@@ -40,6 +40,7 @@ import { repairToolName } from "../../model/streaming/repairToolName.js";
 import { defaultAgentThinking } from "../../model/thinking/registry.js";
 import { applyMethodologyAddendum, computeMethodologyAddendum } from "./methodologyInjection.js";
 import { buildMetacognitivePrompt, buildMetacognitiveRetryPrompt, parseSelfEstimate } from "./metacognitiveControl.js";
+import { evaluateClaimGuard } from "./claimGuard.js";
 import { buildRequestHeaderSnapshot, verifyRequestHeaderSnapshot } from "./requestInvariant.js";
 import { projectToolResults } from "./projectToolResults.js";
 import { resolveOutputTokenRetryBump } from "./outputTokenRetry.js";
@@ -111,6 +112,7 @@ import {
   createToolErrorLoopStatus,
   createTurnAbortedStatus,
   modelErrorTarget,
+  parseOutputCapRejection,
   shouldSurfaceAbortStatus,
   stringifyAbortReason,
   tokensFromUsage,
@@ -264,6 +266,7 @@ export class AgentLoop {
         const recovered = yield* this.handleModelError(
           state,
           input,
+          prepared.request,
           prepared.decision,
           assembled.assembled,
           assembled.toolCalls,
@@ -761,6 +764,7 @@ export class AgentLoop {
   private async *handleModelError(
     state: TurnRuntimeState,
     input: AgentLoopInput,
+    request: CanonicalModelRequest,
     decision: RouterDecision,
     assembled: AssembledAssistantMessage,
     toolCalls: CanonicalToolCall[],
@@ -768,6 +772,30 @@ export class AgentLoop {
   ): AsyncGenerator<AgentEvent, ModelErrorRecoveredResult, unknown> {
     const ctx = this.dependencies.context;
     if (assembled.error) {
+      // 输出上限自愈（W4）：provider 对超出模型上限的 max_tokens 返回 400 并
+      // 在文案中指名上限。学到天花板写入 session 级 hardMaxOutputTokens（
+      // TokenCapManager 跨 turn 保留），隐形重试一次（400 发生在任何流内容
+      // 之前，重发幂等）。
+      if (!state.hasAttemptedOutputCapRetry) {
+        const requestedOutput = routedMaxOutputTokens ?? request.maxOutputTokens;
+        const learnedCap = parseOutputCapRejection(assembled.error, requestedOutput);
+        if (learnedCap !== null) {
+          state.hasAttemptedOutputCapRetry = true;
+          const target = modelErrorTarget(assembled.error, decision.provider, decision.model);
+          this.tokenCaps.setTransientTokenCap(target.provider, target.model, {
+            hardMaxOutputTokens: learnedCap,
+          });
+          yield {
+            type: "warning",
+            sessionId: input.sessionId,
+            turnId: input.turnId,
+            code: "output_cap_learned",
+            message: `Provider rejected max_output_tokens ${routedMaxOutputTokens}; learned cap ${learnedCap} and retrying.`,
+            metadata: { provider: target.provider, model: target.model, learnedCap },
+          };
+          return { kind: "continue" };
+        }
+      }
       // 流中断恢复：streamModel 在流完成前断连（idle 超时/连接断开/网络错误）
       // 时以 streamInterruption 错误上抛，不再整体重试（会重复已收到的文本）。
       // 已产生的部分内容按中断阶段处理：phase=text 且无工具片段 → 可见文本先
@@ -1224,6 +1252,16 @@ export class AgentLoop {
         );
         return yield* this.terminateTurn(input, state, result, { emitFailureEvent: true });
       }
+      // 声称-行动守卫（W3）：收尾文本含验证类声称但本 run 无支撑工具成功执行
+      // 时，强制一轮纠正（模型补做动作或改口）；每 run 至多一次，误报代价仅
+      // 一轮。默认关闭，SATI_CLAIM_GUARD=1 开启。
+      if (this.config.claimGuard === true && !state.hasAttemptedClaimGuardRetry) {
+        const verdict = evaluateClaimGuard(assistantText, state.succeededToolNames);
+        if (verdict.kind === "correction") {
+          state.hasAttemptedClaimGuardRetry = true;
+          return yield* this.continueWithTransientPrompt(state, input, verdict.prompt, "claim_guard_retry");
+        }
+      }
       // 元认知控制：shaky 自评不静默收尾——带诊断重试一次（非空白重试）。
       // 仅 shaky 触发控制退出（见 spec）；strong/thin 被识别但不改行为——一个
       // 不改变下一步的自评只是评论，不是监控动作。
@@ -1334,6 +1372,10 @@ export class AgentLoop {
     });
     state.permissionDenials = [...state.permissionDenials, ...collectPermissionDenials(pairedResults)];
     for (const result of pairedResults) {
+      // 声称-行动守卫：累积本 run 内成功执行的工具名（供 claimGuard 校验支撑）。
+      if (result.type === "success") {
+        state.succeededToolNames.push(result.toolName);
+      }
       if (result.type === "success" && result.metadata?.structuredOutput) {
         state.structuredOutput = result.data;
       }

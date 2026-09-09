@@ -120,6 +120,59 @@ export function clampOutputToModelCap(requested: number, modelMaxOutputTokens: n
   return next;
 }
 
+// ---------------------------------------------------------------------------
+// 输出上限自愈（W4，借鉴 GenOffice output-cap fallback）
+// ---------------------------------------------------------------------------
+
+/** 报错文本中指向 max_tokens 上限的关键词（各家命名变体）。 */
+const OUTPUT_CAP_KEYWORD_RE = /max_?tokens|max_completion_tokens|max_?output_?tokens|completion tokens|output tokens/i;
+
+/** 解析出的上限须形如真实模型上限（8192/64000/128000），排除模型名年份等无关数字。 */
+function looksLikeCeiling(n: number): boolean {
+  return n >= 1024 && (n % 1024 === 0 || n % 1000 === 0);
+}
+
+/**
+ * 解析 400/422 报错文本中的 max_tokens 输出天花板（W4）。
+ *
+ * Provider 对超出模型上限的 max_tokens 请求通常返回 400 而非钳制，报错
+ * 文案会指名合法上限（措辞因厂商而异）。requested 已知时取小于它的最大
+ * 「上限形」数字；requested 未知（循环未显式设置，provider 侧默认值超限）
+ * 时取第二大——「32768 > 8192」类文案中请求值在前、上限在后。无可信解析
+ * 值时返回 null。已知 error.maxOutputTokens（协议字段，当前无产出方）优先
+ * 采信。
+ */
+export function parseOutputCapRejection(error: CanonicalModelError, requested: number | undefined): number | null {
+  if (!(error.status === 400 || error.status === 422 || error.code === "invalid_request")) return null;
+  if (
+    typeof error.maxOutputTokens === "number" &&
+    Number.isFinite(error.maxOutputTokens) &&
+    error.maxOutputTokens > 0
+  ) {
+    if (typeof requested !== "number" || !Number.isFinite(requested) || requested <= 0) {
+      return Math.floor(error.maxOutputTokens);
+    }
+    return error.maxOutputTokens < requested ? Math.floor(error.maxOutputTokens) : null;
+  }
+  if (!OUTPUT_CAP_KEYWORD_RE.test(error.message)) return null;
+  const ceilings: number[] = [];
+  for (const match of error.message.matchAll(/\d[\d,]*/g)) {
+    const n = Number(match[0].replace(/,/g, ""));
+    if (Number.isFinite(n) && looksLikeCeiling(n) && !ceilings.includes(n)) {
+      ceilings.push(n);
+    }
+  }
+  ceilings.sort((a, b) => a - b);
+  if (typeof requested === "number" && Number.isFinite(requested) && requested > 0) {
+    const below = ceilings.filter(n => n < requested);
+    return below.length > 0 ? below[below.length - 1]! : null;
+  }
+  // requested 未知：单上限形数字即采信；多个时取第二大（请求值通常在前）。
+  if (ceilings.length === 1) return ceilings[0]!;
+  if (ceilings.length >= 2) return ceilings[ceilings.length - 2]!;
+  return null;
+}
+
 export function tokensFromUsage(usage: CanonicalUsage | undefined): number | undefined {
   if (!usage) return undefined;
   const inputTokens = usage.inputTokens;
