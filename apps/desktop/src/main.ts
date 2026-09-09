@@ -26,6 +26,7 @@ import {
   type MenuItemConstructorOptions,
 } from "electron";
 import { validateSatiConfigFile } from "./config-validator.js";
+import { openExternalSafely } from "./safe-external-url.js";
 import { showOnboardingWindow } from "./onboarding-window.js";
 import { ServerManager } from "./server-manager.js";
 import { resolveSplashHtmlPath, showSplashWindow } from "./splash-window.js";
@@ -184,7 +185,7 @@ function buildHelpSubmenu(): MenuItemConstructorOptions[] {
       // menu so this flips back on automatically.
       enabled: localUrl != null,
       click: () => {
-        if (localUrl) void shell.openExternal(localUrl);
+        if (localUrl) openExternalSafely(localUrl);
       },
     },
     {
@@ -218,13 +219,13 @@ function buildHelpSubmenu(): MenuItemConstructorOptions[] {
     {
       label: "报告问题…",
       click: () => {
-        void shell.openExternal(ISSUES_URL);
+        openExternalSafely(ISSUES_URL);
       },
     },
     {
       label: "项目主页…",
       click: () => {
-        void shell.openExternal(REPO_URL);
+        openExternalSafely(REPO_URL);
       },
     },
   ];
@@ -504,7 +505,8 @@ function createMainWindow(port: number, options: { onReadyToShow?: () => void } 
   });
 
   win.webContents.setWindowOpenHandler(({ url }) => {
-    void shell.openExternal(url);
+    // 外链统一经协议白名单门控：file:// 与自定义 scheme 不交给操作系统。
+    openExternalSafely(url);
     return { action: "deny" };
   });
 
