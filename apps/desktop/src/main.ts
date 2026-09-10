@@ -28,7 +28,8 @@ import {
 import { validateSatiConfigFile } from "./config-validator.js";
 import { openExternalSafely } from "./safe-external-url.js";
 import { showOnboardingWindow } from "./onboarding-window.js";
-import { ServerManager } from "./server-manager.js";
+import { ServerManager, getSatiDir } from "./server-manager.js";
+import { installRendererRecovery } from "./renderer-recovery.js";
 import { resolveSplashHtmlPath, showSplashWindow } from "./splash-window.js";
 import { resolveAppIconPath } from "./icon-path.js";
 
@@ -478,6 +479,17 @@ function createMainWindow(port: number, options: { onReadyToShow?: () => void } 
   });
 
   void win.loadURL(`http://127.0.0.1:${port}/`);
+
+  installRendererRecovery(win, {
+    isQuitting: () => isQuitting,
+    // 桌面壳没有独立的外观配置，跟随系统语言（应用内切换 UI 语言不会同步到这里）。
+    isChinese: () => app.getLocale().toLowerCase().startsWith("zh"),
+    showDialog: options => dialog.showMessageBox(win, options),
+    log: (event, details) => {
+      const line = `${new Date().toISOString()} [renderer] ${event} ${JSON.stringify(details)}\n`;
+      void fs.promises.appendFile(path.join(getSatiDir(), "desktop.renderer.log"), line).catch(() => {});
+    },
+  });
 
   win.on("close", e => {
     // macOS：关闭即隐藏（Dock 图标可恢复，符合惯例）。

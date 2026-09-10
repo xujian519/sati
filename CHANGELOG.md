@@ -2,6 +2,20 @@
 
 本文件按版本记录 Sati 的重要变更。桌面端版本号（`release(desktop)`）与根 `package.json` 由 `scripts/bump-version.mjs` 同步维护。
 
+## Unreleased
+
+> **上游同步（2026-09-10）**：移植 PilotDeck `v2026.09.10`（PR #568）中可独立落地且与 Sati 现状不冲突的部分——会话/项目删除排空（消除迟到写入把已删文件写回）、标题生成与回合收尾解耦、长会话 UI 响应性、桌面端渲染进程恢复。依赖未同步基座（#550/#552/#562）的模型选择记忆/输入队列/侧栏指示器/设置对话框不在本期范围，取舍明细见 `docs/notes/implemented/2026-09-10-upstream-568-port.md`。
+
+### Feat
+- feat(gateway): 新增可选方法 `close_project_sessions`（协议 MINOR 1.8）——删除项目/会话前显式排空在跑 turn 与转录写入；服务端未实现时抛错而非静默降级
+
+### Fix
+- fix(gateway): 项目关闭时排空会话与转写写入 —— `SessionRouter` 项目级关闭/恢复与代数校验、`AgentSession.dispose()`、`AgentTranscriptWriter.close()` 契约
+- fix(agent): 标题生成与回合收尾解耦 —— 后台标题不再阻塞 `turn_completed` 与转录收尾，会话销毁后不再回写标题
+- fix(ui): 删除项目/会话时先经 gateway 排空，读取会话消息失败改显式报错（不再以空历史掩盖）
+- fix(ui): 长会话渲染修复 —— 移除全局 HTML 反转义（保 LaTeX/代码/路径）、打字机降频、侧栏拖拽按帧合并、空视口检测与告警条
+- fix(desktop): 渲染进程崩溃/无响应时提供重载恢复对话框
+
 ## v0.1.12 - 2026-09-09
 
 > **版本目标（2026-09-09）**：修复桌面端打开文件（含 md）时编辑器崩溃的关键回归（CodeMirror 双实例），外链协议白名单门控，agent 工具循环守卫 / 输出上限自愈 / 凭据脱敏加固，genoffice P0 采用，以及 TypeScript 7 / jsdom 30 / react-i18next 17 等依赖升级。

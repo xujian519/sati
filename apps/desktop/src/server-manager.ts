@@ -135,7 +135,7 @@ function linkDirectory(link: string, target: string): void {
  * 优先 SATI_HOME，缺省 ~/.sati。此前 desktop.server.log/.pid 硬编码 ~/.sati，
  * 在 SATI_HOME 设置时与主进程路径分歧。
  */
-function getSatiDir(): string {
+export function getSatiDir(): string {
   return process.env.SATI_HOME || path.join(os.homedir(), ".sati");
 }
 

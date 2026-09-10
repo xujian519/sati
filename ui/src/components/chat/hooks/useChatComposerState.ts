@@ -1347,10 +1347,22 @@ export function useChatComposerState({
   useEffect(() => flushPendingDraft, []);
 
   // 页面卸载（刷新/关闭）前 flush 未落盘草稿——整页关闭不触发组件卸载 cleanup，
-  // 需 beforeunload 兜底。
+  // 需 beforeunload 兜底。移动端与 bfcache 走 pagehide/visibilitychange（上游 #568）；
+  // sati:flush-drafts 供「重新加载界面」按钮在 reload 前主动落盘（见 lib/uiDiagnostics）。
   useEffect(() => {
+    const onHidden = () => {
+      if (document.visibilityState === "hidden") flushPendingDraft();
+    };
     window.addEventListener("beforeunload", flushPendingDraft);
-    return () => window.removeEventListener("beforeunload", flushPendingDraft);
+    window.addEventListener("pagehide", flushPendingDraft);
+    window.addEventListener("sati:flush-drafts", flushPendingDraft);
+    document.addEventListener("visibilitychange", onHidden);
+    return () => {
+      window.removeEventListener("beforeunload", flushPendingDraft);
+      window.removeEventListener("pagehide", flushPendingDraft);
+      window.removeEventListener("sati:flush-drafts", flushPendingDraft);
+      document.removeEventListener("visibilitychange", onHidden);
+    };
   }, []);
 
   useEffect(() => {

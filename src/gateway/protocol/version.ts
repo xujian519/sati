@@ -44,8 +44,13 @@
  *           `edit_last_turn` / `regenerate_last_turn`（遮蔽式 append-only：
  *           追加 turn_rewrite 转录条目，投影层跳过被遮蔽条目；成功后由
  *           调用方走标准 submit_turn 重发）(MINOR，feature-detect)。
+ *   - 1.8 — 2026-09-10: added optional project-lifecycle method
+ *           `close_project_sessions`（上游 #568 移植：项目删除前暂停新建、
+ *           排空在跑 turn 与转录写入器；`resume: true` 解冻。未实现时服务端
+ *           显式报错而非 not_configured 降级——删除方必须确知已排空）
+ *           (MINOR，feature-detect)。
  */
-export const SATI_GATEWAY_PROTOCOL_VERSION = "1.7";
+export const SATI_GATEWAY_PROTOCOL_VERSION = "1.8";
 
 /**
  * Handshake compatibility check: clients and servers with the same MAJOR

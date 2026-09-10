@@ -670,6 +670,13 @@ export interface Gateway {
   resumeSession(input: { sessionKey: string }): Promise<{ sessionKey: string }>;
   newSession(input: NewSessionInput): Promise<{ sessionKey: string }>;
   closeSession(input: { sessionKey: string; reason?: string }): Promise<void>;
+  /**
+   * 关闭/恢复某个项目的全部会话（上游 #568，协议 MINOR 1.8）。
+   * 关闭时排空在跑的 turn 与转录写入器，返回被关闭的 sessionKey 列表；
+   * `resume: true` 解除项目暂停（删除失败回滚用）。可选方法——未实现时
+   * 调用方按不可用处理（不静默当作已完成）。
+   */
+  closeProjectSessions?(input: { projectKey: string; resume?: boolean }): Promise<{ sessionKeys: string[] }>;
   recordAgentStatusMessage?(input: GatewayRecordAgentStatusMessageInput): Promise<{ recorded: boolean }>;
   describeServer(): Promise<GatewayServerInfo>;
   getActiveTurnSnapshot?(input: GatewayActiveTurnSnapshotInput): Promise<GatewayActiveTurnSnapshot>;

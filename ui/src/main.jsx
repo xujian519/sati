@@ -9,8 +9,11 @@ import "./index.css";
 // Initialize i18n
 import "./i18n/config.js";
 import { registerDynamicImportReloadHandler } from "./utils/reloadOnChunkError";
+import { registerUiDiagnostics } from "./lib/uiDiagnostics";
 
 registerDynamicImportReloadHandler();
+// 全局 error / unhandledrejection 落环形缓冲（上游 #568），便于崩溃后取回现场。
+registerUiDiagnostics();
 
 // Register service worker for PWA + Web Push support
 if ("serviceWorker" in navigator) {

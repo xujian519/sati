@@ -12,7 +12,9 @@ import type { Gateway } from "../../../src/gateway/protocol/types.js";
  *   - 内联对象类型方法路由统一为 `{ok:true}`；
  *   - 可选方法未接线 → `not_configured` 降级结果；
  *   - 未知方法 → `gateway_request_failed` 失败帧；
- *   - SkillManagerError（结构化）回码/信息返回客户端。
+ *   - SkillManagerError（结构化）回码/信息返回客户端；
+ *   - close_project_sessions：入参守卫、已接线透传、未接线 → `method_unavailable`
+ *     （显式失败而非 not_configured 降级——调用方要据此决定能否删目录）。
  */
 describe("GatewayWsConnection dispatchRequest 分发路由", () => {
   class MockWs {
@@ -191,6 +193,68 @@ describe("GatewayWsConnection dispatchRequest 分发路由", () => {
       ),
       "未知方法应回 gateway_request_failed 失败帧",
     );
+  });
+
+  it("close_project_sessions 未接线 → method_unavailable 显式失败（不得降级成 not_configured）", async () => {
+    const ws = new MockWs();
+    makeConnection(ws, baseGateway());
+    ws.receive(helloFrame());
+    await settle();
+    ws.receive(requestFrame("1", "close_project_sessions", { projectKey: "/tmp/p" }));
+    await settle();
+    assert.ok(
+      ws.sent.some(
+        line =>
+          line.includes('"type":"response"') &&
+          line.includes('"ok":false') &&
+          line.includes('"code":"method_unavailable"') &&
+          line.includes("Project session closure is unavailable"),
+      ),
+      "未接线时应回 method_unavailable 失败帧；not_configured 会被调用方当成排空成功",
+    );
+  });
+
+  it("close_project_sessions 已接线 → params 透传 gateway 并回结果帧", async () => {
+    const ws = new MockWs();
+    const gateway = {
+      ...baseGateway(),
+      closeProjectSessions: async (input: { projectKey: string; resume?: boolean }) => ({
+        sessionKeys: [input.projectKey, String(input.resume ?? false)],
+      }),
+    } as unknown as Gateway;
+    makeConnection(ws, gateway);
+    ws.receive(helloFrame());
+    await settle();
+    ws.receive(requestFrame("1", "close_project_sessions", { projectKey: "/tmp/p", resume: true }));
+    await settle();
+    assert.ok(
+      ws.sent.some(
+        line =>
+          line.includes('"type":"response"') &&
+          line.includes('"ok":true') &&
+          line.includes('"sessionKeys":["/tmp/p","true"]'),
+      ),
+      "已接线时应透传 params 并回结果帧",
+    );
+  });
+
+  it("守卫表：close_project_sessions 缺 projectKey → invalid_params，不进入实现层", async () => {
+    const ws = new MockWs();
+    let called = false;
+    const gateway = {
+      ...baseGateway(),
+      closeProjectSessions: async () => {
+        called = true;
+        return { sessionKeys: [] };
+      },
+    } as unknown as Gateway;
+    makeConnection(ws, gateway);
+    ws.receive(helloFrame());
+    await settle();
+    ws.receive(requestFrame("1", "close_project_sessions", { resume: true }));
+    await settle();
+    assert.equal(invalidParamsErrorFrame(ws).code, "invalid_params");
+    assert.ok(!called, "守卫拒绝后不得进入 gateway.closeProjectSessions");
   });
 
   it("SkillManagerError（结构化）→ 错误码/信息往返客户端", async () => {

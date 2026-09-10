@@ -2,6 +2,7 @@ import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRe
 import type { Dispatch, ReactNode, RefObject, SetStateAction } from "react";
 import { useTranslation } from "react-i18next";
 import { XCircle, GitBranch } from "lucide-react";
+import { recordUiDiagnostic, reloadUi } from "../../lib/uiDiagnostics";
 import type {
   ChatMessage,
   ChatRunMode,
@@ -356,6 +357,8 @@ function MessagesPaneV2({
 }: MessagesPaneV2Props) {
   const resolvedPlanModeActive = planModeActive || runMode === "plan";
   const { t } = useTranslation("chat");
+  // 布局告警文案与 ErrorBoundary 共用 common 命名空间的 uiText 段。
+  const { t: tCommon } = useTranslation("common");
   const messageKeyMapRef = useRef<WeakMap<ChatMessage, string>>(new WeakMap());
   const generatedMessageKeyCounterRef = useRef(0);
   const measuredHeightsRef = useRef<Map<string, number>>(new Map());
@@ -596,7 +599,19 @@ function MessagesPaneV2({
     void heightVersion;
     return keyedMessageItems.map(item => measuredHeightsRef.current.get(item.itemKey) ?? item.estimatedHeight);
   }, [heightVersion, keyedMessageItems]);
-  const shouldVirtualizeMessages = keyedMessageItems.length > MESSAGE_VIRTUALIZATION_THRESHOLD;
+  // 估算总高只算一次，供虚拟化判定与不虚拟化时的窗口高度共用（原先两处各扫一遍全表）。
+  const estimatedTotalHeight = useMemo(
+    () => keyedMessageItems.reduce((height, item) => height + item.estimatedHeight, 0),
+    [keyedMessageItems],
+  );
+  const shouldVirtualizeMessages = useMemo(
+    () =>
+      keyedMessageItems.length > MESSAGE_VIRTUALIZATION_THRESHOLD ||
+      // 少量超长回答可能比数百条短消息更重；40 条以上且估算总高超过 20000px 时提前启用
+      // 虚拟化，常规小会话保持完整渲染以保留文本选择能力（上游 #568）。
+      (keyedMessageItems.length > 40 && estimatedTotalHeight > 20_000),
+    [keyedMessageItems.length, estimatedTotalHeight],
+  );
   // P3-5：前缀和 useMemo 缓存——依赖 measuredItemHeights 引用而非 scrollTop，
   // 滚动 tick 不再每帧全量重算前缀和（级联命中：流式 process tick 引用稳定）。
   const prefixOffsets = useMemo(
@@ -618,9 +633,12 @@ function MessagesPaneV2({
             endIndex: keyedMessageItems.length,
             topPadding: 0,
             bottomPadding: 0,
-            totalHeight: measuredItemHeights.reduce((sum, height) => sum + height, 0),
+            // 全量渲染时组件不读 totalHeight（只有 padding/窗口索引参与渲染），
+            // 复用估算总高即可，省掉一次全表求和。
+            totalHeight: estimatedTotalHeight,
           },
     [
+      estimatedTotalHeight,
       keyedMessageItems.length,
       measuredItemHeights,
       prefixOffsets,
@@ -1051,9 +1069,65 @@ function MessagesPaneV2({
     renderWindowKey: `${virtualWindow.startIndex}:${virtualWindow.endIndex}`,
   });
   const searchIsRenderedByShell = useRegisterChatHistorySearchControls(chatHistorySearch);
+  const [hasLayoutWarning, setHasLayoutWarning] = useState(false);
+  useEffect(() => {
+    setHasLayoutWarning(false);
+    if (isAssistantWorking || isLoadingSessionMessages || keyedMessageItems.length === 0) return;
+    // 等布局稳定后再判定。隐藏标签页/面板、空会话都不算渲染故障（上游 #568）。
+    // 依赖只放稳定的标量签名：放进 keyedMessageItems 的数组身份或滚动窗口会让
+    // 流式输出/滚动期间每次渲染都重置计时器，"稳定后 800ms" 永不成立，探测形同虚设。
+    // 依赖不含滚动 → 触发时不再读当时的虚拟窗口（已过期），改读实时 DOM 行数。
+    const timer = window.setTimeout(() => {
+      const node = scrollContainerRef.current;
+      if (!node || node.clientHeight <= 0 || !node.getClientRects().length || document.visibilityState === "hidden") {
+        return;
+      }
+      const viewport = node.getBoundingClientRect();
+      const rows = Array.from(node.querySelectorAll<HTMLElement>("[data-message-key]"));
+      const hasVisibleRow = rows.some(row => {
+        const rect = row.getBoundingClientRect();
+        return rect.height > 0 && rect.bottom > viewport.top && rect.top < viewport.bottom;
+      });
+      if (hasVisibleRow) return;
+      // 只记计数/位置，不落消息内容（诊断缓冲不得含 prompt / 正文）。
+      recordUiDiagnostic("chat-empty-viewport", {
+        messages: chatMessages.length,
+        renderItems: keyedMessageItems.length,
+        renderedRows: rows.length,
+        scrollTop: node.scrollTop,
+        scrollHeight: node.scrollHeight,
+        viewportHeight: node.clientHeight,
+        virtualized: shouldVirtualizeMessages,
+      });
+      setHasLayoutWarning(true);
+    }, 800);
+    return () => window.clearTimeout(timer);
+  }, [
+    isAssistantWorking,
+    isLoadingSessionMessages,
+    keyedMessageItems.length,
+    chatMessages.length,
+    scrollContainerRef,
+    shouldVirtualizeMessages,
+  ]);
 
   return (
     <div className="relative min-h-0 flex-1 overflow-hidden">
+      {hasLayoutWarning ? (
+        <div
+          role="alert"
+          className="absolute inset-x-4 top-4 z-20 mx-auto flex max-w-xl items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200"
+        >
+          <span>{tCommon("uiText.chatLayoutError")}</span>
+          <button
+            type="button"
+            onClick={reloadUi}
+            className="shrink-0 rounded px-2 py-1 underline underline-offset-2 hover:bg-amber-100 dark:hover:bg-amber-900"
+          >
+            {tCommon("uiText.reloadInterface")}
+          </button>
+        </div>
+      ) : null}
       {chatHistorySearch.isOpen && !searchIsRenderedByShell ? (
         <ChatHistorySearchBar
           query={chatHistorySearch.query}

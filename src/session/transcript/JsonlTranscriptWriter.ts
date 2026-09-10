@@ -55,6 +55,8 @@ const DEFAULT_FLUSH_INTERVAL_MS = 50;
 
 export class JsonlTranscriptWriter implements AgentTranscriptWriter {
   private sequence = 0;
+  /** 关闭标志（上游 #568）：置位后拒绝新写入并丢弃未开始的批次。 */
+  private closed = false;
   private lastEntryId: string | null = null;
   private readonly now: () => Date;
   private readonly flushThresholdBytes: number;
@@ -144,6 +146,29 @@ export class JsonlTranscriptWriter implements AgentTranscriptWriter {
         throw error;
       }
     });
+  }
+
+  /**
+   * 停止接受写入并等待在途 append 完成（上游 #568 会话/项目关闭链路）。
+   * 语义：
+   *  - 置位后 recordEntry 立即返回已 resolve 的 promise，不再排队——被拒的写入
+   *    在**创建 ack 之前**就返回，故不存在需要收尾的等待者，也不会造成悬挂；
+   *  - **close 之前已接受**的条目（含仍缓冲在 pending 里的）照常落盘：它们的
+   *    调用方已按 durable 语义拿到 ack，丢弃会让 ack 变成假成功（曾导致
+   *    turn_result / metadata 尾静默缺失，resume 把它误判为断点而重放回合）；
+   *  - 已开始与刚入链的写入一律完成，本方法返回时全部排空；
+   *  - 幂等，可安全重复调用。
+   */
+  async close(): Promise<void> {
+    this.closed = true;
+    if (this.flushTimer !== undefined) {
+      clearTimeout(this.flushTimer);
+      this.flushTimer = undefined;
+    }
+    // 落盘 close 前已接受的条目：recordEntry 已不再入队、定时器已清，
+    // 故这一批就是最后一批，不会再有迟到写入搭上本次排空。
+    this.flushPending();
+    await this.writeChain.catch(() => undefined);
   }
 
   recordAcceptedInput(
@@ -270,6 +295,7 @@ export class JsonlTranscriptWriter implements AgentTranscriptWriter {
    * resolve；落盘失败 reject（错误传播，fail-closed 与旧行为一致）。
    */
   recordEntry(entry: AgentTranscriptEntry): Promise<void> {
+    if (this.closed) return Promise.resolve();
     this.sequence = Math.max(this.sequence, entry.sequence);
     this.lastEntryId = entry.entryId ?? this.lastEntryId;
     const line = `${JSON.stringify(entry)}\n`;
@@ -300,6 +326,8 @@ export class JsonlTranscriptWriter implements AgentTranscriptWriter {
    * 调度一个批次落盘（不 await）。批次 = 当前全部 pending 行，一次 appendFile。
    * 无在途守卫：批次直接链到 writeChain 尾部（链自身保证串行），flush 期间
    * 新入队的条目被 splice 进下一个批次——flushCheckpoint 返回链尾等待全部排空。
+   * 入链的批次一律落盘：入链即代表"已被接受"，close() 只阻止新条目入队
+   * （recordEntry 早退）而不吞掉已接受的批次。
    */
   private flushPending(): void {
     const lines = this.pendingLines.splice(0);

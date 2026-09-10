@@ -27,6 +27,7 @@ import type { TFunction } from "i18next";
 import type { AppTab, Project, ProjectSession } from "../../types/app";
 import { cn } from "../../lib/utils.js";
 import { isImeEnterEvent } from "../../utils/ime";
+import { createFrameBatcher } from "../../utils/frameBatcher";
 import {
   projectDisplayName,
   sessionDisplayTitle,
@@ -369,37 +370,44 @@ export default function SidebarV2({
   });
   const [isResizing, setIsResizing] = useState(false);
 
+  // 拖拽清理句柄：卸载时若仍在拖拽，监听器不能留在 document 上（上游 #568）。
+  const widthDragCleanupRef = useRef<(() => void) | null>(null);
+  useEffect(() => () => widthDragCleanupRef.current?.(), []);
+
   const handleResizeStart = useCallback(
     (event: MouseEvent<HTMLDivElement>) => {
       event.preventDefault();
+      widthDragCleanupRef.current?.();
       const startX = event.clientX;
       const startWidth = sidebarWidth;
+      let latestWidth = startWidth;
       setIsResizing(true);
 
-      const onMove = (e: globalThis.MouseEvent) => {
-        const next = Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, startWidth + (e.clientX - startX)));
-        setSidebarWidth(next);
-      };
-
-      const onUp = () => {
-        setIsResizing(false);
+      // 指针采样按帧合并：拖拽期间不落盘，也不让每次 mousemove 都触发
+      // 一次 React 渲染（上游 #568）。
+      const moveBatch = createFrameBatcher((e: globalThis.MouseEvent) => {
+        latestWidth = Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, startWidth + (e.clientX - startX)));
+        setSidebarWidth(latestWidth);
+      });
+      const onMove = moveBatch.schedule;
+      const cleanup = () => {
+        moveBatch.cancel();
         document.removeEventListener("mousemove", onMove);
         document.removeEventListener("mouseup", onUp);
-        // Persist the latest width. Read directly off the DOM element rather
-        // than chasing closure state to avoid serializing a stale value; the
-        // microtask lets the final setState settle before we measure.
-        queueMicrotask(() => {
-          try {
-            const aside = document.querySelector<HTMLElement>("aside[data-sidebar-v2-root]");
-            const width = aside?.offsetWidth;
-            if (width && Number.isFinite(width)) {
-              window.localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(Math.round(width)));
-            }
-          } catch {
-            // localStorage may be unavailable in some environments — ignore.
-          }
-        });
+        widthDragCleanupRef.current = null;
       };
+      const onUp = () => {
+        moveBatch.flush();
+        cleanup();
+        setIsResizing(false);
+        // 落盘最终宽度：直接用合并器记录的最新值，不再回读 DOM。
+        try {
+          window.localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(Math.round(latestWidth)));
+        } catch {
+          // localStorage may be unavailable in some environments — ignore.
+        }
+      };
+      widthDragCleanupRef.current = cleanup;
 
       document.addEventListener("mousemove", onMove);
       document.addEventListener("mouseup", onUp);

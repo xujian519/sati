@@ -547,5 +547,13 @@
       "updateAvailable": "Update available",
       "closeSidebar": "Close sidebar"
     }
+  },
+  "uiText": {
+    "errorTitle": "Something went wrong",
+    "chatError": "An error occurred while loading the chat interface.",
+    "errorDetails": "Error Details",
+    "tryAgain": "Try Again",
+    "reloadInterface": "Reload interface",
+    "chatLayoutError": "Messages could not be displayed. Try reloading the interface."
   }
 }

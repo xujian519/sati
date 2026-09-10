@@ -1,0 +1,146 @@
+import { AlertCircle, Check, Copy, FileCode2 } from "lucide-react";
+import { useContext, useEffect, useRef, useState } from "react";
+import type { ComponentProps } from "react";
+import { useTranslation } from "react-i18next";
+import type { ExtraProps } from "react-markdown";
+import { copyHtmlToClipboard, copyTextToClipboard } from "../../../../utils/clipboard";
+import { MarkdownSourceContext } from "./markdownSourceContext";
+
+function CopyButton({
+  label,
+  onCopy,
+  markdown = false,
+}: {
+  label: string;
+  onCopy: () => Promise<boolean>;
+  markdown?: boolean;
+}) {
+  const { t } = useTranslation("chat");
+  const [status, setStatus] = useState<"idle" | "copied" | "failed">("idle");
+  const [pending, setPending] = useState(false);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  useEffect(() => {
+    if (status === "idle") return;
+    const timer = setTimeout(() => setStatus("idle"), 2000);
+    return () => clearTimeout(timer);
+  }, [status]);
+
+  // 事件回调不写 async（项目规范）：同步抛出与异步拒绝都归入"复制失败"。
+  const handleCopy = () => {
+    setPending(true);
+    void Promise.resolve()
+      .then(onCopy)
+      .catch(() => false)
+      .then(copied => {
+        if (!mounted.current) return;
+        setPending(false);
+        setStatus(copied ? "copied" : "failed");
+      });
+  };
+
+  let title = label;
+  let Icon = markdown ? FileCode2 : Copy;
+  if (status === "copied") {
+    title = t("codeBlock.copied");
+    Icon = Check;
+  } else if (status === "failed") {
+    title = t("copyBlock.failed");
+    Icon = AlertCircle;
+  }
+
+  return (
+    <button
+      type="button"
+      title={title}
+      aria-label={title}
+      disabled={pending}
+      className="inline-flex h-6 w-6 items-center justify-center rounded hover:bg-black/10 focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50 dark:hover:bg-white/10"
+      onClick={handleCopy}
+    >
+      <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+    </button>
+  );
+}
+
+export function MarkdownCodeBlock({ node, children, ...props }: ComponentProps<"pre"> & ExtraProps) {
+  const { t } = useTranslation("chat");
+  const code = node?.children.find(child => child.type === "element" && child.tagName === "code");
+  // remark adds one display newline to code.value. Remove only that newline,
+  // never trim user indentation, blank lines, or literal backslash sequences.
+  const text =
+    code?.type === "element"
+      ? code.children
+          .map(child => (child.type === "text" ? child.value : ""))
+          .join("")
+          .replace(/\n$/, "")
+      : "";
+  return (
+    <div className="markdown-copy-block relative my-4 min-w-0">
+      <div className="markdown-copy-controls not-prose absolute top-2 right-2 z-10 rounded bg-gray-800 text-gray-300">
+        <CopyButton label={t("codeBlock.copyCode")} onCopy={() => copyTextToClipboard(text)} />
+      </div>
+      <pre {...props} className={`${props.className || ""} m-0! overflow-x-auto`}>
+        {children}
+      </pre>
+    </div>
+  );
+}
+
+function tableClipboardContent(table: HTMLTableElement) {
+  const clone = table.cloneNode(true) as HTMLTableElement;
+  // KaTeX includes both MathML and visual text. Copy each formula just once.
+  clone.querySelectorAll(".katex").forEach(formula => {
+    formula.replaceWith(formula.querySelector("annotation")?.textContent || formula.textContent || "");
+  });
+  clone.querySelectorAll("br").forEach(br => br.replaceWith("\n"));
+  const quoteCell = (value: string) => (/[\t\n\r"]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value);
+  const text = Array.from(clone.rows, row =>
+    Array.from(row.cells, cell => quoteCell(cell.textContent || "")).join("\t"),
+  ).join("\n");
+  return { text, html: clone.outerHTML };
+}
+
+export function MarkdownTable({ node, children, ...props }: ComponentProps<"table"> & ExtraProps) {
+  const { t } = useTranslation("chat");
+  const source = useContext(MarkdownSourceContext);
+  const ref = useRef<HTMLTableElement>(null);
+  const start = node?.position?.start.offset;
+  const end = node?.position?.end.offset;
+  // Positions begin at the first cell, but later source lines can still include
+  // surrounding blockquote/list indentation. Copy a standalone table.
+  const containerWidth = (node?.position?.start.column ?? 1) - 1;
+  // 源码切片只在真正复制时做：放在渲染里等于每次重渲染都扫一遍表格源码（长会话热路径）。
+  const copyMarkdown = () => {
+    if (start === undefined || end === undefined) return Promise.resolve(false);
+    const markdown = source
+      .slice(start, end)
+      .replace(/\n([ \t>]*)/g, (_match, prefix: string) => `\n${prefix.slice(containerWidth)}`);
+    return copyTextToClipboard(markdown);
+  };
+  return (
+    <div className="markdown-copy-block relative my-4 min-w-0">
+      <div className="markdown-copy-controls not-prose absolute top-1 right-1 z-10 flex rounded bg-white text-gray-500 dark:bg-gray-900 dark:text-gray-400">
+        <CopyButton
+          label={t("copyBlock.table")}
+          onCopy={() => {
+            if (!ref.current) return Promise.resolve(false);
+            const { text, html } = tableClipboardContent(ref.current);
+            return copyHtmlToClipboard(html, text);
+          }}
+        />
+        <CopyButton markdown label={t("copyBlock.tableMarkdown")} onCopy={copyMarkdown} />
+      </div>
+      <div className="overflow-x-auto">
+        <table {...props} ref={ref} className={`markdown-copy-table ${props.className || ""} my-0!`}>
+          {children}
+        </table>
+      </div>
+    </div>
+  );
+}

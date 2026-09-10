@@ -5,7 +5,7 @@
 
 import type { NormalizedMessage } from "../../../stores/useSessionStore";
 import type { ChatMessage, CompactBoundaryShadowedMessage, SubagentChildTool } from "../types/types";
-import { decodeHtmlEntities, unescapeWithMathProtection, formatUsageLimitText } from "../utils/chatFormatting";
+import { formatUsageLimitText } from "../utils/chatFormatting";
 import { parseUserAttachmentNote } from "../utils/attachmentNotes";
 import { asRecord } from "../../../utils/unknown";
 
@@ -21,9 +21,9 @@ type ConvertSingleMessageOptions = {
 };
 
 function normalizeAssistantText(content: string): string {
-  let text = decodeHtmlEntities(content);
-  text = unescapeWithMathProtection(text);
-  return formatUsageLimitText(text);
+  // 传输层已经完成 JSON 解码（上游 #568）：不要再做全局反转义，
+  // 否则 LaTeX、代码块与 Windows 路径会被破坏。Markdown 保真透传。
+  return formatUsageLimitText(content);
 }
 
 function isEmptyAssistantTextMessage(msg: NormalizedMessage): boolean {
@@ -189,7 +189,7 @@ function convertSingleMessage(
           id: msg.id,
           entryId: msg.entryId,
           type: "user",
-          content: unescapeWithMathProtection(decodeHtmlEntities(content)),
+          content,
           timestamp: msg.timestamp,
           ...(msg.forkUnsupportedContent
             ? {
@@ -306,7 +306,7 @@ function convertSingleMessage(
         return {
           id: msg.id,
           type: "assistant",
-          content: unescapeWithMathProtection(thinkingContent),
+          content: thinkingContent,
           timestamp: msg.timestamp,
           isThinking: true,
           isStreaming: msg.id.startsWith("__streaming_thinking_"),
