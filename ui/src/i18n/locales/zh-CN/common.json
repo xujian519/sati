@@ -547,5 +547,13 @@
     "deleteSession": "删除会话",
     "errorDeleteProject": "删除项目失败",
     "errorDeleteSession": "删除会话失败"
+  },
+  "uiText": {
+    "errorTitle": "出现了一些问题",
+    "chatError": "加载聊天界面时出错。",
+    "errorDetails": "错误详情",
+    "tryAgain": "重试",
+    "reloadInterface": "重新加载界面",
+    "chatLayoutError": "消息显示异常，可以尝试重新加载界面。"
   }
 }

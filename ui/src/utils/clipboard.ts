@@ -26,6 +26,30 @@ function fallbackCopyToClipboard(text: string): boolean {
   return copied;
 }
 
+// 同时提供 HTML 与纯文本表示：文档编辑器拿到表格，纯文本编辑器拿到 TSV。
+// 浏览器不支持富文本写入时退回纯文本复制（上游 #568）。
+export async function copyHtmlToClipboard(html: string, text: string): Promise<boolean> {
+  try {
+    if (
+      typeof window !== "undefined" &&
+      window.isSecureContext &&
+      typeof ClipboardItem !== "undefined" &&
+      navigator.clipboard?.write
+    ) {
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          "text/html": new Blob([html], { type: "text/html" }),
+          "text/plain": new Blob([text], { type: "text/plain" }),
+        }),
+      ]);
+      return true;
+    }
+  } catch {
+    /* Fall back to text if rich clipboard access is unavailable. */
+  }
+  return copyTextToClipboard(text);
+}
+
 export async function copyTextToClipboard(text: string): Promise<boolean> {
   if (!text) {
     return false;

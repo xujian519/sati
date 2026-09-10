@@ -67,7 +67,14 @@ router.get("/:sessionId/messages", async (req, res) => {
     });
   } catch (error) {
     logger.error("[messages] read_session_messages failed:", error);
-    return res.json({ messages: [], total: 0, hasMore: false, offset: 0, limit: null });
+    // 显式失败（上游 #568）：空历史会让前端把"读取失败"显示为"没有消息"，
+    // 掩盖真实故障并诱导用户在错误前提上继续操作。
+    return res.status(500).json({
+      error: {
+        code: "session_messages_read_failed",
+        message: "Unable to read conversation messages. Please retry.",
+      },
+    });
   }
 });
 

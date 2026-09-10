@@ -22,7 +22,7 @@ import { logger } from "./utils/consoleLogger.js";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
-import { getSatiGateway } from "./sati-bridge.js";
+import { getSatiGateway, beginProjectDeletion, beginSessionDeletion } from "./sati-bridge.js";
 import { mapLegacySessionPresentation } from "../../src/web/server/index.js";
 import {
   resolvePilotHome,
@@ -417,23 +417,37 @@ async function deleteSession(projectName, sessionId, _options = {}) {
   const fullPath = await extractProjectDirectory(projectName);
   const pilotHome = resolvePilotHome(process.env);
   const projectId = await resolveProjectIdForPathOrName(projectName, fullPath);
-  // Try the sanitized filename first (current storage layout), then the
-  // raw form (legacy files written before the sanitize fix).
-  const safeId = sanitizeSessionIdForPath(sessionId);
-  const filenames = safeId === sessionId ? [sessionId] : [safeId, sessionId];
-  let removed = false;
-  for (const name of filenames) {
-    const transcript = path.join(pilotHome, "projects", projectId, "chats", `${name}.jsonl`);
-    try {
-      await fs.unlink(transcript);
-      removed = true;
-    } catch (error) {
-      if (error?.code !== "ENOENT") {
-        throw error;
+  // Gateway 拥有后台标题请求与转写写队列：先排空关闭，再 unlink，
+  // 否则迟到的完成会把已删文件写回来（上游 #568）。
+  const gateway = await getSatiGateway();
+  const finishDeletion = beginSessionDeletion(fullPath, sessionId);
+  let deleted = false;
+  try {
+    await gateway.closeSession({ sessionKey: sessionId, reason: "session_deleted" });
+    // Try the sanitized filename first (current storage layout), then the
+    // raw form (legacy files written before the sanitize fix).
+    const safeId = sanitizeSessionIdForPath(sessionId);
+    const filenames = safeId === sessionId ? [sessionId] : [safeId, sessionId];
+    let removed = false;
+    for (const name of filenames) {
+      const transcript = path.join(pilotHome, "projects", projectId, "chats", `${name}.jsonl`);
+      try {
+        await fs.unlink(transcript);
+        removed = true;
+      } catch (error) {
+        if (error?.code !== "ENOENT") {
+          throw error;
+        }
       }
     }
+    await fs.rm(path.join(pilotHome, "projects", projectId, "pending-inputs", `${safeId}.json`), {
+      force: true,
+    });
+    deleted = true;
+    return removed;
+  } finally {
+    finishDeletion(deleted);
   }
-  return removed;
 }
 
 async function deleteProject(projectName, force = false) {
@@ -441,15 +455,28 @@ async function deleteProject(projectName, force = false) {
   const pilotHome = resolvePilotHome(process.env);
   const projectId = await resolveProjectIdForPathOrName(projectName, fullPath);
   const projectDir = path.join(pilotHome, "projects", projectId);
+  const gateway = await getSatiGateway();
+  if (!gateway.closeProjectSessions) {
+    throw new Error("Gateway does not support project session closure.");
+  }
+  const finishDeletion = beginProjectDeletion(fullPath);
+  let deleted = false;
   try {
+    await gateway.closeProjectSessions({ projectKey: fullPath });
     await fs.rm(projectDir, { recursive: true, force });
+    deleted = true;
     directoryCache.delete(projectName);
     return true;
   } catch (error) {
     if (error?.code === "ENOENT") {
+      deleted = true;
       return false;
     }
     throw error;
+  } finally {
+    finishDeletion(deleted);
+    // 解封项目：删除失败也要放行，否则项目永久不可用。
+    await gateway.closeProjectSessions({ projectKey: fullPath, resume: true });
   }
 }
 

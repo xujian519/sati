@@ -230,6 +230,10 @@ export async function getSatiGatewayWithReset() {
  * the transcript and the agent state machine.
  */
 const sessionState = new Map();
+// 删除窗口（上游 #568）：项目/会话删除期间封锁新状态创建与新回合启动，
+// 否则迟到的提交会在删除后重建状态、把已删会话复活。
+const deletingProjects = new Set();
+const deletingSessions = new Set();
 
 function isSatiSessionKey(value) {
   if (typeof value !== "string" || !value.trim()) return false;
@@ -249,7 +253,48 @@ function newSessionKey() {
   return `web${sep}s_${randomUUID()}`;
 }
 
+/**
+ * 打开删除窗口（上游 #568）。返回的 `finish(deleted)` 必须放在 `finally`：
+ * 成功删除则标记会话状态已死并逐出，失败（如 ENOENT 之外的错误）只解封、
+ * 让调用方抛错。窗口内 `ensureSessionState` 与 `runChatViaGateway` 一律拒绝。
+ */
+export function beginProjectDeletion(projectKey) {
+  return beginDeletion(projectKey);
+}
+
+export function beginSessionDeletion(projectKey, sessionKey) {
+  return beginDeletion(projectKey, sessionKey);
+}
+
+function beginDeletion(projectKey, sessionKey) {
+  const key = path.resolve(projectKey);
+  const scope = sessionKey ? JSON.stringify([key, sessionKey]) : key;
+  const blocked = sessionKey ? deletingSessions : deletingProjects;
+  if (deletingProjects.has(key) || blocked.has(scope)) {
+    throw new Error("Deletion is already in progress.");
+  }
+  blocked.add(scope);
+  const states = [...sessionState.values()].filter(
+    state => path.resolve(state.projectKey || GENERAL_HOME) === key && (!sessionKey || state.sessionKey === sessionKey),
+  );
+  for (const state of states) state.deleting = true;
+  return deleted => {
+    for (const state of states) {
+      state.deleting = false;
+      if (deleted) {
+        state.deleted = true;
+        sessionState.delete(state.sessionKey);
+      }
+    }
+    blocked.delete(scope);
+  };
+}
+
 function ensureSessionState(sessionKey, projectKey, channelKey) {
+  const resolvedProject = path.resolve(projectKey || GENERAL_HOME);
+  if (deletingProjects.has(resolvedProject) || deletingSessions.has(JSON.stringify([resolvedProject, sessionKey]))) {
+    throw new Error("Project or session is being deleted.");
+  }
   let state = sessionState.get(sessionKey);
   if (!state) {
     state = {
@@ -708,6 +753,9 @@ export async function runChatViaGateway(command, options = {}, writer, provider 
   let gw = null;
   try {
     gw = await ensureGateway();
+    // 连接期间项目/会话可能已进入删除窗口：连接就绪后必须复检，否则删除后
+    // 仍会提交并把已删会话写回磁盘（上游 #568）。
+    if (state.deleted || state.deleting) throw new Error("Project is being deleted.");
 
     if (staleRunId) {
       const abortReason = options?.forceStart === true ? "user:force_start_next_turn" : "system:stale_turn";

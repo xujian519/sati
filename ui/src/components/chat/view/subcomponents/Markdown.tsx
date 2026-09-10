@@ -2,8 +2,9 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import type { Components, Options as ReactMarkdownOptions } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { normalizeInlineCodeFences } from "../../utils/chatFormatting";
 import { resolveMarkdownFileHref } from "../../utils/resolveMarkdownFileHref";
+import { MarkdownCodeBlock, MarkdownTable } from "./MarkdownCopyBlocks";
+import { MarkdownSourceContext } from "./markdownSourceContext";
 
 type MarkdownProps = {
   children: React.ReactNode;
@@ -29,6 +30,9 @@ function contentMayContainMath(text: string): boolean {
 
 function createMarkdownComponents(onFileOpen?: (filePath: string) => void): Components {
   return {
+    // 代码块/表格级 hover 复制（上游 #568）；整条消息级复制仍在 MessageRowV2。
+    pre: MarkdownCodeBlock,
+    table: MarkdownTable,
     a: ({ href, children, ...props }) => {
       const filePath = resolveMarkdownFileHref(href);
       if (filePath && onFileOpen) {
@@ -63,9 +67,11 @@ function createMarkdownComponents(onFileOpen?: (filePath: string) => void): Comp
 }
 
 export function Markdown({ children, className, isStreaming, onFileOpen }: MarkdownProps) {
-  const content = useMemo(() => normalizeInlineCodeFences(String(children ?? "")), [children]);
+  // 不做围栏规范化（上游 #568）：单行 ``` 代码块本就合法，
+  // 改写会破坏代码/路径中的反引号内容。
+  const content = String(children ?? "");
 
-  const components = useMemo(() => (onFileOpen ? createMarkdownComponents(onFileOpen) : undefined), [onFileOpen]);
+  const components = useMemo(() => createMarkdownComponents(onFileOpen), [onFileOpen]);
 
   // Only apply streaming-fade-in on the initial mount while streaming.
   // Once streaming ends, never re-apply it — prevents old content from
@@ -105,9 +111,11 @@ export function Markdown({ children, className, isStreaming, onFileOpen }: Markd
 
   return (
     <div className={`${className || ""} ${showFadeIn ? "streaming-fade-in" : ""}`.trim()}>
-      <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins} components={components}>
-        {content}
-      </ReactMarkdown>
+      <MarkdownSourceContext.Provider value={content}>
+        <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins} components={components}>
+          {content}
+        </ReactMarkdown>
+      </MarkdownSourceContext.Provider>
     </div>
   );
 }
