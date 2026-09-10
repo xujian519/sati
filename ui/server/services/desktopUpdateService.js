@@ -97,7 +97,7 @@ function mapGitHubRelease(release) {
   };
 }
 
-function selectDesktopAsset(release, options = {}) {
+export function selectDesktopAsset(release, options = {}) {
   const platform = options.platform || process.platform;
   const arch = options.arch || process.arch;
   const assets = Array.isArray(release?.assets) ? release.assets : [];
@@ -534,10 +534,20 @@ function scoreExtension(name, platform) {
 
 function scoreArch(name, arch) {
   if (/(universal|all)/.test(name)) return 20;
-  if (arch === "arm64") return /(arm64|aarch64)/.test(name) ? 25 : 0;
-  if (arch === "x64") return /(x64|x86_64|amd64)/.test(name) ? 25 : 0;
-  if (arch === "ia32") return /(ia32|x86|i386)/.test(name) ? 25 : 0;
-  return 0;
+  const assetArch = detectArch(name);
+  if (!assetArch) return 0;
+  // 识别出是别的架构时给负分，而不是 0 分：0 分与「名字里没写架构」同分，会让
+  // 本架构的包缺失时静默选中另一个架构的安装包（装不上，且提示一路显示可更新）。
+  // 负分使其总分为负，被 selectDesktopAsset 的 `score > 0` 过滤掉。
+  return assetArch === arch ? 25 : -200;
+}
+
+function detectArch(name) {
+  if (/(arm64|aarch64)/.test(name)) return "arm64";
+  if (/(x64|x86_64|amd64)/.test(name)) return "x64";
+  // 裸 x86 必须卡在分隔符上，否则会把 x86_64 之外的词（如 x86vm）也算成 32 位。
+  if (/(ia32|i386|(?:^|[-_.])x86(?:[-_.]|$))/.test(name)) return "ia32";
+  return null;
 }
 
 function readPackageVersion(projectRoot) {
