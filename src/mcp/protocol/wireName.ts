@@ -10,7 +10,7 @@
  */
 
 export function buildMcpToolWireName(serverId: string, toolName: string): string {
-  return `mcp__${normalizeSegment(serverId)}__${normalizeSegment(toolName)}`;
+  return `mcp__${normalizeServerSegment(serverId)}__${normalizeSegment(toolName)}`;
 }
 
 export function parseMcpToolWireName(wireName: string): { serverId: string; toolName: string } | null {
@@ -26,4 +26,16 @@ export function parseMcpToolWireName(wireName: string): { serverId: string; tool
 
 function normalizeSegment(value: string): string {
   return value.replace(/[^A-Za-z0-9_-]/g, "_");
+}
+
+/**
+ * `parseMcpToolWireName` splits at the first `__` after the prefix, so the
+ * server segment must never contain `__` or end in `_` — otherwise the
+ * separator becomes ambiguous and the wire name parses to a different
+ * server/tool pair.
+ */
+function normalizeServerSegment(value: string): string {
+  return normalizeSegment(value)
+    .replace(/_{2,}/g, "_")
+    .replace(/^_+|_+$/g, "");
 }
