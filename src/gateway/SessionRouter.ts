@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import type { AgentSession } from "../agent/index.js";
 import type { CanonicalMessage } from "../model/protocol/canonical.js";
 import type { GatewaySessionInfo, ListSessionsInput, ListSessionsResult } from "./protocol/types.js";
@@ -57,6 +58,8 @@ export class SessionRouter {
   private readonly closingProjects = new Map<string, string | undefined>();
   /** projectKey → 代数；项目被关闭时 +1，用于发现"创建/重建期间项目被关"的竞态。 */
   private readonly projectGenerations = new Map<string, number>();
+  /** sessionKey → 代数；会话被 close() 时 +1，用于发现"创建期间会话被关"的竞态。 */
+  private readonly sessionGenerations = new Map<string, number>();
   /** 已暂停的项目（删除中）：拒绝新会话创建/重建，直到 resumeProject。 */
   private readonly pausedProjects = new Set<string>();
   /** 进行中的会话创建（项目关闭时需一并等待并 dispose，避免关闭后泄漏运行时）。 */
@@ -78,11 +81,15 @@ export class SessionRouter {
     }
   }
 
-  async getOrCreate(context: GatewaySessionContext): Promise<AgentSession> {
+  async getOrCreate(input: GatewaySessionContext): Promise<AgentSession> {
+    const context = normalizeSessionContext(input);
     this.assertProjectOpen(context.projectKey);
     // 记下创建发生时的项目代数：创建/重建期间项目被关闭（代数 +1）时，
     // 本次创建的结果必须作废，否则会在已删除的项目里复活运行时。
     const generation = this.projectGenerations.get(context.projectKey ?? "");
+    // 记下创建发生时的会话代数：创建期间会话被 close()（代数 +1）时本次创建
+    // 的结果必须作废，否则 deleteSession 已 unlink 的转录会被写入器复活。
+    const sessionGeneration = this.sessionGenerations.get(context.sessionKey) ?? 0;
     this.sweepIdle();
     const closing = this.closingSessions.get(context.sessionKey);
     if (closing) await closing;
@@ -98,6 +105,10 @@ export class SessionRouter {
           await recreated.dispose?.();
           throw new Error("Project was closed while recreating the session.");
         }
+        if (sessionGeneration !== (this.sessionGenerations.get(context.sessionKey) ?? 0)) {
+          await recreated.dispose?.();
+          throw new Error("Session was closed while recreating it.");
+        }
         cached.session = recreated;
         cached.dirtyReason = undefined;
       }
@@ -110,6 +121,10 @@ export class SessionRouter {
       await session.dispose?.();
       throw new Error("Project was closed while creating the session.");
     }
+    if (sessionGeneration !== (this.sessionGenerations.get(context.sessionKey) ?? 0)) {
+      await session.dispose?.();
+      throw new Error("Session was closed while creating it.");
+    }
     this.sessions.set(context.sessionKey, {
       session,
       lastUsedAt: this.nowMs(),
@@ -119,7 +134,8 @@ export class SessionRouter {
   }
 
   private assertProjectOpen(projectKey?: string): void {
-    if (projectKey && this.pausedProjects.has(projectKey)) throw new Error("Project is being deleted.");
+    if (!projectKey) return;
+    if (this.pausedProjects.has(normalizeProjectKey(projectKey))) throw new Error("Project is being deleted.");
   }
 
   private async createTrackedSession(
@@ -145,7 +161,8 @@ export class SessionRouter {
    * 暂停创建并排空该项目自己的运行时写入器（不扫描历史）。
    * 返回被关闭的已缓存会话 sessionKey 列表。
    */
-  async closeProject(projectKey: string): Promise<string[]> {
+  async closeProject(input: string): Promise<string[]> {
+    const projectKey = normalizeProjectKey(input);
     this.pausedProjects.add(projectKey);
     this.projectGenerations.set(projectKey, (this.projectGenerations.get(projectKey) ?? 0) + 1);
     const keys = [...this.sessions]
@@ -157,19 +174,22 @@ export class SessionRouter {
     const draining = [...this.closingSessions]
       .filter(([key]) => this.closingProjects.get(key) === projectKey)
       .map(([, pending]) => pending);
+    // 每项独立兜底：某个会话的 dispose 失败（例如历史空闲驱逐在排空途中抛错）
+    // 不得让整个项目关闭 reject——那会把 pausedProjects 留在半途，项目被永久
+    // 判定为"删除中"而目录其实没删掉。
     await Promise.all([
-      ...keys.map(key => this.close(key)),
-      ...draining,
+      ...keys.map(key => this.close(key).catch(() => undefined)),
+      ...draining.map(pending => pending.catch(() => undefined)),
       ...creating.map(async pending => {
         const session = await pending.catch(() => null);
-        await session?.dispose?.();
+        await Promise.resolve(session?.dispose?.()).catch(() => undefined);
       }),
     ]);
     return keys;
   }
 
   resumeProject(projectKey: string): void {
-    this.pausedProjects.delete(projectKey);
+    this.pausedProjects.delete(normalizeProjectKey(projectKey));
   }
 
   beginTurn(sessionKey: string, runId: string): boolean {
@@ -211,12 +231,39 @@ export class SessionRouter {
   }
 
   async close(sessionKey: string): Promise<void> {
+    // 代数 +1：任何在本次 close 之前发起、尚未完成的创建都不允许再注册
+    // （否则 deleteSession 已 unlink 的转录会被新写入器 mkdir 复活）。
+    this.sessionGenerations.set(sessionKey, (this.sessionGenerations.get(sessionKey) ?? 0) + 1);
     const record = this.sessions.get(sessionKey);
     if (record && this.sessions.delete(sessionKey)) {
       await this.emitSessionEvict(sessionKey, record, "closed");
     } else {
       // 空闲逐出或另一次 close 可能已在排空这个写入器：等待它，别抢跑。
       await this.closingSessions.get(sessionKey);
+    }
+    // 首次 getOrCreate 尚未登记到 sessions 的会话：等待创建完成后 dispose，
+    // 让"写入器已关闭"成为 close 返回的前置条件（删除方随后才 unlink 文件）。
+    await this.drainCreatingSession(sessionKey);
+  }
+
+  /**
+   * 排空指定 sessionKey 正在创建中的会话。创建的注册由 getOrCreate 的代数守卫
+   * 拦下；这里只负责等待创建落地并把得到的会话 dispose 掉（dispose 幂等，
+   * 与 getOrCreate 的守卫重复调用无害）。
+   */
+  private async drainCreatingSession(sessionKey: string): Promise<void> {
+    const creating = [...this.creatingSessions]
+      .filter(([, context]) => context.sessionKey === sessionKey)
+      .map(([creation]) => creation);
+    if (creating.length === 0) return;
+    const created = await Promise.all(creating.map(creation => creation.catch(() => null)));
+    for (const session of created) {
+      if (!session) continue;
+      const record = this.sessions.get(sessionKey);
+      if (record?.session === session) this.sessions.delete(sessionKey);
+      // dispose 失败不该让调用方的删除失败：写入器关闭（close 内部已 catch）
+      // 才是本方法要保证的部分。
+      await Promise.resolve(session.dispose?.()).catch(() => undefined);
     }
   }
 
@@ -237,7 +284,8 @@ export class SessionRouter {
     return count;
   }
 
-  markProjectDirty(projectKey: string, reason = "runtime_changed"): number {
+  markProjectDirty(input: string, reason = "runtime_changed"): number {
+    const projectKey = normalizeProjectKey(input);
     let count = 0;
     for (const record of this.sessions.values()) {
       if (record.context.projectKey !== projectKey) {
@@ -303,7 +351,8 @@ export class SessionRouter {
    * in flight for the given project.  Used by the Always-On scheduler to
    * implement the `agent_busy` gate.
    */
-  hasActiveUserTurn(projectKey: string): boolean {
+  hasActiveUserTurn(input: string): boolean {
+    const projectKey = normalizeProjectKey(input);
     for (const [sessionKey] of this.inFlightTurns) {
       if (sessionKey.startsWith("always-on/")) continue;
       if (sessionKey.startsWith("cron:")) continue;
@@ -381,6 +430,22 @@ function snapshotEvictedSession(sessionKey: string, record: SessionRecord): Sess
     context: { ...record.context },
     ...(messageCount !== undefined ? { messageCount } : {}),
   };
+}
+
+/**
+ * 项目键归一化：把同一目录的不同写法（尾部分隔符、`.`、相对路径）收敛到一种
+ * 表示。归一化必须同时作用于**注册**与**查询**两侧——只归一化一侧会让
+ * closeProject / markProjectDirty / hasActiveUserTurn 的比较静默失配（上游
+ * #568 的 `close_project_sessions` 在 InProcessGateway 侧归一化，而会话注册
+ * 用的是原样 projectKey）。`resolve` 幂等，故绝对路径不受影响。
+ */
+function normalizeProjectKey(projectKey: string): string {
+  return resolve(projectKey);
+}
+
+function normalizeSessionContext(context: GatewaySessionContext): GatewaySessionContext {
+  if (!context.projectKey) return context;
+  return { ...context, projectKey: normalizeProjectKey(context.projectKey) };
 }
 
 function mergeSessionContext(current: GatewaySessionContext, next: GatewaySessionContext): GatewaySessionContext {

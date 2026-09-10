@@ -2,6 +2,7 @@ import type { Gateway, GatewayEvent } from "../protocol/types.js";
 import type { WsHelloFrame, WsRequestFrame } from "../protocol/frames.js";
 import { SATI_GATEWAY_PROTOCOL_VERSION, isProtocolCompatible } from "../protocol/version.js";
 import { notConfigured } from "../protocol/notConfigured.js";
+import { GatewayMethodUnavailableError } from "../protocol/methodUnavailable.js";
 import { SkillManagerError, SkillValidationError } from "../../extension/skills/index.js";
 import type { KanbanBoardManager, KanbanSubscriber } from "../kanban/KanbanBoardManager.js";
 import { TextWebSocketConnection } from "./websocket.js";
@@ -231,7 +232,9 @@ export class GatewayWsConnection {
         );
         return;
       }
-      if (error instanceof SkillManagerError) {
+      // 同上，另有 GatewayMethodUnavailableError：可选方法未接线时必须带上
+      // `method_unavailable`，否则调用方只能拿到笼统的 gateway_request_failed。
+      if (error instanceof SkillManagerError || error instanceof GatewayMethodUnavailableError) {
         this.ws.sendText(
           JSON.stringify({
             type: "response",
@@ -299,7 +302,7 @@ export class GatewayWsConnection {
         // 显式失败而非 not_configured 降级：调用方（项目删除）必须知道会话
         // 是否真的排空了，否则会在活跃写入器之下删文件。
         if (!this.options.gateway.closeProjectSessions) {
-          throw new Error("Project session closure is unavailable.");
+          throw new GatewayMethodUnavailableError("Project session closure is unavailable.");
         }
         return this.options.gateway.closeProjectSessions(frame.params as GatewayMethodParams<"closeProjectSessions">);
       case "record_agent_status_message":
