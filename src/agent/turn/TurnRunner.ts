@@ -340,9 +340,12 @@ export class TurnRunner {
         yield { type: "file_artifacts", sessionId: options.sessionId, turnId: options.turnId, artifacts };
       }
       // turn_completed 在结果落盘与 metadata 收尾之后才外发（上游 #568）：
-      // 消费者收到"回合结束"时，转录尾部必然已是最终状态。
-      await this.transcript.recordTurnResult(options.sessionId, options.turnId, runResult.result);
-      await this.finalizeSessionMetadata(options, sessionTitle);
+      // 消费者收到"回合结束"时，转录尾部必然已是最终状态。收尾写入失败只告警
+      // ——落盘异常不得把已经算好的成功回合改写为 turn_failed。
+      await this.settleTailWrite("recordTurnResult", () =>
+        this.transcript.recordTurnResult(options.sessionId, options.turnId, runResult.result),
+      );
+      await this.settleTailWrite("finalizeSessionMetadata", () => this.finalizeSessionMetadata(options, sessionTitle));
       if (turnCompletedEvent) {
         yield turnCompletedEvent;
       }
@@ -354,12 +357,12 @@ export class TurnRunner {
       if (artifacts.length > 0) {
         yield { type: "file_artifacts", sessionId: options.sessionId, turnId: options.turnId, artifacts };
       }
-      await Promise.resolve(this.transcript.recordTurnResult(options.sessionId, options.turnId, result)).catch(
-        () => {},
+      await this.settleTailWrite("recordTurnResult", () =>
+        this.transcript.recordTurnResult(options.sessionId, options.turnId, result),
       );
       const status = await this.recordTurnFailureStatus(options, normalized);
       yield this.toAgentStatusEvent(options, status);
-      await this.finalizeSessionMetadata(options, sessionTitle);
+      await this.settleTailWrite("finalizeSessionMetadata", () => this.finalizeSessionMetadata(options, sessionTitle));
       yield { type: "turn_failed", sessionId: options.sessionId, turnId: options.turnId, error: normalized };
       yield { type: "turn_completed", sessionId: options.sessionId, turnId: options.turnId, result };
       return { result, messages };
@@ -394,9 +397,21 @@ export class TurnRunner {
     };
   }
 
+  /**
+   * 转录收尾写入的统一兜底：失败降级为告警，不改变回合结论。落盘异常若向上传播，
+   * 会把已算好的成功回合改写成 turn_failed（或让错误路径再抛一次、连
+   * turn_failed/turn_completed 都发不出去）。
+   */
+  private async settleTailWrite(what: string, write: () => Promise<void> | void): Promise<void> {
+    // `.then(write)` 而非直接调用：把同步抛出也转成 promise 拒绝，一并被兜住。
+    await Promise.resolve()
+      .then(write)
+      .catch(error => logger.warn(`${what} failed:`, error));
+  }
+
   private async recordErrorResult(_options: TurnRunnerOptions, result: AgentTurnResult): Promise<void> {
-    await Promise.resolve(this.transcript.recordTurnResult(result.sessionId, result.turnId, result)).catch(error =>
-      logger.warn("recordTurnResult failed:", error),
+    await this.settleTailWrite("recordTurnResult", () =>
+      this.transcript.recordTurnResult(result.sessionId, result.turnId, result),
     );
   }
 
@@ -405,8 +420,8 @@ export class TurnRunner {
     error: ReturnType<typeof agentError>,
   ): Promise<AgentStatusMessageInput> {
     const status = this.createTurnFailureStatus(error);
-    await Promise.resolve(this.transcript.recordAgentStatusMessage?.(options.sessionId, options.turnId, status)).catch(
-      recordError => logger.warn("recordAgentStatusMessage failed:", recordError),
+    await this.settleTailWrite("recordAgentStatusMessage", () =>
+      Promise.resolve(this.transcript.recordAgentStatusMessage?.(options.sessionId, options.turnId, status)),
     );
     return status;
   }

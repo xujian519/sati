@@ -151,11 +151,12 @@ export class JsonlTranscriptWriter implements AgentTranscriptWriter {
   /**
    * 停止接受写入并等待在途 append 完成（上游 #568 会话/项目关闭链路）。
    * 语义：
-   *  - 置位后 recordEntry 立即返回已 resolve 的 promise，不再排队（丢弃迟到写入）；
-   *  - 尚未开始的批次（含调用前刚入链的）在链上被跳过，其 ack 以 resolve 收尾——
-   *    丢弃已经发生，不让既有的等待者永久悬挂（上游无 ack 机制，此处为 Sati 适配）；
-   *  - **已开始**的写入（appendFile / write(2) 在途）照常完成落盘，这正是本方法
-   *    要等的东西；
+   *  - 置位后 recordEntry 立即返回已 resolve 的 promise，不再排队——被拒的写入
+   *    在**创建 ack 之前**就返回，故不存在需要收尾的等待者，也不会造成悬挂；
+   *  - **close 之前已接受**的条目（含仍缓冲在 pending 里的）照常落盘：它们的
+   *    调用方已按 durable 语义拿到 ack，丢弃会让 ack 变成假成功（曾导致
+   *    turn_result / metadata 尾静默缺失，resume 把它误判为断点而重放回合）；
+   *  - 已开始与刚入链的写入一律完成，本方法返回时全部排空；
    *  - 幂等，可安全重复调用。
    */
   async close(): Promise<void> {
@@ -164,8 +165,8 @@ export class JsonlTranscriptWriter implements AgentTranscriptWriter {
       clearTimeout(this.flushTimer);
       this.flushTimer = undefined;
     }
-    // 把尚未入链的 pending 批次链上：运行期闭包读到 closed=true → 跳过落盘并
-    // resolve 其 ack，避免缓冲区残留与 ack 悬挂。
+    // 落盘 close 前已接受的条目：recordEntry 已不再入队、定时器已清，
+    // 故这一批就是最后一批，不会再有迟到写入搭上本次排空。
     this.flushPending();
     await this.writeChain.catch(() => undefined);
   }
@@ -325,7 +326,8 @@ export class JsonlTranscriptWriter implements AgentTranscriptWriter {
    * 调度一个批次落盘（不 await）。批次 = 当前全部 pending 行，一次 appendFile。
    * 无在途守卫：批次直接链到 writeChain 尾部（链自身保证串行），flush 期间
    * 新入队的条目被 splice 进下一个批次——flushCheckpoint 返回链尾等待全部排空。
-   * close() 置位后，链上尚未开始的批次在运行期被跳过（丢弃而不落盘）。
+   * 入链的批次一律落盘：入链即代表"已被接受"，close() 只阻止新条目入队
+   * （recordEntry 早退）而不吞掉已接受的批次。
    */
   private flushPending(): void {
     const lines = this.pendingLines.splice(0);
@@ -334,9 +336,6 @@ export class JsonlTranscriptWriter implements AgentTranscriptWriter {
     if (lines.length === 0) return;
     this.writeChain = this.writeChain
       .then(async () => {
-        // close() 后未开始的批次一律丢弃（已开始的写入在下面 await 中自然完成）；
-        // acks 仍由后置 then 的 resolve 分支收尾，不悬挂等待者。
-        if (this.closed) return;
         if (!this.dirReady) {
           await mkdir(dirname(this.options.path), { recursive: true, mode: 0o700 });
           this.dirReady = true;

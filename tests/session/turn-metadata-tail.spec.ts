@@ -194,21 +194,26 @@ for (const replace of [false, true]) {
   });
 }
 
-test("closing a transcript drains in-flight writes and discards queued and future writes", async () => {
+test("closing a transcript drains queued writes and refuses future writes", async () => {
   const directory = await mkdtemp(join(tmpdir(), "sati-writer-close-"));
   const path = join(directory, "session.jsonl");
   const writer = new JsonlTranscriptWriter({ path });
   try {
-    // M3 写缓冲：flushCheckpoint 前的条目留在 pending，close 时整批被丢弃；
-    // 但它们的 ack 仍须 resolve（Sati 适配：上游无 ack 机制，丢弃即悬挂）。
+    // M3 写缓冲：flushCheckpoint 前的条目留在 pending。
     void writer.recordSessionMetadata("s", "t", { title: "Original" });
     await writer.flushCheckpoint();
+    // close 前已接受但仍在 pending 的条目必须在 close 时落盘：其 ack 已按
+    // durable 语义 resolve，丢弃会让 ack 变成假成功（resume 会把缺失的尾部
+    // 记录误判为断点，重放一个已经回答过的回合）。
     const queued = writer.recordSessionMetadata("s", "t", { aiTitle: "Queued" });
     await writer.close();
     await queued;
-    await rm(path);
+    const flushed = await readFile(path, "utf8");
+    assert.match(flushed, /Original/);
+    assert.match(flushed, /Queued/);
+    // close 之后接受的写入在创建 ack 前就被拒绝，既不落盘也不排队。
     await writer.recordSessionMetadata("s", "t", { aiTitle: "Too late" });
-    await assert.rejects(readFile(path), { code: "ENOENT" });
+    assert.doesNotMatch(await readFile(path, "utf8"), /Too late/);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
