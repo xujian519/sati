@@ -173,6 +173,19 @@ function resetGatewayConnection(expectedGateway) {
   gatewayInstance = null;
 }
 
+/**
+ * 提交/会话操作被"项目正在删除"拒绝。这是一个正常拒绝而非故障：它绝不能触发
+ * gateway 状态消息回写——回写会经会话存储重新 mkdir 已删除的项目目录，把刚删掉
+ * 的目录复活（上游 #568）。
+ */
+export class ProjectDeletingError extends Error {
+  constructor(message = "Project is being deleted.") {
+    super(message);
+    this.name = "ProjectDeletingError";
+    this.code = "project_being_deleted";
+  }
+}
+
 export function isGatewayUnavailableError(error) {
   const message = error instanceof Error ? error.message : String(error);
   return /gateway websocket (closed|is not connected)|failed to connect to gateway websocket|gateway hello timed out|gateway closed during hello|gateway connect failed/i.test(
@@ -755,7 +768,7 @@ export async function runChatViaGateway(command, options = {}, writer, provider 
     gw = await ensureGateway();
     // 连接期间项目/会话可能已进入删除窗口：连接就绪后必须复检，否则删除后
     // 仍会提交并把已删会话写回磁盘（上游 #568）。
-    if (state.deleted || state.deleting) throw new Error("Project is being deleted.");
+    if (state.deleted || state.deleting) throw new ProjectDeletingError();
 
     if (staleRunId) {
       const abortReason = options?.forceStart === true ? "user:force_start_next_turn" : "system:stale_turn";
@@ -894,29 +907,41 @@ export async function runChatViaGateway(command, options = {}, writer, provider 
     if (gatewayUnavailable && gw) {
       resetGatewayConnection(gw);
     }
+    const projectDeleting = error instanceof ProjectDeletingError;
     const message = gatewayUnavailable ? "Sati gateway is unavailable." : rawMessage;
-    const statusEvent = gatewayUnavailable
-      ? createBridgeFailureStatusEvent({
-          event: "gateway_unavailable",
-          message,
-          userHint: "Start or restart the Sati gateway, then retry this message.",
-          scope: "preflight",
-          detail: {
-            gatewayUrl: GATEWAY_URL,
-          },
-        })
-      : createBridgeFailureStatusEvent({
-          event: "gateway_bridge_error",
-          message,
-          userHint:
-            "The Web bridge failed while streaming this turn. Retry this message; if it repeats, check the UI server and gateway logs.",
-        });
+    let statusEvent;
+    if (gatewayUnavailable) {
+      statusEvent = createBridgeFailureStatusEvent({
+        event: "gateway_unavailable",
+        message,
+        userHint: "Start or restart the Sati gateway, then retry this message.",
+        scope: "preflight",
+        detail: {
+          gatewayUrl: GATEWAY_URL,
+        },
+      });
+    } else if (projectDeleting) {
+      statusEvent = createBridgeFailureStatusEvent({
+        event: "project_being_deleted",
+        message,
+        userHint: "This project is being deleted. Wait for it to finish or open another project.",
+      });
+    } else {
+      statusEvent = createBridgeFailureStatusEvent({
+        event: "gateway_bridge_error",
+        message,
+        userHint:
+          "The Web bridge failed while streaming this turn. Retry this message; if it repeats, check the UI server and gateway logs.",
+      });
+    }
 
     logger.error(
       "[sati-bridge] runChatViaGateway threw:",
       error instanceof Error ? error.stack || error.message : error,
     );
-    if (gw) {
+    // 删除窗口内的拒绝不回写：状态消息会经会话存储重新 mkdir 项目目录，
+    // 把刚删除的目录复活（上游 #568）。
+    if (gw && !projectDeleting) {
       await recordGatewayStatusMessage(gw, {
         sessionKey,
         turnId: runId,

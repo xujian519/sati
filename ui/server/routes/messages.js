@@ -27,6 +27,19 @@ function isSearchToolName(name) {
   return normalized === "grep" || normalized === "glob";
 }
 
+/**
+ * 读取转录失败的统一响应：显式 500（上游 #568）。用空历史掩盖失败会让前端把
+ * "读取失败"显示成"没有消息"，诱导用户在错误前提上继续操作。
+ */
+function readMessagesFailure(res, code) {
+  return res.status(500).json({
+    error: {
+      code,
+      message: "Unable to read conversation messages. Please retry.",
+    },
+  });
+}
+
 router.get("/:sessionId/messages", async (req, res) => {
   try {
     const { sessionId } = req.params;
@@ -67,14 +80,7 @@ router.get("/:sessionId/messages", async (req, res) => {
     });
   } catch (error) {
     logger.error("[messages] read_session_messages failed:", error);
-    // 显式失败（上游 #568）：空历史会让前端把"读取失败"显示为"没有消息"，
-    // 掩盖真实故障并诱导用户在错误前提上继续操作。
-    return res.status(500).json({
-      error: {
-        code: "session_messages_read_failed",
-        message: "Unable to read conversation messages. Please retry.",
-      },
-    });
+    return readMessagesFailure(res, "session_messages_read_failed");
   }
 });
 
@@ -147,7 +153,7 @@ router.get("/:sessionId/subagent/:subagentId/messages", async (req, res) => {
     });
   } catch (error) {
     logger.error("[messages] read_subagent_messages failed:", error);
-    return res.json({ messages: [], total: 0, hasMore: false });
+    return readMessagesFailure(res, "subagent_messages_read_failed");
   }
 });
 

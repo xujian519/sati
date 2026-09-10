@@ -476,7 +476,15 @@ async function deleteProject(projectName, force = false) {
   } finally {
     finishDeletion(deleted);
     // 解封项目：删除失败也要放行，否则项目永久不可用。
-    await gateway.closeProjectSessions({ projectKey: fullPath, resume: true });
+    // 必须兜底——finally 中拒绝的 promise 会顶掉 try 的返回值和原错误，让调用方
+    // 拿到一个假的失败（成功删除被报成失败，或真实错误被掩盖）。代价是解封失败时
+    // gateway 侧会一直暂停该项目，故记错误日志明确后果。
+    await gateway.closeProjectSessions({ projectKey: fullPath, resume: true }).catch(error => {
+      logger.error(
+        `[projects] failed to resume project ${fullPath} after deletion; it stays paused until gateway restart:`,
+        error?.message ?? error,
+      );
+    });
   }
 }
 
