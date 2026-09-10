@@ -29,7 +29,7 @@ import { validateSatiConfigFile } from "./config-validator.js";
 import { openExternalSafely } from "./safe-external-url.js";
 import { showOnboardingWindow } from "./onboarding-window.js";
 import { ServerManager, getSatiDir } from "./server-manager.js";
-import { installRendererRecovery } from "./rendererRecovery.js";
+import { installRendererRecovery } from "./renderer-recovery.js";
 import { resolveSplashHtmlPath, showSplashWindow } from "./splash-window.js";
 import { resolveAppIconPath } from "./icon-path.js";
 
