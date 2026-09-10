@@ -98,6 +98,7 @@ export const METHOD_PARAM_GUARDS = {
   resume_session: fields({ sessionKey: "string" }),
   new_session: fields({ channelKey: "string" }),
   close_session: fields({ sessionKey: "string" }),
+  close_project_sessions: fields({ projectKey: "string", resume: "boolean?" }),
   record_agent_status_message: OBJECT_PARAMS,
   describe_server: OBJECT_PARAMS,
   active_turn_snapshot: fields({ sessionKey: "string?" }),

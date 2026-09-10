@@ -82,12 +82,13 @@ function makeGateway(service: DiscoveryPlanService | undefined, extra: Record<st
 }
 
 describe("gateway 协议版本", () => {
-  it("discovery 协议方法扩展后版本为 1.1（审批 1.2，cron 更新 1.3，panel_heartbeat 1.4，steer_turn 1.6，edit_last_turn 1.7）", () => {
+  it("discovery 协议方法扩展后版本为 1.1（审批 1.2，cron 更新 1.3，panel_heartbeat 1.4，steer_turn 1.6，edit_last_turn 1.7，close_project_sessions 1.8）", () => {
     // 1.1 = discovery-plan 可选方法；1.2 = 输出门禁 HITL 审批可选方法；1.3 = cron_update 可选方法；
     // 1.4 = team-activity-panel 可选方法（panel_heartbeat / team_panel_snapshot / team_tool_call）；
     // 1.6 = mid-turn steering 可选方法（steer_turn / cancel_steer + steer_applied / steer_unapplied）；
-    // 1.7 = last-turn rewrite 可选方法（edit_last_turn / regenerate_last_turn，遮蔽式 append-only）。
-    assert.ok(["1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7"].includes(SATI_GATEWAY_PROTOCOL_VERSION));
+    // 1.7 = last-turn rewrite 可选方法（edit_last_turn / regenerate_last_turn，遮蔽式 append-only）；
+    // 1.8 = close_project_sessions 可选方法（项目删除前排空会话与转写写入，上游 #568）。
+    assert.ok(["1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8"].includes(SATI_GATEWAY_PROTOCOL_VERSION));
   });
 });
 

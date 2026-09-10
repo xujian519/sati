@@ -295,6 +295,13 @@ export class GatewayWsConnection {
         return this.options.gateway
           .closeSession(frame.params as GatewayMethodParams<"closeSession">)
           .then(() => ({ ok: true }));
+      case "close_project_sessions":
+        // 显式失败而非 not_configured 降级：调用方（项目删除）必须知道会话
+        // 是否真的排空了，否则会在活跃写入器之下删文件。
+        if (!this.options.gateway.closeProjectSessions) {
+          throw new Error("Project session closure is unavailable.");
+        }
+        return this.options.gateway.closeProjectSessions(frame.params as GatewayMethodParams<"closeProjectSessions">);
       case "record_agent_status_message":
         if (this.options.gateway.recordAgentStatusMessage) {
           return this.options.gateway.recordAgentStatusMessage(

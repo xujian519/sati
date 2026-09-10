@@ -740,6 +740,23 @@ export class InProcessGateway implements Gateway {
     return { sessionKey: sanitizeSessionIdForPath(rawKey) };
   }
 
+  /**
+   * 关闭（或恢复）某项目的全部会话（上游 #568）。项目删除前调用：暂停新建、
+   * 排空在跑 turn 与转录写入器；`resume` 用于删除失败后解冻，避免项目被
+   * 永久暂停。关闭成功后一并清理这些会话的临时权限授予。
+   */
+  async closeProjectSessions(input: { projectKey: string; resume?: boolean }): Promise<{ sessionKeys: string[] }> {
+    if (!input.projectKey?.trim()) throw new Error("projectKey is required.");
+    const projectKey = resolve(input.projectKey);
+    if (input.resume) {
+      this.router.resumeProject(projectKey);
+      return { sessionKeys: [] };
+    }
+    const sessionKeys = await this.router.closeProject(projectKey);
+    for (const key of sessionKeys) this.sessionPermissionGrants.delete(key);
+    return { sessionKeys };
+  }
+
   async closeSession(input: { sessionKey: string; reason?: string }): Promise<void> {
     await this.router.close(input.sessionKey);
     this.sessionPermissionGrants.delete(input.sessionKey);

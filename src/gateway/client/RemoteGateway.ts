@@ -165,6 +165,10 @@ export class RemoteGateway implements Gateway {
     return this.client.request<{ sessionKey: string }>("new_session", input);
   }
 
+  async closeProjectSessions(input: { projectKey: string; resume?: boolean }): Promise<{ sessionKeys: string[] }> {
+    return (await this.client.request("close_project_sessions", input)) as { sessionKeys: string[] };
+  }
+
   async closeSession(input: { sessionKey: string; reason?: string }): Promise<void> {
     await this.client.request("close_session", input);
   }
