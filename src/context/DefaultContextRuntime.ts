@@ -123,11 +123,13 @@ export class DefaultContextRuntime implements ContextRuntime {
   private readonly knowledgeProfile?: KnowledgeProfile;
   private readonly now: () => Date;
   /**
-   * 系统提示里的日期在构造时冻结：`<environment>now:` 位于 system prompt
-   * 前缀中，若每次组装都取实时时钟，跨午夜会改写前缀并让整段 prompt cache
-   * 失效。需要实时时间的工作走 get_current_time 工具。
+   * 系统提示里的日期按 UTC 自然日冻结：`<environment>now:` 位于 system prompt
+   * 前缀中，同一天内反复取实时时钟会改写前缀、让整段 prompt cache 失效，
+   * 故同一自然日内复用同一个日期（逐字不变）。但完全冻结会让跨午夜仍活跃的
+   * 会话此后每回合都发旧日期、陈旧没有上界，故跨自然日刷新一次——陈旧上界
+   * 为 1 天。需要精确到分秒的工作走 get_current_time 工具。
    */
-  private readonly promptDate: Date;
+  private promptDate: Date;
   private fullCompactionCooldownUntil = 0;
   private consecutiveIneffectiveFullCompactions = 0;
 
@@ -155,6 +157,20 @@ export class DefaultContextRuntime implements ContextRuntime {
     this.knowledgeProfile = options.knowledgeProfile;
     this.now = options.now ?? (() => new Date());
     this.promptDate = new Date(this.now().getTime());
+  }
+
+  /**
+   * 供 PromptAssembler 取提示日期：与上次返回的日期同属一个自然日时原样复用，
+   * 跨日才前进。判「同日」用 `toISOString()`（UTC），与 PromptAssembler 里
+   * `now.toISOString().slice(0, 10)` 的取日口径一致——两者口径若不同，跨过
+   * 当地午夜却不跨 UTC 日时会算出同一个日期，刷新就落不到提示上。
+   */
+  private promptClock(): Date {
+    const now = this.now();
+    if (now.toISOString().slice(0, 10) !== this.promptDate.toISOString().slice(0, 10)) {
+      this.promptDate = new Date(now.getTime());
+    }
+    return this.promptDate;
   }
 
   async prepareForModel(input: ContextPrepareInput): Promise<ModelContext> {
@@ -198,7 +214,7 @@ export class DefaultContextRuntime implements ContextRuntime {
       tools: input.tools,
       customSystemPrompt: input.customSystemPrompt,
       appendSystemPrompt: input.appendSystemPrompt,
-      now: () => this.promptDate,
+      now: () => this.promptClock(),
     });
 
     const parts = [...prompt.parts];
