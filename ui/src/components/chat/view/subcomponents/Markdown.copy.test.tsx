@@ -9,9 +9,19 @@ vi.mock("../../../../utils/clipboard", () => ({
   copyTextToClipboard: vi.fn(async () => true),
   copyHtmlToClipboard: vi.fn(async () => true),
 }));
-vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (_key: string, options: { defaultValue: string }) => options.defaultValue }),
-}));
+// 断言的是真实英文文案，故 t() 直接查 en/chat.json：key 拼错或文案缺失会当场失败，
+// 而不是被内联 defaultValue 掩盖。
+vi.mock("react-i18next", async () => {
+  const { default: enChat } = await import("../../../../i18n/locales/en/chat.json");
+  const translate = (key: string) => {
+    const value = key
+      .split(".")
+      .reduce<unknown>((node, part) => (node as Record<string, unknown> | undefined)?.[part], enChat);
+    if (typeof value !== "string") throw new Error(`missing chat.json entry: ${key}`);
+    return value;
+  };
+  return { useTranslation: () => ({ t: translate }) };
+});
 afterEach(cleanup);
 beforeEach(() => vi.clearAllMocks());
 
