@@ -15,13 +15,12 @@ export function parseTier(judgeOutput: string, knownTiers: string[]): string | u
   const exact = findExactTier(cleaned, knownTiers);
   if (exact) return exact;
 
-  // Longest tiers first: `-` is a word boundary, so a shorter tier that is a
-  // word-prefix of a hyphenated tier (e.g. "fast" vs "fast-pro") would
-  // otherwise match inside the longer name.
-  const byLength = [...knownTiers].sort((a, b) => b.length - a.length);
-  for (const tier of byLength) {
-    const pattern = new RegExp(`\\b${escapeRegex(tier)}\\b`, "i");
-    if (pattern.test(cleaned)) {
+  // Declared order (tiers are declared cheapest first), so a judge that names
+  // several tiers ("not complex, it is simple") resolves to the cheaper one.
+  // `-` and `_` count as name characters here: `\b` alone would let a tier that
+  // is a word-prefix of a hyphenated one ("fast" inside "fast-pro") match first.
+  for (const tier of knownTiers) {
+    if (tierPattern(tier).test(cleaned)) {
       return tier;
     }
   }
@@ -32,6 +31,11 @@ export function parseTier(judgeOutput: string, knownTiers: string[]): string | u
 function findExactTier(value: string, knownTiers: string[]): string | undefined {
   const lowered = value.toLowerCase();
   return knownTiers.find(t => t.toLowerCase() === lowered);
+}
+
+/** Tier-name boundary: `\w` plus `-`/`_`, so prefixes never match inside a longer tier name. */
+function tierPattern(tier: string): RegExp {
+  return new RegExp(`(?<![\\w-])${escapeRegex(tier)}(?![\\w-])`, "i");
 }
 
 function escapeRegex(s: string): string {

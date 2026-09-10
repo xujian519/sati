@@ -39,8 +39,18 @@ describe("parseTier", () => {
     assert.equal(parseTier("Fast-Pro", ["fast", "fast-pro"]), "fast-pro");
   });
 
-  it("模糊匹配按 tier 长度降序，取最长的命中项", () => {
-    assert.equal(parseTier("both a-a and a appear here", ["a", "a-a"]), "a-a");
+  it("输出提到多个 tier 时按声明顺序取先声明者（歧义落到更便宜的档）", () => {
+    // 真实 tier 按成本升序声明。judge 忽略强制的 <tier> 标签、改在散文里提到
+    // 两个档位名时（"not complex, it is simple"），按长度降序的试序会把结果
+    // 翻到更贵的一档——选中 complex 还会顺带触发 sub-agent 编排。
+    const tiers = ["simple", "medium", "complex", "reasoning"];
+    assert.equal(parseTier("This is not complex, it is simple.", tiers), "simple");
+    assert.equal(parseTier("这不需要 reasoning，simple 即可", tiers), "simple");
+  });
+
+  it("模糊匹配按声明顺序，长 tier 不因更长而抢先", () => {
+    assert.equal(parseTier("both a-a and a appear here", ["a", "a-a"]), "a");
+    assert.equal(parseTier("both a-a and a appear here", ["a-a", "a"]), "a-a");
   });
 
   it("无任何匹配返回 undefined", () => {
