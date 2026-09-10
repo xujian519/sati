@@ -283,8 +283,9 @@ export function getContextStatus(tokenBudget?: Record<string, unknown> | null): 
   const used = readNumber(tokenBudget?.displayUsed) ?? readNumber(tokenBudget?.used) ?? 0;
   const total = readNumber(tokenBudget?.total) ?? 0;
   const effectiveTotal = readNumber(tokenBudget?.effectiveTotal);
-  const displayTotal = effectiveTotal && effectiveTotal > 0 ? effectiveTotal : total;
-  if (displayTotal <= 0) {
+  const budgetTotal = effectiveTotal && effectiveTotal > 0 ? effectiveTotal : total;
+  const visibleTotal = total > 0 ? total : budgetTotal;
+  if (budgetTotal <= 0) {
     return {
       known: false,
       used: 0,
@@ -299,23 +300,22 @@ export function getContextStatus(tokenBudget?: Record<string, unknown> | null): 
     };
   }
 
-  // The visible count and percent must describe the same quantity. `budgetUsed`
-  // includes the conservative request padding used by the compaction policy;
-  // using it for the badge while showing `displayUsed` below produced confusing
-  // combinations such as “100%+” beside “11,928 / 12,000”. Policy state still
-  // uses the padded budget and can correctly remain blocking.
-  const percent = Math.max(0, Math.round((used / displayTotal) * 100));
+  // 分子固定用 `displayUsed`（不含请求侧保守 padding），避免「100%+」旁边写着
+  // 「11,928 / 12,000」这种自相矛盾的组合。分母分两套口径：percent 描述策略严重度
+  // （是否逼近自动压缩线），用扣掉输出预留后的可用预算；徽标与提示文案展示模型
+  // 完整上下文窗口，用户看到的是自己真实的窗口占用。
+  const percent = Math.max(0, Math.round((used / budgetTotal) * 100));
   const snapshotState = typeof tokenBudget?.state === "string" ? tokenBudget.state : null;
   const tone = resolveContextTone(snapshotState, percent);
   return {
     known: true,
     used,
     total,
-    displayTotal,
+    displayTotal: visibleTotal,
     percent,
     percentLabel: formatContextPercentLabel(percent),
     usedLabel: formatTokenCount(used),
-    totalLabel: formatTokenCount(displayTotal),
+    totalLabel: formatTokenCount(visibleTotal),
     state: snapshotState === "blocking" || snapshotState === "warning" ? snapshotState : "ok",
     tone,
   };

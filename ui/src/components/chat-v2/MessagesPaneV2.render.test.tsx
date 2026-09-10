@@ -103,6 +103,32 @@ describe("getContextStatus", () => {
     expect(status.state).toBe("blocking");
     expect(status.tone).toBe("red");
   });
+
+  it("shows the full context window while calculating percent against the effective budget", () => {
+    const status = getContextStatus({
+      displayUsed: 38_161,
+      total: 131_072,
+      effectiveTotal: 98_304,
+      reservedOutputTokens: 32_768,
+      state: "ok",
+    });
+
+    // 显示分母是模型完整上下文窗口；策略口径（percent/tone）仍是扣掉输出预留后的可用预算。
+    expect(status.displayTotal).toBe(131_072);
+    expect(status.totalLabel).toBe("131k");
+    expect(status.used).toBe(38_161);
+    expect(status.percent).toBe(39);
+    expect(status.percentLabel).toBe("39%");
+    expect(status.tone).toBe("normal");
+  });
+
+  it("falls back to the effective budget for display when the raw total is absent", () => {
+    const status = getContextStatus({ displayUsed: 1_000, effectiveTotal: 4_000 });
+
+    expect(status.displayTotal).toBe(4_000);
+    expect(status.totalLabel).toBe("4.0k");
+    expect(status.percentLabel).toBe("25%");
+  });
 });
 
 describe("MessagesPaneV2 render behavior", () => {
