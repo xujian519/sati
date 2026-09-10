@@ -25,6 +25,24 @@ describe("parseTier", () => {
     assert.equal(parseTier("<tier>unknown</tier> and complex", ["simple", "complex"]), "complex");
   });
 
+  it("整段输出恰好等于某个 tier 时精确命中，不被更短 tier 的词边界抢先", () => {
+    // `-` 是词边界，`\ba\b` 会在 "a-a" 内部命中。
+    assert.equal(parseTier("a-a", ["a", "a-a"]), "a-a");
+  });
+
+  it("带连字符的长 tier 不被其词前缀截胡", () => {
+    // 声明顺序把 "fast" 放在前面，旧实现会先命中 "fast"。
+    assert.equal(parseTier("route this to fast-pro please", ["fast", "fast-pro"]), "fast-pro");
+  });
+
+  it("精确匹配不区分大小写", () => {
+    assert.equal(parseTier("Fast-Pro", ["fast", "fast-pro"]), "fast-pro");
+  });
+
+  it("模糊匹配按 tier 长度降序，取最长的命中项", () => {
+    assert.equal(parseTier("both a-a and a appear here", ["a", "a-a"]), "a-a");
+  });
+
   it("无任何匹配返回 undefined", () => {
     assert.equal(parseTier("no tier mentioned at all", ["simple", "complex"]), undefined);
   });
