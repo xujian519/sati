@@ -122,6 +122,12 @@ export class DefaultContextRuntime implements ContextRuntime {
   private readonly memoryRetrievalTimeoutMs: number;
   private readonly knowledgeProfile?: KnowledgeProfile;
   private readonly now: () => Date;
+  /**
+   * 系统提示里的日期在构造时冻结：`<environment>now:` 位于 system prompt
+   * 前缀中，若每次组装都取实时时钟，跨午夜会改写前缀并让整段 prompt cache
+   * 失效。需要实时时间的工作走 get_current_time 工具。
+   */
+  private readonly promptDate: Date;
   private fullCompactionCooldownUntil = 0;
   private consecutiveIneffectiveFullCompactions = 0;
 
@@ -148,6 +154,7 @@ export class DefaultContextRuntime implements ContextRuntime {
     this.memoryRetrievalTimeoutMs = options.memoryRetrievalTimeoutMs ?? DEFAULT_MEMORY_RETRIEVAL_TIMEOUT_MS;
     this.knowledgeProfile = options.knowledgeProfile;
     this.now = options.now ?? (() => new Date());
+    this.promptDate = new Date(this.now().getTime());
   }
 
   async prepareForModel(input: ContextPrepareInput): Promise<ModelContext> {
@@ -191,7 +198,7 @@ export class DefaultContextRuntime implements ContextRuntime {
       tools: input.tools,
       customSystemPrompt: input.customSystemPrompt,
       appendSystemPrompt: input.appendSystemPrompt,
-      now: this.now,
+      now: () => this.promptDate,
     });
 
     const parts = [...prompt.parts];
