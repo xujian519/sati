@@ -428,20 +428,33 @@ export class AgentLoop {
     // Split decide + execute so we can insert a post-routing compact pass
     // when the routed model's context window differs from the agent's
     // default model (the window used by the first tryAutoCompact above).
-    const decision = await this.dependencies.router.decide({
-      request,
-      sessionId: input.sessionId,
-      isMainAgent: !this.config.isSubagent,
-      metadata: state.stickyInfo
-        ? {
-            previousTier: state.previousTier,
-            previousProvider: state.stickyInfo.previousProvider,
-            previousModel: state.stickyInfo.previousModel,
-          }
-        : state.previousTier
-          ? { previousTier: state.previousTier }
-          : undefined,
-    });
+    let decision: RouterDecision;
+    try {
+      decision = await this.dependencies.router.decide({
+        request,
+        sessionId: input.sessionId,
+        isMainAgent: !this.config.isSubagent,
+        // 取消回合时同步中止在途的路由判官：否则判官要跑满超时才返回，为一个
+        // 已取消的回合发出降级事件并白白占用一次 judge 调用。
+        abortSignal: input.abortSignal,
+        metadata: state.stickyInfo
+          ? {
+              previousTier: state.previousTier,
+              previousProvider: state.stickyInfo.previousProvider,
+              previousModel: state.stickyInfo.previousModel,
+            }
+          : state.previousTier
+            ? { previousTier: state.previousTier }
+            : undefined,
+      });
+    } catch (error) {
+      // decide 会把中止原因原样抛出（RouterRuntime 的 abort 重抛语义）；按取消
+      // 收尾，而不是让取消被记成一次路由失败。
+      if (input.abortSignal?.aborted) {
+        return yield* this.abortTurn(input, state);
+      }
+      throw error;
+    }
     const routedLimits = this.tokenCaps.getModelTokenLimits(decision.provider, decision.model);
     const routedMaxOutputTokens = routedLimits?.maxOutputTokens;
 

@@ -111,7 +111,8 @@
         "updateAvailable": "Update Available",
         "installerLaunched": "Installer Launched",
         "upToDate": "Up to Date",
-        "unavailable": "Unavailable"
+        "unavailable": "Unavailable",
+        "assetUnavailable": "No installer for this platform"
       }
     },
     "invalidYaml": {

@@ -52,3 +52,32 @@ test("parseMcpToolWireName normalizes serverId and toolName the same way as buil
   const wireName = buildMcpToolWireName("my server", "my tool");
   assert.deepEqual(parseMcpToolWireName(wireName), { serverId: "my_server", toolName: "my_tool" });
 });
+
+test("buildMcpToolWireName collapses underscore runs in the server segment", () => {
+  // parse() splits at the FIRST "__" after the prefix, so a server segment
+  // containing "__" would make the separator ambiguous and parse to a
+  // different server/tool pair.
+  const wireName = buildMcpToolWireName("0__A", "a");
+  assert.equal(wireName, "mcp__0_A__a");
+  assert.deepEqual(parseMcpToolWireName(wireName), { serverId: "0_A", toolName: "a" });
+});
+
+test("buildMcpToolWireName trims edge underscores off the server segment", () => {
+  // A trailing "_" would fuse with the "__" separator into "___".
+  assert.equal(buildMcpToolWireName("srv_", "tool"), "mcp__srv__tool");
+  assert.equal(buildMcpToolWireName("_srv", "tool"), "mcp__srv__tool");
+  assert.deepEqual(parseMcpToolWireName(buildMcpToolWireName("srv_", "tool")), {
+    serverId: "srv",
+    toolName: "tool",
+  });
+});
+
+test("buildMcpToolWireName collapses runs created by unsafe characters", () => {
+  assert.equal(buildMcpToolWireName("a..b", "tool"), "mcp__a_b__tool");
+  // Single underscores inside the server ID carry meaning and must survive.
+  assert.equal(buildMcpToolWireName("my_server", "tool"), "mcp__my_server__tool");
+});
+
+test("buildMcpToolWireName leaves the tool segment free to contain double underscores", () => {
+  assert.equal(buildMcpToolWireName("server", "a__b"), "mcp__server__a__b");
+});

@@ -234,6 +234,22 @@ export class ApiServerChannel implements ChannelAdapter {
 
     const lastMsg = messages[messages.length - 1];
     const userText = normalizeContent(lastMsg?.content);
+    if (userText === null) {
+      // 对象型 content 不降级为 String(obj)（会得到字面量 "[object Object]" 并
+      // 以 200 返回，调用方无从察觉自己的提示词根本没被理解）。
+      sendJson(
+        res,
+        400,
+        createApiServerErrorBody({
+          event: "api_invalid_content",
+          message: "Unsupported content",
+          code: "invalid_content",
+          status: 400,
+          userHint: "Send content as a string or an array of text parts.",
+        }),
+      );
+      return;
+    }
     if (!userText) {
       sendJson(
         res,
@@ -512,7 +528,7 @@ function parseCorsOrigins(value: unknown): string[] {
   return [];
 }
 
-function normalizeContent(content: unknown): string {
+function normalizeContent(content: unknown): string | null {
   if (!content) return "";
   if (typeof content === "string") return content;
   if (Array.isArray(content)) {
@@ -531,6 +547,7 @@ function normalizeContent(content: unknown): string {
       .filter(Boolean)
       .join("\n");
   }
+  if (typeof content === "object") return null;
   return String(content);
 }
 

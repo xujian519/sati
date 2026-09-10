@@ -917,7 +917,7 @@ export class WeComChannel implements ChannelAdapter {
       path: filePath,
       mimeType,
       bytes: data.length,
-      metadata: { source: "wecom", mediaType: kind },
+      metadata: { channelKey: "wecom", source: "wecom", mediaType: kind },
     };
   }
 

@@ -62,6 +62,8 @@ export type RouterDecisionInput = {
   request: import("../../model/protocol/canonical.js").CanonicalModelRequest;
   sessionId: string;
   isMainAgent: boolean;
+  /** 回合取消时中止在途的判官（judge）请求，避免降级到 fallback tier。 */
+  abortSignal?: AbortSignal;
   metadata?: {
     lastUsage?: RouterDecisionInputUsageHint;
     explicitProvider?: string;

@@ -354,17 +354,24 @@ export function createRouterRuntime(config: RouterConfig, deps: RouterRuntimeDep
           config: config.tokenSaver,
           messages: input.request.messages,
           judgeRuntime,
+          abortSignal: input.abortSignal,
           previousTier: input.metadata?.previousTier,
           sessionId: input.sessionId,
           telemetry,
         });
         if (tokenSaver) {
           if (tokenSaver.failureReason) {
+            const failure = tokenSaver.failure;
             events.emit({
               type: "sati_router_token_saver_failed",
               sessionId: input.sessionId,
               reason: tokenSaver.failureReason,
               fallbackTier: tokenSaver.tier,
+              judgeProvider: config.tokenSaver.judge.provider,
+              judgeModel: config.tokenSaver.judge.model,
+              attempts: failure?.attempts ?? 1,
+              ...(failure?.code ? { errorCode: failure.code } : {}),
+              ...(failure?.message ? { errorMessage: failure.message } : {}),
             });
           }
           if (tokenSaver.selection) {
@@ -909,6 +916,7 @@ export function createRouterRuntime(config: RouterConfig, deps: RouterRuntimeDep
       request,
       sessionId: ctx.sessionId,
       isMainAgent: ctx.isMainAgent,
+      abortSignal: ctx.abortSignal,
       metadata: ctx.previousTier ? { previousTier: ctx.previousTier } : undefined,
     });
     yield* execute(decision, request, ctx);

@@ -283,7 +283,9 @@ export function getContextStatus(tokenBudget?: Record<string, unknown> | null): 
   const used = readNumber(tokenBudget?.displayUsed) ?? readNumber(tokenBudget?.used) ?? 0;
   const total = readNumber(tokenBudget?.total) ?? 0;
   const effectiveTotal = readNumber(tokenBudget?.effectiveTotal);
-  const displayTotal = effectiveTotal && effectiveTotal > 0 ? effectiveTotal : total;
+  const windowTotal = total > 0 ? total : 0;
+  const budgetTotal = effectiveTotal && effectiveTotal > 0 ? effectiveTotal : 0;
+  const displayTotal = windowTotal > 0 ? windowTotal : budgetTotal;
   if (displayTotal <= 0) {
     return {
       known: false,
@@ -299,14 +301,17 @@ export function getContextStatus(tokenBudget?: Record<string, unknown> | null): 
     };
   }
 
-  // The visible count and percent must describe the same quantity. `budgetUsed`
-  // includes the conservative request padding used by the compaction policy;
-  // using it for the badge while showing `displayUsed` below produced confusing
-  // combinations such as “100%+” beside “11,928 / 12,000”. Policy state still
-  // uses the padded budget and can correctly remain blocking.
+  // 百分比与「x / y」必须同分母：都用模型完整上下文窗口（缺 total 时退回扣掉输出
+  // 预留的可用预算），否则同一句提示里会出现「39%。已用 38.2k / 131k tokens」这种
+  // 自相矛盾的两个比例。
   const percent = Math.max(0, Math.round((used / displayTotal) * 100));
+  // 策略严重度是另一个问题，且这个百分比不展示给用户：服务端 snapshot 带 state 时
+  // 以它为准，缺失时（历史回放路径可能不带）才退回用「逼近自动压缩线」的可用预算
+  // 算阈值，避免窗口口径的百分把压缩线的告警吃掉。
+  const policyTotal = effectiveTotal && effectiveTotal > 0 ? effectiveTotal : displayTotal;
+  const policyPercent = Math.max(0, Math.round((used / policyTotal) * 100));
   const snapshotState = typeof tokenBudget?.state === "string" ? tokenBudget.state : null;
-  const tone = resolveContextTone(snapshotState, percent);
+  const tone = resolveContextTone(snapshotState, policyPercent);
   return {
     known: true,
     used,

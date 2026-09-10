@@ -36,6 +36,15 @@ export type RouterTokenSaverFailedEvent = {
   turnId?: string;
   reason: "timeout" | "model_error" | "parse_error";
   fallbackTier: string;
+  /** 判官模型：分辨「判官配错」与「提示词不可解析」的关键，两者处置不同。 */
+  judgeProvider?: string;
+  judgeModel?: string;
+  /** 降级前已尝试的分类次数（含首次）。 */
+  attempts?: number;
+  /** provider 归一化后的错误码（如 auth_error / judge_timeout）。 */
+  errorCode?: string;
+  /** 已脱敏的 provider 错误信息，不含请求内容与凭证。 */
+  errorMessage?: string;
 };
 
 export type RouterCustomFailedEvent = {
