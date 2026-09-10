@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Check, Loader2, X } from "lucide-react";
+import { AlertTriangle, Check, Loader2, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { authenticatedFetch } from "../../../../utils/api";
 import { cn } from "../../../../lib/utils";
@@ -14,7 +14,13 @@ type AboutSectionsProps = {
 };
 
 type LocalUpdateResult = "downloaded" | "installerLaunched" | "failed" | "webUpdated" | "webUpToDate" | null;
-type VersionStatus = "checking" | "updateAvailable" | "installerLaunched" | "upToDate" | "unavailable";
+type VersionStatus =
+  | "checking"
+  | "updateAvailable"
+  | "installerLaunched"
+  | "upToDate"
+  | "unavailable"
+  | "assetUnavailable";
 
 function formatDateTime(value: string | null): string {
   if (!value) return "-";
@@ -41,9 +47,19 @@ export default function AboutSections({ title, versionInfo, checkingVersion }: A
     if (localUpdateResult === "webUpToDate") return "upToDate";
     if (localUpdateResult === "failed") return "unavailable";
     if (versionInfo.checkUnavailable) return "unavailable";
-    if (versionInfo.hasUpdate) return "updateAvailable";
+    // 有新版本但本平台没有对应架构的安装包时，服务端把 updateAvailable 置假 ——
+    // 此时既不能提示「可更新」（下载只会 404），也不能说「已是最新」（版本确实
+    // 落后了），单独给一个「无可用安装包」态。
+    if (versionInfo.updateAvailable) return "updateAvailable";
+    if (versionInfo.hasUpdate) return "assetUnavailable";
     return "upToDate";
-  }, [checkingVersion, localUpdateResult, versionInfo.checkUnavailable, versionInfo.hasUpdate]);
+  }, [
+    checkingVersion,
+    localUpdateResult,
+    versionInfo.checkUnavailable,
+    versionInfo.hasUpdate,
+    versionInfo.updateAvailable,
+  ]);
 
   const handleDownloadAndInstall = async () => {
     setDownloading(true);
@@ -138,7 +154,10 @@ export default function AboutSections({ title, versionInfo, checkingVersion }: A
   const showDownloadButton = isDesktop && status === "updateAvailable" && localUpdateResult !== "downloaded";
   const showRestartInstallButton = isDesktop && localUpdateResult === "downloaded";
   const showWebUpdateButton =
-    !isDesktop && versionInfo.hasUpdate && localUpdateResult !== "webUpdated" && localUpdateResult !== "webUpToDate";
+    !isDesktop &&
+    versionInfo.updateAvailable &&
+    localUpdateResult !== "webUpdated" &&
+    localUpdateResult !== "webUpToDate";
   const showWebRestartButton = !isDesktop && localUpdateResult === "webUpdated";
   const statusBadgeClass = cn(
     "inline-flex items-center rounded-md border px-2 py-0.5 text-sm leading-5 font-medium",
@@ -148,7 +167,9 @@ export default function AboutSections({ title, versionInfo, checkingVersion }: A
         ? "border-emerald-300 bg-emerald-50 text-emerald-700"
         : status === "checking"
           ? "border-slate-300 bg-slate-50 text-slate-700"
-          : "border-red-300 bg-red-50 text-red-700",
+          : status === "assetUnavailable"
+            ? "border-amber-300 bg-amber-50 text-amber-700"
+            : "border-red-300 bg-red-50 text-red-700",
   );
   const statusIconClass = "h-3.5 w-3.5";
 
@@ -167,6 +188,8 @@ export default function AboutSections({ title, versionInfo, checkingVersion }: A
                 <Loader2 className={cn("mr-1.5 animate-spin", statusIconClass)} />
               ) : status === "unavailable" ? (
                 <X className={cn("mr-1", statusIconClass)} />
+              ) : status === "assetUnavailable" ? (
+                <AlertTriangle className={cn("mr-1", statusIconClass)} />
               ) : (
                 <Check className={cn("mr-1", statusIconClass)} />
               )}

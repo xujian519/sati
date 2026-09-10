@@ -111,7 +111,8 @@
         "updateAvailable": "有新版本",
         "installerLaunched": "安装程序已启动",
         "upToDate": "已是最新",
-        "unavailable": "无法获取"
+        "unavailable": "无法获取",
+        "assetUnavailable": "当前平台暂无安装包"
       }
     },
     "invalidYaml": {

@@ -9,7 +9,10 @@ import SettingsContent from "./view/SettingsContent";
 
 export type DesktopVersionCheckResult = {
   mode: "desktop" | "web";
+  /** 有更新的版本存在（信息性）。 */
   hasUpdate: boolean;
+  /** 存在更新且本平台有可安装的产物 —— 只有它为真才该提示/给出按钮。 */
+  updateAvailable: boolean;
   checkUnavailable: boolean;
   currentVersion: string;
   latestVersion: string | null;
@@ -19,6 +22,7 @@ export type DesktopVersionCheckResult = {
 
 type VersionCheckPayload = {
   hasUpdate?: boolean;
+  updateAvailable?: boolean;
   checkUnavailable?: boolean;
   current?: { version?: string; buildTime?: string | null };
   latest?: { version?: string | null; publishedAt?: string | null };
@@ -31,6 +35,9 @@ function normalizeDesktopVersionResult(payload: VersionCheckPayload): DesktopVer
   return {
     mode: "desktop",
     hasUpdate: Boolean(payload?.hasUpdate),
+    // 服务端会滤掉「有新版本但本平台没有对应架构安装包」的情况；旧版服务端
+    // 不发这个字段，回退到 hasUpdate 保持行为不变。
+    updateAvailable: Boolean(payload?.updateAvailable ?? payload?.hasUpdate),
     checkUnavailable: Boolean(payload?.checkUnavailable),
     currentVersion: payload?.current?.version ?? "unknown",
     latestVersion: payload?.latest?.version ?? null,
@@ -43,6 +50,8 @@ function normalizeWebVersionResult(payload: VersionCheckPayload): DesktopVersion
   return {
     mode: "web",
     hasUpdate: Boolean(payload?.hasUpdate),
+    // Web 自更新走 git 远端比较，没有「安装包」概念，可用即可动。
+    updateAvailable: Boolean(payload?.hasUpdate),
     checkUnavailable: Boolean(payload?.checkUnavailable),
     currentVersion: payload?.localHead ?? "unknown",
     latestVersion: payload?.remoteHead ?? null,
@@ -59,6 +68,7 @@ function SettingsInner({ isOpen, onClose, projects = [], initialTab }: SettingsP
   const [versionInfo, setVersionInfo] = useState<DesktopVersionCheckResult>({
     mode: isDesktopApp ? "desktop" : "web",
     hasUpdate: false,
+    updateAvailable: false,
     checkUnavailable: false,
     currentVersion: "unknown",
     latestVersion: null,
@@ -86,6 +96,7 @@ function SettingsInner({ isOpen, onClose, projects = [], initialTab }: SettingsP
       setVersionInfo(prev => ({
         ...prev,
         hasUpdate: false,
+        updateAvailable: false,
         checkUnavailable: true,
       }));
     } finally {
@@ -118,7 +129,7 @@ function SettingsInner({ isOpen, onClose, projects = [], initialTab }: SettingsP
             selectedKey={selectedKey}
             onSelect={selectMenuItem}
             onClose={onClose}
-            showAboutDot={versionInfo.hasUpdate}
+            showAboutDot={versionInfo.updateAvailable}
             mobileVisible={mobileNavigationOpen}
           />
           <SettingsContent

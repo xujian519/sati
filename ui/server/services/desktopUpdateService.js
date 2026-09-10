@@ -156,13 +156,21 @@ export async function getDesktopUpdateStatus(options = {}) {
     });
     const comparison = compareVersions(current.version, latest.version || latest.tagName);
     const hasUpdate = comparison < 0;
+    // 有新版本 ≠ 能装：同一平台只发布了别的架构的包时 selectDesktopAsset 返回
+    // null。若此时仍报「更新可用」，About 页会点亮圆点并给出下载按钮，点下去
+    // 只得到 404 —— 状态必须与资产选择同口径。
+    const assetAvailable = Boolean(selectedAsset);
+    const updateAvailable = hasUpdate && assetAvailable;
+    const platform = options.platform || process.platform;
+    const arch = options.arch || process.arch;
     const status = {
       source: "github-releases",
       scope: "desktop",
       repository,
-      status: hasUpdate ? "update-available" : "up-to-date",
+      status: !hasUpdate ? "up-to-date" : updateAvailable ? "update-available" : "asset-unavailable",
       hasUpdate,
-      updateAvailable: hasUpdate,
+      updateAvailable,
+      assetAvailable,
       checkUnavailable: false,
       current,
       latest: {
@@ -170,6 +178,11 @@ export async function getDesktopUpdateStatus(options = {}) {
         selectedAsset,
       },
       lastCheckedAt: now.toISOString(),
+      ...(hasUpdate && !assetAvailable
+        ? {
+            message: `Release ${latest.version || latest.tagName} ships no installer for ${platform}/${arch}.`,
+          }
+        : {}),
     };
 
     cachedStatus = { cachedAt: Date.now(), status };

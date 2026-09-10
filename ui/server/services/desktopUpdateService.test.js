@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { selectDesktopAsset } from "./desktopUpdateService.js";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { getDesktopUpdateStatus, selectDesktopAsset, startDesktopUpdateDownload } from "./desktopUpdateService.js";
 
 /**
  * 上游 #544：DMG 从 universal 拆成 mac-arm64 / mac-x64 双产物后，同一 release 里
@@ -63,5 +63,85 @@ describe("desktop installer asset selection", () => {
     const release = { assets: [{ name: "Sati-2026.903.0-win-x64-setup.exe" }] };
 
     expect(selectDesktopAsset(release, { platform: "darwin", arch: "arm64" })).toBeNull();
+  });
+});
+
+/**
+ * 状态与资产选择必须同口径：`selectDesktopAsset` 返回 null 时，如果状态仍是
+ * 「可更新」，About 页会点亮圆点并给出下载按钮，点下去只得到 404。
+ */
+describe("desktop update status vs installer asset", () => {
+  const ENV = {
+    SATI_DESKTOP_VERSION: "0.1.12",
+    SATI_COMMIT_SHA: "deadbeef",
+    SATI_BUILD_TIME: "2026-09-01T00:00:00.000Z",
+  };
+  const OPTS = { platform: "darwin", arch: "arm64", force: true, now: new Date("2026-09-10T00:00:00.000Z") };
+
+  function stubLatestRelease(assets, version = "0.1.13") {
+    return vi.stubGlobal("fetch", async () => ({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => ({
+        tag_name: `v${version}`,
+        name: version,
+        html_url: "https://example.test/releases/v0.1.13",
+        published_at: "2026-09-09T00:00:00.000Z",
+        assets: assets.map((name, index) => ({
+          id: index + 1,
+          name,
+          size: 1024,
+          browser_download_url: `https://example.test/download/${name}`,
+          content_type: "application/octet-stream",
+        })),
+      }),
+    }));
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("有对应架构的安装包时才报可更新", async () => {
+    stubLatestRelease(["Sati-0.1.13-mac-arm64.dmg"]);
+    const status = await getDesktopUpdateStatus({ ...OPTS, env: ENV });
+
+    expect(status.status).toBe("update-available");
+    expect(status.hasUpdate).toBe(true);
+    expect(status.updateAvailable).toBe(true);
+    expect(status.assetAvailable).toBe(true);
+    expect(status.latest.selectedAsset?.name).toBe("Sati-0.1.13-mac-arm64.dmg");
+    expect(status.message).toBeUndefined();
+  });
+
+  it("本平台只有别的架构的包时报「无可用安装包」而非可更新", async () => {
+    stubLatestRelease(["Sati-0.1.13-mac-x64.dmg"]);
+    const status = await getDesktopUpdateStatus({ ...OPTS, env: ENV });
+
+    // 版本确实落后（hasUpdate 为真），但没有能装上的包 —— 不能提示可更新。
+    expect(status.hasUpdate).toBe(true);
+    expect(status.assetAvailable).toBe(false);
+    expect(status.updateAvailable).toBe(false);
+    expect(status.status).toBe("asset-unavailable");
+    expect(status.latest.selectedAsset).toBeNull();
+    expect(status.message).toMatch(/darwin\/arm64/);
+  });
+
+  it("无可用安装包时下载入口以 404 收场，状态不再承诺一个做不到的动作", async () => {
+    stubLatestRelease(["Sati-0.1.13-mac-x64.dmg"]);
+    const status = await getDesktopUpdateStatus({ ...OPTS, env: ENV });
+
+    expect(status.status).toBe("asset-unavailable");
+    await expect(startDesktopUpdateDownload({ status })).rejects.toMatchObject({ statusCode: 404 });
+  });
+
+  it("版本未前进时既不可更新也无资产诉求", async () => {
+    stubLatestRelease(["Sati-0.1.12-mac-arm64.dmg"], "0.1.12");
+    const status = await getDesktopUpdateStatus({ ...OPTS, env: ENV });
+
+    expect(status.status).toBe("up-to-date");
+    expect(status.hasUpdate).toBe(false);
+    expect(status.updateAvailable).toBe(false);
   });
 });
