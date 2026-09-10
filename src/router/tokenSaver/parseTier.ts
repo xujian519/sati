@@ -8,12 +8,11 @@ export function parseTier(judgeOutput: string, knownTiers: string[]): string | u
 
   const match = TIER_TAG_PATTERN.exec(cleaned);
   if (match) {
-    const candidate = match[1];
-    const found = knownTiers.find(t => t.toLowerCase() === candidate.toLowerCase());
+    const found = findExactTier(match[1], knownTiers);
     if (found) return found;
   }
 
-  const exact = knownTiers.find(t => t.toLowerCase() === cleaned.toLowerCase());
+  const exact = findExactTier(cleaned, knownTiers);
   if (exact) return exact;
 
   // Longest tiers first: `-` is a word boundary, so a shorter tier that is a
@@ -28,6 +27,11 @@ export function parseTier(judgeOutput: string, knownTiers: string[]): string | u
   }
 
   return undefined;
+}
+
+function findExactTier(value: string, knownTiers: string[]): string | undefined {
+  const lowered = value.toLowerCase();
+  return knownTiers.find(t => t.toLowerCase() === lowered);
 }
 
 function escapeRegex(s: string): string {

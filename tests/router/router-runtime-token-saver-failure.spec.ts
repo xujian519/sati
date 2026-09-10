@@ -37,11 +37,9 @@ const config: RouterConfig = {
   },
 };
 
-function judgeRuntimeFailing(error: unknown): ModelRuntime {
+function runtimeWithComplete(complete: ModelRuntime["complete"]): ModelRuntime {
   return {
-    complete: () => {
-      throw error;
-    },
+    complete,
     stream: () => {
       throw new Error("stream is not exercised in router runtime tests");
     },
@@ -53,25 +51,15 @@ function judgeRuntimeFailing(error: unknown): ModelRuntime {
 }
 
 /** 判官永不返回，只在请求被中止时拒绝（透传中止原因）。 */
-function judgeRuntimeHangingUntilAborted(): ModelRuntime {
-  return {
-    complete: (_request: CanonicalModelRequest, options?: { signal?: AbortSignal }) =>
-      new Promise((_resolve, reject) => {
-        // 传入时已中止：中止事件早已派发，再挂监听不会触发，须直接判定。
-        if (options?.signal?.aborted) {
-          reject(options.signal.reason);
-          return;
-        }
-        options?.signal?.addEventListener("abort", () => reject(options.signal?.reason), { once: true });
-      }),
-    stream: () => {
-      throw new Error("stream is not exercised in router runtime tests");
-    },
-    getCapabilities: () => ({ maxContextTokens: 0 }),
-    getMultimodal: () => ({ images: false }),
-    getProviderProtocol: () => undefined,
-    getProviderBaseUrl: () => undefined,
-  } as unknown as ModelRuntime;
+function pendingUntilAbort(signal?: AbortSignal): Promise<never> {
+  return new Promise((_resolve, reject) => {
+    // 传入时已中止：中止事件早已派发，再挂监听不会触发，须直接判定。
+    if (signal?.aborted) {
+      reject(signal.reason ?? new Error("aborted"));
+      return;
+    }
+    signal?.addEventListener("abort", () => reject(signal.reason ?? new Error("aborted")), { once: true });
+  });
 }
 
 function makeRuntime(modelRuntime: ModelRuntime, events: RouterEvent[]) {
@@ -85,15 +73,15 @@ function makeRuntime(modelRuntime: ModelRuntime, events: RouterEvent[]) {
 test("判官失败降级时事件带出 judge 模型、重试次数与错误码", async () => {
   const events: RouterEvent[] = [];
   const runtime = makeRuntime(
-    judgeRuntimeFailing(
-      new ModelProviderError({
+    runtimeWithComplete(() => {
+      throw new ModelProviderError({
         provider: "judge-provider",
         protocol: "openai",
         code: "auth_error",
         message: "authorization: bearer sk-secret-abc123 rejected",
         retryable: false,
-      }),
-    ),
+      });
+    }),
     events,
   );
 
@@ -114,7 +102,10 @@ test("判官失败降级时事件带出 judge 模型、重试次数与错误码"
 
 test("判官超时降级时事件同样带出 judge 身份与诊断码", async () => {
   const events: RouterEvent[] = [];
-  const runtime = makeRuntime(judgeRuntimeHangingUntilAborted(), events);
+  const runtime = makeRuntime(
+    runtimeWithComplete((_request, options) => pendingUntilAbort(options?.signal)),
+    events,
+  );
 
   await runtime.decide({ request, sessionId: "session-478-timeout", isMainAgent: true });
 
@@ -128,7 +119,10 @@ test("判官超时降级时事件同样带出 judge 身份与诊断码", async (
 
 test("决策输入的中止信号透传到判官请求：回合已取消时不再降级", async () => {
   const events: RouterEvent[] = [];
-  const runtime = makeRuntime(judgeRuntimeHangingUntilAborted(), events);
+  const runtime = makeRuntime(
+    runtimeWithComplete((_request, options) => pendingUntilAbort(options?.signal)),
+    events,
+  );
   const abortController = new AbortController();
   abortController.abort(new Error("turn cancelled"));
 

@@ -361,6 +361,7 @@ export function createRouterRuntime(config: RouterConfig, deps: RouterRuntimeDep
         });
         if (tokenSaver) {
           if (tokenSaver.failureReason) {
+            const failure = tokenSaver.failure;
             events.emit({
               type: "sati_router_token_saver_failed",
               sessionId: input.sessionId,
@@ -368,9 +369,9 @@ export function createRouterRuntime(config: RouterConfig, deps: RouterRuntimeDep
               fallbackTier: tokenSaver.tier,
               judgeProvider: config.tokenSaver.judge.provider,
               judgeModel: config.tokenSaver.judge.model,
-              attempts: tokenSaver.failure?.attempts ?? 1,
-              ...(tokenSaver.failure?.code ? { errorCode: tokenSaver.failure.code } : {}),
-              ...(tokenSaver.failure?.message ? { errorMessage: tokenSaver.failure.message } : {}),
+              attempts: failure?.attempts ?? 1,
+              ...(failure?.code ? { errorCode: failure.code } : {}),
+              ...(failure?.message ? { errorMessage: failure.message } : {}),
             });
           }
           if (tokenSaver.selection) {
