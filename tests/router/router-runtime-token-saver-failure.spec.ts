@@ -100,6 +100,68 @@ test("判官失败降级时事件带出 judge 模型、重试次数与错误码"
   assert.doesNotMatch(failed.errorMessage, /sk-secret-abc123/);
 });
 
+test("第三方网关回显的凭证形态被脱敏，不落盘到 router 事件", async () => {
+  // 真实报错正文（OpenAI 兼容网关各家写法不同）：
+  //   - "Incorrect API key provided: sk-proj-…"  —— 只裸报密钥，无 key= 上下文
+  //   - "…?key=AIza…"                            —— 密钥进 URL 查询串
+  //   - "401 Unauthorized: x-api-key sk-ant-…"   —— 密钥跟在头部名之后
+  //   - 整个错误体被 JSON 序列化回显                 —— 键名/值各带一层引号
+  // 旧实现只认 `bearer <tok>` 与 `key=value`，以上四种都会原样写进
+  // `~/.sati/router/events.jsonl`（明文文件）。断言用「密钥本体」而非脱敏标记，
+  // 避免只测到格式变化。
+  const echoes: Array<{ label: string; message: string; secret: string }> = [
+    {
+      label: "裸报密钥",
+      message: "Incorrect API key provided: sk-proj-Abcdefghijklmnopqrstuvwx. You can find your API key at ...",
+      secret: "sk-proj-Abcdefghijklmnopqrstuvwx",
+    },
+    {
+      label: "URL 查询串",
+      message:
+        "HTTP 400: https://generativelanguage.googleapis.com/v1beta/models?key=AIzaSyDabcdefghijklmnopqrst returned error",
+      secret: "AIzaSyDabcdefghijklmnopqrst",
+    },
+    {
+      label: "请求头名后接密钥",
+      message: "401 Unauthorized: x-api-key sk-ant-Abcdefghijklmnopqrstuvwx is invalid",
+      secret: "sk-ant-Abcdefghijklmnopqrstuvwx",
+    },
+    {
+      label: "JSON 回显（有已知前缀）",
+      message: '{"error":{"message":"bad key"},"api_key": "sk-live-Abcdefghijklmnopqrstuvwx"}',
+      secret: "sk-live-Abcdefghijklmnopqrstuvwx",
+    },
+    {
+      label: "JSON 回显（前缀未知的自建网关）",
+      message: '{"api_key": "Qwerty1234567890Abcdef", "detail": "authentication failed"}',
+      secret: "Qwerty1234567890Abcdef",
+    },
+  ];
+
+  for (const { label, message, secret } of echoes) {
+    const events: RouterEvent[] = [];
+    const runtime = makeRuntime(
+      runtimeWithComplete(() => {
+        throw new ModelProviderError({
+          provider: "judge-provider",
+          protocol: "openai",
+          code: "auth_error",
+          message,
+          retryable: false,
+        });
+      }),
+      events,
+    );
+
+    await runtime.decide({ request, sessionId: `session-redact-${label}`, isMainAgent: true });
+
+    const failed = events.find(event => event.type === "sati_router_token_saver_failed");
+    assert.ok(failed?.errorMessage, `${label}: expected a sanitized provider message`);
+    assert.doesNotMatch(failed.errorMessage, new RegExp(secret.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), label);
+    assert.match(failed.errorMessage, /redacted/i, label);
+  }
+});
+
 test("判官超时降级时事件同样带出 judge 身份与诊断码", async () => {
   const events: RouterEvent[] = [];
   const runtime = makeRuntime(

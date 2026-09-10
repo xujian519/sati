@@ -1,4 +1,5 @@
 import { debugLog } from "../../shared/debug.js";
+import { sanitizeOutgoingText } from "../../shared/credentialRedaction.js";
 import type { CanonicalMessage, CanonicalModelRequest, ModelRuntime } from "../../model/index.js";
 import { ModelProviderError, ModelRequestError } from "../../model/index.js";
 import type { TelemetryClient } from "../../telemetry/index.js";
@@ -342,9 +343,17 @@ function shouldRetryJudgeFailure(error: unknown): boolean {
 }
 
 function sanitizeFailureMessage(message: string): string {
-  return message
+  // 先走通用凭证脱敏（sk-/AIza/ghp_ 等前缀密钥、URL userinfo、引号口令）——
+  // 第三方 OpenAI 兼容网关会原样回显密钥（`Incorrect API key provided: sk-…`、
+  // `?key=AIza…`），只认 `bearer`/`key=value` 的规则会漏掉它们，让密钥明文落进
+  // `~/.sati/router/events.jsonl`。再补两类通用规则不覆盖的赋值形态。
+  const { text } = sanitizeOutgoingText(message);
+  return text
     .replace(/\b(authorization\s*[:=]\s*bearer\s+|bearer\s+)[^\s,;]+/gi, "$1<redacted>")
-    .replace(/\b(api[_-]?key|token|secret|password)\s*[:=]\s*[^\s,;]+/gi, "$1=<redacted>")
+    .replace(
+      /\b((?:x-)?api[_-]?key|access[_-]?token|token|secret|password)(["']?\s*[:=]\s*["']?)[^\s,;"']+/gi,
+      "$1$2<redacted>",
+    )
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 300);

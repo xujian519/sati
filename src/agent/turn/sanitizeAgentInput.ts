@@ -5,19 +5,18 @@
  * 在 TurnRunner 入口（inputProcessor.accept 之前）对输入文本做三类替换，
  * 脱敏后的文本同时进入 transcript 与模型可见消息，维持「模型可见 = 已记录」。
  *
- * 正则刻意收窄防误伤：密钥需 ≥16 字符；URL 凭证仅匹配 userinfo 段
- * （scheme://user:pass@host），普通 "a:b@c" 散文不受影响。
+ * 替换规则本身在 `src/shared/credentialRedaction.ts`（router 的错误落盘同用）。
  */
 import type { AgentInput } from "../protocol/input.js";
 import type { CanonicalContentBlock } from "../../model/index.js";
+import { sanitizeOutgoingText } from "../../shared/credentialRedaction.js";
 
-const API_KEY_RE = /\b(?:sk-|sk-ant-|xai-|AIza|ghp_|gho_|glpat_)[A-Za-z0-9_-]{16,}\b/g;
-const URL_CREDENTIALS_RE = /([a-z][a-z0-9+.-]*:\/\/[^\s:@/]+):[^\s@/]+@/gi;
-const SECRET_ASSIGNMENT_RE = /(password|passwd|secret_key|private_key)(\s*[:=]\s*)(["'])[^"']+\3/gi;
-
-export const REDACTED_API_KEY = "[REDACTED_API_KEY]";
-export const REDACTED_CREDENTIALS = "[REDACTED_CREDENTIALS]";
-export const REDACTED_SECURE_TOKEN = "[REDACTED_SECURE_TOKEN]";
+export {
+  REDACTED_API_KEY,
+  REDACTED_CREDENTIALS,
+  REDACTED_SECURE_TOKEN,
+  sanitizeOutgoingText,
+} from "../../shared/credentialRedaction.js";
 
 export type SanitizeResult = {
   /** 脱敏后的输入（redacted=false 时原样返回） */
@@ -25,15 +24,6 @@ export type SanitizeResult = {
   /** 是否发生任一替换 */
   redacted: boolean;
 };
-
-/** 对单段文本执行三类凭证替换；redacted = 文本是否发生变化。 */
-export function sanitizeOutgoingText(text: string): { text: string; redacted: boolean } {
-  const out = text
-    .replace(API_KEY_RE, REDACTED_API_KEY)
-    .replace(URL_CREDENTIALS_RE, `$1:${REDACTED_CREDENTIALS}@`)
-    .replace(SECRET_ASSIGNMENT_RE, `$1$2$3${REDACTED_SECURE_TOKEN}$3`);
-  return { text: out, redacted: out !== text };
-}
 
 /**
  * 对 AgentInput 做外发脱敏：text 形态脱敏 text 字段；blocks 形态仅脱敏
