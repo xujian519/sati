@@ -54,4 +54,6 @@ export type AgentTranscriptWriter = {
   flushCheckpoint?(): void | Promise<void>;
   recordEntry?(entry: AgentTranscriptEntry): void | Promise<void>;
   snapshotState?(): AgentTranscriptWriterState;
+  /** 停止接受写入并等待在途 append 完成（关闭后新条目与未开始的批次一律丢弃）。 */
+  close?(): Promise<void>;
 };

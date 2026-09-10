@@ -55,6 +55,8 @@ const DEFAULT_FLUSH_INTERVAL_MS = 50;
 
 export class JsonlTranscriptWriter implements AgentTranscriptWriter {
   private sequence = 0;
+  /** 关闭标志（上游 #568）：置位后拒绝新写入并丢弃未开始的批次。 */
+  private closed = false;
   private lastEntryId: string | null = null;
   private readonly now: () => Date;
   private readonly flushThresholdBytes: number;
@@ -144,6 +146,28 @@ export class JsonlTranscriptWriter implements AgentTranscriptWriter {
         throw error;
       }
     });
+  }
+
+  /**
+   * 停止接受写入并等待在途 append 完成（上游 #568 会话/项目关闭链路）。
+   * 语义：
+   *  - 置位后 recordEntry 立即返回已 resolve 的 promise，不再排队（丢弃迟到写入）；
+   *  - 尚未开始的批次（含调用前刚入链的）在链上被跳过，其 ack 以 resolve 收尾——
+   *    丢弃已经发生，不让既有的等待者永久悬挂（上游无 ack 机制，此处为 Sati 适配）；
+   *  - **已开始**的写入（appendFile / write(2) 在途）照常完成落盘，这正是本方法
+   *    要等的东西；
+   *  - 幂等，可安全重复调用。
+   */
+  async close(): Promise<void> {
+    this.closed = true;
+    if (this.flushTimer !== undefined) {
+      clearTimeout(this.flushTimer);
+      this.flushTimer = undefined;
+    }
+    // 把尚未入链的 pending 批次链上：运行期闭包读到 closed=true → 跳过落盘并
+    // resolve 其 ack，避免缓冲区残留与 ack 悬挂。
+    this.flushPending();
+    await this.writeChain.catch(() => undefined);
   }
 
   recordAcceptedInput(
@@ -270,6 +294,7 @@ export class JsonlTranscriptWriter implements AgentTranscriptWriter {
    * resolve；落盘失败 reject（错误传播，fail-closed 与旧行为一致）。
    */
   recordEntry(entry: AgentTranscriptEntry): Promise<void> {
+    if (this.closed) return Promise.resolve();
     this.sequence = Math.max(this.sequence, entry.sequence);
     this.lastEntryId = entry.entryId ?? this.lastEntryId;
     const line = `${JSON.stringify(entry)}\n`;
@@ -300,6 +325,7 @@ export class JsonlTranscriptWriter implements AgentTranscriptWriter {
    * 调度一个批次落盘（不 await）。批次 = 当前全部 pending 行，一次 appendFile。
    * 无在途守卫：批次直接链到 writeChain 尾部（链自身保证串行），flush 期间
    * 新入队的条目被 splice 进下一个批次——flushCheckpoint 返回链尾等待全部排空。
+   * close() 置位后，链上尚未开始的批次在运行期被跳过（丢弃而不落盘）。
    */
   private flushPending(): void {
     const lines = this.pendingLines.splice(0);
@@ -308,6 +334,9 @@ export class JsonlTranscriptWriter implements AgentTranscriptWriter {
     if (lines.length === 0) return;
     this.writeChain = this.writeChain
       .then(async () => {
+        // close() 后未开始的批次一律丢弃（已开始的写入在下面 await 中自然完成）；
+        // acks 仍由后置 then 的 resolve 分支收尾，不悬挂等待者。
+        if (this.closed) return;
         if (!this.dirReady) {
           await mkdir(dirname(this.options.path), { recursive: true, mode: 0o700 });
           this.dirReady = true;

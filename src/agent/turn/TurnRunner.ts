@@ -82,6 +82,8 @@ type PendingSessionTitle = {
 const SESSION_LISTING_PROMPT_MAX_CHARS = 1_200;
 
 export class TurnRunner {
+  /** 会话已关闭（上游 #568）：置位后不再启动后台标题生成，且其迟到结果不再落盘。 */
+  private disposed = false;
   private pendingSessionTitle: PendingSessionTitle | undefined;
 
   constructor(
@@ -152,28 +154,6 @@ export class TurnRunner {
 
   async *run(options: TurnRunnerOptions): AsyncGenerator<AgentEvent, TurnRunnerResult, unknown> {
     yield { type: "turn_started", sessionId: options.sessionId, turnId: options.turnId };
-    const artifactCollector =
-      this.runtimeContext.collectFileArtifacts === false
-        ? undefined
-        : await FileArtifactCollector.start({
-            cwd: this.runtimeContext.cwd,
-            allowedInputPaths: options.allowedReadFiles,
-            now: this.now,
-          }).catch(() => undefined);
-    let artifactsFinished = false;
-    const finishArtifacts = async (result: AgentTurnResult): Promise<FileArtifact[]> => {
-      if (!artifactCollector || artifactsFinished) return [];
-      artifactsFinished = true;
-      const artifacts = await artifactCollector
-        .finish(result.type === "success" ? "complete" : "incomplete")
-        .catch(() => []);
-      if (artifacts.length > 0) {
-        await Promise.resolve(
-          this.transcript.recordFileArtifacts?.(options.sessionId, options.turnId, artifacts),
-        ).catch(error => logger.warn("recordFileArtifacts failed:", error));
-      }
-      return artifacts;
-    };
     // 外发脱敏：凭证类内容在进入 transcript / 模型可见消息之前替换（W1）。
     const sanitized = sanitizeAgentInput(options.input);
     const accepted = this.inputProcessor.accept(sanitized.input);
@@ -199,6 +179,31 @@ export class TurnRunner {
 
     await this.persistListingPromptMetadata(options, accepted.messages);
     yield { type: "input_accepted", sessionId: options.sessionId, turnId: options.turnId, messages: accepted.messages };
+
+    // 先确认 durable 输入再扫描工作区（上游 #568）：基线仍早于 hooks/模型/工具
+    // 任何可能的文件改动，但长耗时的工作区扫描不再推迟 input_accepted 的送达。
+    const artifactCollector =
+      this.runtimeContext.collectFileArtifacts === false
+        ? undefined
+        : await FileArtifactCollector.start({
+            cwd: this.runtimeContext.cwd,
+            allowedInputPaths: options.allowedReadFiles,
+            now: this.now,
+          }).catch(() => undefined);
+    let artifactsFinished = false;
+    const finishArtifacts = async (result: AgentTurnResult): Promise<FileArtifact[]> => {
+      if (!artifactCollector || artifactsFinished) return [];
+      artifactsFinished = true;
+      const artifacts = await artifactCollector
+        .finish(result.type === "success" ? "complete" : "incomplete")
+        .catch(() => []);
+      if (artifacts.length > 0) {
+        await Promise.resolve(
+          this.transcript.recordFileArtifacts?.(options.sessionId, options.turnId, artifacts),
+        ).catch(error => logger.warn("recordFileArtifacts failed:", error));
+      }
+      return artifacts;
+    };
 
     const prompt = inputToPromptText(sanitized.input);
     const userPromptHooks = await this.lifecycle?.dispatch({
@@ -334,11 +339,13 @@ export class TurnRunner {
       if (artifacts.length > 0) {
         yield { type: "file_artifacts", sessionId: options.sessionId, turnId: options.turnId, artifacts };
       }
+      // turn_completed 在结果落盘与 metadata 收尾之后才外发（上游 #568）：
+      // 消费者收到"回合结束"时，转录尾部必然已是最终状态。
+      await this.transcript.recordTurnResult(options.sessionId, options.turnId, runResult.result);
+      await this.finalizeSessionMetadata(options, sessionTitle);
       if (turnCompletedEvent) {
         yield turnCompletedEvent;
       }
-      await this.transcript.recordTurnResult(options.sessionId, options.turnId, runResult.result);
-      await this.finalizeSessionMetadata(options, sessionTitle);
       return runResult;
     } catch (error) {
       const normalized = normalizeAgentError(error);
@@ -433,7 +440,7 @@ export class TurnRunner {
     options: TurnRunnerOptions,
     acceptedMessages: CanonicalMessage[],
   ): PendingSessionTitle | undefined {
-    if (this.turnDependencies.autoGenerateSessionTitle !== true) {
+    if (this.disposed || this.turnDependencies.autoGenerateSessionTitle !== true) {
       return undefined;
     }
     const metadataStore = this.turnDependencies.metadataStore;
@@ -467,6 +474,9 @@ export class TurnRunner {
         signal: controller.signal,
       })
         .then(async title => {
+          // 会话已关闭或本轮已中止：迟到的标题不得写回（上游 #568）。provider 可能
+          // 无视取消，故这里以标志位兜底，而不是依赖 abort 生效。
+          if (this.disposed || controller.signal.aborted) return;
           pending.title = title;
           if (title) {
             const snap = metadataStore.getSnapshot();
@@ -485,36 +495,31 @@ export class TurnRunner {
     return pending;
   }
 
-  private async flushReadySessionTitle(
-    options: TurnRunnerOptions,
-    pending: PendingSessionTitle | undefined,
-  ): Promise<void> {
-    if (!pending) {
-      return;
-    }
-    if (!pending.completed) {
-      // The title generation has its own timeout (SESSION_TITLE_TIMEOUT_MS).
-      // Wait for it to settle instead of discarding immediately.
-      await pending.promise;
-    }
-    if (!pending.title) {
-      return;
-    }
-    const metadataStore = this.turnDependencies.metadataStore;
-    if (!metadataStore) {
-      return;
-    }
-    const latest = metadataStore.getSnapshot();
-    if (latest.title || latest.aiTitle) {
-      return;
-    }
-    await metadataStore.saveAiTitle(pending.title, options.turnId);
+  /**
+   * 会话关闭（上游 #568）：作废后台工作，之后转录不再接受写入。
+   * 生成标题的 provider 可能无视取消——不等它的网络请求，靠上面的完成守卫
+   * 保证迟到标题永远写不回来。
+   */
+  async dispose(): Promise<void> {
+    this.disposed = true;
+    this.pendingSessionTitle?.controller.abort("session_closed");
+    this.pendingSessionTitle?.cleanup();
+    await this.transcript.close?.();
   }
 
-  /** turn 收尾：冲刷标题后把当前 metadata 快照 reappend 到转录尾部。 */
+  /**
+   * turn 收尾（上游 #568）：把当前 metadata 快照 reappend 到转录尾部。
+   * 标题生成不再在此阻塞——它的完成回调自行落盘（`record()` 会把增量
+   * 元数据写进转录尾部），因此后续 turn 可以在标题仍在生成时继续。
+   */
   private async finalizeSessionMetadata(options: TurnRunnerOptions, pending?: PendingSessionTitle): Promise<void> {
-    await this.flushReadySessionTitle(options, pending);
+    // 标题完成会自动落盘；此处只解除它对本轮的 abort 联动，不等待其 settle。
+    pending?.cleanup();
     await this.turnDependencies.metadataStore?.reappendTail(options.turnId).catch(() => {});
+    // M3 写缓冲适配：reappend 的条目排在 turn_result 强制 flush **之后**的批次里，
+    // 其 ack 只能等 unref 兜底定时器——而 turn 边界按约定不依赖它。这里显式冲刷，
+    // 使 turn_completed 发出时转录尾部（含 metadata 快照）确已落盘（上游 #568 不变式）。
+    await Promise.resolve(this.transcript.flushCheckpoint?.()).catch(() => {});
   }
 
   /** 记录列表用 firstPrompt/lastPrompt（截断），供会话列表大附件兜底恢复。 */

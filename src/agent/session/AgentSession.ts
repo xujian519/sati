@@ -180,6 +180,15 @@ export class AgentSession {
     yield { type: "session_ended", sessionId: this.state.sessionId, reason: sessionEndReason };
   }
 
+  /**
+   * 释放会话（上游 #568）：中止在跑的 turn 并作废 TurnRunner 的后台工作
+   * （含关闭转录写入）。会话被驱逐/项目被关闭时由 SessionRouter 调用。
+   */
+  async dispose(): Promise<void> {
+    if (this.state.status === "running") this.abort("session_closed");
+    await this.options.turnRunner.dispose?.();
+  }
+
   abort(reason?: string): void {
     this.state.abortController.abort(reason);
     this.state.status = "aborted";
