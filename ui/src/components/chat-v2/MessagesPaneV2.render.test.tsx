@@ -104,7 +104,7 @@ describe("getContextStatus", () => {
     expect(status.tone).toBe("red");
   });
 
-  it("shows the full context window while calculating percent against the effective budget", () => {
+  it("百分比与「x / y」同分母，提示里不再出现两个比例", () => {
     const status = getContextStatus({
       displayUsed: 38_161,
       total: 131_072,
@@ -113,13 +113,27 @@ describe("getContextStatus", () => {
       state: "ok",
     });
 
-    // 显示分母是模型完整上下文窗口；策略口径（percent/tone）仍是扣掉输出预留后的可用预算。
+    // 38,161 / 131,072 ≈ 29%：分母与下面展示的 "38.2k … out of 131k" 是同一个。
     expect(status.displayTotal).toBe(131_072);
     expect(status.totalLabel).toBe("131k");
     expect(status.used).toBe(38_161);
-    expect(status.percent).toBe(39);
-    expect(status.percentLabel).toBe("39%");
+    expect(status.percent).toBe(29);
+    expect(status.percentLabel).toBe("29%");
     expect(status.tone).toBe("normal");
+  });
+
+  it("已用超过可用预算时也不再并排「100%+」与不足 100% 的比值", () => {
+    const status = getContextStatus({
+      displayUsed: 100_000,
+      total: 131_072,
+      effectiveTotal: 98_304,
+      reservedOutputTokens: 32_768,
+    });
+
+    expect(status.percentLabel).toBe("76%");
+    expect(status.totalLabel).toBe("131k");
+    // 策略口径（已用 100k > 可用预算 98.3k）只体现为告警色，不产出与标签矛盾的数字。
+    expect(status.tone).toBe("red");
   });
 
   it("falls back to the effective budget for display when the raw total is absent", () => {
