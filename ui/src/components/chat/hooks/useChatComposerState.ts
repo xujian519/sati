@@ -99,7 +99,15 @@ interface MentionableFile {
 interface CommandExecutionResult {
   type: "builtin" | "custom";
   action?: string;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- 命令执行结果负载异构（help/model/cost/status/rewind/skillInstall 结构各不相同），类型化需大量收窄且收益低。
+  /**
+   * SAFETY: 内置命令负载为按 action 分派的异构契约（help/content、model/current+available、
+   * cost/tokenUsage+cost、status/version+uptime、memory/path、rewind/steps、
+   * skillInstall/slug+skillMeta+installPath… 各 action 形状互不相同），且消费处为
+   * handleBuiltInCommand 的真值判断+模板拼接（约 30 处字段读取）。
+   * 收敛为逐 action 判别联合需同时决定各字段缺失时的兜底值，属行为面变更，
+   * 故本卡（C40 保守档）保留 any 并登记，另卡按「action → payload 接口」建模。
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- 见上方 SAFETY 说明：异构 action 负载，另卡建判别联合。
   data?: any;
   content?: string;
   hasBashCommands?: boolean;

@@ -1905,6 +1905,8 @@ function ImportFromFolder({
             <input
               ref={fileInputRef}
               type="file"
+              // SAFETY: webkitdirectory 为非标准属性（Chromium/WebKit/Firefox 支持，Safari 忽略），
+              // React DOM 类型未声明该属性，故在此显式豁免类型检查。
               // @ts-expect-error webkitdirectory is non-standard but supported in Chromium/WebKit/Firefox.
               webkitdirectory=""
               multiple

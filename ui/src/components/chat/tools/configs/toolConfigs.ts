@@ -1,8 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any --
- * 工具渲染注册表：input/result 为异构工具数据（JSON），跨 17+ 专利/内置工具的结构
- * 各不相同，静态建模收益低且会波及所有 config 实现处。文件内已有 SearchToolResultData
- * 等 unknown 先例做局部收窄，存量 any 待工具协议收敛后分批处理。
- */
 import { logWarn } from "../../../../utils/logging";
 import { parseStructuredTodos, parseTodoMarkdown } from "./todoParsing";
 
@@ -11,14 +6,42 @@ import { parseStructuredTodos, parseTodoMarkdown } from "./todoParsing";
  * Defines display behavior for all tool types
  */
 
+/**
+ * 工具载荷的对象视图：字段值形状未知（JSON），读取处逐字段收窄。
+ * 本注册表覆盖 17+ 个异构工具，其参数/结果形状各不相同且随工具协议演进，
+ * 故不做逐工具静态建模，而是以「对象视图 + 逐字段收窄」消费（见 field/text/
+ * optionalText/payloadOf），禁止 any 透传。
+ */
+export type ToolPayload = Record<string, unknown>;
+
+/** 将未知载荷收窄为对象视图；非对象载荷（字符串/数组/null/undefined）得到空视图。 */
+function payloadOf(payload: unknown): ToolPayload {
+  return typeof payload === "object" && payload !== null && !Array.isArray(payload) ? (payload as ToolPayload) : {};
+}
+
+/** 读取对象载荷的字段；非对象载荷视为无该字段。 */
+function field(payload: unknown, key: string): unknown {
+  return payloadOf(payload)[key];
+}
+
+/** 读取字段的文本值；非字符串（含缺失）回退空串。 */
+function text(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+/** 读取字段的可选文本值；非字符串（含缺失）视为未提供（下游据此不渲染次要行）。 */
+function optionalText(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
+
 export interface ToolDisplayConfig {
   input: {
     type: "one-line" | "collapsible" | "hidden";
     // One-line config
     icon?: string;
     label?: string;
-    getValue?: (input: any) => string;
-    getSecondary?: (input: any) => string | undefined;
+    getValue?: (input: unknown) => string;
+    getSecondary?: (input: unknown) => string | undefined;
     action?: "copy" | "open-file" | "jump-to-results" | "none";
     style?: string;
     wrapText?: boolean;
@@ -30,17 +53,17 @@ export interface ToolDisplayConfig {
       icon?: string;
     };
     // Collapsible config
-    title?: string | ((input: any) => string);
+    title?: string | ((input: unknown, helpers?: unknown) => string);
     defaultOpen?: boolean;
     contentType?: "diff" | "markdown" | "file-list" | "todo-list" | "text" | "task" | "question-answer";
-    getContentProps?: (input: any, helpers?: any) => any;
+    getContentProps?: (input: unknown, helpers?: unknown) => unknown;
     actionButton?: "file-button" | "none";
   };
   result?: {
     hidden?: boolean;
     hideOnSuccess?: boolean;
     type?: "one-line" | "collapsible" | "special" | "card";
-    title?: string | ((result: any) => string);
+    title?: string | ((result: unknown) => string);
     defaultOpen?: boolean;
     // Special result handlers
     contentType?:
@@ -52,8 +75,8 @@ export interface ToolDisplayConfig {
       | "task"
       | "question-answer"
       | "plan-card";
-    getMessage?: (result: any) => string;
-    getContentProps?: (result: any) => any;
+    getMessage?: (result: unknown) => string;
+    getContentProps?: (result: unknown, helpers?: unknown) => unknown;
   };
 }
 
@@ -123,8 +146,8 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
     input: {
       type: "one-line",
       icon: "terminal",
-      getValue: input => input.command,
-      getSecondary: input => input.description,
+      getValue: input => text(field(input, "command")),
+      getSecondary: input => optionalText(field(input, "description")),
       action: "copy",
       style: "terminal",
       wrapText: true,
@@ -139,7 +162,7 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
     result: {
       type: "collapsible",
       title: data => {
-        const content = typeof data === "string" ? data : data?.content;
+        const content = typeof data === "string" ? data : text(field(data, "content"));
         if (!content) return "Output (empty)";
         const lines = content.split("\n").length;
         return `Output (${lines} line${lines > 1 ? "s" : ""})`;
@@ -147,7 +170,7 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
       defaultOpen: false,
       contentType: "text",
       getContentProps: data => {
-        const content = typeof data === "string" ? data : data?.content || "";
+        const content = typeof data === "string" ? data : text(field(data, "content"));
         return { content };
       },
     },
@@ -161,7 +184,7 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
     input: {
       type: "one-line",
       label: "Read",
-      getValue: input => input.file_path || "",
+      getValue: input => text(field(input, "file_path")),
       action: "open-file",
       colorScheme: {
         primary: "text-gray-700 dark:text-gray-300",
@@ -179,16 +202,17 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
     input: {
       type: "collapsible",
       title: input => {
-        const filename = input.file_path?.split("/").pop() || input.file_path || "file";
+        const filePath = text(field(input, "file_path"));
+        const filename = filePath.split("/").pop() || filePath || "file";
         return `${filename}`;
       },
       defaultOpen: false,
       contentType: "diff",
       actionButton: "none",
       getContentProps: input => ({
-        oldContent: input.old_string,
-        newContent: input.new_string,
-        filePath: input.file_path,
+        oldContent: field(input, "old_string"),
+        newContent: field(input, "new_string"),
+        filePath: field(input, "file_path"),
         badge: "Edit",
         badgeColor: "gray",
       }),
@@ -202,7 +226,8 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
     input: {
       type: "collapsible",
       title: input => {
-        const filename = input.file_path?.split("/").pop() || input.file_path || "file";
+        const filePath = text(field(input, "file_path"));
+        const filename = filePath.split("/").pop() || filePath || "file";
         return `${filename}`;
       },
       defaultOpen: false,
@@ -210,8 +235,8 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
       actionButton: "none",
       getContentProps: input => ({
         oldContent: "",
-        newContent: input.content,
-        filePath: input.file_path,
+        newContent: field(input, "content"),
+        filePath: field(input, "file_path"),
         badge: "New",
         badgeColor: "green",
       }),
@@ -225,16 +250,17 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
     input: {
       type: "collapsible",
       title: input => {
-        const filename = input.file_path?.split("/").pop() || input.file_path || "file";
+        const filePath = text(field(input, "file_path"));
+        const filename = filePath.split("/").pop() || filePath || "file";
         return `${filename}`;
       },
       defaultOpen: false,
       contentType: "diff",
       actionButton: "none",
       getContentProps: input => ({
-        oldContent: input.old_string,
-        newContent: input.new_string,
-        filePath: input.file_path,
+        oldContent: field(input, "old_string"),
+        newContent: field(input, "new_string"),
+        filePath: field(input, "file_path"),
         badge: "Patch",
         badgeColor: "gray",
       }),
@@ -252,8 +278,11 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
     input: {
       type: "one-line",
       label: "Grep",
-      getValue: input => input.pattern,
-      getSecondary: input => (input.path ? `in ${input.path}` : undefined),
+      getValue: input => text(field(input, "pattern")),
+      getSecondary: input => {
+        const path = text(field(input, "path"));
+        return path ? `in ${path}` : undefined;
+      },
       action: "jump-to-results",
       colorScheme: {
         primary: "text-gray-700 dark:text-gray-300",
@@ -283,8 +312,11 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
     input: {
       type: "one-line",
       label: "Glob",
-      getValue: input => input.pattern,
-      getSecondary: input => (input.path ? `in ${input.path}` : undefined),
+      getValue: input => text(field(input, "pattern")),
+      getSecondary: input => {
+        const path = text(field(input, "path"));
+        return path ? `in ${path}` : undefined;
+      },
       action: "jump-to-results",
       colorScheme: {
         primary: "text-gray-700 dark:text-gray-300",
@@ -320,12 +352,15 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
       title: "Updating todo list",
       defaultOpen: false,
       contentType: "todo-list",
-      getContentProps: input => ({
-        todos:
-          Array.isArray(input.todos) && input.todos.length > 0
-            ? parseStructuredTodos(input.todos)
-            : parseTodoMarkdown(input.markdown),
-      }),
+      getContentProps: input => {
+        const todos = field(input, "todos");
+        return {
+          todos:
+            Array.isArray(todos) && todos.length > 0
+              ? parseStructuredTodos(todos)
+              : parseTodoMarkdown(field(input, "markdown")),
+        };
+      },
     },
     result: {
       type: "collapsible",
@@ -340,12 +375,15 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
       title: "Updating todo list",
       defaultOpen: false,
       contentType: "todo-list",
-      getContentProps: input => ({
-        todos:
-          Array.isArray(input.todos) && input.todos.length > 0
-            ? parseStructuredTodos(input.todos)
-            : parseTodoMarkdown(input.markdown),
-      }),
+      getContentProps: input => {
+        const todos = field(input, "todos");
+        return {
+          todos:
+            Array.isArray(todos) && todos.length > 0
+              ? parseStructuredTodos(todos)
+              : parseTodoMarkdown(field(input, "markdown")),
+        };
+      },
     },
     result: {
       type: "collapsible",
@@ -370,7 +408,7 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
       contentType: "todo-list",
       getContentProps: result => {
         try {
-          const content = String(result.content || "");
+          const content = String(field(result, "content") || "");
           let todos = null;
           if (content.startsWith("[")) {
             todos = JSON.parse(content);
@@ -392,11 +430,13 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
     input: {
       type: "one-line",
       label: "CronCreate",
-      getValue: input => input.prompt || "schedule job",
+      getValue: input => text(field(input, "prompt")) || "schedule job",
       getSecondary: input => {
-        const cadence = input.recurring === false ? "one-shot" : "recurring";
-        const storage = input.durable ? "durable" : "session";
-        return input.cron ? `${input.cron} · ${cadence} · ${storage}` : `${cadence} · ${storage}`;
+        const payload = payloadOf(input);
+        const cadence = payload.recurring === false ? "one-shot" : "recurring";
+        const storage = payload.durable ? "durable" : "session";
+        const cron = text(payload.cron);
+        return cron ? `${cron} · ${cadence} · ${storage}` : `${cadence} · ${storage}`;
       },
       action: "none",
       colorScheme: {
@@ -410,14 +450,16 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
       type: "collapsible",
       defaultOpen: false,
       title: result => {
-        const toolData = result?.toolUseResult || {};
-        const job = toolData.data || toolData;
-        const id = job.id ? `Scheduled ${job.id}` : "Scheduled job";
-        return job.humanSchedule ? `${id} · ${job.humanSchedule}` : id;
+        const toolData = payloadOf(field(result, "toolUseResult"));
+        const job = payloadOf(field(toolData, "data") || toolData);
+        const jobId = text(job.id);
+        const id = jobId ? `Scheduled ${jobId}` : "Scheduled job";
+        const humanSchedule = text(job.humanSchedule);
+        return humanSchedule ? `${id} · ${humanSchedule}` : id;
       },
       contentType: "text",
       getContentProps: result => ({
-        content: String(result?.content || ""),
+        content: String(field(result, "content") || ""),
         format: "plain",
       }),
     },
@@ -427,7 +469,7 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
     input: {
       type: "one-line",
       label: "CronDelete",
-      getValue: input => input.id || "cancel scheduled job",
+      getValue: input => text(field(input, "id")) || "cancel scheduled job",
       action: "none",
       colorScheme: {
         primary: "text-gray-700 dark:text-gray-300",
@@ -439,13 +481,14 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
       type: "collapsible",
       defaultOpen: false,
       title: result => {
-        const toolData = result?.toolUseResult || {};
-        const job = toolData.data || toolData;
-        return job.id ? `Cancelled ${job.id}` : "Cancelled scheduled job";
+        const toolData = payloadOf(field(result, "toolUseResult"));
+        const job = payloadOf(field(toolData, "data") || toolData);
+        const jobId = text(job.id);
+        return jobId ? `Cancelled ${jobId}` : "Cancelled scheduled job";
       },
       contentType: "text",
       getContentProps: result => ({
-        content: String(result?.content || ""),
+        content: String(field(result, "content") || ""),
         format: "plain",
       }),
     },
@@ -467,14 +510,14 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
       type: "collapsible",
       defaultOpen: false,
       title: result => {
-        const toolData = result?.toolUseResult || {};
-        const jobs = toolData.data?.jobs || toolData.jobs || [];
+        const toolData = payloadOf(field(result, "toolUseResult"));
+        const jobs = field(field(toolData, "data"), "jobs") || field(toolData, "jobs") || [];
         const count = Array.isArray(jobs) ? jobs.length : 0;
         return `${count} scheduled ${count === 1 ? "job" : "jobs"}`;
       },
       contentType: "text",
       getContentProps: result => ({
-        content: String(result?.content || ""),
+        content: String(field(result, "content") || ""),
         format: "plain",
       }),
     },
@@ -488,8 +531,8 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
     input: {
       type: "one-line",
       label: "Task",
-      getValue: input => input.subject || "Creating task",
-      getSecondary: input => input.status || undefined,
+      getValue: input => text(field(input, "subject")) || "Creating task",
+      getSecondary: input => optionalText(field(input, "status")),
       action: "none",
       colorScheme: {
         primary: "text-gray-700 dark:text-gray-300",
@@ -507,10 +550,14 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
       type: "one-line",
       label: "Task",
       getValue: input => {
-        const parts = [];
-        if (input.taskId) parts.push(`#${input.taskId}`);
-        if (input.status) parts.push(input.status);
-        if (input.subject) parts.push(`"${input.subject}"`);
+        const payload = payloadOf(input);
+        const taskId = text(payload.taskId);
+        const status = text(payload.status);
+        const subject = text(payload.subject);
+        const parts: string[] = [];
+        if (taskId) parts.push(`#${taskId}`);
+        if (status) parts.push(status);
+        if (subject) parts.push(`"${subject}"`);
         return parts.join(" → ") || "updating";
       },
       action: "none",
@@ -543,7 +590,7 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
       title: "Task list",
       contentType: "task",
       getContentProps: result => ({
-        content: String(result?.content || ""),
+        content: String(field(result, "content") || ""),
       }),
     },
   },
@@ -552,7 +599,10 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
     input: {
       type: "one-line",
       label: "Task",
-      getValue: input => (input.taskId ? `#${input.taskId}` : "fetching"),
+      getValue: input => {
+        const taskId = text(field(input, "taskId"));
+        return taskId ? `#${taskId}` : "fetching";
+      },
       action: "none",
       colorScheme: {
         primary: "text-gray-700 dark:text-gray-300",
@@ -566,7 +616,7 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
       title: "Task details",
       contentType: "task",
       getContentProps: result => ({
-        content: String(result?.content || ""),
+        content: String(field(result, "content") || ""),
       }),
     },
   },
@@ -579,36 +629,41 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
     input: {
       type: "collapsible",
       title: input => {
-        const subagentType = input.subagent_type || "Agent";
-        const description = input.description || "Running task";
+        const subagentType = text(field(input, "subagent_type")) || "Agent";
+        const description = text(field(input, "description")) || "Running task";
         return `Subagent / ${subagentType}: ${description}`;
       },
       defaultOpen: false,
       contentType: "markdown",
       getContentProps: input => {
+        const payload = payloadOf(input);
+        const prompt = text(payload.prompt);
+        const model = text(payload.model);
+        const resume = text(payload.resume);
+
         // If only prompt exists (and required fields), show just the prompt
         // Otherwise show all available fields
-        const hasOnlyPrompt = input.prompt && !input.model && !input.resume;
+        const hasOnlyPrompt = prompt && !model && !resume;
 
         if (hasOnlyPrompt) {
           return {
-            content: input.prompt || "",
+            content: prompt || "",
           };
         }
 
         // Format multiple fields
-        const parts = [];
+        const parts: string[] = [];
 
-        if (input.model) {
-          parts.push(`**Model:** ${input.model}`);
+        if (model) {
+          parts.push(`**Model:** ${model}`);
         }
 
-        if (input.prompt) {
-          parts.push(`**Prompt:**\n${input.prompt}`);
+        if (prompt) {
+          parts.push(`**Prompt:**\n${prompt}`);
         }
 
-        if (input.resume) {
-          parts.push(`**Resuming from:** ${input.resume}`);
+        if (resume) {
+          parts.push(`**Resuming from:** ${resume}`);
         }
 
         return {
@@ -627,8 +682,9 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
       contentType: "markdown",
       getContentProps: result => {
         // Handle agent results which may have complex structure
-        if (result && result.content) {
-          let content = result.content;
+        const rawContent = field(result, "content");
+        if (rawContent) {
+          let content: unknown = rawContent;
           // If content is a JSON string, try to parse it (agent results may arrive serialized)
           if (typeof content === "string") {
             try {
@@ -644,8 +700,8 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
           // If content is an array (typical for agent responses with multiple text blocks)
           if (Array.isArray(content)) {
             const textContent = content
-              .filter((item: any) => item.type === "text")
-              .map((item: any) => item.text)
+              .filter(item => field(item, "type") === "text")
+              .map(item => text(field(item, "text")))
               .join("\n\n");
             return { content: textContent || "No response text" };
           }
@@ -664,29 +720,30 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
   AskUserQuestion: {
     input: {
       type: "collapsible",
-      title: (input: any, helpers?: any) => {
-        const questions = Array.isArray(input.questions) ? input.questions : [];
+      title: (input, helpers) => {
+        const rawQuestions = field(input, "questions");
+        const questions = Array.isArray(rawQuestions) ? rawQuestions : [];
         const count = questions.length;
-        const resultAnswers = helpers?.toolResult?.toolUseResult?.answers;
-        const answers = input.answers || resultAnswers;
+        const resultAnswers = field(field(field(helpers, "toolResult"), "toolUseResult"), "answers");
+        const answers = field(input, "answers") || resultAnswers;
         const hasAnswers =
           answers && typeof answers === "object" && !Array.isArray(answers) && Object.keys(answers).length > 0;
         if (count === 1) {
-          const header = questions[0]?.header || "Question";
+          const header = text(field(questions[0], "header")) || "Question";
           return hasAnswers ? `${header} — answered` : header;
         }
-        if (count === 0 && input.questions) {
+        if (count === 0 && rawQuestions) {
           return "Question payload";
         }
         return hasAnswers ? `${count} questions — answered` : `${count} questions`;
       },
       defaultOpen: true,
       contentType: "question-answer",
-      getContentProps: (input: any, helpers?: any) => {
-        const resultAnswers = helpers?.toolResult?.toolUseResult?.answers;
+      getContentProps: (input, helpers) => {
+        const resultAnswers = field(field(field(helpers, "toolResult"), "toolUseResult"), "answers");
         return {
-          questions: input.questions,
-          answers: input.answers || resultAnswers || {},
+          questions: field(input, "questions"),
+          answers: field(input, "answers") || resultAnswers || {},
         };
       },
     },
@@ -706,10 +763,10 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
     result: {
       type: "card",
       contentType: "plan-card",
-      getContentProps: (result: any) => ({
-        planTitle: result.planTitle || "Implementation Plan",
-        planSummary: result.planSummary || "",
-        planFilePath: result.planFilePath || "",
+      getContentProps: result => ({
+        planTitle: text(field(result, "planTitle")) || "Implementation Plan",
+        planSummary: text(field(result, "planSummary")),
+        planFilePath: text(field(result, "planFilePath")),
       }),
     },
   },
@@ -721,10 +778,10 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
     result: {
       type: "card",
       contentType: "plan-card",
-      getContentProps: (result: any) => ({
-        planTitle: result.planTitle || "Implementation Plan",
-        planSummary: result.planSummary || "",
-        planFilePath: result.planFilePath || "",
+      getContentProps: result => ({
+        planTitle: text(field(result, "planTitle")) || "Implementation Plan",
+        planSummary: text(field(result, "planSummary")),
+        planFilePath: text(field(result, "planFilePath")),
       }),
     },
   },
@@ -748,7 +805,7 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
       type: "collapsible",
       contentType: "text",
       getContentProps: result => ({
-        content: String(result?.content || ""),
+        content: String(field(result, "content") || ""),
         format: "plain",
       }),
     },
@@ -781,7 +838,7 @@ export function getToolConfig(toolName: string): ToolDisplayConfig {
 /**
  * Check if a tool result should be hidden
  */
-export function shouldHideToolResult(toolName: string, toolResult: any): boolean {
+export function shouldHideToolResult(toolName: string, toolResult: unknown): boolean {
   const config = getToolConfig(toolName);
 
   if (!config.result) return false;
@@ -789,10 +846,10 @@ export function shouldHideToolResult(toolName: string, toolResult: any): boolean
   // Hide successful noise (for example read_file content already appears in
   // the model context), but never hide failures: users need the exact tool
   // error and recovery hint to understand why the turn got stuck.
-  if (config.result.hidden && !toolResult?.isError) return true;
+  if (config.result.hidden && !field(toolResult, "isError")) return true;
 
   // Hide on success only
-  if (config.result.hideOnSuccess && toolResult && !toolResult.isError) {
+  if (config.result.hideOnSuccess && toolResult && !field(toolResult, "isError")) {
     return true;
   }
 
