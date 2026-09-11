@@ -697,7 +697,7 @@
   - `CODEBUDDY_SAFE_DELETE_ENABLED=0 pnpm typecheck` ✅；`pnpm lint` ✅（含 `check:event-matrix` / `check:patent-sop` / `check:patent-workflow-docs` / `check:html-templates` / `check:skills` 全链路）；`pnpm format:check`（biome 2292 文件）✅
   - `pnpm test`（后端，build + node:test）✅ 4224 测试；`cd ui && pnpm typecheck` ✅；`cd ui && pnpm test`（111 文件 / 670 测试）✅
   - **复测计数**：同一口径重扫 → 无参 catch 518 = 已注释 **481** + 无注释 37（转译 11 / 有日志 8 / **真静默 18**），即「无注释的静默吞错」**125 → 18**。
-- **提交**：见本卡 PR（`refactor(catch): C41 …`，无关联 issue——追踪于本日卡）。
+- **提交**：`refactor(catch): C41 为真静默无参 catch 补 fail-safe 意图注释`（107 处，79 文件）、`docs(event-matrix): C41 注释插行导致行号位移，重生成事件生产者/消费者矩阵`、`refactor(ui): C41 修正 Todo 工具族区块分隔注释，消除 TODO 审计误报`、`docs(code-refinement): C41 记录 …` —— 见本卡 PR #287（无关联 issue——追踪于本日卡）。
 
 ## 六、基线（2026-08-18 实测）
 
