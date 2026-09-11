@@ -25,12 +25,15 @@ rules/
 > **加载状态（2026-08-16 已激活）**：nuo-*.yaml（7 个文件 96 条）**已接线激活**——
 > 评审结论见文末「nuo 规则激活评审（2026-08-16）」章节，评审调整落
 > `rules/patent/activation-overrides.yaml`（轻量补丁，加载时字段级覆盖 action）。
-> 接线两链（第三链 policy-bridge 工具拦截为可选二期，默认未接线）：
+> 接线三链（第三链 policy-bridge 工具拦截由 `SATI_RULE_POLICY_BRIDGE_ENABLED` 门控，默认关）：
 > - **A 链（agent 显式自检）**：`rule_check` scope=patent-full = compliance + nuo 全量
 >   （100 条，经 override 降级后 2 block / 2 review / 66 warn / 30 log）；
 > - **B 链（输出门禁）**：`RuleOutputGate` + `selectGateRules()` 只接入「出现即违规」的
 >   keyword_blocklist 规则（nuo 9 条，排除 compliance PAT-* 与 structural_analysis）——
 >   structural「缺失即违规」对任意输出海量误报，仅适用 rule_check 显式自检。
+> - **C 链（工具拦截）**：`policy-bridge.ts` 把 block + `keyword_blocklist` + 非输出面 phase
+>   的规则编译为 policy deny 规则，flag 开启时**前置**注入 `PermissionContext.rules.deny`
+>   （默认关；当前资产下编译结果为空，见下「action 语义」）。
 > 详见 `docs/nuo-rules-activation-plan.md`。激活前这些规则零加载，
 > `rule_check` 仅加载 `compliance.yaml`。
 
@@ -82,18 +85,23 @@ rules:
 
 ### action 语义
 
-> **接线状态（2026-08）**：`block` 的**工具拦截**目前**未接入生产路径**——
-> `policy-bridge.ts` 的 `rulesToPolicyDenyRules` 仅被测试调用，无生产代码把
-> block 规则编译注入 `PermissionRuntime`。因此 `action: block` 当前**只作用于
-> 输出层**（强制挂起审批），不会在工具调用前拒绝。
+> **接线状态**：`block` 的**工具拦截**已接线，由 flag `SATI_RULE_POLICY_BRIDGE_ENABLED`
+> （默认关）门控——开启时 `createLocalGateway` 把 block 规则编译为 policy deny 规则并
+> **前置**注入 `PermissionContext.rules.deny`（`PermissionRuntime` 取 deny 首个匹配，仅在
+> 来源为 `"user"` 时才可能被 session allow 覆盖，故 policy 必须前置）。
+> 编译带 **phase 语义门**：只有非输出面 phase（`pre_execution` 或未声明）且
+> `keyword_blocklist` 的 block 规则参与；`post_execution` 属输出面语义，编译为工具*输入*
+> 拦截会误伤正当入参（实现见 `src/rule/runtime/policy-bridge.ts`）。
+> **当前规则资产保留 block 的 2 条规则均为 `post_execution`**（见文末评审），故开启 flag
+> 后编译结果为空——启用成本为零，但要真正拦到工具，须先新增 `pre_execution` 关键词规则
+> 并逐条评审误拦面（`keyword_blocklist` 用于工具输入时误伤代价是硬拒绝，不经 HITL）。
 > **HITL 审批闭环（2026-08-11 落地）**：输出层挂起审批已打通放行链路——
 > `GatewayApprovalBus` 注册挂起条目 + `approval_pending` 事件 → UI 审批卡片 →
 > `approvalDecide` 命令 → `approvePendingOutput` / `rejectPendingOutput` 完成流控。
-> 依赖"block 阻止工具调用"前请先完成 policy-bridge 接线。
 
 | action | 输出门禁（RuleOutputGate） | 工具拦截（policy-bridge） |
 |--------|---------------------------|--------------------------|
-| `block` | 强制挂起审批（输出已生成无法拦截） | ⚠️ 未接线：仅测试调用，生产不注入 deny 规则 |
+| `block` | 强制挂起审批（输出已生成无法拦截） | 已接线（flag 默认关）：编译为 policy deny 规则并前置注入 `PermissionContext.rules.deny`；仅非输出面 phase 参与，当前资产下编译结果为空 |
 | `review` | 挂起人工审批 | 不参与（留给输出层） |
 | `warn` | 追加合规提示 | 不参与 |
 | `log` | 仅记录 | 不参与 |
@@ -291,6 +299,10 @@ nuo 规则的 `check` 分两类语义，处置方式不同：
 （❌命中 = 误伤/命中证据；✅放行 = 无误伤。命中方向：CON-COMP-0101/X-REF-003 的 ❌ 是「正确命中真违规」，其余 ❌ 是「误伤合法文本」→ 已降级。）
 
 ### 遗留（接线时一并处理）
+
+> 工具拦截通道已于 2026-09-11 接线（flag 默认关 + phase 语义门，见
+> `docs/notes/implemented/2026-09-11-policy-bridge-tool-guard-wiring.md`）；下列 1–3 项属
+> **规则资产**语义增强，须独立评审误拦面后再动。
 
 1. **X-REF-003 全角括号漏报**：规则用半角 `(202X)`，中文文本常用全角 `（202X）` → 增强 pattern 同时覆盖全/半角；
 2. **EX-SEL-004 negationContext**：补「防/反/抑制/检测」放行语境，避免误伤合法安防专利主题；
