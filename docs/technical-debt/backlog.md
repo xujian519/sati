@@ -32,9 +32,11 @@
   - 建议：收束到 `src/telemetry/` wrapper；先 `sati.ts` → `createLocalGateway.ts`。
   - 工作量：L · 严重级：P2 · 状态：new
   - **2026-08-27 复核**：总量已降至 **153**（logger 收敛生效，cli 191→137，`createLocalGateway.ts` 已清零）。剩余 cli 命中抽样 ~14/15 属 CLI 合法用户输出（向导 TUI、banner、用法报错），建议改判 mostly won't-fix；焦点转向 **ui/server 桥**：`routes/git.js` 等桥文件新增 `console.log("[sati-bridge] submitTurn runMode=...")`（`sati-bridge.js:713,731`，每条用户消息触发）应走 debugLog 门控或服务端 logger。次热现为 `telemetry`(8)。
+  - **2026-09-11 终审**：✅ **done（C39，2026-09-08）**。收束 `ui/server` 408→0、`ui/src` 116→0——建两处纯转发入口 `ui/server/utils/consoleLogger.js` 与 `ui/src/utils/logging.ts`（不改输出文本，逐字节不变）；`src/` 剩余 143 处按设计豁免（CLI 交互 / 登录二维码 / `debug.ts` / telemetry 入口），即 2026-08-27 复核所述的「mostly won't-fix」部分。按 2026-09-11 对齐口径，`src + ui/server` 实测**上界 158**（含注释掉的调用等同名文本），远低于目标 <300。
 - **TD-CATCH-001** · 静默吞错 catch（体仅注释/空白）151 处，`adapters` 40 · `always-on` 15 · `tool` 14
   - 影响：异常被吞且无注释，属隐患。逐条补注释或改结构化错误。
-  - 工作量：L · 严重级：P2 · 状态：new
+  - 工作量：L · 严重级：P2 · 状态：done（2026-09-11，C41）
+  - **2026-09-11 终审（含口径更正）**：✅ **done（C41）**。**本条原始定义有误**——「体仅注释/空白」把**已在函数 JSDoc 说明意图的防御式**与**真无任何说明的静默回退**混计（这也是「151 处」的来源）。按修正后口径（**无注释的无参 catch**；判定「有注释」认 catch 行内 / catch 上一行 / 体内独立注释行或行尾注释三种形态），`src + ui/src` 产品代码 = 总计 **518** / 无注释 **37** / 已注释 **481**。C41 为 107 处真静默吞错补体内意图注释（统一「失败模式 → 回退语义」形态）、18 处登记不重复（已由函数级 JSDoc 或体内自述式告警承载），**隐患类 125 → 37**；零行为变化以编译级证明（`transpileModule({removeComments:true})` 79/79 逐字节相同）。口径定义见 `docs/technical-debt/README.md` §指标口径说明，决策见 `docs/notes/implemented/2026-09-11-c41-catch-todo-governance.md`。
 
 ### Arch/分层
 - **TD-BOUND-001** · `ui/server → src` 深层导入 14 处
@@ -71,10 +73,18 @@
 - **TD-TEST-002** · 极薄模块（1 测试文件）：`fs` `lifecycle` `network` `status` `browser`。工作量：S ×5 · 严重级：P3 · 状态：new
 
 ### 文档漂移
-- **TD-I18N-001** · `teamPanel` namespace 缺 2 个 zh key / 1 个 en key。工作量：S · 严重级：P3 · 状态：new
+- **TD-I18N-001** · `teamPanel` namespace 缺 2 个 zh key / 1 个 en key。工作量：S · 严重级：P3 · 状态：done（2026-09-11 复核：现为 en 44 / zh 43，仅余 `pill.teamCount_one` —— i18next 的 zh 复数类别只有 `other`，该 key 在 zh 侧按设计不存在，非缺陷；C35 已修 `pill.teamCount` → `pill.teamCount_other` 并加复数回归用例）
 - **TD-DOC-001** · 网关协议版本文档漂移：`version.ts`=**1.4**，但 `CLAUDE.md` 仍写「当前协议 **1.2**」
   - 位置：`src/gateway/protocol/version.ts:31` ↔ `CLAUDE.md`
   - 建议：同步 `CLAUDE.md` 及变更表。工作量：S · 严重级：P2 · 状态：done（2026-08-23：设计文档 `docs/design/gateway-protocol-versioning.md` 版本表/状态更新至 1.4；本地 `CLAUDE.md` 同步至 1.4（`CLAUDE.md` gitignored 不入库））
+
+### 度量工具（2026-09-11 C42 登记）
+
+- **TD-METRICS-001** · `measure-techdebt.mjs` 指标口径与文档不一致，且 `any` 正则双向失真
+  - 位置：`scripts/measure-techdebt.mjs`、`docs/technical-debt/README.md`、`docs/technical-debt/metrics.md`
+  - 影响：① 全部指标此前一律只扫 `src/`，与 `docs/code-refinement-plan.md` §六 基线表声明的 `src + ui/server`（console）、`src + ui/src`（any/catch）、`src + ui + ui/server + tests`（TODO）不一致——C40/C41 两张横切卡都因此被迫自建一次性扫描重建口径；② `any` 用裸正则 `: any | as any | <any> | any[]`，**既高估**（注释/字符串里的英文单词 "any"）**又低估**（泛型位 `Record<string, any>` 的文本是 `, any>`，不含 `: any`）；③ `catchSilent` 把已注释的防御式计为静默吞错。
+  - 修复：作用域按基线表对齐并输出 `scopes` 字段；`any` 改 TS AST（类型位 `AnyKeyword` + `@ts-*` 指令），实测 3 处且与 C40 逐处 `SAFETY` 登记清单完全一致；废弃 `catchSilent` 改用「无注释的无参 catch」（以 C41 独立验证分类做等价性校验，逐数相同）；console 豁免两处 C39 收束入口；`metrics.md` 按新口径重生成（顶部带「指标口径」表）。
+  - 工作量：M · 严重级：P2 · **状态：done（2026-09-11，C42）** · 决策见 `docs/notes/implemented/2026-09-11-c42-final-report.md`
 
 > **自动化命中清单结束。** 以下为 Phase 2 逐模块人工审阅结果（B1–B6 全部完成）。
 
