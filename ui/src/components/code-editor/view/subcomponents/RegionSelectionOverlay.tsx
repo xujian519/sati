@@ -256,6 +256,7 @@ export default function RegionSelectionOverlay({
                 if (captureRequestRef.current !== requestId) return;
                 onCommit(capture);
               } catch {
+                // 区域截图捕获失败 → 置错误态并结束 loading（用户可见提示）。
                 if (captureRequestRef.current !== requestId) return;
                 setError(t("contentReference.regionSelection.captureFailed"));
                 setCapturing(false);

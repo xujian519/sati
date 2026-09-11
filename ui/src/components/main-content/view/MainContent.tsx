@@ -112,6 +112,7 @@ function readStoredFilesAssistantWidth(): number {
       ? Math.min(Math.max(stored, FILES_ASSISTANT_MIN_WIDTH), FILES_ASSISTANT_MAX_WIDTH)
       : FILES_ASSISTANT_DEFAULT_WIDTH;
   } catch {
+    // localStorage 不可用/值非法 → 用默认宽度。
     return FILES_ASSISTANT_DEFAULT_WIDTH;
   }
 }
@@ -121,6 +122,7 @@ function readStoredToolPanelWidth(): number {
     const stored = Number(localStorage.getItem(TOOL_PANEL_STORAGE_KEY));
     return Number.isFinite(stored) && stored > 0 ? stored : TOOL_PANEL_DEFAULT_WIDTH;
   } catch {
+    // localStorage 不可用/值非法 → 用默认宽度。
     return TOOL_PANEL_DEFAULT_WIDTH;
   }
 }
@@ -129,6 +131,7 @@ async function readJsonPayload<T>(response: Response): Promise<T | null> {
   try {
     return (await response.json()) as T;
   } catch {
+    // 响应体非 JSON → 返回 null（调用方按无数据）。
     return null;
   }
 }

@@ -36,6 +36,7 @@ function readStoredCollapsed(): boolean {
   try {
     return window.localStorage.getItem(TEAM_PANEL_COLLAPSED_KEY) === "1";
   } catch {
+    // localStorage 不可用 → 视为未折叠。
     return false;
   }
 }

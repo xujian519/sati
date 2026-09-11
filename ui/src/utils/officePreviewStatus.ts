@@ -74,6 +74,7 @@ export async function readOfficePreviewStatus(options: { refresh?: boolean } = {
       libreOffice: body?.libreOffice,
     };
   } catch {
+    // 探测请求失败 → 回退读配置并标记 statusUnavailable。
     const fallback = await readServiceFromConfig();
     return {
       ...fallback,

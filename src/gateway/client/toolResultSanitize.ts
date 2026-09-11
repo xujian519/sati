@@ -77,6 +77,7 @@ export function previewUnknown(value: unknown): string | undefined {
   try {
     return JSON.stringify(value);
   } catch {
+    // 值不可序列化 → 退回 String 预览。
     return String(value);
   }
 }

@@ -343,6 +343,7 @@ async function pathExists(path: string): Promise<boolean> {
     await access(path);
     return true;
   } catch {
+    // 路径不可访问 → 视为不存在（pathExists 的 fail-safe 语义）。
     return false;
   }
 }

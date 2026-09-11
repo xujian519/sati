@@ -32,6 +32,7 @@ export async function listWebProjects(options: ListWebProjectsOptions): Promise<
       projectIds = await readdir(legacyProjectsDir);
       projectsDir = legacyProjectsDir;
     } catch {
+      // 旧 home 目录也不可读 → 视为无项目（空列表）。
       projectIds = [];
     }
   }
@@ -43,6 +44,7 @@ export async function listWebProjects(options: ListWebProjectsOptions): Promise<
       const s = await stat(dir);
       isDir = s.isDirectory();
     } catch {
+      // 目录项不可 stat → 视为非目录，跳过。
       isDir = false;
     }
     if (!isDir) continue;
@@ -83,6 +85,7 @@ async function summarizeProject(projectRoot: string, options: ListWebProjectsOpt
     sessionCount = sessions.length;
     lastActivity = sessions[0]?.lastModified;
   } catch {
+    // 会话列表读取失败 → 计数 0 且无最近活动，不阻断项目枚举。
     sessionCount = 0;
   }
   return {

@@ -182,6 +182,7 @@ export function createRecognizeChemicalStructureTool(
           indexed = true;
         }
       } catch {
+        // 索引写入失败 → indexed=false，仅标记未入索引，不影响本次识别结果。
         indexed = false;
       }
 

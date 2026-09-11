@@ -112,7 +112,7 @@
 | C38 | scripts/ 32 文件审阅精炼 | ✅ 2026-09-08 |
 | C39 | 裸 console 收束（→telemetry wrapper，行为不变） | ✅ 2026-09-08 |
 | C40 | any/类型逃逸收敛（主链路优先 + SAFETY 注释） | ✅ 2026-09-11（16 处收敛 + 3 处 SAFETY 登记；PR #286；决策见 docs/notes/implemented/2026-09-11-c40-any-convergence.md） |
-| C41 | 无参 catch 治理 + TODO/FIXME 核实 | ⬜ |
+| C41 | 无参 catch 治理 + TODO/FIXME 核实 | ✅ 2026-09-11（107 处真静默吞错补意图注释，无注释类 125→18；TODO 真实标记核实为 2 处仍有效；决策见 docs/notes/implemented/2026-09-11-c41-catch-todo-governance.md） |
 | C42 | 终审：docs/code-refinement-report.md + 技术债报告追加注记 | ✅ 2026-08-20（报告见 docs/code-refinement-report.md；注记见 technical-debt-report.md「2026-08-20 注记」段；进度 7/42，C07-C41 共 35 卡遗留） |
 
 ## 五、进度表（每日更新）
@@ -162,6 +162,7 @@
 | 2026-09-08 | C38 | scripts/ 32 文件（审阅后精炼 11 文件） | 死代码/占位删除：gen-patent-workflow-docs 恒空 orphans 检查、patent-benchmark-business DESIGN-INV- 分支与默认逐字节一致、token-estimate-audit toolSchemas 常量+toolsNote 死字段（输出少一条样本，行为面已明示）、measure-techdebt godFunctions 占位（main 无条件覆写）、mock-slow-provider 死 body 变量→req.resume()；重复收敛：repair-invalidation-decisions REASON_RE 提取共用；命名/遮蔽修复：patent-eval 图模式 provider→stageProvider；边界守卫收紧（行为面已明示）：check-ui-server-boundary N3 正则失配改 fail-loud、bump-version --root 空值 arg 守卫；注释修正：check-node-runtime/check-ui-server-boundary；测试补充：open-pr.test 长词截断用例；P0/P1 无；记录不处理：update.sh 63 行 stash pop / 41-45 行 detached HEAD（git/重启行为决策，另卡）、patent-eval L121 不可达 break（触发 no-fallthrough，不动） | 1（refactor） | ✅ |
 | 2026-09-08 | C39 | 裸 console 收束（→ 本地 wrapper，行为不变） | ui/server 建 consoleLogger.js、ui/src 建 logging.ts（纯转发不加前缀，输出逐字节不变）；量化 667 → 154（真实裸调用 143 < 300 ✅）：ui/server 408→0、ui/src 110+6→0；`src/` 143 处全部豁免（cli 交互/二维码/debug.ts/telemetry 入口）；关键发现：ui/server 的 uploads.js/shell.js 含正则字符类内引号，naive 替换会误开字符串态 → 改用小型状态机；ui/src 的 .jsx/.js 未被 .ts/.tsx 扫描覆盖，第 2 批补收束；行为不变对比法：调用点归一化为占位符后逐字节 diff（92 文件 problem:0） | 4（refactor×4） | ✅ |
 | 2026-09-11 | C40 | any / 类型逃逸收敛（主链路优先 + 外围 SAFETY） | 盘点纠正：`src/` 主链路已零真实逃逸（报告期点名的 planMode.ts(6)/MessageProjector.ts(5) 在 C05/C06 已清），逃逸集中在 ui/src 且 14 处压在 toolConfigs.ts（该文件有既有的文件级 eslint-disable 推迟决策）；**技术路线**：ToolRenderer 早已以 `unknown` 视图（ToolDisplaySection）消费配置 → 编排侧 any 只是单侧逃逸，收敛 = 对齐既有契约、不改消费路径；**落地**：`ToolPayload`（Record<string,unknown>）+ payloadOf/field/text/optionalText 四个收窄读取器，interface handler 参数 any→unknown，逐处就地收窄 16 处（toolConfigs 14→0 并删文件级豁免、patch.ts 2→0 改 readAt/writeAt，补 patch.spec 5 例）；**保留 3 处并登记**：useChatComposerState `data?: any`（按 action 分派的异构负载，收敛需先定兜底值=行为面，另卡建判别联合）、ToolRenderer `toObject: Record<string,any>`（需先定 contentType→prop 契约）、SkillsV2 `@ts-expect-error webkitdirectory`（非标准 DOM 属性，正当豁免）；**唯一语义决定**：非字符串/缺失字段由「原样透传（缺失时 .split 抛错）」改为回退空串/undefined（inputSchema 声明为字符串，该路径不可达）；决策见 docs/notes/implemented/2026-09-11-c40-any-convergence.md | 1（refactor） | ✅ |
+| 2026-09-11 | C41 | 无参 catch 治理 + TODO/FIXME 核实（横切） | **口径先立**：`measure-techdebt.mjs` 的 `catchNoParam` 只扫 `src/`（与基线表 `src + ui/src` 不符），`catchSilent` 又把「已注释的防御式」与「真静默」混计——按它治理是治假目标；另证「`catch {` 计数」在行为不变前提下**不可降**（只剩删除 try 或改 `catch (e)` 凑数两条路，前者仅在 try 体可证不抛时成立，而本仓这些体几乎全是 JSON.parse/fs.*/new URL），故把目标改为「消灭无注释隐患类」；**分类口径（三层）**：src+ui/src 产品代码（排除同目录 .spec/.test）无参 catch 518 = 已注释 374 + 无注释 144，无注释再分 错误转译 11（体含 throw）/ 有日志 8 / **真静默 125**；125 中 18 处已由函数级 JSDoc 或体内自述式告警说明（登记不重复），**107 处补体内意图注释**（统一「失败模式 → 回退语义」形态）；**TODO 核实**：全仓 83 命中里 66 在 docs/（规范文档在讲 TODO 约定）、5 在 scripts/（检测工具自身），代码侧真实标记 **仅 2 处且均有效**（vite.config.js:27 legacy PORT 未来大版本移除——下行 `env.SERVER_PORT \|\| env.PORT` 仍在使用；verify-config.spec.ts:46 TODO(G1-b/G1-c)——规范 §7 第 2 步两项仍未勾选），另把 `toolConfigs.ts` 区块分隔注释 `// TODO TOOLS`（语义为 Todo 工具族，与同文件 `// COMMAND TOOLS` 同构）改为 `// Todo-list 工具族（…）` 以消除长期审计误报；**零行为变化**：79 文件 +107/−0 且 107 行全为 `//` 注释，TypeScript `transpileModule({removeComments:true})` 编译 HEAD 版 vs 工作树版 **79/79 逐字节相同**；行号位移连带 `pnpm gen:event-matrix` 重生成（8 行，归一化行号后零差异）；**登记不处理**：11 处错误转译 + 8 处带日志（不静默，无需注释）、两条有效 TODO 保留原样、`measure-techdebt.mjs` 的 catch 口径不一致留待 C42 一并修正 | 1（refactor） | ✅ |
 ### 日卡记录
 
 #### C01 src/agent（2026-08-19）
@@ -679,14 +680,33 @@
   - **行为等价性（组件级 DOM 对照，替代抽样截图作视觉证据）**：jsdom + `@testing-library/react` 渲染**真实 `ToolRenderer`**（仅 `vi.mock` 把注册表换成 `origin/main` 版），84 个载荷用例比对 `container.innerHTML` 与 `console.warn`：**良构组 DOM 逐字节相同**；14 例差异**全部来自类型违约载荷**（8 例旧代码抛错→新代码优雅回退，旧代码 8 条 `logWarn` 归零）。脚本为一次性证据，验证后已删除。
 - **提交**：`refactor(ui): C40 收敛工具渲染注册表 any 至 unknown 视图`（PR #286，无关联 issue——追踪于本日卡）。
 
+#### C41 无参 catch 治理 + TODO/FIXME 核实（2026-09-11）
+
+- **审阅（先纠口径，再定目标）**：卡面只给名称与「显著下降」，而基线表把该指标描述为「含防御式（有注释）与隐患（无注释）两类」却无可复现判据。实测发现两处口径问题：① `scripts/measure-techdebt.mjs` 的 `catchNoParam`（403）/`catchSilent`（158）**只扫 `src/`**，与基线表声明的 `src + ui/src` 不一致；② `catchSilent` 的定义（体仅注释/空白）会把**已在函数级 JSDoc 说明意图的防御式**与**真无任何说明的静默吞错**混计——按它治理等于治一个假目标。
+- **关键前置判断（决定「治理」的含义）**：`catch {` 的**计数**在行为不变前提下不可降——只有「删除 try/catch」（仅在 try 体可证不抛时成立，而本仓这些体几乎全是 `JSON.parse` / `fs.*` / `new URL`，都会抛）或「改写成 `catch (e) {` 凑数」两条路。故把目标从「降计数」修正为「**消灭无注释隐患类**」——这也正是基线表述里真正有风险的那一半。
+- **分类口径（三层，可复现）**：`src + ui/src` 产品代码（排除同目录 `*.spec`/`*.test`）无参 `catch {` **518** = 已带意图注释 **374** + 无注释 **144**；无注释细分 **错误转译（体含 `throw`）11** / **体内有日志 8** / **真静默吞错 125**。判定器对行尾注释（`return null; // 缓存损坏 → 失效重扫`）、体内首行注释、行内注释三种形态均计为「已注释」，已用 `SkillManager.ts`（6 处）与 `parseTextToolCalls.ts`（3 处）逐条人工校验一致。
+- **精炼项**：为 **107 处真静默吞错**各补一行体内意图注释，统一写成「失败模式 → 回退语义」（如 `// 凭据文件缺失或损坏 → 视为未配置（fail-safe，调用方提示重新登录）。`）。按模块：`ui/src` 42 · `src/tool` 16 · `src/model` 10 · `src/cli` 9 · `src/patent` 7 · `src/context` 7 · `src/extension` 5 · `src/web` 4 · 其余（agent/gateway/rule/session/telemetry/adapters）7。**仅新增注释行，零代码改动**（79 文件 +107/−0，107 行全部以 `//` 开头，删除 0 行）。
+- **未补并登记（18 处，各自已有说明位置）**：函数级 JSDoc 已写明回退语义者（`SkillManager.statIsDirectory` 断链 symlink 视为非目录、`chemistry/figure/index-store` 损坏→空索引+warning、`approval-store` 坏记录跳过、`run-id` 文件缺失/损坏返回 undefined、`RuleLoader.validateRegexPatterns` 非法正则返回 false、`TranscriptReader` 头部指纹失败→保守全量 等）；体内带**自述式告警信息**者（`pushIssue(hardFails,"no_skill_md",…)`、`warnings.push({message:"规则目录不存在"})`、`extractStructuredOutput` 的 `reason:"invalid_json"`、`chart.ts` 的 `error:"…JSON 解析失败"` 等）——这些的回退语义已由信息文本承载，再写注释是稀释信号。
+- **TODO/FIXME 核实**：全仓（排除 `node_modules`/`dist`/`vendor`）`TODO|FIXME|HACK` 命中 83 处，其中 **66 处在 `docs/`**（规范/计划文档本身在讲 TODO 约定）、5 处在 `scripts/`（`measure-techdebt` 等检测工具自身）、1 处在 `CONTRIBUTING.md`（约定原文）。代码侧真实标记 **仅 2 处，均核实为仍然有效**：
+  - `ui/vite.config.js:27` —— “未来大版本移除 legacy `PORT` 变量支持”：下一行仍为 `env.SERVER_PORT || env.PORT || 3001`，legacy 路径在用 → 保留。
+  - `tests/development-standards/verify-config.spec.ts:46` —— `TODO(G1-b/G1-c, docs/development-standards.md §7 第 2 步)`：规范 §7 第 2 步 `G1-b`/`G1-c` 两项仍为未勾选 → 保留。
+  - 另修正误报源头：`ui/src/components/chat/tools/configs/toolConfigs.ts` 的区块分隔注释原为 `// TODO TOOLS`（语义是 Todo 工具族，与同文件 `// COMMAND TOOLS`/`// CRON TOOLS` 同构），每次审计都被 `\bTODO\b` 计入 → 改为 `// Todo-list 工具族（TodoWrite / todo_write / TodoRead）` 并加一行说明。达卡面 ≤5 目标。
+- **验证**：
+  - **零行为变化（编译级证明，强于测试）**：对全部 79 个改动文件，用 TypeScript `transpileModule({ removeComments: true, target: ES2022 })` 分别编译 `HEAD` 版与工作树版 → **79/79 转译产物逐字节相同**。注释不可能改变编译产物，故行为等价性得证。
+  - **行号位移连带**：`pnpm check:event-matrix` 报 stale → `pnpm gen:event-matrix` 重生成 `docs/event-producer-consumer.md`（+8/−8）；把行号归一化（`:\d+` → `:#`）后逐行比对 **差异 0**，证明纯位移。
+  - `CODEBUDDY_SAFE_DELETE_ENABLED=0 pnpm typecheck` ✅；`pnpm lint` ✅（含 `check:event-matrix` / `check:patent-sop` / `check:patent-workflow-docs` / `check:html-templates` / `check:skills` 全链路）；`pnpm format:check`（biome 2292 文件）✅
+  - `pnpm test`（后端，build + node:test）✅ 4224 测试；`cd ui && pnpm typecheck` ✅；`cd ui && pnpm test`（111 文件 / 670 测试）✅
+  - **复测计数**：同一口径重扫 → 无参 catch 518 = 已注释 **481** + 无注释 37（转译 11 / 有日志 8 / **真静默 18**），即「无注释的静默吞错」**125 → 18**。
+- **提交**：`refactor(catch): C41 为真静默无参 catch 补 fail-safe 意图注释`（107 处，79 文件）、`docs(event-matrix): C41 注释插行导致行号位移，重生成事件生产者/消费者矩阵`、`refactor(ui): C41 修正 Todo 工具族区块分隔注释，消除 TODO 审计误报`、`docs(code-refinement): C41 记录 …` —— 见本卡 PR #287（无关联 issue——追踪于本日卡）。
+
 ## 六、基线（2026-08-18 实测）
 
 | 指标 | 基线值 | 目标 | 备注 |
 |---|---|---|---|
 | 裸 console（src + ui/server，含 .ts/.tsx/.js） | 657 处 / 83 文件 | <300 | 含 ui/server 手写 JS 大量输出；C39 后（2026-09-08）实测 154（真实裸调用 144，其余为 CLI/横幅豁免与注释残留） |
 | `any`/`@ts-expect-error`（src + ui/src） | 20 处 | ≤10 | 主链路清零，外围加 SAFETY 注释；C40 后（2026-09-11）实测 5（主链路 0，ui/src 余 5 处含 1 处跨卡记录项），逐条 SAFETY 见 note |
-| 无参 `catch {`（src + ui/src） | 485 处 | 显著下降 | 含防御式（有注释）与隐患（无注释）两类 |
-| TODO/FIXME/HACK（src + ui + ui/server + tests） | 24 处 | ≤5 | 需逐条核实业务语义 |
+| 无参 `catch {`（src + ui/src） | 485 处 | 显著下降 | 含防御式（有注释）与隐患（无注释）两类；**口径修正（C41）**：隐患类 = 无注释的**静默**吞错（体无 `throw`、无日志，且无 JSDoc/自述式告警说明）；`catch {` 计数本身在行为不变前提下不可降。C41 后（2026-09-11）实测 518 = 已注释 481 + 无注释 37（转译 11 / 有日志 8 / 真静默 18），**隐患类 125 → 18**（详见 C41 note） |
+| TODO/FIXME/HACK（src + ui + ui/server + tests） | 24 处 | ≤5 | 需逐条核实业务语义；C41 后（2026-09-11）核实：代码侧真实标记 **2 处**（`ui/vite.config.js:27`、`tests/development-standards/verify-config.spec.ts:46`，均仍有效保留），全仓 83 命中里 66 在 `docs/`（约定原文）、5 在 `scripts/`（检测工具自身）、其余为字符串/正则/占位符中的同名文本；另修正 `toolConfigs.ts` 分隔注释 `// TODO TOOLS` 的来源误报 |
 | TS/TSX 文件数 | 1828 | — | 全仓 |
 | 测试文件数 | 458 | — | tests/ + ui/src + ui/e2e |
 | 后端 >600 行文件 | 42 | 不强制下降（保守档） | 记录待拆建议 |

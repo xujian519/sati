@@ -25,6 +25,7 @@ export const readErrorMessageFromResponse = async (response: Response, fallback:
     const payload = (await response.json()) as { error?: string };
     return payload.error || fallback;
   } catch {
+    // 响应体非 JSON → 用 fallback 文案。
     return fallback;
   }
 };

@@ -175,6 +175,7 @@ export function useShellConnection({
           connectingRef.current = false;
         };
       } catch {
+        // 建立 shell WebSocket 失败 → 复位连接状态（由 UI 提示重连）。
         setIsConnected(false);
         setIsConnecting(false);
         connectingRef.current = false;

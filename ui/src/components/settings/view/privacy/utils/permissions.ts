@@ -75,6 +75,7 @@ export function parsePermissionsImport(raw: string): ParsedPermissionsImport | n
   try {
     parsed = JSON.parse(raw);
   } catch {
+    // 导入内容非 JSON → 返回 null（提示无法解析）。
     return null;
   }
   if (!parsed || typeof parsed !== "object") return null;

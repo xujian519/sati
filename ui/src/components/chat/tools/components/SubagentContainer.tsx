@@ -33,6 +33,7 @@ const getCompactToolDisplay = (toolName: string, toolInput: unknown): string => 
           try {
             return JSON.parse(toolInput);
           } catch {
+            // toolInput 非 JSON → 视为空对象（仅用于紧凑展示）。
             return {};
           }
         })()
@@ -67,6 +68,7 @@ export const SubagentContainer: React.FC<SubagentContainerProps> = ({ toolInput,
           try {
             return JSON.parse(toolInput);
           } catch {
+            // toolInput 非 JSON → 视为空对象。
             return {};
           }
         })()

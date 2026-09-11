@@ -191,6 +191,7 @@ function appendCoverageWarnings(
   try {
     matrix = JSON.parse(raw) as typeof matrix;
   } catch {
+    // 审查矩阵 JSON 解析失败 → 跳过矩阵合并，仅返回原校验结果。
     return validation;
   }
   const violations = [...validation.violations];

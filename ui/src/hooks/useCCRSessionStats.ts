@@ -31,6 +31,7 @@ export function useCCRSessionStats(sessionId: string | null | undefined) {
         setStats(null);
       }
     } catch {
+      // 统计请求失败 → stats=null（UI 显示无数据）。
       setStats(null);
     } finally {
       hasFetchedRef.current = true;

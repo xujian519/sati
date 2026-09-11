@@ -133,6 +133,7 @@ export default function McpServersSection({ title, projects = [] }: McpServersSe
       const nextServer = formFromRaw(candidate, kind === "stdio" ? STDIO_TEMPLATE : REMOTE_TEMPLATE);
       updateServers([...activeServers, nextServer]);
     } catch {
+      // 当前配置非合法 JSON → 提示先修正 JSON 再加模板。
       setError(t("mcpConfig.fixJsonBeforeTemplate"));
     }
   };

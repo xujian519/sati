@@ -166,6 +166,7 @@ export function TuiApp(props: TuiAppProps): React.ReactNode {
             tuiMessages.length > 0 ? tuiMessages : [{ role: "system", text: `Session: ${summary || sessionKey}` }],
         }));
       } catch {
+        // 会话记录读取/回放失败 → 仅提示已切换会话，不阻断切换（fail-safe）。
         setState(c => ({
           ...c,
           messages: [{ role: "system", text: `Switched to session: ${summary || sessionKey}` }],

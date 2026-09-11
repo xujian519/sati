@@ -379,6 +379,7 @@ function providerOriginUrl(raw: string): string {
     const parsed = new URL(raw);
     return parsed.origin;
   } catch {
+    // 非法 URL → 原样返回作为 origin 兜底（不阻断 token 记账）。
     return raw;
   }
 }

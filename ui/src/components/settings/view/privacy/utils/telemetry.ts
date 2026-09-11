@@ -12,6 +12,7 @@ export function readTelemetryEnabled(raw: string): boolean {
     }
     return (telemetry as Record<string, unknown>).enabled === true;
   } catch {
+    // 配置解析失败 → 视为未开启（fail-safe）。
     return false;
   }
 }
@@ -28,6 +29,7 @@ export function setTelemetryEnabled(raw: string, enabled: boolean): string | nul
     config.telemetry = { ...telemetry, enabled };
     return stringifyYaml(config, { indent: 2, lineWidth: 0 });
   } catch {
+    // 配置解析/序列化失败 → 返回 null（调用方提示未写入）。
     return null;
   }
 }

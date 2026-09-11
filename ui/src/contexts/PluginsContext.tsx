@@ -61,6 +61,7 @@ export function PluginsProvider({ children }: { children: ReactNode }) {
           const data = await res.json();
           errorMessage = data.details || data.error || errorMessage;
         } catch {
+          // 错误体非 JSON → 退回 statusText/默认文案。
           errorMessage = res.statusText || errorMessage;
         }
         setPluginsError(errorMessage);

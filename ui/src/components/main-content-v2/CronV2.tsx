@@ -76,6 +76,7 @@ function getBrowserTimezone(): string {
   try {
     return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
   } catch {
+    // Intl 时区解析失败 → 回退 UTC。
     return "UTC";
   }
 }

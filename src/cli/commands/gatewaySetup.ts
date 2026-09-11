@@ -198,6 +198,7 @@ async function attemptFeishuQRCreation(
     const mod = await import("@larksuiteoapi/node-sdk");
     Lark = ((mod as { default?: unknown }).default ?? mod) as LarkSdkLike;
   } catch {
+    // 可选依赖 @larksuiteoapi/node-sdk 缺失 → 视为不支持扫码，返回 null 走其他引导分支。
     return null;
   }
 
@@ -594,6 +595,7 @@ function loadWeixinCredentials(): { accountId: string; baseUrl: string; botToken
     if (!data.baseUrl || !data.botToken || !data.accountId) return null;
     return data;
   } catch {
+    // 凭据文件缺失或损坏 → 视为未配置（fail-safe，调用方提示重新登录）。
     return null;
   }
 }
@@ -620,6 +622,7 @@ function loadYamlConfig(): YamlConfig | null {
     const raw = readFileSync(SATI_YAML_PATH, "utf-8");
     return parseYaml(raw) as YamlConfig;
   } catch {
+    // sati.yaml 缺失或无法解析 → 视为无配置，引导流程按默认值继续。
     return null;
   }
 }

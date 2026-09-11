@@ -194,6 +194,7 @@ export async function countPdfPages(pdfBuffer: Buffer): Promise<number | undefin
     const count = doc.countPages();
     return count > 0 ? count : undefined;
   } catch {
+    // mupdf 缺失或 PDF 解析失败 → 页数未知（undefined）。
     return undefined;
   }
 }

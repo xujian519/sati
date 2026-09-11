@@ -86,6 +86,7 @@ export function getAdapter(): PatentKgAdapterRef | null {
     cachedRef = { adapter: new PatentKgAdapter(store), dbPath: patentKgDb };
     return cachedRef;
   } catch {
+    // 图谱库打开失败 → 返回 null，调用方按不可用处理。
     return null;
   }
 }

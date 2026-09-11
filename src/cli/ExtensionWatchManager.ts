@@ -139,6 +139,7 @@ export class ExtensionWatchManager {
       watcher.on("error", onError);
       return watcher;
     } catch {
+      // 目标不可监视（不存在/权限不足）→ 视为无监视器，热重载降级不可用。
       return undefined;
     }
   }

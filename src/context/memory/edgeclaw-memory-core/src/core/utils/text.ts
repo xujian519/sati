@@ -89,6 +89,7 @@ export function safeJsonParse<T>(raw: string, fallback: T): T {
   try {
     return JSON.parse(raw) as T;
   } catch {
+    // 坏 JSON → 返回 fallback（本函数即安全解析收口点）。
     return fallback;
   }
 }

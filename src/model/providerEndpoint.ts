@@ -18,6 +18,7 @@ function getPathSegments(baseUrl: string): string[] {
   try {
     return new URL(baseUrl).pathname.split("/").filter(Boolean);
   } catch {
+    // 非法 URL → 无路径段（空数组），按无版本段处理。
     return [];
   }
 }

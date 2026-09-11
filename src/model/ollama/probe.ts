@@ -36,6 +36,7 @@ export function ollamaOrigin(baseUrl: string): string {
   try {
     return new URL(baseUrl).origin;
   } catch {
+    // 非法 baseUrl → 退回去尾斜杠的原串作为 origin。
     return baseUrl.replace(/\/+$/, "");
   }
 }
@@ -108,6 +109,7 @@ async function fetchJson(
     try {
       return text ? JSON.parse(text) : null;
     } catch {
+      // 响应体非 JSON → 视为探测无结果（null）。
       return null;
     }
   } catch {

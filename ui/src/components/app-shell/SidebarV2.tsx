@@ -67,6 +67,7 @@ const readProjectSortOrder = (): ProjectSortOrder => {
     const parsed = JSON.parse(raw) as { projectSortOrder?: unknown };
     return parsed.projectSortOrder === "date" ? "date" : "name";
   } catch {
+    // 本地设置损坏/非 JSON → 回退默认排序 name。
     return "name";
   }
 };

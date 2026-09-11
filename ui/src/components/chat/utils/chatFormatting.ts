@@ -37,6 +37,7 @@ export function formatUsageLimitText(text: string) {
       return `Usage limit reached. Your limit will reset at **${timeStr} ${tzHuman}** - ${dateReadable}`;
     });
   } catch {
+    // 时间格式化失败（非法 reset）→ 原样返回文案，不阻断消息渲染。
     return text;
   }
 }

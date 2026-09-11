@@ -107,6 +107,7 @@ function staticPrefixIsDirectory(prefix: string, cwd: string): boolean {
   try {
     return statSync(path.resolve(cwd, prefix)).isDirectory();
   } catch {
+    // 路径不可 stat → 视为非目录前缀。
     return false;
   }
 }

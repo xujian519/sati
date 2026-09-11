@@ -234,6 +234,7 @@ function tryParseHermesJson(text: string): TextToolCallParseResult | null {
         });
       }
     } catch {
+      // 工具调用体 JSON 非法 → 记为 partial（hermes_json）并跳过该块。
       partialToolCall ??= partialInfo("hermes_json", "invalid_json_inside_tool_call", block.raw);
     }
   }
@@ -286,6 +287,7 @@ function tryParseMistral(text: string): TextToolCallParseResult | null {
     try {
       parsed = JSON.parse(block.json);
     } catch {
+      // mistral 工具调用 JSON 非法 → 记为 partial 并 continue。
       partialToolCall ??= partialInfo("mistral", "invalid_tool_calls_json", block.raw);
       continue;
     }
@@ -351,6 +353,7 @@ function tryParseLlama(text: string): TextToolCallParseResult | null {
         });
       }
     } catch {
+      // python 标签后 JSON 非法 → 记为 partial（llama）并跳过该块。
       partialToolCall ??= partialInfo("llama", "invalid_json_after_python_tag", block.raw);
     }
   }

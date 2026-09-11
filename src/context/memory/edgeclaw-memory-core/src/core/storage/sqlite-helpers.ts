@@ -37,6 +37,7 @@ function parseJson<T>(raw: string, fallback: T): T {
   try {
     return JSON.parse(raw) as T;
   } catch {
+    // 坏 JSON → 返回调用方给定 fallback。
     return fallback;
   }
 }

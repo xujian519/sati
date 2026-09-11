@@ -33,6 +33,7 @@ function parseMemoryJson(raw: string): Record<string, unknown> | null {
       return value as Record<string, unknown>;
     }
   } catch {
+    // 非 JSON 对象 → 返回 null。
     return null;
   }
   return null;
@@ -185,6 +186,7 @@ export default function MemoryDataSection({ projects }: MemoryDataSectionProps) 
     try {
       payload = parseMemoryJson(await file.text());
     } catch {
+      // 文件读取/解析失败 → payload=null，走错误分支提示。
       payload = null;
     }
     if (!payload) {

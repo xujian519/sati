@@ -69,6 +69,7 @@ function formatInvalidPayload(value: unknown) {
   try {
     return JSON.stringify(value, null, 2);
   } catch {
+    // 不可序列化 → 退回 String(value)。
     return String(value);
   }
 }

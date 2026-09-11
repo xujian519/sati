@@ -43,6 +43,7 @@ export function createPlanFileManager(options: { projectRoot: string }): PlanFil
       const content = readFileSync(absolutePath, "utf8");
       return content.trim() || undefined;
     } catch {
+      // 计划文件不存在/不可读 → 视为无计划（undefined）。
       return undefined;
     }
   }
