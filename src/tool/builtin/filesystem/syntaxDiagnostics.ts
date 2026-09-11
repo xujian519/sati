@@ -67,6 +67,7 @@ export async function formatSyntaxDiagnostics(filePath: string, content: string)
         .map(diagnostic => `- L${diagnostic.line}:${diagnostic.column} error: ${diagnostic.message}`),
     ].join("\n");
   } catch {
+    // 语法诊断收集失败 → 不产出提示（undefined），不阻断写入。
     return undefined;
   }
 }
@@ -452,6 +453,7 @@ function parseJsonObject(text: string): Record<string, unknown> | undefined {
     const parsed = JSON.parse(text);
     return isRecord(parsed) ? parsed : undefined;
   } catch {
+    // 文本非 JSON 对象 → 返回 undefined。
     return undefined;
   }
 }

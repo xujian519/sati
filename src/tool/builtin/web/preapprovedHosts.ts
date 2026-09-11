@@ -201,6 +201,7 @@ export function isPreapprovedUrl(url: string): boolean {
     const parsed = new URL(url);
     return isPreapprovedHost(parsed.hostname, parsed.pathname);
   } catch {
+    // URL 非法 → 视为非预批准主机（fail-closed）。
     return false;
   }
 }

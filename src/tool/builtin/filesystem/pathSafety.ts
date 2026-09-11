@@ -131,6 +131,7 @@ function safeRealpath(value: string): string | undefined {
   try {
     return realpathSync(value);
   } catch {
+    // realpath 失败（不存在/断链）→ 返回 undefined（按未解析路径处理）。
     return undefined;
   }
 }
@@ -145,6 +146,7 @@ function isRegularFile(value: string): boolean {
   try {
     return statSync(value).isFile();
   } catch {
+    // stat 失败（不存在）→ 视为非常规文件。
     return false;
   }
 }

@@ -114,6 +114,7 @@ export class GatewayWsConnection {
     try {
       frame = JSON.parse(message);
     } catch {
+      // 帧非 JSON → 以 4002 关闭连接（对端协议错误，不重抛）。
       this.ws.close(4002, "invalid_json");
       return;
     }

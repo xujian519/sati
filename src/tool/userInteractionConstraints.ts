@@ -9,6 +9,7 @@ export function requiresPromptCapability(tool: SatiToolDefinition, input: unknow
   try {
     return tool.requiresUserInteraction?.(input) === true;
   } catch {
+    // requiresUserInteraction 抛错 → 视为无需交互（保守放行）。
     return false;
   }
 }

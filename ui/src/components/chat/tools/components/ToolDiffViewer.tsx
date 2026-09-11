@@ -22,6 +22,7 @@ function stringifyDiffInput(value: unknown): string {
   try {
     return typeof value === "object" ? JSON.stringify(value, null, 2) : String(value);
   } catch {
+    // 不可序列化 → 退回 String(value)。
     return String(value);
   }
 }

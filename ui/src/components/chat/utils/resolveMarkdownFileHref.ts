@@ -11,6 +11,7 @@ const decodePath = (value: string): string => {
   try {
     return decodeURIComponent(value);
   } catch {
+    // decodeURIComponent 失败（畸形转义）→ 返回原串。
     return value;
   }
 };
@@ -74,6 +75,7 @@ export function resolveMarkdownFileHref(
       const url = new URL(trimmed);
       return decodePath(url.pathname) || null;
     } catch {
+      // file:// URL 解析失败 → 返回 null（不可打开）。
       return null;
     }
   }
@@ -101,6 +103,7 @@ export function resolveMarkdownFileHref(
     const pathname = decodePath(url.pathname);
     return resolveProjectPathFromPathname(pathname);
   } catch {
+    // 路径构造 URL 失败 → 返回 null。
     return null;
   }
 }

@@ -16,6 +16,7 @@ export function validateURL(url: string): boolean {
   try {
     parsed = new URL(url);
   } catch {
+    // URL 非法 → 校验不通过（fail-closed）。
     return false;
   }
 
@@ -58,6 +59,7 @@ export function isPermittedRedirect(originalUrl: string, redirectUrl: string): b
     original = new URL(originalUrl);
     redirect = new URL(redirectUrl);
   } catch {
+    // 原始/重定向 URL 非法 → 拒绝重定向（fail-closed）。
     return false;
   }
   if (redirect.protocol !== original.protocol) return false;

@@ -53,6 +53,7 @@ function parseIdArray(raw: string): string[] {
     const parsed = JSON.parse(raw) as unknown;
     return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === "string") : [];
   } catch {
+    // id 数组解析失败 → 返回空数组（调用方视为无关联 id）。
     return [];
   }
 }

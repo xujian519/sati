@@ -88,6 +88,7 @@ export function getCaseLawEngine(): CaseLawEngineRef | null {
     cachedRef = { engine, dbPath: caseDb };
     return cachedRef;
   } catch {
+    // 判例库打开失败 → 返回 null，调用方按不可用处理。
     return null;
   }
 }

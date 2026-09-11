@@ -84,6 +84,7 @@ export class TelemetrySender {
           this.metrics.sent += batch.length;
           this.metrics.lastSuccessAt = new Date().toISOString();
         } catch {
+          // 单批投递失败 → 计失败数并按重试上限丢弃，不阻断后续批次。
           this.metrics.sendFailures += 1;
           for (const item of batch) {
             if (item.attempts + 1 > this.config.maxRetries) {

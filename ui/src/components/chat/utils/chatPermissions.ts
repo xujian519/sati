@@ -65,6 +65,7 @@ export function formatToolInputForDisplay(input: unknown) {
   try {
     return JSON.stringify(input, null, 2);
   } catch {
+    // 不可序列化 → 退回 String(input)。
     return String(input);
   }
 }

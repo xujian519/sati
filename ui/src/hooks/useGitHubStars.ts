@@ -15,6 +15,7 @@ export const useGitHubStars = (owner: string, repo: string) => {
     try {
       return localStorage.getItem(DISMISS_KEY) === "true";
     } catch {
+      // localStorage 不可用 → 视为未忽略。
       return false;
     }
   });

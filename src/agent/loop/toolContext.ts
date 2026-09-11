@@ -121,6 +121,7 @@ export class ToolContextFactory {
       if (!state) return undefined;
       return renderWorkspaceCoreDirective(state);
     } catch {
+      // 工作区账本读取失败 → 跳过该指令注入，不阻断回合（best-effort）。
       return undefined;
     }
   }

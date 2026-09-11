@@ -17,6 +17,7 @@ export function useGatewayStatus() {
       setStatus(data);
       return data;
     } catch {
+      // 状态请求失败 → 返回 null（保持/清空上次状态）。
       if (showLoading) setStatus(null);
       return null;
     } finally {

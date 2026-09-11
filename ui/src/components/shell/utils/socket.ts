@@ -16,6 +16,7 @@ export function parseShellMessage(payload: string): ShellIncomingMessage | null 
   try {
     return JSON.parse(payload) as ShellIncomingMessage;
   } catch {
+    // 非 JSON 帧 → 返回 null（忽略该消息）。
     return null;
   }
 }

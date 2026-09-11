@@ -26,6 +26,7 @@ export function loadVectorRows(path: string): StoredVectorRow[] {
   try {
     raw = readFileSync(path, "utf8");
   } catch {
+    // 向量行文件不存在/不可读 → 视为空库（首次运行语义）。
     return [];
   }
   const rows: StoredVectorRow[] = [];

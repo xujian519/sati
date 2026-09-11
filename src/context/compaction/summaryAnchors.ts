@@ -174,6 +174,7 @@ function stringifyForAnchor(value: unknown, maxChars: number): string {
   try {
     return truncateForAnchor(JSON.stringify(value, circularJsonReplacer()), maxChars);
   } catch {
+    // 序列化失败（循环引用等）→ 退回 String 摘要，锚点仍可生成。
     return truncateForAnchor(String(value), maxChars);
   }
 }

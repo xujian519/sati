@@ -266,6 +266,7 @@ function safeJsonStringify(value: unknown): string {
   try {
     return JSON.stringify(value) ?? "";
   } catch {
+    // 不可序列化输入（循环引用/BigInt）→ 空串，按无内容计 token（遗留语义）。
     return "";
   }
 }

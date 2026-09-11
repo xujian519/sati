@@ -82,6 +82,7 @@ export function tryParseJson(value?: unknown): unknown {
   try {
     return JSON.parse(value);
   } catch {
+    // 非 JSON 字符串 → 返回 undefined（调用方按无结构化数据）。
     return undefined;
   }
 }

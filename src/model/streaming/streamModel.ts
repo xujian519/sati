@@ -828,6 +828,7 @@ async function shouldUseEndpointResponse(
     const body = await response.clone().json();
     return isExpectedProviderResponseShape(provider.protocol, body);
   } catch {
+    // 响应体非 JSON → 视为非预期结构，允许端点回退。
     return false;
   }
 }
@@ -883,6 +884,7 @@ async function safeReadJson(response: Response): Promise<unknown> {
   try {
     return JSON.parse(text);
   } catch {
+    // 响应体非 JSON → 原样返回文本，交由上层按文本处理。
     return text;
   }
 }

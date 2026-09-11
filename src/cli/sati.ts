@@ -667,6 +667,7 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
         mode: "in_process",
       }).start({ gateway: local });
     } catch {
+      // 内嵌 gateway 启动 TUI 失败 → 回退到直连模式重试，避免 CLI 直接崩溃。
       await new TuiChannel({
         projectKey: process.cwd(),
         cwd: process.cwd(),

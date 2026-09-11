@@ -99,6 +99,7 @@ export default function AboutSections({ title, versionInfo, checkingVersion }: A
 
       setLocalUpdateResult("failed");
     } catch {
+      // 轮询下载状态失败 → 置 failed，UI 提示重试。
       setLocalUpdateResult("failed");
     } finally {
       setDownloading(false);
@@ -120,6 +121,7 @@ export default function AboutSections({ title, versionInfo, checkingVersion }: A
         terminalStatus === "error" ? "failed" : terminalStatus === "up-to-date" ? "webUpToDate" : "webUpdated",
       );
     } catch {
+      // 应用更新请求失败 → 置 failed，UI 提示重试。
       setLocalUpdateResult("failed");
     } finally {
       setWebUpdating(false);
@@ -132,6 +134,7 @@ export default function AboutSections({ title, versionInfo, checkingVersion }: A
       await launchDesktopInstaller(downloadedFilePath);
       setLocalUpdateResult("installerLaunched");
     } catch {
+      // 启动安装器失败 → 置 failed，UI 提示重试。
       setLocalUpdateResult("failed");
     } finally {
       setInstalling(false);

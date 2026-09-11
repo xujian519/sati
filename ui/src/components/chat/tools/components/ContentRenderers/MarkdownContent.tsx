@@ -13,6 +13,7 @@ function stringifyMarkdown(content: unknown): string {
   try {
     return typeof content === "object" ? JSON.stringify(content, null, 2) : String(content);
   } catch {
+    // 不可序列化 → 退回 String(content)。
     return String(content);
   }
 }

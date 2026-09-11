@@ -518,6 +518,7 @@ function parseSkillFrontmatterWithMeta(content: string): FrontmatterParseResult 
       usedCompatibilityFallback: false,
     };
   } catch {
+    // YAML frontmatter 解析失败 → 回退兼容式解析并标记 usedCompatibilityFallback。
     const compat = parseCompatFrontmatter(fmRaw);
     return {
       frontmatter: compat,
@@ -770,6 +771,7 @@ async function validateFromDisk(sourcePath: string): Promise<SkillValidationResu
   try {
     stat = await fs.stat(sourcePath);
   } catch {
+    // 源路径不可 stat（不存在/不可读）→ 记 source_missing 硬失败并中止校验。
     pushIssue(hardFails, "source_missing", `Source path does not exist: ${sourcePath}`);
     return { ok: false, hardFails, warnings, stats, frontmatter };
   }
@@ -782,6 +784,7 @@ async function validateFromDisk(sourcePath: string): Promise<SkillValidationResu
   try {
     skillMdContent = await fs.readFile(join(sourcePath, "SKILL.md"), "utf8");
   } catch {
+    // SKILL.md 缺失/不可读 → 记 no_skill_md 硬失败并中止校验。
     pushIssue(hardFails, "no_skill_md", "Source folder does not contain a SKILL.md at the root.");
     return { ok: false, hardFails, warnings, stats, frontmatter };
   }
@@ -805,6 +808,7 @@ async function walkDir(
   try {
     entries = await fs.readdir(dir, { withFileTypes: true });
   } catch {
+    // readdir 失败 → 跳过本层文件统计，仅影响 fileCount/totalBytes 展示（best-effort）。
     return;
   }
   for (const entry of entries) {

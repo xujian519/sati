@@ -72,6 +72,7 @@ const readLegacyPreference = (key: UiPreferenceKey, fallback: boolean): boolean 
     const parsed = JSON.parse(raw);
     return parseBoolean(parsed, fallback);
   } catch {
+    // 旧偏好值非法 → 返回 fallback。
     return fallback;
   }
 };

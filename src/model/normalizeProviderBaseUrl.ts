@@ -21,6 +21,7 @@ export function normalizeProviderBaseUrl(raw: string): string | undefined {
     }
     return normalized;
   } catch {
+    // 非合法 http(s) URL → 返回 undefined（调用方视为无 base URL）。
     return undefined;
   }
 }

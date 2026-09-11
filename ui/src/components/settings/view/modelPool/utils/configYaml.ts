@@ -9,6 +9,7 @@ export function safeParseYaml(text: string): SatiConfig | null {
     }
     return null;
   } catch {
+    // YAML 非法或非对象 → 返回 null。
     return null;
   }
 }

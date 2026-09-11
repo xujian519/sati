@@ -18,6 +18,7 @@ function fallbackCopyToClipboard(text: string): boolean {
   try {
     copied = document.execCommand("copy");
   } catch {
+    // execCommand 复制失败/不可用 → copied=false，交由下方降级路径。
     copied = false;
   } finally {
     document.body.removeChild(textarea);

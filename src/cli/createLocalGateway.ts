@@ -794,6 +794,7 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
         }
         return true;
       } catch {
+        // 唤醒成员回合失败 → 返回 false 交由调用方决定重试，不在此吞掉。
         return false;
       }
     },
@@ -1975,6 +1976,7 @@ class ProjectRuntimeRegistry {
         try {
           return runtime.model.getProviderProtocol(providerId);
         } catch {
+          // provider 未知时无协议可查 → 返回 undefined，调用方按默认协议处理。
           return undefined;
         }
       },
@@ -1982,6 +1984,7 @@ class ProjectRuntimeRegistry {
         try {
           return runtime.model.getCapabilities(provider, model).maxOutputTokens;
         } catch {
+          // provider/model 未知 → 输出上限未知，返回 undefined 走环境变量/默认兜底。
           return undefined;
         }
       },
@@ -1990,6 +1993,7 @@ class ProjectRuntimeRegistry {
           const caps = runtime.model.getCapabilities(provider, model);
           return { maxContextTokens: caps.maxContextTokens, maxOutputTokens: caps.maxOutputTokens };
         } catch {
+          // 同上：能力查询失败即返回 undefined，由调用方兜底，不阻断启动。
           return undefined;
         }
       },
@@ -2364,6 +2368,7 @@ class ProjectRuntimeRegistry {
       maxContextTokens = agent.maxContextTokens ?? caps.maxContextTokens;
       maxOutputTokens = caps.maxOutputTokens;
     } catch {
+      // 能力查询失败 → 上下文上限退回显式配置，输出上限留 undefined 由后续链路兜底。
       maxContextTokens = agent.maxContextTokens;
     }
     maxOutputTokens =

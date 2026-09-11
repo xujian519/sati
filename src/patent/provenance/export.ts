@@ -47,6 +47,7 @@ function approvalConclusion(entity: ProvenanceEntity | undefined, activity: Prov
     if (activity.source === "output_gate" && typeof parsed.verdict === "string") return parsed.verdict;
     return "";
   } catch {
+    // 实体值非 JSON/形状不符 → 结论描述留空（导出仍继续）。
     return "";
   }
 }

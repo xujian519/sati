@@ -376,6 +376,7 @@ function isGoogleOpenAICompatibleProvider(provider: ProviderConfig | undefined):
     const url = new URL(rawUrl);
     return url.hostname === "generativelanguage.googleapis.com" && url.pathname.includes("/openai");
   } catch {
+    // URL 解析失败 → 退回字符串包含判断（同语义的容错路径）。
     return rawUrl.includes("generativelanguage.googleapis.com") && rawUrl.includes("/openai");
   }
 }

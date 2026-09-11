@@ -102,6 +102,7 @@ function toDisplayString(value: unknown, fallback = ""): string {
   try {
     return typeof value === "object" ? JSON.stringify(value) : String(value);
   } catch {
+    // 值不可序列化 → 返回 fallback 文案。
     return fallback;
   }
 }
@@ -152,6 +153,7 @@ const ToolRendererInner: React.FC<ToolRendererProps> = ({
       const rawData = mode === "input" ? toolInput : toolResult;
       return typeof rawData === "string" ? JSON.parse(rawData) : rawData;
     } catch {
+      // 负载非 JSON 字符串 → 原样使用（按已解析值处理）。
       return mode === "input" ? toolInput : toolResult;
     }
   }, [mode, toolInput, toolResult]);

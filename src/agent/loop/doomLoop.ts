@@ -447,6 +447,7 @@ export function toolCallKey(obs: Pick<ToolCallObservation, "name" | "args">): st
   try {
     argsText = JSON.stringify(obs.args ?? {});
   } catch {
+    // args 无法稳定序列化（循环引用/BigInt）→ 退回 String，指纹仍可用于去重。
     argsText = String(obs.args ?? "");
   }
   return `${obs.name}:${argsText}`;

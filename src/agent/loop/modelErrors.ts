@@ -198,6 +198,7 @@ export function stringifyAbortReason(reason: unknown): string | undefined {
   try {
     return JSON.stringify(reason);
   } catch {
+    // reason 不可序列化（循环引用等）→ 退回 String，仅用于展示。
     return String(reason);
   }
 }

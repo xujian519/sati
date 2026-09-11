@@ -49,6 +49,7 @@ async function resolveDestinationPage(
     const pageNumber = pageIndex + 1;
     return pageNumber >= 1 && pageNumber <= pdfDocument.numPages ? pageNumber : null;
   } catch {
+    // pdf.js 目标解析失败（坏引用）→ 返回 null（大纲项无跳转）。
     return null;
   }
 }

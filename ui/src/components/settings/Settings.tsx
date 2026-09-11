@@ -93,6 +93,7 @@ function SettingsInner({ isOpen, onClose, projects = [], initialTab }: SettingsP
       const data = await res.json();
       setVersionInfo(isDesktopApp ? normalizeDesktopVersionResult(data) : normalizeWebVersionResult(data));
     } catch {
+      // 版本检查请求失败 → 标记 checkUnavailable，不阻断设置页。
       setVersionInfo(prev => ({
         ...prev,
         hasUpdate: false,

@@ -313,6 +313,7 @@ export class ToolResultBudget {
     try {
       await access(path);
     } catch {
+      // access 失败即文件不存在 → 以 wx 独占写入落盘；已存在则复用，实现去重。
       await writeFile(path, block.data, { flag: "wx", mode: 0o600, encoding: "utf8" });
     }
 
