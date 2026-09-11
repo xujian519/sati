@@ -1,16 +1,29 @@
 type Path = readonly (string | number)[];
 
+/** 读取容器在首段键上的值；与 `container?.[key]` 语义一致（null/undefined → undefined）。 */
+function readAt(container: unknown, key: string | number): unknown {
+  if (container === null || container === undefined) return undefined;
+  return (container as Record<string | number, unknown>)[key];
+}
+
+/** 在容器副本上写入首段键值，返回新容器；数组下标走浅拷贝数组，其余走浅拷贝对象。 */
+function writeAt(container: unknown, useArrayKey: boolean, key: string | number, value: unknown): unknown {
+  if (useArrayKey) {
+    const next = [...(container as unknown[])];
+    next[key as number] = value;
+    return next;
+  }
+  return { ...(container as object), [key]: value };
+}
+
 export function patch<T>(config: T, path: Path, value: unknown): T {
   if (path.length === 0) return value as T;
   const [head, ...rest] = path;
-  const isArrayKey = typeof head === "number";
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- 通用深层 patch：current 需兼容对象/数组两种索引读写，类型化需泛型重载且收益低。
-  const current: any = config ?? (isArrayKey ? [] : {});
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- 通用深层 patch：next 需支持 next[head] 读写（数组下标或对象键）。
-  const next: any = isArrayKey ? [...(current as unknown[])] : { ...(current as object) };
-  next[head as string | number] =
-    rest.length === 0
-      ? value
-      : patch(current?.[head as string | number] ?? (typeof rest[0] === "number" ? [] : {}), rest, value);
-  return next as T;
+  const useArrayKey = typeof head === "number";
+  // SAFETY: 通用深层 patch 以「数组下标 / 对象键」视图读写，容器形状由调用方按 path 决定；
+  // 仅在 null/undefined 时按 path 类型回退空容器（与原先 `??` 语义一致）。
+  const current: unknown = config ?? (useArrayKey ? [] : {});
+  const written =
+    rest.length === 0 ? value : patch(readAt(current, head) ?? (typeof rest[0] === "number" ? [] : {}), rest, value);
+  return writeAt(current, useArrayKey, head, written) as T;
 }

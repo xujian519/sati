@@ -111,7 +111,7 @@
 | C37 | tests/ 审阅 B：patent/knowledge/gateway/session 等其余 | ✅ 2026-09-06 |
 | C38 | scripts/ 32 文件审阅精炼 | ✅ 2026-09-08 |
 | C39 | 裸 console 收束（→telemetry wrapper，行为不变） | ✅ 2026-09-08 |
-| C40 | any/类型逃逸收敛（主链路优先 + SAFETY 注释） | ⬜ |
+| C40 | any/类型逃逸收敛（主链路优先 + SAFETY 注释） | ✅ 2026-09-11（16 处收敛 + 3 处 SAFETY 登记；PR #286；决策见 docs/notes/implemented/2026-09-11-c40-any-convergence.md） |
 | C41 | 无参 catch 治理 + TODO/FIXME 核实 | ⬜ |
 | C42 | 终审：docs/code-refinement-report.md + 技术债报告追加注记 | ✅ 2026-08-20（报告见 docs/code-refinement-report.md；注记见 technical-debt-report.md「2026-08-20 注记」段；进度 7/42，C07-C41 共 35 卡遗留） |
 
@@ -160,6 +160,8 @@
 | 2026-09-06 | C36 | tests/ 审阅 A：agent/tool/context（131 spec 文件） | P0 恒绿断言 ×1 已修（turnRuntimeState「复制语义」断言与被测对象无引用关联→改写为真实守护拷贝）；P1 恒真 ×2 已修（doomLoop toolCallKey 表达式自比较→多键插入序格式钉定；tokenizer-cache 二次调用命中缓存恒真→独立对照直编码）；名实不符改名 ×4 已修（jsonl-store/rrf/executeCode/rule-check）；P3 卫生 ×4（assert.equal(bool,true)→assert.ok ×2、诊断消息缺括号、冗余动态导入 ×2）；P2 析取弱断言 ×3 只登记（ruleCheck.spec.ts，强化需人工核对规则命中预期）；登记不处理：context-fixture 未采纳残留 12+ 文件（另卡）、镜像公式断言、trace 透传零断言、双文件并存等 ×7；机械扫描全净（零零断言/skip·only/恒真字面量/空体/TODO）；横切零 as any·零 @ts-expect-error，console 15 处全为 warn 拦截技巧（合法） | 4（test×3 + docs） | ✅ |
 | 2026-09-06 | C37 | tests/ 审阅 B：其余 375 spec 文件（patent 111/knowledge 42/gateway 29/model 27/session 24 等） | P1 恒真/死断言 ×4 已修（rewrite-last-turn `{} as Gateway` 属性断言、pdf-extract 恒真析取、patentSearch-dedupe 自引用 deepEqual、retry-schedule length>=0 经实证改 equal(0)）；名实不符改名 ×5（semantic 融合/assemble wiki 保留/resolve url 复用/drafting-sop 需修订/WorkflowEngine parallel）；P3 卫生 ×4（embedding-consistency tmp 目录泄漏、cron-runtime 冗余断言对 ×2、parse-hook-output 静默 if→响亮 ×3、logger 裸 ESC 字节）；登记不处理：本机 gitignored harness ×7（不进 CI，case-law-search.test.ts 断言/跳过矛盾仅本机）、workflow 真并行证据、休眠 patent-drafting fixture（T12 零执行）、析取断言 ×2、硬编码计数等 ×8；机械扫描全净，t.skip ×3 均条件门控（合法），真 TODO ×1 仍成立；横切零 as any/零 @ts-expect-error | 4（test×3 + docs） | ✅ |
 | 2026-09-08 | C38 | scripts/ 32 文件（审阅后精炼 11 文件） | 死代码/占位删除：gen-patent-workflow-docs 恒空 orphans 检查、patent-benchmark-business DESIGN-INV- 分支与默认逐字节一致、token-estimate-audit toolSchemas 常量+toolsNote 死字段（输出少一条样本，行为面已明示）、measure-techdebt godFunctions 占位（main 无条件覆写）、mock-slow-provider 死 body 变量→req.resume()；重复收敛：repair-invalidation-decisions REASON_RE 提取共用；命名/遮蔽修复：patent-eval 图模式 provider→stageProvider；边界守卫收紧（行为面已明示）：check-ui-server-boundary N3 正则失配改 fail-loud、bump-version --root 空值 arg 守卫；注释修正：check-node-runtime/check-ui-server-boundary；测试补充：open-pr.test 长词截断用例；P0/P1 无；记录不处理：update.sh 63 行 stash pop / 41-45 行 detached HEAD（git/重启行为决策，另卡）、patent-eval L121 不可达 break（触发 no-fallthrough，不动） | 1（refactor） | ✅ |
+| 2026-09-08 | C39 | 裸 console 收束（→ 本地 wrapper，行为不变） | ui/server 建 consoleLogger.js、ui/src 建 logging.ts（纯转发不加前缀，输出逐字节不变）；量化 667 → 154（真实裸调用 143 < 300 ✅）：ui/server 408→0、ui/src 110+6→0；`src/` 143 处全部豁免（cli 交互/二维码/debug.ts/telemetry 入口）；关键发现：ui/server 的 uploads.js/shell.js 含正则字符类内引号，naive 替换会误开字符串态 → 改用小型状态机；ui/src 的 .jsx/.js 未被 .ts/.tsx 扫描覆盖，第 2 批补收束；行为不变对比法：调用点归一化为占位符后逐字节 diff（92 文件 problem:0） | 4（refactor×4） | ✅ |
+| 2026-09-11 | C40 | any / 类型逃逸收敛（主链路优先 + 外围 SAFETY） | 盘点纠正：`src/` 主链路已零真实逃逸（报告期点名的 planMode.ts(6)/MessageProjector.ts(5) 在 C05/C06 已清），逃逸集中在 ui/src 且 14 处压在 toolConfigs.ts（该文件有既有的文件级 eslint-disable 推迟决策）；**技术路线**：ToolRenderer 早已以 `unknown` 视图（ToolDisplaySection）消费配置 → 编排侧 any 只是单侧逃逸，收敛 = 对齐既有契约、不改消费路径；**落地**：`ToolPayload`（Record<string,unknown>）+ payloadOf/field/text/optionalText 四个收窄读取器，interface handler 参数 any→unknown，逐处就地收窄 16 处（toolConfigs 14→0 并删文件级豁免、patch.ts 2→0 改 readAt/writeAt，补 patch.spec 5 例）；**保留 3 处并登记**：useChatComposerState `data?: any`（按 action 分派的异构负载，收敛需先定兜底值=行为面，另卡建判别联合）、ToolRenderer `toObject: Record<string,any>`（需先定 contentType→prop 契约）、SkillsV2 `@ts-expect-error webkitdirectory`（非标准 DOM 属性，正当豁免）；**唯一语义决定**：非字符串/缺失字段由「原样透传（缺失时 .split 抛错）」改为回退空串/undefined（inputSchema 声明为字符串，该路径不可达）；决策见 docs/notes/implemented/2026-09-11-c40-any-convergence.md | 1（refactor） | ✅ |
 ### 日卡记录
 
 #### C01 src/agent（2026-08-19）
@@ -655,12 +657,34 @@
   - `922226328` refactor(ui): 收束裸 console 至 logging helper（C39）— 44 文件 + logging.ts
   - `b8dae53d` refactor(ui): 收束遗漏的 .jsx/.js 裸 console 至 logging helper（C39）— 5 文件（main.jsx/TasksSettingsContext.jsx/useLocalStorage.jsx/i18n/config.js + logging.ts 补 logInfo）
 
+#### C40 any / 类型逃逸收敛（2026-09-11）
+
+- **审阅（盘点纠正卡面假设）**：`src/` 主链路 **零真实逃逸**——剩余 4 处匹配全是注释/字符串里的英文单词 `any`（`lookup.ts` "any catalog provider's"、`SnipEngine.ts` "any tool_call"、`continuationRequest.ts` "any provider-boundary"）；报告期（08-20）点名的 `planMode.ts`(6)、`MessageProjector.ts`(5) 已在 C05/C06 死代码清理中消失。真实逃逸集中在 `ui/src`：`toolConfigs.ts` 14 处（占 3/4，且文件顶部有**既有的文件级 `eslint-disable no-explicit-any` 推迟决策**）、`modelPool/utils/patch.ts` 2 处、`useChatComposerState.ts` 1 处（C29 已记录"归横切"）、`SkillsV2.tsx` 1 处（`@ts-expect-error`）。另发现审计口径外的第 5 处：`ToolRenderer.tsx` `toObject(): Record<string, any>`（纯 grep 口径漏报，因 `any` 前是逗号非冒号）。
+- **关键前置发现（决定技术路线）**：`ToolRenderer.tsx:148` 消费配置时已把配置赋给 `ToolDisplaySection`——该视图的 handler 签名本就是 `(input: unknown) => string`。故 `ToolDisplayConfig` 的 `any` 是**编排侧单侧逃逸**，消费侧契约早已是 `unknown`；收敛不需要动任何消费路径，只需让编排侧对齐契约。
+- **精炼项**：
+  1. `ToolDisplayConfig` handler 参数 `any` → `unknown`（`getValue`/`getSecondary`/`getMessage`/`title`/`getContentProps` 共 8 处签名），`getContentProps` 返回 `any` → `unknown`；与 `ToolDisplaySection` 同形，`ToolRenderer` 赋值零改动。
+  2. 新增载荷词汇表替代裸 `any`：`export type ToolPayload = Record<string, unknown>` + 模块私有 `payloadOf`（非对象载荷→空视图）/ `field`（等价原 `?.`）/ `text`（非字符串→空串）/ `optionalText`（非字符串→undefined，供 `getSecondary` 决定是否渲染次要行）。
+  3. `toolConfigs.ts` 逐处就地收窄 14 处并**删除文件级 `eslint-disable`**（此后新增 any 会被 lint 拦下，防回摆）。覆盖 Bash/Read/Edit/Write/ApplyPatch/Grep/Glob/TodoWrite/todo_write/TodoRead/CronCreate/CronDelete/CronList/TaskCreate/TaskUpdate/TaskList/TaskGet/Task/AskUserQuestion/exit_plan_mode/ExitPlanMode/Default 与 `shouldHideToolResult`。Todo 族因两个 parser 本就收 `unknown`，改为直接把原始字段值传入 → **逐字节行为不变**。
+  4. `patch.ts` 改 `readAt`/`writeAt` 两个 helper + `useArrayKey` 分派：保留原有"数组下标走浅拷贝数组、其余走浅拷贝对象"语义与 null/undefined 回退空容器语义（`readAt` 与 `current?.[key]` 等价，含字符串索引）。
+- **未收敛并登记（3 处，各有独立另卡路径）**：
+  - `useChatComposerState.ts data?: any`：内置命令按 `action` 分派的异构负载（help/model/cost/status/memory/rewind/skillInstall/switchProject 形状互不相同，约 30 处字段读取）；收敛为判别联合须同时决定各字段缺失兜底值（行为面），另卡按 `action → payload` 建模。
+  - `ToolRenderer.tsx toObject(): Record<string, any>`：`getContentProps` 产物按 `contentType` 分派给 diff/file-list/todo/task 子组件（~20 处 prop 传值），收敛需先定义各 contentType 的 prop 契约。
+  - `SkillsV2.tsx @ts-expect-error webkitdirectory`：非标准 DOM 属性（Chromium/WebKit/Firefox 支持），React 类型未声明，属**正当豁免**（替代写法只有更差的断言），已补 SAFETY 说明。
+- **行为面唯一语义决定**：handler 收到**非字符串/缺失**字段时，原先 `any` 原样透传（数字被 React 渲染成数字、对象渲染成 `[object Object]`、缺失字段上 `.split` 直接抛错），现统一回退空串/`undefined`。因工具 `inputSchema` 声明这些字段为字符串，该路径在生产不可达，且原行为在缺失时是抛错——故按"定义未定义行为"处理，非"改变已定义行为"。
+- **验证**：
+  - `cd ui && pnpm typecheck` ✅；`cd ui && pnpm lint`（eslint src/ server/ --max-warnings 0 + `check-ui-server-boundary` fresh）✅；`pnpm format:check`（biome 2292 文件）✅
+  - `cd ui && pnpm test`（111 文件 / 670 测试）✅；新增 `patch.spec.ts` 5 例（不可变、缺省容器、数组按索引重建、空 path 直返）
+  - **量化（同一正则 before/after）**：`toolConfigs.ts` 14→0、`patch.ts` 2→0、`useChatComposerState.ts` 1→1（登记）、`SkillsV2.tsx` 1→1（正当豁免）；仓内 any 类型位 + `@ts-expect-error` 合计 **21 → 5**（含 ToolRenderer 记录项），达卡面 ≤10 目标
+  - **审计口径修正登记**：旧 grep 口径（`: any` / `as any` / `<any>` / `@ts-expect-error`）会漏报 `Record<string, any>`（`any` 前是逗号）与 `data?: any`（`?` 与 `:` 之间无词边界），亦会把注释/字符串里的英文单词 `any` 计为命中；本次逐条人工归类，后续复测建议固定为「类型位 any + `@ts-*` 指令 + `no-explicit-any` 豁免指令」三口径分别计数。
+  - **行为等价性（组件级 DOM 对照，替代抽样截图作视觉证据）**：jsdom + `@testing-library/react` 渲染**真实 `ToolRenderer`**（仅 `vi.mock` 把注册表换成 `origin/main` 版），84 个载荷用例比对 `container.innerHTML` 与 `console.warn`：**良构组 DOM 逐字节相同**；14 例差异**全部来自类型违约载荷**（8 例旧代码抛错→新代码优雅回退，旧代码 8 条 `logWarn` 归零）。脚本为一次性证据，验证后已删除。
+- **提交**：`refactor(ui): C40 收敛工具渲染注册表 any 至 unknown 视图`（PR #286，无关联 issue——追踪于本日卡）。
+
 ## 六、基线（2026-08-18 实测）
 
 | 指标 | 基线值 | 目标 | 备注 |
 |---|---|---|---|
 | 裸 console（src + ui/server，含 .ts/.tsx/.js） | 657 处 / 83 文件 | <300 | 含 ui/server 手写 JS 大量输出；C39 后（2026-09-08）实测 154（真实裸调用 144，其余为 CLI/横幅豁免与注释残留） |
-| `any`/`@ts-expect-error`（src + ui/src） | 20 处 | ≤10 | 主链路清零，外围加 SAFETY 注释 |
+| `any`/`@ts-expect-error`（src + ui/src） | 20 处 | ≤10 | 主链路清零，外围加 SAFETY 注释；C40 后（2026-09-11）实测 5（主链路 0，ui/src 余 5 处含 1 处跨卡记录项），逐条 SAFETY 见 note |
 | 无参 `catch {`（src + ui/src） | 485 处 | 显著下降 | 含防御式（有注释）与隐患（无注释）两类 |
 | TODO/FIXME/HACK（src + ui + ui/server + tests） | 24 处 | ≤5 | 需逐条核实业务语义 |
 | TS/TSX 文件数 | 1828 | — | 全仓 |
