@@ -3,7 +3,7 @@ import test from "node:test";
 import { PermissionRuntime, createDefaultPermissionContext, type PermissionRule } from "../../src/permission/index.js";
 import { rulesToPolicyDenyRules } from "../../src/rule/index.js";
 import { matchPermissionRule } from "../../src/permission/policy/matchPermissionRule.js";
-import { loadPatentComplianceRuleSet } from "../../src/rule/index.js";
+import { loadPatentComplianceRuleSet, loadPatentFullRuleSet, mergePolicyDenyRules } from "../../src/rule/index.js";
 import type { SatiToolDefinition, SatiToolRuntimeContext } from "../../src/tool/index.js";
 import type { ConstitutionalRule, RuleSet } from "../../src/rule/index.js";
 
@@ -221,4 +221,146 @@ test("rulesToPolicyDenyRules on bundled patent compliance asset yields policy ru
   // compliance.yaml 全部为 warn/review，无 block → 全部跳过
   assert.equal(rules.length, 0);
   assert.ok(skipped.length >= 4);
+});
+
+// ---------------------------------------------------------------------------
+// phase 语义门：输出面（post_execution）规则不得编译为工具*输入*拦截
+// ---------------------------------------------------------------------------
+
+const POST_EXECUTION_RULE: ConstitutionalRule = {
+  id: "CON-COMP-0101",
+  name: "禁止编造占位专利号",
+  severity: "critical",
+  action: "block",
+  phase: "post_execution",
+  check: { type: "keyword_blocklist", keywords: ["CNXXXXXX"] },
+};
+
+const PRE_EXECUTION_RULE: ConstitutionalRule = {
+  id: "PRE-001",
+  name: "工具输入前置拦截",
+  severity: "critical",
+  action: "block",
+  phase: "pre_execution",
+  check: { type: "keyword_blocklist", keywords: ["赌博"] },
+};
+
+test("rulesToPolicyDenyRules phase gate skips post_execution and keeps pre_execution", () => {
+  const { rules, skipped } = rulesToPolicyDenyRules(ruleSet([POST_EXECUTION_RULE, PRE_EXECUTION_RULE]));
+  assert.equal(rules.length, 1);
+  assert.equal(rules[0]?.ruleId, "PRE-001");
+  assert.equal(skipped.length, 1);
+  assert.equal(skipped[0]?.ruleId, "CON-COMP-0101");
+  assert.match(skipped[0]?.reason ?? "", /phase=post_execution/);
+});
+
+test("rulesToPolicyDenyRules keeps rules without an explicit phase (backward compatible)", () => {
+  const { rules, skipped } = rulesToPolicyDenyRules(ruleSet([BLOCK_KEYWORD_RULE]));
+  assert.equal(rules.length, 1);
+  assert.equal(skipped.length, 0);
+});
+
+test("rulesToPolicyDenyRules excludePhases can be disabled explicitly", () => {
+  const { rules } = rulesToPolicyDenyRules(ruleSet([POST_EXECUTION_RULE]), { excludePhases: [] });
+  assert.equal(rules.length, 1);
+});
+
+test("rulesToPolicyDenyRules on the bundled patent rule set yields no interception rules", () => {
+  const { ruleSet: bundled } = loadPatentFullRuleSet();
+  const { rules, skipped } = rulesToPolicyDenyRules(bundled);
+  // 保留 block 的 2 条（CON-COMP-0101 / X-REF-003）均为 post_execution 输出面语义
+  assert.equal(rules.length, 0);
+  const phaseSkipped = skipped.filter(item => item.reason.includes("phase=post_execution"));
+  assert.deepEqual(phaseSkipped.map(item => item.ruleId).sort(), ["CON-COMP-0101", "X-REF-003"]);
+});
+
+// ---------------------------------------------------------------------------
+// mergePolicyDenyRules：policy 前置不变式
+// ---------------------------------------------------------------------------
+
+test("mergePolicyDenyRules returns the same array reference when there are no policy rules", () => {
+  const existing: PermissionRule[] = [{ source: "user", behavior: "deny", toolName: "*" }];
+  assert.equal(mergePolicyDenyRules(existing, []), existing);
+});
+
+test("mergePolicyDenyRules prepends policy rules and drops stale policy entries", () => {
+  const userDeny: PermissionRule = { source: "user", behavior: "deny", toolName: "*", pattern: "text:赌博" };
+  const stalePolicy: PermissionRule = { source: "policy", behavior: "deny", toolName: "*", pattern: "text:旧规则" };
+  const freshPolicy: PermissionRule = { source: "policy", behavior: "deny", toolName: "*", pattern: "text:赌博" };
+  const merged = mergePolicyDenyRules([userDeny, stalePolicy], [freshPolicy]);
+  assert.deepEqual(
+    merged.map(rule => rule.source),
+    ["policy", "user"],
+  );
+  assert.equal(merged[0], freshPolicy);
+  assert.equal(merged[1], userDeny);
+});
+
+test("PermissionRuntime: merged policy deny survives a session allow the user deny yields to", async () => {
+  const runtime = new PermissionRuntime();
+  const tool = makeTool();
+  const userDeny: PermissionRule = { source: "user", behavior: "deny", toolName: "*", pattern: "text:赌博" };
+  const sessionAllow: PermissionRule = { source: "session", behavior: "allow", toolName: "write_file" };
+  const policyDeny: PermissionRule = { source: "policy", behavior: "deny", toolName: "*", pattern: "text:赌博" };
+  const input = { file_path: "a.txt", content: "涉及赌博内容" };
+  // 未前置（user deny 在前）：首个匹配来源为 user → session allow 经该短路路径生效
+  const bypassed = await runtime.decide(
+    tool,
+    input,
+    makeContext({ deny: [userDeny, policyDeny], allow: [sessionAllow] }),
+    "call-4",
+  );
+  assert.equal(bypassed.type, "allow");
+  // 合并后（policy 前置）：首个匹配来源为 policy → 拒绝，不被 session allow 覆盖
+  const merged = mergePolicyDenyRules([userDeny], [policyDeny]);
+  const denied = await runtime.decide(tool, input, makeContext({ deny: merged, allow: [sessionAllow] }), "call-5");
+  assert.equal(denied.type, "deny");
+  if (denied.type === "deny") {
+    assert.equal(denied.reason.type === "rule" ? denied.reason.rule.source : null, "policy");
+  }
+});
+
+test("PermissionRuntime: policy deny is not bypassed in bypassPermissions mode", async () => {
+  const runtime = new PermissionRuntime();
+  const tool = makeTool();
+  const policyDeny: PermissionRule = { source: "policy", behavior: "deny", toolName: "*", pattern: "text:赌博" };
+  const context: SatiToolRuntimeContext = {
+    sessionId: "s1",
+    turnId: "t1",
+    cwd: "/tmp",
+    permissionMode: "bypassPermissions",
+    permissionContext: createDefaultPermissionContext({
+      cwd: "/tmp",
+      mode: "bypassPermissions",
+      canPrompt: false,
+      rules: { allow: [], deny: [policyDeny], ask: [] },
+    }),
+  };
+  const decision = await runtime.decide(tool, { file_path: "a.txt", content: "赌博" }, context, "call-6");
+  assert.equal(decision.type, "deny");
+});
+
+test("PermissionRuntime: deny message carries the rule id when present, legacy text otherwise", async () => {
+  const runtime = new PermissionRuntime();
+  const tool = makeTool();
+  const withId = await runtime.decide(
+    tool,
+    { file_path: "a.txt", content: "赌博" },
+    makeContext({
+      deny: [{ source: "policy", behavior: "deny", toolName: "*", pattern: "text:赌博", ruleId: "CON-102" }],
+      allow: [],
+    }),
+    "call-7",
+  );
+  assert.equal(withId.type, "deny");
+  if (withId.type === "deny") assert.match(withId.message, /CON-102/);
+
+  const withoutId = await runtime.decide(
+    tool,
+    { file_path: "a.txt", content: "赌博" },
+    makeContext({ deny: [{ source: "policy", behavior: "deny", toolName: "*", pattern: "text:赌博" }], allow: [] }),
+    "call-8",
+  );
+  assert.equal(withoutId.type, "deny");
+  if (withoutId.type === "deny") assert.equal(withoutId.message, "Deny rule blocks *.");
 });
