@@ -113,7 +113,7 @@
 | C39 | 裸 console 收束（→telemetry wrapper，行为不变） | ✅ 2026-09-08 |
 | C40 | any/类型逃逸收敛（主链路优先 + SAFETY 注释） | ✅ 2026-09-11（16 处收敛 + 3 处 SAFETY 登记；PR #286；决策见 docs/notes/implemented/2026-09-11-c40-any-convergence.md） |
 | C41 | 无参 catch 治理 + TODO/FIXME 核实 | ✅ 2026-09-11（107 处真静默吞错补意图注释，无注释类 125→18；TODO 真实标记核实为 2 处仍有效；决策见 docs/notes/implemented/2026-09-11-c41-catch-todo-governance.md） |
-| C42 | 终审：docs/code-refinement-report.md + 技术债报告追加注记 | ✅ 2026-09-11（报告整篇重写：42/42 完成、四项指标终值、终审发现与遗留清单；注记见 `docs/technical-debt-report.md`「2026-09-11 注记」段；同卡修正 `scripts/measure-techdebt.mjs` 的**三处口径问题**；决策见 docs/notes/implemented/2026-09-11-c42-final-report.md） |
+| C42 | 终审：docs/code-refinement-report.md + 技术债报告追加注记 | ✅ 2026-09-11（PR #288）：报告整篇重写——42/42 完成、四项指标终值、终审发现与遗留清单；注记见 `docs/technical-debt-report.md`「2026-09-11 注记」段；同卡修正 `scripts/measure-techdebt.mjs` 的**三处口径问题**（登记债号 TD-METRICS-001）；决策见 docs/notes/implemented/2026-09-11-c42-final-report.md |
 
 ## 五、进度表（每日更新）
 
@@ -722,7 +722,7 @@
   - `npx biome check scripts/measure-techdebt.mjs` ✅；`node --check scripts/measure-techdebt.mjs` ✅；`--json` 与 `--update` 两条路径均跑通（全量遍历约 2.3s）。
   - `CODEBUDDY_SAFE_DELETE_ENABLED=0 pnpm check` ✅（`check:config` + 根/UI typecheck + `eslint src tests scripts apps/desktop` + `check:event-matrix` / `check:patent-sop` / `check:patent-workflow-docs` / `check:html-templates` / `check:skills` + biome 2292 文件）。
   - `pnpm test`（后端 build + node:test）✅ 4224 测试（4219 pass / **1 fail 环境型** / 4 skip）——唯一失败为 `tests/patent/document/renderPatentDocument.spec.ts`「系统 Chrome 存在时可生成 PDF」，该用例设计为无 Chrome 时跳过，本机 Chrome 存在但渲染未产出 PDF、渲染器走降级路径；该链路不在本卡改动范围（本卡改动仅 `scripts/` + `docs/`），CI 无 Chrome 故跳过。`cd ui && pnpm test`（111 文件 / 670 用例）✅
-- **提交**：`refactor(scripts): C42 对齐 measure-techdebt 指标口径并改 any 为 AST 统计`、`docs(techdebt): C42 按新口径重生成 metrics 并改写指标口径说明`、`docs(code-refinement): C42 重写终审报告、补技术债注记与决策记录`（见本卡 PR）。
+- **提交**：`refactor(scripts): C42 对齐 measure-techdebt 指标口径并改 any 为 AST 统计`、`docs(techdebt): C42 按新口径重生成 metrics 并改写指标口径说明`、`docs(code-refinement): C42 重写终审报告、补技术债注记与决策记录`、`docs(techdebt): C42 更新活账本——本轮偿还条目转 done 并登记 TD-METRICS-001` —— 见本卡 PR #288（可回溯来源：债号 TD-METRICS-001）。
 
 ## 六、基线（2026-08-18 实测）
 
