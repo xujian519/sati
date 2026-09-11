@@ -376,3 +376,65 @@ pnpm typecheck && pnpm lint && pnpm format:check   # 全绿（lint 挂 4 门禁�
 pnpm build && node --test $(find dist/tests -name '*.spec.js' -o -name '*.test.js')  # 3529 pass / 0 fail / 3 skip
 pnpm record:replay tests/fixtures/llm-replay/deepseek-v4-flash-basic  # fixture valid（08-20 重录）
 ```
+
+---
+
+## 2026-09-11 注记（C42 代码精炼终审跟进 · 本轮精炼收官）
+
+- 背景：`docs/code-refinement-plan.md` 保守档 **42 张日卡全部完成**（C01–C42，100%），终审报告见 `docs/code-refinement-report.md`
+- 关联文档：`docs/notes/implemented/2026-09-11-c40-any-convergence.md`、`docs/notes/implemented/2026-09-11-c41-catch-todo-governance.md`、`docs/notes/implemented/2026-09-11-c42-final-report.md`
+- **本报告正式退出事实源地位**：自上而下持续维护请以 `docs/technical-debt/README.md`（方法论 + 口径）、`backlog.md`（活账本）、`metrics.md`（2026-09-11 按新口径重新生成）为准；本文件与 `code-refinement-report.md` 的 08-20/08-27 快照仅作历史记录。
+
+### 指标终值（口径已对齐；跨 2026-09-11 的同比须按同一口径重算）
+
+| 指标 | 08-18 基线 | 08-20 时点 | 09-11 终审 | 判定 |
+|---|---|---|---|---|
+| 裸 `console.*`（src + ui/server） | 657 | 670 | **158**（正则上界）／真实裸调用 **143** | ✅ 目标 <300 |
+| 类型逃逸（src + ui/src） | 20 | 21 | **3**（TS AST 精确，全部已 SAFETY 登记） | ✅ 目标 ≤10 |
+| 无参 `catch {`（src + ui/src） | 485 | 501 | 总计 **518**，其中**无注释隐患类 37**（C41 前 125） | ✅ 按修正后目标 |
+| TODO/FIXME/HACK | 24 | 27 | 代码侧真实标记 **2**（grep 上界 11） | ✅ 按核实口径 |
+| 后端测试 | 873（08-02） | 3529 pass | **4224（4219 pass / 1 fail 环境型 / 4 skip）** | — |
+
+### 本注记同时修正了三处指标口径（此前工具与文档两套口径）
+
+1. **作用域**：`measure-techdebt.mjs` 此前所有指标一律只扫 `src/`，与计划 §六 基线表声明的 `src + ui/src` / `src + ui/server` / `src + ui + ui/server + tests` 不一致——C40、C41 两张横切卡都不得不先自建扫描重建口径。现已对齐，且 `metrics.md` 顶部输出「指标口径」表、`--json` 输出 `scopes`。
+2. **`any` 改 TS AST 精确统计**：旧裸正则既高估（注释里的英文单词 "any"）又低估（泛型位 `Record<string, any>` 不含 `: any`）。正则上界 5 → AST **3**。
+3. **废弃「静默吞错 catch（体仅注释/空白）」**：它把已在函数 JSDoc 说明意图的防御式与真无说明的静默回退混计。改为「无注释的无参 catch」，判定认 catch 行内 / 上一行 / 体内（含行尾）三种注释形态；扫描器以 C41 的独立验证分类做等价性校验，逐数相同。
+
+> 详见 `docs/technical-debt/README.md` §指标口径说明 与终审报告 §三。
+
+### 遗留清单状态更新
+
+| 项 | 状态 |
+|---|---|
+| 巨无霸函数拆解（McpClient/reasoning-rules/kg-store/legal-search/workflow/AgentLoop/InProcessGateway） | ✅ 已完成（08-14~08-17）——本报告 §三/§五 历史条目维持 |
+| C39 裸 console 收束 | ✅ 已完成（09-08）：ui/server 408→0、ui/src 116→0；`src/` 143 处按设计豁免 |
+| C40 any 收敛 / C41 catch+TODO 治理 | ✅ 已完成（09-11），决策见两条 note |
+| C42 终审报告 + 本注记 | ✅ 本次完成 |
+| 保守档 42 张日卡 | ✅ 全部完成（100%） |
+| `ui/server` 9 项 P0 候选 + 9 条死路由 | ⬜ 未做（协议面，须单独立项） |
+| C24 `SkillManager.walkDir` P0 候选 | ⬜ 未做 |
+| `ui/server → src` 深层 import 收口 | ⬜ 未做（14 处；08-14 「双后端为有意设计」决策后保留的可选卫生子项） |
+| `edgeclaw` 编译产物直连（`ui/server/routes/memory.js`） | ✅ 决策维持（08-17 复核，受支持的一等解析路径） |
+| 大文件拆解（>600 行 92 个 / 单函数 ≥300 行 62 个） | ⬜ 保守档明确排除，仅登记待拆候选 |
+
+### 新增/确认的债务项（09-11 复核）
+
+1. **协议面专项待立项**：`ui/server` 的 9 项 P0 候选（chat.js edit/regen 流不广播、shell.js PTY 重连竞态 ×2、sati-bridge Map 慢泄漏、MCP 状态死链路、`/load` 路径校验弱于 `/execute`、git `/status` 丢 R/C、agent.js clone 双层吞错 + 非流式 messages 恒空、`/test-connection` 不识别掩码键）与 9 条死路由（taskmaster 8 + `/api/commands/load`）。
+2. **未被精炼计划覆盖的新模块**：并行落地的 `src/agent/team/`（23 文件：scheduler / member-waker / team-db / mailbox / taskpool）、`ui/src/components/team-panel/`（17 文件）与 `ui/src/components/patent/StylePanel/`（6 文件 + `document_style_*` 工具与 i18n）**不在**阶段 3（C27–C35）轮转范围内，应补入 `backlog.md` 分节。
+3. **i18n 残留**：`en/stylePanel.json` 与 zh 侧**逐字节相同**（en 整面板缺英译，涉字号/字体产品术语）；`teamPanel` en 44 / zh 43（`pill.teamCount_one` 仅 en 有——i18next zh 复数类别仅 `other`，属设计）；377 个强信号未使用 key 候选需 i18next-parser 类工具核实。
+4. **测试基建**：e2e 仅 1 个环境变量门控 spec 且**无 `playwright.config`**（现 e2e 实际未运行，`npx playwright test` 裸跑会误捕 src 下 vitest 文件）；context-fixture 残留 12+ 文件与本机 gitignored harness ×7 未纳入版本管理/CI。
+5. **llm-replay 纪律**（贯穿红线）：任何工具 `inputSchema` 改动（含描述文本）与新增默认注册工具都会破坏 fixture（重放对齐注册表 44 个 vs 无参注册表 47 个）；新增工具优先条件注册（`team_*` / `document_style_*` 先例）。
+6. **依赖安全未在本次复核**：依赖未变动，沿用 2026-08-13 基线（`pnpm audit` 1 条 —— `extract-zip`，electron 安装期依赖，无可用修复版本）。
+
+### 下次审计基线（可复现，2026-09-11 版）
+
+```bash
+node scripts/measure-techdebt.mjs --json                     # 指标（含 scopes 与逐处 any 清单）
+node scripts/measure-techdebt.mjs --update docs/technical-debt/metrics.md
+pnpm typecheck && pnpm lint && pnpm format:check             # 全绿（lint 挂 4 门禁）
+pnpm build && node --test --test-force-exit $(find dist/tests -name '*.spec.js' -o -name '*.test.js')
+                                                             # 4224 tests：4219 pass / 1 fail（环境型 Chrome-PDF）/ 4 skip
+pnpm --filter sati-ui typecheck && pnpm --filter sati-ui test # 111 文件 / 670 用例 全绿
+```
+
