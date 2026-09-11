@@ -343,7 +343,8 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
   },
 
   // ============================================================================
-  // TODO TOOLS
+  // Todo-list 工具族（TodoWrite / todo_write / TodoRead）
+  // 注：此处 "Todo" 指待办清单工具语义，非待办标记——避免被 TODO/FIXME 审计误计。
   // ============================================================================
 
   TodoWrite: {
