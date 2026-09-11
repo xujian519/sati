@@ -113,7 +113,7 @@
 | C39 | 裸 console 收束（→telemetry wrapper，行为不变） | ✅ 2026-09-08 |
 | C40 | any/类型逃逸收敛（主链路优先 + SAFETY 注释） | ✅ 2026-09-11（16 处收敛 + 3 处 SAFETY 登记；PR #286；决策见 docs/notes/implemented/2026-09-11-c40-any-convergence.md） |
 | C41 | 无参 catch 治理 + TODO/FIXME 核实 | ✅ 2026-09-11（107 处真静默吞错补意图注释，无注释类 125→18；TODO 真实标记核实为 2 处仍有效；决策见 docs/notes/implemented/2026-09-11-c41-catch-todo-governance.md） |
-| C42 | 终审：docs/code-refinement-report.md + 技术债报告追加注记 | ✅ 2026-08-20（报告见 docs/code-refinement-report.md；注记见 technical-debt-report.md「2026-08-20 注记」段；进度 7/42，C07-C41 共 35 卡遗留） |
+| C42 | 终审：docs/code-refinement-report.md + 技术债报告追加注记 | ✅ 2026-09-11（PR #288）：报告整篇重写——42/42 完成、四项指标终值、终审发现与遗留清单；注记见 `docs/technical-debt-report.md`「2026-09-11 注记」段；同卡修正 `scripts/measure-techdebt.mjs` 的**三处口径问题**（登记债号 TD-METRICS-001）；决策见 docs/notes/implemented/2026-09-11-c42-final-report.md |
 
 ## 五、进度表（每日更新）
 
@@ -163,6 +163,7 @@
 | 2026-09-08 | C39 | 裸 console 收束（→ 本地 wrapper，行为不变） | ui/server 建 consoleLogger.js、ui/src 建 logging.ts（纯转发不加前缀，输出逐字节不变）；量化 667 → 154（真实裸调用 143 < 300 ✅）：ui/server 408→0、ui/src 110+6→0；`src/` 143 处全部豁免（cli 交互/二维码/debug.ts/telemetry 入口）；关键发现：ui/server 的 uploads.js/shell.js 含正则字符类内引号，naive 替换会误开字符串态 → 改用小型状态机；ui/src 的 .jsx/.js 未被 .ts/.tsx 扫描覆盖，第 2 批补收束；行为不变对比法：调用点归一化为占位符后逐字节 diff（92 文件 problem:0） | 4（refactor×4） | ✅ |
 | 2026-09-11 | C40 | any / 类型逃逸收敛（主链路优先 + 外围 SAFETY） | 盘点纠正：`src/` 主链路已零真实逃逸（报告期点名的 planMode.ts(6)/MessageProjector.ts(5) 在 C05/C06 已清），逃逸集中在 ui/src 且 14 处压在 toolConfigs.ts（该文件有既有的文件级 eslint-disable 推迟决策）；**技术路线**：ToolRenderer 早已以 `unknown` 视图（ToolDisplaySection）消费配置 → 编排侧 any 只是单侧逃逸，收敛 = 对齐既有契约、不改消费路径；**落地**：`ToolPayload`（Record<string,unknown>）+ payloadOf/field/text/optionalText 四个收窄读取器，interface handler 参数 any→unknown，逐处就地收窄 16 处（toolConfigs 14→0 并删文件级豁免、patch.ts 2→0 改 readAt/writeAt，补 patch.spec 5 例）；**保留 3 处并登记**：useChatComposerState `data?: any`（按 action 分派的异构负载，收敛需先定兜底值=行为面，另卡建判别联合）、ToolRenderer `toObject: Record<string,any>`（需先定 contentType→prop 契约）、SkillsV2 `@ts-expect-error webkitdirectory`（非标准 DOM 属性，正当豁免）；**唯一语义决定**：非字符串/缺失字段由「原样透传（缺失时 .split 抛错）」改为回退空串/undefined（inputSchema 声明为字符串，该路径不可达）；决策见 docs/notes/implemented/2026-09-11-c40-any-convergence.md | 1（refactor） | ✅ |
 | 2026-09-11 | C41 | 无参 catch 治理 + TODO/FIXME 核实（横切） | **口径先立**：`measure-techdebt.mjs` 的 `catchNoParam` 只扫 `src/`（与基线表 `src + ui/src` 不符），`catchSilent` 又把「已注释的防御式」与「真静默」混计——按它治理是治假目标；另证「`catch {` 计数」在行为不变前提下**不可降**（只剩删除 try 或改 `catch (e)` 凑数两条路，前者仅在 try 体可证不抛时成立，而本仓这些体几乎全是 JSON.parse/fs.*/new URL），故把目标改为「消灭无注释隐患类」；**分类口径（三层）**：src+ui/src 产品代码（排除同目录 .spec/.test）无参 catch 518 = 已注释 374 + 无注释 144，无注释再分 错误转译 11（体含 throw）/ 有日志 8 / **真静默 125**；125 中 18 处已由函数级 JSDoc 或体内自述式告警说明（登记不重复），**107 处补体内意图注释**（统一「失败模式 → 回退语义」形态）；**TODO 核实**：全仓 83 命中里 66 在 docs/（规范文档在讲 TODO 约定）、5 在 scripts/（检测工具自身），代码侧真实标记 **仅 2 处且均有效**（vite.config.js:27 legacy PORT 未来大版本移除——下行 `env.SERVER_PORT \|\| env.PORT` 仍在使用；verify-config.spec.ts:46 TODO(G1-b/G1-c)——规范 §7 第 2 步两项仍未勾选），另把 `toolConfigs.ts` 区块分隔注释 `// TODO TOOLS`（语义为 Todo 工具族，与同文件 `// COMMAND TOOLS` 同构）改为 `// Todo-list 工具族（…）` 以消除长期审计误报；**零行为变化**：79 文件 +107/−0 且 107 行全为 `//` 注释，TypeScript `transpileModule({removeComments:true})` 编译 HEAD 版 vs 工作树版 **79/79 逐字节相同**；行号位移连带 `pnpm gen:event-matrix` 重生成（8 行，归一化行号后零差异）；**登记不处理**：11 处错误转译 + 8 处带日志（不静默，无需注释）、两条有效 TODO 保留原样、`measure-techdebt.mjs` 的 catch 口径不一致留待 C42 一并修正 | 1（refactor） | ✅ |
+| 2026-09-11 | C42 | 终审报告 + 技术债注记 + 指标口径修正 | **终审收官**：C01–C42 **42/42 全部 ✅**；**先修口径再出报告**——① `measure-techdebt.mjs` 所有指标此前只扫 `src/`，与基线表声明的 `src + ui/src`、`src + ui/server`、`src + ui + ui/server + tests` 不一致（C40/C41 都因此被迫自建扫描），已按基线表对齐并在 `metrics.md` 顶部输出「指标口径」表、`--json` 输出 `scopes`；② `any` 由裸正则改为 **TS AST 精确统计**（旧正则高估注释里的英文 "any"、低估泛型位 `Record<string, any>`）：正则上界 5 → AST **3**，且与 C40 逐处 SAFETY 登记清单完全一致；③ 废弃语义混淆的 `catchSilent`（把已注释的防御式当真静默），改为「无注释的无参 catch」，扫描器以 C41 独立验证分类（518 / 无注释 37）做等价性校验**逐数相同**（判定认 catch 行内/上一行/体内含行尾三种注释形态）；console 作用域加 ui/server 并豁免两处 C39 收束入口；**终审指标终值**：console 158（正则上界，真实裸调用 143 ✅）/ 类型逃逸 3（✅）/ 无参 catch 518 中无注释隐患类 37（C41 前 125 ✅）/ TODO 真实标记 2（✅）；**规模**：src 1033 文件 185,487 行、ui/src 465/82,807、ui/server 103/31,071、tests 524 文件、单函数 ≥300 行 62 个、>600 行文件 92 个（保守档不拆，登记待拆候选）；**发现**：P0 已修 2 处（C05 帧解析冒泡、C36 恒绿断言）+ 08-28 批次 8 项，登记未修 10 项（C24 ×1、C34 ×9）+ ui/server 死路由 9 条；沉淀 4 条「不处理」判例（预留契约面保留 / 跨文件微重复不合并 / 结构相似不参数化 / 短链三元不展平）；**产出**：报告整篇重写 + technical-debt-report 注记 + metrics.md 按新口径重生成 + `docs/notes/implemented/2026-09-11-c42-final-report.md` | 3（refactor + docs×2） | ✅ |
 ### 日卡记录
 
 #### C01 src/agent（2026-08-19）
@@ -699,19 +700,46 @@
   - **复测计数**：同一口径重扫 → 无参 catch 518 = 已注释 **481** + 无注释 37（转译 11 / 有日志 8 / **真静默 18**），即「无注释的静默吞错」**125 → 18**。
 - **提交**：`refactor(catch): C41 为真静默无参 catch 补 fail-safe 意图注释`（107 处，79 文件）、`docs(event-matrix): C41 注释插行导致行号位移，重生成事件生产者/消费者矩阵`、`refactor(ui): C41 修正 Todo 工具族区块分隔注释，消除 TODO 审计误报`、`docs(code-refinement): C41 记录 …` —— 见本卡 PR #287（无关联 issue——追踪于本日卡）。
 
+#### C42 终审报告 + 技术债注记 + 指标口径修正（2026-09-11）
+
+- **取卡**：保守档最后一张。C41 的记录把一笔债显式登记给了本卡——「`measure-techdebt.mjs` 的 catch 口径不一致留待 C42 一并修正」。故本卡分两半：**先修口径，再出报告**（口径不对，「指标是否达标」无法判定）。
+- **审阅（口径问题三处，逐条取证）**：
+  1. **作用域不一致**：脚本 `measure()` 把 `allSrcForScan = [...srcFiles, ...srcJsFiles]` 喂给**全部**指标 → console / unsafe / catchEmpty / catchNoParam / catchSilent / todos 一律只扫 `src/`。对照实测：catch 403（工具）vs 518（基线表口径）、any 2（工具）vs 5（基线表口径）。基线表 §六 声明的是 `src + ui/server`（console）、`src + ui/src`（any、catch）、`src + ui + ui/server + tests`（TODO）。
+  2. **`any` 裸正则两个方向都不准**：`: any | as any | <any> | any[]` **高估**（注释里的英文单词——`SnipEngine.ts:64` 的 "any tool_call"、`continuationRequest.ts:22` 的 "any provider-boundary"、`ui/src/utils/unknown.ts:5` 的 JSDoc 示例 `as any`）且**低估**（`ui/src/components/chat/tools/ToolRenderer.tsx:111` 的 `toObject: Record<string, any>`——该处文本是 `, any>`，不含 `: any`）。
+  3. **`catchSilent` 语义混淆**：定义为「体仅注释/空白」，把**已由函数级 JSDoc 说明意图的防御式**与**真无任何说明的静默回退**混计（C41 已独立发现）。
+- **修正（本卡落地）**：
+  - **作用域按基线表对齐**，并在生成文档顶部输出「指标口径」表、`--json` 输出 `scopes` 字段（口径显式化，便于同比重算）。
+  - **新增 `scanTypeEscapes()`**：用 TS AST 统计类型位 `AnyKeyword` 节点 + `@ts-(expect-error|ignore)` 指令（脚本本就依赖 typescript，`godFunctions` 已有 AST 机制）。**校验**：结果 **3**，且恰为 C40 的保留清单（`useChatComposerState.ts:111` / `ToolRenderer.tsx:111` / `SkillsV2.tsx:1910`）——与正则口径（5，含 3 处假阳性且漏 1 处真）互为交叉验证。
+  - **新增 `scanNoParamCatch()` 取代 `catchSilent`**：判定「有注释」认三种形态——catch 行内、catch 上一行、体内（独立注释行或**代码行尾注释**）。**等价性校验**：得 `总计 518 / 无注释 37 / 已注释 481`，与 C41 独立验证的分类**逐数相同**。
+  - **console 作用域**含 `ui/server`，并豁免两处 C39 收束入口（`ui/server/utils/consoleLogger.js`、`ui/src/utils/logging.ts`）——它们体内就是转发，计入即定义性错误。
+  - **连带文档**：`docs/technical-debt/README.md` 的「指标口径说明」与检测手段表（B/C 类）改写；`docs/technical-debt/metrics.md` 按新口径重生成（新增「指标口径」表，catch 拆成总计 / 无注释 / 已注释三行）。
+- **终审报告**（`docs/code-refinement-report.md` **整篇重写**，替换 2026-08-20 的「5/42」快照）：结论（42/42 + 四项指标全达标）／指标对比（基线→终审）／口径修正三处／分阶段成果（阶段 1–4）／终审发现（P0 处置表 + 4 条判例 + 测试缺口）／遗留清单 9 项／未来专项建议／复现方式与口径速查。
+- **技术债注记**：`docs/technical-debt-report.md` 追加「2026-09-11 注记」段（指标终值表、三处口径修正、遗留清单状态、新增/确认债务 6 项、下次审计基线），并声明本报告与终审报告的 08-20/08-27 快照**退出事实源地位**，改由 `backlog.md`（活账本）+ `metrics.md` 滚动维护。
+- **终审指标终值**：console **158**（正则上界；真实裸调用 143，全部按设计豁免）✅ / 类型逃逸 **3**（AST 精确）✅ / 无参 catch 518 中**无注释隐患类 37**（C41 前 125）✅ / TODO 代码侧真实标记 **2** ✅。规模：`src` 1033 文件 185,487 行、`ui/src` 465 / 82,807、`ui/server` 103 / 31,071、`tests` 524 文件、单函数 ≥300 行 62 个、>600 行文件 92 个（保守档不拆，登记待拆候选）。
+- **终审发现**：P0 已修 2 处（C05 帧解析冒泡、C36 恒绿断言）+ 08-28 批次 8 项；**登记未修 10 项**（C24 ×1、C34 ×9）另加 `ui/server` 死路由 9 条；沉淀 **4 条「不处理」判例**（预留契约面保留 / 跨文件微重复不合并 / 结构相似不参数化 / 短链三元不展平）。
+- **验证**：
+  - **口径等价性校验（本卡关键证据）**：`node scripts/measure-techdebt.mjs --json` → catch `总计 518 / 无注释 37 / 已注释 481` 与 C41 独立扫描器的三层分类**逐数相同**；type escape `3` 与 C40 逐处 `SAFETY` 登记的保留清单**完全一致**。
+  - `npx biome check scripts/measure-techdebt.mjs` ✅；`node --check scripts/measure-techdebt.mjs` ✅；`--json` 与 `--update` 两条路径均跑通（全量遍历约 2.3s）。
+  - `CODEBUDDY_SAFE_DELETE_ENABLED=0 pnpm check` ✅（`check:config` + 根/UI typecheck + `eslint src tests scripts apps/desktop` + `check:event-matrix` / `check:patent-sop` / `check:patent-workflow-docs` / `check:html-templates` / `check:skills` + biome 2292 文件）。
+  - `pnpm test`（后端 build + node:test）✅ 4224 测试（4219 pass / **1 fail 环境型** / 4 skip）——唯一失败为 `tests/patent/document/renderPatentDocument.spec.ts`「系统 Chrome 存在时可生成 PDF」，该用例设计为无 Chrome 时跳过，本机 Chrome 存在但渲染未产出 PDF、渲染器走降级路径；该链路不在本卡改动范围（本卡改动仅 `scripts/` + `docs/`），CI 无 Chrome 故跳过。`cd ui && pnpm test`（111 文件 / 670 用例）✅
+- **提交**：`refactor(scripts): C42 对齐 measure-techdebt 指标口径并改 any 为 AST 统计`、`docs(techdebt): C42 按新口径重生成 metrics 并改写指标口径说明`、`docs(code-refinement): C42 重写终审报告、补技术债注记与决策记录`、`docs(techdebt): C42 更新活账本——本轮偿还条目转 done 并登记 TD-METRICS-001` —— 见本卡 PR #288（可回溯来源：债号 TD-METRICS-001）。
+
 ## 六、基线（2026-08-18 实测）
 
-| 指标 | 基线值 | 目标 | 备注 |
-|---|---|---|---|
-| 裸 console（src + ui/server，含 .ts/.tsx/.js） | 657 处 / 83 文件 | <300 | 含 ui/server 手写 JS 大量输出；C39 后（2026-09-08）实测 154（真实裸调用 144，其余为 CLI/横幅豁免与注释残留） |
-| `any`/`@ts-expect-error`（src + ui/src） | 20 处 | ≤10 | 主链路清零，外围加 SAFETY 注释；C40 后（2026-09-11）实测 5（主链路 0，ui/src 余 5 处含 1 处跨卡记录项），逐条 SAFETY 见 note |
-| 无参 `catch {`（src + ui/src） | 485 处 | 显著下降 | 含防御式（有注释）与隐患（无注释）两类；**口径修正（C41）**：隐患类 = 无注释的**静默**吞错（体无 `throw`、无日志，且无 JSDoc/自述式告警说明）；`catch {` 计数本身在行为不变前提下不可降。C41 后（2026-09-11）实测 518 = 已注释 481 + 无注释 37（转译 11 / 有日志 8 / 真静默 18），**隐患类 125 → 18**（详见 C41 note） |
-| TODO/FIXME/HACK（src + ui + ui/server + tests） | 24 处 | ≤5 | 需逐条核实业务语义；C41 后（2026-09-11）核实：代码侧真实标记 **2 处**（`ui/vite.config.js:27`、`tests/development-standards/verify-config.spec.ts:46`，均仍有效保留），全仓 83 命中里 66 在 `docs/`（约定原文）、5 在 `scripts/`（检测工具自身）、其余为字符串/正则/占位符中的同名文本；另修正 `toolConfigs.ts` 分隔注释 `// TODO TOOLS` 的来源误报 |
-| TS/TSX 文件数 | 1828 | — | 全仓 |
-| 测试文件数 | 458 | — | tests/ + ui/src + ui/e2e |
-| 后端 >600 行文件 | 42 | 不强制下降（保守档） | 记录待拆建议 |
-| UI >600 行文件 | 26 | 不强制下降（保守档） | 记录待拆建议 |
-| ui/server JS 文件 | 98 / 29.7K 行 | — | 只做行为不变清理 |
+> **2026-09-11 终审**：本表口径已与 `scripts/measure-techdebt.mjs` 对齐（此前工具一律只扫 `src/`，与下表声明不一致——C40/C41 都因此被迫自建扫描重建口径）。口径定义见 `docs/technical-debt/README.md` §指标口径说明 与终审报告 §三/§八。
+
+| 指标 | 基线值（08-18） | 目标 | 终审值（09-11） | 备注 |
+|---|---|---|---|---|
+| 裸 console（src + ui/server，含 .ts/.tsx/.js） | 657 处 / 83 文件 | <300 | **158**（正则上界）／真实裸调用 **143** | C39 收束：ui/server 408→0、ui/src 116→0；剩余 143 处**全在 `src/` 且按设计豁免**（CLI 交互/登录二维码/`debug.ts`/telemetry 入口）。158 与 143 之差是注释中的同名文本（如 `ui/server/sessionManager.js` 5 处 `// console.error(...)`） |
+| 类型逃逸 `any`/`@ts-expect-error`/`@ts-ignore`（src + ui/src） | 20 处 | ≤10 | **3**（TS AST 精确） | C40 收敛后主链路 0；3 处均逐条 `SAFETY` 登记（`useChatComposerState.ts:111` / `ToolRenderer.tsx:111` / `SkillsV2.tsx:1910`）。**口径修正（C42）**：旧裸正则既高估（注释里的英文 "any"）又低估（泛型位 `Record<string, any>`），已改 TS AST |
+| 无参 `catch {`（src + ui/src） | 485 处 | 显著下降 | 总计 **518**，其中**无注释隐患类 37** | **口径修正（C41/C42）**：治理目标是「无注释隐患类」而非计数——`catch {` 计数在行为不变前提下不可降（try 体几乎全是 `JSON.parse`/`fs.*`/`new URL`）。C41 补 107 处意图注释 + 18 处登记不重复，**隐患类 125 → 37**（37 = 转译 11 + 有日志 8 + 真静默 18） |
+| TODO/FIXME/HACK（src + ui + ui/server + tests） | 24 处 | ≤5 | 代码侧真实标记 **2**（grep 上界 11） | C41 全仓核实：83 命中里 66 在 `docs/`（规范在讲 TODO 约定）、5 在 `scripts/`（检测工具自身）；代码侧仅 2 处且**均仍有效**（`ui/vite.config.js:27`、`tests/development-standards/verify-config.spec.ts:46`）。**口径修正（C42）**：脚本作用域纳入 tests 后 grep 上界 11 |
+| TS/TSX 文件数 | 1828（旧全仓口径） | — | `src` **1033** + `ui/src` **465** | 终审另计 `ui/server` 103（JS） + `tests` 524；行数：`src` 185,487 / `ui/src` 82,807 / `ui/server` 31,071。基线口径不同，**不可直接相减** |
+| 测试文件数 | 458 | — | `tests/` **524** | 另计同址 `src` 13 + `ui/src` 36；后端 4224 用例 / UI 670 用例 |
+| 后端 >600 行文件 | 42 | 不强制下降（保守档） | `src` **40**（+ edgeclaw 子包 10） | 口径为 `src`（不含子包），**基本持平**；待拆候选见终审报告 §六 |
+| UI >600 行文件 | 26 | 不强制下降（保守档） | `ui/src` **25**（+ `ui/server` 17） | 口径为 `ui/src`，**基本持平**；待拆候选见终审报告 §六 |
+| ui/server JS 文件 | 98 / 29.7K 行 | — | 103 / 31,071 行 | 只做行为不变清理（C34） |
+| 单函数 ≥300 行 | — | 不强制下降（保守档） | **62 个** | 最大 `useChatComposerState` 1608 行；完整清单见 `docs/technical-debt/metrics.md` |
 
 ## 七、风险与护栏
 

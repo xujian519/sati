@@ -8,8 +8,8 @@
  *
  * 覆盖指标：
  *   - 体积/复杂度：目录文件数/行数、Top 大文件、TS AST 单函数行数（god function）
- *   - 类型安全    ：any / @ts-expect-error / @ts-ignore（按模块聚合）
- *   - 错误&可观测 ：裸 console.*、空 catch、无参 catch、TODO/HACK/FIXME/XXX
+ *   - 类型安全    ：类型位 any（TS AST 精确）+ @ts-expect-error / @ts-ignore（src + ui/src）
+ *   - 错误&可观测 ：裸 console.*、空 catch、无参 catch（含无注释隐患类）、TODO/HACK/FIXME/XXX
  *   - 分层边界    ：ui/server→src 深层导入、src→ui 导入、ui/server 直连 edgeclaw lib 编译产物
  *   - 测试        ：各 src 模块测试文件数、零/极薄模块
  *   - i18n        ：en / zh-CN 命名空间 key 对齐
@@ -37,14 +37,34 @@ const EXCLUDE_DIRS = new Set([
 const GOD_FN_THRESHOLD = Number(process.env.GOD_FN_THRESHOLD ?? 300);
 const TOP_FILES_LIMIT = Number(process.env.TOP_FILES_LIMIT ?? 30);
 
-// 只匹配「真实类型逃逸」的 any 形态（: any / as any / <any> / any[]），
-// 避免把注释/字符串里的英文单词 "any" 误计。@ts-expect-error / @ts-ignore 单独计。
-const UNSAFE_PATTERN = /: any\b|as any\b|<any>|any\[\]|@ts-expect-error|@ts-ignore/g;
+// 裸正则模式（type escape 专用模式已废弃，改走 TS AST，见 scanTypeEscapes）。
 const CONSOLE_PATTERN = /console\.(log|error|warn|info|debug)/g;
 const EMPTY_CATCH_PATTERN = /catch\s*(\([^)]*\))?\s*\{\s*\}/g;
-const NO_PARAM_CATCH_PATTERN = /\bcatch\s*\{/g;
-const SWALLOW_CATCH_PATTERN = /catch\s*(\([^)]*\))?\s*\{\s*(?:(?:\/\/[^\n]*\n)|(?:\/\*[\s\S]*?\*\/)|[ \t\r\n])*\}/g;
 const TODO_PATTERN = /\b(TODO|FIXME|HACK|XXX)\b/g;
+
+/**
+ * 各指标的作用域（2026-09-11 C42 对齐）。
+ *
+ * 此前所有指标一律只扫 `src/`，而 `docs/code-refinement-plan.md` §六 基线表声明的是
+ * `src + ui/src` / `src + ui/server` / `src + ui + ui/server + tests`——工具与文档两套口径，
+ * 导致 C40/C41 两张横切卡都得先用自建扫描重建口径才能定目标（见 C41 note「遗留口径问题」）。
+ * 口径一旦变化，历史快照的同比须按同一口径重算，故在此显式声明并可被 `--json` 读出。
+ */
+const SCOPE_DOC = {
+  console:
+    "src + ui/server（.ts/.tsx/.js/.jsx/.mjs/.cjs；豁免两处 C39 收束入口 ui/server/utils/consoleLogger.js 与 ui/src/utils/logging.ts）",
+  unsafe: "src + ui/src（.ts/.tsx，含同址 *.spec.*；TS AST 精确统计 AnyKeyword + @ts-* 指令）",
+  catch: "src + ui/src 产品代码（排除 *.spec.* / *.test.*）",
+  todos: "src + ui/src + ui/server + tests（.ts/.tsx/.js/.jsx/.mjs/.cjs）",
+};
+
+/**
+ * C39 刻意建立的日志收束入口——它们体内就是 `console.*` 转发，计入即定义性错误。
+ * 真实裸调用由其消费方统计（见 C39 记录：收束后 src/ 真实裸调用 143 处，全部按设计豁免）。
+ */
+const SANCTIONED_CONSOLE_ENTRIES = new Set(["ui/server/utils/consoleLogger.js", "ui/src/utils/logging.ts"]);
+
+const isTestFile = f => /\.(spec|test)\.[cm]?[jt]sx?$/.test(f);
 
 let ts = null;
 
@@ -176,6 +196,95 @@ function grepCountByModule(files, pattern) {
   return { total, perModule };
 }
 
+/**
+ * 类型逃逸（精确口径，2026-09-11 C42 落地）。
+ *
+ * 旧实现是裸正则（`: any | as any | <any> | any[]`），两个方向都不准：
+ *   - **高估**：把注释/字符串里的英文单词 "any" 计入（如 `SnipEngine.ts:64` 的 "any tool_call"）；
+ *   - **低估**：漏掉泛型位 `Record<string, any>`（该处文本是 `, any>`，不含 `: any`）。
+ * 故改用 TS AST 统计 `AnyKeyword` 节点（只算真正的类型位），指令类
+ * （`@ts-expect-error` / `@ts-ignore`）另行计数——两者合起来即 C40 采用的三口径。
+ */
+async function scanTypeEscapes(files) {
+  const t = await initTs();
+  const items = [];
+  for (const f of files) {
+    if (!f.endsWith(".ts") && !f.endsWith(".tsx")) continue;
+    const src = readFileSync(f, "utf8");
+    const kind = f.endsWith(".tsx") ? t.ScriptKind.TSX : t.ScriptKind.TS;
+    const rel = relative(ROOT, f);
+    const sf = t.createSourceFile(rel, src, t.ScriptTarget.Latest, true, kind);
+    const lineAt = pos => sf.getLineAndCharacterOfPosition(pos).line + 1;
+    const visit = node => {
+      if (node.kind === t.SyntaxKind.AnyKeyword)
+        items.push({ file: rel, line: lineAt(node.getStart(sf)), kind: "any" });
+      t.forEachChild(node, visit);
+    };
+    visit(sf);
+    for (const m of src.matchAll(/@ts-(?:expect-error|ignore)\b/g)) {
+      items.push({ file: rel, line: src.slice(0, m.index).split("\n").length, kind: m[0] });
+    }
+  }
+  const perModule = {};
+  for (const it of items) {
+    const mod = moduleOf(join(ROOT, it.file));
+    perModule[mod] = (perModule[mod] ?? 0) + 1;
+  }
+  return { total: items.length, perModule, items };
+}
+
+/**
+ * 无参 catch 的注释卫生（C41 口径，2026-09-11 并入本工具）。
+ *
+ * `catch {`（未绑定错误变量）**本身不是缺陷**：仓内 try 体几乎全是 `JSON.parse` / `fs.*` /
+ * `new URL`，删掉 try 会改变行为，改写成 `catch (e)` 只影响计数不影响语义。真正的隐患是
+ * **没有任何意图说明**的静默回退，故这里统计「无注释的无参 catch」，而不是总数。
+ *
+ * 判定「已注释」的三种形态（任一命中即视为已说明）：
+ *   1. catch 行内   —— `catch { // 凭据缺失 → 视为未配置`
+ *   2. catch 上一行 —— 整行为注释
+ *   3. 体内         —— 独立注释行，或代码行尾注释（`return null; // 缓存损坏 → 失效重扫`）
+ */
+function scanNoParamCatch(files) {
+  const rows = [];
+  for (const f of files) {
+    const lines = readLines(f);
+    const rel = relative(ROOT, f);
+    for (let i = 0; i < lines.length; i++) {
+      const m = /\bcatch\s*\{/.exec(lines[i]);
+      if (!m) continue;
+      const tail = lines[i].slice(m.index + m[0].length);
+      const inlineComment = tail.includes("//") || tail.includes("/*");
+      const prevLineComment = /^\s*(\/\/|\/\*|\*)/.test(lines[i - 1] ?? "");
+      let depth = 1;
+      let bodyComment = false;
+      for (let j = i; j < lines.length && depth > 0; j++) {
+        const seg = j === i ? tail : lines[j];
+        let seen = "";
+        for (let k = 0; k < seg.length; k++) {
+          const ch = seg[k];
+          if (ch === "{") depth++;
+          else if (ch === "}") {
+            depth--;
+            if (depth === 0) break;
+          }
+          seen += ch;
+        }
+        if (seen.includes("//") || seen.includes("/*")) bodyComment = true;
+      }
+      rows.push({ file: rel, line: i + 1, documented: inlineComment || prevLineComment || bodyComment });
+    }
+  }
+  const perModule = {};
+  let documented = 0;
+  for (const r of rows) {
+    if (r.documented) documented += 1;
+    const mod = moduleOf(join(ROOT, r.file));
+    perModule[mod] = (perModule[mod] ?? 0) + 1;
+  }
+  return { total: rows.length, documented, undocumented: rows.length - documented, perModule };
+}
+
 /** 检测 ui/server→src 深层导入、src→ui 导入、edgeclaw 编译产物导入。 */
 function boundaryChecks() {
   const uiServerFiles = listFiles(join(ROOT, "ui/server"), [".js", ".mjs", ".ts"]);
@@ -299,10 +408,18 @@ async function measure() {
   const uiSrcFiles = listFiles(join(ROOT, "ui/src"), [".ts", ".tsx"]);
   const uiServerFiles = listFiles(join(ROOT, "ui/server"), [".js", ".mjs", ".ts"]);
 
-  const allSrcForScan = [...srcFiles, ...srcJsFiles];
+  // 扫描作用域按 SCOPE_DOC 展开（此前全部只用 allSrcForScan = src/）
+  const jsLike = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"];
+  const uiServerScan = listFiles(join(ROOT, "ui/server"), jsLike);
+  const testsScan = listFiles(join(ROOT, "tests"), jsLike);
+  const productCatchFiles = [...srcFiles, ...uiSrcFiles].filter(f => !isTestFile(f));
+  const consoleFiles = [...srcFiles, ...srcJsFiles, ...uiServerScan].filter(
+    f => !SANCTIONED_CONSOLE_ENTRIES.has(relative(ROOT, f)),
+  );
 
   return {
     date: new Date().toISOString().slice(0, 10),
+    scopes: SCOPE_DOC,
     stats: {
       srcTsFiles: srcFiles.length,
       srcTsLines: countLines(srcFiles),
@@ -314,12 +431,11 @@ async function measure() {
       uiServerLines: countLines(uiServerFiles),
     },
     topFiles: topFiles([...srcFiles, ...uiSrcFiles, ...uiServerFiles], TOP_FILES_LIMIT),
-    unsafe: grepCountByModule(allSrcForScan, UNSAFE_PATTERN),
-    console: grepCountByModule(allSrcForScan, CONSOLE_PATTERN),
-    catchEmpty: grepCountByModule(allSrcForScan, EMPTY_CATCH_PATTERN),
-    catchNoParam: grepCountByModule(allSrcForScan, NO_PARAM_CATCH_PATTERN),
-    catchSilent: grepCountByModule(allSrcForScan, SWALLOW_CATCH_PATTERN),
-    todos: grepCountByModule(allSrcForScan, TODO_PATTERN),
+    unsafe: await scanTypeEscapes([...srcFiles, ...uiSrcFiles]),
+    console: grepCountByModule(consoleFiles, CONSOLE_PATTERN),
+    catchEmpty: grepCountByModule(productCatchFiles, EMPTY_CATCH_PATTERN),
+    catchNoParam: scanNoParamCatch(productCatchFiles),
+    todos: grepCountByModule([...srcFiles, ...srcJsFiles, ...uiSrcFiles, ...uiServerScan, ...testsScan], TODO_PATTERN),
     boundaries: boundaryChecks(),
     tests: testCoverage(),
     i18n: i18nDiff(),
@@ -352,6 +468,12 @@ function renderMarkdown(m) {
   L.push(`| ui/src 文件 / 行数 | ${m.stats.uiSrcFiles} / ${m.stats.uiSrcLines} |`);
   L.push(`| ui/server 文件 / 行数 | ${m.stats.uiServerFiles} / ${m.stats.uiServerLines} |`);
   L.push(``);
+  L.push(`## 指标口径`);
+  L.push(``);
+  L.push(`| 指标 | 作用域 |`);
+  L.push(`|---|---|`);
+  for (const [k, v] of Object.entries(m.scopes)) L.push(`| ${k} | ${v} |`);
+  L.push(``);
   L.push(`## 异味指标（越少越好）`);
   L.push(``);
   L.push(`| 指标 | 总量 | 热点模块 |`);
@@ -359,8 +481,9 @@ function renderMarkdown(m) {
   L.push(`| \`any\`/\`@ts-expect-error\`/\`@ts-ignore\` | ${m.unsafe.total} | ${topModules(m.unsafe.perModule)} |`);
   L.push(`| 裸 \`console.*\` | ${m.console.total} | ${topModules(m.console.perModule)} |`);
   L.push(`| 空 \`catch {}\` | ${m.catchEmpty.total} | ${topModules(m.catchEmpty.perModule)} |`);
-  L.push(`| 静默吞错 \`catch\`（体仅注释/空白） | ${m.catchSilent.total} | ${topModules(m.catchSilent.perModule)} |`);
-  L.push(`| 无参 \`catch {\` | ${m.catchNoParam.total} | ${topModules(m.catchNoParam.perModule)} |`);
+  L.push(`| 无参 \`catch {\`（总计） | ${m.catchNoParam.total} | ${topModules(m.catchNoParam.perModule)} |`);
+  L.push(`| ↳ **无注释**（隐患类，目标） | **${m.catchNoParam.undocumented}** | — |`);
+  L.push(`| ↳ 已带意图注释 | ${m.catchNoParam.documented} | — |`);
   L.push(`| \`TODO/HACK/FIXME/XXX\` | ${m.todos.total} | ${topModules(m.todos.perModule)} |`);
   L.push(`| 分层违规 \`ui/server→src\` | ${m.boundaries.uiServerToSrcCount} | — |`);
   L.push(`| 分层违规 \`src→ui\` | ${m.boundaries.srcToUiCount} | — |`);
