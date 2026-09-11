@@ -24,8 +24,8 @@
 | 代码 | 类别 | 检测手段 |
 |---|---|---|
 | A | 体积/复杂度 | `wc -l` Top 文件；TS AST 单函数 > 阈值；平均行/函数 |
-| B | 类型安全 | `any` / `@ts-expect-error` / `@ts-ignore` 按模块聚合 |
-| C | 错误 & 可观测 | 裸 `console.*`、空/无参 `catch {}`、静默吞错、`TODO` |
+| B | 类型安全 | 类型位 `any`（TS AST）/ `@ts-expect-error` / `@ts-ignore` 按模块聚合 |
+| C | 错误 & 可观测 | 裸 `console.*`、空 `catch {}`、无参 `catch {}`（区分总数与**无注释隐患类**）、`TODO` |
 | D | 架构/分层 | `ui/server→src` 深层导入、`src→ui`、循环依赖、protocol/runtime/config 三层符合度 |
 | E | 测试 | 模块测试分布、主链路文件无直接单测、伪测试（`readFileSync`+正则扫源码） |
 | F | 死代码/重复 | codegraph 可达性找未引用导出、品牌残留、同能力多套实现 |
@@ -51,8 +51,12 @@ pnpm typecheck && pnpm lint && pnpm format:check
 
 ### 指标口径说明（重要）
 
-- **`any` 指标是裸正则的**上界**，非准确值**：`measure-techdebt.mjs` 用 `: any | as any | <any> | any[]` 匹配，会把注释/字符串里的英文单词 "any"（如 `SnipEngine.ts:64` 的 "any tool_call"）计入。2026-08-23 人工复核（B1+B2 六个模块）确认**全源码真实 `any` 逃逸 = 0**；真正的类型债是强转与断言（`as never`/`as unknown as X`/`as string[]`/`!`，见 `backlog.md` TD-TYPE-002）。
-- **静默吞错 catch** 与 **无参 catch** 是两回事：前者=体仅注释/空白（真实隐患，151 处），后者=未绑定错误变量（395 处，部分有注释属防御式）。`metrics.md` 都单独列出。
+> **2026-09-11（C42 终审）口径已对齐**：此前所有指标一律只扫 `src/`，与 `docs/code-refinement-plan.md` §六 基线表声明的 `src + ui/src` / `src + ui/server` 不一致——C40/C41 两张横切卡都不得不先自建扫描重建口径才能定目标（见 C41 note「遗留口径问题」）。现已按基线表对齐，`metrics.md` 顶部输出「指标口径」表，`--json` 亦可读出 `scopes` 字段。**跨 2026-09-11 的同比须按同一口径重算。**
+
+- **`any` 指标已从裸正则改为 TS AST 精确统计**（`scanTypeEscapes`）：旧正则 `: any | as any | <any> | any[]` 两个方向都不准——**高估**（注释/字符串里的英文单词 "any"，如 `SnipEngine.ts:64` 的 "any tool_call"）且**低估**（泛型位 `Record<string, any>` 文本不含 `: any`，被漏掉）。现在只统计真正的类型位 `AnyKeyword` 节点 + `@ts-expect-error`/`@ts-ignore` 指令，`src + ui/src` 实测 **3 处**，与 C40 逐处 `SAFETY` 登记的保留清单完全一致（互为交叉验证）。真正的类型债仍是强转与断言（`as never`/`as unknown as X`/`as string[]`/`!`，见 `backlog.md` TD-TYPE-002）。
+- **无参 `catch {`** 拆成两个数：**总计**（未绑定错误变量；仓内 try 体几乎全是 `JSON.parse`/`fs.*`/`new URL`，删 try 会改变行为，故该计数在行为不变前提下不可降）与 **无注释**（隐患类，唯二治理目标）。判定「有注释」认三种形态：catch 行内、catch 上一行、体内（独立注释行或代码行尾注释）。
+- 旧版「静默吞错 catch（体仅注释/空白）」指标**已废弃**：它把**已在函数 JSDoc 说明意图的防御式**与真无说明的静默回退混计（C41 发现并修正）。无参 catch 的意图注释形态统一为「失败模式 → 回退语义」。
+- **裸 `console.*` 仍是正则上界**：会把**注释掉的**调用计入（如 `ui/server/sessionManager.js` 5 处 `// console.error(...)`）；C39 刻意建立的两处收束入口（`ui/server/utils/consoleLogger.js`、`ui/src/utils/logging.ts`）已豁免。收束后 `src/` 真实裸调用 143 处全部按设计豁免（CLI 交互/二维码/`debug.ts`/telemetry 入口）。
 - i18n / 测试覆盖 / 分层边界为精确值，可直接使用。
 
 ## 严重级定义
