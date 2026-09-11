@@ -18,7 +18,7 @@
 2. **`AgentLoop.run()` 拆解**：主循环方法 ≤200 行，错误恢复分支全部下沉到 `recovery/` 子模块（遵循 `docs/god-function-refactor-plan.md`）
 3. **三大渠道有契约测试**：`tests/adapters/` 新增 ≥6 个 spec（WeCom/Weixin/Feishu 各 ≥2：消息接收→回复闭环 + 巨型方法纯函数层）
 4. **重复实现收敛**：env 解析助手全仓 ≤1 处、退避/jitter 通用实现全仓 ≤1 处（各模块只留超参）；`pilot/paths` 工具函数移入 `shared/paths` 后，`src/` 内对 `pilot/paths.ts` 的直引为 0
-5. **工作流评估产出**：`docs/workflow-convergence-eval.md` 在 2026-11-18 前完成（S2 defer 到期前），给出四引擎能力覆盖矩阵与收敛决策
+5. **工作流评估产出**：`docs/workflow-convergence-eval.md` ✅ **2026-09-11 完成**（早于 2026-11-18 硬截止），给出四引擎能力覆盖矩阵与收敛决策（结论：选项 a，删除 DAG 引擎）
 6. **每卡门禁全绿**：`pnpm typecheck && pnpm lint && pnpm format:check && pnpm test`，零新增 warning；UI 卡为 `pnpm --filter sati-ui test && pnpm --filter sati-ui typecheck`
 
 ---
@@ -102,6 +102,10 @@
 
 **发现**：四套并行执行模型（`src/workflow` DAG 引擎 / `src/patent/workflow` 单阶段执行器 / `flexible-plan` / `patent/graph` SuperStep）+ `workflow` 撞名；DAG 引擎仅 2 消费者（S2 已 defer，2026-11-18 到期）。
 
+> **状态（2026-09-11）**：P6a 评估与 P6c 执行已落地——评估报告 `docs/workflow-convergence-eval.md`，
+> 收敛结论为选项 (a) 并已删除 `src/workflow/**` 与 `src/patent/workflow-dag.ts`；P6b 范围修正见评估报告 §七。
+> 决策记录：`docs/notes/implemented/2026-09-11-workflow-convergence-delete-dag-engine.md`。
+
 **改动点**：
 - **P6a 评估（必须先于一切删除动作）**：产出 `docs/workflow-convergence-eval.md`——四引擎能力覆盖矩阵（checkpoint / 审批门 / 降级 / HITL / resume / 等价性测试现状）、DAG 两消费者的真实需求清单、收敛方向建议（图引擎为长期模型的可行性）
 - **P6b 共享执行协议**（无论评估结论，先做）：`src/patent/execution-protocol.ts` 统一 checkpoint / 门禁 / 降级契约，四引擎适配
@@ -155,9 +159,9 @@
 | P4b | AgentLoop.run() 阶段骨架 + recovery/ 下沉 | ⬜ |
 | P4c | 三大渠道类按 protocol/state/handlers/render 切分 | ⬜ |
 | P5 | pilot 职责文档 + wiki 资产迁 assets/ | ⬜ |
-| P6a | 工作流收敛评估（docs/workflow-convergence-eval.md） | ⬜ |
-| P6b | patent 执行协议统一（execution-protocol.ts） | ⬜ |
-| P6c | 工作流收敛执行（依 P6a 决策） | ⬜ |
+| P6a | 工作流收敛评估（docs/workflow-convergence-eval.md） | ✅ 2026-09-11（结论：选项 a） |
+| P6b | patent 执行协议统一（execution-protocol.ts） | ⤵ 范围修正：不单独立项，改为按 `patent/graph/README.md` 已知差异逐条收敛（见评估报告 §七） |
+| P6c | 工作流收敛执行（依 P6a 决策） | ✅ 2026-09-11（选项 a：删除 `src/workflow/**` + `src/patent/workflow-dag.ts`） |
 | P7 | 浏览器后端单一数据源（或漂移门禁降级方案） | ⬜ |
 
 ### P1 交付记录（2026-08-20）
@@ -191,4 +195,4 @@
 3. `ui/server` 白名单边界不动（`check-ui-server-boundary.mjs`）；`edgeclaw-memory-core` 构建方式与 lib 直连路径不动
 4. 全部提交为 `refactor` / `test` / `docs` 类，一个关注点一个提交；发现 P0 行为缺陷不混入 refactor 提交，另开 fix 提交
 5. P2a 不早于 c03-c04 分支合并启动（session/transcript 正在重构中）
-6. P6c 任何删除动作必须先有 P6a 评估结论（S2 defer 到期 2026-11-18 前完成评估）
+6. P6c 任何删除动作必须先有 P6a 评估结论（S2 defer 到期 2026-11-18 前完成评估）——✅ 2026-09-11 已满足：评估见 `docs/workflow-convergence-eval.md`，随后按选项 (a) 执行删除

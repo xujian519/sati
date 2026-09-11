@@ -14,7 +14,7 @@
 | #162 收束裸 console + 静默 catch（TD-CONSOLE-001 · TD-CATCH-001） | C / P2 | L | 低 | 不需要 | 一（穿插） |
 | #159 前端 God Hook/组件拆分（UI-CHAT-N01/02/03/04/07 · UI-APP-N01） | A / P1 | L | **高（UI 主链路）** | **必须**（桌面+移动） | 二 |
 | ✅ #161 policy-bridge 拦截接线（RULE-N02） | F / P2 | S(代码) | **极高（全局权限）** | 不需要 | 三（灰度）· 已按灰度落地 |
-| #150 多套并行引擎统一（WORKFLOW-N01 · PATENT-N01） | D / P1 | L | 高 | 不需要 | 三/四（硬截止） |
+| ✅ #150 多套并行引擎统一（WORKFLOW-N01 · PATENT-N01） | D / P1 | L | 高 | 不需要 | 三/四（硬截止）· 已评估并删除 DAG 引擎 |
 
 > 注：以上 4 条专项均**不触碰工具 `inputSchema`**，因此不会使 llm-replay fixture 失配，无需重录（AGENTS 铁律 6 / 重放契约）。
 
@@ -30,7 +30,7 @@
 - **#162 可观测性收束**（TD-CONSOLE-001 + TD-CATCH-001，P2/L）：裸 `console.*` 267 处（`cli` 191 最热）；静默吞错 catch 151 处（`adapters` 40 · `always-on` 15 · `tool` 14）。
 - **#159 前端 God Hook/组件拆分**（P1/L）：见 §2 阶段二子项。
 - **#161 policy-bridge 接线**（RULE-N02，P2/S-code）：**已完成**——`rulesToPolicyDenyRules` 经 flag `SATI_RULE_POLICY_BRIDGE_ENABLED`（默认关）接入 `createLocalGateway`，编译带 phase 语义门并前置注入 `rules.deny`；当前规则资产下编译结果为空（保留 block 的 2 条均为 `post_execution`）。
-- **#150 多引擎统一**（WORKFLOW-N01 / PATENT-N01，P1/L）：`.brooks-lint.yaml` 对该债 suppress 至 **2026-11-18**。
+- **#150 多引擎统一**（WORKFLOW-N01 / PATENT-N01，P1/L）：**已完成**（2026-09-11）——P6a 评估（`docs/workflow-convergence-eval.md`）结论为选项 (a)，`src/workflow/**` 与 `src/patent/workflow-dag.ts` 已删除；`.brooks-lint.yaml` suppress 条目移除。
 
 ## 2. 建议顺序（阶段化）
 
@@ -57,7 +57,7 @@
 
 ### 阶段三 · 高改动面 + 硬截止（单独排期）
 - **#161 policy-bridge 接线（P2）**：**已按此结论落地**——`flag-gated`（默认关）+ phase 语义门 + policy deny 前置注入 + `docs/notes/implemented/2026-09-11-policy-bridge-tool-guard-wiring.md`。未采用全量编译（即便开启也不拦输出面规则）。
-- **#150 多引擎统一（P1）**：suppress 至 **2026-11-18** 到期，需在截止前完成「graph↔workflow↔flexible-plan」能力对比 + 消费者需求评估，产出「删除 / 合并 / 降级」结论。
+- **#150 多引擎统一（P1）**：**已按此结论完成**——「graph↔workflow↔flexible-plan」能力对比与消费者需求评估见 `docs/workflow-convergence-eval.md`，结论「删除」（选项 a）已执行，命名撞名随之消失。
 
 ## 3. 机会型（不占专项排期，命中才修）
 
@@ -91,7 +91,7 @@
 | #161 | ✅ done（feat/rule-policy-bridge-wiring） |
 | #163 / #162 | ✅ done（PR #286 / #274） |
 | #159 | ⏳ 待做（按 §2 阶段推进） |
-| #150 | ⏳ 待做（硬截止 2026-11-18） |
+| #150 | ✅ done（评估 + 删除 DAG 引擎，早于硬截止） |
 
 ---
 
