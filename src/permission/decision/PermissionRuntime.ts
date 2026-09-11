@@ -272,7 +272,10 @@ function denyFromRule(rule: PermissionRule): PermissionDecision {
     type: "rule",
     behavior: "deny",
     rule,
-    message: `Deny rule blocks ${rule.toolName}.`,
+    message:
+      rule.ruleId !== undefined
+        ? `宪法规则 ${rule.ruleId} 拦截工具调用 ${rule.toolName}。`
+        : `Deny rule blocks ${rule.toolName}.`,
   });
 }
 

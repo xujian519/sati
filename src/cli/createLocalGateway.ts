@@ -126,7 +126,13 @@ import {
 import { WorkerRegistry, defaultPatentWorkers } from "../patent/index.js";
 import { isProvenanceEnabled } from "../patent/provenance/index.js";
 import { SqliteApprovalStore } from "../patent/provenance/approval-store.js";
-import { loadPatentFullRuleSet, RuleOutputGate, selectGateRules } from "../rule/index.js";
+import {
+  loadPatentFullRuleSet,
+  mergePolicyDenyRules,
+  RuleOutputGate,
+  rulesToPolicyDenyRules,
+  selectGateRules,
+} from "../rule/index.js";
 import { createDefaultPermissionContext, type PermissionRule } from "../permission/index.js";
 import { loadPilotConfig, resolvePilotHome, type PilotProxyConfig } from "../pilot/index.js";
 import { createPilotConfigStoreSync, type PilotConfigStore } from "../pilot/config/PilotConfigStore.js";
@@ -1041,6 +1047,14 @@ class ProjectRuntimeRegistry {
     string,
     { allow: PermissionRule[]; deny: PermissionRule[]; ask: PermissionRule[] }
   >();
+
+  /**
+   * Per-project 宪法规则 deny 规则（`SATI_RULE_POLICY_BRIDGE_ENABLED` 开启时由
+   * `prepareSessionRuntime` 编译并登记，默认关时为空数组）。
+   * `createAgentConfig` 在构造 `PermissionContext` 时**无条件**前置合并它——
+   * 会话级 `sessionOverrides.permissionRules` 覆盖不得静默关闭宪法拦截。
+   */
+  private readonly policyDenyRules = new Map<string, PermissionRule[]>();
 
   /**
    * Per-session MCP runtimes for `perSession: true` servers (e.g.
@@ -2184,6 +2198,25 @@ class ProjectRuntimeRegistry {
       ruleOutputGateLogger.warn(`专利规则集加载告警: ${fullRuleSet.warnings.join("; ")}`);
     }
     const ruleGate = new RuleOutputGate(selectGateRules(fullRuleSet.ruleSet));
+    // 宪法规则工具拦截通道（C 链，默认关）：block + keyword_blocklist 且**非输出面 phase**
+    // 的规则编译为 policy deny 规则，交 createAgentConfig 前置注入 PermissionContext.rules.deny。
+    // phase 语义门见 src/rule/runtime/policy-bridge.ts；当前规则资产的 block 规则均为
+    // post_execution（输出面），故开启后编译结果为空——显式告警而非静默"已启用却无规则"。
+    const policyDenyRules: PermissionRule[] = [];
+    if (brandEnv(this.options.env, ENV_KEY.RULE_POLICY_BRIDGE_ENABLED) === "1") {
+      const compiled = rulesToPolicyDenyRules(fullRuleSet.ruleSet);
+      policyDenyRules.push(...compiled.rules);
+      if (compiled.rules.length === 0) {
+        ruleOutputGateLogger.warn(
+          `policy-bridge 已启用，但当前规则资产无可拦截规则（跳过 ${compiled.skipped.length} 条：block 规则均为输出面语义）`,
+        );
+      } else {
+        ruleOutputGateLogger.info(
+          `policy-bridge 已启用：编译 ${compiled.rules.length} 条 deny 规则（跳过 ${compiled.skipped.length} 条）`,
+        );
+      }
+    }
+    this.policyDenyRules.set(runtime.projectRoot, policyDenyRules);
     // 决策溯源旁路（P6 双通道单点）：默认关 → approvalStore 不配置，output-gate 零开销。
     const enableProvenance = isProvenanceEnabled({
       enableProvenance: this.options.enableProvenance,
@@ -2439,7 +2472,9 @@ class ProjectRuntimeRegistry {
         additionalWorkingDirectories: this.options.additionalWorkingDirectories,
         rules: {
           allow: liveRuleSet.allow,
-          deny: liveRuleSet.deny,
+          // policy deny 前置是不变式：PermissionRuntime 取 deny 首个匹配，仅在来源为
+          // "user" 时才允许被 session allow 覆盖——policy 若排后会被该短路路径绕过。
+          deny: mergePolicyDenyRules(liveRuleSet.deny, this.policyDenyRules.get(runtime.projectRoot) ?? []),
           ask: liveRuleSet.ask,
         },
       }),

@@ -9,6 +9,8 @@ export type PermissionRule = {
   behavior: PermissionRuleBehavior;
   toolName: string;
   pattern?: string;
+  /** 来源规则 id（宪法规则工具拦截通道的编译产物填写，供审计与可读拒绝消息追溯）。 */
+  ruleId?: string;
 };
 
 export type PermissionRuleSet = {
