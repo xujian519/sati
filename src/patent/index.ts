@@ -77,11 +77,7 @@ export {
   type BuiltinPatentManifest,
 } from "./workflow.js";
 
-export {
-  manifestToFlowGraph,
-  validateWorkflowManifestDag,
-  workflowManifestToMermaid,
-} from "./workflow-dag.js";
+export { workflowManifestToMermaid } from "./workflow/mermaid.js";
 
 export {
   // 契约

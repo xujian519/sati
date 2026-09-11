@@ -1,6 +1,6 @@
 /**
- * WorkflowRun 持久化后端（对齐 src/workflow/persistence/WorkflowPlanStore 的设计：
- * 同样的 save/load/list 三接口，持久化对象为 patent 域的 WorkflowRunResult）。
+ * WorkflowRun 持久化后端（save/load/list 三接口，
+ * 持久化对象为 patent 域的 WorkflowRunResult）。
  *
  * - InMemoryWorkflowRunStore：内存 Map，适合测试与单次运行上下文
  * - JsonFileWorkflowRunStore：每 run 一个 JSON 文件（`<dir>/<runId>.json`），
