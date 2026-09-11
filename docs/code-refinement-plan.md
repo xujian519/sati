@@ -111,7 +111,7 @@
 | C37 | tests/ 审阅 B：patent/knowledge/gateway/session 等其余 | ✅ 2026-09-06 |
 | C38 | scripts/ 32 文件审阅精炼 | ✅ 2026-09-08 |
 | C39 | 裸 console 收束（→telemetry wrapper，行为不变） | ✅ 2026-09-08 |
-| C40 | any/类型逃逸收敛（主链路优先 + SAFETY 注释） | ✅ 2026-09-11（16 处收敛 + 3 处 SAFETY 登记；决策见 docs/notes/implemented/2026-09-11-c40-any-convergence.md） |
+| C40 | any/类型逃逸收敛（主链路优先 + SAFETY 注释） | ✅ 2026-09-11（16 处收敛 + 3 处 SAFETY 登记；PR #286；决策见 docs/notes/implemented/2026-09-11-c40-any-convergence.md） |
 | C41 | 无参 catch 治理 + TODO/FIXME 核实 | ⬜ |
 | C42 | 终审：docs/code-refinement-report.md + 技术债报告追加注记 | ✅ 2026-08-20（报告见 docs/code-refinement-report.md；注记见 technical-debt-report.md「2026-08-20 注记」段；进度 7/42，C07-C41 共 35 卡遗留） |
 
@@ -673,10 +673,11 @@
 - **行为面唯一语义决定**：handler 收到**非字符串/缺失**字段时，原先 `any` 原样透传（数字被 React 渲染成数字、对象渲染成 `[object Object]`、缺失字段上 `.split` 直接抛错），现统一回退空串/`undefined`。因工具 `inputSchema` 声明这些字段为字符串，该路径在生产不可达，且原行为在缺失时是抛错——故按"定义未定义行为"处理，非"改变已定义行为"。
 - **验证**：
   - `cd ui && pnpm typecheck` ✅；`cd ui && pnpm lint`（eslint src/ server/ --max-warnings 0 + `check-ui-server-boundary` fresh）✅；`pnpm format:check`（biome 2292 文件）✅
-  - `cd ui && pnpm test`（110 文件 / 665 测试）✅；新增 `patch.spec.ts` 5 例（不可变、缺省容器、数组按索引重建、空 path 直返）
+  - `cd ui && pnpm test`（111 文件 / 670 测试）✅；新增 `patch.spec.ts` 5 例（不可变、缺省容器、数组按索引重建、空 path 直返）
   - **量化（同一正则 before/after）**：`toolConfigs.ts` 14→0、`patch.ts` 2→0、`useChatComposerState.ts` 1→1（登记）、`SkillsV2.tsx` 1→1（正当豁免）；仓内 any 类型位 + `@ts-expect-error` 合计 **21 → 5**（含 ToolRenderer 记录项），达卡面 ≤10 目标
   - **审计口径修正登记**：旧 grep 口径（`: any` / `as any` / `<any>` / `@ts-expect-error`）会漏报 `Record<string, any>`（`any` 前是逗号）与 `data?: any`（`?` 与 `:` 之间无词边界），亦会把注释/字符串里的英文单词 `any` 计为命中；本次逐条人工归类，后续复测建议固定为「类型位 any + `@ts-*` 指令 + `no-explicit-any` 豁免指令」三口径分别计数。
-- **提交**：见本卡 PR（`refactor(ui): C40 …`）。
+  - **行为等价性（组件级 DOM 对照，替代抽样截图作视觉证据）**：jsdom + `@testing-library/react` 渲染**真实 `ToolRenderer`**（仅 `vi.mock` 把注册表换成 `origin/main` 版），84 个载荷用例比对 `container.innerHTML` 与 `console.warn`：**良构组 DOM 逐字节相同**；14 例差异**全部来自类型违约载荷**（8 例旧代码抛错→新代码优雅回退，旧代码 8 条 `logWarn` 归零）。脚本为一次性证据，验证后已删除。
+- **提交**：`refactor(ui): C40 收敛工具渲染注册表 any 至 unknown 视图`（PR #286，无关联 issue——追踪于本日卡）。
 
 ## 六、基线（2026-08-18 实测）
 
