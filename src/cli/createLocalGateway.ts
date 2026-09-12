@@ -1,6 +1,5 @@
 import { appendFileSync, existsSync, mkdirSync as mkdirSyncFs, renameSync } from "node:fs";
-import { dirname, resolve, join as joinPath } from "node:path";
-import { fileURLToPath } from "node:url";
+import { resolve, join as joinPath } from "node:path";
 import type { EdgeClawMemoryService } from "edgeclaw-memory-core";
 import { brandEnv, ENV_KEY } from "../env.js";
 import { parsePositiveInt } from "../shared/env/index.js";
@@ -11,11 +10,14 @@ import {
   createAgentEventBuffer,
   createAgentSessionWithStorage,
   type AgentRuntimeConfig,
-  type AgentRuntimeDependencies,
   type AgentSession,
   type CreateAgentSessionOptions,
 } from "../agent/index.js";
 import { resolveRoutedModelMaxContextTokens } from "../agent/runtime/modelContextWindow.js";
+import { buildBrowserUseArgs } from "./browserLaunchArgs.js";
+
+// 兼容再导出：既有测试从本文件导入 buildBrowserUseArgs（tests/gateway/browser-use-args.spec.ts）。
+export { buildBrowserUseArgs } from "./browserLaunchArgs.js";
 import type { TeamToolsOptions } from "../tool/builtin/team/index.js";
 import { getSubagentDefinition } from "../agent/sub/builtinSubagentTypes.js";
 import { scopeToolsForDefinition, type ScopeToolsOptions } from "../agent/sub/scopeTools.js";
@@ -25,14 +27,11 @@ import {
   TeamScheduler,
   TeamShare,
   defaultTeamDbPath,
-  attemptsExhausted,
   invalidateTaskAttempt,
-  ownedOpenTask,
   parseMemberSessionKey,
   scanStrandedTasks,
   scanTeamMembers,
   toGatewayEvent,
-  validateAttemptUpdate,
   wakeMember,
   withTeamLock,
   type ScanStrandedTasksResult,
@@ -73,12 +72,6 @@ import { setCaseLawSemanticSource, setPersonalNoteSemanticSource } from "../tool
 import type { KnowledgeDbPaths } from "../knowledge/index.js";
 import type { KnowledgeCapabilitiesResult } from "../gateway/protocol/types.js";
 import type { MemoryResolver } from "../context/index.js";
-import {
-  listRegisteredRoleIds,
-  registerRoleDefinition,
-  unregisterRoleDefinition,
-} from "../agent/sub/builtinSubagentTypes.js";
-import { roleFromContribution } from "../agent/sub/roleFromSkill.js";
 import { HookRuntime, PluginRuntime } from "../extension/index.js";
 import { LifecycleRuntime } from "../lifecycle/index.js";
 import {
@@ -125,7 +118,6 @@ import {
 } from "../patent/index.js";
 import { WorkerRegistry, defaultPatentWorkers } from "../patent/index.js";
 import { isProvenanceEnabled } from "../patent/provenance/index.js";
-import { SqliteApprovalStore } from "../patent/provenance/approval-store.js";
 import {
   loadPatentFullRuleSet,
   mergePolicyDenyRules,
@@ -134,15 +126,9 @@ import {
   selectGateRules,
 } from "../rule/index.js";
 import { createDefaultPermissionContext, type PermissionRule } from "../permission/index.js";
-import { loadPilotConfig, resolvePilotHome, type PilotProxyConfig } from "../pilot/index.js";
+import { loadPilotConfig, resolvePilotHome } from "../pilot/index.js";
 import { createPilotConfigStoreSync, type PilotConfigStore } from "../pilot/config/PilotConfigStore.js";
-import type { PilotAgentModelSelection, PilotConfigSnapshot } from "../pilot/config/types.js";
-import {
-  DEFAULT_JUDGE_TIMEOUT_MS,
-  DEFAULT_ALLOWED_TOOLS,
-  DEFAULT_TRIGGER_TIERS,
-  type RouterConfig,
-} from "../router/config/schema.js";
+import type { PilotConfigSnapshot } from "../pilot/config/types.js";
 import {
   RESUME_TURN_MESSAGE,
   TaskResumeScanner,
@@ -166,19 +152,27 @@ import {
   type SatiToolRuntimeContext,
   type ToolRegistry,
 } from "../tool/index.js";
-import type { SatiElicitationChannel, SatiUnavailableToolDiagnostic } from "../tool/index.js";
+import type { SatiUnavailableToolDiagnostic } from "../tool/index.js";
 import { createRouterRuntime, type RouterRuntime } from "../router/index.js";
 import type { RouterEventBus, RouterEvent } from "../router/protocol/events.js";
 import { loadBuiltinPlugins } from "../extension/plugins/builtin/loadBuiltinPlugins.js";
 import { SkillManager, migrateLegacyBundledSkillCopies } from "../extension/skills/index.js";
 import { createLogger, logger, createTelemetryCollector, type TelemetryClient } from "../telemetry/index.js";
+import { ensureRouterConfig } from "./routerDefaults.js";
+import {
+  createApprovalStoreSafely,
+  createAutoElicitationChannel,
+  describeExtensionScope,
+  handleMemberTurnCompleted,
+  mergeSessionDependencies,
+  resolveBuiltinSkillsRoot,
+  syncRoleDefinitions,
+} from "./gatewaySupport.js";
 import { registerMcpAuxTools, registerToolsIfAbsent } from "./mcpToolRegistration.js";
 import { ExtensionWatchManager, type ExtensionWatchEvent } from "./ExtensionWatchManager.js";
-import { registerNestedTeamRoleDefinitions } from "./teamRoleAssembly.js";
 
 const patentOutputGateLogger = createLogger("PatentOutputGate");
 const ruleOutputGateLogger = createLogger("RuleOutputGate");
-const sqliteApprovalStoreLogger = createLogger("SqliteApprovalStore");
 
 export type CreateLocalGatewayOptions = {
   projectRoot?: string;
@@ -301,38 +295,6 @@ export type TeamSubsystemHandle = {
  * 锁外执行存在 TOCTOU 窗口，置 failed 前靠 validateAttemptUpdate 三拒兜底（终态拒绝 / attemptId
  * 已清拒绝 / attemptId 不匹配拒绝，fail-closed）；漏判场景下个 turn_completed 再检查，最终收敛。
  */
-function handleMemberTurnCompleted(
-  db: TeamDb,
-  teamSchedulerRef: TeamScheduler,
-  teamId: string,
-  memberId: string,
-  emitTeamEvent: (captainSessionKey: string, event: TeamEvent) => boolean,
-): void {
-  const open = ownedOpenTask(db.listTasks(teamId), memberId);
-  if (open !== undefined) {
-    const fresh = db.getTask(teamId, open.id);
-    if (fresh !== undefined && attemptsExhausted(fresh)) {
-      const guard = validateAttemptUpdate(fresh, fresh.attemptId);
-      if (guard === undefined) {
-        db.updateTask({ ...fresh, status: "failed", updatedAt: new Date().toISOString() });
-        // I2（code review）：置 failed 同步补发 task_failed（对齐 teamTasks 工具路径的事件形状；
-        // 队长会话扇出，团队行缺失时跳过——任务归属团队必存在，此处仅防御）。
-        const team = db.getTeam(teamId);
-        if (team !== undefined) {
-          emitTeamEvent(team.captainSessionKey, {
-            type: "task_failed",
-            teamId,
-            taskId: fresh.id,
-            memberId: open.assigneeId ?? "",
-            attempt: fresh.attempt,
-            reason: "attempts_exhausted",
-          });
-        }
-      }
-    }
-  }
-  void teamSchedulerRef.onMemberIdle(teamId, memberId).catch(() => undefined);
-}
 
 export function createLocalGateway(options: CreateLocalGatewayOptions = {}): CreateLocalGatewayResult {
   const baseEnv = options.env ?? process.env;
@@ -942,19 +904,6 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
   };
 }
 
-function resolveBuiltinSkillsRoot(configuredRoot: string | undefined, env: Record<string, string | undefined>): string {
-  const explicit = configuredRoot ?? brandEnv(env, ENV_KEY.BUNDLED_SKILLS_DIR);
-  if (explicit) return resolve(explicit);
-
-  const moduleDir = dirname(fileURLToPath(import.meta.url));
-  const candidates = [
-    joinPath(moduleDir, "..", "..", "skills"),
-    joinPath(moduleDir, "..", "..", "..", "skills"),
-    joinPath(process.cwd(), "skills"),
-  ];
-  return resolve(candidates.find(candidate => existsSync(candidate)) ?? candidates[2]);
-}
-
 type ProjectRuntimeRegistryOptions = {
   fallbackProjectRoot: string;
   pilotHome: string;
@@ -1018,8 +967,6 @@ type ProjectRuntime = {
   perSessionServerSpecs?: import("../mcp/protocol/types.js").SatiMcpServerSpec[];
 };
 
-const DEFAULT_BROWSER_ACTION_TIMEOUT_MS = 30_000;
-const DEFAULT_BROWSER_NAVIGATION_TIMEOUT_MS = 90_000;
 /** M5：任务续算扫描启动延时——避开启动期 transcript 读盘竞争。 */
 const TASK_RESUME_SCAN_DELAY_MS = 3_000;
 /** M4：路由事件审计落盘批量 flush 间隔（unref，不持 event loop）。 */
@@ -2482,35 +2429,6 @@ class ProjectRuntimeRegistry {
   }
 }
 
-function mergeSessionDependencies(
-  base: CreateAgentSessionOptions["dependencies"],
-  extension: Partial<
-    Pick<
-      AgentRuntimeDependencies,
-      | "context"
-      | "fileHistory"
-      | "subagentTranscript"
-      | "elicitation"
-      | "eventEmitter"
-      | "drainEvents"
-      | "planFileManager"
-      | "planTodoManager"
-    >
-  >,
-): CreateAgentSessionOptions["dependencies"] {
-  return {
-    ...base,
-    ...(extension.context ? { context: extension.context } : {}),
-    ...(extension.fileHistory ? { fileHistory: extension.fileHistory } : {}),
-    ...(extension.subagentTranscript ? { subagentTranscript: extension.subagentTranscript } : {}),
-    ...(extension.elicitation ? { elicitation: extension.elicitation } : {}),
-    ...(extension.eventEmitter ? { eventEmitter: extension.eventEmitter } : {}),
-    ...(extension.drainEvents ? { drainEvents: extension.drainEvents } : {}),
-    ...(extension.planFileManager ? { planFileManager: extension.planFileManager } : {}),
-    ...(extension.planTodoManager ? { planTodoManager: extension.planTodoManager } : {}),
-  };
-}
-
 function handleExtensionWatchEvent(
   event: ExtensionWatchEvent,
   registry: ProjectRuntimeRegistry,
@@ -2527,204 +2445,4 @@ function handleExtensionWatchEvent(
   logger.info(`Extensions changed for project ${event.scope.projectRoot}, invalidating runtime:`, changed);
   registry.invalidate(event.scope.projectRoot);
   router?.markProjectDirty(event.scope.projectRoot, "extension_changed");
-}
-
-function describeExtensionScope(scope: ExtensionWatchEvent["scope"]): string {
-  return scope.kind === "global" ? "global extensions" : `project extensions (${scope.projectRoot})`;
-}
-
-function createAutoElicitationChannel(): SatiElicitationChannel {
-  return {
-    async askUser(request) {
-      const answers: Record<string, string | string[]> = {};
-      for (const q of request.questions) {
-        if (q.options.length > 0) {
-          answers[q.question] = q.multiSelect ? [q.options[0].label] : q.options[0].label;
-        } else {
-          answers[q.question] = "yes";
-        }
-      }
-      return { type: "answered", answers };
-    },
-  };
-}
-
-function ensureRouterConfig(
-  router: RouterConfig | undefined,
-  defaultSelection: PilotAgentModelSelection,
-): RouterConfig {
-  const defaultRef = { id: defaultSelection.id, provider: defaultSelection.provider, model: defaultSelection.model };
-  if (router?.enabled === false) {
-    return { enabled: false };
-  }
-  if (router) {
-    // Scenarios is optional at the parse boundary (see schema.ts) — the UI
-    // can persist a partial `router:` block, e.g. user toggled `enabled`
-    // and seeded `tokenSaver.*` without ever opening the Scenarios editor.
-    // Fill `scenarios.default` from `agent.model` so RouterRuntime always
-    // sees a valid map.
-    return {
-      enabled: true,
-      ...router,
-      scenarios: router.scenarios ?? { default: defaultRef },
-      fallback: router.fallback ?? { default: [defaultRef] },
-      tokenSaver: router.tokenSaver ?? buildDefaultTokenSaver(defaultRef),
-      autoOrchestrate: router.autoOrchestrate ?? buildDefaultAutoOrchestrate(),
-      stats: { enabled: true, baselineModel: defaultRef, ...(router.stats ?? {}) },
-    };
-  }
-  return {
-    enabled: true,
-    scenarios: { default: defaultRef },
-    fallback: { default: [defaultRef] },
-    zeroUsageRetry: { enabled: true, maxAttempts: 2 },
-    tokenSaver: buildDefaultTokenSaver(defaultRef),
-    autoOrchestrate: buildDefaultAutoOrchestrate(),
-    stats: { enabled: true, baselineModel: defaultRef },
-  };
-}
-
-function buildDefaultTokenSaver(defaultRef: { id: string; provider: string; model: string }) {
-  return {
-    enabled: true,
-    judge: defaultRef,
-    defaultTier: "medium",
-    judgeTimeoutMs: DEFAULT_JUDGE_TIMEOUT_MS,
-    tiers: {
-      simple: { model: defaultRef },
-      medium: { model: defaultRef },
-      complex: { model: defaultRef },
-      reasoning: { model: defaultRef },
-    },
-  };
-}
-
-function buildDefaultAutoOrchestrate() {
-  return {
-    enabled: true,
-    triggerTiers: [...DEFAULT_TRIGGER_TIERS],
-    slimSystemPrompt: true,
-    allowedTools: [...DEFAULT_ALLOWED_TOOLS],
-  };
-}
-
-export function buildBrowserUseArgs(
-  baseArgs: string[],
-  outputDir: string,
-  env: Record<string, string | undefined>,
-  configProxy?: PilotProxyConfig,
-): string[] {
-  let args = [...baseArgs];
-  args = appendCliArg(args, "--output-dir", outputDir);
-  args = appendCliArg(
-    args,
-    "--timeout-action",
-    String(
-      parsePositiveInt(brandEnv(env, ENV_KEY.BROWSER_TIMEOUT_ACTION_MS)) ??
-        parsePositiveInt(brandEnv(env, ENV_KEY.BROWSER_ACTION_TIMEOUT_MS)) ??
-        DEFAULT_BROWSER_ACTION_TIMEOUT_MS,
-    ),
-  );
-  args = appendCliArg(
-    args,
-    "--timeout-navigation",
-    String(
-      parsePositiveInt(brandEnv(env, ENV_KEY.BROWSER_TIMEOUT_NAVIGATION_MS)) ??
-        parsePositiveInt(brandEnv(env, ENV_KEY.BROWSER_NAVIGATION_TIMEOUT_MS)) ??
-        DEFAULT_BROWSER_NAVIGATION_TIMEOUT_MS,
-    ),
-  );
-
-  const proxy = resolveBrowserProxyServer(env, configProxy);
-  if (proxy) {
-    args = appendCliArg(args, "--proxy-server", proxy.server);
-    const proxyBypass = resolveBrowserProxyBypass(env, configProxy, proxy.source);
-    if (proxyBypass) {
-      args = appendCliArg(args, "--proxy-bypass", proxyBypass);
-    }
-  }
-  return args;
-}
-
-function appendCliArg(args: string[], flag: string, value: string): string[] {
-  if (args.includes(flag) || args.some(arg => arg.startsWith(`${flag}=`))) {
-    return args;
-  }
-  return [...args, flag, value];
-}
-
-type BrowserProxySource = "browser-env" | "env" | "config";
-
-function resolveBrowserProxyServer(
-  env: Record<string, string | undefined>,
-  configProxy?: PilotProxyConfig,
-): { server: string; source: BrowserProxySource } | undefined {
-  const explicit = cleanEnvValue(brandEnv(env, ENV_KEY.BROWSER_PROXY_SERVER));
-  if (explicit) {
-    if (/^(0|false|off|none|direct)$/i.test(explicit)) return undefined;
-    return { server: explicit, source: "browser-env" };
-  }
-  if (/^(1|true|on|yes)$/i.test(cleanEnvValue(brandEnv(env, ENV_KEY.BROWSER_PROXY_FROM_ENV)) ?? "")) {
-    const envProxy =
-      cleanEnvValue(brandEnv(env, ENV_KEY.PROXY)) ??
-      cleanEnvValue(env.https_proxy) ??
-      cleanEnvValue(env.HTTPS_PROXY) ??
-      cleanEnvValue(env.http_proxy) ??
-      cleanEnvValue(env.HTTP_PROXY);
-    if (envProxy) return { server: envProxy, source: "env" };
-  }
-  const configUrl = cleanEnvValue(configProxy?.url);
-  return configUrl ? { server: configUrl, source: "config" } : undefined;
-}
-
-function resolveBrowserProxyBypass(
-  env: Record<string, string | undefined>,
-  configProxy: PilotProxyConfig | undefined,
-  proxySource: BrowserProxySource,
-): string {
-  const explicit = cleanEnvValue(brandEnv(env, ENV_KEY.BROWSER_PROXY_BYPASS));
-  if (explicit) return explicit;
-  const noProxy = cleanEnvValue(env.no_proxy) ?? cleanEnvValue(env.NO_PROXY);
-  const configNoProxy = proxySource === "config" ? cleanEnvValue(configProxy?.noProxy) : undefined;
-  return [noProxy, configNoProxy, "localhost", "127.0.0.1"].filter(Boolean).join(",");
-}
-
-function cleanEnvValue(value: string | undefined): string | undefined {
-  const trimmed = value?.trim();
-  return trimmed ? trimmed : undefined;
-}
-
-/**
- * 把插件贡献中的角色 skill（type: "role"）同步进子代理注册表。
- * 先清除此前注册的角色（防残留，直接遍历注册表键，避免同名角色被
- * 内置预设过滤而漏清理），再注册当前全部角色。
- * 内置 4 个预设（SUBAGENT_DEFINITIONS）不受影响。
- */
-function syncRoleDefinitions(pluginRuntime: PluginRuntime, builtinSkillsRoot?: string): void {
-  for (const id of listRegisteredRoleIds()) {
-    unregisterRoleDefinition(id);
-  }
-  for (const skill of pluginRuntime.getAllSkills()) {
-    const definition = roleFromContribution(skill);
-    if (definition !== null) {
-      registerRoleDefinition(definition);
-    }
-  }
-  // M3 T15：skills/patent-teams/ 嵌套目录（自身无 SKILL.md，一级扫描跳过），
-  // 经同一 roleFromContribution → registerRoleDefinition 路径补注册。
-  registerNestedTeamRoleDefinitions(builtinSkillsRoot);
-}
-
-/**
- * 安全构造审批审计库（评审 I3）：库打不开（目录只读/损坏/魔数不符）时降级为
- * 不注入 approvalStore（审批留痕不落盘），绝不抛错拖垮 gateway；saveRecord 侧
- * 已内建 fail-open。返回 undefined = 不落盘。
- */
-function createApprovalStoreSafely(): SqliteApprovalStore | undefined {
-  try {
-    return new SqliteApprovalStore();
-  } catch (err) {
-    sqliteApprovalStoreLogger.error("审批审计库打开失败，审批留痕降级为不落盘:", err);
-    return undefined;
-  }
 }

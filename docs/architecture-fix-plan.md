@@ -75,6 +75,12 @@
 
 **发现**：15 个后端文件 >780 行（`createLocalGateway.ts` 2394 居首）；`AgentLoop.run()` 约 1440 行（C2）；渠道类单文件 1300–1760 行。
 
+> **状态（2026-09-11）**：P4a 第一刀已落地——模块级 helper 外置为 `src/cli/{browserLaunchArgs,routerDefaults,gatewaySupport}.ts`，
+> `createLocalGateway.ts` 2730 → 2481 行（逐字迁移，行为不变）；决策见
+> `docs/notes/implemented/2026-09-11-createlocalgateway-helper-extraction.md`。
+> **剩余步骤**：按子系统把 `ProjectRuntimeRegistry`（1456 行）与组合根拆成 gateway / agent / tool / always-on 四个 builder
+> （目标 `≤600` 行）；下一刀的主要对象是 `prepareSessionRuntime`（536 行）与 `createAgentConfig`（126 行）。
+
 **改动点**（按风险递增，每步独立提交）：
 1. **`createLocalGateway.ts`（2394）**：按子系统拆 4 个 builder（gateway / agent / tool / always-on + approval-store），组合根只做编排与依赖装配
 2. **`AgentLoop.run()`（C2）**：按 `docs/god-function-refactor-plan.md` 抽阶段骨架（输入校验 → 模型请求 → 工具执行 → 结果合并 → 收尾），每阶段 ≤60 行；错误恢复分支下沉 `loop/recovery/` 子模块；先补表征测试再动结构
@@ -155,7 +161,7 @@
 | P2e | patent↔tool 环（证据协议归位 + commandRunner 迁 shared） | ⬜ |
 | P2f | pilot 环收尾（type-only 环处置） | ⬜ |
 | P3 | WeCom/Weixin/Feishu 契约测试 + 纯函数层抽取 | ⬜ |
-| P4a | createLocalGateway 拆 4 builder | ⬜ |
+| P4a | createLocalGateway 拆 4 builder | 🔶 2026-09-11 第一刀（模块级 helper 外置，2730→2481 行）；余下按 builder 拆类 |
 | P4b | AgentLoop.run() 阶段骨架 + recovery/ 下沉 | ⬜ |
 | P4c | 三大渠道类按 protocol/state/handlers/render 切分 | ⬜ |
 | P5 | pilot 职责文档 + wiki 资产迁 assets/ | ⬜ |
