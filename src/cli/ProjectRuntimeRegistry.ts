@@ -20,7 +20,7 @@ import {
 } from "../agent/index.js";
 import { resolveRoutedModelMaxContextTokens } from "../agent/runtime/modelContextWindow.js";
 import type { TeamToolsOptions } from "../tool/builtin/team/index.js";
-import { scopeToolsForDefinition, type ScopeToolsOptions } from "../agent/sub/scopeTools.js";
+import { type ScopeToolsOptions } from "../agent/sub/scopeTools.js";
 import { parseMemberSessionKey, TeamDb } from "../agent/team/index.js";
 import type { MemoryResolver } from "../context/index.js";
 import {
@@ -109,14 +109,12 @@ import {
   resumeAgentSession,
   TaskResumeScanner,
 } from "../session/index.js";
-import { sanitizeSessionIdForPath } from "../session/storage/ProjectSessionStorage.js";
 import { createSessionTitleGenerator } from "../session/title/SessionTitleGenerator.js";
 import { type BackgroundTaskCompletionEvent, BackgroundTaskRuntime } from "../task/runtime/BackgroundTaskRuntime.js";
 import type { SatiUnavailableToolDiagnostic } from "../tool/index.js";
 import {
   createBuiltinRegistry,
   createPlanFileManager,
-  filterAvailableTools,
   type SatiToolDefinition,
   type ToolRegistry,
 } from "../tool/index.js";
@@ -124,7 +122,6 @@ import { createRouterRuntime, type RouterRuntime } from "../router/index.js";
 import type { RouterEvent, RouterEventBus } from "../router/protocol/events.js";
 import { loadBuiltinPlugins } from "../extension/plugins/builtin/loadBuiltinPlugins.js";
 import { createLogger, logger, type TelemetryClient } from "../telemetry/index.js";
-import { buildBrowserUseArgs } from "./browserLaunchArgs.js";
 import { ensureRouterConfig } from "./routerDefaults.js";
 import {
   createApprovalStoreSafely,
@@ -133,6 +130,7 @@ import {
   syncRoleDefinitions,
 } from "./gatewaySupport.js";
 import { registerMcpAuxTools, registerToolsIfAbsent } from "./mcpToolRegistration.js";
+import { provisionSessionTools } from "./sessionToolSurface.js";
 
 const patentOutputGateLogger = createLogger("PatentOutputGate");
 const ruleOutputGateLogger = createLogger("RuleOutputGate");
@@ -988,120 +986,22 @@ export class ProjectRuntimeRegistry {
     syncRoleDefinitions(runtime.pluginRuntime, this.options.builtinSkillsRoot);
     await this.ensureMcpReady(runtime);
     const contributions = runtime.pluginRuntime.snapshotContributions();
-
-    // -- per-session MCP runtime (e.g. browser-use) --------------------
-    let sessionTools: ToolRegistry = runtime.tools;
-    const perSpecs = runtime.perSessionServerSpecs;
-    const maxInstances = runtime.snapshot.config.gateway?.maxPerSessionMcpInstances ?? 5;
-    if (perSpecs && perSpecs.length > 0 && this.sessionMcpRuntimes.size < maxInstances) {
-      this.evictSessionMcp(context.sessionKey);
-      const patchedPerSpecs = perSpecs.map(spec => {
-        if (spec.transport === "stdio" && spec.id === "browser-use") {
-          const outDir = joinPath(
-            runtime.projectRoot,
-            ".sati",
-            "browser_screenshots",
-            sanitizeSessionIdForPath(context.sessionKey),
-          );
-          mkdirSyncFs(outDir, { recursive: true });
-          return {
-            ...spec,
-            cwd: outDir,
-            args: buildBrowserUseArgs(spec.args ?? [], outDir, this.options.env, runtime.snapshot.config.proxy),
-          };
-        }
-        return spec;
-      });
-      const sessionMcp = new McpRuntime(patchedPerSpecs);
-      this.sessionMcpRuntimes.set(context.sessionKey, sessionMcp);
-      try {
-        await sessionMcp.start();
-        const defs = await createMcpToolDefinitionsFromRuntime(sessionMcp);
-        if (defs.length > 0) {
-          sessionTools = runtime.tools.clone();
-          for (const def of defs) {
-            if (sessionTools.has(def.name)) {
-              sessionTools.replace(def);
-            } else {
-              sessionTools.register(def);
-            }
-          }
-        }
-      } catch (error) {
-        logger.warn(
-          `Per-session MCP startup failed for ${context.sessionKey}:`,
-          error instanceof Error ? error.message : String(error),
-        );
-      }
-    } else if (perSpecs && perSpecs.length > 0) {
-      logger.warn(
-        `Per-session MCP limit reached (${maxInstances}). ` +
-          `Session ${context.sessionKey} will share the project-level browser instance.`,
-      );
-    }
-
-    // -- excludeTools filtering (unattended sessions) -------------------
-    const override = this._sessionOverrides?.get(context.sessionKey);
-    if (override?.excludeTools && override.excludeTools.length > 0) {
-      if (sessionTools === runtime.tools) {
-        sessionTools = runtime.tools.clone();
-      }
-      for (const name of override.excludeTools) {
-        sessionTools.unregister(name);
-      }
-    }
-
-    // -- Strip always_on_* tools from non-Always-On sessions -------------
-    // These tools require an AlwaysOnRunContext to execute; surfacing them
-    // in regular user sessions just pollutes the model's tool list.
-    const isAlwaysOnSession = context.sessionKey.startsWith("always-on/");
-    if (!isAlwaysOnSession) {
-      const alwaysOnNames = this._extraTools.filter(t => t.name.startsWith("always_on_")).map(t => t.name);
-      if (alwaysOnNames.length > 0) {
-        if (sessionTools === runtime.tools) {
-          sessionTools = runtime.tools.clone();
-        }
-        for (const name of alwaysOnNames) {
-          sessionTools.unregister(name);
-        }
-      }
-    }
-
-    const availability = await filterAvailableTools(sessionTools, {
-      cwd: runtime.projectRoot,
+    const toolSurface = await provisionSessionTools({
+      sessionKey: context.sessionKey,
+      projectTools: runtime.tools,
+      projectRoot: runtime.projectRoot,
       env: this.options.env,
+      proxy: runtime.snapshot.config.proxy,
+      perSessionServerSpecs: runtime.perSessionServerSpecs,
+      maxPerSessionMcpInstances: runtime.snapshot.config.gateway?.maxPerSessionMcpInstances ?? 5,
+      sessionMcpRuntimes: this.sessionMcpRuntimes,
+      evictSessionMcp: sessionKey => this.evictSessionMcp(sessionKey),
+      sessionOverrides: this._sessionOverrides,
+      extraTools: this._extraTools,
+      memberToolScopeResolver: this._memberToolScopeResolver,
     });
-    sessionTools = availability.registry;
-    runtime.unavailableTools = availability.unavailable;
-
-    // P0-1：成员会话工具隔离——按成员角色裁剪工具集（allowedTools/visibleDomains/
-    // omitTools），使自动唤醒成员只暴露角色专业工具，而非保有队长全工具，
-    // 同时剥离 never-expose 的 HARD_BLOCKED/open_ai/always_on_* 等工具
-    //（scopeToolsForDefinition 已内置该剔除）。未注册角色/未命中成员降级不裁。
-    const parsedMember = parseMemberSessionKey(context.sessionKey);
-    if (parsedMember) {
-      const scope = this._memberToolScopeResolver?.(parsedMember.memberId);
-      if (scope) {
-        const scopedDefs = scopeToolsForDefinition(sessionTools.list(), scope);
-        const keep = new Set(scopedDefs.map(tool => tool.name));
-        // 成员作业面保留：domain === "team"（job-surface：team_update_task/team_status/
-        // team_send_message/team_share_write/team_share_read）是成员完成任务所必需的运行面，
-        // 不受角色 subject domains 裁剪——角色 domains 描述专业主题域（patent/search/legal…），
-        // 不覆盖团队作业面；management 面（team:manage，captain-only）仍被裁剪隐藏。
-        for (const tool of sessionTools.list()) {
-          if (tool.domain === "team") {
-            keep.add(tool.name);
-          }
-        }
-        const scoped = sessionTools.clone();
-        for (const tool of sessionTools.list()) {
-          if (!keep.has(tool.name)) {
-            scoped.unregister(tool.name);
-          }
-        }
-        sessionTools = scoped;
-      }
-    }
+    const sessionTools = toolSurface.tools;
+    runtime.unavailableTools = toolSurface.unavailableTools;
 
     // Inject the gateway's interactive permission hook so the agent's
     // PermissionRequest lifecycle is round-tripped through whichever
