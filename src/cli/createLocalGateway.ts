@@ -3,20 +3,10 @@ import type { SessionConfigOverrides } from "../always-on/runtime/SessionConfigO
 import { type AgentRuntimeConfig } from "../agent/index.js";
 import { getSubagentDefinition } from "../agent/sub/builtinSubagentTypes.js";
 import {
-  TeamApprovalForwarder,
   TeamDb,
   TeamScheduler,
-  TeamShare,
-  defaultTeamDbPath,
-  invalidateTaskAttempt,
-  scanStrandedTasks,
-  scanTeamMembers,
-  toGatewayEvent,
-  wakeMember,
-  withTeamLock,
   type ScanStrandedTasksResult,
   type ScanTeamMembersResult,
-  type TeamEvent,
 } from "../agent/team/index.js";
 import { HookRuntime } from "../extension/index.js";
 import { LifecycleRuntime } from "../lifecycle/index.js";
@@ -32,7 +22,6 @@ import {
 } from "../gateway/index.js";
 import { SessionPresence } from "../gateway/server/sessionPresence.js";
 import { type ModelRuntime } from "../model/index.js";
-import { WorkerRegistry, defaultPatentWorkers } from "../patent/index.js";
 import { resolvePilotHome } from "../pilot/index.js";
 import { createPilotConfigStoreSync, type PilotConfigStore } from "../pilot/config/PilotConfigStore.js";
 import type { PilotConfigSnapshot } from "../pilot/config/types.js";
@@ -40,10 +29,11 @@ import { cleanupOrphanToolResults } from "../session/index.js";
 import { type SatiToolDefinition } from "../tool/index.js";
 import { SkillManager, migrateLegacyBundledSkillCopies } from "../extension/skills/index.js";
 import { logger, createTelemetryCollector, type TelemetryClient } from "../telemetry/index.js";
-import { describeExtensionScope, handleMemberTurnCompleted, resolveBuiltinSkillsRoot } from "./gatewaySupport.js";
+import { describeExtensionScope, resolveBuiltinSkillsRoot } from "./gatewaySupport.js";
 import { ExtensionWatchManager, type ExtensionWatchEvent } from "./ExtensionWatchManager.js";
 import { ProjectRuntimeRegistry } from "./ProjectRuntimeRegistry.js";
 import { buildGatewayRuntimeOptions } from "./gatewayRuntimeOptions.js";
+import { buildTeamSubsystem } from "./teamSubsystem.js";
 
 // 兼容再导出：既有测试从本文件导入 buildBrowserUseArgs（tests/gateway/browser-use-args.spec.ts）。
 export { buildBrowserUseArgs } from "./browserLaunchArgs.js";
@@ -316,7 +306,7 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
       agentMaxOutputTokens: defaultRuntime.snapshot.config.agent.maxOutputTokens,
       memoryDiagnosticsEnabled,
       getGateway: () => gateway,
-      getTeamDb: () => teamDb,
+      getTeamDb: () => team.db,
       getBoundServer: () => boundServer,
     }),
   );
@@ -327,179 +317,14 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
   // ── 团队子系统（M1）：durable 成员底座 ──
   // teams.db 打开/迁移失败选择 fail-fast：团队数据是写真源（成员注册即落库），
   // 静默降级会掩盖成员缺失；与 knowledge 只读降级（消费侧容错）不同。
-  const teamDb = new TeamDb(defaultTeamDbPath(pilotHome, env));
-  // TeamEvent 广播收口（质量审阅 I2）：三处 emit 语义同构（scheduler / 工具集 / 本地函数），
-  // 收敛为单一闭包——handleMemberTurnCompleted 补发 task_failed 事件（C2 判失败不再静默）。
-  const emitTeamEvent = (captainSessionKey: string, event: TeamEvent): boolean => {
-    return gateway.emitForSession(captainSessionKey, toGatewayEvent(event));
-  };
-  // sessionPresence 声明已上移至 gateway 创建前（panelHeartbeat delegate 闭包引用，
-  // 见上方 M3 注释）；此处仅沿用实例。
-  // gateway 注入接线（emitForSession/approvalDecide 类型兼容性编译期验证）。
-  // handleMemberEvent 由 M2 调度器 wake 包装层 + 冷恢复扫描（下方 runMemberScan 的 onEvent）
-  // 双路径消费——调度器路径与 scanner 路径的 approval_pending 均冒泡到队长 watcher。
-  const teamForwarder = new TeamApprovalForwarder({
-    db: teamDb,
-    emitForSession: (sessionKey, event) => gateway.emitForSession(sessionKey, event),
-    approvalDecide: input => gateway.approvalDecide(input),
-  });
-  const runMemberScan = (): Promise<ScanTeamMembersResult> => {
-    // 冷恢复回合结束（turn_completed）的成员收口集合（每成员至多一次）。
-    const completed: Array<{ teamId: string; memberId: string }> = [];
-    const reclaimCompleted = (): void => {
-      // 恢复回合已完全收尾（wakeMember 仅在 submitTurn 生成器完全 unwinding——
-      // 消费者 finally 内 router.endTurn 已执行、会话槽已释放——之后才返回），
-      // 此刻续派与 warm 路径锁内串行等效，不会命中 session_busy。
-      for (const { teamId, memberId } of completed) {
-        handleMemberTurnCompleted(teamDb, teamScheduler, teamId, memberId, emitTeamEvent);
-      }
-    };
-    return scanTeamMembers({
-      db: teamDb,
-      gateway,
-      projectRoot: fallbackProjectRoot,
-      pilotHome,
-      // P0-3：挂起审批判定 = 内存 bus 或持久化表（bus 为内存态崩溃即失，冷恢复后该成员
-      // 依据持久化表被判"挂起"并冒泡/跳过）。
-      hasPendingApprovals: sessionKey =>
-        gateway.getApprovalBus().list(sessionKey).length > 0 || teamDb.hasPendingApproval(sessionKey),
-      // P0-3：挂起审批成员冒泡 member_stalled_approval 给队长（emitTeamEvent 闭包 597 行）。
-      emitTeamEvent,
-      // I1（code review）：冷恢复 turn 的 approval_pending 冒泡到队长 watcher——
-      // scanner 直调 wakeMember 现传 onEvent（M1 已知限制在此闭环，计划 1349 行承诺兑现）。
-      onEvent: (member, event) => {
-        teamForwarder.handleMemberEvent(member, event);
-        // M3（复审观察项 3）：冷恢复回合结束 → 与 wake 包装层同款收口（C2 + onMemberIdle 续派）。
-        // 只在事件回调内登记、不立即续派：冷恢复路径无团队锁（scanTeamMembers 直调
-        // wakeMember，不经 scheduler 的 withTeamLock），回合结束事件在 submitTurn
-        // 生成器迭代内同步送达——立即续派会在生成器 unwinding（消费者 finally 内
-        // router.endTurn）之前发起下一次 wake，beginTurn 判 busy（session_busy
-        // 事件流空转、wake 包装层照常返回 true）→ 任务卡 claimed 永不续派；
-        // 延后宏任务同样不可靠（pump 收尾可跨宏任务）。warm 路径同款延后
-        //（wake 包装层收集 completed、wake 返回后收口，见下方 teamScheduler 接线）。
-        if (event.type === "turn_completed" && member.teamId !== undefined) {
-          completed.push({ teamId: member.teamId, memberId: member.id });
-        }
-      },
-    })
-      .then(result => {
-        if (result.resumed > 0) {
-          logger.info(`Team member resume: scanned=${result.scanned}, resumed=${result.resumed}`);
-        }
-        reclaimCompleted();
-        return result;
-      })
-      .catch(() => {
-        reclaimCompleted();
-        return { scanned: 0, resumed: 0 };
-      });
-  };
-  // ── 团队调度器接线（M2）：事件驱动调度器 + M1 已知限制闭环 ──
-  // wake 包装层：调 wakeMember 并在 onEvent 内捕获 turn_completed → onMemberIdle，
-  // 成员回合结束自动触发下一任务派发 + member_idle 广播（M1 冷恢复 turn 审批冒泡
-  // 限制已由 runMemberScan 的 onEvent 接线闭环——下方 I1 注释）。
-  // onMemberIdle 的异步 rejection 静默吞掉（onEvent 契约：回调不得抛出，也不得以
-  // 异步 rejection 影响回合；dispose 后锁队列里残留的踢腿自然失败被吞）。
-  // M3 锁范围收窄（原"wake 全程持有团队锁"已废弃）：认领在调度器锁内完成，成员
-  // 回合全程不持团队锁——回合内 team_update_task 等团队工具取同一把锁，持锁唤醒
-  // 会重入死锁（M3 集成测试暴露）；回合结束收口（C2 + onMemberIdle 续派）延后至
-  // wake 返回后，与 scanner 冷恢复路径同款（下方 onEvent 内 completed 收集）。
-  // I3（code review）闭环：captain 离线（连接断开超宽限窗）→ 暂停新认领；
-  // unknown（纯 in-process/CLI 场景）容错视为在线，不阻塞成员工作。
-  // ⚠️ 最终复审 I1（已知边界）：Web 主路径经 ui/server relay 单条共享 ws 连接（sati-bridge 单例），
-  // 浏览器关闭不触发 gateway onClose → Web 用户下线判定不生效（fail-open 回到 M2 行为：成员成果
-  // 持久化不丢失、C2 有界重试）；CLI/TUI 直连 ws 路径正常。M4 面板接线时以浏览器连接级信号为准。
-  // 阶段 3：专利 worker 注册表——team_create_task 的 workerName 存在性校验 + 调度器分派
-  // 时的角色 tier 校验共用同一实例（缺省仅内置 6 个 worker，provision-* 条款 worker 未注册
-  // 时不阻塞：workerName 校验与分派校验均 fail-open）。
-  const workerRegistry = new WorkerRegistry();
-  for (const worker of defaultPatentWorkers()) {
-    workerRegistry.register(worker);
-  }
-  const teamScheduler = new TeamScheduler({
-    db: teamDb,
-    emit: emitTeamEvent,
-    isCaptainOnline: captainSessionKey => sessionPresence.isActive(captainSessionKey),
-    workerRegistry,
-    // P1-5：邮箱投递租约宽限参数化（默认 60s，调度器邮箱未读判定/租约过期复用）。
+  const team = buildTeamSubsystem({
+    pilotHome,
+    env,
+    gateway,
+    fallbackProjectRoot,
+    sessionPresence,
     mailboxLeaseMs: options.mailboxLeaseMs,
-    // P1-4：成员任务唤醒 turn 0 注入共享黑板摘要（订阅方读 {projectRoot}/.sati/team-workspace/{teamId}/share.jsonl；
-    // 空黑板返回 undefined 不注入注记——与 assignmentPrompt 的 sharedContext 空串跳过一致）。
-    readSharedBoardSummary: teamId => {
-      try {
-        const summary = new TeamShare(
-          joinPath(fallbackProjectRoot, ".sati", "team-workspace", teamId, "share.jsonl"),
-        ).summary();
-        return summary.length > 0 ? summary : undefined;
-      } catch {
-        // 黑板不存在/读失败：容错视作无共享上下文，不阻塞成员唤醒。
-        return undefined;
-      }
-    },
-    wake: async (memberId, message) => {
-      try {
-        // 成员快照一次读取（onEvent 内每事件复用；handleMemberEvent 需要 teamId/sessionKey）。
-        // 读在 try 内：wake 永不抛错（db 已关等竞态统一走 catch → false 回滚路径）
-        const member = teamDb.getMember(memberId);
-        // 回合结束收口延后到 wake 返回后（M3 锁范围收窄：kickMember 已锁外唤醒，团队锁
-        // 不再跨回合持有——turn_completed 在 submitTurn 生成器迭代内同步送达，若在事件
-        // 回调内立即续派会先于消费者 finally 的 endTurn 命中 session_busy；wake 返回时
-        // 生成器已完全 unwinding、endTurn 已执行、会话槽已释放，与 scanner 冷恢复路径同款）。
-        const completed: Array<{ teamId: string; memberId: string }> = [];
-        const reclaimCompleted = (): void => {
-          for (const { teamId, memberId: m } of completed) {
-            handleMemberTurnCompleted(teamDb, teamScheduler, teamId, m, emitTeamEvent);
-          }
-        };
-        let ok = false;
-        try {
-          await wakeMember(teamDb, gateway, memberId, message, {
-            onEvent: event => {
-              // 审批冒泡（M1 Task 6 接线点）：成员回合的 approval_pending → 队长会话 watcher
-              if (member !== undefined) {
-                teamForwarder.handleMemberEvent(member, event);
-              }
-              // M1 已知限制闭环 + M3（复审观察项 3）：回合结束 → C2 检查 + onMemberIdle
-              //（下一任务派发 + member_idle 广播）；与 scanner 冷恢复路径共用共享函数收口。
-              if (event.type === "turn_completed" && member?.teamId !== undefined) {
-                completed.push({ teamId: member.teamId, memberId });
-              }
-            },
-          });
-          ok = true;
-        } finally {
-          // M1（T12 复审）：仅正常路径收口——抛错路径交给外层 kickMember 回滚统一处理
-          //（回滚里成员回 idle；此处再续派 onMemberIdle 会踩掉并发重认领写下的 working 状态）
-          if (ok) reclaimCompleted();
-        }
-        return true;
-      } catch {
-        // 唤醒成员回合失败 → 返回 false 交由调用方决定重试，不在此吞掉。
-        return false;
-      }
-    },
   });
-  // M2：stranded 任务冷恢复——invalidate 旧 attempt（生成 handoffId 拒绝迟到写）
-  // 后交调度器 kickMember：锁内重读成员状态 + ownedOpenTask 优先 → 自动 re-claim。
-  const runStrandedScan = (): Promise<ScanStrandedTasksResult> =>
-    scanStrandedTasks({
-      db: teamDb,
-      invalidateAndKick: async (teamId, taskId, memberId) => {
-        // C1（code review）：invalidate 进团队锁 + 锁内复查——stranded 判定基于扫描
-        // 起点快照，与调度器锁内 claim 存在 TOCTOU（启动扫描 fire-and-forget 与就绪后
-        // 调度并发）；成员 working（活跃回合）或任务已被并发转派的不得 invalidate
-        // （防同一任务双执行）。kickMember 留在锁外（kickMember 内部自己拿锁，避免重入死锁）。
-        await withTeamLock(teamId, async () => {
-          const task = teamDb.getTask(teamId, taskId);
-          const member = teamDb.getMember(memberId);
-          if (task === undefined || member === undefined) return;
-          if (task.status !== "claimed" && task.status !== "in_progress") return;
-          if (member.status === "working" || teamDb.isRetired(member.sessionKey)) return;
-          teamDb.updateTask(invalidateTaskAttempt(task, {}));
-        });
-        await teamScheduler.kickMember(teamId, memberId);
-      },
-    });
   // Startup sweep: reclaim .sati/tool-results/ directories whose transcript
   // no longer exists (crash leftovers, deleted sessions). Fire-and-forget —
   // must not block gateway startup.
@@ -525,17 +350,17 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
   // resolve，注入后 invalidate 清缓存，会话创建重建 runtime 时经 createBuiltinRegistry
   // options.team 注册 9 工具）。emit 与 TeamScheduler 构造（上方）同构：TeamEvent → gateway 广播。
   registry.setTeamTools({
-    db: teamDb,
-    scheduler: teamScheduler,
-    emit: emitTeamEvent,
-    workerRegistry,
+    db: team.db,
+    scheduler: team.scheduler,
+    emit: team.emitTeamEvent,
+    workerRegistry: team.workerRegistry,
   });
   // P0-1：成员工具作用域解析器注入——成员会话创建时按角色裁剪工具集。resolver 延迟
   // 求值（每次会话创建时经 getSubagentDefinition 取角色定义，角色由 syncRoleDefinitions
   // 在 createSession 前注册），故注入时点无需保证角色已注册；parseMemberSessionKey
   // 命中的 memberId 即 teams.db 成员主键 id，getMember(id) 可反查 roleSlug。
   registry.setMemberToolScopeResolver(memberId => {
-    const member = teamDb.getMember(memberId);
+    const member = team.db.getMember(memberId);
     if (!member) return undefined;
     const definition = getSubagentDefinition(member.roleSlug);
     if (!definition) return undefined;
@@ -547,30 +372,12 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
     };
   });
   // P0-3：注入团队库供输出门禁持久化成员挂起审批（onPending upsert / resolveApproval delete）。
-  registry.setTeamDb(teamDb);
+  registry.setTeamDb(team.db);
   registry.setKanbanBoardManager(kanbanBoardManager);
   // T12 复审 M4：启动扫描完成信号（显式可 await——测试不再用 setTimeout 排干猜测时序）
   // Minor-1 兜底：存储层异常经 catch 记录（console.error 含扫描标识）且不 reject——
   // 信号语义 = 扫描已尝试完成，无论成败；与修复前 void IIFE 的吞错行为等价。
-  const startupScanDone = (async () => {
-    teamDb.resetMemberStatuses();
-    // P0-3：从 teams.db 挂起审批表重建内存审批总线——bus 为进程内存态，崩溃即失；
-    // 冷启动恢复后成员挂起审批仍对队长可见（approval_list_pending/UI 卡片），
-    // 且 decide 有 pendingIndex 依据（会话未被重建时 delivered:false → 收敛删除）。
-    for (const row of teamDb.listPendingApprovals()) {
-      gateway.getApprovalBus().register({
-        sessionKey: row.sessionKey,
-        pendingIndex: row.pendingIndex,
-        textPreview: row.textPreview,
-        triggerKeyword: row.triggerKeyword,
-        sessionId: row.sessionId,
-        turnId: row.turnId,
-        createdAt: Date.parse(row.createdAt),
-      });
-    }
-    await runMemberScan();
-    await runStrandedScan();
-  })().catch(error => logger.error("Team startup scan failed:", error));
+  const startupScanDone = team.startStartupScan();
   return {
     gateway,
     configStore,
@@ -583,7 +390,7 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
       // 至多 drain 一个在途回合。db.close() 幂等守卫已防双关。
       // teamScheduler 无资源需释放（内存锁 + 闭包，锁队列随进程退出自然回收）；
       // 调度器闭包持有 sessionPresence（isCaptainOnline 数据源），已随下方 clear() 释放。
-      teamDb.close();
+      team.db.close();
       // M3：闭包持有 sessionPresence（isCaptainOnline 数据源）——dispose 时清空活跃记录
       sessionPresence.clear();
       registry.invalidate();
@@ -610,7 +417,13 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
       gateway.setAlwaysOnRerunPlan(update.alwaysOnRerunPlan);
       gateway.setDiscoveryPlanService(update.discoveryPlanService);
     },
-    teamSubsystem: { db: teamDb, runMemberScan, scheduler: teamScheduler, runStrandedScan, startupScanDone },
+    teamSubsystem: {
+      db: team.db,
+      runMemberScan: team.runMemberScan,
+      scheduler: team.scheduler,
+      runStrandedScan: team.runStrandedScan,
+      startupScanDone,
+    },
     sessionPresence,
     kanbanBoardManager,
   };
