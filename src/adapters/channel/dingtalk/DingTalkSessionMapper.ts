@@ -1,36 +1,10 @@
-import { randomUUID } from "node:crypto";
-import { newSessionMessage } from "../protocol/text.js";
+import { ChatSessionMapper, type ChatSessionMapperState } from "../protocol/ChatSessionMapper.js";
 
-export type DingTalkSessionMapperState = {
-  activeByChatId: Record<string, string>;
-};
+export type DingTalkSessionMapperState = ChatSessionMapperState;
 
-export class DingTalkSessionMapper {
-  constructor(
-    private readonly state: DingTalkSessionMapperState = { activeByChatId: {} },
-    private readonly uuid: () => string = randomUUID,
-  ) {}
-
-  resolve(input: { chatId: string; text: string }): { sessionKey: string; command?: "new"; message: string } {
-    const trimmed = input.text.trim();
-    const newMessage = newSessionMessage(trimmed);
-    if (newMessage !== null) {
-      const sessionKey = `dingtalk:chat=${input.chatId}:s_${this.uuid()}`;
-      this.state.activeByChatId[input.chatId] = sessionKey;
-      return {
-        sessionKey,
-        command: "new",
-        message: newMessage,
-      };
-    }
-
-    return {
-      sessionKey: this.state.activeByChatId[input.chatId] ?? `dingtalk:chat=${input.chatId}:general`,
-      message: trimmed,
-    };
-  }
-
-  snapshot(): DingTalkSessionMapperState {
-    return { activeByChatId: { ...this.state.activeByChatId } };
+/** dingtalk 渠道薄壳：会话键前缀与状态形状由共享实现提供（issue #149）。 */
+export class DingTalkSessionMapper extends ChatSessionMapper {
+  constructor(state?: DingTalkSessionMapperState, uuid?: () => string) {
+    super("dingtalk", state, uuid);
   }
 }

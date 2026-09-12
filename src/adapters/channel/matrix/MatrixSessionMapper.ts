@@ -1,36 +1,10 @@
-import { randomUUID } from "node:crypto";
-import { newSessionMessage } from "../protocol/text.js";
+import { ChatSessionMapper, type ChatSessionMapperState } from "../protocol/ChatSessionMapper.js";
 
-export type MatrixSessionMapperState = {
-  activeByChatId: Record<string, string>;
-};
+export type MatrixSessionMapperState = ChatSessionMapperState;
 
-export class MatrixSessionMapper {
-  constructor(
-    private readonly state: MatrixSessionMapperState = { activeByChatId: {} },
-    private readonly uuid: () => string = randomUUID,
-  ) {}
-
-  resolve(input: { chatId: string; text: string }): { sessionKey: string; command?: "new"; message: string } {
-    const trimmed = input.text.trim();
-    const newMessage = newSessionMessage(trimmed);
-    if (newMessage !== null) {
-      const sessionKey = `matrix:chat=${input.chatId}:s_${this.uuid()}`;
-      this.state.activeByChatId[input.chatId] = sessionKey;
-      return {
-        sessionKey,
-        command: "new",
-        message: newMessage,
-      };
-    }
-
-    return {
-      sessionKey: this.state.activeByChatId[input.chatId] ?? `matrix:chat=${input.chatId}:general`,
-      message: trimmed,
-    };
-  }
-
-  snapshot(): MatrixSessionMapperState {
-    return { activeByChatId: { ...this.state.activeByChatId } };
+/** matrix 渠道薄壳：会话键前缀与状态形状由共享实现提供（issue #149）。 */
+export class MatrixSessionMapper extends ChatSessionMapper {
+  constructor(state?: MatrixSessionMapperState, uuid?: () => string) {
+    super("matrix", state, uuid);
   }
 }

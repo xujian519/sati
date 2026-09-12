@@ -1,36 +1,10 @@
-import { randomUUID } from "node:crypto";
-import { newSessionMessage } from "../protocol/text.js";
+import { ChatSessionMapper, type ChatSessionMapperState } from "../protocol/ChatSessionMapper.js";
 
-export type SignalSessionMapperState = {
-  activeByChatId: Record<string, string>;
-};
+export type SignalSessionMapperState = ChatSessionMapperState;
 
-export class SignalSessionMapper {
-  constructor(
-    private readonly state: SignalSessionMapperState = { activeByChatId: {} },
-    private readonly uuid: () => string = randomUUID,
-  ) {}
-
-  resolve(input: { chatId: string; text: string }): { sessionKey: string; command?: "new"; message: string } {
-    const trimmed = input.text.trim();
-    const newMessage = newSessionMessage(trimmed);
-    if (newMessage !== null) {
-      const sessionKey = `signal:chat=${input.chatId}:s_${this.uuid()}`;
-      this.state.activeByChatId[input.chatId] = sessionKey;
-      return {
-        sessionKey,
-        command: "new",
-        message: newMessage,
-      };
-    }
-
-    return {
-      sessionKey: this.state.activeByChatId[input.chatId] ?? `signal:chat=${input.chatId}:general`,
-      message: trimmed,
-    };
-  }
-
-  snapshot(): SignalSessionMapperState {
-    return { activeByChatId: { ...this.state.activeByChatId } };
+/** signal 渠道薄壳：会话键前缀与状态形状由共享实现提供（issue #149）。 */
+export class SignalSessionMapper extends ChatSessionMapper {
+  constructor(state?: SignalSessionMapperState, uuid?: () => string) {
+    super("signal", state, uuid);
   }
 }
