@@ -13,7 +13,7 @@
 | #163 类型强转收敛（TD-TYPE-002） | B / P1 | L | 低 | 不需要 | 一 |
 | #162 收束裸 console + 静默 catch（TD-CONSOLE-001 · TD-CATCH-001） | C / P2 | L | 低 | 不需要 | 一（穿插） |
 | #159 前端 God Hook/组件拆分（UI-CHAT-N01/02/03/04/07 · UI-APP-N01） | A / P1 | L | **高（UI 主链路）** | **必须**（桌面+移动） | 二 |
-| #161 policy-bridge 拦截接线（RULE-N02） | F / P2 | S(代码) | **极高（全局权限）** | 不需要 | 三（灰度） |
+| ✅ #161 policy-bridge 拦截接线（RULE-N02） | F / P2 | S(代码) | **极高（全局权限）** | 不需要 | 三（灰度）· 已按灰度落地 |
 | #150 多套并行引擎统一（WORKFLOW-N01 · PATENT-N01） | D / P1 | L | 高 | 不需要 | 三/四（硬截止） |
 
 > 注：以上 4 条专项均**不触碰工具 `inputSchema`**，因此不会使 llm-replay fixture 失配，无需重录（AGENTS 铁律 6 / 重放契约）。
@@ -29,7 +29,7 @@
 - **#163 类型强转收敛**（TD-TYPE-002，P1/L）：全源码 >90 处 `as`。`gateway/GatewayWsConnection.ts` `as never` 43 · `gateway/client/RemoteGateway.ts` `as XResult` ~30 · `knowledge/**` DB 行 `as X` 29 · `model/streaming`/`providers/google`/`patent/provenance`/`evidence/receipt` `as unknown as X`。
 - **#162 可观测性收束**（TD-CONSOLE-001 + TD-CATCH-001，P2/L）：裸 `console.*` 267 处（`cli` 191 最热）；静默吞错 catch 151 处（`adapters` 40 · `always-on` 15 · `tool` 14）。
 - **#159 前端 God Hook/组件拆分**（P1/L）：见 §2 阶段二子项。
-- **#161 policy-bridge 接线**（RULE-N02，P2/S-code）：`rulesToPolicyDenyRules` 从不注入 `PermissionContext`，`action:"block"` 未真正拦截工具调用。
+- **#161 policy-bridge 接线**（RULE-N02，P2/S-code）：**已完成**——`rulesToPolicyDenyRules` 经 flag `SATI_RULE_POLICY_BRIDGE_ENABLED`（默认关）接入 `createLocalGateway`，编译带 phase 语义门并前置注入 `rules.deny`；当前规则资产下编译结果为空（保留 block 的 2 条均为 `post_execution`）。
 - **#150 多引擎统一**（WORKFLOW-N01 / PATENT-N01，P1/L）：`.brooks-lint.yaml` 对该债 suppress 至 **2026-11-18**。
 
 ## 2. 建议顺序（阶段化）
@@ -56,7 +56,7 @@
 每个组件一个 PR；拆分后**必须**浏览器验证 + 补组件测试（这些巨型组件测试薄弱，见 UI-CHAT-N10）。涉 UI 改动须按 AGENTS/用户规则验证，不能只凭截图。
 
 ### 阶段三 · 高改动面 + 硬截止（单独排期）
-- **#161 policy-bridge 接线（P2）**：影响 `PermissionRuntime` 全局工具拦截。建议**最后做**：`flag-gated` 灰度 + 一次只开一个规则域 + `docs/notes/` decision note（含 `## Alternatives considered`）。勿当作快项直接全量接入。
+- **#161 policy-bridge 接线（P2）**：**已按此结论落地**——`flag-gated`（默认关）+ phase 语义门 + policy deny 前置注入 + `docs/notes/implemented/2026-09-11-policy-bridge-tool-guard-wiring.md`。未采用全量编译（即便开启也不拦输出面规则）。
 - **#150 多引擎统一（P1）**：suppress 至 **2026-11-18** 到期，需在截止前完成「graph↔workflow↔flexible-plan」能力对比 + 消费者需求评估，产出「删除 / 合并 / 降级」结论。
 
 ## 3. 机会型（不占专项排期，命中才修）
@@ -88,7 +88,9 @@
 | Item | 状态 |
 |---|---|
 | #160 / #164 | ✅ done（PR #165 / #167） |
-| #163 / #162 / #159 / #161 | ⏳ 待做（按 §2 阶段推进） |
+| #161 | ✅ done（feat/rule-policy-bridge-wiring） |
+| #163 / #162 | ✅ done（PR #286 / #274） |
+| #159 | ⏳ 待做（按 §2 阶段推进） |
 | #150 | ⏳ 待做（硬截止 2026-11-18） |
 
 ---

@@ -602,9 +602,9 @@
   - 位置：`src/tool/builtin/ruleCheck.ts:54-66`、`src/rule/runtime/rule-pack.ts:162-169`
   - 影响：长驻进程内只改 base/domains/overrides 任一规则文件而未改顶层 `.sati/rules.yaml` 时，`rule_check(scope:"pack")` 返回陈旧规则集。建议：缓存键改为清单 mtime + 各已装载层规则文件 mtime 集合/内容摘要。
 - **TD-RULE-N02** · policy-bridge 工具拦截通道未接入生产路径
-  - 类别：F · 严重级：P2 · 工作量：S · 状态：new
-  - 位置：`src/rule/runtime/policy-bridge.ts:12-17`
-  - 影响：`action:"block"` 目前只在输出层降级为强制审批，`rulesToPolicyDenyRules` 从不注入 `PermissionContext`，并未真正拦截工具调用，与宣称不符。建议：在 `PermissionRuntime` 初始化处接线，或明确标注未启用。
+  - 类别：F · 严重级：P2 · 工作量：S · 状态：done
+  - 位置：`src/rule/runtime/policy-bridge.ts`
+  - 处置：已在 `createLocalGateway` 接线——flag `SATI_RULE_POLICY_BRIDGE_ENABLED`（默认关）开启时把 block 规则编译为 policy deny 规则并**前置**合并进 `PermissionContext.rules.deny`（`mergePolicyDenyRules`）；编译带 phase 语义门（默认排除 `post_execution` 输出面规则）；编译结果为空时组合根显式告警。当前资产保留 block 的 2 条均为 `post_execution`，故开启后编译结果为空——通道就绪，真正拦截需新增 `pre_execution` 关键词规则。决策见 `docs/notes/implemented/2026-09-11-policy-bridge-tool-guard-wiring.md`。
 - **TD-RULE-N03** · `evaluateText` 的 domain 过滤为测试专用，线上从不生效
   - 类别：D · 严重级：P3 · 工作量：S · 状态：new
   - 位置：`src/rule/runtime/RuleEngine.ts:148-153`

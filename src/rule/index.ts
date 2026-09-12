@@ -80,6 +80,8 @@ export {
   type RulePackManifest,
 } from "./runtime/rule-pack.js";
 export {
+  DEFAULT_EXCLUDED_PHASES,
+  mergePolicyDenyRules,
   rulesToPolicyDenyRules,
   type RulesToPolicyOptions,
   type RulesToPolicyResult,
