@@ -75,7 +75,7 @@
 
 **发现**：15 个后端文件 >780 行（`createLocalGateway.ts` 2394 居首）；`AgentLoop.run()` 约 1440 行（C2）；渠道类单文件 1300–1760 行。
 
-> **状态（2026-09-12）**：P4a 前五刀已落地，均为逐字迁移、行为不变——**组合根已达成 `≤600` 验收线**，第五刀起转入类内拆分：
+> **状态（2026-09-12）**：P4a 前六刀已落地，均为逐字迁移、行为不变——**组合根已达成 `≤600` 验收线**，第五刀起转入类内拆分：
 > ① 第一刀（2026-09-11）模块级 helper 外置为 `src/cli/{browserLaunchArgs,routerDefaults,gatewaySupport}.ts`，2730 → 2481 行；
 > ② 第二刀（2026-09-12）`ProjectRuntimeRegistry` 类（含两个私有类型、两个常量、两个 logger）迁出为 `src/cli/ProjectRuntimeRegistry.ts`，
 > `createLocalGateway.ts` **2449 → 804 行**，依赖方向收敛为单向 `createLocalGateway → ProjectRuntimeRegistry`；
@@ -89,13 +89,18 @@
 > ⑤ 第五刀（2026-09-12，类内拆分第一刀）`prepareSessionRuntime`（537 行）的**会话工具面**阶段（每会话 MCP /
 > unattended excludeTools / always_on 剥离 / 可用性过滤 / 成员角色裁剪，113 行）抽为
 > `src/cli/sessionToolSurface.ts` 的 `provisionSessionTools(input)`——browser-use 特例（截图目录、逐 spec 参数改写）
-> 随之移出通用会话装配（TD-GOD-002 (c)），`ProjectRuntimeRegistry.ts` **1663 → 1563 行**。
+> 随之移出通用会话装配（TD-GOD-002 (c)），`ProjectRuntimeRegistry.ts` **1663 → 1563 行**；
+> ⑥ 第六刀（2026-09-12，类内拆分第二刀）专利输出门禁构造（167 行：每会话 `PatentOutputGate` / HITL 审批闭环 /
+> 决策溯源旁路 / policy-bridge deny 编译 / 决策反馈回流）抽为 `src/cli/patentOutputGateFactory.ts` 的
+> `buildPatentOutputGate(deps)`——gateway / teamDb / sessionOverrides 三处可变绑定改用 accessor 延迟取数，
+> policyDenyRules 表登记留在调用方，`ProjectRuntimeRegistry.ts` **1563 → 1384 行**。
 > 决策见 `docs/notes/implemented/2026-09-11-createlocalgateway-helper-extraction.md`、
 > `docs/notes/implemented/2026-09-12-projectruntimeregistry-module-extraction.md`、
 > `docs/notes/implemented/2026-09-12-gateway-runtime-options-builder.md` 与
-> `docs/notes/implemented/2026-09-12-team-subsystem-builder.md` 与
-> `docs/notes/implemented/2026-09-12-session-tool-surface-extraction.md`。
-> **剩余步骤**：`prepareSessionRuntime` 其余三段（权限 hook/lifecycle、baseDependencies 装配、专利输出门禁 167 行）、
+> `docs/notes/implemented/2026-09-12-team-subsystem-builder.md`、
+> `docs/notes/implemented/2026-09-12-session-tool-surface-extraction.md` 与
+> `docs/notes/implemented/2026-09-12-patent-output-gate-factory.md`。
+> **剩余步骤**：`prepareSessionRuntime` 其余两段（权限 hook/lifecycle、baseDependencies 装配）、
 > `resolve`（249 行）、`createAgentConfig`（127 行）。
 
 **改动点**（按风险递增，每步独立提交）：
@@ -178,7 +183,7 @@
 | P2e | patent↔tool 环（证据协议归位 + commandRunner 迁 shared） | ⬜ |
 | P2f | pilot 环收尾（type-only 环处置） | ⬜ |
 | P3 | WeCom/Weixin/Feishu 契约测试 + 纯函数层抽取 | ⬜ |
-| P4a | createLocalGateway 拆 4 builder | 🔶 2026-09-12 第五刀（类内拆分：会话工具面 → `sessionToolSurface.ts`，registry 1663→1563；第四刀 team builder 635→448 **组合根达成 ≤600**；三 gateway builder 803→635；二 registry 独立成模块 2449→804；一 helper 外置 2730→2481）。余下：`prepareSessionRuntime` 余三段 / `resolve` 249 / `createAgentConfig` 127 |
+| P4a | createLocalGateway 拆 4 builder | 🔶 2026-09-12 第六刀（专利输出门禁 → `patentOutputGateFactory.ts`，registry 1563→1384；五 类内拆分会话工具面 1663→1563；四 team builder 635→448 **组合根达成 ≤600**；三 gateway builder 803→635；二 registry 独立成模块 2449→804；一 helper 外置 2730→2481）。余下：`prepareSessionRuntime` 权限 hook/lifecycle + baseDependencies 段 / `resolve` 249 / `createAgentConfig` 127 |
 | P4b | AgentLoop.run() 阶段骨架 + recovery/ 下沉 | ⬜ |
 | P4c | 三大渠道类按 protocol/state/handlers/render 切分 | ⬜ |
 | P5 | pilot 职责文档 + wiki 资产迁 assets/ | ⬜ |
