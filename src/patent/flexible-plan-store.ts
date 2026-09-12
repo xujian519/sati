@@ -1,6 +1,6 @@
 /**
- * FlexiblePlan 持久化后端（对齐 src/workflow/persistence/WorkflowPlanStore 的
- * save/load/list 三接口；持久化对象为 patent 域的 FlexiblePlanState）。
+ * FlexiblePlan 持久化后端（save/load/list 三接口；
+ * 持久化对象为 patent 域的 FlexiblePlanState）。
  *
  * - JsonFileFlexiblePlanStore：每计划一个 JSON 文件（`<dir>/<caseId>.json`），
  *   原子写（先写临时文件再 rename），caseId 安全字符校验防路径注入。

@@ -624,35 +624,24 @@
 
 ---
 
-## 14. workflow（B3 ✅）
+## 14. workflow（B3 ✅，2026-09-11 已收敛删除）
 
-**模块概况**：11 TS + 4 测试；DAG（FlowGraph/DagExecutor）+ SafeEvaluator + InputResolver + checkpoint 双实现 + persistence + worker resolver + SubAgentSession 桥。**已移植未接线**：src/ 内仅 `FlowGraph`/`FlowNodeType` 被 `src/patent/workflow-dag.ts` 借用。
+**模块已删除**：依 P6a 评估结论（`docs/workflow-convergence-eval.md`）执行 `docs/architecture-fix-plan.md` P6c 选项 (a)——`src/workflow/**`（11 文件，1760 行）与借用者 `src/patent/workflow-dag.ts` 整体删除，`tests/workflow/**` 与 `tests/patent/workflow-dag.spec.ts` 同步移除。
 
-- **TD-WORKFLOW-N01** · 引擎整体未接线，仅 FlowGraph 被生产消费（与 patent 双轨重复）
-  - 类别：F · 严重级：P1 · 工作量：M · 状态：new
-  - 位置：`src/workflow/runtime/WorkflowEngine.ts:10-15`；`src/patent/workflow-dag.ts:15`
-  - 影响：engine/SafeEvaluator/InputResolver/checkpoint/persistence/workerResolver/subagentFactory 及 DagExecutor 在 src/ 内零生产调用方，仅被 tests/ 覆盖，属未接线平行实现，与 `src/patent/workflow`+`graph` 双轨重复（呼应 TD-PATENT-N01）。建议：要么接线沉淀为唯一引擎，要么降级为基线并标注生命周期；至少删除纯死码 DagExecutor。
-- **TD-WORKFLOW-N02** · 失败 wave 不取消兄弟步骤，AbortSignal 通道未使用
-  - 类别：I · 严重级：P2 · 工作量：M · 状态：new
-  - 位置：`src/workflow/runtime/WorkflowEngine.ts:344-355,395,453`；`protocol/types.ts:109`
-  - 影响：`runReadySteps` 用 `Promise.allSettled(workers)` 整批收尾，任一步失败须等整 wave 跑完才判定失败，浪费兄弟步骤 LLM token 并可能产生副作用；`WorkflowAgentFactory.prompt` 声明 `signal?` 但两处调用均未传。建议：失败后经 AbortController 向在飞兄弟步骤广播 signal。
-- **TD-WORKFLOW-N03** · maxParallel worker 池（信号量）无针对性测试
-  - 类别：E · 严重级：P2 · 工作量：S · 状态：new
-  - 位置：`WorkflowEngine.ts:341-355`；`tests/workflow/WorkflowEngine.test.ts:111-155`
-  - 影响：现有测试只跑 2 个并行步骤（默认 maxParallel=4 从不触顶），无用例断言超上限并发被压住及边界。建议：补 `maxParallel:2` 超上限并发计数测试。
-- **TD-WORKFLOW-N04** · `workflow_failed.error` 载荷错误（用 `ready[0]` 而非实际失败步骤）
-  - 类别：C · 严重级：P2 · 工作量：S · 状态：**done（已修复 2026-08-23）**
-  - 修复：`WorkflowEngine` 收集失败步骤 id 到 `failedStepIds`，`workflow_failed.error` 上报 `failedStepIds[0]`（首个实际失败步骤），而非恒取波内首步 `ready[0]`。新增 `tests/workflow/WorkflowEngine.test.ts` 的「workflow_failed reports the actual failed step, not the first ready step」回归用例（成功步骤在前 + 失败步骤在后）。typecheck/lint/biome/测试全绿。
-  - 位置：`src/workflow/runtime/WorkflowEngine.ts:285-301`
-  - 影响：失败判定用 `ready[i]!.id` 定位真实失败步骤（`:289`），但 `:301` `workflow_failed.error = ready[0]?.id` 恒取波内首步；失败者非首个就绪步骤时上报错误步骤 id。建议：收集失败步骤 id 到局部变量。
-- **TD-WORKFLOW-N05** · 双份手写点路径解析器重复
-  - 类别：A · 严重级：P3 · 工作量：S · 状态：new
-  - 位置：`SafeEvaluator.ts:214-228`；`InputResolver.ts:23-52`
-  - 建议：抽为共享 resolver。
-- **TD-WORKFLOW-N06** · 非空断言 `!` 与 `as unknown as X` 双强转依赖不变量
-  - 类别：B · 严重级：P3 · 工作量：S · 状态：new
-  - 位置：`WorkflowEngine.ts:285,289,348,572,521`；`DagEngine.ts:177`
-  - 建议：显式取值并断言，或对 find 失败抛 `WorkflowPlanError`。
+**删除依据**：引擎在 `src` / `ui` / `apps` / `scripts` **零生产调用方**（仅 `tests/` 覆盖）；唯一借用者 `src/patent/workflow-dag.ts` 的三个导出亦无生产消费者（仅 barrel 转出 + 测试），且其 `FlowGraph.validate()` 对 manifest 顺序链恒为空判定。专利域执行路径由 `src/patent/workflow.ts`（`runWorkflow`）与 `src/patent/graph/`（SuperStep，含 `manifestToGraph` 等价性测试）承接，计划层由 `flexible-plan` 承接。
+
+**原子条目终态**：
+
+| 债号 | 终态 |
+|---|---|
+| TD-WORKFLOW-N01 · 引擎整体未接线 | **done（删除）**——选项 (a) 落地 |
+| TD-WORKFLOW-N02 · 失败 wave 不取消兄弟步骤 | **voided**——随模块删除消失 |
+| TD-WORKFLOW-N03 · maxParallel worker 池无针对性测试 | **voided**——同上 |
+| TD-WORKFLOW-N04 · `workflow_failed.error` 载荷错误 | done（2026-08-23 修复），随模块删除归档 |
+| TD-WORKFLOW-N05 · 双份手写点路径解析器重复 | **voided**——同上 |
+| TD-WORKFLOW-N06 · 非空断言与双强转 | **voided**——同上 |
+
+`.brooks-lint.yaml` 的 R4 suppress 条目已移除（评估完成、重复模式消失）；`docs/architecture-fix-plan.md` 的 P6a/P6c 勾选，P6b 范围修正见评估报告 §七。
 
 ## 15. extension（B4 ✅）
 

@@ -82,8 +82,7 @@ export type WorkflowRunOptions = {
   approvalGrants?: string[];
   /**
    * 结果持久化存储：执行结束时调用 saveRun（可选）。
-   * 设计对齐 src/workflow WorkflowPlanStore（save/load/list 三接口），
-   * 实现见 ./workflow-store.js。
+   * save/load/list 三接口，实现见 ./workflow-store.js。
    */
   persist?: WorkflowRunStore;
   /** 持久化键（runId），用于区分同一 manifest 的多次执行；缺省 manifestId。 */
@@ -145,8 +144,8 @@ export type WorkflowRunResult = {
 };
 
 /**
- * WorkflowRun 持久化契约（对齐 src/workflow/persistence/WorkflowPlanStore 的
- * save/load/list 三接口；此处持久化对象为 patent 域的 WorkflowRunResult）。
+ * WorkflowRun 持久化契约（save/load/list 三接口；
+ * 此处持久化对象为 patent 域的 WorkflowRunResult）。
  * 实现见 ./workflow-store.js（InMemory / JsonFile 两种后端）。
  */
 export type WorkflowRunStore = {
