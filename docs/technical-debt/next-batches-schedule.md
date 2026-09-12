@@ -65,10 +65,10 @@
 |---|---|---|
 | #147 | AgentLoop / createLocalGateway 巨型文件 | 下次动 AgentLoop 主循环或 gateway 装配 |
 | #148 | edgeclaw-memory-core 大文件 | 随 memory 里程碑（M1/M2 记忆增强） |
-| #149 | 渠道公共 helper 去重（ADAPTERS-N01） | 新增下一 IM 渠道前 / 渠道里程碑 |
-| #151 | patent 域耦合度确认 | 下次大改 patent 任一核心子模块前 |
-| #152 | 800–1000 行工具文件 | 下次改这些文件时顺带拆分 |
-| #153 | patent 数据映射层领域逻辑位置 | 下次动 patent 数据映射时确认 |
+| #149 | 渠道公共 helper 去重（ADAPTERS-N01） | ✅ 2026-09-11 完成主项（13 渠道 mapper 共享，−290 行）；剩余 3 项登记 TD-ADAPTERS-N02/N03/N04 |
+| #151 | patent 域耦合度确认 | ✅ 2026-09-11 复核完成：无结构性耦合（正常业务密度）；4 处小项登记 TD-PATENT-N10/N11/N15 等，见 `docs/patent-coupling-and-data-layer-review.md` |
+| #152 | 800–1000 行工具文件 | ✅ 2026-09-11 完成 `SkillManager` 拆分（915→623 行）+ 校验族直测；其余 6 文件清单见 TD 段落，保持机会型 |
+| #153 | patent 数据映射层领域逻辑位置 | ✅ 2026-09-11 复核完成：适配层不贫血；1 条疑似缺陷已证伪；3 项失真登记 TD-PATENT-N12/N13/N14 |
 
 ## 4. 持续项
 

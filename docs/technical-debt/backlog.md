@@ -426,6 +426,35 @@
 
 ---
 
+### 2026-09-11 复核追加（issue #151 / #153）
+
+- **#151 复核结论：不存在需要拆分的结构性耦合**（69% 耦合在模块内闭合、跨模块仅 31%、文件级与目录级 SCC 均为 0、无双向边、52% 跨边流入零扇出叶子件）。且 issue 前提「最高频变更面」按文件数归一化后属**最低区间**——完整度量见 `docs/patent-coupling-and-data-layer-review.md`。
+- **TD-PATENT-N10** · 进程级可变全局注册表 `globalStageHandlerRegistry` 的隐式初始化顺序（未先 `registerBuiltinAtoms` 的图运行会静默降级）
+  - 类别：D · 严重级：P2 · 工作量：S · 状态：new
+  - 位置：定义 `src/patent/atoms/handler.ts:130`；注册 `atoms/index.ts:110-114`；消费 `graph/adapter.ts:16`、`graph/domains/{novelty:16,inventiveness:21,enablement:15}.ts`、`evaluate/runner.ts:13`
+  - 建议：由 graph/evaluate 显式接收 `StageHandlerRegistry`（`graph/adapter.ts:15-16` 参数面已可注入），把隐式顺序变成显式契约。
+- **TD-PATENT-N11** · barrel 绕过 19 条（目标目录已有 barrel 且已 re-export 同一符号）
+  - 类别：A · 严重级：P3 · 工作量：S · 状态：new
+  - 位置：`atoms/handlers/builtin/mapper.ts:20-22`、`provenance/collector.ts:13,14`、`graph/domains/shared.ts:15`、`guard/evidenceComplianceGuards.ts:18`、`atoms/handlers/builtin/draft.ts:14`、`evaluate/runner.ts:11`、`flexible-plan.ts:29`
+  - 建议：改为经 barrel 导入（机械、无行为变更）；同时补两处 barrel 缺口（`claim-chart/index.ts` 增 `validatePinCiteFormat`、`workflow/index.ts` 增 `signalMatches`）。
+- **TD-PATENT-N12** · 引证同族维度被 flatten（领域信息失真）
+  - 类别：C · 严重级：P2 · 工作量：M · 状态：new
+  - 位置：`src/patent/data/nuo/mapper.ts:44-45,83-90`（`*_no_family` 与 `*_yes_family` 合并为单数组）；被 `tests/patent/data/nuo/mapper.spec.ts:150-160` 锁为契约
+  - 影响：同族/非同族在 A22.2/A22.3 与 FTO 语境含义不同。建议由产品侧决定形状后再改（属跨模块契约变更）。
+- **TD-PATENT-N13** · 专利号归一化口径发散
+  - 类别：C · 严重级：P2 · 工作量：S · 状态：new
+  - 位置：`src/patent/data/nuo/egoSession.ts:257-263`（自建，剥 `-` `:`）vs vendor 同名导出（不剥，`vendor/nuo-patent/dist/index.d.ts:766`）；键口径见 `src/tool/builtin/patentPdfDownload.ts:653` 与 `src/patent/data/nuo/patentCache.ts:133`
+  - 影响：同号不同形会重复打源。建议先以日志确认是否已发生，再选「改用 vendor 实现」或「保留严格版 + 缓存键同归一化」。
+- **TD-PATENT-N14** · TTL 分层内嵌法律状态词表且语义过宽
+  - 类别：D · 严重级：P3 · 工作量：S · 状态：new
+  - 位置：`src/patent/data/nuo/patentCache.ts:137-138`（`无效` 同时命中「无效宣告」程序）
+  - 建议：词表移出具名领域词表或收紧为状态词；意图需业务确认。
+- **TD-PATENT-N15** · `egoSession.ts` 位置错放
+  - 类别：D · 严重级：P3 · 工作量：S · 状态：new
+  - 位置：`src/patent/data/nuo/egoSession.ts`（通用浏览器执行封装，无 nuo 数据源逻辑；消费方 `src/tool/*` 与 `src/browser/backend/egoBackend.ts:1`）
+  - 建议：移至 `src/browser/`；7 个深引调用点同步改路径（无事件面变更）。
+- **复核证伪一条疑似缺陷**：`patentCache.ts:117-120` 的缓存判据对取消路径**已正确处理**（取消落入 vendor 的 `检索失败: <message>` 分支并被既有正则覆盖），本次未改动该文件。
+
 ## 9. adapters（B3 ✅）
 
 **模块概况**：102 文件；`channel/` 21 渠道（Channel+SessionMapper+render 模板）+ `protocol/` 共享层 + `web/` 桥；`protocol/` 已抽渲染/交付/交互/命令共享组件（组合复用方向正确）。渠道类间脚手架重复高，负载集中在 wecom(1761)/weixin(1492)/feishu(1333) 与 TUI。
@@ -474,6 +503,23 @@
   - 影响：`CHANNEL_LOADERS` 仅 20 项，缺 feishu/weixin/wecom/qq/cli/tui 等已存在渠道，新增/遗漏需人工维护两处。建议：改由渠道目录自注册或生成清单。
 
 ---
+
+### 2026-09-11 处置追加（issue #149）
+
+- **已完成**：13 个渠道的 `*SessionMapper.ts`（归一化后逐字相同的 36 行 ×13）收敛为共享 `src/adapters/channel/protocol/ChatSessionMapper.ts` + 各渠道 8 行薄壳，净减约 290 行；类名与 State 类型导出面保持，13 个 `Channel` 零改动。决策见 `docs/notes/implemented/2026-09-11-adapters-skill-split.md`。
+- **TD-ADAPTERS-N02** · 13 个渠道的单轮处理循环可抽共享 turn-processor（约 −300 行）
+  - 类别：A · 严重级：P2 · 工作量：M · 状态：new
+  - 位置：13 个渠道的 `processMessage` 循环，差异仅 `mattermost:215`（ctx 重算 chatId）、`qq:240`（`sendC2CReplyChunked`）、`slack:208`（前置 gateway null 守卫）
+  - 影响：这 13 个渠道**全部处于无测试集合**；且抽取会把 21 个 `submitTurn` 调用点搬入共享模块，`docs/event-producer-consumer.md` 按 `file:line` 硬编码 → **必须同 PR 跑 `pnpm gen:event-matrix`**。建议先补测试再动。
+- **TD-ADAPTERS-N03** · 3 个渠道的 `readRequestBody` 逐字重复
+  - 类别：A · 严重级：P3 · 工作量：S · 状态：new
+  - 位置：`api-server:475` ≡ `sms:300` ≡ `webhook:452`（17 行 ×3）→ 抽入 `channel/protocol/`。
+- **TD-ADAPTERS-N04** · 13 处内联等效于既有共享函数
+  - 类别：A · 严重级：P3 · 工作量：S · 状态：new
+  - 位置：内联体 vs `src/adapters/channel/protocol/ChannelCommandRegistry.ts:363` 的 `resolveIncomingMessage`
+  - 注意：**4 个语义例外不得改**——`weixin:568`（队列而非丢弃）、`wecom:761`（按 sessionKey 守卫）、`feishu:505`（chatState.queueTurn）、`api-server:272`（返回 HTTP 响应）。
+- **明确不做（判例）**：6 处跨文件微重复（`extractText` 的 `string("")` vs `string|null`、`formatError`、`normalizeBaseUrl` ×3、`sendJson` ×2、`sleep` ×3、WS 双形态）按「跨文件微重复不合并」判例保留；18 个 `render` 薄包装保留（它们是 options 未被误改的回归钉，且被 `tests/adapters/channel-render.spec.ts` 直接 import）。
+- **否定结论（省掉一类工作）**：渠道间不存在时间戳/日期格式化重复；`sessionKey` 解析亦无第二份实现。
 
 ## 10. always-on（B3 ✅）
 
@@ -673,6 +719,12 @@
   - 建议：改用收集警告而非静默返回。
 
 ---
+
+### 2026-09-11 处置追加（issue #152）
+
+- **已完成**：`SkillManager.ts` 915 → 623 行——frontmatter 解析族抽为 `src/extension/skills/frontmatter.ts`，bundle 校验族（磁盘 + manifest 双路径）抽为 `src/extension/skills/validation.ts`（`MAX_*`/`RISKY_EXTS` 随之迁出，它们只被校验族使用），并补 6 条直测 `tests/extension/skills/skill-validation.spec.ts`（此前 validate/import 无专门 spec）。销 TD-EXTENSION-N01/N02 的主因。见 `docs/notes/implemented/2026-09-11-adapters-skill-split.md`。
+- **保留机会型**：其余 6 个 800–1000 行工具文件（`patentPdfDownload` 953 / `readFile` 891 / `patentWorkflowRunTool` 818 / `kanban` 815 / `executeCode` 774 / `webSearch` 721）的拆分清单与最小步骤已由 issue #152 的调研给出，本 PR 未落地。
+  - 优先级（风险低→高）：`webSearch`（721 行里 313 行是三个可独立 provider，且现仅 3 个用例——**先补 provider 解析测试**）→ `executeCode`（已有 `executeCodeRpc.ts` 抽取前例）→ `readFile` → `patentPdfDownload`（⚠️ `loadPdfLinkExtractJs:80-84` 用 `import.meta.url` 上溯定位 assets，跨目录深度抽取会**静默回退内嵌备份**，只能抽到同深度）→ `patentWorkflowRunTool`（先按 TD-PATENT-N07 抽共享 `buildRunContext` 消除双份真相）→ `kanban`（真债是 15 个工厂的脚手架重复，应先抽共享 helper 而非搬文件）。
 
 ## 16. permission（B4 ✅）
 

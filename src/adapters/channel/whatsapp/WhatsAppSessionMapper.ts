@@ -1,36 +1,10 @@
-import { randomUUID } from "node:crypto";
-import { newSessionMessage } from "../protocol/text.js";
+import { ChatSessionMapper, type ChatSessionMapperState } from "../protocol/ChatSessionMapper.js";
 
-export type WhatsAppSessionMapperState = {
-  activeByChatId: Record<string, string>;
-};
+export type WhatsAppSessionMapperState = ChatSessionMapperState;
 
-export class WhatsAppSessionMapper {
-  constructor(
-    private readonly state: WhatsAppSessionMapperState = { activeByChatId: {} },
-    private readonly uuid: () => string = randomUUID,
-  ) {}
-
-  resolve(input: { chatId: string; text: string }): { sessionKey: string; command?: "new"; message: string } {
-    const trimmed = input.text.trim();
-    const newMessage = newSessionMessage(trimmed);
-    if (newMessage !== null) {
-      const sessionKey = `whatsapp:chat=${input.chatId}:s_${this.uuid()}`;
-      this.state.activeByChatId[input.chatId] = sessionKey;
-      return {
-        sessionKey,
-        command: "new",
-        message: newMessage,
-      };
-    }
-
-    return {
-      sessionKey: this.state.activeByChatId[input.chatId] ?? `whatsapp:chat=${input.chatId}:general`,
-      message: trimmed,
-    };
-  }
-
-  snapshot(): WhatsAppSessionMapperState {
-    return { activeByChatId: { ...this.state.activeByChatId } };
+/** whatsapp 渠道薄壳：会话键前缀与状态形状由共享实现提供（issue #149）。 */
+export class WhatsAppSessionMapper extends ChatSessionMapper {
+  constructor(state?: WhatsAppSessionMapperState, uuid?: () => string) {
+    super("whatsapp", state, uuid);
   }
 }

@@ -1,36 +1,10 @@
-import { randomUUID } from "node:crypto";
-import { newSessionMessage } from "../protocol/text.js";
+import { ChatSessionMapper, type ChatSessionMapperState } from "../protocol/ChatSessionMapper.js";
 
-export type WebhookSessionMapperState = {
-  activeByChatId: Record<string, string>;
-};
+export type WebhookSessionMapperState = ChatSessionMapperState;
 
-export class WebhookSessionMapper {
-  constructor(
-    private readonly state: WebhookSessionMapperState = { activeByChatId: {} },
-    private readonly uuid: () => string = randomUUID,
-  ) {}
-
-  resolve(input: { chatId: string; text: string }): { sessionKey: string; command?: "new"; message: string } {
-    const trimmed = input.text.trim();
-    const newMessage = newSessionMessage(trimmed);
-    if (newMessage !== null) {
-      const sessionKey = `webhook:chat=${input.chatId}:s_${this.uuid()}`;
-      this.state.activeByChatId[input.chatId] = sessionKey;
-      return {
-        sessionKey,
-        command: "new",
-        message: newMessage,
-      };
-    }
-
-    return {
-      sessionKey: this.state.activeByChatId[input.chatId] ?? `webhook:chat=${input.chatId}:general`,
-      message: trimmed,
-    };
-  }
-
-  snapshot(): WebhookSessionMapperState {
-    return { activeByChatId: { ...this.state.activeByChatId } };
+/** webhook 渠道薄壳：会话键前缀与状态形状由共享实现提供（issue #149）。 */
+export class WebhookSessionMapper extends ChatSessionMapper {
+  constructor(state?: WebhookSessionMapperState, uuid?: () => string) {
+    super("webhook", state, uuid);
   }
 }
