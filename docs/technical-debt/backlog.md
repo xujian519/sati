@@ -64,8 +64,9 @@
 - **TD-GOD-002**（P2）· 后端巨无霸函数：`createRouterRuntime` 877（`router/`）· `main` 635（`cli/sati.ts`）· `createReadFileTool` 509（`tool/readFile.ts`）
   - 细分见各模块节。工作量：L · 状态：new
   - **2026-08-27 复核补充（`createLocalGateway.ts` 结构债，jscpd 盲区——重复为小型接线模式而非文本克隆）**：(a) 模块为三件无关架构钉合：CLI 引导工厂 `:309-820` + 巨类 `ProjectRuntimeRegistry` `:904~2090`（`resolve`≈245 行、`prepareSessionRuntime`≈430 行，失败域横跨插件系统+MCP 生命周期+browser 工具）+ 无关自由工具函数 `:2215-2461`（browser proxy env 解析）；(b) 工厂内 team 成员回收闭包双实现——`runMemberScan :601-612` vs wakeMember 回调 `:682-688`，注释自承「与 scanner 冷恢复路径同款」；(c) browser-use 专属逻辑（mkdirSync 截图目录、逐 spec 参数改写 `:1663-1689`）泄漏进通用会话装配。建议拆出 `TeamReclaimCoordinator`、以 `SessionToolProvisioner` 承接 browser-use/MCP 装配、迁走 proxy env 工具函数。工作量：M×3 子项。
+    - **2026-09-12 进展**：两次逐字迁移已落地（决策见 `docs/notes/implemented/2026-09-11-createlocalgateway-helper-extraction.md`、`2026-09-12-projectruntimeregistry-module-extraction.md`）——(a) 模块级 helper 外置为 `src/cli/{browserLaunchArgs,routerDefaults,gatewaySupport}.ts`；(b) `ProjectRuntimeRegistry` 类整体迁出为 `src/cli/ProjectRuntimeRegistry.ts`（1664 行），`createLocalGateway.ts` 2437 → 804 行。**未完成**：(b) 工厂内 team 成员回收闭包双实现、(c) browser-use 逻辑泄漏进会话装配——随第三刀（按 builder 拆类，对象 `prepareSessionRuntime` 537 行 / `resolve` 249 行 / `createAgentConfig` 127 行）一并处置。
   - **2026-08-27 新增上帝函数 2 个**：`GatewayWsConnection.dispatchRequest`（316 行 switch，见 TD-GATEWAY-002）、kanban `ui/src/components/kanban/hooks/useBoardState.ts::useBoardState`（398 行，见 TD-UI-CHAT-N14）。
-- **TD-SIZE-001** · 大文件：`SkillsV2.tsx` 2503 · `createLocalGateway.ts` 2437 · `AgentLoop.ts` 2305 · `sati-bridge.js` 2055 · `routes/taskmaster.js` 1888 · `PdfDocumentPreview.tsx` 1861 · `WeComChannel.ts` 1761
+- **TD-SIZE-001** · 大文件：`SkillsV2.tsx` 2503 · `AgentLoop.ts` 2305 · `ProjectRuntimeRegistry.ts` 1664（2026-09-12 由 `createLocalGateway.ts` 2437 拆出，组合根降至 804） · `sati-bridge.js` 2055 · `routes/taskmaster.js` 1888 · `PdfDocumentPreview.tsx` 1861 · `WeComChannel.ts` 1761
   - 工作量：L · 严重级：P2 · 状态：new
 
 ### 测试
