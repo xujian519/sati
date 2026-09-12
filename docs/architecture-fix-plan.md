@@ -75,7 +75,7 @@
 
 **发现**：15 个后端文件 >780 行（`createLocalGateway.ts` 2394 居首）；`AgentLoop.run()` 约 1440 行（C2）；渠道类单文件 1300–1760 行。
 
-> **状态（2026-09-12）**：P4a 前四刀已落地，均为逐字迁移、行为不变——**组合根已达成 `≤600` 验收线**：
+> **状态（2026-09-12）**：P4a 前五刀已落地，均为逐字迁移、行为不变——**组合根已达成 `≤600` 验收线**，第五刀起转入类内拆分：
 > ① 第一刀（2026-09-11）模块级 helper 外置为 `src/cli/{browserLaunchArgs,routerDefaults,gatewaySupport}.ts`，2730 → 2481 行；
 > ② 第二刀（2026-09-12）`ProjectRuntimeRegistry` 类（含两个私有类型、两个常量、两个 logger）迁出为 `src/cli/ProjectRuntimeRegistry.ts`，
 > `createLocalGateway.ts` **2449 → 804 行**，依赖方向收敛为单向 `createLocalGateway → ProjectRuntimeRegistry`；
@@ -85,13 +85,18 @@
 > ④ 第四刀（2026-09-12）团队子系统（teams.db / 审批转发 / 冷恢复扫描 / 调度器 / 启动扫描编排）抽为
 > `src/cli/teamSubsystem.ts` 的 `buildTeamSubsystem(deps)`——P4a 的 **team builder**，
 > `createLocalGateway.ts` **635 → 448 行**（启动扫描改为返回 `startStartupScan()` 句柄，由工厂在原位置调用，
-> 保持"先注入 team 工具、再启动扫描"的时序）。
+> 保持"先注入 team 工具、再启动扫描"的时序）；
+> ⑤ 第五刀（2026-09-12，类内拆分第一刀）`prepareSessionRuntime`（537 行）的**会话工具面**阶段（每会话 MCP /
+> unattended excludeTools / always_on 剥离 / 可用性过滤 / 成员角色裁剪，113 行）抽为
+> `src/cli/sessionToolSurface.ts` 的 `provisionSessionTools(input)`——browser-use 特例（截图目录、逐 spec 参数改写）
+> 随之移出通用会话装配（TD-GOD-002 (c)），`ProjectRuntimeRegistry.ts` **1663 → 1563 行**。
 > 决策见 `docs/notes/implemented/2026-09-11-createlocalgateway-helper-extraction.md`、
 > `docs/notes/implemented/2026-09-12-projectruntimeregistry-module-extraction.md`、
 > `docs/notes/implemented/2026-09-12-gateway-runtime-options-builder.md` 与
-> `docs/notes/implemented/2026-09-12-team-subsystem-builder.md`。
-> **剩余步骤**：组合根目标已达成，下一刀转入类内拆分——按 builder 拆 `ProjectRuntimeRegistry`（1663 行；
-> 对象 `prepareSessionRuntime` 537 行 / `resolve` 249 行 / `createAgentConfig` 127 行）。
+> `docs/notes/implemented/2026-09-12-team-subsystem-builder.md` 与
+> `docs/notes/implemented/2026-09-12-session-tool-surface-extraction.md`。
+> **剩余步骤**：`prepareSessionRuntime` 其余三段（权限 hook/lifecycle、baseDependencies 装配、专利输出门禁 167 行）、
+> `resolve`（249 行）、`createAgentConfig`（127 行）。
 
 **改动点**（按风险递增，每步独立提交）：
 1. **`createLocalGateway.ts`（2394）**：按子系统拆 4 个 builder（gateway / agent / tool / always-on + approval-store），组合根只做编排与依赖装配
@@ -173,7 +178,7 @@
 | P2e | patent↔tool 环（证据协议归位 + commandRunner 迁 shared） | ⬜ |
 | P2f | pilot 环收尾（type-only 环处置） | ⬜ |
 | P3 | WeCom/Weixin/Feishu 契约测试 + 纯函数层抽取 | ⬜ |
-| P4a | createLocalGateway 拆 4 builder | 🔶 2026-09-12 第四刀完成（team builder：`teamSubsystem.ts`，635→448 行，**组合根达成 ≤600**）；前三刀：gateway builder 803→635、registry 独立成模块 2449→804、helper 外置 2730→2481。余下：类内 builder 化（`ProjectRuntimeRegistry.ts` 1663 行） |
+| P4a | createLocalGateway 拆 4 builder | 🔶 2026-09-12 第五刀（类内拆分：会话工具面 → `sessionToolSurface.ts`，registry 1663→1563；第四刀 team builder 635→448 **组合根达成 ≤600**；三 gateway builder 803→635；二 registry 独立成模块 2449→804；一 helper 外置 2730→2481）。余下：`prepareSessionRuntime` 余三段 / `resolve` 249 / `createAgentConfig` 127 |
 | P4b | AgentLoop.run() 阶段骨架 + recovery/ 下沉 | ⬜ |
 | P4c | 三大渠道类按 protocol/state/handlers/render 切分 | ⬜ |
 | P5 | pilot 职责文档 + wiki 资产迁 assets/ | ⬜ |
