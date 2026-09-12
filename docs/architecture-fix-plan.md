@@ -75,14 +75,19 @@
 
 **发现**：15 个后端文件 >780 行（`createLocalGateway.ts` 2394 居首）；`AgentLoop.run()` 约 1440 行（C2）；渠道类单文件 1300–1760 行。
 
-> **状态（2026-09-12）**：P4a 前两刀已落地，均为逐字迁移、行为不变：
+> **状态（2026-09-12）**：P4a 前三刀已落地，均为逐字迁移、行为不变：
 > ① 第一刀（2026-09-11）模块级 helper 外置为 `src/cli/{browserLaunchArgs,routerDefaults,gatewaySupport}.ts`，2730 → 2481 行；
 > ② 第二刀（2026-09-12）`ProjectRuntimeRegistry` 类（含两个私有类型、两个常量、两个 logger）迁出为 `src/cli/ProjectRuntimeRegistry.ts`，
-> `createLocalGateway.ts` **2449 → 804 行**，依赖方向收敛为单向 `createLocalGateway → ProjectRuntimeRegistry`。
-> 决策见 `docs/notes/implemented/2026-09-11-createlocalgateway-helper-extraction.md` 与
-> `docs/notes/implemented/2026-09-12-projectruntimeregistry-module-extraction.md`。
-> **剩余步骤**：第三刀按 builder 拆 `ProjectRuntimeRegistry`（1664 行；对象 `prepareSessionRuntime` 537 行 / `resolve` 249 行 /
-> `createAgentConfig` 127 行），并收口组合根至 `≤600` 行。
+> `createLocalGateway.ts` **2449 → 804 行**，依赖方向收敛为单向 `createLocalGateway → ProjectRuntimeRegistry`；
+> ③ 第三刀（2026-09-12）`new InProcessGateway(router, {...})` 的 22 字段选项对象（17 个闭包回调）抽为
+> `src/cli/gatewayRuntimeOptions.ts` 的 `buildGatewayRuntimeOptions(deps)`——P4a 四个 builder 里的 **gateway builder**，
+> `createLocalGateway.ts` **803 → 634 行**（3 个延迟绑定 gateway/teamDb/boundServer 改取数函数）。
+> 决策见 `docs/notes/implemented/2026-09-11-createlocalgateway-helper-extraction.md`、
+> `docs/notes/implemented/2026-09-12-projectruntimeregistry-module-extraction.md` 与
+> `docs/notes/implemented/2026-09-12-gateway-runtime-options-builder.md`。
+> **剩余步骤**：第四刀 team 子系统 builder（`teamDb`/`TeamApprovalForwarder`/`runMemberScan`/`TeamScheduler`/
+> `runStrandedScan`/`startupScanDone`，约 226 行）把组合根压进 `≤600`；随后按 builder 拆 `ProjectRuntimeRegistry`
+> （1663 行；对象 `prepareSessionRuntime` 537 行 / `resolve` 249 行 / `createAgentConfig` 127 行）。
 
 **改动点**（按风险递增，每步独立提交）：
 1. **`createLocalGateway.ts`（2394）**：按子系统拆 4 个 builder（gateway / agent / tool / always-on + approval-store），组合根只做编排与依赖装配
@@ -164,7 +169,7 @@
 | P2e | patent↔tool 环（证据协议归位 + commandRunner 迁 shared） | ⬜ |
 | P2f | pilot 环收尾（type-only 环处置） | ⬜ |
 | P3 | WeCom/Weixin/Feishu 契约测试 + 纯函数层抽取 | ⬜ |
-| P4a | createLocalGateway 拆 4 builder | 🔶 2026-09-12 第二刀（`ProjectRuntimeRegistry` 独立成模块，2449→804 行；第一刀 helper 外置 2730→2481）；余下按 builder 拆类（1664 行） |
+| P4a | createLocalGateway 拆 4 builder | 🔶 2026-09-12 第三刀（gateway builder：`gatewayRuntimeOptions.ts`，803→634 行；第二刀 registry 独立成模块 2449→804；第一刀 helper 外置 2730→2481）；余下 team builder（约 226 行）+ 类内 builder 化 |
 | P4b | AgentLoop.run() 阶段骨架 + recovery/ 下沉 | ⬜ |
 | P4c | 三大渠道类按 protocol/state/handlers/render 切分 | ⬜ |
 | P5 | pilot 职责文档 + wiki 资产迁 assets/ | ⬜ |

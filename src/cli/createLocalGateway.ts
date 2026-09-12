@@ -26,30 +26,24 @@ import {
   SessionRouter,
   isGatewayMemoryDiagnosticsEnabled,
   logGatewayMemoryDiagnostic,
-  summarizeCanonicalMessages,
   type Gateway,
   type GatewayCronController,
   KanbanBoardManager,
 } from "../gateway/index.js";
 import { SessionPresence } from "../gateway/server/sessionPresence.js";
-import { buildTeamPanelSnapshot } from "../gateway/teamPanel.js";
-import { SatiToolRuntimeError } from "../tool/protocol/errors.js";
 import { type ModelRuntime } from "../model/index.js";
 import { WorkerRegistry, defaultPatentWorkers } from "../patent/index.js";
 import { resolvePilotHome } from "../pilot/index.js";
 import { createPilotConfigStoreSync, type PilotConfigStore } from "../pilot/config/PilotConfigStore.js";
 import type { PilotConfigSnapshot } from "../pilot/config/types.js";
-import { cleanupOrphanToolResults, createAgentProjectSessionStorage } from "../session/index.js";
-import { readWebSessionMessages, readSubagentWebMessages } from "../web/server/readSessionMessages.js";
-import { forkWebSession } from "../web/server/forkSession.js";
-import { rewriteLastTurn } from "../web/server/editLastTurn.js";
-import { describeWebProject, listWebProjects } from "../web/server/listProjects.js";
-import { type SatiToolDefinition, type SatiToolRuntimeContext } from "../tool/index.js";
+import { cleanupOrphanToolResults } from "../session/index.js";
+import { type SatiToolDefinition } from "../tool/index.js";
 import { SkillManager, migrateLegacyBundledSkillCopies } from "../extension/skills/index.js";
 import { logger, createTelemetryCollector, type TelemetryClient } from "../telemetry/index.js";
 import { describeExtensionScope, handleMemberTurnCompleted, resolveBuiltinSkillsRoot } from "./gatewaySupport.js";
 import { ExtensionWatchManager, type ExtensionWatchEvent } from "./ExtensionWatchManager.js";
 import { ProjectRuntimeRegistry } from "./ProjectRuntimeRegistry.js";
+import { buildGatewayRuntimeOptions } from "./gatewayRuntimeOptions.js";
 
 // 兼容再导出：既有测试从本文件导入 buildBrowserUseArgs（tests/gateway/browser-use-args.spec.ts）。
 export { buildBrowserUseArgs } from "./browserLaunchArgs.js";
@@ -302,192 +296,30 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
   const sessionPresence = new SessionPresence(options.captainGraceMs);
   // Phase 3：项目看板管理器。单实例缓存所有项目 BoardRuntime 并维护订阅表。
   const kanbanBoardManager = new KanbanBoardManager();
-  const gateway = new InProcessGateway(router, {
-    serverInfo: { mode: "in_process", projectKey: projectRoot },
-    telemetry,
-    kanban: kanbanBoardManager,
-    cron: options.cron,
-    skillManager,
-    setSessionCwd: (sessionKey, cwd) => registry.setSessionCwd(sessionKey, cwd),
-    readSessionMessages: input =>
-      readWebSessionMessages(input, {
-        projectRoot: input.projectKey ? input.projectKey : fallbackProjectRoot,
-        pilotHome,
-        maxContextTokens: defaultRuntime.snapshot.config.agent.maxContextTokens,
-        maxOutputTokens: defaultRuntime.snapshot.config.agent.maxOutputTokens,
-        now,
-      }),
-    readSubagentMessages: input =>
-      readSubagentWebMessages(input, {
-        projectRoot: input.projectKey ? input.projectKey : fallbackProjectRoot,
-        pilotHome,
-        now,
-      }),
-    forkSession: input =>
-      forkWebSession(input, {
-        projectRoot: input.projectKey ? input.projectKey : fallbackProjectRoot,
-        pilotHome,
-        now,
-      }),
-    // 编辑/重新生成最后一条用户消息（协议 1.7）：预检 in-flight turn 与挂起审批
-    // （内存 bus + 团队持久化表），通过后经 rewriteLastTurn 追加 turn_rewrite 遮蔽
-    // 条目；新输入由调用方随后走标准 submit_turn。
-    editLastTurn: async input => {
-      if (router.hasInFlightTurn(input.sessionKey)) {
-        return { rewritten: false, reason: "active_turn" };
-      }
-      if (gateway.getApprovalBus().list(input.sessionKey).length > 0 || teamDb.hasPendingApproval(input.sessionKey)) {
-        return { rewritten: false, reason: "pending_approval" };
-      }
-      return rewriteLastTurn(
-        { sessionKey: input.sessionKey, reason: "edit_last_turn", newText: input.text },
-        { projectRoot: input.projectKey ? input.projectKey : fallbackProjectRoot, pilotHome, now },
-      );
-    },
-    regenerateLastTurn: async input => {
-      if (router.hasInFlightTurn(input.sessionKey)) {
-        return { rewritten: false, reason: "active_turn" };
-      }
-      if (gateway.getApprovalBus().list(input.sessionKey).length > 0 || teamDb.hasPendingApproval(input.sessionKey)) {
-        return { rewritten: false, reason: "pending_approval" };
-      }
-      return rewriteLastTurn(
-        { sessionKey: input.sessionKey, reason: "regenerate_last_turn" },
-        { projectRoot: input.projectKey ? input.projectKey : fallbackProjectRoot, pilotHome, now },
-      );
-    },
-    async recordAgentStatusMessage(input) {
-      const storage = createAgentProjectSessionStorage({
-        projectRoot: input.projectKey ? input.projectKey : fallbackProjectRoot,
-        pilotHome,
-        sessionId: input.sessionKey,
-        now,
-      });
-      await storage.transcript.recordAgentStatusMessage(input.sessionKey, input.turnId, input.status);
-      return { recorded: true };
-    },
-    listProjects: () => listWebProjects({ pilotHome }),
-    describeProject: input => describeWebProject(input.projectKey, { pilotHome }),
-    knowledgeCapabilities: input => Promise.resolve(registry.knowledgeCapabilitiesReport(input?.projectKey)),
-    // M4（Web 下线判定）：面板心跳 → SessionPresence.panelTouch（浏览器经 ui/server
-    // relay 周期上报；浏览器关闭不触发 gateway onClose，以心跳停 + 宽限窗判离线）。
-    panelHeartbeat: async (input: { sessionKeys: string[] }) => {
-      for (const key of input.sessionKeys) {
-        sessionPresence.panelTouch(key);
-      }
-      return { touched: input.sessionKeys.length };
-    },
-    // M4（团队活动面板，T6）：数据面——TeamDb 直查 + presence 在线态快照，
-    // 不触发模型回路。teamDb 声明于 gateway 之后（团队子系统区块），闭包延迟引用。
-    // 信任边界（T6 评审 M2）：与 list_sessions 同层——ws token 持有者即可枚举团队
-    // 快照；单用户桌面场景可接受，不校验 sessionKey（无独立敏感数据，成员已全退休
-    // 时仅剩团队壳）。
-    teamPanelSnapshot: async (_input: { sessionKey?: string }) => {
-      return buildTeamPanelSnapshot(teamDb, sessionPresence);
-    },
-    // M4（团队活动面板，T6）：操作面——直调既有 team_* 工具。权限自守
-    // （requireTeamCaptain/requireTeamMember 基于 context.sessionId）、TeamEvent
-    // 广播走工具层既有链（emit 经 TeamToolsOptions 注入），面板不重复实现语义。
-    // 工具经 registry.resolve(fallbackProjectRoot).tools 取当前项目 runtime 注册表
-    // （setTeamTools 注入后含 9 个 team_* 工具；面板操作在启动扫描后发生，时序安全）。
-    // 首次调用可能触发一次性的同步 runtime 构建（resolve 无缓存命中时），之后命中缓存
-    // （T6 评审 M3）。
-    // 信任边界（T6 评审 M1）：仅暴露 team_* 前缀工具——面板操作面是特权的直调通道
-    // （不经 ToolRuntime 的权限/校验/审计链），白名单之外的工具一律 fail-closed 拒绝。
-    teamToolCall: async (input: { tool: string; input: Record<string, unknown>; sessionKey?: string }) => {
-      if (!input.tool.startsWith("team_")) {
-        return {
-          ok: false,
-          error: { code: "team_unknown_tool", message: `工具 ${input.tool} 不在面板操作面（仅 team_* 域）` },
-        };
-      }
-      const tool = registry.resolve(fallbackProjectRoot).tools.get(input.tool);
-      if (!tool) {
-        return { ok: false, error: { code: "team_unknown_tool", message: `工具 ${input.tool} 不存在` } };
-      }
-      try {
-        // 特权直调不经 ToolRuntime 的权限/校验/审计链，context 仅需满足
-        // SatiToolRuntimeContext 形状（team_* 工具实际消费 sessionId/cwd/turnId）。
-        const context: SatiToolRuntimeContext = {
-          sessionId: input.sessionKey ?? "",
-          turnId: `team-panel-${crypto.randomUUID()}`,
-          cwd: fallbackProjectRoot,
-          permissionMode: "default",
-          permissionContext: {
-            mode: "default",
-            rules: { allow: [], deny: [], ask: [] },
-            cwd: fallbackProjectRoot,
-            additionalWorkingDirectories: [],
-            canPrompt: false,
-            bypassAvailable: false,
-          },
-        };
-        const out = await tool.execute(input.input, context);
-        return { ok: true, data: out.data };
-      } catch (error) {
-        const code = error instanceof SatiToolRuntimeError ? error.code : "tool_execution_failed";
-        const message = error instanceof Error ? error.message : String(error);
-        return { ok: false, error: { code, message } };
-      }
-    },
-    async reloadConfig() {
-      let changedPaths: string[] = [];
-      const unsubscribe = configStore.subscribe(event => {
-        changedPaths = event.changedPaths;
-      });
-      try {
-        await configStore.reload("rpc");
-      } finally {
-        unsubscribe();
-      }
-      return { reloaded: true, changedPaths };
-    },
-    async reloadExtensions(input) {
-      const changedPaths = input?.changedPaths ?? [];
-      if (input?.projectKey) {
-        logger.info(
-          `Extensions reload requested for project ${input.projectKey}:`,
-          changedPaths.join(", ") || "(manual)",
-        );
-        registry.invalidate(input.projectKey);
-        router?.markProjectDirty(input.projectKey, "extension_changed");
-      } else {
-        logger.info("Extensions reload requested for all runtimes:", changedPaths.join(", ") || "(manual)");
-        registry.invalidate();
-        router?.markAllDirty("extension_changed");
-      }
-      boundServer?.broadcastNotification("config_changed", {
-        changedPaths,
-        changeClasses: ["extension-changed"],
-      });
-      return { reloaded: true, changedPaths };
-    },
-    // Defensive: re-check the on-disk config at the start of every
-    // turn so an apiKey/url edit applied between two messages takes
-    // effect on the next one, even if the fs watcher missed it.
-    // Singleton-deduped inside PilotConfigStore.reload — concurrent
-    // turns share a single in-flight read, and unchanged config is a
-    // no-op (no invalidation, no session recreation).
-    async refreshConfigBeforeTurn() {
-      await configStore.reload("turn-start");
-    },
-    afterTurnCompleted: ({ sessionKey, projectKey, runId }) => {
-      if (memoryDiagnosticsEnabled) {
-        const snapshot = router?.snapshotSession(sessionKey);
-        logGatewayMemoryDiagnostic({
-          event: "turn_completed",
-          sessionCount: router?.cachedSessionCount(),
-          session: {
-            sessionKey,
-            projectKey,
-            runId,
-            ...(snapshot ? summarizeCanonicalMessages(snapshot.messages) : {}),
-          },
-        });
-      }
-      registry.scheduleMemoryMaintenance(projectKey ?? fallbackProjectRoot);
-    },
-  });
+  // 显式标注类型：deps.getGateway 闭包引用 gateway 自身，无标注时 TS 无法推断（TS7022/TS7023）。
+  const gateway: InProcessGateway = new InProcessGateway(
+    router,
+    buildGatewayRuntimeOptions({
+      router,
+      projectRoot,
+      fallbackProjectRoot,
+      pilotHome,
+      now,
+      telemetry,
+      kanbanBoardManager,
+      skillManager,
+      cron: options.cron,
+      sessionPresence,
+      registry,
+      configStore,
+      agentMaxContextTokens: defaultRuntime.snapshot.config.agent.maxContextTokens,
+      agentMaxOutputTokens: defaultRuntime.snapshot.config.agent.maxOutputTokens,
+      memoryDiagnosticsEnabled,
+      getGateway: () => gateway,
+      getTeamDb: () => teamDb,
+      getBoundServer: () => boundServer,
+    }),
+  );
   // Hand the gateway back to the registry so per-session creation can
   // build a `GatewayElicitationChannel` against this gateway's bus +
   // emit-sink (B1).
