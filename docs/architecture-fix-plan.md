@@ -75,7 +75,7 @@
 
 **发现**：15 个后端文件 >780 行（`createLocalGateway.ts` 2394 居首）；`AgentLoop.run()` 约 1440 行（C2）；渠道类单文件 1300–1760 行。
 
-> **状态（2026-09-13）**：P4a 前九刀已落地，均为逐字迁移、行为不变——**组合根已达成 `≤600` 验收线**，第五刀起转入类内拆分：
+> **状态（2026-09-13，P4a 十刀收尾 ✅）**：P4a 十刀全部落地，均为逐字迁移、行为不变——组合根 `createLocalGateway.ts` 达成 `≤600` 验收线（**2730 → 448**），第五刀起转入 `ProjectRuntimeRegistry` 类内拆分（**1663 → 642**）：
 > ① 第一刀（2026-09-11）模块级 helper 外置为 `src/cli/{browserLaunchArgs,routerDefaults,gatewaySupport}.ts`，2730 → 2481 行；
 > ② 第二刀（2026-09-12）`ProjectRuntimeRegistry` 类（含两个私有类型、两个常量、两个 logger）迁出为 `src/cli/ProjectRuntimeRegistry.ts`，
 > `createLocalGateway.ts` **2449 → 804 行**，依赖方向收敛为单向 `createLocalGateway → ProjectRuntimeRegistry`；
@@ -110,6 +110,10 @@
 > `sessionWriters` 按活 Map 传入，extraTools / teamTools / kanban / gateway 四个取数保持延迟读取，
 > 公开字段 `routerEventBus` 经 `setRouterEventBus` 写回（回调返回同一 bus），`ProjectRuntime` 类型
 > 由构造者持有并导出，`ProjectRuntimeRegistry.ts` **1073 → 677 行**。
+> ⑩ 第十刀（2026-09-13，类内拆分第六刀，收尾）会话权限 hook / lifecycle 装配（37 行：把 gateway 的
+> 交互式权限 hook 挂到插件 hooks 之上并包成 `LifecycleRuntime`）抽为 `src/cli/sessionLifecycle.ts` 的
+> `buildSessionLifecycle(input)`——`getLiveRuleSet` 保持取数函数，保证 hook 的 `permissionRules.allow`
+> 与 `PermissionContext.rules.allow` 是同一活数组引用，`ProjectRuntimeRegistry.ts` **677 → 642 行**。
 > 决策见 `docs/notes/implemented/2026-09-11-createlocalgateway-helper-extraction.md`、
 > `docs/notes/implemented/2026-09-12-projectruntimeregistry-module-extraction.md`、
 > `docs/notes/implemented/2026-09-12-gateway-runtime-options-builder.md` 与
@@ -117,10 +121,11 @@
 > `docs/notes/implemented/2026-09-12-session-tool-surface-extraction.md`、
 > `docs/notes/implemented/2026-09-12-patent-output-gate-factory.md`、
 > `docs/notes/implemented/2026-09-12-session-dependency-assembly.md`、
-> `docs/notes/implemented/2026-09-13-agent-session-config-extraction.md` 与
-> `docs/notes/implemented/2026-09-13-project-runtime-factory.md`。
-> **剩余步骤**：`prepareSessionRuntime` 的权限 hook/lifecycle 段（唯一持有 `liveRuleSet.allow`
-> 活引用回写的部分）。
+> `docs/notes/implemented/2026-09-13-agent-session-config-extraction.md`、
+> `docs/notes/implemented/2026-09-13-project-runtime-factory.md` 与
+> `docs/notes/implemented/2026-09-13-session-lifecycle-hook-extraction.md`。
+> **P4a 已收尾（2026-09-13）**：十刀后 `ProjectRuntimeRegistry.ts` 1663 → 642 行，`prepareSessionRuntime`
+> 只余编排与取数（工具面 / lifecycle / 依赖装配 / 输出门禁四段各自成模块）；后续可选项见 P4b / P4c。
 
 **改动点**（按风险递增，每步独立提交）：
 1. **`createLocalGateway.ts`（2394）**：按子系统拆 4 个 builder（gateway / agent / tool / always-on + approval-store），组合根只做编排与依赖装配
@@ -202,7 +207,7 @@
 | P2e | patent↔tool 环（证据协议归位 + commandRunner 迁 shared） | ⬜ |
 | P2f | pilot 环收尾（type-only 环处置） | ⬜ |
 | P3 | WeCom/Weixin/Feishu 契约测试 + 纯函数层抽取 | ⬜ |
-| P4a | createLocalGateway 拆 4 builder | 🔶 2026-09-13 第九刀（项目运行时构造 → `projectRuntimeFactory.ts`，registry 1073→677；八 Agent 配置构造 1183→1073；七 会话依赖装配 1384→1183；六 专利输出门禁 1563→1384；五 类内拆分会话工具面 1663→1563；四 team builder 635→448 **组合根达成 ≤600**；三 gateway builder 803→635；二 registry 独立成模块 2449→804；一 helper 外置 2730→2481）。余下：`prepareSessionRuntime` 权限 hook/lifecycle 段 |
+| P4a | createLocalGateway 拆 4 builder | ✅ 2026-09-13（十刀收尾：组合根 `createLocalGateway.ts` 2730→448；`ProjectRuntimeRegistry.ts` 1663→642——工具面 / 输出门禁 / 依赖装配 / Agent 配置 / 运行时构造 / 权限 lifecycle 六段 + 四个 builder 均已成独立模块，详见 §二 P4 状态块） |
 | P4b | AgentLoop.run() 阶段骨架 + recovery/ 下沉 | ⬜ |
 | P4c | 三大渠道类按 protocol/state/handlers/render 切分 | ⬜ |
 | P5 | pilot 职责文档 + wiki 资产迁 assets/ | ⬜ |
