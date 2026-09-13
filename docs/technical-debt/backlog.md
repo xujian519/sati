@@ -480,8 +480,8 @@
   - 位置：`wecom/WeComChannel.ts`、`weixin/WeixinChannel.ts`、`feishu/FeishuChannel.ts`
   - 影响：每文件混入网络传输/消息解析/媒体上传/路径沙箱/Markdown 掩码等无关职责。建议：把纯函数（`isDeniedDeliverablePath`/`maskProtectedDeliverableSpans`/`tryParseUrl`）与 sendable 职责拆到独立模块。
 - **TD-ADAPTERS-N04** · 传输重负载渠道类测试覆盖极薄（全模块仅 3 个直测）
-  - 类别：E · 严重级：P2 · 工作量：M · 状态：new
-  - 位置：`tests/adapters/`（仅 channel-render/feishu-permission-reply/im-permission-helper）
+  - 类别：E · 严重级：P2 · 工作量：M · 状态：🔶 部分完成（2026-09-13：企微回调模式 4 个契约测试落地，`tests/adapters/wecom-callback-contract.spec.ts` 走真实 HTTP 回调 + 企微 AES/签名闭环；余 weixin pollLoop/媒体 AES-ECB、WeCom onSocketData、WhatsApp dispatch 与 Feishu webhook）
+  - 位置：`tests/adapters/`（现 6 spec：channel-render / feishu-permission-reply / im-permission-helper / wecom-attachments / api-server-content-object / wecom-callback-contract）
   - 影响：wecom/weixin/feishu 分发/轮询/媒体上传生命周期无单测。建议：为 Weixin pollLoop、WeCom onSocketData、WhatsApp dispatch 补分支测试（clientFactory/webSocketCtor 注 seam）。
 - **TD-ADAPTERS-N05** · weixin 登录流程用裸 `console.log/error`，绕过 ChannelLogger
   - 类别：C · 严重级：P3 · 工作量：S · 状态：new
