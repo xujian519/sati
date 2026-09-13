@@ -14,8 +14,6 @@ import { TeamDb } from "../agent/team/index.js";
 import { PluginRuntimeExtensionResolver } from "../context/index.js";
 import { resolveKnowledgeCapabilities, resolveKnowledgeDbPaths } from "../knowledge/index.js";
 import type { KnowledgeCapabilitiesResult } from "../gateway/protocol/types.js";
-import { HookRuntime } from "../extension/index.js";
-import { LifecycleRuntime } from "../lifecycle/index.js";
 import {
   type GatewaySessionContext,
   type GatewaySubmitTurnInput,
@@ -24,10 +22,6 @@ import {
   type ListSessionsInput,
   type ListSessionsResult,
 } from "../gateway/index.js";
-import {
-  createGatewayPermissionHook,
-  GATEWAY_PERMISSION_CALLBACK_NAME,
-} from "../gateway/permission/createGatewayPermissionHook.js";
 import {
   createMcpToolDefinitionsFromRuntime,
   loadMcpServerConfig,
@@ -58,6 +52,7 @@ import { registerMcpAuxTools, registerToolsIfAbsent } from "./mcpToolRegistratio
 import { provisionSessionTools } from "./sessionToolSurface.js";
 import { buildAgentSessionConfig } from "./agentSessionConfig.js";
 import { buildPatentOutputGate } from "./patentOutputGateFactory.js";
+import { buildSessionLifecycle } from "./sessionLifecycle.js";
 import { buildSessionDependencies } from "./sessionDependencyAssembly.js";
 
 type ProjectRuntimeRegistryOptions = {
@@ -561,43 +556,13 @@ export class ProjectRuntimeRegistry {
     const sessionTools = toolSurface.tools;
     runtime.unavailableTools = toolSurface.unavailableTools;
 
-    // Inject the gateway's interactive permission hook so the agent's
-    // PermissionRequest lifecycle is round-tripped through whichever
-    // client is streaming this session (Web UI, TUI, etc.) instead of
-    // returning `permission_required` errors. The hook mutates the
-    // session's live `permissionRules.allow` array on `remember=true`,
-    // so a subsequent tool call inside the same turn bypasses the ask
-    // path without waiting for the next turn.
-    //
-    // We register unconditionally whenever a gateway is wired up. If no
-    // client is actively streaming, `gw.emitForSession()` returns false
-    // and the hook auto-denies — better than silently hanging.
-    const gw = this.gateway;
-    const liveRuleSet = this.getLiveRuleSet(context.sessionKey);
-    const hookSettings: typeof contributions.hooks = gw
-      ? {
-          ...contributions.hooks,
-          PermissionRequest: [
-            ...(contributions.hooks.PermissionRequest ?? []),
-            {
-              hooks: [{ type: "callback", name: GATEWAY_PERMISSION_CALLBACK_NAME }],
-            },
-          ],
-        }
-      : contributions.hooks;
-    const hookRuntime = new HookRuntime(hookSettings);
-    if (gw) {
-      hookRuntime.getCallbackExecutor().register(
-        GATEWAY_PERMISSION_CALLBACK_NAME,
-        createGatewayPermissionHook({
-          sessionKey: context.sessionKey,
-          bus: gw.getPermissionBus(),
-          emit: event => gw.emitForSession(context.sessionKey, event),
-          permissionRules: liveRuleSet.allow,
-        }),
-      );
-    }
-    const lifecycle = new LifecycleRuntime(hookRuntime);
+    const lifecycle = buildSessionLifecycle({
+      sessionKey: context.sessionKey,
+      hooks: contributions.hooks,
+      // 装配期读一次（原 const gw = this.gateway）：无 gateway 时只装插件 hooks。
+      gateway: this.gateway,
+      getLiveRuleSet: () => this.getLiveRuleSet(context.sessionKey),
+    });
     const extension = new PluginRuntimeExtensionResolver(runtime.pluginRuntime, {
       // B3 upgrade path: surface instructions fetched from live MCP servers
       // (McpRuntime.getInstructions) on top of the static plugin-declared ones.
