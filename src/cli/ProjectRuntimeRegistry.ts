@@ -7,7 +7,6 @@ import { appendFileSync, existsSync, mkdirSync as mkdirSyncFs, renameSync } from
 import { join as joinPath, resolve } from "node:path";
 import type { EdgeClawMemoryService } from "edgeclaw-memory-core";
 import { brandEnv, ENV_KEY } from "../env.js";
-import { parsePositiveInt } from "../shared/env/index.js";
 import { resolveEmbeddingClient, resolveRerankClient } from "../model/embedding/index.js";
 import type { PilotConfigDiagnostic, PilotConfigSnapshot } from "../pilot/config/types.js";
 import type { SessionConfigOverrides } from "../always-on/runtime/SessionConfigOverrides.js";
@@ -64,10 +63,8 @@ import {
 import { createModelRuntime, type ModelRuntime } from "../model/index.js";
 import { createPolicyKey, normalizeRetryReason } from "../model/streaming/retryState.js";
 import { applyReplayEnvHooks } from "../test-support/llm-replay/index.js";
-import { resolveModelInfo } from "../model/resolveModelInfo.js";
-import { injectMethodology, MethodologyRegistry } from "../methodology/index.js";
-import { mergePolicyDenyRules } from "../rule/index.js";
-import { createDefaultPermissionContext, type PermissionRule } from "../permission/index.js";
+import { MethodologyRegistry } from "../methodology/index.js";
+import { type PermissionRule } from "../permission/index.js";
 import { loadPilotConfig } from "../pilot/index.js";
 import {
   createAgentProjectSessionStorage,
@@ -88,6 +85,7 @@ import { ensureRouterConfig } from "./routerDefaults.js";
 import { mergeSessionDependencies, syncRoleDefinitions } from "./gatewaySupport.js";
 import { registerMcpAuxTools, registerToolsIfAbsent } from "./mcpToolRegistration.js";
 import { provisionSessionTools } from "./sessionToolSurface.js";
+import { buildAgentSessionConfig } from "./agentSessionConfig.js";
 import { buildPatentOutputGate } from "./patentOutputGateFactory.js";
 import { buildSessionDependencies } from "./sessionDependencyAssembly.js";
 
@@ -1059,125 +1057,17 @@ export class ProjectRuntimeRegistry {
     runtime: ProjectRuntime,
     context: GatewaySessionContext,
   ): CreateAgentSessionOptions["config"] {
-    const agent = runtime.snapshot.config.agent;
-    const override = this._sessionOverrides?.get(context.sessionKey);
-    const permissionMode = override?.permissionMode ?? this.options.permissionMode;
-    const cwd = override?.cwd ?? runtime.projectRoot;
-    // M4：会话级模型路由覆盖（团队成员唤醒传快照 modelRoute）——仅覆盖本次会话的
-    // provider/model，不改全局配置、不动 PilotConfigStore。整体应用（质量评审 M3）：
-    // provider/model 双字段非空才覆盖——WS 线协议可直传部分字段（编译期约束管不到
-    // 线协议），任一缺失整体回落项目默认，避免 provider 与 model 拼错对。
-    let provider = agent.model.provider;
-    let model = agent.model.model;
-    const modelRoute = context.modelRoute;
-    if (
-      modelRoute !== undefined &&
-      typeof modelRoute.provider === "string" &&
-      modelRoute.provider.length > 0 &&
-      typeof modelRoute.model === "string" &&
-      modelRoute.model.length > 0
-    ) {
-      provider = modelRoute.provider;
-      model = modelRoute.model;
-    }
-    // Hand `PermissionContext` the same live rule-set reference the
-    // gateway permission hook owns (see `getLiveRuleSet`). With this
-    // shared reference, an "allow + remember" decision pushed by the
-    // hook is visible to `PermissionRuntime.decide` on the very next
-    // tool call inside the same turn — no roundtrip back to the client
-    // needed, even when the client lives in a different process.
-    const liveRuleSet = this.getLiveRuleSet(context.sessionKey);
-    // 阶段四 T3：统一能力解析（config → catalog → 协议默认），未知模型按
-    // catalog/默认回退，而非盲目 text-only。
-    const modelMultimodal: import("../model/index.js").MultimodalConstraints | undefined = resolveModelInfo(
-      runtime.model,
-      provider,
-      model,
-    ).multimodal;
-    let maxContextTokens: number | undefined;
-    let maxOutputTokens: number | undefined;
-    try {
-      const caps = runtime.model.getCapabilities(provider, model);
-      maxContextTokens = agent.maxContextTokens ?? caps.maxContextTokens;
-      maxOutputTokens = caps.maxOutputTokens;
-    } catch {
-      // 能力查询失败 → 上下文上限退回显式配置，输出上限留 undefined 由后续链路兜底。
-      maxContextTokens = agent.maxContextTokens;
-    }
-    maxOutputTokens =
-      parsePositiveInt(brandEnv(this.options.env, ENV_KEY.MAX_OUTPUT_TOKENS)) ??
-      agent.maxOutputTokens ??
-      maxOutputTokens;
-    const subagentModel = agent.subagents?.default;
-    let subagentRuntimeModel: CreateAgentSessionOptions["config"]["subagentModel"];
-    if (subagentModel) {
-      let subagentModelMultimodal: import("../model/index.js").MultimodalConstraints | undefined;
-      try {
-        subagentModelMultimodal = resolveModelInfo(
-          runtime.model,
-          subagentModel.provider,
-          subagentModel.model,
-        ).multimodal;
-      } catch {
-        // Model or provider not found — keep the override but fall back to inherited caps.
-      }
-      let subagentMaxContextTokens: number | undefined;
-      let subagentMaxOutputTokens: number | undefined;
-      try {
-        const caps = runtime.model.getCapabilities(subagentModel.provider, subagentModel.model);
-        subagentMaxContextTokens = caps.maxContextTokens;
-        subagentMaxOutputTokens = caps.maxOutputTokens;
-      } catch {
-        // Keep the override even if capability lookup fails.
-      }
-      subagentRuntimeModel = {
-        provider: subagentModel.provider,
-        model: subagentModel.model,
-        ...(subagentModelMultimodal ? { modelMultimodal: subagentModelMultimodal } : {}),
-        ...(subagentMaxContextTokens !== undefined ? { maxContextTokens: subagentMaxContextTokens } : {}),
-        ...(subagentMaxOutputTokens !== undefined
-          ? {
-              maxOutputTokens:
-                parsePositiveInt(brandEnv(this.options.env, ENV_KEY.MAX_OUTPUT_TOKENS)) ?? subagentMaxOutputTokens,
-            }
-          : {}),
-      };
-    }
-    return {
-      provider,
-      model,
-      modelMultimodal,
-      cwd,
-      permissionMode,
-      jsonSelfCorrect: true,
-      workspaceLedger: brandEnv(this.options.env, ENV_KEY.WORKSPACE_LEDGER_ENABLED) === "1",
-      metacognitiveControl: brandEnv(this.options.env, ENV_KEY.METACOGNITIVE_CONTROL_ENABLED) === "1",
-      claimGuard: brandEnv(this.options.env, ENV_KEY.CLAIM_GUARD_ENABLED) === "1",
-      ...(subagentRuntimeModel ? { subagentModel: subagentRuntimeModel } : {}),
-      subagentTimeoutMs: agent.subagents?.timeoutMs,
-      maxContextTokens,
-      maxOutputTokens,
-      thinking: agent.thinking,
-      methodologyInjection: lastUserMessage => {
-        // minScore 0.2：要求至少命中约 2 个触发词（1/8≈0.12 的单词偶然命中
-        // 会被过滤，如"问题/优化/流程"单独出现时），避免日常对话被强制注入格式。
-        const result = injectMethodology(this.methodologyRegistry, lastUserMessage, { minScore: 0.2 });
-        return result.applied && result.prompt ? result.prompt : null;
-      },
-      permissionContext: createDefaultPermissionContext({
-        cwd,
-        mode: permissionMode,
-        canPrompt: override?.canPrompt ?? true,
-        bypassAvailable: override?.bypassAvailable ?? true,
-        additionalWorkingDirectories: this.options.additionalWorkingDirectories,
-        rules: {
-          allow: liveRuleSet.allow,
-          // policy deny 前置是不变式：PermissionRuntime 取 deny 首个匹配，仅在来源为
-          // "user" 时才允许被 session allow 覆盖——policy 若排后会被该短路路径绕过。
-          deny: mergePolicyDenyRules(liveRuleSet.deny, this.policyDenyRules.get(runtime.projectRoot) ?? []),
-          ask: liveRuleSet.ask,
-        },
-      }),
-    };
+    return buildAgentSessionConfig({
+      sessionKey: context.sessionKey,
+      modelRoute: context.modelRoute,
+      runtime,
+      getSessionOverride: () => this._sessionOverrides?.get(context.sessionKey),
+      permissionMode: this.options.permissionMode,
+      env: this.options.env,
+      additionalWorkingDirectories: this.options.additionalWorkingDirectories,
+      getLiveRuleSet: () => this.getLiveRuleSet(context.sessionKey),
+      getPolicyDenyRules: () => this.policyDenyRules.get(runtime.projectRoot) ?? [],
+      methodologyRegistry: this.methodologyRegistry,
+    });
   }
 }
