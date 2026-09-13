@@ -14,34 +14,18 @@ import type { SessionConfigOverrides } from "../always-on/runtime/SessionConfigO
 import {
   type AgentRuntimeConfig,
   type AgentSession,
-  createAgentEventBuffer,
   type CreateAgentSessionOptions,
   createAgentSessionWithStorage,
 } from "../agent/index.js";
-import { resolveRoutedModelMaxContextTokens } from "../agent/runtime/modelContextWindow.js";
 import type { TeamToolsOptions } from "../tool/builtin/team/index.js";
 import { type ScopeToolsOptions } from "../agent/sub/scopeTools.js";
 import { TeamDb } from "../agent/team/index.js";
 import type { MemoryResolver } from "../context/index.js";
 import {
-  AutoCompactionPolicy,
-  CachedMicroCompactionEngine,
-  CompactionEngine,
-  ContextOverflowRecovery,
   createEdgeClawMemoryProviderFromConfig,
-  DEFAULT_PROTECTED_TOOL_RESULT_NAMES,
-  DefaultContextRuntime,
-  InstructionDiscovery,
-  MicroCompactionEngine,
   PluginRuntimeExtensionResolver,
-  SnipEngine,
   TokenAccountingRuntime,
-  TokenBudgetManager,
-  ToolResultBudget,
 } from "../context/index.js";
-import { FileHistoryStore } from "../session/filesystem/FileHistoryStore.js";
-import type { AgentSubagentTranscriptHooks } from "../agent/runtime/AgentRuntimeDependencies.js";
-import { createPlanTodoStateManager } from "../agent/runtime/PlanTodoState.js";
 import type { KnowledgeDbPaths } from "../knowledge/index.js";
 import {
   buildKnowledgeResolvers,
@@ -59,7 +43,6 @@ import type { KnowledgeCapabilitiesResult } from "../gateway/protocol/types.js";
 import { HookRuntime, PluginRuntime } from "../extension/index.js";
 import { LifecycleRuntime } from "../lifecycle/index.js";
 import {
-  GatewayElicitationChannel,
   type GatewayProjectStorageOptions,
   type GatewaySessionContext,
   type GatewaySubmitTurnInput,
@@ -96,21 +79,17 @@ import {
 import { createSessionTitleGenerator } from "../session/title/SessionTitleGenerator.js";
 import { type BackgroundTaskCompletionEvent, BackgroundTaskRuntime } from "../task/runtime/BackgroundTaskRuntime.js";
 import type { SatiUnavailableToolDiagnostic } from "../tool/index.js";
-import {
-  createBuiltinRegistry,
-  createPlanFileManager,
-  type SatiToolDefinition,
-  type ToolRegistry,
-} from "../tool/index.js";
+import { createBuiltinRegistry, type SatiToolDefinition, type ToolRegistry } from "../tool/index.js";
 import { createRouterRuntime, type RouterRuntime } from "../router/index.js";
 import type { RouterEvent, RouterEventBus } from "../router/protocol/events.js";
 import { loadBuiltinPlugins } from "../extension/plugins/builtin/loadBuiltinPlugins.js";
 import { logger, type TelemetryClient } from "../telemetry/index.js";
 import { ensureRouterConfig } from "./routerDefaults.js";
-import { createAutoElicitationChannel, mergeSessionDependencies, syncRoleDefinitions } from "./gatewaySupport.js";
+import { mergeSessionDependencies, syncRoleDefinitions } from "./gatewaySupport.js";
 import { registerMcpAuxTools, registerToolsIfAbsent } from "./mcpToolRegistration.js";
 import { provisionSessionTools } from "./sessionToolSurface.js";
 import { buildPatentOutputGate } from "./patentOutputGateFactory.js";
+import { buildSessionDependencies } from "./sessionDependencyAssembly.js";
 
 type ProjectRuntimeRegistryOptions = {
   fallbackProjectRoot: string;
@@ -1023,203 +1002,23 @@ export class ProjectRuntimeRegistry {
       runtimeMcpInstructions: () => runtime.mcpRuntime?.getInstructions() ?? [],
     });
     const projectRoot = runtime.projectRoot;
-    const memoryResolver = runtime.memory;
-    const now = this.options.now;
-    const eventBuf = createAgentEventBuffer();
 
-    const baseDependencies: CreateAgentSessionOptions["dependencies"] = {
-      router: runtime.router,
-      tools: { registry: sessionTools },
+    const { baseDependencies, extendDependencies } = buildSessionDependencies({
+      sessionKey: context.sessionKey,
+      projectKey: context.projectKey,
+      runtime,
+      sessionTools,
       lifecycle,
+      extension,
       now: this.options.now,
-      eventEmitter: eventBuf.emitter,
-      drainEvents: eventBuf.drain,
-      tokenAccounting: runtime.tokenAccounting,
-      getModelMaxContextTokens: (provider, model) =>
-        resolveRoutedModelMaxContextTokens({
-          modelRuntime: runtime.model,
-          agentModel: runtime.snapshot.config.agent.model,
-          agentMaxContextTokens: runtime.snapshot.config.agent.maxContextTokens,
-          provider,
-          model,
-        }),
-      getProviderProtocol: providerId => {
-        try {
-          return runtime.model.getProviderProtocol(providerId);
-        } catch {
-          // provider 未知时无协议可查 → 返回 undefined，调用方按默认协议处理。
-          return undefined;
-        }
-      },
-      getModelMaxOutputTokens: (provider, model) => {
-        try {
-          return runtime.model.getCapabilities(provider, model).maxOutputTokens;
-        } catch {
-          // provider/model 未知 → 输出上限未知，返回 undefined 走环境变量/默认兜底。
-          return undefined;
-        }
-      },
-      getModelTokenLimits: (provider, model) => {
-        try {
-          const caps = runtime.model.getCapabilities(provider, model);
-          return { maxContextTokens: caps.maxContextTokens, maxOutputTokens: caps.maxOutputTokens };
-        } catch {
-          // 同上：能力查询失败即返回 undefined，由调用方兜底，不阻断启动。
-          return undefined;
-        }
-      },
-    };
+      pilotHome: this.options.pilotHome,
+      autoElicitation: this.options.autoElicitation,
+      getGateway: () => this.gateway,
+    });
     const sessionTitleGenerator = createSessionTitleGenerator({
       modelRuntime: runtime.model,
       agentModel: runtime.snapshot.config.agent.model,
     });
-    const extendDependencies = (storage: ReturnType<typeof createAgentProjectSessionStorage>) => {
-      const toolResultBudget = new ToolResultBudget({ toolResultsDir: storage.toolResultsDir });
-      const tokenBudget = new TokenBudgetManager();
-      const compactionEngine = new CompactionEngine({
-        model: {
-          stream: (request, signal) =>
-            runtime.router.stream(request, {
-              sessionId: context.sessionKey,
-              turnId: "compact",
-              projectPath: context.projectKey,
-              abortSignal: signal,
-              isMainAgent: false,
-            }),
-        },
-        tokenBudget,
-        tokenAccounting: runtime.tokenAccounting,
-        lifecycle: {
-          async dispatch(input) {
-            await lifecycle.dispatch({
-              event: input.event,
-              baseInput: {
-                sessionId: context.sessionKey,
-                transcriptPath: "",
-                cwd: projectRoot,
-                permissionMode: "default",
-              },
-              payload: input.payload,
-              matchQuery: input.event,
-            });
-          },
-        },
-        provider: runtime.snapshot.config.agent.model.provider,
-        model_: runtime.snapshot.config.agent.model.model,
-        protectedToolNames: DEFAULT_PROTECTED_TOOL_RESULT_NAMES,
-        now,
-        eventEmitter: eventBuf.emitter,
-      });
-      const autoCompactionPolicy = new AutoCompactionPolicy();
-      const microcompactEngine = new CachedMicroCompactionEngine({ enabled: true });
-      const microCompaction = new MicroCompactionEngine({
-        protectedToolNames: DEFAULT_PROTECTED_TOOL_RESULT_NAMES,
-      });
-      const snipEngine = new SnipEngine({
-        protectedToolNames: DEFAULT_PROTECTED_TOOL_RESULT_NAMES,
-      });
-      const overflowRecovery = new ContextOverflowRecovery();
-      const caps = runtime.model.getCapabilities(
-        runtime.snapshot.config.agent.model.provider,
-        runtime.snapshot.config.agent.model.model,
-      );
-      const instructionDiscovery = new InstructionDiscovery(projectRoot, projectRoot, this.options.pilotHome);
-      const contextRuntime = new DefaultContextRuntime({
-        extension,
-        projectRoot,
-        memoryResolver,
-        memoryRetrievalTimeoutMs: runtime.snapshot.config.memory?.retrievalTimeoutMs,
-        // 项目知识偏好透传：knowledge provider 据此强制注入/加权审查标准
-        knowledgeProfile: runtime.snapshot.config.memory?.knowledgeProfile,
-        instructionDiscovery,
-        toolResultBudget,
-        tokenBudget,
-        compactionEngine,
-        autoCompactionPolicy,
-        microcompactEngine,
-        microCompaction,
-        snipEngine,
-        overflowRecovery,
-        maxContextTokens: runtime.snapshot.config.agent.maxContextTokens ?? caps.maxContextTokens,
-        now,
-      });
-      const fileHistory = new FileHistoryStore({
-        backupDir: storage.fileHistoryDir,
-        now: this.options.now,
-      });
-      const gw = this.gateway;
-      const elicitation = this.options.autoElicitation
-        ? createAutoElicitationChannel()
-        : gw
-          ? new GatewayElicitationChannel({
-              sessionKey: context.sessionKey,
-              bus: gw.getElicitationBus(),
-              emit: event => gw.emitForSession(context.sessionKey, event),
-              dispatchHook: (hookEvent, payload) => {
-                lifecycle
-                  .dispatch({
-                    event: hookEvent as import("../extension/hooks/protocol/events.js").SatiHookEvent,
-                    baseInput: { sessionId: context.sessionKey, transcriptPath: "", cwd: projectRoot },
-                    payload,
-                    matchQuery: hookEvent,
-                  })
-                  .catch(() => {});
-              },
-              emitAgentEvent: (_type, payload) => {
-                eventBuf.emitter({
-                  type: "elicitation_requested",
-                  sessionId: context.sessionKey,
-                  turnId: "",
-                  requestId: payload.requestId,
-                  toolName: payload.toolName,
-                });
-              },
-            })
-          : undefined;
-      const subagentTranscript: AgentSubagentTranscriptHooks = {
-        recordSubagentStarted: args =>
-          storage.transcript.recordSubagentStarted(args.sessionId, args.turnId, {
-            subagentId: args.subagentId,
-            subagentType: args.subagentType,
-            prompt: args.prompt,
-            transcriptRelativePath: args.transcriptRelativePath,
-            subagentSessionId: args.subagentSessionId,
-          }),
-        recordSubagentCompleted: args =>
-          storage.transcript.recordSubagentCompleted(args.sessionId, args.turnId, {
-            subagentId: args.subagentId,
-            subagentType: args.subagentType,
-            summary: args.summary,
-            usage: args.usage,
-            turns: args.turns,
-            durationMs: args.durationMs,
-            errored: args.errored,
-          }),
-        subagentTranscriptResolver: subagentId => {
-          const handle = storage.transcript.forSubagent(subagentId, this.options.now);
-          return {
-            recordAcceptedInput: (sessionId, turnId, messages) =>
-              handle.writer.recordAcceptedInput(sessionId, turnId, messages),
-            recordDurableMessage: (sessionId, turnId, message) =>
-              handle.writer.recordDurableMessage(sessionId, turnId, message),
-            // 子代理收尾时排空 sidechain 写缓冲：sidechain 无 turn_result 强制
-            // flush，仅靠 50ms 兜底定时器（unref）——进程在间隔内退出丢尾条。
-            flush: () => handle.writer.flushCheckpoint(),
-            transcriptRelativePath: storage.transcript.relativeSubagentPath(subagentId),
-          };
-        },
-      };
-      const planFileManager = createPlanFileManager({ projectRoot });
-      const planTodoManager = createPlanTodoStateManager();
-      return {
-        context: contextRuntime,
-        fileHistory,
-        subagentTranscript,
-        elicitation,
-        planFileManager,
-        planTodoManager,
-      };
-    };
     const outputGate = buildPatentOutputGate({
       sessionKey: context.sessionKey,
       projectRoot,
