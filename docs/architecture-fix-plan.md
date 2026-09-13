@@ -63,6 +63,12 @@
 
 **发现**：`src/adapters/` 89 源文件 vs `tests/adapters/` 3 spec；WeCom（1760 行）/ Weixin（1459）/ Feishu（1332）无直接测试，`ChannelStartDeps` seam 未被利用。
 
+> **状态（2026-09-13）**：① 企微回调模式（`WeComCallbackChannel`）已补 **4 个契约测试**
+> （`tests/adapters/wecom-callback-contract.spec.ts`：URL 验证 AES 解密 / 入站闭环 → gateway + `message/send` /
+> 坏签名 403 且不进 gateway / 缺 `<Encrypt>` 400），测试用真实 `node:http` 回调 + 现场构造的企微密文与签名驱动；
+> 决策见 `docs/notes/implemented/2026-09-13-channel-contract-tests-wecom-callback.md`。
+> 余下：Weixin / Feishu 各 ≥2 契约测试，以及 `sendVideo` / `deliverCronResult` 的纯函数层抽取（为 P4c 铺路）。
+
 **改动点**：
 1. WeCom / Weixin / Feishu 各补 ≥2 契约测试：`node:http` 假服务器模拟回调 → 断言回复消息与加解密（微信/企微 AES）行为；先表征（characterization）后重构
 2. `sendVideo`（681 行）/ `deliverCronResult`（665 行）内媒体组装与消息分发逻辑抽纯函数层，配套单测（为 P4 拆文件铺路）
@@ -206,7 +212,7 @@
 | P2d | adapters→cli 反转（chatSearchCore 抽取） | ⬜ |
 | P2e | patent↔tool 环（证据协议归位 + commandRunner 迁 shared） | ⬜ |
 | P2f | pilot 环收尾（type-only 环处置） | ⬜ |
-| P3 | WeCom/Weixin/Feishu 契约测试 + 纯函数层抽取 | ⬜ |
+| P3 | WeCom/Weixin/Feishu 契约测试 + 纯函数层抽取 | 🔶 2026-09-13 第一卡（企微回调 4 个契约测试落地，`tests/adapters/` 5→6 spec）；余 Weixin / Feishu 各 ≥2 与 `sendVideo`/`deliverCronResult` 纯函数层 |
 | P4a | createLocalGateway 拆 4 builder | ✅ 2026-09-13（十刀收尾：组合根 `createLocalGateway.ts` 2730→448；`ProjectRuntimeRegistry.ts` 1663→642——工具面 / 输出门禁 / 依赖装配 / Agent 配置 / 运行时构造 / 权限 lifecycle 六段 + 四个 builder 均已成独立模块，详见 §二 P4 状态块） |
 | P4b | AgentLoop.run() 阶段骨架 + recovery/ 下沉 | ⬜ |
 | P4c | 三大渠道类按 protocol/state/handlers/render 切分 | ⬜ |
