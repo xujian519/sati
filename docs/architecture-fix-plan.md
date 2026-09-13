@@ -75,7 +75,7 @@
 
 **发现**：15 个后端文件 >780 行（`createLocalGateway.ts` 2394 居首）；`AgentLoop.run()` 约 1440 行（C2）；渠道类单文件 1300–1760 行。
 
-> **状态（2026-09-13）**：P4a 前八刀已落地，均为逐字迁移、行为不变——**组合根已达成 `≤600` 验收线**，第五刀起转入类内拆分：
+> **状态（2026-09-13）**：P4a 前九刀已落地，均为逐字迁移、行为不变——**组合根已达成 `≤600` 验收线**，第五刀起转入类内拆分：
 > ① 第一刀（2026-09-11）模块级 helper 外置为 `src/cli/{browserLaunchArgs,routerDefaults,gatewaySupport}.ts`，2730 → 2481 行；
 > ② 第二刀（2026-09-12）`ProjectRuntimeRegistry` 类（含两个私有类型、两个常量、两个 logger）迁出为 `src/cli/ProjectRuntimeRegistry.ts`，
 > `createLocalGateway.ts` **2449 → 804 行**，依赖方向收敛为单向 `createLocalGateway → ProjectRuntimeRegistry`；
@@ -104,16 +104,23 @@
 > `src/cli/agentSessionConfig.ts` 的 `buildAgentSessionConfig(deps)`——会话覆盖 / 活规则集 / policy deny
 > 三处注册表状态改用 accessor 延迟取数（`getLiveRuleSet()` 无覆盖时会 mint 并缓存 per-session 活数组），
 > 类内只留 16 行适配，`ProjectRuntimeRegistry.ts` **1183 → 1073 行**。
+> ⑨ 第九刀（2026-09-13，类内拆分第五刀）项目运行时构造（`resolve` 243 行 + 只服务于它的
+> `buildRouterEventBus` 80 行、`emitBackgroundTaskCompletion` 19 行 + `ProjectRuntime` 类型 43 行）
+> 抽为 `src/cli/projectRuntimeFactory.ts` 的 `createProjectRuntimeResolver(deps)`——`runtimes` /
+> `sessionWriters` 按活 Map 传入，extraTools / teamTools / kanban / gateway 四个取数保持延迟读取，
+> 公开字段 `routerEventBus` 经 `setRouterEventBus` 写回（回调返回同一 bus），`ProjectRuntime` 类型
+> 由构造者持有并导出，`ProjectRuntimeRegistry.ts` **1073 → 677 行**。
 > 决策见 `docs/notes/implemented/2026-09-11-createlocalgateway-helper-extraction.md`、
 > `docs/notes/implemented/2026-09-12-projectruntimeregistry-module-extraction.md`、
 > `docs/notes/implemented/2026-09-12-gateway-runtime-options-builder.md` 与
 > `docs/notes/implemented/2026-09-12-team-subsystem-builder.md`、
 > `docs/notes/implemented/2026-09-12-session-tool-surface-extraction.md`、
 > `docs/notes/implemented/2026-09-12-patent-output-gate-factory.md`、
-> `docs/notes/implemented/2026-09-12-session-dependency-assembly.md` 与
-> `docs/notes/implemented/2026-09-13-agent-session-config-extraction.md`。
+> `docs/notes/implemented/2026-09-12-session-dependency-assembly.md`、
+> `docs/notes/implemented/2026-09-13-agent-session-config-extraction.md` 与
+> `docs/notes/implemented/2026-09-13-project-runtime-factory.md`。
 > **剩余步骤**：`prepareSessionRuntime` 的权限 hook/lifecycle 段（唯一持有 `liveRuleSet.allow`
-> 活引用回写的部分）与 `resolve`（249 行）。
+> 活引用回写的部分）。
 
 **改动点**（按风险递增，每步独立提交）：
 1. **`createLocalGateway.ts`（2394）**：按子系统拆 4 个 builder（gateway / agent / tool / always-on + approval-store），组合根只做编排与依赖装配
@@ -195,7 +202,7 @@
 | P2e | patent↔tool 环（证据协议归位 + commandRunner 迁 shared） | ⬜ |
 | P2f | pilot 环收尾（type-only 环处置） | ⬜ |
 | P3 | WeCom/Weixin/Feishu 契约测试 + 纯函数层抽取 | ⬜ |
-| P4a | createLocalGateway 拆 4 builder | 🔶 2026-09-13 第八刀（Agent 配置构造 → `agentSessionConfig.ts`，registry 1183→1073；七 会话依赖装配 1384→1183；六 专利输出门禁 1563→1384；五 类内拆分会话工具面 1663→1563；四 team builder 635→448 **组合根达成 ≤600**；三 gateway builder 803→635；二 registry 独立成模块 2449→804；一 helper 外置 2730→2481）。余下：`prepareSessionRuntime` 权限 hook/lifecycle 段 / `resolve` 249 |
+| P4a | createLocalGateway 拆 4 builder | 🔶 2026-09-13 第九刀（项目运行时构造 → `projectRuntimeFactory.ts`，registry 1073→677；八 Agent 配置构造 1183→1073；七 会话依赖装配 1384→1183；六 专利输出门禁 1563→1384；五 类内拆分会话工具面 1663→1563；四 team builder 635→448 **组合根达成 ≤600**；三 gateway builder 803→635；二 registry 独立成模块 2449→804；一 helper 外置 2730→2481）。余下：`prepareSessionRuntime` 权限 hook/lifecycle 段 |
 | P4b | AgentLoop.run() 阶段骨架 + recovery/ 下沉 | ⬜ |
 | P4c | 三大渠道类按 protocol/state/handlers/render 切分 | ⬜ |
 | P5 | pilot 职责文档 + wiki 资产迁 assets/ | ⬜ |
