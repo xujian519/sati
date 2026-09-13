@@ -1,14 +1,6 @@
-/**
- * 项目运行时注册表：按 projectRoot 缓存并装配 ProjectRuntime（rules / tools / mcp / memory / model）。
- * 从 createLocalGateway.ts 逐字迁出（#147 P4a 第二刀），组合根只保留工厂编排。
- */
-
-import { appendFileSync, existsSync, mkdirSync as mkdirSyncFs, renameSync } from "node:fs";
-import { join as joinPath, resolve } from "node:path";
-import type { EdgeClawMemoryService } from "edgeclaw-memory-core";
+import { resolve } from "node:path";
 import { brandEnv, ENV_KEY } from "../env.js";
-import { resolveEmbeddingClient, resolveRerankClient } from "../model/embedding/index.js";
-import type { PilotConfigDiagnostic, PilotConfigSnapshot } from "../pilot/config/types.js";
+import { PilotConfigSnapshot } from "../pilot/config/types.js";
 import type { SessionConfigOverrides } from "../always-on/runtime/SessionConfigOverrides.js";
 import {
   type AgentRuntimeConfig,
@@ -19,30 +11,12 @@ import {
 import type { TeamToolsOptions } from "../tool/builtin/team/index.js";
 import { type ScopeToolsOptions } from "../agent/sub/scopeTools.js";
 import { TeamDb } from "../agent/team/index.js";
-import type { MemoryResolver } from "../context/index.js";
-import {
-  createEdgeClawMemoryProviderFromConfig,
-  PluginRuntimeExtensionResolver,
-  TokenAccountingRuntime,
-} from "../context/index.js";
-import type { KnowledgeDbPaths } from "../knowledge/index.js";
-import {
-  buildKnowledgeResolvers,
-  CompositeMemoryResolver,
-  createCaseLawSemanticSource,
-  createKnowledgeEmbeddingSearch,
-  getOrCreatePersonalNoteIndex,
-  KnowledgeRuntimeStats,
-  logKnowledgeCapabilities,
-  resolveKnowledgeCapabilities,
-  resolveKnowledgeDbPaths,
-} from "../knowledge/index.js";
-import { setCaseLawSemanticSource, setPersonalNoteSemanticSource } from "../tool/builtin/patentCaseSearch.js";
+import { PluginRuntimeExtensionResolver } from "../context/index.js";
+import { resolveKnowledgeCapabilities, resolveKnowledgeDbPaths } from "../knowledge/index.js";
 import type { KnowledgeCapabilitiesResult } from "../gateway/protocol/types.js";
-import { HookRuntime, PluginRuntime } from "../extension/index.js";
+import { HookRuntime } from "../extension/index.js";
 import { LifecycleRuntime } from "../lifecycle/index.js";
 import {
-  type GatewayProjectStorageOptions,
   type GatewaySessionContext,
   type GatewaySubmitTurnInput,
   InProcessGateway,
@@ -60,12 +34,9 @@ import {
   McpRuntime,
   parsePluginMcpServers,
 } from "../mcp/index.js";
-import { createModelRuntime, type ModelRuntime } from "../model/index.js";
-import { createPolicyKey, normalizeRetryReason } from "../model/streaming/retryState.js";
-import { applyReplayEnvHooks } from "../test-support/llm-replay/index.js";
+import { type ModelRuntime } from "../model/index.js";
 import { MethodologyRegistry } from "../methodology/index.js";
 import { type PermissionRule } from "../permission/index.js";
-import { loadPilotConfig } from "../pilot/index.js";
 import {
   createAgentProjectSessionStorage,
   listProjectSessions,
@@ -74,14 +45,14 @@ import {
   TaskResumeScanner,
 } from "../session/index.js";
 import { createSessionTitleGenerator } from "../session/title/SessionTitleGenerator.js";
-import { type BackgroundTaskCompletionEvent, BackgroundTaskRuntime } from "../task/runtime/BackgroundTaskRuntime.js";
-import type { SatiUnavailableToolDiagnostic } from "../tool/index.js";
-import { createBuiltinRegistry, type SatiToolDefinition, type ToolRegistry } from "../tool/index.js";
-import { createRouterRuntime, type RouterRuntime } from "../router/index.js";
-import type { RouterEvent, RouterEventBus } from "../router/protocol/events.js";
-import { loadBuiltinPlugins } from "../extension/plugins/builtin/loadBuiltinPlugins.js";
+import { type SatiToolDefinition } from "../tool/index.js";
+import { RouterEventBus } from "../router/protocol/events.js";
 import { logger, type TelemetryClient } from "../telemetry/index.js";
-import { ensureRouterConfig } from "./routerDefaults.js";
+import {
+  createProjectRuntimeResolver,
+  type ProjectRuntime,
+  type ProjectRuntimeResolver,
+} from "./projectRuntimeFactory.js";
 import { mergeSessionDependencies, syncRoleDefinitions } from "./gatewaySupport.js";
 import { registerMcpAuxTools, registerToolsIfAbsent } from "./mcpToolRegistration.js";
 import { provisionSessionTools } from "./sessionToolSurface.js";
@@ -108,54 +79,8 @@ type ProjectRuntimeRegistryOptions = {
   onProjectActivated?: (projectRoot: string) => void;
 };
 
-type ProjectRuntime = {
-  projectRoot: string;
-  snapshot: ReturnType<typeof loadPilotConfig>;
-  model: ModelRuntime;
-  tokenAccounting: TokenAccountingRuntime;
-  router: RouterRuntime;
-  pluginRuntime: PluginRuntime;
-  tools: ToolRegistry;
-  unavailableTools?: SatiUnavailableToolDiagnostic[];
-  projectStorage: GatewayProjectStorageOptions;
-  /** Per-project background task runtime (shared across sessions). C5. */
-  backgroundTasks: BackgroundTaskRuntime;
-  /** Memory provider, undefined when memory is disabled in PilotConfig. */
-  memory?: MemoryResolver;
-  /** Backing memory service for maintenance / introspection. */
-  memoryService?: EdgeClawMemoryService;
-  /** 知识库路径探测结果（knowledge.capabilities 可观测性出口数据源）。 */
-  knowledgePaths?: KnowledgeDbPaths;
-  /** 知识库运行时状态聚合（各 resolver 打点；gateway 出口读快照）。 */
-  knowledgeStats?: KnowledgeRuntimeStats;
-  /** 是否已配置 embedding 客户端（memory.embedding）。 */
-  knowledgeEmbeddingConfigured?: boolean;
-  /** 是否已配置 rerank 客户端（memory.embedding.rerank）。 */
-  knowledgeRerankConfigured?: boolean;
-  /** Coalesced project-level memory maintenance loop. */
-  memoryMaintenanceInFlight?: Promise<void>;
-  memoryMaintenanceRequested?: boolean;
-  /**
-   * Lazily-started MCP runtime (C1). Built on first session creation by
-   * `ensureMcpReady()` because plugin refresh + connect is async.
-   * Only contains non-`perSession` servers (shared across sessions).
-   */
-  mcpRuntime?: McpRuntime;
-  /** Tracks the in-flight `ensureMcpReady` promise so concurrent sessions share it. */
-  mcpReady?: Promise<void>;
-  /**
-   * Server specs marked `perSession: true`. These are NOT started at the
-   * project level — each agent session creates its own `McpRuntime` from
-   * these specs so that e.g. browser-use gets an isolated process per
-   * session.  Populated during `ensureMcpReady()`.
-   */
-  perSessionServerSpecs?: import("../mcp/protocol/types.js").SatiMcpServerSpec[];
-};
-
 /** M5：任务续算扫描启动延时——避开启动期 transcript 读盘竞争。 */
 const TASK_RESUME_SCAN_DELAY_MS = 3_000;
-/** M4：路由事件审计落盘批量 flush 间隔（unref，不持 event loop）。 */
-const ROUTER_EVENT_FLUSH_INTERVAL_MS = 250;
 
 export class ProjectRuntimeRegistry {
   private readonly runtimes = new Map<string, ProjectRuntime>();
@@ -220,9 +145,29 @@ export class ProjectRuntimeRegistry {
   /** 成员挂起审批持久化（P0-3）：createLocalGateway 经 setTeamDb 注入，输出门禁挂起/决时写 teams.db——审批总线为内存态，崩溃即失。 */
   private _teamDb?: TeamDb;
 
+  /** 项目运行时装配器（P4a 第九刀，见 ./projectRuntimeFactory.ts）。 */
+  private readonly runtimeResolver: ProjectRuntimeResolver;
+
   constructor(private readonly options: ProjectRuntimeRegistryOptions) {
     this._extraTools = options.extraTools ? [...options.extraTools] : [];
     this._sessionOverrides = options.sessionOverrides;
+    this.runtimeResolver = createProjectRuntimeResolver({
+      fallbackProjectRoot: options.fallbackProjectRoot,
+      pilotHome: options.pilotHome,
+      builtinSkillsRoot: options.builtinSkillsRoot,
+      env: options.env,
+      now: options.now,
+      telemetry: options.telemetry,
+      modelFactory: options.modelFactory,
+      onProjectActivated: options.onProjectActivated,
+      runtimes: this.runtimes,
+      sessionWriters: this.sessionWriters,
+      getExtraTools: () => this._extraTools,
+      getTeamTools: () => this._teamTools,
+      getKanbanBoardManager: () => this._kanbanBoardManager,
+      getGateway: () => this.gateway,
+      setRouterEventBus: bus => (this.routerEventBus = bus),
+    });
   }
 
   /**
@@ -239,107 +184,6 @@ export class ProjectRuntimeRegistry {
 
   setGateway(gateway: InProcessGateway): void {
     this.gateway = gateway;
-  }
-
-  private emitBackgroundTaskCompletion(event: BackgroundTaskCompletionEvent): void {
-    if (!event.sessionId || !this.gateway) {
-      return;
-    }
-    const outputPreview = event.outputPreview.trimEnd();
-    this.gateway.emitForSession(event.sessionId, {
-      type: "agent_status",
-      event: "background_task_completed",
-      detail: {
-        taskId: event.taskId,
-        status: event.status,
-        exitCode: event.exitCode ?? null,
-        totalBytes: event.totalBytes,
-        startedAt: event.startedAt,
-        endedAt: event.endedAt,
-        ...(outputPreview ? { outputPreview } : {}),
-      },
-    });
-  }
-
-  private buildRouterEventBus(): RouterEventBus {
-    const pilotHome = this.options.pilotHome;
-    const routerDir = joinPath(pilotHome, "router");
-    try {
-      mkdirSyncFs(routerDir, { recursive: true });
-    } catch {
-      // 目录已存在或创建失败：后续事件写盘会再试，此处失败不阻断（best-effort）。
-    }
-    const eventsPath = joinPath(routerDir, "events.jsonl");
-    try {
-      const oldPath = joinPath(pilotHome, "router-events.jsonl");
-      if (!existsSync(eventsPath) && existsSync(oldPath)) {
-        renameSync(oldPath, eventsPath);
-      }
-    } catch {
-      // 迁移失败：沿用旧文件，events.jsonl 仅审计用，失败不影响主流程（best-effort）。
-    }
-    // M4：逐事件 appendFileSync 改缓冲 + 250ms 批量 flush。events.jsonl 仅供
-    // 人工审计（bootstrap-sati-config 注释），无程序化消费/重建路径——尾部
-    // 丢失可接受；flush timer unref 不持 event loop，dispose 时同步 flush 收尾。
-    const pendingEvents: RouterEvent[] = [];
-    let flushTimer: ReturnType<typeof setTimeout> | null = null;
-    const flushPendingEvents = () => {
-      if (flushTimer !== null) {
-        clearTimeout(flushTimer);
-        flushTimer = null;
-      }
-      if (pendingEvents.length === 0) return;
-      const batch = pendingEvents.splice(0, pendingEvents.length);
-      try {
-        appendFileSync(eventsPath, batch.map(event => JSON.stringify(event)).join("\n") + "\n");
-      } catch {
-        // 事件批量落盘失败：丢弃该批，不中断 agent turn，下批 flush 再试（best-effort）。
-      }
-    };
-    const scheduleFlush = () => {
-      if (flushTimer !== null) return;
-      flushTimer = setTimeout(() => {
-        flushTimer = null;
-        flushPendingEvents();
-      }, ROUTER_EVENT_FLUSH_INTERVAL_MS);
-      flushTimer.unref?.();
-    };
-    return {
-      emit: (event: RouterEvent) => {
-        pendingEvents.push(event);
-        scheduleFlush();
-        if (event.type === "sati_router_retry_progress") {
-          try {
-            this.gateway?.broadcastRetryProgress(event);
-          } catch {
-            // 重试进度广播失败：事件仅审计展示，丢一条不影响重试链路（best-effort）。
-          }
-          // 跨进程重启续算 T-A：重试调度写入该会话 transcript 权威序列（log-only）。
-          // 事件含 sessionId/turnId；无 turnId（子代理上下文）或会话未登记时跳过。
-          try {
-            if (typeof event.turnId === "string") {
-              const writer = this.sessionWriters.get(event.sessionId);
-              if (writer?.recordRetrySchedule) {
-                void writer.recordRetrySchedule(event.sessionId, event.turnId, {
-                  retryId: event.retryId ?? "",
-                  provider: event.provider,
-                  model: event.model,
-                  policyKey: createPolicyKey(),
-                  attempt: event.attempt,
-                  maxAttempts: event.maxAttempts,
-                  delayMs: event.delayMs,
-                  reason: normalizeRetryReason(event.reason),
-                  scheduledAt: this.options.now().toISOString(),
-                });
-              }
-            }
-          } catch {
-            // 重试调度落盘失败：不中断 agent turn，下轮或续算路径再补（best-effort）。
-          }
-        }
-      },
-      flush: flushPendingEvents,
-    };
   }
 
   /**
@@ -473,247 +317,7 @@ export class ProjectRuntimeRegistry {
   }
 
   resolve(projectKey?: string): ProjectRuntime {
-    const projectRoot = resolve(projectKey ?? this.options.fallbackProjectRoot);
-    this.options.onProjectActivated?.(projectRoot);
-    const cached = this.runtimes.get(projectRoot);
-    if (cached) {
-      return cached;
-    }
-
-    const snapshot = loadPilotConfig({ projectRoot, env: this.options.env });
-    const baseModel = this.options.modelFactory
-      ? this.options.modelFactory(snapshot)
-      : createModelRuntime(snapshot.config.model);
-    // Phase 4 T1: replay seam hooks. SATI_LLM_REPLAY_RECORD_ROOT records every
-    // stream the gateway drives; SATI_LLM_REPLAY_ROOT replays a fixture without
-    // an API key. Unset in normal operation (applyReplayEnvHooks is a no-op).
-    const model = applyReplayEnvHooks(baseModel, this.options.env);
-    const tokenAccounting = new TokenAccountingRuntime({
-      modelConfig: snapshot.config.model,
-    });
-    const pluginRuntime = new PluginRuntime({
-      projectRoot,
-      pilotHome: this.options.pilotHome,
-      builtinSkillsRoot: this.options.builtinSkillsRoot,
-      builtinPlugins: loadBuiltinPlugins(),
-      builtinPluginsEnabled: snapshot.config.extension.builtinPluginsEnabled,
-    });
-    const routerConfig = ensureRouterConfig(snapshot.config.router, snapshot.config.agent.model);
-    const router = createRouterRuntime(routerConfig, {
-      modelRuntime: model,
-      now: this.options.now,
-      customRouterRegistry: pluginRuntime,
-      loadSkillPrompt: extensionId => pluginRuntime.loadSkillPrompt(extensionId),
-      events: (this.routerEventBus = this.buildRouterEventBus()),
-      telemetry: this.options.telemetry,
-    });
-    const backgroundTasks = new BackgroundTaskRuntime({
-      now: this.options.now,
-      onCompletion: event => this.emitBackgroundTaskCompletion(event),
-    });
-    const webSearchConfig = snapshot.config.tools?.webSearch;
-    const paperSearchConfig = snapshot.config.tools?.paperSearch;
-
-    // 语义检索（可选）：embedding 端点配置解析一次，分发给记忆、知识库与附图检索。
-    const knowledgePaths = resolveKnowledgeDbPaths();
-    const embeddingDiagnostics: PilotConfigDiagnostic[] = [];
-    const embeddingClient = resolveEmbeddingClient(
-      snapshot.config.memory?.embedding,
-      snapshot.config.model,
-      embeddingDiagnostics,
-    );
-    // 重排（可选，阶段 C）：cross-encoder 对召回候选重新打分
-    const rerankClient = resolveRerankClient(
-      snapshot.config.memory?.embedding?.rerank,
-      snapshot.config.model,
-      embeddingDiagnostics,
-    );
-    for (const diagnostic of embeddingDiagnostics) {
-      logger.warn(`${diagnostic.path}: ${diagnostic.message}`);
-    }
-
-    // 知识库向量库目录（embedding 客户端解析见上，记忆/知识库/附图检索共用）。
-    // 记忆服务需在 createBuiltinRegistry 之前创建：memory_* 工具随注册表闭包注入。
-    const embeddingDir = joinPath(knowledgePaths.dataDir, "embeddings");
-
-    const memory = createEdgeClawMemoryProviderFromConfig({
-      config: snapshot.config.memory,
-      modelConfig: snapshot.config.model,
-      agentModel: snapshot.config.agent.model.id,
-      projectRoot,
-      now: this.options.now,
-      telemetry: this.options.telemetry,
-      embeddingClient,
-      embeddingDir,
-    });
-
-    const tools = createBuiltinRegistry({
-      ...(this._teamTools ? { team: this._teamTools } : {}),
-      ...(this._kanbanBoardManager ? { kanban: this._kanbanBoardManager } : {}),
-      backgroundTasks: { runtime: backgroundTasks },
-      searchPatentFigure: { embeddingClient },
-      // 文书排版调参面板工具（opt-in：无参注册会破坏 llm-replay fixture 工具集匹配）
-      documentStyle: {},
-      // J-Space 工作区工具（opt-in：与工作区账本开关联动，避免破坏 fixture 工具集匹配）
-      workspaceLedgerTools: brandEnv(this.options.env, ENV_KEY.WORKSPACE_LEDGER_ENABLED) === "1",
-      ...(memory?.service ? { memory: { service: memory.service } } : {}),
-      readSkill: {
-        loader: name => pluginRuntime.loadSkillPrompt(name),
-        lister: () => pluginRuntime.getAllSkills(),
-      },
-      // Pass the YAML-configured web-search provider through to the built-in
-      // `web_search` tool. When absent, the tool may infer GLM/Tavily from
-      // provider-specific environment variables.
-      ...(webSearchConfig?.enabled === false
-        ? { webSearch: false as const }
-        : webSearchConfig
-          ? {
-              webSearch: {
-                ...(webSearchConfig.provider ? { provider: webSearchConfig.provider } : {}),
-                ...(webSearchConfig.apiKey ? { apiKey: webSearchConfig.apiKey } : {}),
-                ...(webSearchConfig.endpoint ? { endpoint: webSearchConfig.endpoint } : {}),
-                ...(webSearchConfig.customProvider ? { customProvider: webSearchConfig.customProvider } : {}),
-              },
-            }
-          : {}),
-      // Pass the YAML-configured literature sources through to the built-in
-      // `paper_search` / `paper_list_sources` tools. Config shape matches
-      // CreateLiteratureRegistryOptions; undefined fields fall back to defaults
-      // (all sources enabled, free no-key).
-      ...(paperSearchConfig?.enabled === false
-        ? { paperSearch: false as const }
-        : paperSearchConfig
-          ? {
-              paperSearch: {
-                arxiv: paperSearchConfig.arxiv,
-                openalex: paperSearchConfig.openalex,
-                semanticScholar: paperSearchConfig.semanticScholar,
-                crossref: paperSearchConfig.crossref,
-                openalexMailto: paperSearchConfig.openalexMailto,
-                semanticScholarApiKey: paperSearchConfig.semanticScholarApiKey,
-              },
-            }
-          : {}),
-      // Pass the YAML-configured patents.downloadDir through to the built-in
-      // `patent_pdf_download` tool (runtime-live: read at every execution).
-      ...(snapshot.config.patents?.downloadDir
-        ? { patentPdfDownload: { patentsConfigProvider: () => snapshot.config.patents } }
-        : {}),
-      // Pass the YAML-configured patents.modelHints through to
-      // `patent_workflow_run` (judgeModels multi-judge consensus + per-node
-      // model tiering). Absent → hints ignored, everything uses the session model.
-      ...(snapshot.config.patents?.modelHints ? { patentModelHints: snapshot.config.patents.modelHints } : {}),
-    });
-    for (const tool of this._extraTools) {
-      tools.register(tool);
-    }
-
-    // 知识库 MemoryResolver 组装：EdgeClaw 会话记忆 + 专利知识库 + 法律知识库。
-    // 数据库文件缺失/打开失败时自动降级（见 src/knowledge/assemble.ts）。
-    const knowledgeStats = new KnowledgeRuntimeStats();
-    const knowledgeResolvers: Array<MemoryResolver> = [];
-    if (memory?.provider) knowledgeResolvers.push(memory.provider);
-    knowledgeResolvers.push(
-      ...buildKnowledgeResolvers({
-        patentKgDb: knowledgePaths.patentKgDb,
-        lawDb: knowledgePaths.lawDb,
-        knowledgeDb: knowledgePaths.knowledgeDb,
-        wikiDir: knowledgePaths.wikiDir,
-        vectorsDb: knowledgePaths.vectorsDb,
-        embeddingDir,
-        embedding: embeddingClient,
-        rerank: rerankClient,
-        rerankTopN: snapshot.config.memory?.embedding?.rerank?.topN,
-        indexWiki: snapshot.config.memory?.embedding?.indexWiki !== false,
-        stats: knowledgeStats,
-        logger: { warn: (...args) => logger.warn("knowledge:", ...args) },
-      }),
-    );
-
-    // 判例语义召回源注入（patent_case_search 工具）：knowledge.db embeddings(case/judgment)
-    // + 当前 embedding client。embedding 未配置或 knowledge.db 不可用时保持语义路关闭。
-    if (embeddingClient && knowledgePaths.caseDb) {
-      try {
-        const caseEmbeddings = createKnowledgeEmbeddingSearch({
-          dbPath: knowledgePaths.caseDb,
-          docTypes: ["case", "judgment"],
-          logger: { warn: (...args) => logger.warn("knowledge:", ...args) },
-        });
-        setCaseLawSemanticSource(createCaseLawSemanticSource(texts => embeddingClient!.embed(texts), caseEmbeddings));
-        // P4 向量预热：异步分页加载（每页 setImmediate 让出）不阻塞 gateway 启动，
-        // 因此 setTimeout 0 即安全——首个语义检索前矩阵大概率已就绪（ready），
-        // 未就绪时 search 也会返回 [] 并兜底触发预热，不产生 embed 浪费
-        // （case-law searchSemantic 未 ready 跳过语义路）。
-        setTimeout(() => {
-          void caseEmbeddings.loadAsync();
-        }, 0);
-      } catch (error) {
-        logger.warn("knowledge: 判例语义召回源注入失败，patent_case_search 语义路关闭:", error);
-      }
-    }
-
-    // personal_note 语义召回源注入（patent_case_search 工具）：项目沉淀笔记（OA 答复要点等）
-    // 可被语义召回。数据源固定为 knowledgeDb（knowledge_note_save 写入地），与组装层
-    // 单例键一致；进程级单例与组装层共享。引擎侧回源走 caseDb——两者分离
-    // （SATI_CASE_DB）时笔记命中无法经 caseDb 引擎回源，显式告警关闭该路。
-    if (embeddingClient && knowledgePaths.knowledgeDb) {
-      try {
-        const noteIndex = getOrCreatePersonalNoteIndex({
-          dbPath: knowledgePaths.knowledgeDb,
-          client: embeddingClient,
-          storePath: joinPath(embeddingDir, "personal-note.jsonl"),
-          logger: { warn: (...args) => logger.warn("knowledge:", ...args) },
-        });
-        if (knowledgePaths.caseDb && knowledgePaths.caseDb !== knowledgePaths.knowledgeDb) {
-          logger.warn(
-            "knowledge: personal_note 库与判例库分离（SATI_CASE_DB），笔记命中无法回源，工具侧笔记语义路关闭。",
-          );
-        } else {
-          setPersonalNoteSemanticSource(noteIndex);
-        }
-      } catch (error) {
-        logger.warn("knowledge: personal_note 语义召回源注入失败，笔记语义路关闭:", error);
-      }
-    }
-
-    // 知识能力自检：数据/配置缺失时输出可读清单，避免静默降级。
-    // 传 runtime 快照让 KG FTS tokenizer 等运行时能力项（如 FTS5 缺失回退 LIKE）
-    // 也出现在启动输出里——provider 构造时已同步完成探测。
-    logKnowledgeCapabilities(
-      knowledgePaths,
-      {
-        embeddingConfigured: Boolean(embeddingClient),
-        rerankConfigured: Boolean(rerankClient),
-        runtime: knowledgeStats.snapshot(),
-      },
-      console,
-    );
-
-    const memoryResolver =
-      knowledgeResolvers.length === 1 ? knowledgeResolvers[0] : new CompositeMemoryResolver(knowledgeResolvers);
-
-    const runtime: ProjectRuntime = {
-      projectRoot,
-      snapshot,
-      model,
-      tokenAccounting,
-      router,
-      pluginRuntime,
-      tools,
-      backgroundTasks,
-      memory: memoryResolver,
-      memoryService: memory?.service,
-      knowledgePaths,
-      knowledgeStats,
-      knowledgeEmbeddingConfigured: Boolean(embeddingClient),
-      knowledgeRerankConfigured: Boolean(rerankClient),
-      projectStorage: {
-        projectRoot,
-        pilotHome: this.options.pilotHome,
-      },
-    };
-    this.runtimes.set(projectRoot, runtime);
-    return runtime;
+    return this.runtimeResolver.resolve(projectKey);
   }
 
   /**
