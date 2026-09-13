@@ -70,12 +70,13 @@
     - **2026-09-12（第五刀，类内拆分）**：(c) **browser-use 泄漏已处置**——`prepareSessionRuntime` 的会话工具面阶段（113 行：每会话 MCP + unattended excludeTools + always_on 剥离 + 可用性过滤 + 成员角色裁剪，含截图目录 mkdir 与逐 spec 参数改写）抽到 `src/cli/sessionToolSurface.ts`（`provisionSessionTools(input)`），registry 1663 → 1563 行；决策见 `docs/notes/implemented/2026-09-12-session-tool-surface-extraction.md`。剩余：(b) 工厂内 team 成员回收闭包双实现 + 类内其余巨方法（`prepareSessionRuntime` 余两段 / `resolve` 249 / `createAgentConfig` 127）。
     - **2026-09-12（第六刀，类内拆分）**：专利输出门禁构造（167 行，每会话 `PatentOutputGate` + HITL 审批闭环 + 决策溯源旁路 + policy-bridge deny 编译 + 决策反馈回流）抽到 `src/cli/patentOutputGateFactory.ts`（`buildPatentOutputGate(deps)`，gateway/teamDb/sessionOverrides 以 accessor 延迟取数），registry 1563 → 1384 行；决策见 `docs/notes/implemented/2026-09-12-patent-output-gate-factory.md`。
   - **2026-08-27 新增上帝函数 2 个**：`GatewayWsConnection.dispatchRequest`（316 行 switch，见 TD-GATEWAY-002）、kanban `ui/src/components/kanban/hooks/useBoardState.ts::useBoardState`（398 行，见 TD-UI-CHAT-N14）。
-- **TD-SIZE-001** · 大文件：`SkillsV2.tsx` 2503 · `AgentLoop.ts` 2305 · `ProjectRuntimeRegistry.ts` 1183（2026-09-12 由 `createLocalGateway.ts` 2437 拆出后经五刀类内拆分：会话工具面 / 专利输出门禁 / 会话依赖装配，组合根降至 448） · `sati-bridge.js` 2055 · `routes/taskmaster.js` 1888 · `PdfDocumentPreview.tsx` 1861 · `WeComChannel.ts` 1761
+- **TD-SIZE-001** · 大文件：`SkillsV2.tsx` 2503 · `AgentLoop.ts` 2305 · `ProjectRuntimeRegistry.ts` 1073（2026-09-12 由 `createLocalGateway.ts` 2437 拆出后经六刀类内拆分：会话工具面 / 专利输出门禁 / 会话依赖装配 / Agent 配置构造，组合根降至 448） · `sati-bridge.js` 2055 · `routes/taskmaster.js` 1888 · `PdfDocumentPreview.tsx` 1861 · `WeComChannel.ts` 1761
   - 工作量：L · 严重级：P2 · 状态：new
 
 ### 测试
 - **TD-TEST-001** · 主链路核心缺直接单测（见各模块节 *_GATEWAY* / *_ROUTER*）。工作量：M · 严重级：P1 · 状态：new
 - **TD-TEST-002** · 极薄模块（1 测试文件）：`fs` `lifecycle` `network` `status` `browser`。工作量：S ×5 · 严重级：P3 · 状态：new
+- **TD-TEST-003** · `tests/patent/figuregen/dot.spec.ts` 的两个「真机集成」用例按 `resolveDotBinary()`（PATH 扫描）在**注册期**决定 skip，而本机默认 shell PATH 不含 `/opt/homebrew/bin`（brew 前缀）——同一份 `dist` 在带/不带该前缀的 shell 下 skip 数在 4/6 之间跳（2026-09-13 用探针用例定位：load-time PATH 无前缀 → 两用例 skip）。建议 `resolveDotBinary()` 兜底探测常见 brew 前缀或优先读 `SATI_GRAPHVIZ_DOT`。工作量：S · 严重级：P3 · 状态：new
 
 ### 文档漂移
 - **TD-I18N-001** · `teamPanel` namespace 缺 2 个 zh key / 1 个 en key。工作量：S · 严重级：P3 · 状态：done（2026-09-11 复核：现为 en 44 / zh 43，仅余 `pill.teamCount_one` —— i18next 的 zh 复数类别只有 `other`，该 key 在 zh 侧按设计不存在，非缺陷；C35 已修 `pill.teamCount` → `pill.teamCount_other` 并加复数回归用例）
