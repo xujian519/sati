@@ -94,14 +94,20 @@
 > 决策溯源旁路 / policy-bridge deny 编译 / 决策反馈回流）抽为 `src/cli/patentOutputGateFactory.ts` 的
 > `buildPatentOutputGate(deps)`——gateway / teamDb / sessionOverrides 三处可变绑定改用 accessor 延迟取数，
 > policyDenyRules 表登记留在调用方，`ProjectRuntimeRegistry.ts` **1563 → 1384 行**。
+> ⑦ 第七刀（2026-09-12，类内拆分第三刀）会话依赖装配（189 行：`baseDependencies` 装配 +
+> `extendDependencies(storage)` 闭包——上下文运行时/文件历史/子代理转录钩子/elicitation 通道/plan 管理器）
+> 抽为 `src/cli/sessionDependencyAssembly.ts` 的 `buildSessionDependencies(deps)`——`lifecycle`/`extension`
+> 按值传入（权限 hook 注册在同一 HookRuntime 上，不得重建），gateway 仍走取数函数，
+> `ProjectRuntimeRegistry.ts` **1384 → 1182 行**。
 > 决策见 `docs/notes/implemented/2026-09-11-createlocalgateway-helper-extraction.md`、
 > `docs/notes/implemented/2026-09-12-projectruntimeregistry-module-extraction.md`、
 > `docs/notes/implemented/2026-09-12-gateway-runtime-options-builder.md` 与
 > `docs/notes/implemented/2026-09-12-team-subsystem-builder.md`、
-> `docs/notes/implemented/2026-09-12-session-tool-surface-extraction.md` 与
-> `docs/notes/implemented/2026-09-12-patent-output-gate-factory.md`。
-> **剩余步骤**：`prepareSessionRuntime` 其余两段（权限 hook/lifecycle、baseDependencies 装配）、
-> `resolve`（249 行）、`createAgentConfig`（127 行）。
+> `docs/notes/implemented/2026-09-12-session-tool-surface-extraction.md`、
+> `docs/notes/implemented/2026-09-12-patent-output-gate-factory.md` 与
+> `docs/notes/implemented/2026-09-12-session-dependency-assembly.md`。
+> **剩余步骤**：`prepareSessionRuntime` 的权限 hook/lifecycle 段、`resolve`（249 行）、
+> `createAgentConfig`（127 行）。
 
 **改动点**（按风险递增，每步独立提交）：
 1. **`createLocalGateway.ts`（2394）**：按子系统拆 4 个 builder（gateway / agent / tool / always-on + approval-store），组合根只做编排与依赖装配
@@ -183,7 +189,7 @@
 | P2e | patent↔tool 环（证据协议归位 + commandRunner 迁 shared） | ⬜ |
 | P2f | pilot 环收尾（type-only 环处置） | ⬜ |
 | P3 | WeCom/Weixin/Feishu 契约测试 + 纯函数层抽取 | ⬜ |
-| P4a | createLocalGateway 拆 4 builder | 🔶 2026-09-12 第六刀（专利输出门禁 → `patentOutputGateFactory.ts`，registry 1563→1384；五 类内拆分会话工具面 1663→1563；四 team builder 635→448 **组合根达成 ≤600**；三 gateway builder 803→635；二 registry 独立成模块 2449→804；一 helper 外置 2730→2481）。余下：`prepareSessionRuntime` 权限 hook/lifecycle + baseDependencies 段 / `resolve` 249 / `createAgentConfig` 127 |
+| P4a | createLocalGateway 拆 4 builder | 🔶 2026-09-12 第七刀（会话依赖装配 → `sessionDependencyAssembly.ts`，registry 1384→1182；六 专利输出门禁 1563→1384；五 类内拆分会话工具面 1663→1563；四 team builder 635→448 **组合根达成 ≤600**；三 gateway builder 803→635；二 registry 独立成模块 2449→804；一 helper 外置 2730→2481）。余下：`prepareSessionRuntime` 权限 hook/lifecycle 段 / `resolve` 249 / `createAgentConfig` 127 |
 | P4b | AgentLoop.run() 阶段骨架 + recovery/ 下沉 | ⬜ |
 | P4c | 三大渠道类按 protocol/state/handlers/render 切分 | ⬜ |
 | P5 | pilot 职责文档 + wiki 资产迁 assets/ | ⬜ |
