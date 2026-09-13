@@ -98,7 +98,7 @@
 > `extendDependencies(storage)` 闭包——上下文运行时/文件历史/子代理转录钩子/elicitation 通道/plan 管理器）
 > 抽为 `src/cli/sessionDependencyAssembly.ts` 的 `buildSessionDependencies(deps)`——`lifecycle`/`extension`
 > 按值传入（权限 hook 注册在同一 HookRuntime 上，不得重建），gateway 仍走取数函数，
-> `ProjectRuntimeRegistry.ts` **1384 → 1182 行**。
+> `ProjectRuntimeRegistry.ts` **1384 → 1183 行**。
 > 决策见 `docs/notes/implemented/2026-09-11-createlocalgateway-helper-extraction.md`、
 > `docs/notes/implemented/2026-09-12-projectruntimeregistry-module-extraction.md`、
 > `docs/notes/implemented/2026-09-12-gateway-runtime-options-builder.md` 与
@@ -189,7 +189,7 @@
 | P2e | patent↔tool 环（证据协议归位 + commandRunner 迁 shared） | ⬜ |
 | P2f | pilot 环收尾（type-only 环处置） | ⬜ |
 | P3 | WeCom/Weixin/Feishu 契约测试 + 纯函数层抽取 | ⬜ |
-| P4a | createLocalGateway 拆 4 builder | 🔶 2026-09-12 第七刀（会话依赖装配 → `sessionDependencyAssembly.ts`，registry 1384→1182；六 专利输出门禁 1563→1384；五 类内拆分会话工具面 1663→1563；四 team builder 635→448 **组合根达成 ≤600**；三 gateway builder 803→635；二 registry 独立成模块 2449→804；一 helper 外置 2730→2481）。余下：`prepareSessionRuntime` 权限 hook/lifecycle 段 / `resolve` 249 / `createAgentConfig` 127 |
+| P4a | createLocalGateway 拆 4 builder | 🔶 2026-09-12 第七刀（会话依赖装配 → `sessionDependencyAssembly.ts`，registry 1384→1183；六 专利输出门禁 1563→1384；五 类内拆分会话工具面 1663→1563；四 team builder 635→448 **组合根达成 ≤600**；三 gateway builder 803→635；二 registry 独立成模块 2449→804；一 helper 外置 2730→2481）。余下：`prepareSessionRuntime` 权限 hook/lifecycle 段 / `resolve` 249 / `createAgentConfig` 127 |
 | P4b | AgentLoop.run() 阶段骨架 + recovery/ 下沉 | ⬜ |
 | P4c | 三大渠道类按 protocol/state/handlers/render 切分 | ⬜ |
 | P5 | pilot 职责文档 + wiki 资产迁 assets/ | ⬜ |
