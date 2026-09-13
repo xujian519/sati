@@ -70,7 +70,7 @@
     - **2026-09-12（第五刀，类内拆分）**：(c) **browser-use 泄漏已处置**——`prepareSessionRuntime` 的会话工具面阶段（113 行：每会话 MCP + unattended excludeTools + always_on 剥离 + 可用性过滤 + 成员角色裁剪，含截图目录 mkdir 与逐 spec 参数改写）抽到 `src/cli/sessionToolSurface.ts`（`provisionSessionTools(input)`），registry 1663 → 1563 行；决策见 `docs/notes/implemented/2026-09-12-session-tool-surface-extraction.md`。剩余：(b) 工厂内 team 成员回收闭包双实现 + 类内其余巨方法（`prepareSessionRuntime` 余两段 / `resolve` 249 / `createAgentConfig` 127）。
     - **2026-09-12（第六刀，类内拆分）**：专利输出门禁构造（167 行，每会话 `PatentOutputGate` + HITL 审批闭环 + 决策溯源旁路 + policy-bridge deny 编译 + 决策反馈回流）抽到 `src/cli/patentOutputGateFactory.ts`（`buildPatentOutputGate(deps)`，gateway/teamDb/sessionOverrides 以 accessor 延迟取数），registry 1563 → 1384 行；决策见 `docs/notes/implemented/2026-09-12-patent-output-gate-factory.md`。
   - **2026-08-27 新增上帝函数 2 个**：`GatewayWsConnection.dispatchRequest`（316 行 switch，见 TD-GATEWAY-002）、kanban `ui/src/components/kanban/hooks/useBoardState.ts::useBoardState`（398 行，见 TD-UI-CHAT-N14）。
-- **TD-SIZE-001** · 大文件：`SkillsV2.tsx` 2503 · `AgentLoop.ts` 2305 · `ProjectRuntimeRegistry.ts` 1664（2026-09-12 由 `createLocalGateway.ts` 2437 拆出，组合根降至 804） · `sati-bridge.js` 2055 · `routes/taskmaster.js` 1888 · `PdfDocumentPreview.tsx` 1861 · `WeComChannel.ts` 1761
+- **TD-SIZE-001** · 大文件：`SkillsV2.tsx` 2503 · `AgentLoop.ts` 2305 · `ProjectRuntimeRegistry.ts` 1182（2026-09-12 由 `createLocalGateway.ts` 2437 拆出后经五刀类内拆分：会话工具面 / 专利输出门禁 / 会话依赖装配，组合根降至 448） · `sati-bridge.js` 2055 · `routes/taskmaster.js` 1888 · `PdfDocumentPreview.tsx` 1861 · `WeComChannel.ts` 1761
   - 工作量：L · 严重级：P2 · 状态：new
 
 ### 测试

@@ -63,7 +63,7 @@
 
 | Issue | 内容 | 触发条件 |
 |---|---|---|
-| #147 | AgentLoop / createLocalGateway 巨型文件 | 🔶 `createLocalGateway` 2449→448 行（2026-09-12 四刀：helper 外置 / registry 独立成模块 / gateway builder / team builder，**已达 P4a 的 ≤600**）；余下类内 builder（`ProjectRuntimeRegistry.ts` 1384 行，会话工具面 + 输出门禁已抽）+ `AgentLoop.run()` |
+| #147 | AgentLoop / createLocalGateway 巨型文件 | 🔶 `createLocalGateway` 2449→448 行（2026-09-12 四刀：helper 外置 / registry 独立成模块 / gateway builder / team builder，**已达 P4a 的 ≤600**）；类内 builder 第七刀后在跑（`ProjectRuntimeRegistry.ts` 1384→1182 行，会话工具面 + 输出门禁 + 会话依赖装配已抽，余权限 hook/lifecycle 段 + `resolve` + `createAgentConfig`）+ `AgentLoop.run()` |
 | #148 | edgeclaw-memory-core 大文件 | 随 memory 里程碑（M1/M2 记忆增强） |
 | #149 | 渠道公共 helper 去重（ADAPTERS-N01） | ✅ 2026-09-11 完成主项（13 渠道 mapper 共享，−290 行）；剩余 3 项登记 TD-ADAPTERS-N02/N03/N04 |
 | #151 | patent 域耦合度确认 | ✅ 2026-09-11 复核完成：无结构性耦合（正常业务密度）；4 处小项登记 TD-PATENT-N10/N11/N15 等，见 `docs/patent-coupling-and-data-layer-review.md` |
