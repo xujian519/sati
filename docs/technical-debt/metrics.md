@@ -1,15 +1,15 @@
 # Sati 技术债务指标基线与趋势
 
 > 由 `node scripts/measure-techdebt.mjs --update` 自动生成，谨防手工编辑。
-> 最近一次快照：**2026-09-11**
+> 最近一次快照：**2026-09-14**
 
 ## 规模
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1033 / 185487 |
+| src TS 文件 / 行数 | 1070 / 184689 |
 | src JS 文件 | 0 |
-| tests 文件 | 524 |
+| tests 文件 | 532 |
 | ui/src 文件 / 行数 | 465 / 82807 |
 | ui/server 文件 / 行数 | 103 / 31071 |
 
@@ -29,9 +29,9 @@
 | `any`/`@ts-expect-error`/`@ts-ignore` | 3 | ui/src(3) |
 | 裸 `console.*` | 158 | cli(137) · telemetry(8) · ui/server(5) |
 | 空 `catch {}` | 0 | — |
-| 无参 `catch {`（总计） | 518 | ui/src(115) · adapters(70) · patent(44) |
+| 无参 `catch {`（总计） | 516 | ui/src(115) · adapters(70) · patent(44) |
 | ↳ **无注释**（隐患类，目标） | **37** | — |
-| ↳ 已带意图注释 | 481 | — |
+| ↳ 已带意图注释 | 479 | — |
 | `TODO/HACK/FIXME/XXX` | 11 | always-on(4) · tests(4) · ui/src(2) |
 | 分层违规 `ui/server→src` | 14 | — |
 | 分层违规 `src→ui` | 0 | — |
@@ -62,12 +62,9 @@
 | `src/cli/sati.ts` | `main` | 636 | function |
 | `ui/src/components/app-shell/AppShellV2.tsx` | `AppShellV2` | 630 | function |
 | `ui/src/components/onboarding/view/subcomponents/LlmConfigurationStep.tsx` | `LlmConfigurationStep` | 630 | function |
-| `src/cli/createLocalGateway.ts` | `createLocalGateway` | 607 | function |
 | `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` | `(anonymous)` | 600 | arrow |
 | `ui/src/components/main-content/view/MainContent.tsx` | `SplitBody` | 573 | function |
 | `src/context/memory/edgeclaw-memory-core/src/core/review/dream-review.ts` | `run` | 524 | method |
-| `src/cli/createLocalGateway.ts` | `prepareSessionRuntime` | 517 | method |
-| `src/tool/builtin/readFile.ts` | `createReadFileTool` | 509 | function |
 | `src/context/memory/edgeclaw-memory-core/src/core/retrieval/reasoning-loop.ts` | `retrieve` | 484 | method |
 | `src/context/memory/edgeclaw-memory-core/src/core/pipeline/heartbeat.ts` | `runHeartbeat` | 477 | method |
 | `ui/src/components/main-content-v2/CronV2.tsx` | `CronFormView` | 476 | function |
@@ -84,17 +81,15 @@
 | `ui/src/components/main-content-v2/CronV2.test.tsx` | `(anonymous)` | 384 | arrow |
 | `src/web/client/webMessage.ts` | `applyWebGatewayEvent` | 383 | function |
 | `src/tool/execution/ToolRuntime.ts` | `execute` | 382 | method |
-| `src/tool/builtin/readFile.ts` | `(anonymous)` | 381 | arrow |
 | `ui/src/components/app-shell/MainAreaV2.tsx` | `MainAreaV2Content` | 381 | function |
 | `ui/src/components/settings/view/integrations/im/components/FeishuChannelSection.tsx` | `FeishuChannelSection` | 381 | function |
 | `ui/src/components/chat/tools/components/InteractiveRenderers/AskUserQuestionPanel.tsx` | `AskUserQuestionPanel` | 378 | arrow |
 | `ui/src/components/kanban/hooks/useBoardState.ts` | `useBoardState` | 368 | function |
 | `ui/src/components/chat/hooks/useFileMentions.tsx` | `useFileMentions` | 366 | function |
-| `src/agent/loop/AgentLoop.ts` | `handleModelError` | 364 | method |
 | `ui/src/components/settings/view/agentRoute/components/RouterSection.tsx` | `RouterSection` | 355 | function |
+| `src/cli/projectRuntimeFactory.ts` | `createProjectRuntimeResolver` | 349 | function |
 | `ui/src/components/main-content/view/MainContent.tsx` | `MainContent` | 346 | function |
 | `src/gateway/server/GatewayWsConnection.ts` | `dispatchRequest` | 343 | method |
-| `src/tool/builtin/patentPdfDownload.ts` | `createPatentPdfDownloadTool` | 343 | function |
 | `src/patent/graph/domains/inventiveness.ts` | `buildInventivenessGraph` | 342 | function |
 | `ui/src/components/main-content-v2/PlansAndCronJobs.tsx` | `PlansAndCronJobs` | 334 | function |
 | `src/gateway/client/telemetry.ts` | `emitSessionTelemetry` | 333 | function |
@@ -109,9 +104,7 @@
 
 | 文件 | 行 |
 |---|---|
-| `src/cli/createLocalGateway.ts` | 2696 |
 | `ui/src/components/main-content-v2/SkillsV2.tsx` | 2525 |
-| `src/agent/loop/AgentLoop.ts` | 2430 |
 | `ui/server/sati-bridge.js` | 2228 |
 | `ui/src/components/code-editor/view/subcomponents/PdfDocumentPreview.tsx` | 1885 |
 | `ui/server/routes/taskmaster.js` | 1850 |
@@ -135,37 +128,38 @@
 | `ui/src/components/chat/hooks/useChatSessionState.ts` | 1171 |
 | `ui/server/routes/commands.js` | 1149 |
 | `src/context/memory/edgeclaw-memory-core/src/core/file-memory.ts` | 1139 |
+| `src/agent/loop/AgentLoop.ts` | 1134 |
 | `ui/server/routes/agent.js` | 1133 |
 | `ui/src/components/main-content-v2/CronV2.tsx` | 1130 |
 | `ui/src/components/main-content/view/MainContent.tsx` | 1111 |
 | `ui/src/components/chat-v2/ComposerV2.tsx` | 1109 |
+| `ui/server/routes/config.js` | 1100 |
 
 ## 测试覆盖（tests/<模块> 文件数）
 
 | 模块 | 测试文件 |
 |---|---|
-| patent | 111 |
-| tool | 60 |
-| agent | 49 |
+| patent | 110 |
+| tool | 61 |
+| agent | 55 |
 | knowledge | 42 |
+| context | 29 |
 | gateway | 29 |
-| context | 28 |
 | model | 27 |
 | session | 25 |
 | router | 14 |
 | always-on | 13 |
 | mcp | 13 |
 | cron | 11 |
-| extension | 10 |
+| extension | 11 |
+| adapters | 9 |
 | rule | 9 |
 | literature | 8 |
 | pilot | 8 |
 | web | 8 |
 | cli | 7 |
-| adapters | 5 |
 | permission | 4 |
 | test-support | 4 |
-| workflow | 4 |
 | methodology | 3 |
 | telemetry | 3 |
 | board | 2 |
@@ -178,7 +172,7 @@
 | runtime | 1 |
 | status | 1 |
 
-| **合计** | **507** |
+| **合计** | **515** |
 
 ## i18n en/zh-CN 对齐
 
