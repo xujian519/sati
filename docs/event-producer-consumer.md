@@ -13,7 +13,7 @@ emit/dispatch/emitAgentEvent/emitEvent 字符串事件名调用点、对象字�
 | approval_pending | src/cli/patentOutputGateFactory.ts:149 | submitTurn 流 ×28 |
 | approval_resolved | src/cli/patentOutputGateFactory.ts:77 | submitTurn 流 ×28 |
 | assistant_attachment | src/gateway/client/eventMapping.ts:258 | submitTurn 流 ×28 |
-| assistant_message | src/agent/loop/AgentLoop.ts:780, src/agent/loop/AgentLoop.ts:848, src/agent/loop/AgentLoop.ts:886, src/agent/loop/turnExit.ts:133 | src/gateway/client/InProcessGateway.ts:551 |
+| assistant_message | src/agent/loop/AgentLoop.ts:780, src/agent/loop/AgentLoop.ts:848, src/agent/loop/AgentLoop.ts:886, src/agent/loop/turnExit.ts:136 | src/gateway/client/InProcessGateway.ts:551 |
 | assistant_text_delta | src/gateway/client/InProcessGateway.ts:384 | submitTurn 流 ×28 |
 | assistant_thinking_delta | - | submitTurn 流 ×28 |
 | compact_completed | src/context/compaction/CompactionEngine.ts:279 | src/gateway/client/InProcessGateway.ts:551 |
@@ -81,9 +81,9 @@ emit/dispatch/emitAgentEvent/emitEvent 字符串事件名调用点、对象字�
 | tool_result | src/agent/loop/AgentLoop.ts:1440 | src/gateway/client/InProcessGateway.ts:551 |
 | tool_result_detail_available | src/gateway/client/eventMapping.ts:246, src/gateway/client/eventMapping.ts:252, src/gateway/client/eventMapping.ts:272 | submitTurn 流 ×28 |
 | tool_results_projected | src/agent/loop/AgentLoop.ts:936, src/agent/loop/AgentLoop.ts:1471 | src/gateway/client/InProcessGateway.ts:551 |
-| turn_completed | src/agent/loop/turnExit.ts:108, src/agent/loop/turnExit.ts:168, src/agent/turn/TurnRunner.ts:176, src/agent/turn/TurnRunner.ts:242, src/agent/turn/TurnRunner.ts:264, src/agent/turn/TurnRunner.ts:367, src/gateway/client/InProcessGateway.ts:388, src/gateway/client/eventMapping.ts:522, src/session/transcript/TranscriptReplay.ts:228, src/session/transcript/TranscriptReplay.ts:304 | src/gateway/client/InProcessGateway.ts:551, submitTurn 流 ×28 |
+| turn_completed | src/agent/loop/turnExit.ts:111, src/agent/loop/turnExit.ts:171, src/agent/turn/TurnRunner.ts:176, src/agent/turn/TurnRunner.ts:242, src/agent/turn/TurnRunner.ts:264, src/agent/turn/TurnRunner.ts:367, src/gateway/client/InProcessGateway.ts:388, src/gateway/client/eventMapping.ts:522, src/session/transcript/TranscriptReplay.ts:228, src/session/transcript/TranscriptReplay.ts:304 | src/gateway/client/InProcessGateway.ts:551, submitTurn 流 ×28 |
 | turn_continued | src/agent/loop/AgentLoop.ts:820, src/agent/loop/AgentLoop.ts:915, src/agent/loop/AgentLoop.ts:995, src/agent/loop/AgentLoop.ts:1058, src/agent/loop/AgentLoop.ts:1074, src/agent/loop/AgentLoop.ts:1086, src/agent/loop/AgentLoop.ts:1649, src/agent/loop/AgentLoop.ts:2008, src/agent/loop/recoveryStrategies.ts:38, src/agent/loop/recoveryStrategies.ts:122 | src/gateway/client/InProcessGateway.ts:551 |
-| turn_failed | src/agent/loop/turnExit.ts:105, src/agent/turn/TurnRunner.ts:175, src/agent/turn/TurnRunner.ts:241, src/agent/turn/TurnRunner.ts:263, src/agent/turn/TurnRunner.ts:366 | src/gateway/client/InProcessGateway.ts:551 |
+| turn_failed | src/agent/loop/turnExit.ts:108, src/agent/turn/TurnRunner.ts:175, src/agent/turn/TurnRunner.ts:241, src/agent/turn/TurnRunner.ts:263, src/agent/turn/TurnRunner.ts:366 | src/gateway/client/InProcessGateway.ts:551 |
 | turn_started | src/agent/turn/TurnRunner.ts:156 | src/gateway/client/InProcessGateway.ts:551, submitTurn 流 ×28 |
 | user_prompt_submitted | src/agent/turn/TurnRunner.ts:220 | src/gateway/client/InProcessGateway.ts:551 |
 | warning | src/agent/loop/AgentLoop.ts:812, src/agent/loop/AgentLoop.ts:1246, src/agent/turn/TurnRunner.ts:222 | src/gateway/client/InProcessGateway.ts:551 |
