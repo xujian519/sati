@@ -1,7 +1,7 @@
 # AgentLoop 拆解专项实施文档
 
 - 创建日期：2026-08-14
-- 状态：**轮次 1–4 完成**——`AgentLoop.ts` run() 骨架化（~80 行），阶段二依赖的主循环拆解已落地
+- 状态：**轮次 1–8 完成**——`AgentLoop.ts` 2433 → 1133 行，issue #147 已结清（收口判据见 `docs/notes/implemented/2026-09-14-agentloop-decomposition-closure.md`）
 - 前置：阶段一/阶段二（`docs/deepseek-harness-phase1-plan.md` / `phase2-plan.md`）
 
 ---
@@ -204,3 +204,7 @@
 | 轮次 8 | 请求装配（`createModelRequest` / `createBudgetEvaluator` / `readWorkspaceLedgerBlock`）→ `src/agent/loop/modelRequest.ts`；压缩执行器（`runAutoCompact` / `persistCompactSnapshot`）→ `src/agent/loop/compactionExecutor.ts` | `AgentLoop.ts` 1485 → 1133（八刀累计 2433 → 1133）；`AutoCompactOptions`/`AutoCompactRunner` 改由 `compactionExecutor.ts` 声明，恢复链导入复用 |
 
 决策记录见 `docs/notes/implemented/2026-09-14-agentloop-model-request-compaction-extraction.md`。至此 AgentLoop 只剩主循环阶段方法与其编排用的私有辅助（工具执行泵、熔断、收尾、权限/模式覆写）。
+
+### 10.2 收口（issue #147 结清）
+
+轮次 8 之后 `AgentLoop.ts` 只剩主循环阶段编排与其编排用辅助（无 200+ 行的私有子系统方法），`createLocalGateway.ts` 448 行已达 P4a 的 ≤600 验收线——**停在 1133 行是设计使然**（继续切阶段方法属"改流程"，会把阶段间的顺序契约从"读一个类"变成"跨文件追调用链"）。判据、放弃过的替代方案与代价见 `docs/notes/implemented/2026-09-14-agentloop-decomposition-closure.md`。P4c（渠道类切分）不属本 issue 的债务，方向由 #149 与本文档 §3 机会型清单承担。
