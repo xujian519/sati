@@ -3,6 +3,7 @@ import { chunkText } from "../protocol/text.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
 import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
 import { ImPermissionHelper } from "../protocol/ImPermissionHelper.js";
+import { resolveIncomingMessage } from "../protocol/ChannelCommandRegistry.js";
 import { SlackSessionMapper } from "./SlackSessionMapper.js";
 import { renderSlackEvent } from "./slack-render.js";
 
@@ -181,14 +182,11 @@ export class SlackChannel implements ChannelAdapter {
       return;
     }
 
-    const mapped = this.mapper.resolve({ chatId, text });
     const sendCtx = { channelId, threadTs };
-
-    if (mapped.command === "new" && !mapped.message) {
-      await this.sendReply(sendCtx, "已创建新会话。");
-      return;
-    }
-    if (!mapped.message) return;
+    const { mapped, handled } = await resolveIncomingMessage(this.mapper, chatId, text, (_id, t) =>
+      this.sendReply(sendCtx, t),
+    );
+    if (handled) return;
 
     this.activeChats.add(chatId);
     try {
