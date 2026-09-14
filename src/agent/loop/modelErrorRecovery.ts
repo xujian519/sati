@@ -16,12 +16,13 @@ import {
   type CanonicalModelRequest,
   type CanonicalToolCall,
 } from "../../model/index.js";
-import type { ContextRecoveryDecision, TokenBudgetSnapshot } from "../../context/index.js";
+import type { ContextRecoveryDecision } from "../../context/index.js";
 import type { PermissionMode } from "../../permission/index.js";
 import type { RouterDecision } from "../../router/index.js";
 import { agentError } from "../protocol/errors.js";
 import type { AgentEvent } from "../protocol/events.js";
 import type { AgentLoopInput } from "../protocol/input.js";
+import type { AutoCompactRunner } from "./compactionExecutor.js";
 import { createMissingToolResult } from "./ensureToolResultPairing.js";
 import {
   addEmptyReasoningContentMarkers,
@@ -63,22 +64,6 @@ import {
 export type RecoveryHandled = TurnStepContinue | TurnStepReturn;
 
 /**
- * 恢复链调用 `AgentLoop.runAutoCompact` 的窄接口：只声明本链使用的
- * `model-error-recovery` 一路参数（其余阶段的参数留在 AgentLoop）。
- */
-export type AutoCompactRunner = (
-  state: TurnRuntimeState,
-  input: AgentLoopInput,
-  options: {
-    stage: "model-error-recovery";
-    maxContextTokens?: number;
-    reservedOutputTokens: number;
-    emitAutoCompactEvent?: boolean;
-    fallbackTruncateRatio?: number;
-  },
-) => AsyncGenerator<AgentEvent, { compacted: boolean; snapshot?: TokenBudgetSnapshot }, unknown>;
-
-/**
  * 恢复链依赖袋：tokenCaps/contextRuntime/now 承接自 TurnExitDeps（终局与
  * 状态发射复用），其余为配置派生项与 AgentLoop 侧的执行器。
  */
@@ -88,6 +73,7 @@ export interface ModelErrorRecoveryDeps extends TurnExitDeps {
   /** 补齐缺失工具结果所需的上下文（config 派生）。 */
   readonly missingToolResultRecoveryContext: () => { cwd: string; permissionMode: PermissionMode };
   readonly dispatchLifecycle: LifecycleDispatcher;
+  /** 压缩执行器（本链只走 `model-error-recovery` 一路参数）。 */
   readonly runAutoCompact: AutoCompactRunner;
 }
 

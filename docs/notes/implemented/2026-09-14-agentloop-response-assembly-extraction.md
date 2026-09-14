@@ -15,7 +15,7 @@ TD-AGENT-103 记的是 `AgentLoop.assembleAndRecover`（201 行）：**一次模
 | 文件 | 行数 | 内容 |
 |---|---|---|
 | `src/agent/loop/responseAssembly.ts`（新） | 394 | `assembleAndRecover`（装配 + 调度 + 正常落库）、三条处置步骤函数（`handlePartialTextToolCall` / `handleRepairedTruncation` / `handleEmptyResponse`）、`repairTextExtractedToolNames`（随迁）、`ResponseAssemblyDeps`、`AssembledResponse`、`SyntheticPromptContinuer` |
-| `src/agent/loop/AgentLoop.ts` | 1733 → **1492** | 删除 `assembleAndRecover`（201 行）与 `repairTextExtractedToolNames`（28 行）及 `AssembleAndRecoverResult` 别名；`run()` 直接调模块入口 |
+| `src/agent/loop/AgentLoop.ts` | 1733 → **1485** | 删除 `assembleAndRecover`（201 行）与 `repairTextExtractedToolNames`（28 行）及 `AssembleAndRecoverResult` 别名；`run()` 直接调模块入口 |
 
 调度顺序（**顺序即语义**，模块头注释已写明）：
 
@@ -48,7 +48,7 @@ TD-AGENT-103 记的是 `AgentLoop.assembleAndRecover`（201 行）：**一次模
 
 ## Consequences
 
-- `AgentLoop.ts` 1733 → 1492 行；TD-AGENT-103 结清——AgentLoop 里已无 200+ 行的阶段方法（最大 `prepareModelCall` 116 行）。
+- `AgentLoop.ts` 1733 → 1485 行；TD-AGENT-103 结清——AgentLoop 里已无 200+ 行的阶段方法（最大 `prepareModelCall` 116 行）。
 - 三条异常响应状态机获得独立测试面：新增 22 条行为基线（`tests/agent/loop/responseAssembly.spec.ts`），含"修补截断的脏消息绝不落库""空响应走恢复链而非落库空消息""文本回退工具名在装配期修复"等此前只能靠整条回路间接覆盖的断言。
 - `repairTextExtractedToolNames` 由私有方法变为导出纯函数（依赖经 deps 传入），文本回退工具名修复首次可直测。
 - 无工具契约改动，llm-replay fixture 请求键不受影响（未重录）。

@@ -183,7 +183,7 @@
 
 ---
 
-## 10. 轮次 5–7：出口/策略外迁、恢复链与装配链拆解（已完成，2026-09-14）
+## 10. 轮次 5–8：出口/策略外迁、恢复链、装配链与请求/压缩子系统拆解（已完成，2026-09-14）
 
 §8.3 的段范围是轮次 4 当时的行号，此后两次外迁已改变 AgentLoop 的内部构成：
 
@@ -191,8 +191,16 @@
 |---|---|---|
 | 轮次 5 | turn 出口与中止捕获（`emitStatus`/`createAbortStatus`/`captureTurn`/`terminateTurn`/`captureAbortedPartial`/`abortTurn`）→ `src/agent/loop/turnExit.ts`（`TurnExitDeps` 依赖袋）；共享恢复策略（`continueWithTransientPrompt`/`emitEmptyOutputTokenBump`/`recoverFromMaxOutputBump`/`recoverFromEmptyResponse`）→ `src/agent/loop/recoveryStrategies.ts` | `AgentLoop.ts` 2433 → 2130；§8.3 表中 `handleModelError` 调用的策略不再定义于本类 |
 | 轮次 6 | `handleModelError` 本体（365 行）→ `src/agent/loop/modelErrorRecovery.ts`：9 个具名步骤函数 + `recoverFromModelError` 调度入口（`unhandled` 才落到下一步），`tryReactiveRecover` 随迁 | `AgentLoop.ts` 2130 → 1733；§8.3 表中 `handleModelError` 一行现对应 `modelErrorRecovery.ts`，`run()` 调用点直接调 `recoverFromModelError` |
-| 轮次 7 | `assembleAndRecover` 本体（201 行）+ `repairTextExtractedToolNames` → `src/agent/loop/responseAssembly.ts`：装配 + 三条具名处置步骤（半截文本 / 修补截断 / 空响应），`StageOutcome`/`unhandled` 上移 `turnExit.ts` 供两条链共用 | `AgentLoop.ts` 1733 → 1492；§8.3 表中 `assembleAndRecover` 一行现对应 `responseAssembly.ts` |
+| 轮次 7 | `assembleAndRecover` 本体（201 行）+ `repairTextExtractedToolNames` → `src/agent/loop/responseAssembly.ts`：装配 + 三条具名处置步骤（半截文本 / 修补截断 / 空响应），`StageOutcome`/`unhandled` 上移 `turnExit.ts` 供两条链共用 | `AgentLoop.ts` 1733 → 1485；§8.3 表中 `assembleAndRecover` 一行现对应 `responseAssembly.ts` |
 
 三轮均按「逐字搬迁 + 既有回路测试 + 新增行为基线」验证，事件矩阵经 `pnpm gen:event-matrix` 重生成；决策记录见 `docs/notes/implemented/2026-09-14-agentloop-turn-exit-extraction.md`、`docs/notes/implemented/2026-09-14-agentloop-model-error-recovery-extraction.md` 与 `docs/notes/implemented/2026-09-14-agentloop-response-assembly-extraction.md`。
 
-轮次 4 遗留的请求装配与压缩执行器（`createModelRequest` / `createBudgetEvaluator` / `runAutoCompact` / `persistCompactSnapshot`）仍属 §9 的待办；`assembleAndRecover` 本体已在轮次 7 外迁（TD-AGENT-103 结清）。
+轮次 4 遗留的 `assembleAndRecover` 本体已在轮次 7 外迁（TD-AGENT-103 结清），请求装配与压缩执行器已在轮次 8 外迁；§9 的其余待办（投影化、注入落库、事件化扩展点）仍未动。
+
+### 10.1 轮次 8：请求装配与压缩执行器外迁（已完成）
+
+| 轮次 | 改动 | 结果 |
+|---|---|---|
+| 轮次 8 | 请求装配（`createModelRequest` / `createBudgetEvaluator` / `readWorkspaceLedgerBlock`）→ `src/agent/loop/modelRequest.ts`；压缩执行器（`runAutoCompact` / `persistCompactSnapshot`）→ `src/agent/loop/compactionExecutor.ts` | `AgentLoop.ts` 1485 → 1133（八刀累计 2433 → 1133）；`AutoCompactOptions`/`AutoCompactRunner` 改由 `compactionExecutor.ts` 声明，恢复链导入复用 |
+
+决策记录见 `docs/notes/implemented/2026-09-14-agentloop-model-request-compaction-extraction.md`。至此 AgentLoop 只剩主循环阶段方法与其编排用的私有辅助（工具执行泵、熔断、收尾、权限/模式覆写）。

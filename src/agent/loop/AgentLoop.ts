@@ -1,14 +1,11 @@
 import {
   applyModelEventToAssembler,
-  cloneMessages,
   createModelMessageAssemblerState,
   type AssembledAssistantMessage,
   type CanonicalToolCall,
   type CanonicalMessage,
   ModelProviderError,
   type CanonicalModelRequest,
-  type CanonicalUsage,
-  materializeMediaReferences,
   getSelfCorrectPrompt,
   detectFormatByText,
   textFromMessage,
@@ -17,23 +14,15 @@ import type { SatiToolResult } from "../../tool/protocol/result.js";
 import type { SatiReadFileStateMap, SatiWriteSnapshotMap } from "../../tool/protocol/types.js";
 import { agentError } from "../protocol/errors.js";
 import type { AgentEvent } from "../protocol/events.js";
-import { createLogger, logger } from "../../telemetry/index.js";
+import { createLogger } from "../../telemetry/index.js";
 import type { AgentTurnResult } from "../protocol/result.js";
 import type { AgentRuntimeConfig } from "../runtime/AgentRuntimeConfig.js";
 import type { AgentRuntimeDependencies } from "../runtime/AgentRuntimeDependencies.js";
-import { NullContextRuntime } from "../../context/NullContextRuntime.js";
-import { promptCacheEnabled, resolveRequestCachePlan } from "../../context/cache/CachePlan.js";
-import { compressIndexRanges } from "../../context/compaction/CompactionEngine.js";
-import type { AutoCompactResult, TokenBudgetSnapshot } from "../../context/index.js";
+import type { TokenBudgetSnapshot } from "../../context/index.js";
 import type { PermissionMode, PermissionRuleSet } from "../../permission/index.js";
 import type { RouterDecision } from "../../router/index.js";
-import type { AgentControlBoundaryTranscriptEntry } from "../../session/transcript/TranscriptEntry.js";
-import { renderWorkspaceLedgerBlock, type WorkspaceLedgerBlock } from "../../session/workspace/WorkspaceLedger.js";
-import { requiresPromptCapability } from "../../tool/userInteractionConstraints.js";
 import type { AgentRunMode, AgentLoopInput } from "../protocol/input.js";
-import { defaultAgentThinking } from "../../model/thinking/registry.js";
-import { applyMethodologyAddendum, computeMethodologyAddendum } from "./methodologyInjection.js";
-import { buildMetacognitivePrompt, buildMetacognitiveRetryPrompt, parseSelfEstimate } from "./metacognitiveControl.js";
+import { buildMetacognitiveRetryPrompt, parseSelfEstimate } from "./metacognitiveControl.js";
 import { evaluateClaimGuard } from "./claimGuard.js";
 import { buildRequestHeaderSnapshot, verifyRequestHeaderSnapshot } from "./requestInvariant.js";
 import { projectToolResults } from "./projectToolResults.js";
@@ -53,22 +42,13 @@ import {
   cloneReadFileStateMap,
   cloneWriteSnapshotMap,
   createLifecycleDispatcher,
-  filterAskModeTools,
   findLifecycleBlock,
   findToolLifecycleBlock,
   mergeUserRules,
   readRequestedMode,
-  toolToCanonicalSchema,
   type LifecycleDispatcher,
 } from "./misc.js";
-import {
-  appendPlanModeReminder,
-  markCompactReplacementMessages,
-  normalizeMessagesForModelRequest,
-  splitTransientPrompts,
-  stripTrailingErrorPair,
-  truncateHeadKeepRatio,
-} from "./messages.js";
+import { stripTrailingErrorPair } from "./messages.js";
 import {
   annotateRepeatedToolFailures,
   buildInvalidFingerprint,
@@ -84,7 +64,6 @@ import {
   createModelRequestFailedStatus,
   createStructuredOutputCompletedStatus,
   createToolErrorLoopStatus,
-  tokensFromUsage,
 } from "./modelErrors.js";
 import { TokenCapManager } from "./tokenCapManager.js";
 import { ToolContextFactory } from "./toolContext.js";
@@ -104,11 +83,10 @@ import {
 import { continueWithTransientPrompt, recoverFromEmptyResponse } from "./recoveryStrategies.js";
 import { recoverFromModelError, type ModelErrorRecoveryDeps } from "./modelErrorRecovery.js";
 import { assembleAndRecover, type ResponseAssemblyDeps, type SyntheticPromptOutcome } from "./responseAssembly.js";
+import { runAutoCompact } from "./compactionExecutor.js";
+import { createBudgetEvaluator, createModelRequest, type ModelRequestDeps } from "./modelRequest.js";
 
 const agentLogger = createLogger("agent");
-const autoCompactLogger = createLogger("agent:auto-compact");
-/** A5: prompt cache plan 的进程级单调代数（诊断用，随每次规划递增）。 */
-let promptCacheGeneration = 0;
 const CIRCUIT_BREAKER_GRACE_PROMPT = [
   "Your last several tool calls all failed input validation with the same error.",
   "This may indicate a tool-side issue rather than a problem with your approach.",
@@ -116,11 +94,6 @@ const CIRCUIT_BREAKER_GRACE_PROMPT = [
   "(2) explain the situation in text without calling tools,",
   "(3) if you believe the tool should work, try once more with corrected input.",
 ].join(" ");
-
-function logAutoCompactFailure(stage: string, input: { sessionId: string; turnId: string }, error: unknown): void {
-  const message = error instanceof Error ? error.message : String(error);
-  autoCompactLogger.warn(`${stage} failed sessionId=${input.sessionId} turnId=${input.turnId}: ${message}`);
-}
 
 export type { AgentLoopInput } from "../protocol/input.js";
 
@@ -165,6 +138,7 @@ export class AgentLoop {
   private readonly turnExit: TurnExitDeps;
   private readonly modelErrorRecovery: ModelErrorRecoveryDeps;
   private readonly responseAssembly: ResponseAssemblyDeps;
+  private readonly modelRequest: ModelRequestDeps;
 
   constructor(
     private readonly config: AgentRuntimeConfig,
@@ -192,8 +166,9 @@ export class AgentLoop {
       jsonSelfCorrect: config.jsonSelfCorrect,
       missingToolResultRecoveryContext: () => this.missingToolResultRecoveryContext(),
       dispatchLifecycle: this.dispatchLifecycle,
-      runAutoCompact: (state, input, options) => this.runAutoCompact(state, input, options),
+      runAutoCompact: (state, input, options) => runAutoCompact(this.dependencies.context, state, input, options),
     };
+    this.modelRequest = { config, dependencies, dispatchLifecycle: this.dispatchLifecycle };
     this.responseAssembly = {
       ...this.turnExit,
       doomLoop: dependencies.doomLoop,
@@ -388,10 +363,10 @@ export class AgentLoop {
     const preRoutingMaxContextTokens = this.tokenCaps.currentMaxContextTokens(this.config.provider, this.config.model);
     if (ctx?.tryAutoCompact) {
       const reservedOutputTokens = this.tokenCaps.getReservedOutputTokens();
-      const compact = yield* this.runAutoCompact(state, input, {
+      const compact = yield* runAutoCompact(this.dependencies.context, state, input, {
         stage: "pre-routing",
         reservedOutputTokens,
-        budgetEvaluator: this.createBudgetEvaluator(input, {
+        budgetEvaluator: createBudgetEvaluator(this.modelRequest, input, {
           maxContextTokens: preRoutingMaxContextTokens,
           reservedOutputTokens,
         }),
@@ -400,7 +375,7 @@ export class AgentLoop {
       yield* this.subagentExecutor.drainEventBuffer();
     }
 
-    let request = await this.createModelRequest(state.messages, input, { state });
+    let request = await createModelRequest(this.modelRequest, state.messages, input, { state });
     if (input.abortSignal?.aborted) {
       return yield* abortTurn(this.turnExit, input, state);
     }
@@ -455,11 +430,11 @@ export class AgentLoop {
       const currentBudgetMaxCtx = preRoutingMaxContextTokens;
       if (routedMaxCtx !== undefined && routedMaxCtx !== currentBudgetMaxCtx) {
         const reservedOutputTokens = this.tokenCaps.getReservedOutputTokens(decision.provider, decision.model);
-        const recompact = yield* this.runAutoCompact(state, input, {
+        const recompact = yield* runAutoCompact(this.dependencies.context, state, input, {
           stage: "post-routing",
           maxContextTokens: routedMaxCtx,
           reservedOutputTokens,
-          budgetEvaluator: this.createBudgetEvaluator(input, {
+          budgetEvaluator: createBudgetEvaluator(this.modelRequest, input, {
             decision,
             baseRequest: request,
             maxContextTokens: routedMaxCtx,
@@ -467,7 +442,7 @@ export class AgentLoop {
           }),
         });
         if (recompact.compacted) {
-          request = await this.createModelRequest(state.messages, input, { state });
+          request = await createModelRequest(this.modelRequest, state.messages, input, { state });
           request = this.tokenCaps.applyTokenCapsToRequest(request, decision.provider, decision.model);
         }
         if (recompact.snapshot !== undefined) {
@@ -1121,333 +1096,6 @@ export class AgentLoop {
         reason: "model_error",
       },
     };
-  }
-
-  /**
-   * Read and render the current workspace ledger block (empty when disabled).
-   * Re-reading fresh from the store (backed by the transcript) is what lets the
-   * ledger survive compaction — the block is injected as a system-prompt
-   * addendum rather than living in message history.
-   */
-  private async readWorkspaceLedgerBlock(): Promise<WorkspaceLedgerBlock | undefined> {
-    if (this.config.workspaceLedger !== true || !this.dependencies.workspaceLedger) {
-      return undefined;
-    }
-    try {
-      const state = await this.dependencies.workspaceLedger.read();
-      if (state === undefined) return undefined;
-      const rendered = renderWorkspaceLedgerBlock(state);
-      return rendered.empty ? undefined : rendered;
-    } catch {
-      // Ledger read must never block the request.
-      return undefined;
-    }
-  }
-
-  private async createModelRequest(
-    messages: CanonicalMessage[],
-    input: AgentLoopInput,
-    options: { emitInstructionEvents?: boolean; state?: TurnRuntimeState; previewOnly?: boolean } = {},
-  ): Promise<CanonicalModelRequest> {
-    const contextRuntime = this.dependencies.context ?? new NullContextRuntime();
-    const planTodo = this.dependencies.planTodoManager?.forSession(input.sessionId);
-    const canPrompt = input.canPrompt ?? this.config.permissionContext.canPrompt;
-    const promptBlockedToolNames = canPrompt
-      ? new Set<string>()
-      : new Set(
-          this.dependencies.tools.registry
-            .list()
-            .filter(tool => requiresPromptCapability(tool, {}))
-            .map(tool => tool.name),
-        );
-    let toolDefinitions = this.dependencies.tools.registry
-      .list()
-      .filter(tool => !promptBlockedToolNames.has(tool.name));
-    if (input.allowPlanModeTools !== true) {
-      toolDefinitions = toolDefinitions.filter(
-        tool => tool.name !== "enter_plan_mode" && tool.name !== "exit_plan_mode",
-      );
-    }
-    const requestMessages = normalizeMessagesForModelRequest(messages);
-    let tools = toolDefinitions.map(toolToCanonicalSchema);
-    if (this.config.runMode === "ask") {
-      tools = filterAskModeTools(toolDefinitions);
-    }
-    const workspaceLedgerBlock = await this.readWorkspaceLedgerBlock();
-    // Computed once so the model-visible prompt and the injected_context audit
-    // record the exact same text (模型可见 = 已记录).
-    const metacognitiveAddendum = this.config.metacognitiveControl
-      ? (this.config.metacognitivePrompt ?? buildMetacognitivePrompt())
-      : undefined;
-    const prepared = await contextRuntime.prepareForModel({
-      previewOnly: options.previewOnly,
-      sessionId: input.sessionId,
-      turnId: input.turnId,
-      cwd: this.config.cwd,
-      provider: this.config.provider,
-      model: this.config.model,
-      permissionMode: this.config.permissionMode,
-      runMode: this.config.runMode ?? "agent",
-      additionalWorkingDirectories: this.config.permissionContext.additionalWorkingDirectories,
-      messages: cloneMessages(requestMessages),
-      tools,
-      maxMessages: this.config.maxContextMessages,
-      customSystemPrompt: this.config.systemPrompt,
-      appendSystemPrompt:
-        [input.appendSystemPrompt, planTodo?.buildPromptAddendum(), workspaceLedgerBlock?.block, metacognitiveAddendum]
-          .filter(Boolean)
-          .join("\n\n") || undefined,
-      abortSignal: input.abortSignal,
-    });
-
-    if (options.emitInstructionEvents !== false) {
-      this.dispatchLifecycle(input, "InstructionsLoaded", {
-        hasSystemPrompt: !!prepared.systemPrompt,
-      }).catch(error => agentLogger.warn("InstructionsLoaded lifecycle dispatch failed:", error));
-      this.dependencies.eventEmitter?.({
-        type: "instructions_loaded",
-        sessionId: input.sessionId,
-        turnId: input.turnId,
-        hasSystemPrompt: !!prepared.systemPrompt,
-      });
-    }
-
-    const materialized = await materializeMediaReferences(prepared.messages);
-    for (const diagnostic of materialized.diagnostics) {
-      logger.warn(`${diagnostic.code}: ${diagnostic.message} (${diagnostic.mediaType}, ${diagnostic.path})`);
-    }
-
-    // 单次计算方法论 addendum：既落库审计又拼 system prompt，避免同一 inject
-    // 回调执行两次导致「记录文本 ≠ 模型实际所见」。
-    const methodologyAddendum = computeMethodologyAddendum(requestMessages, this.config.methodologyInjection);
-
-    // 「模型可见 = 已记录」：动态注入段落（记忆/指令/方法论）作为带 source
-    // 标记的参考条目落 transcript（injected_context，重放投影不进入 messages）。
-    // 仅真实请求路径（emitInstructionEvents 默认 true）落库；预算评估候选
-    // 请求（emitInstructionEvents: false）不重复记录。工具循环每轮都会重新
-    // prepareForModel 收集注入，相同 source+text 在同 turn 内只落库一次。
-    if (options.emitInstructionEvents !== false) {
-      const injections = [...(prepared.injections ?? [])];
-      if (methodologyAddendum) {
-        injections.push({ source: "methodology", text: methodologyAddendum });
-      }
-      if (workspaceLedgerBlock && !workspaceLedgerBlock.empty) {
-        injections.push({ source: "workspace_ledger", text: workspaceLedgerBlock.block });
-      }
-      if (metacognitiveAddendum) {
-        injections.push({ source: "metacognitive", text: metacognitiveAddendum });
-      }
-      const freshInjections = injections.filter(injection => {
-        const key = `${injection.source}\u0000${injection.text}`;
-        if (options.state?.reportedInjectionKeys.has(key)) {
-          return false;
-        }
-        options.state?.reportedInjectionKeys.add(key);
-        return true;
-      });
-      if (freshInjections.length > 0) {
-        await input.onInjectedContext?.({ injections: freshInjections });
-      }
-    }
-
-    return {
-      provider: this.config.provider,
-      model: this.config.model,
-      messages:
-        this.config.permissionMode === "plan" ? appendPlanModeReminder(materialized.messages) : materialized.messages,
-      systemPrompt: applyMethodologyAddendum(
-        prepared.systemPrompt ?? this.config.systemPrompt ?? "",
-        methodologyAddendum,
-      ),
-      tools: prepared.tools,
-      toolChoice: this.config.toolChoice,
-      maxOutputTokens: this.config.maxOutputTokens,
-      temperature: this.config.temperature,
-      thinking: this.config.thinking ?? defaultAgentThinking(this.config.model),
-      stream: true,
-      // 阶段四 T4.2：请求级 retryScope——把 turnId 并入请求 metadata，使
-      // streamModel 的 retryId 在同一 turn 的全部请求间稳定（跨路由 attempt
-      // 与重试可审计关联）。Anthropic 降级只读 user_id；OpenAI 作为自定义
-      // metadata 透传（可用于仪表盘请求关联）。
-      metadata: { ...this.config.metadata, turnId: input.turnId },
-      cacheBreakpoints: prepared.cacheBreakpoints,
-      // A5：Anthropic per-request 稳定缓存布局（system + recent3）。仅在
-      // anthropic 协议、无显式微压缩断点、环境开关开启时规划；逐调用可变
-      // 注入（账本/提醒）位于消息尾部，不破坏断点前缀。
-      cachePlan: resolveRequestCachePlan(
-        {
-          provider: this.config.provider,
-          model: this.config.model,
-          systemPrompt: prepared.systemPrompt ?? this.config.systemPrompt,
-          tools: prepared.tools,
-          messages: materialized.messages,
-          enabled:
-            promptCacheEnabled() && this.dependencies.getProviderProtocol?.(this.config.provider) === "anthropic",
-          explicitBreakpoints: prepared.cacheBreakpoints,
-        },
-        // 预算预演不递增 generation：候选请求会被丢弃，否则计数器被假设历史推高。
-        options.previewOnly ? promptCacheGeneration : ++promptCacheGeneration,
-      ),
-    };
-  }
-
-  private createBudgetEvaluator(
-    input: AgentLoopInput,
-    options: {
-      decision?: RouterDecision;
-      baseRequest?: CanonicalModelRequest;
-      maxContextTokens?: number;
-      reservedOutputTokens: number;
-    },
-  ): ((candidateMessages: CanonicalMessage[], lastUsage?: CanonicalUsage) => Promise<TokenBudgetSnapshot>) | undefined {
-    const tokenAccounting = this.dependencies.tokenAccounting;
-    const maxContextTokens = options.maxContextTokens;
-    if (!tokenAccounting || !maxContextTokens) {
-      return undefined;
-    }
-    return async (candidateMessages, lastUsage) => {
-      let candidateRequest = await this.createModelRequest(candidateMessages, input, {
-        emitInstructionEvents: false,
-        // 候选请求只用于预算估算，不得提交提示日期锚点与通知位置。
-        previewOnly: true,
-      });
-      if (options.decision && options.baseRequest && this.dependencies.router.materializeRequest) {
-        const patchedBase = { ...options.baseRequest, messages: candidateRequest.messages };
-        candidateRequest = this.dependencies.router.materializeRequest(options.decision, {
-          ...patchedBase,
-          systemPrompt: candidateRequest.systemPrompt,
-          tools: candidateRequest.tools,
-          cacheBreakpoints: candidateRequest.cacheBreakpoints,
-        });
-      }
-      const snapshot = await tokenAccounting.evaluateRequestBudget(candidateRequest, {
-        maxContextTokens,
-        reservedOutputTokens: options.reservedOutputTokens,
-        signal: input.abortSignal,
-        usePadding: true,
-      });
-      const usageTokens = tokensFromUsage(lastUsage);
-      if (usageTokens === undefined || usageTokens <= snapshot.tokens) {
-        return snapshot;
-      }
-      return tokenAccounting.snapshotFromTokens(usageTokens, maxContextTokens, {
-        reservedOutputTokens: options.reservedOutputTokens,
-        usageTokens,
-        budgetTokens: snapshot.budgetTokens,
-        source: snapshot.source,
-        exact: snapshot.exact,
-        estimatorError: snapshot.estimatorError,
-      });
-    };
-  }
-
-  /**
-   * 单一压缩执行器：统一 tryAutoCompact 的参数组装、compacted 结果处理
-   * （替换 messages + persistCompactSnapshot + 可选 auto_compact 事件）与
-   * 失败降级（logAutoCompactFailure + 可选 truncateHeadKeepRatio 兜底）。
-   * 调用点差异（request 重建 / context_budget 事件 / 外层 turn_continued）
-   * 保留在调用点。无 tryAutoCompact 时直接返回未压缩。
-   */
-  private async *runAutoCompact(
-    state: TurnRuntimeState,
-    input: AgentLoopInput,
-    options: {
-      stage: "pre-routing" | "post-routing" | "model-error-recovery";
-      maxContextTokens?: number;
-      reservedOutputTokens: number;
-      budgetEvaluator?: (
-        candidateMessages: CanonicalMessage[],
-        lastUsage?: CanonicalUsage,
-      ) => Promise<TokenBudgetSnapshot>;
-      emitAutoCompactEvent?: boolean;
-      fallbackTruncateRatio?: number;
-    },
-  ): AsyncGenerator<AgentEvent, { compacted: boolean; snapshot?: TokenBudgetSnapshot }, unknown> {
-    const ctx = this.dependencies.context;
-    if (!ctx?.tryAutoCompact) {
-      return { compacted: false };
-    }
-    // transient synthetic prompts（恢复提示）从未落库，但可能仍在
-    // state.messages 中（上一轮 assemble 阶段才 expire，而本阶段在下一轮
-    // prepareModelCall 开头先于 assemble 执行）。压缩输入若包含它们，遮蔽
-    // 重建序列（transcript 投影）会缺这些消息导致 shadowedRanges 错位。
-    // 压缩前剥离，压缩产物后再追加回末尾（模型尚未消费它们）。
-    const { persistent: compactInputMessages, transient: transientPrompts } = splitTransientPrompts(state.messages);
-    try {
-      const compact = await ctx.tryAutoCompact({
-        sessionId: input.sessionId,
-        turnId: input.turnId,
-        messages: compactInputMessages,
-        abortSignal: input.abortSignal,
-        ...(options.maxContextTokens !== undefined ? { maxContextTokens: options.maxContextTokens } : {}),
-        reservedOutputTokens: options.reservedOutputTokens,
-        lastUsage: state.lastModelUsage,
-        ...(options.budgetEvaluator !== undefined ? { budgetEvaluator: options.budgetEvaluator } : {}),
-      });
-      if (compact.type === "compacted") {
-        state.messages = [...compact.messages, ...transientPrompts];
-        await this.persistCompactSnapshot(input, compact);
-        if (options.emitAutoCompactEvent !== false) {
-          yield {
-            type: "turn_continued",
-            sessionId: input.sessionId,
-            turnId: input.turnId,
-            reason: "auto_compact",
-          };
-        }
-        return { compacted: true, snapshot: compact.snapshot };
-      }
-      if (options.fallbackTruncateRatio !== undefined) {
-        state.messages = [
-          ...truncateHeadKeepRatio(compactInputMessages, options.fallbackTruncateRatio),
-          ...transientPrompts,
-        ];
-      }
-      return { compacted: false, snapshot: compact.snapshot };
-    } catch (error: unknown) {
-      logAutoCompactFailure(options.stage, input, error);
-      if (options.fallbackTruncateRatio !== undefined) {
-        state.messages = [
-          ...truncateHeadKeepRatio(compactInputMessages, options.fallbackTruncateRatio),
-          ...transientPrompts,
-        ];
-      }
-      return { compacted: false };
-    }
-  }
-
-  private async persistCompactSnapshot(
-    input: AgentLoopInput,
-    compact: Extract<AutoCompactResult, { type: "compacted" }>,
-  ): Promise<void> {
-    if (!input.onCompactPersisted || !compact.result) {
-      return;
-    }
-    const shadowedRanges = compact.result.shadowedMessageIndexes
-      ? compressIndexRanges(compact.result.shadowedMessageIndexes)
-      : undefined;
-    const boundary: AgentControlBoundaryTranscriptEntry["boundary"] = {
-      kind: "compact",
-      subtype: "compact_boundary",
-      compactMetadata: {
-        compactionId: compact.result.compactionId,
-        trigger: compact.result.trigger,
-        preTokens: compact.result.preTokens,
-        ...(compact.result.postTokens !== undefined ? { postTokens: compact.result.postTokens } : {}),
-        messagesSummarized: compact.result.messagesSummarized,
-        ...(shadowedRanges !== undefined && shadowedRanges.length > 0 ? { shadowedRanges } : {}),
-        extra: {
-          tier: compact.tier,
-          summarySucceeded: compact.result.error === undefined,
-        },
-      },
-    };
-    await Promise.resolve(
-      input.onCompactPersisted({
-        boundary,
-        messages: markCompactReplacementMessages(compact.messages),
-      }),
-    ).catch(error => agentLogger.warn("onCompactPersisted failed:", error));
   }
 
   /** turn 结果构造（sessionId/turnId/completedAt 补齐），now 由本类依赖注入。 */
