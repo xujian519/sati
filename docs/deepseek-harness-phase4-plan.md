@@ -410,7 +410,7 @@
 ### 9.4 实施中的实证修正
 
 1. **T3 请求期门禁已存在**：router 的 supportsMediaRequirements/createUnsupportedMediaError/降级路径 + validateModelRequest 的 assertContentSupported（T3.3）均已有；T3 增量收敛为统一能力解析（resolveModelInfo 补 pass-through/catalog 回退，替代 router 的裸 getMultimodal try/catch）+ assertInputModality 工具 + analyze_patent_figure 显式门禁。
-2. **T4.1 写入即落盘**：JsonlTranscriptWriter.recordEntry 每次已 await appendFile（无写后缓冲），flushCheckpoint 是契约性 no-op；durable 边界的真实价值在「副作用前显式 checkpoint」接线。
+2. **T4.1 落盘语义（已随 M3 写缓冲更新）**：JsonlTranscriptWriter.recordEntry 条目序列化后入队、**不立即落盘**（批写：64 KB / 50 ms 兜底），`flushCheckpoint` 为**真 flush**；durable 边界的价值在「副作用前显式 checkpoint」接线（fail-closed）。**注**：本行原始结论「写入即落盘、`flushCheckpoint` 为契约性 no-op」已被 M3 写缓冲取代。
 3. **T4.2 封顶已存在**：calculateRetryDelay 已实现 retryAfterMs 封顶；增量是稳定 retryId 与进度事件透出（重启扫描续算属 always-on 范畴，文档化）。
 4. **T5 基础设施已成熟**：Sati 的 writeSnapshots（mtime+内容哈希双校验）已含三态与 CAS 语义；增量是命名化的纯函数分类器 + 稳定错误码（file_not_observed/file_stale_version），替代消息正则匹配。
 5. **T6.1 预算字段缺失**：计划此前声称 types.ts:62 有 timeoutMs 系误读（那是 subagent fork 选项）；按计划补上 SatiToolDefinition.timeoutMs。

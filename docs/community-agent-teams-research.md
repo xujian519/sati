@@ -102,7 +102,7 @@ dsh-agent-teams 是 DeepSeek Harness（DSH，开源 AI agent 宿主，cordis 插
 | 任务 | `src/task/` 是**后台 bash 任务运行时**（`BackgroundTaskRuntime`：spawn 分离进程 + 输出环形缓冲），不是多智能体任务池 |
 | 常驻执行 | `src/always-on/`：Discovery 计划/报告/工作周期 + workspace 隔离；`src/cron/` 定时任务 |
 | 记忆 | 白盒记忆（`src/context/memory/`，EdgeClawMemoryProvider + edgeclaw-memory-core 子包）、知识库 `knowledge.db`（图谱/判例/法规/wiki）、Dream Mode 压缩与回滚 |
-| 会话持久化 | `JsonlTranscriptWriter` 写入即落盘 + `flushCheckpoint`；`TaskResumeScanner` 形态断点续算（request_header 后无 durable 消息自动续算）；`retry_schedule` 重试轨迹 |
+| 会话持久化 | `JsonlTranscriptWriter` 批写（64 KB / 50 ms 兜底）+ 显式 `flushCheckpoint`（真 flush）；`TaskResumeScanner` 形态断点续算（`request_header` 后无 durable 消息自动续算）；`retry_schedule` 重试轨迹 |
 | 事件/网关 | AgentEvent + GatewayEvent 62 事件（事件矩阵门禁）、gateway 协议 1.3、输出门禁 HITL 审批闭环（GatewayApprovalBus + approvalDecide） |
 | UI | `ui/src/components/task-master/`（任务看板：dependencies/subtasks/status）、workflow-run 相关组件、审批卡片 |
 
