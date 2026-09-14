@@ -70,8 +70,9 @@
     - **2026-09-12（第五刀，类内拆分）**：(c) **browser-use 泄漏已处置**——`prepareSessionRuntime` 的会话工具面阶段（113 行：每会话 MCP + unattended excludeTools + always_on 剥离 + 可用性过滤 + 成员角色裁剪，含截图目录 mkdir 与逐 spec 参数改写）抽到 `src/cli/sessionToolSurface.ts`（`provisionSessionTools(input)`），registry 1663 → 1563 行；决策见 `docs/notes/implemented/2026-09-12-session-tool-surface-extraction.md`。剩余：(b) 工厂内 team 成员回收闭包双实现 + 类内其余巨方法（`prepareSessionRuntime` 余两段 / `resolve` 249 / `createAgentConfig` 127）。
     - **2026-09-12（第六刀，类内拆分）**：专利输出门禁构造（167 行，每会话 `PatentOutputGate` + HITL 审批闭环 + 决策溯源旁路 + policy-bridge deny 编译 + 决策反馈回流）抽到 `src/cli/patentOutputGateFactory.ts`（`buildPatentOutputGate(deps)`，gateway/teamDb/sessionOverrides 以 accessor 延迟取数），registry 1563 → 1384 行；决策见 `docs/notes/implemented/2026-09-12-patent-output-gate-factory.md`。
   - **2026-08-27 新增上帝函数 2 个**：`GatewayWsConnection.dispatchRequest`（316 行 switch，见 TD-GATEWAY-002）、kanban `ui/src/components/kanban/hooks/useBoardState.ts::useBoardState`（398 行，见 TD-UI-CHAT-N14）。
-- **TD-SIZE-001** · 大文件：`SkillsV2.tsx` 2503 · `AgentLoop.ts` 2305 · `ProjectRuntimeRegistry.ts` 642（2026-09-12 由 `createLocalGateway.ts` 2437 拆出后经八刀类内拆分：会话工具面 / 专利输出门禁 / 会话依赖装配 / Agent 配置构造 / 项目运行时构造 / 会话权限 lifecycle，组合根降至 448） · `sati-bridge.js` 2055 · `routes/taskmaster.js` 1888 · `PdfDocumentPreview.tsx` 1861 · `WeComChannel.ts` 1761
-  - 工作量：L · 严重级：P2 · 状态：new
+- **TD-SIZE-001** · 大文件：`SkillsV2.tsx` 2503 · `AgentLoop.ts` 2130 · `ProjectRuntimeRegistry.ts` 642（2026-09-12 由 `createLocalGateway.ts` 2437 拆出后经八刀类内拆分：会话工具面 / 专利输出门禁 / 会话依赖装配 / Agent 配置构造 / 项目运行时构造 / 会话权限 lifecycle，组合根降至 448） · `sati-bridge.js` 2055 · `routes/taskmaster.js` 1888 · `PdfDocumentPreview.tsx` 1861 · `WeComChannel.ts` 1761
+  - 工作量：L · 严重级：P2 · 状态：partial
+  - **2026-09-14 进展（AgentLoop 第 5 刀）**：turn 出口与中止捕获（`emitStatus`/`createAbortStatus`/`captureTurn`/`terminateTurn`/`captureAbortedPartial`/`abortTurn`）外迁 `src/agent/loop/turnExit.ts`，共享恢复策略（`continueWithTransientPrompt`/`emitEmptyOutputTokenBump`/`recoverFromMaxOutputBump`/`recoverFromEmptyResponse`）外迁 `src/agent/loop/recoveryStrategies.ts`，AgentLoop.ts 2433 → 2130 行；决策见 `docs/notes/implemented/2026-09-14-agentloop-turn-exit-extraction.md`。**未完成**：`handleModelError` 365 行本体（TD-AGENT-101）、`assembleAndRecover` 约 200 行（TD-AGENT-103）、请求装配与压缩执行器（`createModelRequest` 146 / `createBudgetEvaluator` 46 / `runAutoCompact` 67）。
 
 ### 测试
 - **TD-TEST-001** · 主链路核心缺直接单测（见各模块节 *_GATEWAY* / *_ROUTER*）。工作量：M · 严重级：P1 · 状态：new
@@ -107,15 +108,17 @@
   - 建议：按恢复路径拆成独立策略方法并统一调度口串联。
   - 证据：`handleModelError@795`→`handleNoToolCalls@1166`；`809/888/923` 多个独立分支并列。
   - **2026-08-27 复核（范围扩大）**：债不止于单函数过长——**恢复策略被复制进姊妹函数**，拆分 `handleModelError` 单独完成会留下孪生体。Pair A（max-output 状态机）：`assembleAndRecover :659-694` ↔ `handleModelError :1097-1132`（`resolveOutputTokenRetryBump→setTransientTokenCap→yield token_cap_adjusted→yield turn_continued→continueWithTransientPrompt` 全同）；Pair B（连空响应状态机）：`assembleAndRecover :726-759` ↔ `handleNoToolCalls :1189-1225`（含 `hasAttemptedEmptyRetry` 首重分支与穷尽路径）。改重试上限/提示词/事件载荷须同步 2–3 处（R2/R3）。建议先抽 `recoverFromMaxOutputBump(...)` 与 `recoverFromEmptyResponse(...)` 策略方法供三处复用，再做既有拆分。类别：A/F · Pain×Spread：3×2=6 · 严重级维持 P1。
+  - **2026-09-14 进展（孪生体已收口为独立模块）**：Pair A/B 的策略方法在早前轮次已抽取并三处复用；本日进一步外迁为 `src/agent/loop/recoveryStrategies.ts`（连同 `continueWithTransientPrompt`/`emitEmptyOutputTokenBump`），共享关系由模块结构而非注释保证，`TokenCapManager` 经 `TurnExitDeps` 显式注入。**未完成**：`handleModelError` 本体仍 365 行（约 10 条互斥恢复路径并列），拆分方案（按路径切成策略方法 + 统一调度口）未动。决策见 `docs/notes/implemented/2026-09-14-agentloop-turn-exit-extraction.md`。
 - **TD-AGENT-102** · `TurnRunner.run()` ~197 行且失败路径重复
   - 类别：A · 严重级：P1 · 工作量：M · 状态：new
   - 位置：`src/agent/turn/TurnRunner.ts:149-345`
   - 影响：转录失败/UserPromptSubmit 阻断/未请求模型三条失败路径各自重复「createErrorResult→recordErrorResult→finishArtifacts→recordFailureStatus→yield」样板。
   - 建议：抽 `emitEarlyFailure(options, error, messages)` 统一收口。证据：`181-192`/`210-224`/`229-243` 三处结构重复。
 - **TD-AGENT-103** · `assembleAndRecover` 272 行
-  - 类别：A · 严重级：P2 · 工作量：M · 状态：new
-  - 位置：`src/agent/loop/AgentLoop.ts:523-794`
+  - 类别：A · 严重级：P2 · 工作量：M · 状态：partial
+  - 位置：`src/agent/loop/AgentLoop.ts:577-776`（2026-09-14 行号）
   - 影响：消息组装与错误恢复判定混在一处，嵌套深。建议：拆出错误恢复判定/重试计数。
+  - **2026-09-14 进展**：其调用的两条共享恢复策略与终止出口已外迁（`recoveryStrategies.ts` / `turnExit.ts`），本方法内只剩编排与 Phase C 兜底；**未完成**：方法体本身未拆。
 - **TD-AGENT-104** · 静默吞错 catch
   - 类别：C · 严重级：P2 · 工作量：S · 状态：new
   - 位置：`src/agent/turn/TurnRunner.ts:158,165,334-335,501,523`；`src/agent/team/scheduler/lock.ts:19`
