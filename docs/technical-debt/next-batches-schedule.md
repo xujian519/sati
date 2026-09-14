@@ -67,7 +67,7 @@
 | #148 | edgeclaw-memory-core 大文件 | 随 memory 里程碑（M1/M2 记忆增强） |
 | #149 | 渠道公共 helper 去重（ADAPTERS-N01） | ✅ 2026-09-11 完成主项（13 渠道 mapper 共享，−290 行）；剩余 3 项登记 TD-ADAPTERS-N02/N03/N04 |
 | #151 | patent 域耦合度确认 | ✅ 2026-09-11 复核完成：无结构性耦合（正常业务密度）；4 处小项登记 TD-PATENT-N10/N11/N15 等，见 `docs/patent-coupling-and-data-layer-review.md` |
-| #152 | 800–1000 行工具文件 | ✅ 2026-09-11 完成 `SkillManager` 拆分（915→623 行）+ 校验族直测；✅ 2026-09-14 完成 TD-TOOL-001 `createReadFileTool` 拆分（`readFile.ts` 891→127 行，image/pdf/notebook 分支补 11 条直测）与 `patentPdfDownload.ts` 按职责拆分（953→164 行，10 个模块）；其余文件清单见 TD 段落，保持机会型 |
+| #152 | 800–1000 行工具文件 | ✅ 2026-09-11 完成 `SkillManager` 拆分（915→623 行）+ 校验族直测；✅ 2026-09-14 完成三个 ≥800 行工具文件拆分：TD-TOOL-001 `createReadFileTool`（`readFile.ts` 891→127 行，补 image/pdf/notebook 11 条直测）、`patentPdfDownload.ts`（953→164 行，10 模块）、`patentWorkflowRunTool.ts`（818→149 行，5 模块）；余下 `kanban.ts`/`executeCode.ts` 未达阈值、方案未成形，留作机会型 |
 | #153 | patent 数据映射层领域逻辑位置 | ✅ 2026-09-11 复核完成：适配层不贫血；1 条疑似缺陷已证伪；3 项失真登记 TD-PATENT-N12/N13/N14 |
 
 ## 4. 持续项
