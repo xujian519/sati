@@ -3,8 +3,8 @@ import { chunkText } from "../protocol/text.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
 import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
 import { ImPermissionHelper } from "../protocol/ImPermissionHelper.js";
+import { dispatchChannelMessage } from "../protocol/ImInboundDispatch.js";
 import { processChannelTurn } from "../protocol/ImTurnProcessor.js";
-import { resolveIncomingMessage } from "../protocol/ChannelCommandRegistry.js";
 import { resolveWebSocketImpl, type MinimalWebSocketLike } from "../protocol/resolveWebSocketImpl.js";
 import { MattermostSessionMapper } from "./MattermostSessionMapper.js";
 import { renderMattermostEvent } from "./mattermost-render.js";
@@ -165,43 +165,20 @@ export class MattermostChannel implements ChannelAdapter {
     // Treat each thread as its own session bucket (channel root vs thread reply).
     const chatId = rootId ? `${channelId}:${rootId}` : channelId;
 
-    if (this.elicitation.hasPending(chatId) && this.gateway) {
-      try {
-        const confirmation = await this.elicitation.answer(chatId, text, this.gateway);
-        if (confirmation) await this.sendReply({ channelId, rootId }, confirmation);
-      } catch (e) {
-        this.logger?.error?.(`mattermost: elicitation answer error: ${e}`);
-      }
-      return;
-    }
-
-    if (this.permissions.hasPending(chatId) && this.gateway) {
-      try {
-        const confirmation = await this.permissions.answer(chatId, text, this.gateway);
-        if (confirmation) await this.sendReply({ channelId, rootId }, confirmation);
-      } catch (e) {
-        this.logger?.error?.(`mattermost: permission answer error: ${e}`);
-      }
-      return;
-    }
-
-    if (this.activeChats.has(chatId)) {
-      this.logger?.info?.(`mattermost: chat ${chatId} already active, skipping`);
-      return;
-    }
-
-    const sendCtx = { channelId, rootId };
-    const { mapped, handled } = await resolveIncomingMessage(this.mapper, chatId, text, (_id, t) =>
-      this.sendReply(sendCtx, t),
+    await dispatchChannelMessage(
+      {
+        channelKey: "mattermost",
+        gateway: this.gateway,
+        elicitation: this.elicitation,
+        permissions: this.permissions,
+        activeChats: this.activeChats,
+        mapper: this.mapper,
+        send: (_id, replyText) => this.sendReply({ channelId, rootId }, replyText),
+        turn: mapped => this.processMessage({ channelId, rootId }, mapped.sessionKey, mapped.message),
+        logger: this.logger,
+      },
+      { interactionKey: chatId, text },
     );
-    if (handled) return;
-
-    this.activeChats.add(chatId);
-    try {
-      await this.processMessage(sendCtx, mapped.sessionKey, mapped.message);
-    } finally {
-      this.activeChats.delete(chatId);
-    }
   }
 
   private async processMessage(

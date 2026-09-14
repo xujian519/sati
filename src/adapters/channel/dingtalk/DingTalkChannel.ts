@@ -5,8 +5,8 @@ import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } f
 import { deliverChatCronResult } from "../protocol/ImCronDelivery.js";
 import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
 import { ImPermissionHelper } from "../protocol/ImPermissionHelper.js";
+import { dispatchChannelMessage } from "../protocol/ImInboundDispatch.js";
 import { processChannelTurn } from "../protocol/ImTurnProcessor.js";
-import { resolveIncomingMessage } from "../protocol/ChannelCommandRegistry.js";
 import { DingTalkSessionMapper } from "./DingTalkSessionMapper.js";
 import { renderDingTalkEvent } from "./dingtalk-render.js";
 
@@ -153,42 +153,20 @@ export class DingTalkChannel implements ChannelAdapter {
       this.rememberWebhook(chatId, webhook);
     }
 
-    if (this.elicitation.hasPending(chatId) && this.gateway) {
-      try {
-        const confirmation = await this.elicitation.answer(chatId, text.trim(), this.gateway);
-        if (confirmation) await this.sendReply(chatId, confirmation);
-      } catch (e) {
-        this.logger?.error?.(`dingtalk: elicitation answer error: ${e}`);
-      }
-      return;
-    }
-
-    if (this.permissions.hasPending(chatId) && this.gateway) {
-      try {
-        const confirmation = await this.permissions.answer(chatId, text.trim(), this.gateway);
-        if (confirmation) await this.sendReply(chatId, confirmation);
-      } catch (e) {
-        this.logger?.error?.(`dingtalk: permission answer error: ${e}`);
-      }
-      return;
-    }
-
-    if (this.activeChats.has(chatId)) {
-      this.logger?.info?.(`dingtalk: chat ${chatId} already active, skipping`);
-      return;
-    }
-
-    const { mapped, handled } = await resolveIncomingMessage(this.mapper, chatId, text, (id, t) =>
-      this.sendReply(id, t),
+    await dispatchChannelMessage(
+      {
+        channelKey: "dingtalk",
+        gateway: this.gateway,
+        elicitation: this.elicitation,
+        permissions: this.permissions,
+        activeChats: this.activeChats,
+        mapper: this.mapper,
+        send: (id, replyText) => this.sendReply(id, replyText),
+        turn: mapped => this.processMessage(chatId, mapped.sessionKey, mapped.message),
+        logger: this.logger,
+      },
+      { interactionKey: chatId, text },
     );
-    if (handled) return;
-
-    this.activeChats.add(chatId);
-    try {
-      await this.processMessage(chatId, mapped.sessionKey, mapped.message);
-    } finally {
-      this.activeChats.delete(chatId);
-    }
   }
 
   private extractText(data: Record<string, unknown>): string {

@@ -5,8 +5,8 @@ import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } f
 import { deliverChatCronResult } from "../protocol/ImCronDelivery.js";
 import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
 import { ImPermissionHelper } from "../protocol/ImPermissionHelper.js";
+import { dispatchChannelMessage } from "../protocol/ImInboundDispatch.js";
 import { processChannelTurn } from "../protocol/ImTurnProcessor.js";
-import { resolveIncomingMessage } from "../protocol/ChannelCommandRegistry.js";
 import { SignalSessionMapper } from "./SignalSessionMapper.js";
 import { renderSignalEvent } from "./signal-render.js";
 
@@ -182,42 +182,20 @@ export class SignalChannel implements ChannelAdapter {
     const recipient = sourceNumber ?? sessionChatId.replace(/^(dm:|group:)/, "");
     if (recipient) this.recipientByChat.set(sessionChatId, recipient);
 
-    if (this.elicitation.hasPending(sessionChatId) && this.gateway) {
-      try {
-        const confirmation = await this.elicitation.answer(sessionChatId, text, this.gateway);
-        if (confirmation) await this.sendReply(sessionChatId, confirmation);
-      } catch (e) {
-        this.logger?.error?.(`signal: elicitation answer error: ${e}`);
-      }
-      return;
-    }
-
-    if (this.permissions.hasPending(sessionChatId) && this.gateway) {
-      try {
-        const confirmation = await this.permissions.answer(sessionChatId, text, this.gateway);
-        if (confirmation) await this.sendReply(sessionChatId, confirmation);
-      } catch (e) {
-        this.logger?.error?.(`signal: permission answer error: ${e}`);
-      }
-      return;
-    }
-
-    if (this.activeChats.has(sessionChatId)) {
-      this.logger?.info?.(`signal: chat ${sessionChatId} already active, skipping`);
-      return;
-    }
-
-    const { mapped, handled } = await resolveIncomingMessage(this.mapper, sessionChatId, text, (id, t) =>
-      this.sendReply(id, t),
+    await dispatchChannelMessage(
+      {
+        channelKey: "signal",
+        gateway: this.gateway,
+        elicitation: this.elicitation,
+        permissions: this.permissions,
+        activeChats: this.activeChats,
+        mapper: this.mapper,
+        send: (id, replyText) => this.sendReply(id, replyText),
+        turn: mapped => this.processMessage(sessionChatId, mapped.sessionKey, mapped.message),
+        logger: this.logger,
+      },
+      { interactionKey: sessionChatId, text },
     );
-    if (handled) return;
-
-    this.activeChats.add(sessionChatId);
-    try {
-      await this.processMessage(sessionChatId, mapped.sessionKey, mapped.message);
-    } finally {
-      this.activeChats.delete(sessionChatId);
-    }
   }
 
   private async processMessage(chatId: string, sessionKey: string, message: string): Promise<void> {
