@@ -52,6 +52,8 @@ import {
   emitStatus,
   makeTurnResultBuilder,
   terminateTurn,
+  unhandled,
+  type StageOutcome,
   type TurnExitDeps,
   type TurnStepContinue,
   type TurnStepReturn,
@@ -59,8 +61,6 @@ import {
 
 /** 已接管的结论：回主循环（continue）或终止本轮（return）。 */
 export type RecoveryHandled = TurnStepContinue | TurnStepReturn;
-/** 单条路径的结论：handled，或 `unhandled` —— 不接管，交回调度链。 */
-export type RecoveryOutcome = RecoveryHandled | { kind: "unhandled" };
 
 /**
  * 恢复链调用 `AgentLoop.runAutoCompact` 的窄接口：只声明本链使用的
@@ -89,10 +89,6 @@ export interface ModelErrorRecoveryDeps extends TurnExitDeps {
   readonly missingToolResultRecoveryContext: () => { cwd: string; permissionMode: PermissionMode };
   readonly dispatchLifecycle: LifecycleDispatcher;
   readonly runAutoCompact: AutoCompactRunner;
-}
-
-function unhandled(): RecoveryOutcome {
-  return { kind: "unhandled" };
 }
 
 /** 反应式恢复探针：context runtime 未接线或探针抛错时视为放弃恢复。 */
@@ -135,7 +131,7 @@ export async function* learnOutputCapFromRejection(
   decision: RouterDecision,
   error: CanonicalModelError,
   routedMaxOutputTokens: number | undefined,
-): AsyncGenerator<AgentEvent, RecoveryOutcome, unknown> {
+): AsyncGenerator<AgentEvent, StageOutcome, unknown> {
   if (state.hasAttemptedOutputCapRetry) return unhandled();
   // 实际发送值（applyTokenCapsToRequest 之后）优先于 catalog 路由值：
   // config 钳得比 catalog 低时，报错文案回显的请求值才是对拍基准。
@@ -179,7 +175,7 @@ export async function* recoverFromStreamInterruption(
   error: CanonicalModelError,
   assembled: AssembledAssistantMessage,
   toolCalls: CanonicalToolCall[],
-): AsyncGenerator<AgentEvent, RecoveryOutcome, unknown> {
+): AsyncGenerator<AgentEvent, StageOutcome, unknown> {
   const createTurnResult = makeTurnResultBuilder(deps);
   const interruption = error.streamInterruption;
   if (!interruption) return unhandled();
@@ -269,7 +265,7 @@ export async function* retryMissingReasoningContent(
   state: TurnRuntimeState,
   input: AgentLoopInput,
   error: CanonicalModelError,
-): AsyncGenerator<AgentEvent, RecoveryOutcome, unknown> {
+): AsyncGenerator<AgentEvent, StageOutcome, unknown> {
   if (state.hasAttemptedReasoningContentRetry || !isMissingReasoningContentError(error)) return unhandled();
   state.hasAttemptedReasoningContentRetry = true;
   state.messages = addEmptyReasoningContentMarkers(state.messages);
@@ -321,7 +317,7 @@ export async function* recoverFromJsonSelfCorrect(
   state: TurnRuntimeState,
   input: AgentLoopInput,
   error: CanonicalModelError,
-): AsyncGenerator<AgentEvent, RecoveryOutcome, unknown> {
+): AsyncGenerator<AgentEvent, StageOutcome, unknown> {
   if (
     !deps.jsonSelfCorrect ||
     error.code !== "invalid_tool_arguments" ||
@@ -350,7 +346,7 @@ export async function* recoverFromReactiveDecision(
   input: AgentLoopInput,
   decision: RouterDecision,
   error: CanonicalModelError,
-): AsyncGenerator<AgentEvent, RecoveryOutcome, unknown> {
+): AsyncGenerator<AgentEvent, StageOutcome, unknown> {
   const reactive = await tryReactiveRecover(deps, input, error, state.messages, state.hasAttemptedCompact);
   if (!reactive) return unhandled();
 
@@ -502,7 +498,7 @@ export async function* recoverFromMaxOutputLimit(
   decision: RouterDecision,
   error: CanonicalModelError,
   routedMaxOutputTokens: number | undefined,
-): AsyncGenerator<AgentEvent, RecoveryOutcome, unknown> {
+): AsyncGenerator<AgentEvent, StageOutcome, unknown> {
   if (error.code !== "max_output_reached") return unhandled();
   // 输出触顶的响应含截断内容（可能带半截工具调用语法）：Phase A/B 恢复
   // 响应到达前被取消时，绝不能把原始消息作为最终消息持久化

@@ -1,6 +1,5 @@
 import {
   applyModelEventToAssembler,
-  assembleAssistantMessage,
   cloneMessages,
   createModelMessageAssemblerState,
   type AssembledAssistantMessage,
@@ -9,7 +8,6 @@ import {
   ModelProviderError,
   type CanonicalModelRequest,
   type CanonicalUsage,
-  type CanonicalToolCallBlock,
   materializeMediaReferences,
   getSelfCorrectPrompt,
   detectFormatByText,
@@ -33,7 +31,6 @@ import type { AgentControlBoundaryTranscriptEntry } from "../../session/transcri
 import { renderWorkspaceLedgerBlock, type WorkspaceLedgerBlock } from "../../session/workspace/WorkspaceLedger.js";
 import { requiresPromptCapability } from "../../tool/userInteractionConstraints.js";
 import type { AgentRunMode, AgentLoopInput } from "../protocol/input.js";
-import { repairToolName } from "../../model/streaming/repairToolName.js";
 import { defaultAgentThinking } from "../../model/thinking/registry.js";
 import { applyMethodologyAddendum, computeMethodologyAddendum } from "./methodologyInjection.js";
 import { buildMetacognitivePrompt, buildMetacognitiveRetryPrompt, parseSelfEstimate } from "./metacognitiveControl.js";
@@ -50,8 +47,7 @@ import {
   toolCallKey,
 } from "./repeatToolReminder.js";
 import { buildSteerMessage, steerPreview } from "./steer.js";
-import { collectToolCalls } from "./collectToolCalls.js";
-import { recordModelCall, recordToolResults } from "./doomLoopIntegration.js";
+import { recordToolResults } from "./doomLoopIntegration.js";
 import {
   bindSupplementalMessagesToToolCalls,
   cloneReadFileStateMap,
@@ -60,7 +56,6 @@ import {
   filterAskModeTools,
   findLifecycleBlock,
   findToolLifecycleBlock,
-  mergeUsage,
   mergeUserRules,
   readRequestedMode,
   toolToCanonicalSchema,
@@ -68,7 +63,6 @@ import {
 } from "./misc.js";
 import {
   appendPlanModeReminder,
-  buildPartialTextToolCallRecoveryPrompt,
   markCompactReplacementMessages,
   normalizeMessagesForModelRequest,
   splitTransientPrompts,
@@ -89,10 +83,8 @@ import {
   createMaxTurnsStatus,
   createModelRequestFailedStatus,
   createStructuredOutputCompletedStatus,
-  createToolCallRecoveryExhaustedStatus,
   createToolErrorLoopStatus,
   tokensFromUsage,
-  type AgentStatusMessage,
 } from "./modelErrors.js";
 import { TokenCapManager } from "./tokenCapManager.js";
 import { ToolContextFactory } from "./toolContext.js";
@@ -109,12 +101,9 @@ import {
   type TurnStepContinue,
   type TurnStepReturn,
 } from "./turnExit.js";
-import {
-  continueWithTransientPrompt,
-  recoverFromEmptyResponse,
-  recoverFromMaxOutputBump,
-} from "./recoveryStrategies.js";
+import { continueWithTransientPrompt, recoverFromEmptyResponse } from "./recoveryStrategies.js";
 import { recoverFromModelError, type ModelErrorRecoveryDeps } from "./modelErrorRecovery.js";
+import { assembleAndRecover, type ResponseAssemblyDeps, type SyntheticPromptOutcome } from "./responseAssembly.js";
 
 const agentLogger = createLogger("agent");
 const autoCompactLogger = createLogger("agent:auto-compact");
@@ -158,15 +147,6 @@ type PrepareModelCallResult =
 type StreamModelResponseResult =
   | TurnStepReturn
   | { kind: "continue"; assembler: ReturnType<typeof createModelMessageAssemblerState> };
-type AssembleAndRecoverResult =
-  | TurnStepReturn
-  | TurnStepContinue
-  | {
-      kind: "proceed";
-      assembled: AssembledAssistantMessage;
-      assistantMessage: CanonicalMessage;
-      toolCalls: CanonicalToolCall[];
-    };
 type NoToolCallsResult = TurnStepContinue | TurnStepReturn;
 type ExecuteToolCallsResult = TurnStepReturn | TurnStepContinue | { kind: "proceed"; pairedResults: SatiToolResult[] };
 type CircuitBreakerResult = TurnStepContinue | TurnStepReturn;
@@ -184,6 +164,7 @@ export class AgentLoop {
   private readonly subagentExecutor: SubagentExecutor;
   private readonly turnExit: TurnExitDeps;
   private readonly modelErrorRecovery: ModelErrorRecoveryDeps;
+  private readonly responseAssembly: ResponseAssemblyDeps;
 
   constructor(
     private readonly config: AgentRuntimeConfig,
@@ -212,6 +193,15 @@ export class AgentLoop {
       missingToolResultRecoveryContext: () => this.missingToolResultRecoveryContext(),
       dispatchLifecycle: this.dispatchLifecycle,
       runAutoCompact: (state, input, options) => this.runAutoCompact(state, input, options),
+    };
+    this.responseAssembly = {
+      ...this.turnExit,
+      doomLoop: dependencies.doomLoop,
+      eventEmitter: dependencies.eventEmitter,
+      listToolNames: () => this.dependencies.tools.registry.list().map(tool => tool.name),
+      toolAliases: config.toolAliases,
+      continueWithSyntheticPrompt: (state, input, decision, options) =>
+        this.continueWithSyntheticPrompt(state, input, decision, options),
     };
     this.subagentExecutor = new SubagentExecutor({
       now: this.now,
@@ -250,7 +240,8 @@ export class AgentLoop {
       const streamed = yield* this.streamModelResponse(state, input, prepared.request, prepared.decision);
       if (streamed.kind === "return") return { result: streamed.result, messages: streamed.messages };
 
-      const assembled = yield* this.assembleAndRecover(
+      const assembled = yield* assembleAndRecover(
+        this.responseAssembly,
         state,
         input,
         prepared.request,
@@ -572,207 +563,6 @@ export class AgentLoop {
     }
 
     return { kind: "continue", assembler };
-  }
-
-  private async *assembleAndRecover(
-    state: TurnRuntimeState,
-    input: AgentLoopInput,
-    request: CanonicalModelRequest,
-    decision: RouterDecision,
-    routedMaxOutputTokens: number | undefined,
-    assembler: ReturnType<typeof createModelMessageAssemblerState>,
-  ): AsyncGenerator<AgentEvent, AssembleAndRecoverResult, unknown> {
-    const assembled = assembleAssistantMessage(assembler);
-    state.usage = mergeUsage(state.usage, assembled.usage);
-    state.lastModelUsage = assembled.usage;
-    let assistantMessage = assembled.message;
-    let toolCalls = collectToolCalls(assistantMessage);
-    if (assembled.hasTextFallbackToolCalls) {
-      const repaired = this.repairTextExtractedToolNames(assistantMessage, toolCalls);
-      assistantMessage = repaired.message;
-      toolCalls = repaired.toolCalls;
-    }
-    state.finalMessage = assistantMessage;
-    state.expireConsumedTransientPrompts();
-    const fatalReason = recordModelCall(
-      this.dependencies.doomLoop,
-      assistantMessage,
-      input,
-      this.dependencies.eventEmitter,
-    );
-    if (fatalReason) state.doomLoopFatalReason = fatalReason;
-
-    if (assembled.error) {
-      // 错误路径（含 streamInterruption）由 run() 主循环转交
-      // modelErrorRecovery.recoverFromModelError 恢复/终止。这里不得在正常路径
-      // 落库/emit 未经验证的 assistantMessage——它可能含半截工具调用（如完整文本
-      // 回退解析出的 tool_call 块），恢复响应到达前被取消时绝不能持久化。
-      return { kind: "proceed", assembled, assistantMessage, toolCalls };
-    }
-
-    // 未知 finishReason（有 message_end 但未映射）：视为正常完成。OpenAI
-    // 兼容代理/本地推理服务常返回未枚举的 finish_reason（eos_token 等），
-    // 其响应内容（文本/工具调用）是完整的——注入恢复提示会把每次成功响应
-    // 拖入恢复链并在 2 次后使整个 turn 失败。真正的断流由 streamInterruption
-    // 错误路径覆盖，空响应由下方 empty-response 恢复链处理。
-    // 正常装配即视为恢复成功：连续中断计数在此清零，与 unknownFinish 恢复
-    // 语义对称——恢复流成功产出后下一次可独立恢复的中断重新计数。
-    state.streamInterruptionRecoveryCount = 0;
-
-    if (assembled.hasPartialTextToolCall) {
-      if (state.maxOutputRecoveryCount < MAX_OUTPUT_RECOVERY_LIMIT) {
-        state.maxOutputRecoveryCount++;
-        // 当前 assistant 消息含不安全的工具片段：恢复响应到达前若被取消，
-        // 绝不能把它作为最终消息返回/落库。
-        state.finalMessage = undefined;
-        return yield* continueWithTransientPrompt(
-          state,
-          input,
-          buildPartialTextToolCallRecoveryPrompt(assembled.partialTextToolCall),
-          "max_output_recovery",
-        );
-      }
-
-      const detail = assembled.partialTextToolCall
-        ? `${assembled.partialTextToolCall.format}/${assembled.partialTextToolCall.reason}`
-        : "unknown partial text tool-call";
-      // 半截文本工具调用无安全最终文本（safeFinalTextMessage 恒 undefined）。
-      state.finalMessage = undefined;
-      const result = this.createTurnResult(input, {
-        type: "error",
-        stopReason: "model_error",
-        usage: state.usage,
-        permissionDenials: state.permissionDenials,
-        turns: state.turnCount,
-        startedAt: state.startedAt,
-        finalMessage: state.finalMessage,
-        structuredOutput: state.structuredOutput,
-        errors: [
-          agentError(
-            "agent_model_error",
-            `Partial text tool-call recovery exhausted after ${MAX_OUTPUT_RECOVERY_LIMIT} attempts (${detail}).`,
-          ),
-        ],
-      });
-      yield await emitStatus(
-        input,
-        createToolCallRecoveryExhaustedStatus({
-          error: result.errors![0]!,
-          attempts: state.maxOutputRecoveryCount,
-          reason: detail,
-        }),
-      );
-      return yield* terminateTurn(this.turnExit, input, state, result, { emitFailureEvent: true });
-    }
-
-    // When jsonrepair silently "fixed" truncated JSON and the response
-    // was cut by max_tokens, the tool call arguments are likely incomplete
-    // (e.g. half-written file content). Apply the same recovery as
-    // max_output_reached: token doubling → continuation prompt → give up.
-    //
-    // This gate intentionally runs before durable assistant emission. The
-    // recovered response should replace the dirty repaired/truncated message,
-    // not leave an unmatched tool_call in the transcript.
-    if (
-      assembled.hasRepairedToolCalls &&
-      (assembled.finishReason === "length" ||
-        assembled.finishReason === "tool_call" ||
-        assembled.finishReason === "stop")
-    ) {
-      agentLogger.warn(
-        `Blocking ${toolCalls.length} repaired-but-truncated tool call(s) — entering max_output recovery`,
-      );
-
-      const largeFileDecision = state.largeFileRepair.recoverFromRepairedTruncation(toolCalls);
-      if (largeFileDecision) {
-        const continued = await this.continueWithSyntheticPrompt(state, input, largeFileDecision, {
-          stripCurrentAssistant: false,
-        });
-        if (continued.type === "completed") {
-          if (continued.status) {
-            yield await emitStatus(input, continued.status);
-          }
-          return yield* terminateTurn(this.turnExit, input, state, continued.result, { emitFailureEvent: true });
-        }
-        yield continued.event;
-        return { kind: "continue" };
-      }
-
-      // Phase A/B 由共享策略方法处理；Phase C 兜底保持在本方法内。
-      const recovery = yield* recoverFromMaxOutputBump(this.turnExit, state, input, decision, routedMaxOutputTokens);
-      if (recovery !== "exhausted") {
-        return { kind: "continue" };
-      }
-
-      // Phase C: exhausted. Do not execute repaired/truncated calls; the
-      // arguments may be syntactically repaired while semantically partial.
-      const result = this.createTurnResult(input, {
-        type: "error",
-        stopReason: "model_error",
-        usage: state.usage,
-        permissionDenials: state.permissionDenials,
-        turns: state.turnCount,
-        startedAt: state.startedAt,
-        finalMessage: state.finalMessage,
-        structuredOutput: state.structuredOutput,
-        errors: [
-          agentError(
-            "agent_model_error",
-            "Recovered tool call still looked repaired/truncated after max-output recovery was exhausted.",
-          ),
-        ],
-      });
-      yield await emitStatus(
-        input,
-        createToolCallRecoveryExhaustedStatus({
-          error: result.errors![0]!,
-          attempts: state.maxOutputRecoveryCount,
-          reason: "repaired_truncated_tool_calls",
-        }),
-      );
-      return yield* terminateTurn(this.turnExit, input, state, result, { emitFailureEvent: true });
-    }
-
-    if (!assembled.error && toolCalls.length === 0 && textFromMessage(assistantMessage).length === 0) {
-      const recovery = yield* recoverFromEmptyResponse(
-        this.turnExit,
-        state,
-        input,
-        decision,
-        request,
-        assembled.finishReason,
-        routedMaxOutputTokens,
-      );
-      if (recovery === "recovered-return") {
-        return { kind: "continue" };
-      }
-      if (recovery !== "unhandled") {
-        return recovery;
-      }
-
-      const status = createEmptyResponseStatus({
-        provider: request.provider,
-        model: request.model,
-        attempts: 2,
-      });
-      yield await emitStatus(input, status);
-      const result = this.createTurnResult(input, {
-        type: "success",
-        stopReason: "completed",
-        usage: state.usage,
-        permissionDenials: state.permissionDenials,
-        turns: state.turnCount,
-        startedAt: state.startedAt,
-        finalMessage: state.messages.filter(m => m.role === "assistant").at(-1),
-      });
-      return yield* terminateTurn(this.turnExit, input, state, result, { errored: true });
-    }
-
-    state.messages.push(assistantMessage);
-    yield { type: "assistant_message", sessionId: input.sessionId, turnId: input.turnId, message: assistantMessage };
-    await input.onDurableMessage?.(assistantMessage);
-
-    return { kind: "proceed", assembled, assistantMessage, toolCalls };
   }
 
   private async *handleNoToolCalls(
@@ -1289,17 +1079,7 @@ export class AgentLoop {
     input: AgentLoopInput,
     decision: LargeFileRepairDecision,
     options: { stripCurrentAssistant?: boolean } = {},
-  ): Promise<
-    | {
-        type: "continue";
-        event: AgentEvent;
-      }
-    | {
-        type: "completed";
-        result: AgentTurnResult;
-        status?: AgentStatusMessage;
-      }
-  > {
+  ): Promise<SyntheticPromptOutcome> {
     if (decision.type === "stop") {
       const error = agentError("agent_tool_error_loop", decision.reason);
       const result = this.createTurnResult(input, {
@@ -1668,34 +1448,6 @@ export class AgentLoop {
         messages: markCompactReplacementMessages(compact.messages),
       }),
     ).catch(error => agentLogger.warn("onCompactPersisted failed:", error));
-  }
-
-  private repairTextExtractedToolNames(
-    message: CanonicalMessage,
-    toolCalls: CanonicalToolCall[],
-  ): { message: CanonicalMessage; toolCalls: CanonicalToolCall[] } {
-    if (toolCalls.length === 0) return { message, toolCalls };
-    const validNames = new Set(this.dependencies.tools.registry.list().map(tool => tool.name));
-    const repairedById = new Map<string, string>();
-    const repairedToolCalls = toolCalls.map(call => {
-      const repaired = repairToolName(call.name, validNames, this.config.toolAliases);
-      if (!repaired) return call;
-      repairedById.set(call.id, repaired.name);
-      return { ...call, name: repaired.name };
-    });
-    if (repairedById.size === 0) return { message, toolCalls };
-
-    return {
-      message: {
-        ...message,
-        content: message.content.map(block => {
-          if (block.type !== "tool_call") return block;
-          const repairedName = repairedById.get(block.id);
-          return repairedName ? ({ ...block, name: repairedName } satisfies CanonicalToolCallBlock) : block;
-        }),
-      },
-      toolCalls: repairedToolCalls,
-    };
   }
 
   /** turn 结果构造（sessionId/turnId/completedAt 补齐），now 由本类依赖注入。 */
