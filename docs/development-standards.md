@@ -35,7 +35,7 @@
 |---|---|---|---|
 | 陈述层（standing orders） | `AGENTS.md`（根，入库，每会话必读） | 每条 1–3 行的铁律 + 链接其详述家 | 故事、worked examples、从链接家重复的内容 |
 | 本地 AI 指南 | `CLAUDE.md`（**不入库**，见 .gitignore） | 面向 AI 助手的全量细节：目录、命令、架构约束、历史专项结论 | 不提交；不是规范权威家 |
-| 明细层（规范本身） | `docs/development-standards.md`（本文件）+ `CONTRIBUTING.md`（贡献流程） | 规则是什么、边界是什么、为什么 | 运行时/版本理由（→ 决策记录） |
+| 明细层（规范本身） | `docs/development-standards.md`（本文件，代码门禁）+ `docs/issue-management.md`（议题治理）+ `CONTRIBUTING.md`（贡献流程） | 规则是什么、边界是什么、为什么 | 运行时/版本理由（→ 决策记录） |
 | 决策层 | `docs/notes/`（`proposed/` `implemented/` `rejected/`） | 决策背景、放弃过什么、后果（防重新争论） | 迁移计划、验收清单、spec-speak |
 | 实施计划层 | `docs/*-plan.md`（god-function-refactor-plan、patent-drafting-sop-plan 等） | 一次性的落地实施计划 + 验收报告 | 不是规范的长期家；计划完成即归档性质 |
 | 执行层 | `scripts/*`（check-* / gen-* 门禁）+ `simple-git-hooks` + `.github/workflows/ci.yml` | 机器拒绝违规，不靠自觉 | — |
@@ -65,10 +65,11 @@
 | 提交信息 | `scripts/check-commit-msg.mjs`（commit-msg hook） | Conventional Commits（含 `release` 类型） |
 | 提交前 | `scripts/lint-staged.mjs`（pre-commit hook） | staged 文件 biome format + eslint --fix，按 ui/root 分流 |
 | 边界 | `scripts/check-ui-server-boundary.mjs`（挂 ui lint） | `ui/` 不 import `src/`（.js specifier 下 eslint 规则失效，用纯路径静态校验） |
-| 领域门禁 | `check:event-matrix` / `check:patent-sop` / `check:patent-workflow-docs` / `check:html-templates` / `check:skills`（均挂 `pnpm lint`） | 事件矩阵新鲜度、专利 SOP 引用、workflow 文档幂等、HTML 模板、skill frontmatter |
+| 领域门禁 | `check:event-matrix` / `check:patent-sop` / `check:patent-workflow-docs` / `check:html-templates` / `check:skills` / `check:issue-labels`（均挂 `pnpm lint`） | 事件矩阵新鲜度、专利 SOP 引用、workflow 文档幂等、HTML 模板、skill frontmatter、标签清单与 issue 模板一致 |
 | 测试 | 后端 `node:test`（~2800 用例）+ UI `vitest`（~500）+ Playwright e2e + `llm-replay` 无 key 重放 seam | 单元/集成/回路级 |
 | 版本 | `scripts/bump-version.mjs` | 根 / ui / apps-desktop 三处 version lockstep |
 | CI | `.github/workflows/ci.yml`（2 job） | typecheck/lint/format/test（root+ui）+ Windows desktop build&lint |
+| 议题标签 | `.github/labels.yml` + `scripts/sync-labels.mjs --check`（挂 `pnpm lint`）+ `scripts/classify-issue.mjs` + `.github/workflows/issue-triage.yml` / `stale.yml` | 标签清单与 issue 模板双向一致（模板引用未声明标签、scope 勾选项漂移即红）；新议题自动打 `scope:*` 并落 `status: triage`；过期议题自动治理 |
 
 ### 2.2 缺口（❌ / ⚠️，对应 §7 分阶段落地）
 
@@ -140,7 +141,7 @@
 
 ### 领域门禁（Sati 特有，✅ 已落地，维持）
 
-`pnpm lint` 末尾已挂接 5 个领域门禁，任何事件面/专利 SOP/模板改动漏改即红。**这些是 Sati 相对模板的"超额资产"，保持并继续维护**：
+`pnpm lint` 末尾已挂接 6 个领域门禁，任何事件面/专利 SOP/模板/标签改动漏改即红。**这些是 Sati 相对模板的"超额资产"，保持并继续维护**：
 
 | 门禁 | 生成器 | 保护什么 |
 |---|---|---|
@@ -149,6 +150,7 @@
 | `check:patent-workflow-docs` | `gen-patent-workflow-docs.ts --check` | `assets/workflows/patent/generated/*.yaml` 幂等 |
 | `check:html-templates` | `check-html-templates.mjs` | HTML 交付模板约束 |
 | `check:skills` | `validate-skills.mjs` | skill frontmatter 一致性 |
+| `check:issue-labels` | `sync-labels.mjs --check` | 标签清单（`.github/labels.yml`）与 issue 模板双向一致：模板引用未声明标签、scope 勾选项与 `scope:*` 标签漂移即红 |
 
 > **`check:skills` 语义**：该门禁**警告即阻断**——`validate-skills.mjs` 对 `hard`(exit 1) 与 `warn`(exit 2) 均返回非零；因 lint 用 `&&` 链式，任意 skill 触发告警（如描述 <20 字符）都会让 `pnpm lint` 变红。这是有意的严格策略，改 skill 时需保证其 frontmatter 描述达标。
 
@@ -234,6 +236,16 @@
 - [ ] **G4（高，先选型）**：后端 node:test 覆盖接 `c8`，UI vitest 接 `@vitest/coverage-v8`，定阈值（每文件 100% 是 harness 目标，Sati 可先定 package 级 80% 起步）；信条写进规范。
 - [x] **G5-b（2026-08-23）**：`tests/development-standards/lint-contract.spec.ts` + `lint-contract.config.mjs` + `lint-fixtures/`（随 G2 落地）。
 
+### 第 3 步：议题治理（✅ 已落地，2026-09-14）
+
+补齐"规范只管代码、不管问题怎么进来"的缺口——议题侧此前只有 3 个模板与 1 道 PR 追溯门禁，缺标签状态体系、缺自动分类、缺关闭纪律。明细层见 `docs/issue-management.md`。
+
+- [x] **标签体系单一事实源**：`.github/labels.yml`（类型 / `status:*` / `priority:*` / `scope:*`）+ `scripts/sync-labels.mjs`（`--check` 挂 `pnpm lint`，拦清单内部不合规、模板引用未声明标签、scope 勾选项与标签双向漂移）
+- [x] **issue 自动分类**：`scripts/classify-issue.mjs` + `.github/workflows/issue-triage.yml`（模板的「影响 scope」勾选 → `scope:*`；无状态标签的新议题落 `status: triage`；只增不减，越界读取契约节有负控制）
+- [x] **过期治理**：`.github/workflows/stale.yml`（90 天无活动标记、再 30 天关闭；`in-progress`/`blocked`/`help wanted`/`good first issue`/`pinned`/有里程碑者豁免）
+- [x] **明细层与决策记录**：`docs/issue-management.md` + `docs/notes/implemented/2026-09-14-issue-management.md`
+- [ ] **仓库设置（需手工执行一次）**：`node scripts/sync-labels.mjs` 同步标签实体；按需 `gh api` 建版本里程碑
+
 ### 稳定后按需（不做，除非有需求）
 
 - 跨包去重门禁（语义等价，不止文本克隆）；per-file 行数/内聚护栏；平台矩阵扩展（当前仅 Windows desktop job）；双语配对基础设施（Sati 已有 en/zh-CN i18n，但缺 sidecar 配对校验——仅当规模要求时加）。
@@ -251,6 +263,8 @@ pnpm format           # biome format --write
 pnpm test             # build + node --test dist/tests（后端，~2800 用例）
 cd ui && pnpm test    # vitest（UI，~500 用例）
 pnpm gen:event-matrix / pnpm check:event-matrix   # 事件矩阵生成/校验
+pnpm check:issue-labels   # 标签清单与 issue 模板一致性（挂 lint）
+node scripts/sync-labels.mjs   # 把标签清单同步到仓库（人工触发，需 gh 凭据）
 pnpm record:replay    # llm-replay fixture 校验/清单
 node scripts/bump-version.mjs patch|minor|major   # 版本 lockstep
 ```
@@ -261,7 +275,12 @@ node scripts/bump-version.mjs patch|minor|major   # 版本 lockstep
 |---|---|
 | `AGENTS.md` | 根级 standing orders（每会话必读，1–3 行/条 + 链接家） |
 | `CLAUDE.md` | 本地 AI 助手全量指南（**不入库**） |
-| `docs/development-standards.md` | 本文件：规范明细层 |
+| `docs/development-standards.md` | 本文件：规范明细层（代码门禁） |
+| `docs/issue-management.md` | 议题治理明细层（标签体系/分诊/联动/关闭纪律） |
+| `.github/labels.yml` | 标签体系单一事实源（类型/状态/优先级/作用域） |
+| `scripts/sync-labels.mjs` | 标签门禁（`--check` 挂 lint）与仓库同步器 |
+| `scripts/classify-issue.mjs` | issue 自动分类器（scope 勾选 → `scope:*` 标签） |
+| `.github/workflows/issue-triage.yml` / `stale.yml` | 议题自动分类 / 过期治理 |
 | `CONTRIBUTING.md` | 贡献流程：环境/分支/提交/PR/代码规范/测试/视觉验证 |
 | `docs/notes/README.md` | 决策记录规范（生命周期/格式/Alternatives） |
 | `tsconfig.json` | 编译器配置（strict + ES2022 + NodeNext） |
