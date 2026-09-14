@@ -2,12 +2,15 @@
 
 本文件按版本记录 Sati 的重要变更。桌面端版本号（`release(desktop)`）与根 `package.json` 由 `scripts/bump-version.mjs` 同步维护。
 
-## Unreleased
+## v0.1.13 - 2026-09-14
 
+> **版本目标（2026-09-14）**：提示日期语义收口（冻结以保护 prompt cache + 会话内锚定 + 跨日通知，上游 #569/#571）、PilotDeck `v2026.09.10` 可独立部分移植、C40–C42 技术债清算（`any` 收敛 / 无参 `catch` 意图注释 / 指标口径对齐）、P4a 的 `createLocalGateway` 十刀拆分收尾、P6 收敛（删除零消费 DAG 引擎 + policy-bridge 接线）、渠道契约测试与跨渠道共享去重，以及议题治理体系与 CI 稳定性加固。
 > **上游同步（2026-09-10）**：移植 PilotDeck `v2026.09.10`（PR #568）中可独立落地且与 Sati 现状不冲突的部分——会话/项目删除排空（消除迟到写入把已删文件写回）、标题生成与回合收尾解耦、长会话 UI 响应性、桌面端渲染进程恢复。依赖未同步基座（#550/#552/#562）的模型选择记忆/输入队列/侧栏指示器/设置对话框不在本期范围，取舍明细见 `docs/notes/implemented/2026-09-10-upstream-568-port.md`。
 
 ### Feat
 - feat(gateway): 新增可选方法 `close_project_sessions`（协议 MINOR 1.8）——删除项目/会话前显式排空在跑 turn 与转录写入；服务端未实现时抛错而非静默降级
+- feat(rule): policy-bridge 接线工具拦截 —— `action: block` 经 `PermissionRule(source:"policy")` 拦截工具调用，`SATI_RULE_POLICY_BRIDGE_ENABLED` 门控（默认关）
+- feat(issue): 议题治理体系落地 —— `.github/labels.yml` 标签单一事实源 + `check:issue-labels` 双向门禁、新议题自动打 `scope:*` 与 `status: triage`、90+30 天过期治理
 
 ### Fix
 - fix(gateway): 项目关闭时排空会话与转写写入 —— `SessionRouter` 项目级关闭/恢复与代数校验、`AgentSession.dispose()`、`AgentTranscriptWriter.close()` 契约
@@ -15,6 +18,32 @@
 - fix(ui): 删除项目/会话时先经 gateway 排空，读取会话消息失败改显式报错（不再以空历史掩盖）
 - fix(ui): 长会话渲染修复 —— 移除全局 HTML 反转义（保 LaTeX/代码/路径）、打字机降频、侧栏拖拽按帧合并、空视口检测与告警条
 - fix(desktop): 渲染进程崩溃/无响应时提供重载恢复对话框
+- fix(context): 提示日期语义收口 —— 冻结系统提示日期以保护 prompt cache（上游 #569）、会话内锚定并追加跨日通知（上游 #571）、按 UTC 自然日刷新（上游 #571）、中止装配时不提交提示时间状态
+- fix(router): 任务分类忽略跨日日期通知（上游 #571）；`parseTier` 改精确匹配消除多 tier 歧义翻转（上游 #538）；token-saver 降级事件带出判官诊断（上游 #478）；provider 错误信息复用统一凭证脱敏原语
+- fix(channel): api-server 非法 `content` 请求显式返回 400（上游 #561）；企微入站附件补 `channelKey`（上游 #545）
+- fix(mcp): 归一化 MCP 服务名段（上游 #539）
+- fix(desktop): 桌面更新按架构正确筛选安装包（上游 #544）；更新状态与安装包资产选择同口径
+- fix(ui): 上下文窗口标签口径对齐（上游 #522）；上下文百分比与用量比值统一窗口分母
+- fix(agent): 路由判官调用透传 `abortSignal`
+
+### Refactor
+- refactor(cli): P4a 十刀拆分 `createLocalGateway`（模块级 helper → `gatewayRuntimeOptions` → `ProjectRuntimeRegistry` → `teamSubsystem` → `provisionSessionTools` → `patentOutputGateFactory` → `sessionDependencyAssembly` → `agentSessionConfig` → `projectRuntimeFactory` → `sessionLifecycle`）
+- refactor(patent): 删除零消费的 DAG 引擎及其桥接（workflow 引擎收敛，P6）
+- refactor(adapters): 渠道共享化 —— 13 个渠道共用 `ChatSessionMapper` 薄壳；HTTP 请求体读取与「新会话回执」收敛为 `protocol/` 共享实现
+- refactor(extension): `SkillManager` 的 frontmatter 解析族与 bundle 校验族拆出为独立模块
+- refactor(ui): C40 收敛工具渲染注册表 `any` 至 `unknown` 视图；C41 修正 TODO 审计误报
+- refactor(catch): C41 为真静默的无参 `catch` 补 fail-safe 意图注释
+- refactor(scripts): C42 对齐 `measure-techdebt` 指标口径（`any` 改 TS AST 精确统计、无参 catch 拆分总数与无注释数）
+- refactor(router): 精简 tier 解析与降级事件构造的重复逻辑
+
+### Test
+- test(adapters): 企微回调渠道契约测试（P3 第一卡）
+- test(rule): 覆盖 policy-bridge 的 phase 门、deny 优先级与规则 id 报文
+- test(ci): 消除两处时序脆弱用例 —— 2000 行 SQLite 种子改单事务批量插入（I/O 放大降约 250×）、固定 sleep 改有界轮询；修复 CI 上 60s 超时偶发
+
+### Chore
+- 依赖升级：multer 2.3.0、katex 0.18.7、@codemirror/state 6.7.4（含根 overrides 同步）、node-gyp 13.0.2、lint-staged 17.5.1
+- chore(biome): 忽略本地 harness 状态目录
 
 ## v0.1.12 - 2026-09-09
 
