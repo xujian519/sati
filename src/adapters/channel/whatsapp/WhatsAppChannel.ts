@@ -5,6 +5,7 @@ import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } f
 import { deliverChatCronResult } from "../protocol/ImCronDelivery.js";
 import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
 import { ImPermissionHelper } from "../protocol/ImPermissionHelper.js";
+import { resolveIncomingMessage } from "../protocol/ChannelCommandRegistry.js";
 import { WhatsAppSessionMapper } from "./WhatsAppSessionMapper.js";
 import { renderWhatsAppEvent } from "./whatsapp-render.js";
 
@@ -224,12 +225,10 @@ export class WhatsAppChannel implements ChannelAdapter {
       return;
     }
 
-    const mapped = this.mapper.resolve({ chatId: msg.chatId, text: msg.text });
-    if (mapped.command === "new" && !mapped.message) {
-      await this.sendReply(msg.chatId, "已创建新会话。");
-      return;
-    }
-    if (!mapped.message) return;
+    const { mapped, handled } = await resolveIncomingMessage(this.mapper, msg.chatId, msg.text, (id, t) =>
+      this.sendReply(id, t),
+    );
+    if (handled) return;
 
     this.activeChats.add(msg.chatId);
     try {

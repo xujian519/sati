@@ -4,11 +4,13 @@ import type { CronResultDelivery } from "../../../cron/index.js";
 import type { Gateway, GatewayChannelKey, GatewayEvent } from "../../../gateway/index.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
 import { deliverChatCronResult } from "../protocol/ImCronDelivery.js";
+import { resolveIncomingMessage } from "../protocol/ChannelCommandRegistry.js";
 import {
   createAgentStatusHttpErrorBody,
   createVisibleErrorStatusDetail,
   isVisibleFailureStatusDetail,
 } from "../../../status/agentStatus.js";
+import { readRequestBody } from "../protocol/httpBody.js";
 import { WebhookSessionMapper } from "./WebhookSessionMapper.js";
 import { renderWebhookEvent } from "./webhook-render.js";
 
@@ -249,12 +251,10 @@ export class WebhookChannel implements ChannelAdapter {
       return;
     }
 
-    const mapped = this.mapper.resolve({ chatId, text });
-    if (mapped.command === "new" && !mapped.message) {
-      await this.deliverReply(chatId, "已创建新会话。");
-      return;
-    }
-    if (!mapped.message) return;
+    const { mapped, handled } = await resolveIncomingMessage(this.mapper, chatId, text, (id, t) =>
+      this.deliverReply(id, t),
+    );
+    if (handled) return;
 
     this.activeChats.add(chatId);
     try {
@@ -445,24 +445,6 @@ function createWebhookStatusEvent(input: {
 
 function isVisibleFailureGatewayEvent(event: GatewayEvent): boolean {
   return event.type === "agent_status" && isVisibleFailureStatusDetail(event.detail);
-}
-
-function readRequestBody(req: IncomingMessage, max: number): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    let size = 0;
-    req.on("data", (chunk: Buffer) => {
-      size += chunk.length;
-      if (size > max) {
-        reject(new Error("payload too large"));
-        req.destroy();
-        return;
-      }
-      chunks.push(chunk);
-    });
-    req.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
-    req.on("error", reject);
-  });
 }
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {

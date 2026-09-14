@@ -7,6 +7,7 @@ import { deliverChatCronResult } from "../protocol/ImCronDelivery.js";
 import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
 import { ImPermissionHelper } from "../protocol/ImPermissionHelper.js";
 import { resolveIncomingMessage } from "../protocol/ChannelCommandRegistry.js";
+import { readRequestBody } from "../protocol/httpBody.js";
 import { SmsSessionMapper } from "./SmsSessionMapper.js";
 import { renderSmsEvent } from "./sms-render.js";
 
@@ -295,22 +296,4 @@ export class SmsChannel implements ChannelAdapter {
       return false;
     }
   }
-}
-
-function readRequestBody(req: IncomingMessage, max: number): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    let size = 0;
-    req.on("data", (chunk: Buffer) => {
-      size += chunk.length;
-      if (size > max) {
-        reject(new Error("payload too large"));
-        req.destroy();
-        return;
-      }
-      chunks.push(chunk);
-    });
-    req.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
-    req.on("error", reject);
-  });
 }

@@ -4,6 +4,7 @@ import type { Gateway, GatewayChannelKey } from "../../../gateway/index.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
 import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
 import { ImPermissionHelper } from "../protocol/ImPermissionHelper.js";
+import { resolveIncomingMessage } from "../protocol/ChannelCommandRegistry.js";
 import { BlueBubblesSessionMapper } from "./BlueBubblesSessionMapper.js";
 import { renderBlueBubblesEvent } from "./bluebubbles-render.js";
 
@@ -158,12 +159,10 @@ export class BlueBubblesChannel implements ChannelAdapter {
       return;
     }
 
-    const mapped = this.mapper.resolve({ chatId: chatGuid, text });
-    if (mapped.command === "new" && !mapped.message) {
-      await this.sendReply(chatGuid, "已创建新会话。");
-      return;
-    }
-    if (!mapped.message) return;
+    const { mapped, handled } = await resolveIncomingMessage(this.mapper, chatGuid, text, (id, t) =>
+      this.sendReply(id, t),
+    );
+    if (handled) return;
 
     this.activeChats.add(chatGuid);
     try {

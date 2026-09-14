@@ -11,7 +11,7 @@ export type ChatSessionMapperState = {
  * 支持 `/new` 指令开新会话，并提供活跃映射快照。
  *
  * 渠道侧以固定 `channelKey` 的薄壳子类复用（保留各渠道既有类名与 State 类型导出面），
- * 取代 13 份逐字相同的实现（见 `docs/techdebt/adapters-shared-mapper.md` 与 issue #149）。
+ * 取代 13 份逐字相同的实现（见 `docs/notes/implemented/2026-09-11-adapters-skill-split.md` 与 issue #149）。
  */
 export class ChatSessionMapper {
   constructor(
