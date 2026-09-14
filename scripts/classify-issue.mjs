@@ -7,7 +7,10 @@
  *   ISSUE_BODY    议题正文
  *   ISSUE_LABELS  议题已有标签（逗号分隔）
  *
- * 输出（stdout）：待添加的标签，空格分隔（无则输出空行）。workflow 侧据此 `gh issue edit --add-label`。
+ * 输出（stdout）：待添加的标签，**每行一个**（无则输出空行）。workflow 侧逐行
+ * `gh issue edit --add-label`。行分隔而非空格/逗号分隔是刻意的：标签名合法地包含空格
+ * （`status: triage`、`good first issue`），任何以空格为分隔符的传输都会把它拆成两个
+ * 不存在的标签——2026-09-14 实际发生过（workflow 侧 `tr ' ' ','` → `'status:' not found`）。
  *
  * 分类规则（只做"能机械判定"的部分，语义分诊仍由人做）：
  *   1. 作用域——解析正文「影响 scope」节中已勾选的项，映射为 `scope:*`。
@@ -100,7 +103,7 @@ if (isMain) {
   });
 
   if (labels.length > 0) {
-    console.log(labels.join(" "));
+    console.log(labels.join("\n"));
     if (process.env.ISSUE_TITLE) {
       console.error(`→ ${process.env.ISSUE_TITLE}：新增 ${labels.join("、")}`);
     }

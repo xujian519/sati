@@ -18,6 +18,9 @@ permissions:
 jobs:
   classify:
     name: 自动分类 issue
+    # 只治理在办议题。已关闭议题是终态：编辑它（例如按关闭纪律补一句结论）不应
+    # 被重新补上 status: triage。
+    if: github.event.issue.state == 'open'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -39,20 +42,20 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
 
-      - name: Classify issue
-        id: classify
+      # 逐行读标签并逐个 --add-label：标签名合法地包含空格（`status: triage`），
+      # 任何"拼成分隔串再传给 gh"的写法都会把它拆坏（2026-09-14 的 'status:' not found）。
+      - name: Classify and apply labels
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
           ISSUE_TITLE: ${{ github.event.issue.title }}
           ISSUE_BODY: ${{ github.event.issue.body || '' }}
           ISSUE_LABELS: ${{ join(github.event.issue.labels.*.name, ',') }}
         run: |
-          LABELS="$(node scripts/classify-issue.mjs)"
-          echo "labels=${LABELS}" >> "$GITHUB_OUTPUT"
-
-      - name: Apply labels
-        if: steps.classify.outputs.labels != ''
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ISSUE_NUMBER: ${{ github.event.issue.number }}
-          LABELS: ${{ steps.classify.outputs.labels }}
-        run: gh issue edit "$ISSUE_NUMBER" --add-label "$(echo "$LABELS" | tr ' ' ',')"
+          added=0
+          while IFS= read -r label; do
+            [ -z "$label" ] && continue
+            gh issue edit "$ISSUE_NUMBER" --add-label "$label"
+            added=$((added + 1))
+          done < <(node scripts/classify-issue.mjs)
+          echo "已新增 $added 个标签"

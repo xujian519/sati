@@ -7,6 +7,7 @@
  */
 
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { classifyIssue, loadAllowedScopes } from "./classify-issue.mjs";
@@ -84,4 +85,35 @@ test("集成：仓库清单声明的 scope 与模板勾选项一致", () => {
   assert.ok(scopes.has("agent"));
   assert.ok(scopes.has("other"));
   assert.ok(scopes.size >= 15);
+});
+
+/** 以 workflow 同款环境变量跑 CLI，返回逐行标签。 */
+function runCli(env) {
+  const stdout = execFileSync(process.execPath, ["scripts/classify-issue.mjs"], {
+    cwd: ROOT,
+    encoding: "utf8",
+    env: { ...process.env, ...env },
+  });
+  return stdout.split("\n").filter(line => line.length > 0);
+}
+
+// 回归：CLI 输出的每个标签必须独占一行。标签名合法地包含空格（status: triage），
+// 若改用空格/逗号拼接传输，workflow 侧就会把它拆成 'status:' + 'triage' 两个不存在的
+// 标签（2026-09-14 实际导致 issue-triage 首次运行失败）。纯函数测试覆盖不到这一层。
+test("CLI 契约：带空格的标签独占一行，不被空格拼接", () => {
+  const labels = runCli({
+    ISSUE_TITLE: "feat: CLI 契约",
+    ISSUE_BODY: bodyWith("- [x] agent"),
+    ISSUE_LABELS: "",
+  });
+  assert.deepEqual(labels, ["scope:agent", "status: triage"]);
+});
+
+test("CLI 契约：无待添加标签时输出为空", () => {
+  const labels = runCli({
+    ISSUE_TITLE: "feat: 无新增",
+    ISSUE_BODY: bodyWith("- [x] agent"),
+    ISSUE_LABELS: "scope:agent,status: in-progress",
+  });
+  assert.deepEqual(labels, []);
 });
