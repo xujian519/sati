@@ -2,6 +2,7 @@ import type { Gateway, GatewayChannelKey } from "../../../gateway/index.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
 import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
 import { ImPermissionHelper } from "../protocol/ImPermissionHelper.js";
+import { processChannelTurn } from "../protocol/ImTurnProcessor.js";
 import {
   QQBotGateway,
   type QQBotCredentials,
@@ -234,40 +235,19 @@ export class QQChannel implements ChannelAdapter {
     message: string,
     msgId: string,
   ): Promise<void> {
-    if (!this.gateway) return;
-    const chatKey = `c2c:${userOpenId}`;
-
-    let replyText = "";
-    try {
-      for await (const event of this.gateway.submitTurn({
-        sessionKey,
+    await processChannelTurn(
+      {
         channelKey: "qq",
-        message,
-      })) {
-        if (event.type === "elicitation_request") {
-          const questionText = this.elicitation.capture(chatKey, sessionKey, event);
-          await this.sendC2CReplyChunked(userOpenId, questionText, msgId);
-          continue;
-        }
-        if (event.type === "permission_request") {
-          const questionText = this.permissions.capture(chatKey, sessionKey, event);
-          if (questionText) await this.sendC2CReplyChunked(userOpenId, questionText, msgId);
-          continue;
-        }
-        const fragment = renderQQEvent(event);
-        if (fragment != null) replyText += fragment;
-      }
-    } catch (e) {
-      this.logger?.error?.(`qq: submitTurn error (c2c): ${e}`);
-      replyText = "处理消息时发生错误，请重试。";
-    }
-
-    this.elicitation.clear(chatKey);
-    this.permissions.clear(chatKey);
-    const finalText = replyText.trim();
-    if (finalText) {
-      await this.sendC2CReplyChunked(userOpenId, finalText, msgId);
-    }
+        gateway: this.gateway,
+        elicitation: this.elicitation,
+        permissions: this.permissions,
+        render: renderQQEvent,
+        deliver: text => this.sendC2CReplyChunked(userOpenId, text, msgId),
+        logger: this.logger,
+        errorLabel: "qq: submitTurn error (c2c)",
+      },
+      { interactionKey: `c2c:${userOpenId}`, sessionKey, message },
+    );
   }
 
   private async sendC2CReply(userOpenId: string, text: string, msgId?: string, msgSeq?: number): Promise<void> {
@@ -307,39 +287,18 @@ export class QQChannel implements ChannelAdapter {
     message: string,
     msgId: string,
   ): Promise<void> {
-    if (!this.gateway) return;
-
-    let replyText = "";
-    try {
-      for await (const event of this.gateway.submitTurn({
-        sessionKey,
+    await processChannelTurn(
+      {
         channelKey: "qq",
-        message,
-      })) {
-        if (event.type === "elicitation_request") {
-          const questionText = this.elicitation.capture(chatKey, sessionKey, event);
-          await this.sendReplyChunked(groupOpenId, questionText, msgId);
-          continue;
-        }
-        if (event.type === "permission_request") {
-          const questionText = this.permissions.capture(chatKey, sessionKey, event);
-          if (questionText) await this.sendReplyChunked(groupOpenId, questionText, msgId);
-          continue;
-        }
-        const fragment = renderQQEvent(event);
-        if (fragment != null) replyText += fragment;
-      }
-    } catch (e) {
-      this.logger?.error?.(`qq: submitTurn error: ${e}`);
-      replyText = "处理消息时发生错误，请重试。";
-    }
-
-    this.elicitation.clear(chatKey);
-    this.permissions.clear(chatKey);
-    const finalText = replyText.trim();
-    if (finalText) {
-      await this.sendReplyChunked(groupOpenId, finalText, msgId);
-    }
+        gateway: this.gateway,
+        elicitation: this.elicitation,
+        permissions: this.permissions,
+        render: renderQQEvent,
+        deliver: text => this.sendReplyChunked(groupOpenId, text, msgId),
+        logger: this.logger,
+      },
+      { interactionKey: chatKey, sessionKey, message },
+    );
   }
 
   private async sendReply(groupOpenId: string, text: string, msgId?: string, msgSeq?: number): Promise<void> {

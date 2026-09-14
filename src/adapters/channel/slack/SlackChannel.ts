@@ -3,6 +3,7 @@ import { chunkText } from "../protocol/text.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
 import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
 import { ImPermissionHelper } from "../protocol/ImPermissionHelper.js";
+import { processChannelTurn } from "../protocol/ImTurnProcessor.js";
 import { resolveIncomingMessage } from "../protocol/ChannelCommandRegistry.js";
 import { SlackSessionMapper } from "./SlackSessionMapper.js";
 import { renderSlackEvent } from "./slack-render.js";
@@ -201,40 +202,19 @@ export class SlackChannel implements ChannelAdapter {
     sessionKey: string,
     message: string,
   ): Promise<void> {
-    if (!this.gateway) return;
-    const chatId = ctx.threadTs ? `${ctx.channelId}:${ctx.threadTs}` : ctx.channelId;
-
-    let replyText = "";
-    try {
-      for await (const event of this.gateway.submitTurn({
-        sessionKey,
+    const interactionKey = ctx.threadTs ? `${ctx.channelId}:${ctx.threadTs}` : ctx.channelId;
+    await processChannelTurn(
+      {
         channelKey: "slack",
-        message,
-      })) {
-        if (event.type === "elicitation_request") {
-          const questionText = this.elicitation.capture(chatId, sessionKey, event);
-          await this.sendReply(ctx, questionText);
-          continue;
-        }
-        if (event.type === "permission_request") {
-          const questionText = this.permissions.capture(chatId, sessionKey, event);
-          if (questionText) await this.sendReply(ctx, questionText);
-          continue;
-        }
-        const fragment = renderSlackEvent(event);
-        if (fragment != null) replyText += fragment;
-      }
-    } catch (e) {
-      this.logger?.error?.(`slack: submitTurn error: ${e}`);
-      replyText = "处理消息时发生错误，请重试。";
-    }
-
-    this.elicitation.clear(chatId);
-    this.permissions.clear(chatId);
-    const finalText = replyText.trim();
-    if (finalText) {
-      await this.sendReply(ctx, finalText);
-    }
+        gateway: this.gateway,
+        elicitation: this.elicitation,
+        permissions: this.permissions,
+        render: renderSlackEvent,
+        deliver: text => this.sendReply(ctx, text),
+        logger: this.logger,
+      },
+      { interactionKey, sessionKey, message },
+    );
   }
 
   private async sendReply(ctx: { channelId: string; threadTs?: string }, text: string): Promise<void> {

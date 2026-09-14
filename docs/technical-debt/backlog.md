@@ -492,7 +492,7 @@
 > 复核更正：历史报告所标 WhatsApp/Sms/Discord/Slack「单函数 god function」**已不复存在**（均已拆为 start/dispatch/handleIncoming/processMessage/sendReply）。类型面较干净（大量 `as Record<string,unknown>`，无 `@ts-ignore`/`: any`）。
 
 - **TD-ADAPTERS-N01** · 渠道间「dispatch + submitTurn 处理循环」脚手架高度重复，未抽公共基类/组合
-  - 类别：D · 严重级：P1 · 工作量：M · 状态：new
+  - 类别：D · 严重级：P1 · 工作量：M · 状态：🔶 部分完成（2026-09-14：`submitTurn` 渲染循环侧已抽为 `protocol/ImTurnProcessor.ts`，15 段循环收敛、14 渠道改薄壳；**仍待做** dispatch 前置（elicitation→permission→activeChats→mapper）与 `deliverCronResult` 投递）
   - 位置：`channel/{whatsapp,sms,slack,discord,…}/*Channel.ts`
   - 影响：21 渠道各自复制「elicitation→permission→activeChats→mapper→processMessage」控制流与几乎相同的 `submitTurn` 渲染循环，改公共逻辑须逐渠道同步。建议：把 processMessage 三元循环与 deliverCronResult 提为共享 turn-processor 组合函数。
   - 证据：`whatsapp/WhatsAppChannel.ts:248-266`、`sms/SmsChannel.ts:248-268`、`slack/SlackChannel.ts:208-228`、`discord/DiscordChannel.ts:198-218`（循环体逐字同构）。
@@ -539,9 +539,10 @@
 
 - **已完成**：13 个渠道的 `*SessionMapper.ts`（归一化后逐字相同的 36 行 ×13）收敛为共享 `src/adapters/channel/protocol/ChatSessionMapper.ts` + 各渠道 8 行薄壳，净减约 290 行；类名与 State 类型导出面保持，13 个 `Channel` 零改动。决策见 `docs/notes/implemented/2026-09-11-adapters-skill-split.md`。
 - **TD-ADAPTERS-N02** · 13 个渠道的单轮处理循环可抽共享 turn-processor（约 −300 行）
-  - 类别：A · 严重级：P2 · 工作量：M · 状态：new
+  - 类别：A · 严重级：P2 · 工作量：M · 状态：**done（2026-09-14）**——实际覆盖 14 渠道 15 段循环（比登记多 `wecom-callback`，qq 的 c2c 分支亦在同一文件内），净减 309 行；共享模块 `src/adapters/channel/protocol/ImTurnProcessor.ts`（107 行）+ 直测 15 条
   - 位置：13 个渠道的 `processMessage` 循环，差异仅 `mattermost:215`（ctx 重算 chatId）、`qq:240`（`sendC2CReplyChunked`）、`slack:208`（前置 gateway null 守卫）
   - 影响：这 13 个渠道**全部处于无测试集合**；且抽取会把 21 个 `submitTurn` 调用点搬入共享模块，`docs/event-producer-consumer.md` 按 `file:line` 硬编码 → **必须同 PR 跑 `pnpm gen:event-matrix`**。建议先补测试再动。
+  - 结果：归一化对比证明 15 段循环本体逐字相同（差异仅签名与投递目标），共享模块取最小结构接口（`ChannelTurnGateway`/`ChannelTurnElicitationSink`/`ChannelTurnPermissionSink`），差异经 `deliver` 闭包 / `interactionKey` / `beforeTurn` / `errorLabel` 四要素吸收；6 处语义不同的循环保留内联（webhook/wecom/weixin/feishu/api-server/tui）。事件矩阵 `submitTurn` 消费点 14 → 1。
 - **TD-ADAPTERS-N03** · 3 个渠道的 `readRequestBody` 逐字重复
   - 类别：A · 严重级：P3 · 工作量：S · 状态：**done（2026-09-14）**
   - 位置：`api-server:475` ≡ `sms:300` ≡ `webhook:452`（17 行 ×3）→ 抽入 `channel/protocol/`。
@@ -562,7 +563,11 @@
   - `qq`：mapper 入参形状为 `{groupId, userId, text}`（非 `{chatId, text}`），且 `command === "new"` 时需回调 `onStateChange` 上报快照——套用 helper 需一层丢弃/转发入参的包装，代码量与可读性均不划算。
 - 决策记录：`docs/notes/implemented/2026-09-14-adapters-channel-helper-dedupe.md`（含 `## Alternatives considered`）。
 - 门禁：`pnpm check` 全绿；`docs/event-producer-consumer.md` 已同变更重生成（行号位移）。
-- **仍待做**：`TD-ADAPTERS-N02`（13 渠道单轮处理循环抽取，P2/M）——前置条件不变：13 个渠道全无测试，且会把 21 个 `submitTurn` 调用点搬入共享模块，须先补测试并同 PR 重生成事件矩阵。
+- **N02 done（2026-09-14）**：新增 `src/adapters/channel/protocol/ImTurnProcessor.ts`——`processChannelTurn(deps, input)` 收拢「`submitTurn` 流 → 交互捕获并即时投递 → 渲染累积 → trim 后整段投递 → 清理挂起」；**实际覆盖 14 渠道 15 段循环**（登记为 13，本轮识别 `wecom-callback` 同形，qq 的 `processC2CMessage` 亦同形），渠道侧 188 插入 / 497 删除（净 −309），共享模块 107 行。差异仅四要素：`deliver` 闭包（吸收 `sendReply(chatId|ctx)` / `sendReplyChunked` / `sendC2CReplyChunked`）、`interactionKey`（与回复目标解耦，mattermost/slack/qq 不同）、`beforeTurn`（discord/telegram 打字指示）、`errorLabel`（qq c2c 的 `(c2c)` 日志后缀）。**测试**：补 `tests/adapters/channel-turn-processor.spec.ts` 15 条直测——被抽取的执行单元此前零覆盖；渠道类本身仍无集成测试（该现状未被本 PR 改变），等价性证据为归一化机械对比。
+- **保留 6 处内联循环（语义而非写法差异）**：`webhook`（可见失败去重 + 结构化状态事件）、`wecom`（逐事件 `sendEventMedia` + 交付物抽取）、`weixin`（live reply 控制器 + 超时看门狗 + generation 断点）、`feishu`（live card + 排队）、`api-server`（投递即写 HTTP 响应）、`tui`（本地渲染）。
+- 决策记录：`docs/notes/implemented/2026-09-14-channel-turn-processor.md`（含 `## Alternatives considered`：渠道基类 / 一并抽 dispatch / 具体类型入参 / 统一日志文案 / 消除 render 薄包装 / 拆 14 个 PR）。
+- 门禁：`pnpm check` 全绿；`docs/event-producer-consumer.md` 已同变更重生成（`submitTurn` 消费点 14 → 1，各事件"submitTurn 流"计数 28 → 14）；`pnpm test` 全绿。
+- **仍待做**：`TD-ADAPTERS-N01` 剩余面——dispatch 前置（elicitation/permission `answer` → `activeChats` 去重 → `resolveIncomingMessage` → `try/finally`）与 `deliverCronResult` 投递共享化；差异面比本轮大（api-server 回写 HTTP 响应、feishu 排队、wecom 按 sessionKey 判据、qq 的 `onStateChange`），需两套投递 sink。
 - **明确不做（判例）**：6 处跨文件微重复（`extractText` 的 `string("")` vs `string|null`、`formatError`、`normalizeBaseUrl` ×3、`sendJson` ×2、`sleep` ×3、WS 双形态）按「跨文件微重复不合并」判例保留；18 个 `render` 薄包装保留（它们是 options 未被误改的回归钉，且被 `tests/adapters/channel-render.spec.ts` 直接 import）。
 - **否定结论（省掉一类工作）**：渠道间不存在时间戳/日期格式化重复；`sessionKey` 解析亦无第二份实现。
 

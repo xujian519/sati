@@ -4,6 +4,7 @@ import type { Gateway, GatewayChannelKey } from "../../../gateway/index.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
 import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
 import { ImPermissionHelper } from "../protocol/ImPermissionHelper.js";
+import { processChannelTurn } from "../protocol/ImTurnProcessor.js";
 import { resolveIncomingMessage } from "../protocol/ChannelCommandRegistry.js";
 import { BlueBubblesSessionMapper } from "./BlueBubblesSessionMapper.js";
 import { renderBlueBubblesEvent } from "./bluebubbles-render.js";
@@ -173,40 +174,18 @@ export class BlueBubblesChannel implements ChannelAdapter {
   }
 
   private async processMessage(chatGuid: string, sessionKey: string, message: string): Promise<void> {
-    if (!this.gateway) return;
-
-    let replyText = "";
-    try {
-      for await (const event of this.gateway.submitTurn({
-        sessionKey,
+    await processChannelTurn(
+      {
         channelKey: "bluebubbles",
-        message,
-      })) {
-        if (event.type === "elicitation_request") {
-          const questionText = this.elicitation.capture(chatGuid, sessionKey, event);
-          await this.sendReply(chatGuid, questionText);
-          continue;
-        }
-        if (event.type === "permission_request") {
-          const questionText = this.permissions.capture(chatGuid, sessionKey, event);
-          if (questionText) await this.sendReply(chatGuid, questionText);
-          continue;
-        }
-        const fragment = renderBlueBubblesEvent(event);
-        if (fragment != null) replyText += fragment;
-      }
-    } catch (e) {
-      this.logger?.error?.(`bluebubbles: submitTurn error: ${e}`);
-      replyText = "处理消息时发生错误，请重试。";
-    }
-
-    this.elicitation.clear(chatGuid);
-    this.permissions.clear(chatGuid);
-
-    const finalText = replyText.trim();
-    if (finalText) {
-      await this.sendReply(chatGuid, finalText);
-    }
+        gateway: this.gateway,
+        elicitation: this.elicitation,
+        permissions: this.permissions,
+        render: renderBlueBubblesEvent,
+        deliver: text => this.sendReply(chatGuid, text),
+        logger: this.logger,
+      },
+      { interactionKey: chatGuid, sessionKey, message },
+    );
   }
 
   private async sendReply(chatGuid: string, text: string): Promise<void> {
