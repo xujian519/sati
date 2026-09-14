@@ -518,12 +518,26 @@
   - 位置：13 个渠道的 `processMessage` 循环，差异仅 `mattermost:215`（ctx 重算 chatId）、`qq:240`（`sendC2CReplyChunked`）、`slack:208`（前置 gateway null 守卫）
   - 影响：这 13 个渠道**全部处于无测试集合**；且抽取会把 21 个 `submitTurn` 调用点搬入共享模块，`docs/event-producer-consumer.md` 按 `file:line` 硬编码 → **必须同 PR 跑 `pnpm gen:event-matrix`**。建议先补测试再动。
 - **TD-ADAPTERS-N03** · 3 个渠道的 `readRequestBody` 逐字重复
-  - 类别：A · 严重级：P3 · 工作量：S · 状态：new
+  - 类别：A · 严重级：P3 · 工作量：S · 状态：**done（2026-09-14）**
   - 位置：`api-server:475` ≡ `sms:300` ≡ `webhook:452`（17 行 ×3）→ 抽入 `channel/protocol/`。
 - **TD-ADAPTERS-N04** · 13 处内联等效于既有共享函数
-  - 类别：A · 严重级：P3 · 工作量：S · 状态：new
+  - 类别：A · 严重级：P3 · 工作量：S · 状态：**done（2026-09-14，8 处转换 / 5 处保留）**
   - 位置：内联体 vs `src/adapters/channel/protocol/ChannelCommandRegistry.ts:363` 的 `resolveIncomingMessage`
   - 注意：**4 个语义例外不得改**——`weixin:568`（队列而非丢弃）、`wecom:761`（按 sessionKey 守卫）、`feishu:505`（chatState.queueTurn）、`api-server:272`（返回 HTTP 响应）。
+
+### 2026-09-14 处置追加（issue #149）
+
+- **N03 done**：新增 `src/adapters/channel/protocol/httpBody.ts`（`readRequestBody` 逐字迁移，保留 `payload too large` 文案与超限 `destroy` 契约），api-server/sms/webhook 三处本地实现删除改 import；补 `tests/adapters/channel-http-body.spec.ts` 4 条直测（**该实现此前零覆盖**）。
+- **N04 done（8/13）**：`dingtalk`/`bluebubbles`/`matrix`/`signal`/`whatsapp`/`webhook` 直传 `(id,t)=>this.sendReply(id,t)`；`slack`/`mattermost` 的回复目标是 `{channelId, threadTs|rootId}` 上下文对象，用 `(_id,t)=>this.sendReply(sendCtx,t)` 丢弃 helper 回传的 chatId。
+- **保留 5 处内联（原登记 4 例，本轮新增识别 `qq`）**——差异是业务语义而非写法：
+  - `api-server`：回执写 HTTP 响应（流式/JSON 二选一），空正文返 400 结构化错误体（非"吞掉"）。
+  - `feishu`：`/new` 先 `abortTurn` + 重置交互状态；活跃时 `queueTurn` 排队而非丢弃。
+  - `wecom`：回执带 `chatType`/`replyToMessageId` 选项；活跃判据是 `sessionKey`。
+  - `weixin`：`/new` 先 `abortTurn` + 重置；空正文分支嵌在 `command === "new"` 内。
+  - `qq`：mapper 入参形状为 `{groupId, userId, text}`（非 `{chatId, text}`），且 `command === "new"` 时需回调 `onStateChange` 上报快照——套用 helper 需一层丢弃/转发入参的包装，代码量与可读性均不划算。
+- 决策记录：`docs/notes/implemented/2026-09-14-adapters-channel-helper-dedupe.md`（含 `## Alternatives considered`）。
+- 门禁：`pnpm check` 全绿；`docs/event-producer-consumer.md` 已同变更重生成（行号位移）。
+- **仍待做**：`TD-ADAPTERS-N02`（13 渠道单轮处理循环抽取，P2/M）——前置条件不变：13 个渠道全无测试，且会把 21 个 `submitTurn` 调用点搬入共享模块，须先补测试并同 PR 重生成事件矩阵。
 - **明确不做（判例）**：6 处跨文件微重复（`extractText` 的 `string("")` vs `string|null`、`formatError`、`normalizeBaseUrl` ×3、`sendJson` ×2、`sleep` ×3、WS 双形态）按「跨文件微重复不合并」判例保留；18 个 `render` 薄包装保留（它们是 options 未被误改的回归钉，且被 `tests/adapters/channel-render.spec.ts` 直接 import）。
 - **否定结论（省掉一类工作）**：渠道间不存在时间戳/日期格式化重复；`sessionKey` 解析亦无第二份实现。
 

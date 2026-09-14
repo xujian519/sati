@@ -2,6 +2,7 @@ import { randomUUID, timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { Gateway, GatewayChannelKey, GatewayEvent } from "../../../gateway/index.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
+import { readRequestBody } from "../protocol/httpBody.js";
 import { createAgentStatusHttpErrorBody, isVisibleFailureStatusDetail } from "../../../status/agentStatus.js";
 import { ApiServerSessionMapper } from "./ApiServerSessionMapper.js";
 import { renderApiServerEvent } from "./api-server-render.js";
@@ -470,24 +471,6 @@ export class ApiServerChannel implements ChannelAdapter {
     res.setHeader("X-Hermes-Session-Id", chatId);
     sendJson(res, 200, buildChatCompletion(this.modelName, replyText.trim()));
   }
-}
-
-function readRequestBody(req: IncomingMessage, max: number): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    let size = 0;
-    req.on("data", (chunk: Buffer) => {
-      size += chunk.length;
-      if (size > max) {
-        reject(new Error("payload too large"));
-        req.destroy();
-        return;
-      }
-      chunks.push(chunk);
-    });
-    req.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
-    req.on("error", reject);
-  });
 }
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
