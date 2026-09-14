@@ -203,6 +203,7 @@ describe("DefaultContextRuntime 会话提示日期锚定", () => {
     const runtime = new DefaultContextRuntime({ now: () => current });
 
     const first = await runtime.prepareForModel(makeInput({ messages }));
+    assert.match(first.systemPrompt ?? "", /now: 2026-09-10/);
     current = new Date("2026-09-11T12:00:00.000Z");
     assert.equal(notices(await runtime.prepareForModel(makeInput({ messages }))).length, 1);
 
@@ -225,7 +226,6 @@ describe("DefaultContextRuntime 会话提示日期锚定", () => {
     const refreshed = await runtime.prepareForModel(makeInput({ messages: nextCheckpoint }));
     assert.equal(promptDate(refreshed), "2026-09-12");
     assert.equal(notices(refreshed).length, 0);
-    assert.equal(first.systemPrompt?.includes("now: 2026-09-10"), true);
   });
 
   it("不同会话各自维护锚点（同一 runtime 内隔离）", async () => {

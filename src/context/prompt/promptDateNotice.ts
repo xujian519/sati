@@ -1,11 +1,10 @@
 /**
  * 跨 UTC 午夜的日期通知（上游 PilotDeck v2026.09.14 / PR #571 语义移植）。
  *
- * 系统提示里的 `<environment>now:` 位于前缀中，是 Anthropic prompt cache 的
- * 缓存键：跨天改写它会让整段前缀失效、按 cache miss 重付一次全量 prefill。
- * 因此会话首次正式组装请求时锚定日期（见 DefaultContextRuntime 的 promptTimeState），
- * 跨天改为在请求消息尾部追加一条合成 user 消息告知真实日期——前缀逐字不变，
- * 模型也不会拿到陈旧日期（陈旧上界收敛到 0 天）。
+ * 系统提示里的 `<environment>now:` 是 prompt cache 缓存键的一部分，跨天改写它会让
+ * 整段前缀失效。因此日期锚定在会话内稳定（见 DefaultContextRuntime.resolvePromptTime），
+ * 跨天改为在请求消息尾部追加一条合成 user 消息告知真实日期——前缀逐字不变，模型也
+ * 不会拿到陈旧日期。
  *
  * 该通知只存在于请求投影：不落 transcript、不写用户会话记录、不参与记忆检索。
  */
@@ -13,7 +12,7 @@
 import type { CanonicalMessage } from "../../model/index.js";
 
 /** 日期通知消息的 `metadata.purpose` 标记（router 分类等旁路据此排除）。 */
-export const PROMPT_DATE_NOTICE_PURPOSE = "date_update";
+const PROMPT_DATE_NOTICE_PURPOSE = "date_update";
 
 /**
  * 构造一条跨日日期通知。

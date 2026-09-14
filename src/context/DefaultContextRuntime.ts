@@ -139,14 +139,7 @@ export class DefaultContextRuntime implements ContextRuntime {
   private readonly memoryRetrievalTimeoutMs: number;
   private readonly knowledgeProfile?: KnowledgeProfile;
   private readonly now: () => Date;
-  /**
-   * 会话提示日期锚点（上游 v2026.09.14 / PR #571 语义移植）。`<environment>now:`
-   * 位于 system prompt 前缀中，是 prompt cache 的缓存键：锚定在会话首次正式组装
-   * 请求，此后不因追加消息、重试、跨天而改写，整段前缀在会话内逐字稳定。跨 UTC
-   * 日改为在消息尾部追加一条日期通知（见 promptDateNotice.ts），陈旧上界收敛到
-   * 0 天；只有完整压缩重写前缀后才重新锚定。需要精确到分秒的工作走
-   * get_current_time 工具。
-   */
+  /** 会话提示日期锚点与已追加的跨日通知；解析与提交规则见 `resolvePromptTime`。 */
   private readonly promptTimeState = new Map<string, PromptTimeState>();
   private fullCompactionCooldownUntil = 0;
   private consecutiveIneffectiveFullCompactions = 0;
@@ -192,45 +185,8 @@ export class DefaultContextRuntime implements ContextRuntime {
       });
     }
 
-    // 提示日期锚点 + 跨日通知。逐条指纹只用于算「未变前缀长度」：头部被重写
-    // （裁剪/微压缩/完整压缩）时，落在重写区内的旧通知必须丢弃，否则下标会指向
-    // 错位的消息。指纹只存摘要，不保留一份内容副本。
-    const messageFingerprints = projection.messages.map(message =>
-      createHash("sha256")
-        .update(stableSerialize({ role: message.role, content: message.content }))
-        .digest("hex"),
-    );
-    const previousTime = this.promptTimeState.get(input.sessionId);
-    let unchangedPrefixLength = 0;
-    while (
-      previousTime !== undefined &&
-      unchangedPrefixLength < messageFingerprints.length &&
-      messageFingerprints[unchangedPrefixLength] === previousTime.messages[unchangedPrefixLength]
-    ) {
-      unchangedPrefixLength += 1;
-    }
-    // 只有完整压缩产生新 checkpoint 才允许刷新 system 日期——那时前缀本来就要
-    // 重写；微压缩、头部裁剪、中间删减都不得改写 system 前缀（否则整段缓存失效）。
-    const newCheckpoint =
-      previousTime !== undefined && isCompactionCheckpointHead(projection.messages) && unchangedPrefixLength < 2;
-    const refreshTime = !input.previewOnly && newCheckpoint;
-    const currentTime = this.now();
-    const currentDate = currentTime.toISOString().slice(0, 10);
-    const promptTimestamp = !previousTime || refreshTime ? currentTime.getTime() : previousTime.timestamp;
-    // 通知保留在原始位置，让后续请求在前缀上继续累积；下标超出未变前缀的（被
-    // 重写波及）丢弃，随后按需在新末尾补一条当前日期。
-    const dateUpdates = refreshTime
-      ? []
-      : (previousTime?.dateUpdates ?? []).filter(update => update.index <= unchangedPrefixLength);
-    const lastDate = dateUpdates.at(-1)?.date ?? new Date(promptTimestamp).toISOString().slice(0, 10);
-    if (currentDate !== lastDate) {
-      dateUpdates.push({
-        index: projection.messages.length,
-        date: currentDate,
-        message: buildPromptDateNotice(currentDate),
-      });
-    }
-    const requestMessages = withDateNotices(projection.messages, dateUpdates);
+    // 提示日期锚点 + 跨日通知（提交时机与重定位规则见 resolvePromptTime）。
+    const promptTime = this.resolvePromptTime(input, projection.messages);
 
     // 提前并行启动记忆检索：build 内部是异步的 memory-gate LLM 调用 + 语义
     // 检索（EdgeClawMemoryProvider 命中 TTL 缓存时几乎零成本），让它在后续
@@ -257,7 +213,7 @@ export class DefaultContextRuntime implements ContextRuntime {
       tools: input.tools,
       customSystemPrompt: input.customSystemPrompt,
       appendSystemPrompt: input.appendSystemPrompt,
-      now: () => new Date(promptTimestamp),
+      now: () => new Date(promptTime.timestamp),
     });
 
     const parts = [...prompt.parts];
@@ -285,7 +241,7 @@ export class DefaultContextRuntime implements ContextRuntime {
         // 中止路径不提交锚点状态：锚点由「已提交状态 + 实时时钟」确定性推导，
         // 下一次组装会重算出同样的值。
         return {
-          messages: requestMessages,
+          messages: promptTime.messages,
           systemPrompt: parts.join("\n\n"),
           systemPromptParts: parts,
           injections,
@@ -339,21 +295,11 @@ export class DefaultContextRuntime implements ContextRuntime {
     // 断点与 messages 必须同一坐标系：通知插入后仍在最终数组上计算微压缩断点，
     // 否则下标右移会把 cache_control 打到错误的块上。
     const microcompactResult = this.microcompactEngine?.apply({
-      messages: requestMessages,
+      messages: promptTime.messages,
     });
 
-    // 预算预演（previewOnly）不得提交锚点与通知位置：候选请求喂的是假设历史，
-    // 提交会让随后的真实请求继承错误下标。
-    if (!input.previewOnly) {
-      this.promptTimeState.set(input.sessionId, {
-        timestamp: promptTimestamp,
-        messages: messageFingerprints,
-        dateUpdates,
-      });
-    }
-
     return {
-      messages: requestMessages,
+      messages: promptTime.messages,
       systemPrompt: joined,
       systemPromptParts: parts,
       injections,
@@ -366,6 +312,55 @@ export class DefaultContextRuntime implements ContextRuntime {
       },
       cacheBreakpoints: microcompactResult?.cacheBreakpoints,
     };
+  }
+
+  /**
+   * 解析本次组装的提示日期锚点与跨日通知（上游 PilotDeck v2026.09.14 / PR #571
+   * 语义移植）。
+   *
+   * `<environment>now:` 位于 system prompt 前缀中、是 prompt cache 的缓存键，故
+   * 日期锚定在会话首次正式组装请求，此后追加消息、重试、跨天都不改写，整段前缀在
+   * 会话内逐字稳定；只有完整压缩产生新 checkpoint（前缀本来就要重写）才重新锚定。
+   * 跨 UTC 日改为在消息尾部追加一条日期通知告知真实日期（见 promptDateNotice.ts），
+   * 陈旧上界收敛到 0 天。需要精确到分秒的工作走 get_current_time 工具。
+   *
+   * 非 `previewOnly` 时提交本次锚点与通知位置；预算预演的候选请求会被丢弃，提交会
+   * 让随后的真实请求继承假设历史的下标。
+   *
+   * @param input - 组装输入（取其 sessionId 与 previewOnly）。
+   * @param messages - 投影后的消息序列。
+   * @returns 模型可见的请求消息（投影 + 通知）与 system prompt 用的锚点时刻。
+   */
+  private resolvePromptTime(
+    input: ContextPrepareInput,
+    messages: CanonicalMessage[],
+  ): { messages: CanonicalMessage[]; timestamp: number } {
+    const fingerprints = fingerprintMessages(messages);
+    const previous = this.promptTimeState.get(input.sessionId);
+    const unchangedPrefixLength = countUnchangedPrefix(fingerprints, previous?.messages);
+    // 前两条未变说明头部仍是上次那个 checkpoint，不能借它刷新日期。
+    const newCheckpoint = previous !== undefined && isCompactionCheckpointHead(messages) && unchangedPrefixLength < 2;
+    const refreshTime = newCheckpoint && !input.previewOnly;
+    const now = this.now();
+    const currentDate = utcDay(now);
+    const timestamp = previous === undefined || refreshTime ? now.getTime() : previous.timestamp;
+    // 通知保留在原始位置，让后续请求在前缀上继续累积；下标超出未变前缀的（被重写
+    // 波及）丢弃，随后按需在新末尾补一条当前日期。
+    const dateUpdates = refreshTime
+      ? []
+      : (previous?.dateUpdates ?? []).filter(update => update.index <= unchangedPrefixLength);
+    const lastDate = dateUpdates.at(-1)?.date ?? utcDay(new Date(timestamp));
+    if (currentDate !== lastDate) {
+      dateUpdates.push({
+        index: messages.length,
+        date: currentDate,
+        message: buildPromptDateNotice(currentDate),
+      });
+    }
+    if (!input.previewOnly) {
+      this.promptTimeState.set(input.sessionId, { timestamp, messages: fingerprints, dateUpdates });
+    }
+    return { messages: withDateNotices(messages, dateUpdates), timestamp };
   }
 
   async applyToolResults(input: ContextToolResultInput): Promise<ContextToolResultResult> {
@@ -727,6 +722,46 @@ function instructionScopeDescription(scope: InstructionScope): string {
     case "local":
       return " (user's private project instructions, not checked in)";
   }
+}
+
+/**
+ * UTC 日期（`YYYY-MM-DD`），与 PromptAssembler 取 `<environment>now:` 的口径一致。
+ *
+ * @param time - 待取日的时刻。
+ * @returns UTC 日期字符串。
+ */
+function utcDay(time: Date): string {
+  return time.toISOString().slice(0, 10);
+}
+
+/**
+ * 投影消息的逐条内容指纹，用于识别两次组装之间未变的头部。只存摘要，不保留内容副本。
+ *
+ * @param messages - 投影后的消息序列。
+ * @returns 与消息一一对应的 sha256 摘要。
+ */
+function fingerprintMessages(messages: CanonicalMessage[]): string[] {
+  return messages.map(message =>
+    createHash("sha256")
+      .update(stableSerialize({ role: message.role, content: message.content }))
+      .digest("hex"),
+  );
+}
+
+/**
+ * 两次组装的共同前缀长度：头部被重写（裁剪/微压缩/完整压缩）的位置。
+ *
+ * @param next - 本次投影的逐条指纹。
+ * @param previous - 上次提交的逐条指纹；无上次提交时为 undefined。
+ * @returns 逐条相同的消息条数。
+ */
+function countUnchangedPrefix(next: readonly string[], previous: readonly string[] | undefined): number {
+  if (previous === undefined) return 0;
+  let length = 0;
+  while (length < next.length && next[length] === previous[length]) {
+    length += 1;
+  }
+  return length;
 }
 
 /**

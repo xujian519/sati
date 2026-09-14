@@ -2093,7 +2093,6 @@ export class AgentLoop {
       ? (this.config.metacognitivePrompt ?? buildMetacognitivePrompt())
       : undefined;
     const prepared = await contextRuntime.prepareForModel({
-      // 预算预演（候选请求）不得提交 prompt-time 状态（提示日期锚点、日期通知位置）。
       previewOnly: options.previewOnly,
       sessionId: input.sessionId,
       turnId: input.turnId,
@@ -2222,6 +2221,7 @@ export class AgentLoop {
     return async (candidateMessages, lastUsage) => {
       let candidateRequest = await this.createModelRequest(candidateMessages, input, {
         emitInstructionEvents: false,
+        // 候选请求只用于预算估算，不得提交提示日期锚点与通知位置。
         previewOnly: true,
       });
       if (options.decision && options.baseRequest && this.dependencies.router.materializeRequest) {

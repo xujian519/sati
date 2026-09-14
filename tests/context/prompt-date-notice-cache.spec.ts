@@ -3,8 +3,7 @@ import { describe, it } from "node:test";
 import { CachedMicroCompactionEngine } from "../../src/context/compaction/CachedMicroCompactionEngine.js";
 import { DefaultContextRuntime } from "../../src/context/DefaultContextRuntime.js";
 import { isPromptDateNotice } from "../../src/context/prompt/promptDateNotice.js";
-import type { ContextPrepareInput } from "../../src/context/protocol/types.js";
-import type { ModelContext } from "../../src/context/protocol/types.js";
+import type { ContextPrepareInput, ModelContext } from "../../src/context/protocol/types.js";
 import type { CanonicalMessage } from "../../src/model/index.js";
 
 /**
@@ -16,7 +15,7 @@ import type { CanonicalMessage } from "../../src/model/index.js";
  * 数组上计算。
  */
 
-function inspectRequest(text: string): CanonicalMessage {
+function userMessage(text: string): CanonicalMessage {
   return { role: "user", content: [{ type: "text", text }] };
 }
 
@@ -49,7 +48,7 @@ function makeInput(overrides: Partial<ContextPrepareInput> = {}): ContextPrepare
     model: "claude-x",
     permissionMode: "bypassPermissions",
     additionalWorkingDirectories: [],
-    messages: [inspectRequest("inspect these files")],
+    messages: [userMessage("inspect these files")],
     tools: [],
     ...overrides,
   };
@@ -80,7 +79,7 @@ describe("跨日通知与微压缩断点同源", () => {
       now: () => current,
       microcompactEngine: new CachedMicroCompactionEngine({ enabled: true }),
     });
-    const messages = [inspectRequest("inspect these files"), ...[0, 1, 2, 3, 4, 5].flatMap(readTurn)];
+    const messages = [userMessage("inspect these files"), ...[0, 1, 2, 3, 4, 5].flatMap(readTurn)];
 
     const day1 = await runtime.prepareForModel(makeInput({ messages }));
     assert.equal(day1.messages.some(isPromptDateNotice), false);
