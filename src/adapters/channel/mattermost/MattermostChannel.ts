@@ -3,6 +3,7 @@ import { chunkText } from "../protocol/text.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
 import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
 import { ImPermissionHelper } from "../protocol/ImPermissionHelper.js";
+import { processChannelTurn } from "../protocol/ImTurnProcessor.js";
 import { resolveIncomingMessage } from "../protocol/ChannelCommandRegistry.js";
 import { resolveWebSocketImpl, type MinimalWebSocketLike } from "../protocol/resolveWebSocketImpl.js";
 import { MattermostSessionMapper } from "./MattermostSessionMapper.js";
@@ -208,43 +209,19 @@ export class MattermostChannel implements ChannelAdapter {
     sessionKey: string,
     message: string,
   ): Promise<void> {
-    if (!this.gateway) return;
-
-    let replyText = "";
-    try {
-      for await (const event of this.gateway.submitTurn({
-        sessionKey,
+    const interactionKey = ctx.rootId ? `${ctx.channelId}:${ctx.rootId}` : ctx.channelId;
+    await processChannelTurn(
+      {
         channelKey: "mattermost",
-        message,
-      })) {
-        if (event.type === "elicitation_request") {
-          const chatId = ctx.rootId ? `${ctx.channelId}:${ctx.rootId}` : ctx.channelId;
-          const questionText = this.elicitation.capture(chatId, sessionKey, event);
-          await this.sendReply(ctx, questionText);
-          continue;
-        }
-        if (event.type === "permission_request") {
-          const chatId = ctx.rootId ? `${ctx.channelId}:${ctx.rootId}` : ctx.channelId;
-          const questionText = this.permissions.capture(chatId, sessionKey, event);
-          if (questionText) await this.sendReply(ctx, questionText);
-          continue;
-        }
-        const fragment = renderMattermostEvent(event);
-        if (fragment != null) replyText += fragment;
-      }
-    } catch (e) {
-      this.logger?.error?.(`mattermost: submitTurn error: ${e}`);
-      replyText = "处理消息时发生错误，请重试。";
-    }
-
-    const chatId = ctx.rootId ? `${ctx.channelId}:${ctx.rootId}` : ctx.channelId;
-    this.elicitation.clear(chatId);
-    this.permissions.clear(chatId);
-
-    const finalText = replyText.trim();
-    if (finalText) {
-      await this.sendReply(ctx, finalText);
-    }
+        gateway: this.gateway,
+        elicitation: this.elicitation,
+        permissions: this.permissions,
+        render: renderMattermostEvent,
+        deliver: text => this.sendReply(ctx, text),
+        logger: this.logger,
+      },
+      { interactionKey, sessionKey, message },
+    );
   }
 
   private async sendReply(ctx: { channelId: string; rootId?: string }, text: string): Promise<void> {

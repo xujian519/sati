@@ -6,6 +6,7 @@ import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } f
 import { deliverChatCronResult } from "../protocol/ImCronDelivery.js";
 import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
 import { ImPermissionHelper } from "../protocol/ImPermissionHelper.js";
+import { processChannelTurn } from "../protocol/ImTurnProcessor.js";
 import { resolveIncomingMessage } from "../protocol/ChannelCommandRegistry.js";
 import { MatrixSessionMapper } from "./MatrixSessionMapper.js";
 import { renderMatrixEvent } from "./matrix-render.js";
@@ -200,40 +201,18 @@ export class MatrixChannel implements ChannelAdapter {
   }
 
   private async processMessage(roomId: string, sessionKey: string, message: string): Promise<void> {
-    if (!this.gateway) return;
-
-    let replyText = "";
-    try {
-      for await (const event of this.gateway.submitTurn({
-        sessionKey,
+    await processChannelTurn(
+      {
         channelKey: "matrix",
-        message,
-      })) {
-        if (event.type === "elicitation_request") {
-          const questionText = this.elicitation.capture(roomId, sessionKey, event);
-          await this.sendReply(roomId, questionText);
-          continue;
-        }
-        if (event.type === "permission_request") {
-          const questionText = this.permissions.capture(roomId, sessionKey, event);
-          if (questionText) await this.sendReply(roomId, questionText);
-          continue;
-        }
-        const fragment = renderMatrixEvent(event);
-        if (fragment != null) replyText += fragment;
-      }
-    } catch (e) {
-      this.logger?.error?.(`matrix: submitTurn error: ${e}`);
-      replyText = "处理消息时发生错误，请重试。";
-    }
-
-    this.elicitation.clear(roomId);
-    this.permissions.clear(roomId);
-
-    const finalText = replyText.trim();
-    if (finalText) {
-      await this.sendReply(roomId, finalText);
-    }
+        gateway: this.gateway,
+        elicitation: this.elicitation,
+        permissions: this.permissions,
+        render: renderMatrixEvent,
+        deliver: text => this.sendReply(roomId, text),
+        logger: this.logger,
+      },
+      { interactionKey: roomId, sessionKey, message },
+    );
   }
 
   private async sendReply(roomId: string, text: string): Promise<boolean> {

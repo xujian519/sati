@@ -6,6 +6,7 @@ import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } f
 import { deliverChatCronResult } from "../protocol/ImCronDelivery.js";
 import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
 import { ImPermissionHelper } from "../protocol/ImPermissionHelper.js";
+import { processChannelTurn } from "../protocol/ImTurnProcessor.js";
 import { DiscordSessionMapper } from "./DiscordSessionMapper.js";
 import { renderDiscordEvent } from "./discord-render.js";
 
@@ -189,41 +190,21 @@ export class DiscordChannel implements ChannelAdapter {
   }
 
   private async processMessage(chatId: string, sessionKey: string, message: string): Promise<void> {
-    if (!this.gateway) return;
-
-    void this.sendTyping(chatId);
-
-    let replyText = "";
-    try {
-      for await (const event of this.gateway.submitTurn({
-        sessionKey,
+    await processChannelTurn(
+      {
         channelKey: "discord",
-        message,
-      })) {
-        if (event.type === "elicitation_request") {
-          const questionText = this.elicitation.capture(chatId, sessionKey, event);
-          await this.sendReply(chatId, questionText);
-          continue;
-        }
-        if (event.type === "permission_request") {
-          const questionText = this.permissions.capture(chatId, sessionKey, event);
-          if (questionText) await this.sendReply(chatId, questionText);
-          continue;
-        }
-        const fragment = renderDiscordEvent(event);
-        if (fragment != null) replyText += fragment;
-      }
-    } catch (e) {
-      this.logger?.error?.(`discord: submitTurn error: ${e}`);
-      replyText = "处理消息时发生错误，请重试。";
-    }
-
-    this.elicitation.clear(chatId);
-    this.permissions.clear(chatId);
-    const finalText = replyText.trim();
-    if (finalText) {
-      await this.sendReply(chatId, finalText);
-    }
+        gateway: this.gateway,
+        elicitation: this.elicitation,
+        permissions: this.permissions,
+        render: renderDiscordEvent,
+        deliver: text => this.sendReply(chatId, text),
+        logger: this.logger,
+        beforeTurn: () => {
+          void this.sendTyping(chatId);
+        },
+      },
+      { interactionKey: chatId, sessionKey, message },
+    );
   }
 
   private async sendReply(chatId: string, text: string): Promise<boolean> {
