@@ -1,0 +1,58 @@
+name: Issue Triage
+
+# 把 issue 模板里的人工勾选（「影响 scope」节）翻译成机器可筛选的 scope:* 标签，
+# 并给没有任何 status:* 的议题补 status: triage，使新议题默认落在待分诊队列。
+#
+# 只增不减：语义分诊（确认、定级、派发）仍由人做，本 workflow 不替人决策。
+# 标签白名单来自 .github/labels.yml；若报 "label not found"，说明清单已变更但
+# 尚未同步——本地跑 `node scripts/sync-labels.mjs` 即可。
+
+on:
+  issues:
+    types: [opened, edited]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  classify:
+    name: 自动分类 issue
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Enable pnpm (corepack)
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.32.1 --activate
+
+      # classify-issue.mjs 依赖根依赖 `yaml` 解析 .github/labels.yml；
+      # 跳过 postinstall 脚本即可满足（纯 JS 依赖，无需编译 native 模块）。
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Classify issue
+        id: classify
+        env:
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body || '' }}
+          ISSUE_LABELS: ${{ join(github.event.issue.labels.*.name, ',') }}
+        run: |
+          LABELS="$(node scripts/classify-issue.mjs)"
+          echo "labels=${LABELS}" >> "$GITHUB_OUTPUT"
+
+      - name: Apply labels
+        if: steps.classify.outputs.labels != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          LABELS: ${{ steps.classify.outputs.labels }}
+        run: gh issue edit "$ISSUE_NUMBER" --add-label "$(echo "$LABELS" | tr ' ' ',')"

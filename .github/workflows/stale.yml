@@ -1,0 +1,52 @@
+name: Stale
+
+# 长期无活动的 issue 自动标记并关闭——控制噪音，但只是"默认归档"，不是否决：
+# 关闭后写明恢复路径（评论即 reopen），且已排期（有 milestone）与已认领
+# （in-progress / blocked / help wanted / good first issue）的议题一律豁免。
+#
+# 阈值取舍：90 天无活动标记 + 再 30 天关闭。项目规模小、issue 少，宁可放宽
+# 也不要误杀——误关一个真实议题的代价远高于多留一个静默议题。
+
+on:
+  schedule:
+    # 每周一 01:17 UTC。避开整点，减少与其它定时任务在 GitHub 侧撞车。
+    - cron: "17 1 * * 1"
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  pull-requests: read
+
+jobs:
+  stale:
+    name: 标记长期无活动的 issue
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/stale@v9
+        with:
+          # 只治理 issue；PR 由评审流程与 dependabot 覆盖，不在此自动关闭。
+          days-before-pr-stale: -1
+          days-before-pr-close: -1
+
+          days-before-issue-stale: 90
+          days-before-issue-close: 30
+          stale-issue-label: stale
+          exempt-issue-labels: "status: in-progress,status: blocked,good first issue,help wanted,pinned"
+          exempt-all-milestones: true
+          # 有新活动即摘掉 stale 标签（默认行为，此处显式写明以免被误改）。
+          remove-stale-when-updated: true
+
+          stale-issue-message: |
+            此议题已有 90 天无活动，暂标记为 `stale`。
+
+            若它对你仍然重要，请补充进展或复现信息（任何评论都会自动移除本标记）；
+            否则将在 30 天后自动关闭。关闭不等于否决——随时评论即可重新打开。
+
+          close-issue-message: |
+            因长期无活动，此议题已自动关闭。
+
+            关闭不等于否决：如果问题依然存在，评论即可重新打开；若已自行解决，
+            也欢迎补一句结论（根本原因 / 修复方式），让后来者能搜到。
+
+          operations-per-run: 30

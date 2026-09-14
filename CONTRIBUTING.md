@@ -72,6 +72,24 @@ docs(ui): update chat i18n keys
    [check-pr-issue.mjs](./.github/scripts/check-pr-issue.mjs)）：写 `Closes #123` /
    `关联 Issue: #123` 等 `#编号`，或写明所偿技术债编号 `TD-*-*`，或声明「无关联 issue」
 
+### 4. Issue
+
+议题是项目的**记忆与作战地图**，不是留言板。完整规范见
+[docs/issue-management.md](./docs/issue-management.md)，贡献者只需记住四条：
+
+- **用模板提交**：空白议题已禁用。Bug 与功能请求模板分开，请按模板补齐复现步骤、
+  影响 scope、契约影响等字段——其中「影响 scope」会被自动翻译成 `scope:*` 标签。
+- **标签含义**：`status: triage`（待分诊，新议题默认）→ `status: in-progress`
+  （处理中）→ 关闭即终态；`priority: p0..p3` 含义同
+  [技术债严重级](./docs/technical-debt/README.md)；`scope:*` 与提交 scope 同名。
+  状态与优先级请落成**标签**而非评论——评论会被埋，标签可筛选。
+- **关联写法**：PR 里写 `Closes #123` 可让议题在合并时自动关闭，这是最不易遗漏的方式；
+  commit message 也欢迎引用 `#123`，方便回溯问题演变过程。
+- **关闭留结论**：关闭议题时补一句「根本原因 / 处置」，不要只点 Close——后来者
+  应该能搜到答案，而不是重读整条讨论串。
+
+**提交议题前请先搜索历史（含已关闭）**：已关闭的议题是结论，不是过期信息。
+
 ## 代码规范
 
 ### 强制项

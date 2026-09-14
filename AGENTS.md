@@ -14,9 +14,11 @@
 7. **决策记录**：非平凡变更（改行为/架构/契约/流程/格式）同一 PR 带/更新一条 `docs/notes/` note，含 `## Alternatives considered`。→ `docs/notes/README.md`
 8. **测试**：改核心模块（`agent/` `router/` `tool/` `session/` 等）必须附测试；单测 mock 外部网络；LLM 回路走重放 seam。→ `CONTRIBUTING.md`
 9. **验证顺序**：先跑聚合门禁 `pnpm check`；完整门禁清单（含 `pnpm test`）见 `docs/development-standards.md` 附录 A。
+10. **议题治理**：标签集合的唯一权威是 `.github/labels.yml`（改标签须过 `pnpm check:issue-labels`）；关闭议题必须留一句结论（根本原因 / 处置），设计使然的取舍落成 `docs/notes/` 决策记录。→ `docs/issue-management.md`
 
 ## 关键环境事实（每会话记住）
 
 - 提交必须走分支 + PR（main 受保护）；提交信息 hook 支持 `release` 类型；pre-commit 跑 `npx lint-staged`。
 - 事件矩阵按 `file:line` 硬编码：跨文件移动代码（含 eslint --fix 删 import）后必须 `pnpm gen:event-matrix`。
 - lint-staged 顺序 biome→eslint：eslint --fix 后需重新 biome 化。
+- 改动 `.github/labels.yml` 或 issue 模板的 scope 勾选项后，除门禁外还需手动跑一次 `node scripts/sync-labels.mjs` 把标签实体同步到仓库（CI 无仓库设置写权限）。

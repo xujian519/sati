@@ -1,0 +1,141 @@
+# Sati 标签声明（单一事实源）
+#
+# 这是 issue/PR 标签体系的**唯一权威**：仓库里的标签由此文件定义，改动走 PR。
+#
+#   node scripts/sync-labels.mjs           # 同步到仓库（幂等 upsert，需 gh 已登录）
+#   node scripts/sync-labels.mjs --check   # 校验清单与模板一致（挂 pnpm lint）
+#
+# 命名纪律：
+#   - 类型标签：无前缀（bug / enhancement / …），表达"这是什么"
+#   - 状态标签：`status: <state>`，表达"处于哪一步"，同时至多一个
+#   - 优先级标签：`priority: p0..p3`，与 docs/technical-debt/README.md 的严重级定义同源
+#   - 作用域标签：`scope: <area>`，与提交 scope 同名，由 issue 模板的「影响 scope」勾选自动打
+#
+# 状态机（终态由关闭表达，不设 status: done，避免状态双写）：
+#   status: triage → status: in-progress → （关闭）
+#                  ↘ status: blocked ↗
+
+labels:
+  # ── 类型 ────────────────────────────────────────────────────────────────
+  - name: bug
+    color: d73a4a
+    description: 缺陷：行为与预期不符
+  - name: enhancement
+    color: a2eeef
+    description: 新功能或对现有能力的改进
+  - name: documentation
+    color: 0075ca
+    description: 文档缺失、过时或错误
+  - name: tech-debt
+    color: fbca04
+    description: 技术债：已登记于 docs/technical-debt/backlog.md 的偿还项
+  - name: question
+    color: d876e3
+    description: 使用疑问，非缺陷
+  - name: dependencies
+    color: 0366d6
+    description: 依赖升级（dependabot 自动打）
+  - name: github_actions
+    color: "000000"
+    description: CI / workflow 相关
+  - name: javascript
+    color: "168700"
+    description: JS/TS 依赖生态相关
+
+  # ── 状态 ────────────────────────────────────────────────────────────────
+  - name: "status: triage"
+    color: fbca04
+    description: 待分诊：新提交、尚未确认与定级
+  - name: "status: in-progress"
+    color: 1d76db
+    description: 已确认并在处理中
+  - name: "status: blocked"
+    color: b60205
+    description: 阻塞：等待外部条件或前置决策
+
+  # ── 优先级（定义同源：docs/technical-debt/README.md §严重级定义）──────
+  - name: "priority: p0"
+    color: b60205
+    description: 堵塞：阻塞合入、可致错误决策或数据损坏
+  - name: "priority: p1"
+    color: d93f0b
+    description: 高：主链路性能/可维护性明显受损
+  - name: "priority: p2"
+    color: fbca04
+    description: 中：局部可维护性/可观测性受损
+  - name: "priority: p3"
+    color: c2e0c6
+    description: 低：风格/文档/次要卫生
+
+  # ── 作用域（与 issue 模板「影响 scope」勾选项一一对应）─────────────────
+  - name: scope:agent
+    color: bfd4f2
+    description: Agent 循环 / 会话 / 子代理 / 团队编排
+  - name: scope:ui
+    color: bfd4f2
+    description: Web UI / 组件 / i18n
+  - name: scope:gateway
+    color: bfd4f2
+    description: WebSocket 网关与协议
+  - name: scope:memory
+    color: bfd4f2
+    description: 白盒记忆与上下文
+  - name: scope:router
+    color: bfd4f2
+    description: 智能路由
+  - name: scope:cli
+    color: bfd4f2
+    description: CLI / TUI 入口
+  - name: scope:mcp
+    color: bfd4f2
+    description: MCP 客户端与运行时
+  - name: scope:always-on
+    color: bfd4f2
+    description: 常驻后台执行
+  - name: scope:tool
+    color: bfd4f2
+    description: 工具系统（注册 / 执行 / 审计）
+  - name: scope:knowledge
+    color: bfd4f2
+    description: 统一知识库
+  - name: scope:patent
+    color: bfd4f2
+    description: 专利执行管线与文书
+  - name: scope:model
+    color: bfd4f2
+    description: 模型抽象与提供方
+  - name: scope:literature
+    color: bfd4f2
+    description: 学术文献检索
+  - name: scope:cron
+    color: bfd4f2
+    description: 定时任务
+  - name: scope:rule
+    color: bfd4f2
+    description: 宪法规则引擎
+  - name: scope:other
+    color: bfd4f2
+    description: 未列入上述模块的其他作用域
+
+  # ── 分流与治理 ──────────────────────────────────────────────────────────
+  - name: good first issue
+    color: 7057ff
+    description: 适合新贡献者上手
+  - name: help wanted
+    color: "008672"
+    description: 欢迎外部贡献者认领
+  - name: duplicate
+    color: cfd3d7
+    description: 重复：已有同议题 issue
+  - name: invalid
+    color: e4e669
+    description: 无效：无法复现或不符合项目范围
+  - name: wontfix
+    color: ffffff
+    description: 不予处理（须写明理由，设计使然者另记决策记录）
+  - name: pinned
+    color: d4c5f9
+    description: 常驻议题：豁免自动关闭
+  - name: stale
+    color: "6e7781"
+    description: 长期无活动，待自动关闭（由 stale workflow 打）
