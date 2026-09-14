@@ -2060,7 +2060,7 @@ export class AgentLoop {
   private async createModelRequest(
     messages: CanonicalMessage[],
     input: AgentLoopInput,
-    options: { emitInstructionEvents?: boolean; state?: TurnRuntimeState } = {},
+    options: { emitInstructionEvents?: boolean; state?: TurnRuntimeState; previewOnly?: boolean } = {},
   ): Promise<CanonicalModelRequest> {
     const contextRuntime = this.dependencies.context ?? new NullContextRuntime();
     const planTodo = this.dependencies.planTodoManager?.forSession(input.sessionId);
@@ -2093,6 +2093,7 @@ export class AgentLoop {
       ? (this.config.metacognitivePrompt ?? buildMetacognitivePrompt())
       : undefined;
     const prepared = await contextRuntime.prepareForModel({
+      previewOnly: options.previewOnly,
       sessionId: input.sessionId,
       turnId: input.turnId,
       cwd: this.config.cwd,
@@ -2197,7 +2198,8 @@ export class AgentLoop {
             promptCacheEnabled() && this.dependencies.getProviderProtocol?.(this.config.provider) === "anthropic",
           explicitBreakpoints: prepared.cacheBreakpoints,
         },
-        ++promptCacheGeneration,
+        // 预算预演不递增 generation：候选请求会被丢弃，否则计数器被假设历史推高。
+        options.previewOnly ? promptCacheGeneration : ++promptCacheGeneration,
       ),
     };
   }
@@ -2219,6 +2221,8 @@ export class AgentLoop {
     return async (candidateMessages, lastUsage) => {
       let candidateRequest = await this.createModelRequest(candidateMessages, input, {
         emitInstructionEvents: false,
+        // 候选请求只用于预算估算，不得提交提示日期锚点与通知位置。
+        previewOnly: true,
       });
       if (options.decision && options.baseRequest && this.dependencies.router.materializeRequest) {
         const patchedBase = { ...options.baseRequest, messages: candidateRequest.messages };

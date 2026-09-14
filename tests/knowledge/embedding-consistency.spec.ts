@@ -25,16 +25,22 @@ function createKnowledgeDb(chunks: Array<{ content: string; vector: number[] }>)
     `INSERT INTO documents (id, source, doc_type, title, indexed_at) VALUES ('d1', 'raw', 'case', '判例X', '2026-01-01')`,
   );
   insDoc.run();
+  const insChunk = db.prepare(
+    `INSERT INTO chunks (document_id, chunk_index, chunk_type, content) VALUES ('d1', ?, 'text', ?)`,
+  );
+  const insEmbedding = db.prepare(
+    `INSERT INTO embeddings (chunk_id, document_id, vector, dim, norm, indexed_at) VALUES (?, 'd1', ?, 4, 1.0, '2026-01-01')`,
+  );
+  // 单事务批量插入：自动提交模式下每条语句各是一次事务（2000 行 ≈ 4000 次 fsync），
+  // 实测相差约 250×（CI 上单条用例曾达 6s），是测试套件里最容易被 60s 超时击中的一处。
+  db.exec("BEGIN");
   chunks.forEach((chunk, i) => {
-    const cid = db
-      .prepare(`INSERT INTO chunks (document_id, chunk_index, chunk_type, content) VALUES ('d1', ?, 'text', ?)`)
-      .run(i, chunk.content).lastInsertRowid as number;
+    const cid = insChunk.run(i, chunk.content).lastInsertRowid as number;
     const buf = Buffer.alloc(chunk.vector.length * 4);
     chunk.vector.forEach((v, j) => buf.writeFloatLE(v, j * 4));
-    db.prepare(
-      `INSERT INTO embeddings (chunk_id, document_id, vector, dim, norm, indexed_at) VALUES (?, 'd1', ?, 4, 1.0, '2026-01-01')`,
-    ).run(cid, buf);
+    insEmbedding.run(cid, buf);
   });
+  db.exec("COMMIT");
   db.close();
   return dbPath;
 }

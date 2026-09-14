@@ -75,6 +75,11 @@ export type ContextPrepareInput = {
   appendSystemPrompt?: string;
   /** Maximum messages retained when no compact boundary is in play. */
   maxMessages?: number;
+  /**
+   * 仅预算预演：为 token 估算组装候选请求，不提交提示时间锚点、日期通知位置等
+   * prompt-time 状态——候选请求会被丢弃，提交会让真实请求继承假设历史的状态。
+   */
+  previewOnly?: boolean;
 };
 
 export type ContextToolResultInput = {
