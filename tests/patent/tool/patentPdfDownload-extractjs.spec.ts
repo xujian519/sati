@@ -3,7 +3,7 @@
  *
  * - assets/patent/pdf-link-extract.js 存在且首行版本标记格式正确；
  * - 文件满足 String.raw 嵌入约束（无反引号、无 ${）；
- * - TS 内嵌备份（patentPdfDownload.ts PDF_LINK_EXTRACT_JS）与文件 IIFE 主体逐字符一致；
+ * - TS 内嵌备份（patent-pdf-download/browserScripts.ts PDF_LINK_EXTRACT_JS）与文件 IIFE 主体逐字符一致；
  * - Python 内嵌备份（download_patent_ego.py）与文件 IIFE 主体逐字符一致；
  * - 集成：生成脚本热加载文件内容（含版本标记行，证明来自文件而非备份）。
  *
@@ -62,7 +62,7 @@ test("单一事实源文件：存在、版本标记、IIFE 结构与嵌入约束
 });
 
 test("TS 内嵌备份与文件 IIFE 主体逐字符一致", t => {
-  const tsPath = findRepoFile("src/tool/builtin/patentPdfDownload.ts");
+  const tsPath = findRepoFile("src/tool/builtin/patent-pdf-download/browserScripts.ts");
   if (!tsPath) {
     t.skip("dist 产物不含源码，跳过一致性断言");
     return;

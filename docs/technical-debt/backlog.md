@@ -213,9 +213,11 @@
   - 位置：`src/tool/builtin/validateSpecification.ts:153-156`
   - 影响：RDKit/SMILES 抽检异常被 `return []` 吞掉，失败无日志/遥测。建议：catch 记录 warning 并附 `degraded` 标记。
 - **TD-TOOL-007** · `patentPdfDownload` 内嵌 ~90 行 JS 驱动脚本模板
-  - 类别：A/G · 严重级：P3 · 工作量：M · 状态：new
-  - 位置：`src/tool/builtin/patentPdfDownload.ts:855-949`
+  - 类别：A/G · 严重级：P3 · 工作量：M · 状态：**partial（2026-09-14）**
+  - 位置：`src/tool/builtin/patent-pdf-download/browserScripts.ts`（2026-09-14 由 `patentPdfDownload.ts:855-949` 平移；`buildDownloadScript` 另在 `browserDriver.ts`）
   - 建议：抽为独立 `.js` 源文件纳入类型/格式检查，或改结构化生成并补用例。
+  - 已做（issue #152 拆分副产物）：三段模板与 `escapeTemplateContent`、`pdf-link-extract.js` 热加载集中到单模块，工具文件不再内嵌 JS。
+  - **未做（本条主因）**：模板仍是 TS 内的 `String.raw` 字符串，**未**纳入类型/格式检查。把探测/点击两段也改成 `assets/patent/*.js` 热加载会改变运行期行为（多一次文件 IO + 版本标记契约 + 回退路径），须作独立变更评估。
 - **TD-TOOL-008** · `patentKgQuery` 缓存构造失败静默返回 null
   - 类别：C · 严重级：P3 · 工作量：S · 状态：new
   - 位置：`src/tool/builtin/patentKgQuery.ts:84-90`
@@ -223,10 +225,10 @@
 
 ### 2026-09-14 处置追加（issue #152「审视 800–1000 行的工具文件」）
 
-- **已做（本 PR）**：TD-TOOL-001（`createReadFileTool` god function）——`readFile.ts` 891 → 127 行，四条读取路径与共享 helper 移入 `src/tool/builtin/filesystem/read-file/`。工具契约（`description` + `inputSchema`）逐字未变，llm-replay fixture 无需重录；新旧实现 28 场景差分对拍一致；补 11 条 image/pdf/notebook 直测。见 `docs/notes/implemented/2026-09-14-readfile-god-function-split.md`。
-- **本轮实测行数**（`wc -l`，2026-09-14）：`patentPdfDownload.ts` 953 · `readFile.ts` **891 → 127** · `patentWorkflowRunTool.ts` 818 · `kanban.ts` 815 · `executeCode.ts` 774 · `SkillManager.ts` 621（2026-09-11 已拆）。
+- **已做（PR #321）**：TD-TOOL-001（`createReadFileTool` god function）——`readFile.ts` 891 → 127 行，四条读取路径与共享 helper 移入 `src/tool/builtin/filesystem/read-file/`。工具契约（`description` + `inputSchema`）逐字未变，llm-replay fixture 无需重录；新旧实现 28 场景差分对拍一致；补 11 条 image/pdf/notebook 直测。见 `docs/notes/implemented/2026-09-14-readfile-god-function-split.md`。
+- **已做（本 PR）**：`patentPdfDownload.ts` **953 → 164 行**——按职责拆入 `src/tool/builtin/patent-pdf-download/`（constants/types/browserScripts/browserDriver/fetchFallback/manifest/reporting/outputPaths/validate/execute）。入口路径与导出面不变（registry 与 9 个 spec 无需改导入）；工具契约段逐字未变；新旧实现 32 场景差分对拍一致（含生成的浏览器脚本字符串、落盘文件清单、埋点 JSONL）。副产物：TD-TOOL-007 转为 partial（模板已集中到单模块，但仍未纳入类型/格式检查）。见 `docs/notes/implemented/2026-09-14-patent-pdf-download-split.md`。
+- **本轮实测行数**（`wc -l`，2026-09-14）：`patentPdfDownload.ts` **953 → 164** · `readFile.ts` **891 → 127**（PR #321）· `patentWorkflowRunTool.ts` 818 · `kanban.ts` 815 · `executeCode.ts` 774 · `SkillManager.ts` 621（2026-09-11 已拆）。
 - **仍待做（机会型，触发条件不变「下次改这些文件时顺带拆」）**：
-  - `patentPdfDownload.ts`（953）：`createPatentPdfDownloadTool` 206-558 为主流程，尾部 11 个私有 helper（manifest/摘要/回退抓取/脚本生成）可移入 `builtin/patent-pdf-download/`；另含 TD-TOOL-007（内嵌 ~90 行 JS 驱动模板），两者宜同批（模板外置会同时缩短文件）。
   - `patentWorkflowRunTool.ts`（818）：graph 执行路径（`executeGraphRun` 514-694）与 judge 组装（`assembleGraphJudges`/`buildJudgeSection`）职责分离清晰，可按 graph / judge / 图结果渲染三块切。
   - `kanban.ts`（815）、`executeCode.ts`（774）：未达 800 阈值但同量级，拆分方案未成形，暂不登记新条目。
 - **判定：不做的部分**：`SkillManager.ts` 已于 2026-09-11 拆分（915→623）并销 TD-EXTENSION-N01/N02 主因，本轮复核**不再重复拆分**；`readFile.ts` 残余的 `as ReadFileInput`（现位于 `read-file/validate.ts` 空 `pages` 归一分支）属类型收窄小项，未混入本次纯搬移。
