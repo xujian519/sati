@@ -557,6 +557,21 @@ function isWrappedSummaryMessage(message: CanonicalMessage): boolean {
   );
 }
 
+/**
+ * 判定消息头部是否为一次完整压缩的 checkpoint（boundary 标记 + 摘要消息）。
+ *
+ * 该形态意味着前缀已被整体重写，调用方可据此决定能否刷新只在稳定前缀下才成立的
+ * 状态（如 system prompt 的日期锚点）。
+ *
+ * @param messages - 投影后的消息序列。
+ * @returns 头部是 checkpoint 时为 true。
+ */
+export function isCompactionCheckpointHead(messages: CanonicalMessage[]): boolean {
+  const [boundary, summary] = messages;
+  if (boundary === undefined || summary === undefined) return false;
+  return isCompactBoundaryMessage(boundary) && isWrappedSummaryMessage(summary);
+}
+
 function clamp(value: number, min: number, max: number): number {
   if (Number.isNaN(value)) return min;
   return Math.max(min, Math.min(max, value));

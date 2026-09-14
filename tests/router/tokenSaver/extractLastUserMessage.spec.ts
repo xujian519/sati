@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { buildPromptDateNotice } from "../../../src/context/prompt/promptDateNotice.js";
 import type { CanonicalMessage } from "../../../src/model/index.js";
 import { extractLastUserMessage } from "../../../src/router/tokenSaver/extractLastUserMessage.js";
 
@@ -56,4 +57,18 @@ test("末尾 user 消息无文本时向前查找", () => {
 
 test("返回文本经过 trim", () => {
   assert.equal(extractLastUserMessage([textMessage("user", "  带空白的文本  ")]), "带空白的文本");
+});
+
+test("跳过跨日日期通知，返回其前面的真实用户消息", () => {
+  const messages = [
+    textMessage("user", "请分析权利要求"),
+    textMessage("assistant", "回复"),
+    buildPromptDateNotice("2026-09-11"),
+  ];
+  assert.equal(extractLastUserMessage(messages), "请分析权利要求");
+});
+
+test("只有日期通知时返回 undefined", () => {
+  const messages = [textMessage("assistant", "回复"), buildPromptDateNotice("2026-09-11")];
+  assert.equal(extractLastUserMessage(messages), undefined);
 });
