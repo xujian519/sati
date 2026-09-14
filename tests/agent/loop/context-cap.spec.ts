@@ -585,3 +585,115 @@ test("agent loop persists a full compaction after recovering from a context erro
   assert.equal((persistedCompacts[0]!.boundary as { kind?: string }).kind, "compact");
   assert.equal(persistedCompacts[0]!.messages[0]!.metadata?.compactReplacement, true);
 });
+
+test("budget candidate assembly is preview-only so probes do not commit prompt-time state", async () => {
+  const tokenBudget = new TokenBudgetManager();
+  const preparedAsks: Array<{ previewOnly?: boolean }> = [];
+
+  const context: AgentRuntimeDependencies["context"] = {
+    prepareForModel: async input => {
+      preparedAsks.push({ previewOnly: input.previewOnly });
+      return {
+        messages: input.messages,
+        systemPrompt: undefined,
+        systemPromptParts: [],
+        tools: input.tools,
+        diagnostics: [],
+        boundaries: [],
+      };
+    },
+    applyToolResults: async input => ({
+      messages: input.messages,
+      diagnostics: [],
+    }),
+    recoverFromModelError: async () => ({
+      type: "give_up",
+      reason: "test",
+    }),
+    captureTurn: async () => undefined,
+    tryAutoCompact: async input => {
+      // 驱动预算评估：这条路径会组装一份「候选请求」，其状态不得提交。
+      await input.budgetEvaluator?.(input.messages);
+      return {
+        type: "skipped",
+        snapshot: tokenBudget.snapshotFromTokens(9_000, 10_000, {
+          reservedOutputTokens: input.reservedOutputTokens,
+        }),
+      };
+    },
+  };
+
+  const router: AgentRouterRuntime = {
+    invalidateSticky: () => ({ orchestrating: false }),
+    decide: async ({ request }) => ({
+      provider: request.provider,
+      model: request.model,
+      scenarioType: "default",
+      isSubagent: false,
+      orchestrating: false,
+      resolvedFrom: "explicit",
+      mutations: {},
+    }),
+    execute: async function* (): AsyncIterable<CanonicalModelEvent> {
+      yield { type: "message_start", role: "assistant" };
+      yield { type: "text_delta", text: "done" };
+      yield { type: "message_end", finishReason: "stop" };
+    },
+    stream: async function* (): AsyncIterable<CanonicalModelEvent> {
+      yield { type: "message_start", role: "assistant" };
+      yield { type: "text_delta", text: "unused" };
+      yield { type: "message_end", finishReason: "stop" };
+    },
+    materializeRequest: (decision, request) => ({ ...request, provider: decision.provider, model: decision.model }),
+    observeUsage: () => undefined,
+  };
+
+  const loop = new AgentLoop(
+    {
+      provider: "openai",
+      model: "model-a",
+      cwd: "/workspace/project",
+      maxContextTokens: 8_000,
+      maxOutputTokens: 32_768,
+      permissionMode: "bypassPermissions",
+      permissionContext: createDefaultPermissionContext({
+        cwd: "/workspace/project",
+        mode: "bypassPermissions",
+        canPrompt: false,
+        bypassAvailable: true,
+      }),
+    },
+    {
+      router,
+      tools: {
+        registry: new ToolRegistry(),
+        scheduler: {
+          async executeAll() {
+            return [];
+          },
+        },
+      },
+      context,
+      tokenAccounting: {
+        evaluateRequestBudget: async () => tokenBudget.snapshotFromTokens(9_000, 8_000),
+      } as unknown as AgentRuntimeDependencies["tokenAccounting"],
+    },
+  );
+
+  for await (const _event of loop.run({
+    sessionId: "session-preview-only",
+    turnId: "turn-preview-only",
+    messages: [{ role: "user", content: [{ type: "text", text: "hello" }] }],
+  })) {
+    // Drain the turn.
+  }
+
+  assert.ok(
+    preparedAsks.some(ask => ask.previewOnly === true),
+    "预算候选请求必须以 previewOnly 组装",
+  );
+  assert.ok(
+    preparedAsks.some(ask => ask.previewOnly === undefined),
+    "真实请求不得标记 previewOnly",
+  );
+});
