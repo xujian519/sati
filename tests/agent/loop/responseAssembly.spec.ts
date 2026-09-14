@@ -78,15 +78,6 @@ interface HarnessOptions {
   syntheticOutcome?: SyntheticPromptOutcome;
 }
 
-function bare(): { input: AgentLoopInput; state: TurnRuntimeState } {
-  const input: AgentLoopInput = {
-    sessionId: "s1",
-    turnId: "t1",
-    messages: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
-  };
-  return { input, state: new TurnRuntimeState(input, {}, STARTED_AT) };
-}
-
 function makeHarness(options: HarnessOptions = {}): Harness {
   const durable: CanonicalMessage[] = [];
   const emitted: AgentEvent[] = [];
