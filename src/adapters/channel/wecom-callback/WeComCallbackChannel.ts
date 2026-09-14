@@ -7,8 +7,8 @@ import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } f
 import { deliverChatCronResult } from "../protocol/ImCronDelivery.js";
 import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
 import { ImPermissionHelper } from "../protocol/ImPermissionHelper.js";
+import { dispatchChannelMessage } from "../protocol/ImInboundDispatch.js";
 import { processChannelTurn } from "../protocol/ImTurnProcessor.js";
-import { resolveIncomingMessage } from "../protocol/ChannelCommandRegistry.js";
 import { WeComCallbackSessionMapper } from "./WeComCallbackSessionMapper.js";
 import { renderWeComCallbackEvent } from "./wecom-callback-render.js";
 
@@ -217,42 +217,20 @@ export class WeComCallbackChannel implements ChannelAdapter {
 
     const chatId = from;
 
-    if (this.elicitation.hasPending(chatId) && this.gateway) {
-      try {
-        const confirmation = await this.elicitation.answer(chatId, text, this.gateway);
-        if (confirmation) await this.sendReply(chatId, confirmation);
-      } catch (e) {
-        this.logger?.error?.(`wecom_callback: elicitation answer error: ${e}`);
-      }
-      return;
-    }
-
-    if (this.permissions.hasPending(chatId) && this.gateway) {
-      try {
-        const confirmation = await this.permissions.answer(chatId, text, this.gateway);
-        if (confirmation) await this.sendReply(chatId, confirmation);
-      } catch (e) {
-        this.logger?.error?.(`wecom_callback: permission answer error: ${e}`);
-      }
-      return;
-    }
-
-    if (this.activeChats.has(chatId)) {
-      this.logger?.info?.(`wecom_callback: chat ${chatId} already active, skipping`);
-      return;
-    }
-
-    const { mapped, handled } = await resolveIncomingMessage(this.mapper, chatId, text, (id, t) =>
-      this.sendReply(id, t),
+    await dispatchChannelMessage(
+      {
+        channelKey: "wecom_callback",
+        gateway: this.gateway,
+        elicitation: this.elicitation,
+        permissions: this.permissions,
+        activeChats: this.activeChats,
+        mapper: this.mapper,
+        send: (id, replyText) => this.sendReply(id, replyText),
+        turn: mapped => this.processMessage(chatId, mapped.sessionKey, mapped.message),
+        logger: this.logger,
+      },
+      { interactionKey: chatId, text },
     );
-    if (handled) return;
-
-    this.activeChats.add(chatId);
-    try {
-      await this.processMessage(chatId, mapped.sessionKey, mapped.message);
-    } finally {
-      this.activeChats.delete(chatId);
-    }
   }
 
   private async processMessage(chatId: string, sessionKey: string, message: string): Promise<void> {

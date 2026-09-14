@@ -6,8 +6,8 @@ import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } f
 import { deliverChatCronResult } from "../protocol/ImCronDelivery.js";
 import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
 import { ImPermissionHelper } from "../protocol/ImPermissionHelper.js";
+import { dispatchChannelMessage } from "../protocol/ImInboundDispatch.js";
 import { processChannelTurn } from "../protocol/ImTurnProcessor.js";
-import { resolveIncomingMessage } from "../protocol/ChannelCommandRegistry.js";
 import { MatrixSessionMapper } from "./MatrixSessionMapper.js";
 import { renderMatrixEvent } from "./matrix-render.js";
 
@@ -162,42 +162,20 @@ export class MatrixChannel implements ChannelAdapter {
     const text = String(content.body ?? "").trim();
     if (!text) return;
 
-    if (this.elicitation.hasPending(roomId) && this.gateway) {
-      try {
-        const confirmation = await this.elicitation.answer(roomId, text, this.gateway);
-        if (confirmation) await this.sendReply(roomId, confirmation);
-      } catch (e) {
-        this.logger?.error?.(`matrix: elicitation answer error: ${e}`);
-      }
-      return;
-    }
-
-    if (this.permissions.hasPending(roomId) && this.gateway) {
-      try {
-        const confirmation = await this.permissions.answer(roomId, text, this.gateway);
-        if (confirmation) await this.sendReply(roomId, confirmation);
-      } catch (e) {
-        this.logger?.error?.(`matrix: permission answer error: ${e}`);
-      }
-      return;
-    }
-
-    if (this.activeChats.has(roomId)) {
-      this.logger?.info?.(`matrix: room ${roomId} already active, skipping`);
-      return;
-    }
-
-    const { mapped, handled } = await resolveIncomingMessage(this.mapper, roomId, text, (id, t) =>
-      this.sendReply(id, t),
+    await dispatchChannelMessage(
+      {
+        channelKey: "matrix",
+        gateway: this.gateway,
+        elicitation: this.elicitation,
+        permissions: this.permissions,
+        activeChats: this.activeChats,
+        mapper: this.mapper,
+        send: (id, replyText) => this.sendReply(id, replyText),
+        turn: mapped => this.processMessage(roomId, mapped.sessionKey, mapped.message),
+        logger: this.logger,
+      },
+      { interactionKey: roomId, text },
     );
-    if (handled) return;
-
-    this.activeChats.add(roomId);
-    try {
-      await this.processMessage(roomId, mapped.sessionKey, mapped.message);
-    } finally {
-      this.activeChats.delete(roomId);
-    }
   }
 
   private async processMessage(roomId: string, sessionKey: string, message: string): Promise<void> {

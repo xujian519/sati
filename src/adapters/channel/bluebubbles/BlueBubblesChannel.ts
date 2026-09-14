@@ -4,8 +4,8 @@ import type { Gateway, GatewayChannelKey } from "../../../gateway/index.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
 import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
 import { ImPermissionHelper } from "../protocol/ImPermissionHelper.js";
+import { dispatchChannelMessage } from "../protocol/ImInboundDispatch.js";
 import { processChannelTurn } from "../protocol/ImTurnProcessor.js";
-import { resolveIncomingMessage } from "../protocol/ChannelCommandRegistry.js";
 import { BlueBubblesSessionMapper } from "./BlueBubblesSessionMapper.js";
 import { renderBlueBubblesEvent } from "./bluebubbles-render.js";
 
@@ -135,42 +135,20 @@ export class BlueBubblesChannel implements ChannelAdapter {
     );
     if (!chatGuid || !text) return;
 
-    if (this.elicitation.hasPending(chatGuid) && this.gateway) {
-      try {
-        const confirmation = await this.elicitation.answer(chatGuid, text, this.gateway);
-        if (confirmation) await this.sendReply(chatGuid, confirmation);
-      } catch (e) {
-        this.logger?.error?.(`bluebubbles: elicitation answer error: ${e}`);
-      }
-      return;
-    }
-
-    if (this.permissions.hasPending(chatGuid) && this.gateway) {
-      try {
-        const confirmation = await this.permissions.answer(chatGuid, text, this.gateway);
-        if (confirmation) await this.sendReply(chatGuid, confirmation);
-      } catch (e) {
-        this.logger?.error?.(`bluebubbles: permission answer error: ${e}`);
-      }
-      return;
-    }
-
-    if (this.activeChats.has(chatGuid)) {
-      this.logger?.info?.(`bluebubbles: chat ${chatGuid} already active, skipping`);
-      return;
-    }
-
-    const { mapped, handled } = await resolveIncomingMessage(this.mapper, chatGuid, text, (id, t) =>
-      this.sendReply(id, t),
+    await dispatchChannelMessage(
+      {
+        channelKey: "bluebubbles",
+        gateway: this.gateway,
+        elicitation: this.elicitation,
+        permissions: this.permissions,
+        activeChats: this.activeChats,
+        mapper: this.mapper,
+        send: (id, replyText) => this.sendReply(id, replyText),
+        turn: mapped => this.processMessage(chatGuid, mapped.sessionKey, mapped.message),
+        logger: this.logger,
+      },
+      { interactionKey: chatGuid, text },
     );
-    if (handled) return;
-
-    this.activeChats.add(chatGuid);
-    try {
-      await this.processMessage(chatGuid, mapped.sessionKey, mapped.message);
-    } finally {
-      this.activeChats.delete(chatGuid);
-    }
   }
 
   private async processMessage(chatGuid: string, sessionKey: string, message: string): Promise<void> {
