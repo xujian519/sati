@@ -48,7 +48,7 @@
 
 ### 片 6 · `router/`、`tool/` 零散断言
 
-- **位置**：`router/config/parseRouterConfig.ts:338,465,492,505`（`as string[]`）；`tool/userInteractionConstraints.ts:39`（`{} as never`）、`tool/builtin/readFile.ts:116`（`as ReadFileInput`）、`tool/askModeConstraints.ts:39`（`{} as never`）、`tool/builtin/web/urlFetcher.ts:126-127`（`as unknown as ...`）。
+- **位置**：`router/config/parseRouterConfig.ts:338,465,492,505`（`as string[]`）；`tool/userInteractionConstraints.ts:39`（`{} as never`）、`tool/builtin/filesystem/read-file/validate.ts:24`（`as ReadFileInput`）、`tool/askModeConstraints.ts:39`（`{} as never`）、`tool/builtin/web/urlFetcher.ts:126-127`（`as unknown as ...`）。
 - **修法**：`as string[]` 用窄化守卫（`Array.isArray` + 元素类型判别）；`{} as never` 改为读取具体字段或 `satisfies`；`ReadFileInput` 用类型守卫；urlFetcher 的 `as unknown as` 用 `satisfies` / 守卫。
   - ⚠️ `userInteractionConstraints.ts:39` 与 `askModeConstraints.ts:39` 的 `{} as never` 属**存在性探测**（「是否只读」），收敛时须保留探测语义，只换成类型化访问，不改变返回结果（否则破坏读工具白名单行为）。
 - **测试**：`tests/router/`、`tests/tool/` 对应模块补守卫用例。

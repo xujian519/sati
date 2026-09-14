@@ -185,7 +185,7 @@
 ## 3. tool（主链路 · B1 ✅）
 
 **模块概况**：111 文件，24 内置工具 + 执行/注册/调度基础设施；注册表 `requireOutputSchema` 已开启、`ToolRuntime` 错误归一/审计闭环较完整。债务集中在 `readFile.ts` 与 `createBuiltinRegistry.ts` 两个超大函数、模式约束名单重复、静默吞错。
-> ⚠️ 更正：`TD-TYPE-002`（tool 17 处 any、planMode 6 处）**无法复现**——`src/tool` 无任何类型位 any/`@ts-expect-error`。仅存的非严格收窄是 `userInteractionConstraints.ts:39` 的 `{} as never` 与 `readFile.ts:116` 的 `as ReadFileInput`。
+> ⚠️ 更正：`TD-TYPE-002`（tool 17 处 any、planMode 6 处）**无法复现**——`src/tool` 无任何类型位 any/`@ts-expect-error`。仅存的非严格收窄是 `userInteractionConstraints.ts:39` 的 `{} as never` 与 `filesystem/read-file/validate.ts:24` 的 `as ReadFileInput`。
 
 - **TD-TOOL-001** · `createReadFileTool` god function（~508 行）
   - 类别：A · 严重级：P2 · 工作量：M · 状态：**done（2026-09-14，issue #152）**
