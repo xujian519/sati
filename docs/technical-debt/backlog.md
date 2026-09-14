@@ -188,9 +188,10 @@
 > ⚠️ 更正：`TD-TYPE-002`（tool 17 处 any、planMode 6 处）**无法复现**——`src/tool` 无任何类型位 any/`@ts-expect-error`。仅存的非严格收窄是 `userInteractionConstraints.ts:39` 的 `{} as never` 与 `readFile.ts:116` 的 `as ReadFileInput`。
 
 - **TD-TOOL-001** · `createReadFileTool` god function（~508 行）
-  - 类别：A · 严重级：P2 · 工作量：M · 状态：new
-  - 位置：`src/tool/builtin/readFile.ts:43-551`
+  - 类别：A · 严重级：P2 · 工作量：M · 状态：**done（2026-09-14，issue #152）**
+  - 位置：`src/tool/builtin/readFile.ts:43-551`（改后该文件 127 行，四条读取路径移入 `src/tool/builtin/filesystem/read-file/`）
   - 建议：按读取类型拆独立 handler（image/pdf/notebook/text）+ 共享工具函数。证据：`:43` 起 `:169` execute `:184` markRead `:503` shrinkToBudget `:551` 收尾。
+  - 已做：`constants`/`types`/`kinds`/`validate`/`text`/`image`/`pdf`/`notebook` 八件拆分，入口路径与 `description`+`inputSchema` 逐字保持不变（llm-replay 请求键不受影响）；新旧实现 28 场景差分对拍结果完全一致；补 `tests/tool/read-file-kinds.spec.ts` 11 条（image/pdf/notebook 分支此前直接覆盖为零）。见 `docs/notes/implemented/2026-09-14-readfile-god-function-split.md`。
 - **TD-TOOL-002** · `ToolRegistry.clone()` 静默丢弃 `requireOutputSchema`
   - 类别：B · 严重级：P2 · 工作量：S · 状态：new
   - 位置：`src/tool/registry/ToolRegistry.ts:109-118`
@@ -219,6 +220,16 @@
   - 类别：C · 严重级：P3 · 工作量：S · 状态：new
   - 位置：`src/tool/builtin/patentKgQuery.ts:84-90`
   - 影响：KG 库打开失败被当"未配置"，无法区分损坏/权限 vs 缺失。建议：catch 中区分并记录 warning。
+
+### 2026-09-14 处置追加（issue #152「审视 800–1000 行的工具文件」）
+
+- **已做（本 PR）**：TD-TOOL-001（`createReadFileTool` god function）——`readFile.ts` 891 → 127 行，四条读取路径与共享 helper 移入 `src/tool/builtin/filesystem/read-file/`。工具契约（`description` + `inputSchema`）逐字未变，llm-replay fixture 无需重录；新旧实现 28 场景差分对拍一致；补 11 条 image/pdf/notebook 直测。见 `docs/notes/implemented/2026-09-14-readfile-god-function-split.md`。
+- **本轮实测行数**（`wc -l`，2026-09-14）：`patentPdfDownload.ts` 953 · `readFile.ts` **891 → 127** · `patentWorkflowRunTool.ts` 818 · `kanban.ts` 815 · `executeCode.ts` 774 · `SkillManager.ts` 621（2026-09-11 已拆）。
+- **仍待做（机会型，触发条件不变「下次改这些文件时顺带拆」）**：
+  - `patentPdfDownload.ts`（953）：`createPatentPdfDownloadTool` 206-558 为主流程，尾部 11 个私有 helper（manifest/摘要/回退抓取/脚本生成）可移入 `builtin/patent-pdf-download/`；另含 TD-TOOL-007（内嵌 ~90 行 JS 驱动模板），两者宜同批（模板外置会同时缩短文件）。
+  - `patentWorkflowRunTool.ts`（818）：graph 执行路径（`executeGraphRun` 514-694）与 judge 组装（`assembleGraphJudges`/`buildJudgeSection`）职责分离清晰，可按 graph / judge / 图结果渲染三块切。
+  - `kanban.ts`（815）、`executeCode.ts`（774）：未达 800 阈值但同量级，拆分方案未成形，暂不登记新条目。
+- **判定：不做的部分**：`SkillManager.ts` 已于 2026-09-11 拆分（915→623）并销 TD-EXTENSION-N01/N02 主因，本轮复核**不再重复拆分**；`readFile.ts` 残余的 `as ReadFileInput`（现位于 `read-file/validate.ts` 空 `pages` 归一分支）属类型收窄小项，未混入本次纯搬移。
 
 ---
 
