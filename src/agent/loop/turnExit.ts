@@ -27,6 +27,18 @@ import type { TurnRuntimeState } from "./turnRuntimeState.js";
 export type TurnStepContinue = { kind: "continue" };
 export type TurnStepReturn = { kind: "return"; result: AgentTurnResult; messages: CanonicalMessage[] };
 
+/**
+ * 阶段内有序步骤的统一结论：`TurnStep*` 表示本步骤已接管，
+ * `unhandled` 表示不是本步骤的职责、交给下一条处置路径
+ * （恢复链 modelErrorRecovery 与响应装配链 responseAssembly 共用这套词汇）。
+ */
+export type StageOutcome = TurnStepContinue | TurnStepReturn | { kind: "unhandled" };
+
+/** 构造 `unhandled` 结论（步骤函数"不接管"的默认返回值）。 */
+export function unhandled(): StageOutcome {
+  return { kind: "unhandled" };
+}
+
 /** turn 结果构造参数（sessionId/turnId/completedAt 由构造器补齐）。 */
 export type TurnResultOptions = Omit<AgentTurnResult, "sessionId" | "turnId" | "completedAt">;
 

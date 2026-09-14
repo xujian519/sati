@@ -19,7 +19,7 @@ Status: implemented
 | 文件 | 行数 | 内容 |
 |---|---|---|
 | `src/agent/loop/modelErrorRecovery.ts`（新） | 613 | `RecoveryOutcome`（`handled` 或 `{kind:"unhandled"}`）、`ModelErrorRecoveryDeps`（继承 `TurnExitDeps` + `jsonSelfCorrect` / `missingToolResultRecoveryContext` / `dispatchLifecycle` / `runAutoCompact`）、9 个步骤函数、`recoverFromModelError` 调度入口、`tryReactiveRecover` 探针（原 AgentLoop 私有方法） |
-| `src/agent/loop/AgentLoop.ts` | 2130 → **1740** | 删除 `handleModelError`（365 行）与 `tryReactiveRecover`（24 行）；`run()` 调用点改为 `recoverFromModelError(this.modelErrorRecovery, …)`；构造期建立依赖袋 |
+| `src/agent/loop/AgentLoop.ts` | 2130 → **1733** | 删除 `handleModelError`（365 行）与 `tryReactiveRecover`（24 行）；`run()` 调用点改为 `recoverFromModelError(this.modelErrorRecovery, …)`；构造期建立依赖袋 |
 
 步骤函数即恢复路径，顺序由调度入口显式写出：
 
@@ -50,7 +50,7 @@ learnOutputCapFromRejection → recoverFromStreamInterruption（非中断则清�
 
 ## Consequences
 
-- `AgentLoop.ts` 2130 → 1740 行；TD-AGENT-101（god function + 策略被复制进姊妹函数）结清：本体已无 300+ 行函数，共享策略与恢复路径都有独立模块位置。
+- `AgentLoop.ts` 2130 → 1733 行；TD-AGENT-101（god function + 策略被复制进姊妹函数）结清：本体已无 300+ 行函数，共享策略与恢复路径都有独立模块位置。
 - 恢复链的顺序契约从「阅读顺序」变成「代码顺序 + 注释 + 顺序锁定测试」；重排步骤会改变行为，模块头注释已写明。
 - 步骤函数导出即可直测：新增 22 条行为基线（`tests/agent/loop/modelErrorRecovery.spec.ts`），覆盖每条路径的触发条件与产物、`give_up`/探针抛错/未接线三种「不接管」、以及调度顺序与计数清零。
 - `recoverFromStreamInterruption` 内的局部 `agentError` 由 `error`（遮蔽 `assembled.error`）改名为 `exhaustedError`，仅为消除同名遮蔽；产物载荷逐字未变。
