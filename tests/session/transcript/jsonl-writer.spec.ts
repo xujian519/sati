@@ -34,6 +34,18 @@ function readEntries(path: string): AgentTranscriptEntry[] {
     .map(line => JSON.parse(line) as AgentTranscriptEntry);
 }
 
+/**
+ * 轮询等待异步副作用出现。固定 sleep + 立即断言在 CI 负载下会被击穿
+ * （定时器回调与 appendFile 都可能晚于窗口落地）。
+ */
+async function waitFor(predicate: () => boolean, timeoutMs = 5000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!predicate()) {
+    if (Date.now() > deadline) throw new Error("waitFor 超时：条件未在期限内满足");
+    await new Promise(resolve => setTimeout(resolve, 10));
+  }
+}
+
 describe("JsonlTranscriptWriter recordEntry 写链", () => {
   it("写入 JSONL 行：sequence 递增、parentEntryId 链式链接", async () => {
     const dir = makeTranscriptDir();
@@ -432,7 +444,8 @@ describe("JsonlTranscriptWriter M3 写缓冲", () => {
     const writer = new JsonlTranscriptWriter({ path, now: FIXED_NOW, flushIntervalMs: 10 });
 
     void writer.recordAcceptedInput("s1", "t1", [userMessage("a")]);
-    await new Promise(resolve => setTimeout(resolve, 40));
+    // 断言的是"定时器最终把缓冲落盘"，故等待可观测结果而非固定毫秒数。
+    await waitFor(() => existsSync(path) && readEntries(path).length === 1);
     assert.equal(existsSync(path), true, "定时器兜底落盘");
     assert.equal(readEntries(path).length, 1);
   });

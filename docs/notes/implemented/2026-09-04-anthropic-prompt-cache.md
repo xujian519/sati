@@ -20,6 +20,8 @@ Anthropic 按前缀缓存计价（命中读约 0.1x、写 1.25x）。Sati 此前
 
 **前缀稳定性约束（Sati 特有）**：逐调用可变的 synthetic 注入（J-Space 账本 `<workspace-state>` 块、repeatToolReminder 提醒、未来的 steer 消息）必须位于最近 3 条断点之后（消息尾部注入）。现状核实：repeatToolReminder 与账本注入均为尾部追加（`workspaceLedgerBlock` 经 injections 通道），天然满足；该约束作为 CachePlan 模块文档约定，后续新注入点必须遵守。
 
+**跨日日期通知**：跨 UTC 日追加的 `<date-update>` 合成消息（见 `docs/notes/implemented/2026-09-14-upstream-571-prompt-date-anchor.md`）也是尾部注入的请求级消息，但它**稳定复用**——同一通知在后续请求中保持原下标不重复追加，因此不破坏断点前缀；system prompt 的 `<environment>now:` 则按会话锚定，不再随日期改写。
+
 **可观测**：不新增遥测面——`CanonicalUsage.cacheReadTokens/cacheWriteTokens` 已有解析与透出，配合 plan 的 fingerprint/generation（log-only 场景可从请求对象读取）即可验证命中率。
 
 ## Alternatives considered
