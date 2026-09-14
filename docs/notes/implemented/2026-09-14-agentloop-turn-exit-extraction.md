@@ -39,7 +39,8 @@ AgentLoop.ts 只保留**主循环阶段方法与其依赖**，把上述两组迁
 ## Consequences
 
 - AgentLoop.ts 2433 → 2130 行（迁出 306 行方法与注释，净减 303 行，差额为依赖袋字段、结果构造包装与 import）；TD-SIZE-001 中该文件按体积仍属大文件，但阶段方法不再与出口仪式混居。
-- `handleModelError` 本体仍 365 行（TD-AGENT-101 未结清），其调用的共享策略现在有了结构位置——后续拆本体时可直接对着 `recoveryStrategies.ts` 的四个入口。
+- `handleModelError` 本体当时仍 365 行（TD-AGENT-101 未结清），其调用的共享策略现在有了结构位置——后续拆本体时可直接对着 `recoveryStrategies.ts` 的四个入口（已于同日完成，见下）。
 - `TurnStepContinue`/`TurnStepReturn` 与 `TurnResultOptions` 随迁到 `turnExit.ts` 并由 AgentLoop 导入：阶段方法的返回契约现在只有一个定义处。
-- 新增 21 条行为基线测试（上游拆解轮次的惯例：每个外迁模块配直测）。
+- 新增 20 条行为基线测试（`turnExit.spec.ts` 11 + `recoveryStrategies.spec.ts` 9；上游拆解轮次的惯例：每个外迁模块配直测）。
 - 无工具契约改动，llm-replay fixture 请求键不受影响（未重录）。
+- 本刀的下一步已落地：`handleModelError` 本体拆为 `modelErrorRecovery.ts` 的恢复链，见 [2026-09-14-agentloop-model-error-recovery-extraction.md](./2026-09-14-agentloop-model-error-recovery-extraction.md)。
