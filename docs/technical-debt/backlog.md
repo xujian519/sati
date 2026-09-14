@@ -492,7 +492,7 @@
 > 复核更正：历史报告所标 WhatsApp/Sms/Discord/Slack「单函数 god function」**已不复存在**（均已拆为 start/dispatch/handleIncoming/processMessage/sendReply）。类型面较干净（大量 `as Record<string,unknown>`，无 `@ts-ignore`/`: any`）。
 
 - **TD-ADAPTERS-N01** · 渠道间「dispatch + submitTurn 处理循环」脚手架高度重复，未抽公共基类/组合
-  - 类别：D · 严重级：P1 · 工作量：M · 状态：🔶 大部分完成（2026-09-14 两刀：`submitTurn` 渲染循环侧抽为 `protocol/ImTurnProcessor.ts`（15 段循环、14 渠道）、dispatch 前置抽为 `protocol/ImInboundDispatch.ts`（13 渠道 33 行 ×13 → 1 处）；**仍待做** `deliverCronResult` 投递共享化 + 6 个语义不同渠道的分派路径）
+  - 类别：D · 严重级：P1 · 工作量：M · 状态：**done（2026-09-14，两刀）**——`submitTurn` 渲染循环侧抽为 `protocol/ImTurnProcessor.ts`（14 渠道 15 段循环，净 −309）；dispatch 前置抽为 `protocol/ImInboundDispatch.ts`（13 渠道 33 行 ×13 → 1 处，净 −288）。**收口复核**：本条曾登记「一并抽 `deliverCronResult`」，实测 13 个渠道的该实现**全部已是 3–5 行薄委托**到共享 `protocol/ImCronDelivery.ts#deliverChatCronResult`（无自实现），差异仅剩各渠道自己的回复函数——不可再减，与 render 薄包装同属「薄包装保留」判例；6 个语义不同渠道（webhook/wecom/weixin/feishu/api-server/tui）的分派与轮次路径不适用既有 helper，理由见两刀 note 的 Alternatives considered。
   - 位置：`channel/{whatsapp,sms,slack,discord,…}/*Channel.ts`
   - 影响：21 渠道各自复制「elicitation→permission→activeChats→mapper→processMessage」控制流与几乎相同的 `submitTurn` 渲染循环，改公共逻辑须逐渠道同步。建议：把 processMessage 三元循环与 deliverCronResult 提为共享 turn-processor 组合函数。
   - 证据：`whatsapp/WhatsAppChannel.ts:248-266`、`sms/SmsChannel.ts:248-268`、`slack/SlackChannel.ts:208-228`、`discord/DiscordChannel.ts:198-218`（循环体逐字同构）。
@@ -570,7 +570,9 @@
 - **N01 前半（dispatch 前置）done（2026-09-14，第二刀）**：新增 `src/adapters/channel/protocol/ImInboundDispatch.ts`——`dispatchChannelMessage(deps, input)` 收拢「elicitation/permission 挂起应答 → `activeChats` 去重 → `resolveIncomingMessage`（`/new` 回执、命令解析、吞空正文）→ `activeChats` 包围的轮次执行」，**13 个渠道**各删 36–37 行共享段改 16 行 deps 字面量（182 插入 / 470 删除，净 −288）＋共享模块 86 行。设计要点：**一个 sink 而非两个**（实证确认回执与 `resolveIncomingMessage` 的 sink 在 13 处同目标，11 处 = 挂起键本身、slack/mattermost = 上下文对象并丢弃 helper 回传的 chatId），`turn` 用回调注入使两模块互不依赖。**一处表面差异经核验为无操作**：dingtalk 调用点 `.trim()` 冗余（helper 内部首行即 `text.trim()`）。**一处措辞归一**：matrix 的 `room … already active` → `chat … already active`（其余 12 处本就是 `chat`；全仓 grep 确认无消费方）。**测试**：`tests/adapters/channel-inbound-dispatch.spec.ts` 14 条直测。**等价性证据**：逐渠道机械比对「被删 span 要素」vs「新调用要素」13/13 一致（`sendCtx` 字面量与 sink 形参 `id` 在核验器中显式解析）。
 - 决策记录：`docs/notes/implemented/2026-09-14-channel-inbound-dispatch.md`（含 `## Alternatives considered`）。
 - **仍待做**：`TD-ADAPTERS-N01` 剩余面——`deliverCronResult` 投递共享化（挂在各渠道 cron 触发路径，与入站分派不同源）；6 个语义不同渠道（webhook/wecom/weixin/feishu/api-server/tui）的分派与轮次路径不适用既有 helper。
+- **N01 done（2026-09-14，收口核对）**：`deliverCronResult` 面经逐渠道核对为**已去重**——13 个实现全部是 3–5 行薄委托（`dingtalk`/`discord`/`email`/`feishu`/`homeassistant`/`matrix`/`signal`/`sms`/`telegram`/`webhook`/`wecom-callback`/`whatsapp` 各 3 行、`weixin` 5 行）到 `protocol/ImCronDelivery.ts#deliverChatCronResult`，无一份自实现；变化的只有各渠道自己的回复函数（`sendReply` / `sendTextMessage` / `deliverReply` / `sendReplyChunked`）与 weixin 的 `userId` 映射，属不可再减的薄包装（同 render 薄包装判例）。另 8 个渠道（api-server/bluebubbles/cli/mattermost/qq/slack/tui/wecom）本就不实现 cron 投递，非债。
 - **明确不做（判例）**：6 处跨文件微重复（`extractText` 的 `string("")` vs `string|null`、`formatError`、`normalizeBaseUrl` ×3、`sendJson` ×2、`sleep` ×3、WS 双形态）按「跨文件微重复不合并」判例保留；18 个 `render` 薄包装保留（它们是 options 未被误改的回归钉，且被 `tests/adapters/channel-render.spec.ts` 直接 import）。
+- **议题收口（issue #149）**：五条去重轴全部落地——`*SessionMapper.ts` 共享（2026-09-11，−290）、`readRequestBody` 共享（N03）、`resolveIncomingMessage` 采用统一（N04，8 改 5 留）、单轮处理循环共享（−309）、入站分派前置共享（−288）；N01/N02/N03/N04 均 done。渠道模块内**剩下的**是单列登记的小项（N05 日志绕过 ChannelLogger / N07 render 薄包装 / N08 吞错密度 / N09 无界 `as` / N10 渠道注册表未覆盖），它们是各自的债条目而非「公共 helper 重复」，不随本议题关闭而消失。
 - **否定结论（省掉一类工作）**：渠道间不存在时间戳/日期格式化重复；`sessionKey` 解析亦无第二份实现。
 
 ## 10. always-on（B3 ✅）
