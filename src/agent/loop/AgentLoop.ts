@@ -6,7 +6,6 @@ import {
   type AssembledAssistantMessage,
   type CanonicalToolCall,
   type CanonicalMessage,
-  type CanonicalModelError,
   ModelProviderError,
   type CanonicalModelRequest,
   type CanonicalUsage,
@@ -27,8 +26,7 @@ import type { AgentRuntimeDependencies } from "../runtime/AgentRuntimeDependenci
 import { NullContextRuntime } from "../../context/NullContextRuntime.js";
 import { promptCacheEnabled, resolveRequestCachePlan } from "../../context/cache/CachePlan.js";
 import { compressIndexRanges } from "../../context/compaction/CompactionEngine.js";
-import type { AgentContextRuntime } from "../../context/ContextRuntime.js";
-import type { AutoCompactResult, ContextRecoveryDecision, TokenBudgetSnapshot } from "../../context/index.js";
+import type { AutoCompactResult, TokenBudgetSnapshot } from "../../context/index.js";
 import type { PermissionMode, PermissionRuleSet } from "../../permission/index.js";
 import type { RouterDecision } from "../../router/index.js";
 import type { AgentControlBoundaryTranscriptEntry } from "../../session/transcript/TranscriptEntry.js";
@@ -43,13 +41,7 @@ import { evaluateClaimGuard } from "./claimGuard.js";
 import { buildRequestHeaderSnapshot, verifyRequestHeaderSnapshot } from "./requestInvariant.js";
 import { projectToolResults } from "./projectToolResults.js";
 import type { LargeFileRepairDecision } from "./LargeFileRepair.js";
-import {
-  MAX_JSON_SELF_CORRECT_RETRIES,
-  MAX_OUTPUT_RECOVERY_LIMIT,
-  MAX_SAME_INVALID_FINGERPRINT,
-  MAX_STREAM_INTERRUPTION_RECOVERIES,
-  TurnRuntimeState,
-} from "./turnRuntimeState.js";
+import { MAX_OUTPUT_RECOVERY_LIMIT, MAX_SAME_INVALID_FINGERPRINT, TurnRuntimeState } from "./turnRuntimeState.js";
 import { createMissingToolResult, ensureToolResultPairing } from "./ensureToolResultPairing.js";
 import {
   buildRepeatReminderMessage,
@@ -75,19 +67,13 @@ import {
   type LifecycleDispatcher,
 } from "./misc.js";
 import {
-  addEmptyReasoningContentMarkers,
   appendPlanModeReminder,
   buildPartialTextToolCallRecoveryPrompt,
-  buildStreamInterruptionRecoveryPrompt,
-  isMissingReasoningContentError,
   markCompactReplacementMessages,
   normalizeMessagesForModelRequest,
-  safeFinalTextMessage,
   splitTransientPrompts,
-  stripImagesFromMessages,
   stripTrailingErrorPair,
   truncateHeadKeepRatio,
-  withoutThinkingBlocks,
 } from "./messages.js";
 import {
   annotateRepeatedToolFailures,
@@ -96,7 +82,6 @@ import {
   detectRepeatedToolFailure,
 } from "./toolFailure.js";
 import {
-  classifyModelError,
   createEmptyResponseStatus,
   createFinishReasonStatus,
   createLifecycleBlockedStatus,
@@ -106,8 +91,6 @@ import {
   createStructuredOutputCompletedStatus,
   createToolCallRecoveryExhaustedStatus,
   createToolErrorLoopStatus,
-  modelErrorTarget,
-  parseOutputCapRejection,
   tokensFromUsage,
   type AgentStatusMessage,
 } from "./modelErrors.js";
@@ -131,6 +114,7 @@ import {
   recoverFromEmptyResponse,
   recoverFromMaxOutputBump,
 } from "./recoveryStrategies.js";
+import { recoverFromModelError, type ModelErrorRecoveryDeps } from "./modelErrorRecovery.js";
 
 const agentLogger = createLogger("agent");
 const autoCompactLogger = createLogger("agent:auto-compact");
@@ -183,7 +167,6 @@ type AssembleAndRecoverResult =
       assistantMessage: CanonicalMessage;
       toolCalls: CanonicalToolCall[];
     };
-type ModelErrorRecoveredResult = TurnStepContinue | TurnStepReturn;
 type NoToolCallsResult = TurnStepContinue | TurnStepReturn;
 type ExecuteToolCallsResult = TurnStepReturn | TurnStepContinue | { kind: "proceed"; pairedResults: SatiToolResult[] };
 type CircuitBreakerResult = TurnStepContinue | TurnStepReturn;
@@ -200,6 +183,7 @@ export class AgentLoop {
   private readonly toolContextFactory: ToolContextFactory;
   private readonly subagentExecutor: SubagentExecutor;
   private readonly turnExit: TurnExitDeps;
+  private readonly modelErrorRecovery: ModelErrorRecoveryDeps;
 
   constructor(
     private readonly config: AgentRuntimeConfig,
@@ -222,6 +206,13 @@ export class AgentLoop {
       dispatchLifecycle: this.dispatchLifecycle,
     });
     this.turnExit = { tokenCaps: this.tokenCaps, contextRuntime: dependencies.context, now: this.now };
+    this.modelErrorRecovery = {
+      ...this.turnExit,
+      jsonSelfCorrect: config.jsonSelfCorrect,
+      missingToolResultRecoveryContext: () => this.missingToolResultRecoveryContext(),
+      dispatchLifecycle: this.dispatchLifecycle,
+      runAutoCompact: (state, input, options) => this.runAutoCompact(state, input, options),
+    };
     this.subagentExecutor = new SubagentExecutor({
       now: this.now,
       drainEvents: dependencies.drainEvents,
@@ -271,7 +262,8 @@ export class AgentLoop {
       if (assembled.kind === "continue") continue;
 
       if (assembled.assembled.error) {
-        const recovered = yield* this.handleModelError(
+        const recovered = yield* recoverFromModelError(
+          this.modelErrorRecovery,
           state,
           input,
           prepared.request,
@@ -611,10 +603,10 @@ export class AgentLoop {
     if (fatalReason) state.doomLoopFatalReason = fatalReason;
 
     if (assembled.error) {
-      // 错误路径（含 streamInterruption）由 run() 主循环转交 handleModelError
-      // 恢复/终止。这里不得在正常路径落库/emit 未经验证的 assistantMessage——
-      // 它可能含半截工具调用（如完整文本回退解析出的 tool_call 块），恢复响应
-      // 到达前被取消时绝不能持久化。
+      // 错误路径（含 streamInterruption）由 run() 主循环转交
+      // modelErrorRecovery.recoverFromModelError 恢复/终止。这里不得在正常路径
+      // 落库/emit 未经验证的 assistantMessage——它可能含半截工具调用（如完整文本
+      // 回退解析出的 tool_call 块），恢复响应到达前被取消时绝不能持久化。
       return { kind: "proceed", assembled, assistantMessage, toolCalls };
     }
 
@@ -781,371 +773,6 @@ export class AgentLoop {
     await input.onDurableMessage?.(assistantMessage);
 
     return { kind: "proceed", assembled, assistantMessage, toolCalls };
-  }
-
-  private async *handleModelError(
-    state: TurnRuntimeState,
-    input: AgentLoopInput,
-    request: CanonicalModelRequest,
-    decision: RouterDecision,
-    assembled: AssembledAssistantMessage,
-    toolCalls: CanonicalToolCall[],
-    routedMaxOutputTokens: number | undefined,
-  ): AsyncGenerator<AgentEvent, ModelErrorRecoveredResult, unknown> {
-    const ctx = this.dependencies.context;
-    if (assembled.error) {
-      // 输出上限自愈（W4）：provider 对超出模型上限的 max_tokens 返回 400 并
-      // 在文案中指名上限。学到天花板写入 session 级 hardMaxOutputTokens（
-      // TokenCapManager 跨 turn 保留），隐形重试一次（400 发生在任何流内容
-      // 之前，重发幂等）。
-      if (!state.hasAttemptedOutputCapRetry) {
-        // 实际发送值（applyTokenCapsToRequest 之后）优先于 catalog 路由值：
-        // config 钳得比 catalog 低时，报错文案回显的请求值才是对拍基准。
-        const requestedOutput = request.maxOutputTokens ?? routedMaxOutputTokens;
-        const learnedCap = parseOutputCapRejection(assembled.error, requestedOutput);
-        if (learnedCap !== null) {
-          state.hasAttemptedOutputCapRetry = true;
-          const target = modelErrorTarget(assembled.error, decision.provider, decision.model);
-          this.tokenCaps.setTransientTokenCap(target.provider, target.model, {
-            hardMaxOutputTokens: learnedCap,
-          });
-          yield {
-            type: "warning",
-            sessionId: input.sessionId,
-            turnId: input.turnId,
-            code: "output_cap_learned",
-            message: `Provider rejected max_output_tokens ${requestedOutput ?? "(default)"}; learned cap ${learnedCap} and retrying.`,
-            metadata: { provider: target.provider, model: target.model, learnedCap },
-          };
-          yield {
-            type: "turn_continued",
-            sessionId: input.sessionId,
-            turnId: input.turnId,
-            reason: "model_error",
-          };
-          return { kind: "continue" };
-        }
-      }
-      // 流中断恢复：streamModel 在流完成前断连（idle 超时/连接断开/网络错误）
-      // 时以 streamInterruption 错误上抛，不再整体重试（会重复已收到的文本）。
-      // 已产生的部分内容按中断阶段处理：phase=text 且无工具片段 → 可见文本先
-      // 落库再续接；有任何工具片段 → 绝不落库（恢复响应到达前被取消也不把
-      // 半截工具调用作为最终消息）。最多 MAX_STREAM_INTERRUPTION_RECOVERIES
-      // 次；耗尽走错误面。
-      if (assembled.error.streamInterruption) {
-        if (state.streamInterruptionRecoveryCount < MAX_STREAM_INTERRUPTION_RECOVERIES) {
-          state.streamInterruptionRecoveryCount++;
-          const hasTextToolCall =
-            assembled.hasPartialTextToolCall || assembled.hasTextFallbackToolCalls || toolCalls.length > 0;
-          if (hasTextToolCall) {
-            state.finalMessage = undefined;
-          } else {
-            const partialTextMessage = withoutThinkingBlocks(assembled.message);
-            const hasVisibleText = textFromMessage(partialTextMessage).trim().length > 0;
-            if (assembled.error.streamInterruption.phase === "text" && hasVisibleText) {
-              state.finalMessage = partialTextMessage;
-              state.messages.push(partialTextMessage);
-              yield {
-                type: "assistant_message",
-                sessionId: input.sessionId,
-                turnId: input.turnId,
-                message: partialTextMessage,
-              };
-              await input.onDurableMessage?.(partialTextMessage);
-            } else {
-              // reasoning/empty 阶段中断（或无可保留文本）：恢复响应到达前被
-              // 取消时，不得把 thinking-only 原始消息作为最终消息持久化。
-              state.finalMessage = undefined;
-            }
-          }
-          const recoveryPrompt = hasTextToolCall
-            ? buildPartialTextToolCallRecoveryPrompt(assembled.partialTextToolCall)
-            : buildStreamInterruptionRecoveryPrompt(assembled.error.streamInterruption);
-          return yield* continueWithTransientPrompt(
-            state,
-            input,
-            recoveryPrompt,
-            hasTextToolCall ? "max_output_recovery" : "stream_interruption_recovery",
-          );
-        }
-
-        const error = agentError(
-          "agent_model_error",
-          `Stream interruption recovery exhausted after ${MAX_STREAM_INTERRUPTION_RECOVERIES} attempts (${assembled.error.streamInterruption.phase}).`,
-          assembled.error,
-          "The model stream repeatedly disconnected. Retry the turn or switch providers.",
-        );
-        const exhaustedMessage = safeFinalTextMessage(
-          assembled.message,
-          assembled.hasPartialTextToolCall || assembled.hasTextFallbackToolCalls,
-          toolCalls,
-        );
-        state.finalMessage = exhaustedMessage;
-        if (exhaustedMessage) {
-          state.messages.push(exhaustedMessage);
-          yield {
-            type: "assistant_message",
-            sessionId: input.sessionId,
-            turnId: input.turnId,
-            message: exhaustedMessage,
-          };
-          await input.onDurableMessage?.(exhaustedMessage);
-        }
-        await this.dispatchLifecycle(input, "StopFailure", { error: error.message });
-        yield { type: "stop_failure", sessionId: input.sessionId, turnId: input.turnId, error: error.message };
-        const result = this.createTurnResult(input, {
-          type: "error",
-          stopReason: "model_error",
-          usage: state.usage,
-          permissionDenials: state.permissionDenials,
-          turns: state.turnCount,
-          startedAt: state.startedAt,
-          finalMessage: state.finalMessage,
-          structuredOutput: state.structuredOutput,
-          errors: [error],
-        });
-        yield await emitStatus(input, createModelRequestFailedStatus({ error, modelError: assembled.error }));
-        return yield* terminateTurn(this.turnExit, input, state, result, { emitFailureEvent: true });
-      }
-      state.streamInterruptionRecoveryCount = 0;
-
-      if (!state.hasAttemptedReasoningContentRetry && isMissingReasoningContentError(assembled.error)) {
-        state.hasAttemptedReasoningContentRetry = true;
-        state.messages = addEmptyReasoningContentMarkers(state.messages);
-        yield {
-          type: "turn_continued",
-          sessionId: input.sessionId,
-          turnId: input.turnId,
-          reason: "model_error",
-        };
-        return { kind: "continue" };
-      }
-
-      if (toolCalls.length > 0) {
-        const projected = projectToolResults(
-          toolCalls.map(call =>
-            createMissingToolResult(
-              call,
-              this.now,
-              "Model error interrupted tool execution.",
-              this.missingToolResultRecoveryContext(),
-            ),
-          ),
-        );
-        state.messages.push(...projected);
-        yield {
-          type: "tool_results_projected",
-          sessionId: input.sessionId,
-          turnId: input.turnId,
-          message: projected[0]!,
-        };
-        for (const msg of projected) {
-          await input.onDurableMessage?.(msg);
-        }
-      }
-
-      if (
-        this.config.jsonSelfCorrect &&
-        assembled.error.code === "invalid_tool_arguments" &&
-        state.jsonSelfCorrectCount < MAX_JSON_SELF_CORRECT_RETRIES
-      ) {
-        state.jsonSelfCorrectCount++;
-        return yield* continueWithTransientPrompt(
-          state,
-          input,
-          "Your previous tool call contained invalid JSON in the arguments and could not be parsed. " +
-            "Please retry with valid JSON. Common issues: missing quotes around keys/values, " +
-            "trailing commas, unescaped special characters in strings.",
-          "json_self_correct",
-        );
-      }
-
-      // Reactive recovery: ask context runtime if it can recover from the
-      // model error (e.g. `prompt_too_long` → truncate head and retry).
-      // Single-shot per turn — see legacy parity §3.1 #8.
-      const reactive = await this.tryReactiveRecover(input, assembled.error, state.messages, state.hasAttemptedCompact);
-      if (reactive && reactive.type === "adjust_output_and_retry" && !state.hasAttemptedOutputRetry) {
-        state.hasAttemptedOutputRetry = true;
-        const target = modelErrorTarget(assembled.error, decision.provider, decision.model);
-        const previousOutput = this.tokenCaps.currentMaxOutputTokens(target.provider, target.model);
-        this.tokenCaps.setTransientTokenCap(
-          target.provider,
-          target.model,
-          reactive.scope === "attempt"
-            ? { attemptMaxOutputTokens: reactive.maxOutputTokens }
-            : { hardMaxOutputTokens: reactive.maxOutputTokens },
-        );
-        if (target.provider !== decision.provider || target.model !== decision.model) {
-          this.tokenCaps.setTransientTokenCap(decision.provider, decision.model, {
-            attemptMaxOutputTokens: reactive.maxOutputTokens,
-          });
-        }
-        state.messages = stripTrailingErrorPair(state.messages);
-        yield {
-          type: "token_cap_adjusted",
-          sessionId: input.sessionId,
-          turnId: input.turnId,
-          provider: target.provider,
-          model: target.model,
-          cap: "output",
-          previous: previousOutput,
-          next: reactive.maxOutputTokens,
-          reason: reactive.reason,
-        };
-        yield {
-          type: "turn_continued",
-          sessionId: input.sessionId,
-          turnId: input.turnId,
-          reason: "model_error",
-        };
-        return { kind: "continue" };
-      }
-
-      if (reactive && reactive.type === "compact_and_retry" && !state.hasAttemptedCompact) {
-        const target = modelErrorTarget(assembled.error, decision.provider, decision.model);
-        const previousContext = this.tokenCaps.currentMaxContextTokens(target.provider, target.model);
-        if (reactive.maxContextTokens !== undefined) {
-          this.tokenCaps.setTransientTokenCap(target.provider, target.model, {
-            maxContextTokens: reactive.maxContextTokens,
-          });
-          yield {
-            type: "token_cap_adjusted",
-            sessionId: input.sessionId,
-            turnId: input.turnId,
-            provider: target.provider,
-            model: target.model,
-            cap: "context",
-            previous: previousContext,
-            next: reactive.maxContextTokens,
-            reason: reactive.reason,
-          };
-        }
-        if (reactive.maxOutputTokens !== undefined) {
-          const previousOutput = this.tokenCaps.currentMaxOutputTokens(target.provider, target.model);
-          this.tokenCaps.setTransientTokenCap(target.provider, target.model, {
-            attemptMaxOutputTokens: reactive.maxOutputTokens,
-          });
-          if (target.provider !== decision.provider || target.model !== decision.model) {
-            this.tokenCaps.setTransientTokenCap(decision.provider, decision.model, {
-              attemptMaxOutputTokens: reactive.maxOutputTokens,
-            });
-          }
-          yield {
-            type: "token_cap_adjusted",
-            sessionId: input.sessionId,
-            turnId: input.turnId,
-            provider: target.provider,
-            model: target.model,
-            cap: "output",
-            previous: previousOutput,
-            next: reactive.maxOutputTokens,
-            reason: reactive.reason,
-          };
-        }
-        state.messages = stripTrailingErrorPair(state.messages);
-        if (ctx?.tryAutoCompact) {
-          yield* this.runAutoCompact(state, input, {
-            stage: "model-error-recovery",
-            maxContextTokens: this.tokenCaps.currentMaxContextTokens(target.provider, target.model),
-            reservedOutputTokens: this.tokenCaps.getReservedOutputTokens(target.provider, target.model),
-            emitAutoCompactEvent: false,
-            fallbackTruncateRatio: 0.5,
-          });
-        } else {
-          state.messages = truncateHeadKeepRatio(state.messages, 0.5);
-        }
-        state.hasAttemptedCompact = true;
-        yield {
-          type: "turn_continued",
-          sessionId: input.sessionId,
-          turnId: input.turnId,
-          reason: "model_error",
-        };
-        return { kind: "continue" };
-      }
-
-      if (reactive && reactive.type === "truncate_head_and_retry") {
-        // Drop the failed assistant message + any synthetic tool_result we just
-        // pushed so the retry doesn't carry a half-baked tool_call. Then apply
-        // keepRatio so the cap is computed against valid history only.
-        state.messages = stripTrailingErrorPair(state.messages);
-        state.messages = truncateHeadKeepRatio(state.messages, reactive.keepRatio);
-        state.hasAttemptedCompact = true;
-        yield {
-          type: "turn_continued",
-          sessionId: input.sessionId,
-          turnId: input.turnId,
-          reason: "model_error",
-        };
-        return { kind: "continue" };
-      }
-
-      if (reactive && reactive.type === "strip_images_and_retry") {
-        state.messages = stripTrailingErrorPair(state.messages);
-        state.messages = stripImagesFromMessages(state.messages);
-        yield {
-          type: "turn_continued",
-          sessionId: input.sessionId,
-          turnId: input.turnId,
-          reason: "model_error",
-        };
-        return { kind: "continue" };
-      }
-
-      // `max_output_reached`: output token limit hit (or truncated JSON
-      // reclassified from invalid_tool_arguments when finishReason=length).
-      //
-      // Phase A — single-shot token doubling for explicit caps only.
-      // Phase B — multi-turn continuation: keep the truncated assistant
-      // message in context and inject a "resume" prompt so the model can
-      // pick up where it was cut off (up to MAX_OUTPUT_RECOVERY_LIMIT).
-      // Phase C — exhausted: fall through to error surfacing.
-      if (assembled.error.code === "max_output_reached") {
-        // 输出触顶的响应含截断内容（可能带半截工具调用语法）：Phase A/B 恢复
-        // 响应到达前被取消时，绝不能把原始消息作为最终消息持久化
-        // （与 partial-text 恢复路径的清理一致，经由 helper 的 strip 选项实现）。
-        state.finalMessage = undefined;
-        const recovery = yield* recoverFromMaxOutputBump(this.turnExit, state, input, decision, routedMaxOutputTokens, {
-          stripTrailingErrorPairMessages: true,
-        });
-        if (recovery !== "exhausted") {
-          return { kind: "continue" };
-        }
-        // Phase C: fall through to error surfacing
-      }
-
-      // Cross-provider fallback decisions are now owned by RouterRuntime
-      // (see `runFallbackChain` + `zeroUsageRetry`); the loop only
-      // classifies the surfaced error and falls through.
-      const classified = classifyModelError(assembled.error);
-      await this.dispatchLifecycle(input, "StopFailure", { error: assembled.error });
-      yield {
-        type: "stop_failure",
-        sessionId: input.sessionId,
-        turnId: input.turnId,
-        error: typeof assembled.error === "string" ? assembled.error : JSON.stringify(assembled.error),
-      };
-      const result = this.createTurnResult(input, {
-        type: "error",
-        stopReason: classified.stopReason,
-        usage: state.usage,
-        permissionDenials: state.permissionDenials,
-        turns: state.turnCount,
-        startedAt: state.startedAt,
-        finalMessage: state.finalMessage,
-        errors: [classified.error],
-      });
-      yield await emitStatus(
-        input,
-        createModelRequestFailedStatus({
-          error: classified.error,
-          modelError: assembled.error,
-        }),
-      );
-      return yield* terminateTurn(this.turnExit, input, state, result, { emitFailureEvent: true });
-    }
-
-    return { kind: "continue" };
   }
 
   private async *handleNoToolCalls(
@@ -1714,30 +1341,6 @@ export class AgentLoop {
         reason: "model_error",
       },
     };
-  }
-
-  private async tryReactiveRecover(
-    input: AgentLoopInput,
-    error: CanonicalModelError,
-    messages: CanonicalMessage[],
-    hasAttemptedCompact: boolean,
-  ): Promise<ContextRecoveryDecision | undefined> {
-    const ctx: AgentContextRuntime | undefined = this.dependencies.context;
-    if (!ctx?.recoverFromModelError) {
-      return undefined;
-    }
-    try {
-      return await ctx.recoverFromModelError({
-        sessionId: input.sessionId,
-        turnId: input.turnId,
-        error,
-        messages,
-        hasAttemptedCompact,
-      });
-    } catch {
-      // Recovery probe should never block fallback. Pretend the runtime gave up.
-      return undefined;
-    }
   }
 
   /**

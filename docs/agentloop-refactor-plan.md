@@ -180,3 +180,18 @@
 ## 9. 后续轮次（未实施）
 
 轮次 4 完成后 `run()` 骨架化（~80 行），阶段二剩余工作（投影化、注入落库、事件化扩展点、单一压缩执行器）依赖的主循环拆解已完成，可安全落地。`al-extract-state`（压缩触发/工具泵/上下文状态抽取）可作为可选深化轮次。
+
+---
+
+## 10. 轮次 5–6：出口/策略外迁与恢复链拆解（已完成，2026-09-14）
+
+§8.3 的段范围是轮次 4 当时的行号，此后两次外迁已改变 AgentLoop 的内部构成：
+
+| 轮次 | 改动 | 结果 |
+|---|---|---|
+| 轮次 5 | turn 出口与中止捕获（`emitStatus`/`createAbortStatus`/`captureTurn`/`terminateTurn`/`captureAbortedPartial`/`abortTurn`）→ `src/agent/loop/turnExit.ts`（`TurnExitDeps` 依赖袋）；共享恢复策略（`continueWithTransientPrompt`/`emitEmptyOutputTokenBump`/`recoverFromMaxOutputBump`/`recoverFromEmptyResponse`）→ `src/agent/loop/recoveryStrategies.ts` | `AgentLoop.ts` 2433 → 2130；§8.3 表中 `handleModelError` 调用的策略不再定义于本类 |
+| 轮次 6 | `handleModelError` 本体（365 行）→ `src/agent/loop/modelErrorRecovery.ts`：9 个具名步骤函数 + `recoverFromModelError` 调度入口（`unhandled` 才落到下一步），`tryReactiveRecover` 随迁 | `AgentLoop.ts` 2130 → 1740；§8.3 表中 `handleModelError` 一行现对应 `modelErrorRecovery.ts`，`run()` 调用点直接调 `recoverFromModelError` |
+
+两轮均按「逐字搬迁 + 既有回路测试 + 新增行为基线」验证，事件矩阵经 `pnpm gen:event-matrix` 重生成；决策记录见 `docs/notes/implemented/2026-09-14-agentloop-turn-exit-extraction.md` 与 `docs/notes/implemented/2026-09-14-agentloop-model-error-recovery-extraction.md`。
+
+轮次 4 遗留的 `assembleAndRecover` 本体（TD-AGENT-103）与请求装配/压缩执行器（`createModelRequest` / `createBudgetEvaluator` / `runAutoCompact`）仍属 §9 的待办。

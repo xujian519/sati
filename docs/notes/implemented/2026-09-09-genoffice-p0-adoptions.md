@@ -15,7 +15,7 @@ Status: implemented
 1. **输入脱敏**（`src/agent/turn/sanitizeAgentInput.ts`）：TurnRunner 入口对用户输入做三类正则替换（API key ≥16 字符 / URL userinfo / 密码赋值），脱敏后文本同时进 transcript 与模型可见消息，维持「模型可见 = 已记录」；发生脱敏时发 `warning`（code `payload_redacted`）。
 2. **doomLoop 输出感知**（`src/agent/loop/doomLoop.ts`）：ToolCallLoopDetector 窗口键加入 `resultDigest`（长度 + 首段 FNV-1a）；输出变化断链重置，同参数同输出连续 3 次才报。软信号语义（fatal=false）不变。
 3. **声称-行动守卫**（`src/agent/loop/claimGuard.ts`）：`handleNoToolCalls` 在 stop hooks 后、元认知检查前，检查收尾文本的验证类声称 vs 本 run 成功执行的支撑工具（`CLAIM_SUPPORT_TOOLS`）；无支撑则经 `continueWithTransientPrompt` 纠正一轮，每 run 至多一次。开关 `SATI_CLAIM_GUARD`（默认关），接线照抄 metacognitiveControl 三件套（env.ts / AgentRuntimeConfig / createLocalGateway）。
-4. **输出上限自愈**（`modelErrors.ts parseOutputCapRejection` + `handleModelError` 顶部）：400/422/invalid_request 且文案含 max_tokens 关键词时解析天花板（requested 已知取其下最大「上限形」数字；未知取第二大），写入 `TokenCapManager` 的 session 级 `hardMaxOutputTokens`（跨 turn 保留），`continue` 隐形重试一次。有界一次（`hasAttemptedOutputCapRetry`）。
+4. **输出上限自愈**（`modelErrors.ts parseOutputCapRejection` + `modelErrorRecovery.ts learnOutputCapFromRejection`，2026-09-14 由 `AgentLoop.handleModelError` 顶部外迁）：400/422/invalid_request 且文案含 max_tokens 关键词时解析天花板（requested 已知取其下最大「上限形」数字；未知取第二大），写入 `TokenCapManager` 的 session 级 `hardMaxOutputTokens`（跨 turn 保留），`continue` 隐形重试一次。有界一次（`hasAttemptedOutputCapRetry`）。
 5. **摘要来源标注**（`summaryBuilders.ts`）：压缩摘要系统提示追加数字来源纪律——用户/工具来源的数字保留出处，模型自产无来源数字标 `(unverified)`。
 6. **外链门控**（`apps/desktop/src/safe-external-url.ts`）：`isSafeExternalUrl`（http/https 白名单 + `new URL()` 解析）+ `openExternalSafely`；桌面壳全部 4 处 `shell.openExternal` 收敛到单点，拒绝时仅 warn 不回退原始输入。
 
