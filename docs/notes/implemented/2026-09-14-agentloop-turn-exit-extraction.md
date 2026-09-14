@@ -17,7 +17,7 @@ AgentLoop.ts 只保留**主循环阶段方法与其依赖**，把上述两组迁
 
 | 文件 | 行数 | 内容 |
 |---|---|---|
-| `src/agent/loop/turnExit.ts` | 170 | `TurnExitDeps`（`tokenCaps` + `contextRuntime` + `now`）、`TurnStepContinue`/`TurnStepReturn`、`TurnResultOptions`、`buildTurnResult`、`makeTurnResultBuilder`、`emitStatus`、`createAbortStatus`、`captureTurn`、`terminateTurn`、`captureAbortedPartial`、`abortTurn` |
+| `src/agent/loop/turnExit.ts` | 173 | `TurnExitDeps`（`tokenCaps` + `contextRuntime` + `now`）、`TurnStepContinue`/`TurnStepReturn`、`TurnResultOptions`、`buildTurnResult`、`makeTurnResultBuilder`、`emitStatus`、`createAbortStatus`、`captureTurn`、`terminateTurn`、`captureAbortedPartial`、`abortTurn` |
 | `src/agent/loop/recoveryStrategies.ts` | 225 | `continueWithTransientPrompt`（无依赖）、`emitEmptyOutputTokenBump`、`recoverFromMaxOutputBump`、`recoverFromEmptyResponse`、`EMPTY_LENGTH_OUTPUT_RETRY_FLOOR` |
 
 `AgentLoop.ts` 2433 → **2130 行**；构造期建立唯一依赖袋 `this.turnExit: TurnExitDeps = { tokenCaps, contextRuntime: dependencies.context, now }`，调用点由 `this.X(...)` 改为 `X(this.turnExit, ...)`。`createTurnResult` 保留为 3 行私有包装（绑定 `now`），使 12 处调用点零改动。
