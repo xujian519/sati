@@ -227,10 +227,14 @@
 
 - **已做（PR #321）**：TD-TOOL-001（`createReadFileTool` god function）——`readFile.ts` 891 → 127 行，四条读取路径与共享 helper 移入 `src/tool/builtin/filesystem/read-file/`。工具契约（`description` + `inputSchema`）逐字未变，llm-replay fixture 无需重录；新旧实现 28 场景差分对拍一致；补 11 条 image/pdf/notebook 直测。见 `docs/notes/implemented/2026-09-14-readfile-god-function-split.md`。
 - **已做（本 PR）**：`patentPdfDownload.ts` **953 → 164 行**——按职责拆入 `src/tool/builtin/patent-pdf-download/`（constants/types/browserScripts/browserDriver/fetchFallback/manifest/reporting/outputPaths/validate/execute）。入口路径与导出面不变（registry 与 9 个 spec 无需改导入）；工具契约段逐字未变；新旧实现 32 场景差分对拍一致（含生成的浏览器脚本字符串、落盘文件清单、埋点 JSONL）。副产物：TD-TOOL-007 转为 partial（模板已集中到单模块，但仍未纳入类型/格式检查）。见 `docs/notes/implemented/2026-09-14-patent-pdf-download-split.md`。
-- **本轮实测行数**（`wc -l`，2026-09-14）：`patentPdfDownload.ts` **953 → 164** · `readFile.ts` **891 → 127**（PR #321）· `patentWorkflowRunTool.ts` 818 · `kanban.ts` 815 · `executeCode.ts` 774 · `SkillManager.ts` 621（2026-09-11 已拆）。
+- **本轮实测行数**（`wc -l`，2026-09-14）：`patentPdfDownload.ts` **953 → 164** · `readFile.ts` **891 → 127**（PR #321）· `patentWorkflowRunTool.ts` **818 → 149**（本 PR）· `kanban.ts` 815 · `executeCode.ts` 774 · `SkillManager.ts` 621（2026-09-11 已拆）。
 - **仍待做（机会型，触发条件不变「下次改这些文件时顺带拆」）**：
-  - `patentWorkflowRunTool.ts`（818）：graph 执行路径（`executeGraphRun` 514-694）与 judge 组装（`assembleGraphJudges`/`buildJudgeSection`）职责分离清晰，可按 graph / judge / 图结果渲染三块切。
   - `kanban.ts`（815）、`executeCode.ts`（774）：未达 800 阈值但同量级，拆分方案未成形，暂不登记新条目。
+- **判定：本议题已达"审视并处置"目的**：四个 ≥800 行文件已逐一处理（`readFile.ts`/`patentPdfDownload.ts`/`patentWorkflowRunTool.ts` 拆分，`SkillManager.ts` 2026-09-11 已拆），余下两个未达阈值的同量级文件不构成该条目的原始范围。
+
+### 2026-09-14 处置追加（二）：`patentWorkflowRunTool.ts`
+
+- **已做（本 PR）**：`patentWorkflowRunTool.ts` **818 → 149 行**——按执行面拆入 `src/tool/builtin/patent-workflow-run/`（types/provenance/manifestRun/graphRun/judges）。入口保留契约与分派，`openProvenanceCollector`、`buildJudgeSection` 与两个类型由入口转出（既有 spec 导入路径不变）。工具契约段与类型块逐字未变；新旧实现 22 场景差分对拍一致（manifest 全流程/持久化/放行、三张领域图中断与检查点、judgeModels 共识、buildJudgeSection 六配置、溯源四组合），仅掩蔽调度抖动量。见 `docs/notes/implemented/2026-09-14-patent-workflow-run-split.md`。
 - **判定：不做的部分**：`SkillManager.ts` 已于 2026-09-11 拆分（915→623）并销 TD-EXTENSION-N01/N02 主因，本轮复核**不再重复拆分**；`readFile.ts` 残余的 `as ReadFileInput`（现位于 `read-file/validate.ts` 空 `pages` 归一分支）属类型收窄小项，未混入本次纯搬移。
 
 ---
