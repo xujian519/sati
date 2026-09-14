@@ -25,6 +25,17 @@ function assistant(text: string): CanonicalMessage {
   return { role: "assistant", content: [{ type: "text", text }] };
 }
 
+function toolCall(id: string): CanonicalMessage {
+  return { role: "assistant", content: [{ type: "tool_call", id, name: "read_file", input: { path: "a.ts" } }] };
+}
+
+function toolResult(id: string): CanonicalMessage {
+  return {
+    role: "user",
+    content: [{ type: "tool_result", toolCallId: id, content: [{ type: "text", text: "内容" }] }],
+  };
+}
+
 function notices(context: { messages: CanonicalMessage[] }): CanonicalMessage[] {
   return context.messages.filter(isPromptDateNotice);
 }
@@ -254,8 +265,6 @@ describe("DefaultContextRuntime 会话提示日期锚定", () => {
   });
 
   it("预算预演（previewOnly）不提交锚点与通知位置", async () => {
-    const counter = { value: 0 };
-    const engine = makeSummaryEngine(counter);
     let current = new Date("2026-09-10T12:00:00.000Z");
     const runtime = new DefaultContextRuntime({ now: () => current });
     const messages = [message("第一问")];
@@ -263,23 +272,92 @@ describe("DefaultContextRuntime 会话提示日期锚定", () => {
     const first = await runtime.prepareForModel(makeInput({ messages }));
     current = new Date("2026-09-11T12:00:00.000Z");
 
+    // 预算探针先按当前投影估一次（tryAutoCompact 的首次评估），真实请求随后在其上续写：
+    // 预演一旦提交了通知下标，通知就会落在真实请求的中段——末尾断言才有判别力。
     const preview = await runtime.prepareForModel(
-      makeInput({ messages: [...messages, message("假设被丢弃的历史")], previewOnly: true }),
+      makeInput({ messages: [...messages, message("第二问")], previewOnly: true }),
     );
     assert.equal(promptDate(preview), "2026-09-10", "预演用已提交的锚点，不前进");
     assert.equal(notices(preview).length, 1);
 
-    const checkpoint = await buildCheckpoint(engine, [...messages, assistant("答复"), message("继续撰写")]);
-    const checkpointPreview = await runtime.prepareForModel(makeInput({ messages: checkpoint, previewOnly: true }));
-    assert.equal(promptDate(checkpointPreview), "2026-09-10", "完整压缩的预演也不得刷新锚点");
-
-    const actual = await runtime.prepareForModel(makeInput({ messages: [...messages, message("第二问")] }));
+    const extended = [...messages, message("第二问"), message("第三问")];
+    const actual = await runtime.prepareForModel(makeInput({ messages: extended }));
     assert.equal(actual.systemPrompt, first.systemPrompt);
     assert.equal(notices(actual).length, 1);
     assert.ok(isPromptDateNotice(actual.messages.at(-1)!), "通知位置取自真实请求，未被预演污染");
 
-    const repeated = await runtime.prepareForModel(makeInput({ messages: [...messages, message("第二问")] }));
+    const repeated = await runtime.prepareForModel(makeInput({ messages: extended }));
     assert.deepEqual(repeated.messages, actual.messages);
+  });
+
+  it("完整压缩的预演不刷新锚点，真实请求仍照常刷新", async () => {
+    const counter = { value: 0 };
+    const engine = makeSummaryEngine(counter);
+    let current = new Date("2026-09-10T12:00:00.000Z");
+    const runtime = new DefaultContextRuntime({ now: () => current });
+    const messages = [message("第一问")];
+
+    await runtime.prepareForModel(makeInput({ messages }));
+    current = new Date("2026-09-11T12:00:00.000Z");
+
+    const checkpoint = await buildCheckpoint(engine, [...messages, assistant("答复"), message("继续撰写")]);
+    const preview = await runtime.prepareForModel(makeInput({ messages: checkpoint, previewOnly: true }));
+    assert.equal(promptDate(preview), "2026-09-10", "预演不得借新 checkpoint 刷新锚点");
+
+    const actual = await runtime.prepareForModel(makeInput({ messages: checkpoint }));
+    assert.equal(promptDate(actual), "2026-09-11", "真实请求仍照常刷新");
+  });
+
+  it("中止的装配不提交锚点与通知位置", async () => {
+    const resolver: MemoryResolver = {
+      retrieve: async () => ({ diagnostics: [] }),
+      captureTurn: async () => undefined,
+    };
+    let current = new Date("2026-09-10T12:00:00.000Z");
+    // 中止的提前返回排在记忆检索之后，故需配一个 memoryResolver 才会走到那条分支。
+    const runtime = new DefaultContextRuntime({ now: () => current, memoryResolver: resolver });
+    const messages = [message("第一问")];
+
+    const first = await runtime.prepareForModel(makeInput({ messages }));
+    current = new Date("2026-09-11T12:00:00.000Z");
+
+    const abortController = new AbortController();
+    abortController.abort();
+    await runtime.prepareForModel(
+      makeInput({ messages: [...messages, message("第二问")], abortSignal: abortController.signal }),
+    );
+
+    const extended = [...messages, message("第二问"), message("第三问")];
+    const actual = await runtime.prepareForModel(makeInput({ messages: extended }));
+    assert.equal(actual.systemPrompt, first.systemPrompt);
+    assert.ok(isPromptDateNotice(actual.messages.at(-1)!), "通知落在真实请求末尾，未被中止的装配抢占下标");
+  });
+
+  it("跨日通知不切裂 tool_call / tool_result 配对", async () => {
+    let current = new Date("2026-09-10T23:59:00.000Z");
+    const runtime = new DefaultContextRuntime({ now: () => current });
+    // 尾部是未配对的 tool_call：投影会补一条占位 tool_result（MessageProjector），
+    // 通知必须落在配对之后——tool_call 与其 tool_result 相邻是 provider 的硬约束。
+    const messages = [message("读一下 a.ts"), toolCall("call-1")];
+    await runtime.prepareForModel(makeInput({ messages }));
+
+    current = new Date("2026-09-11T00:05:00.000Z");
+    const paired = [...messages, toolResult("call-1")];
+    const rolled = await runtime.prepareForModel(makeInput({ messages: paired }));
+    assert.ok(isPromptDateNotice(rolled.messages.at(-1)!), "尾部追加不影响配对");
+
+    // 通知保留在原位时落在中段：其后新追加的一轮工具调用仍须自身配对完整。
+    const nextTurn = [...paired, toolCall("call-2"), toolResult("call-2")];
+    const continued = await runtime.prepareForModel(makeInput({ messages: nextTurn }));
+    const callIndex = continued.messages.findIndex(message =>
+      message.content.some(block => block.type === "tool_call" && block.id === "call-2"),
+    );
+    assert.ok(callIndex >= 0, "新工具调用在请求里");
+    assert.deepEqual(
+      continued.messages[callIndex + 1]?.content.map(block => block.type),
+      ["tool_result"],
+      "tool_call 之后紧邻的必须是它自己的 tool_result",
+    );
   });
 
   it("日期通知不参与记忆检索的 query 与最近消息", async () => {

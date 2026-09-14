@@ -588,11 +588,13 @@ test("agent loop persists a full compaction after recovering from a context erro
 
 test("budget candidate assembly is preview-only so probes do not commit prompt-time state", async () => {
   const tokenBudget = new TokenBudgetManager();
-  const preparedAsks: Array<{ previewOnly?: boolean }> = [];
+  // 候选请求由预算评估内部发起，用标记区分其与真实请求，断言才能双侧排他。
+  const preparedAsks: Array<{ previewOnly?: boolean; fromBudgetProbe: boolean }> = [];
+  let inBudgetProbe = false;
 
   const context: AgentRuntimeDependencies["context"] = {
     prepareForModel: async input => {
-      preparedAsks.push({ previewOnly: input.previewOnly });
+      preparedAsks.push({ previewOnly: input.previewOnly, fromBudgetProbe: inBudgetProbe });
       return {
         messages: input.messages,
         systemPrompt: undefined,
@@ -613,7 +615,12 @@ test("budget candidate assembly is preview-only so probes do not commit prompt-t
     captureTurn: async () => undefined,
     tryAutoCompact: async input => {
       // 驱动预算评估：这条路径会组装一份「候选请求」，其状态不得提交。
-      await input.budgetEvaluator?.(input.messages);
+      inBudgetProbe = true;
+      try {
+        await input.budgetEvaluator?.(input.messages);
+      } finally {
+        inBudgetProbe = false;
+      }
       return {
         type: "skipped",
         snapshot: tokenBudget.snapshotFromTokens(9_000, 10_000, {
@@ -688,12 +695,16 @@ test("budget candidate assembly is preview-only so probes do not commit prompt-t
     // Drain the turn.
   }
 
+  const probes = preparedAsks.filter(ask => ask.fromBudgetProbe);
+  const realRequests = preparedAsks.filter(ask => !ask.fromBudgetProbe);
+  assert.ok(probes.length > 0, "预算评估应组装过候选请求");
+  assert.ok(realRequests.length > 0, "回合应组装过真实请求");
   assert.ok(
-    preparedAsks.some(ask => ask.previewOnly === true),
+    probes.every(ask => ask.previewOnly === true),
     "预算候选请求必须以 previewOnly 组装",
   );
   assert.ok(
-    preparedAsks.some(ask => ask.previewOnly === undefined),
+    realRequests.every(ask => ask.previewOnly === undefined),
     "真实请求不得标记 previewOnly",
   );
 });

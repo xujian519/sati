@@ -17,7 +17,7 @@ Status: implemented
 
 **通知**：跨 UTC 日时在下一次请求的消息末尾追加一条 `<date-update>` 合成 user 消息（`src/context/prompt/promptDateNotice.ts`，`metadata: { synthetic: true, purpose: "date_update" }`）。通知按投影坐标系记 `index`，后续请求保持其原位以让前缀逐字延长；落在被重写区（`index > 未变前缀长度`）的通知丢弃，并在新末尾按需补一条当前日期。通知只存在于请求投影（`prepareForModel` 的返回值），**不进 `state.messages`**，因此不落 transcript、不进 web 投影、不参与压缩锚点（`isRealUserRequestMessage` 本就排除 `synthetic`）、不参与记忆检索（记忆 query 与 `recentMessages` 取自插入通知前的投影）。
 
-**预算预演隔离**：`ContextPrepareInput.previewOnly` 让被丢弃的候选请求（`AgentLoop.createBudgetEvaluator`）不提交锚点、通知位置与 cache generation。
+**预算预演隔离**：`ContextPrepareInput.previewOnly` 让被丢弃的候选请求（`AgentLoop.createBudgetEvaluator`）不提交锚点、通知位置与 cache generation。提交动作留在 `prepareForModel` 末尾——只有确实要发给模型的装配才写会话状态，预演与中止（`abortSignal` 已触发）都提前返回、都不提交；把提交挪进 `resolvePromptTime` 内部会让这两条被丢弃的路径反而留下下标，真实请求随后继承它。
 
 **断点同源**：微压缩 `cacheBreakpoints` 改在插入通知后的最终消息数组上计算，避免下标右移把 `cache_control` 打到错误的块上。
 
@@ -33,7 +33,7 @@ Status: implemented
 
 ## Consequences
 
-- 换来：会话内 system 前缀逐字稳定，跨日不再触发全量 cache 写；模型当日日期由通知保证为真（陈旧上界 0 天）。`tests/context/prompt-date-anchor.spec.ts` 覆盖跨日、重写、压缩、会话隔离、预演隔离 11 例；`tests/context/prompt-date-notice-cache.spec.ts` 锁断点与消息同源。
+- 换来：会话内 system 前缀逐字稳定，跨日不再触发全量 cache 写；模型当日日期由通知保证为真（陈旧上界 0 天）。`tests/context/prompt-date-anchor.spec.ts` 覆盖跨日、重写、压缩、会话隔离、预演隔离、中止不提交、工具配对不切裂 14 例；`tests/context/prompt-date-notice-cache.spec.ts` 锁断点与消息同源。
 - 付出：请求投影里多一类合成消息（每条约 50 token，随会话内跨日次数线性累积，完整压缩时清空）；凡是「读最后一条 user 消息」的旁路都要认得它，目前只有路由分类（已过滤）与记忆检索（读投影，天然干净）两处，新增旁路时需复用 `isPromptDateNotice`。
 - 已知限制：通知位置随运行时存在，进程重启/会话恢复后重新锚定为恢复当日日期（与运行时的提示时间状态同生命周期，与上游一致）。
 - 被顶替的假设：`tests/context/prompt-date-freeze.spec.ts` 已删除（其断言是「跨日改写 systemPrompt」，与新语义相反）。

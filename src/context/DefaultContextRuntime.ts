@@ -238,8 +238,7 @@ export class DefaultContextRuntime implements ContextRuntime {
         });
       }
       if (input.abortSignal?.aborted) {
-        // 中止路径不提交锚点状态：锚点由「已提交状态 + 实时时钟」确定性推导，
-        // 下一次组装会重算出同样的值。
+        // 中止路径不提交提示时间状态（提交在方法末尾）：本次装配不发给模型。
         return {
           messages: promptTime.messages,
           systemPrompt: parts.join("\n\n"),
@@ -298,6 +297,12 @@ export class DefaultContextRuntime implements ContextRuntime {
       messages: promptTime.messages,
     });
 
+    // 请求确实要发出时才提交提示时间状态：预演与中止的装配都会被丢弃，提前提交会让
+    // 真实请求继承未发出装配的下标。
+    if (promptTime.state !== undefined) {
+      this.promptTimeState.set(input.sessionId, promptTime.state);
+    }
+
     return {
       messages: promptTime.messages,
       systemPrompt: joined,
@@ -324,17 +329,18 @@ export class DefaultContextRuntime implements ContextRuntime {
    * 跨 UTC 日改为在消息尾部追加一条日期通知告知真实日期（见 promptDateNotice.ts），
    * 陈旧上界收敛到 0 天。需要精确到分秒的工作走 get_current_time 工具。
    *
-   * 非 `previewOnly` 时提交本次锚点与通知位置；预算预演的候选请求会被丢弃，提交会
-   * 让随后的真实请求继承假设历史的下标。
+   * 非 `previewOnly` 时把本次锚点与通知位置一并以 `state` 返回，由调用方在请求确实
+   * 要发出时提交；被丢弃的装配（预演、中止）不得提交，否则真实请求会继承它们的下标。
    *
    * @param input - 组装输入（取其 sessionId 与 previewOnly）。
    * @param messages - 投影后的消息序列。
-   * @returns 模型可见的请求消息（投影 + 通知）与 system prompt 用的锚点时刻。
+   * @returns 模型可见的请求消息（投影 + 通知）、system prompt 用的锚点时刻，以及待提交
+   *   的会话状态（预演时为 undefined）。
    */
   private resolvePromptTime(
     input: ContextPrepareInput,
     messages: CanonicalMessage[],
-  ): { messages: CanonicalMessage[]; timestamp: number } {
+  ): { messages: CanonicalMessage[]; timestamp: number; state?: PromptTimeState } {
     const fingerprints = fingerprintMessages(messages);
     const previous = this.promptTimeState.get(input.sessionId);
     const unchangedPrefixLength = countUnchangedPrefix(fingerprints, previous?.messages);
@@ -357,10 +363,8 @@ export class DefaultContextRuntime implements ContextRuntime {
         message: buildPromptDateNotice(currentDate),
       });
     }
-    if (!input.previewOnly) {
-      this.promptTimeState.set(input.sessionId, { timestamp, messages: fingerprints, dateUpdates });
-    }
-    return { messages: withDateNotices(messages, dateUpdates), timestamp };
+    const state = input.previewOnly ? undefined : { timestamp, messages: fingerprints, dateUpdates };
+    return { messages: withDateNotices(messages, dateUpdates), timestamp, state };
   }
 
   async applyToolResults(input: ContextToolResultInput): Promise<ContextToolResultResult> {
