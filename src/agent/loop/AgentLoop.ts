@@ -21,7 +21,6 @@ import type { SatiReadFileStateMap, SatiWriteSnapshotMap } from "../../tool/prot
 import { agentError } from "../protocol/errors.js";
 import type { AgentEvent } from "../protocol/events.js";
 import { createLogger, logger } from "../../telemetry/index.js";
-import type { AgentLoopTransitionReason } from "../protocol/state.js";
 import type { AgentTurnResult } from "../protocol/result.js";
 import type { AgentRuntimeConfig } from "../runtime/AgentRuntimeConfig.js";
 import type { AgentRuntimeDependencies } from "../runtime/AgentRuntimeDependencies.js";
@@ -43,10 +42,8 @@ import { buildMetacognitivePrompt, buildMetacognitiveRetryPrompt, parseSelfEstim
 import { evaluateClaimGuard } from "./claimGuard.js";
 import { buildRequestHeaderSnapshot, verifyRequestHeaderSnapshot } from "./requestInvariant.js";
 import { projectToolResults } from "./projectToolResults.js";
-import { resolveOutputTokenRetryBump } from "./outputTokenRetry.js";
 import type { LargeFileRepairDecision } from "./LargeFileRepair.js";
 import {
-  MAX_CONSECUTIVE_EMPTY,
   MAX_JSON_SELF_CORRECT_RETRIES,
   MAX_OUTPUT_RECOVERY_LIMIT,
   MAX_SAME_INVALID_FINGERPRINT,
@@ -100,7 +97,6 @@ import {
 } from "./toolFailure.js";
 import {
   classifyModelError,
-  clampOutputToModelCap,
   createEmptyResponseStatus,
   createFinishReasonStatus,
   createLifecycleBlockedStatus,
@@ -110,19 +106,32 @@ import {
   createStructuredOutputCompletedStatus,
   createToolCallRecoveryExhaustedStatus,
   createToolErrorLoopStatus,
-  createTurnAbortedStatus,
   modelErrorTarget,
   parseOutputCapRejection,
-  shouldSurfaceAbortStatus,
-  stringifyAbortReason,
   tokensFromUsage,
   type AgentStatusMessage,
 } from "./modelErrors.js";
 import { TokenCapManager } from "./tokenCapManager.js";
 import { ToolContextFactory } from "./toolContext.js";
 import { SubagentExecutor } from "./subagentExecutor.js";
+import {
+  abortTurn,
+  buildTurnResult,
+  captureAbortedPartial,
+  createAbortStatus,
+  emitStatus,
+  terminateTurn,
+  type TurnExitDeps,
+  type TurnResultOptions,
+  type TurnStepContinue,
+  type TurnStepReturn,
+} from "./turnExit.js";
+import {
+  continueWithTransientPrompt,
+  recoverFromEmptyResponse,
+  recoverFromMaxOutputBump,
+} from "./recoveryStrategies.js";
 
-const EMPTY_LENGTH_OUTPUT_RETRY_FLOOR = 4_096;
 const agentLogger = createLogger("agent");
 const autoCompactLogger = createLogger("agent:auto-compact");
 /** A5: prompt cache plan 的进程级单调代数（诊断用，随每次规划递增）。 */
@@ -153,9 +162,6 @@ export type AgentLoopSeedState = {
   allowedReadFiles?: string[];
 };
 
-/** run() 阶段方法的统一步进结果：continue 进入下一阶段/下一轮，return 终止 run，proceed 携带数据进入后续判断。 */
-type TurnStepContinue = { kind: "continue" };
-type TurnStepReturn = { kind: "return"; result: AgentTurnResult; messages: CanonicalMessage[] };
 type TurnGuardsResult = TurnStepContinue | TurnStepReturn;
 type PrepareModelCallResult =
   | TurnStepReturn
@@ -193,6 +199,7 @@ export class AgentLoop {
   private readonly dispatchLifecycle: LifecycleDispatcher;
   private readonly toolContextFactory: ToolContextFactory;
   private readonly subagentExecutor: SubagentExecutor;
+  private readonly turnExit: TurnExitDeps;
 
   constructor(
     private readonly config: AgentRuntimeConfig,
@@ -214,6 +221,7 @@ export class AgentLoop {
       now: this.now,
       dispatchLifecycle: this.dispatchLifecycle,
     });
+    this.turnExit = { tokenCaps: this.tokenCaps, contextRuntime: dependencies.context, now: this.now };
     this.subagentExecutor = new SubagentExecutor({
       now: this.now,
       drainEvents: dependencies.drainEvents,
@@ -308,7 +316,7 @@ export class AgentLoop {
     input: AgentLoopInput,
   ): AsyncGenerator<AgentEvent, TurnGuardsResult, unknown> {
     if (input.abortSignal?.aborted) {
-      return yield* this.abortTurn(input, state);
+      return yield* abortTurn(this.turnExit, input, state);
     }
 
     if (state.doomLoopFatalReason !== undefined) {
@@ -322,7 +330,7 @@ export class AgentLoop {
         finalMessage: state.finalMessage,
         errors: [agentError("agent_doomloop", state.doomLoopFatalReason)],
       });
-      return yield* this.terminateTurn(input, state, result, { emitFailureEvent: true });
+      return yield* terminateTurn(this.turnExit, input, state, result, { emitFailureEvent: true });
     }
 
     // PreStep 扩展点：turn 开始、模型请求组装前（对应 dsh pre-step 瀑布）。
@@ -348,14 +356,14 @@ export class AgentLoop {
         structuredOutput: state.structuredOutput,
         errors: [agentError("agent_unsupported_feature", preStepBlock.reason)],
       });
-      yield await this.emitStatus(
+      yield await emitStatus(
         input,
         createLifecycleBlockedStatus({
           error: result.errors![0]!,
           stage: "pre_step",
         }),
       );
-      return yield* this.terminateTurn(input, state, result, { emitFailureEvent: true });
+      return yield* terminateTurn(this.turnExit, input, state, result, { emitFailureEvent: true });
     }
 
     return { kind: "continue" };
@@ -411,7 +419,7 @@ export class AgentLoop {
 
     let request = await this.createModelRequest(state.messages, input, { state });
     if (input.abortSignal?.aborted) {
-      return yield* this.abortTurn(input, state);
+      return yield* abortTurn(this.turnExit, input, state);
     }
     this.dispatchLifecycle(input, "PreModelRequest", {
       provider: request.provider,
@@ -451,7 +459,7 @@ export class AgentLoop {
       // decide 会把中止原因原样抛出（RouterRuntime 的 abort 重抛语义）；按取消
       // 收尾，而不是让取消被记成一次路由失败。
       if (input.abortSignal?.aborted) {
-        return yield* this.abortTurn(input, state);
+        return yield* abortTurn(this.turnExit, input, state);
       }
       throw error;
     }
@@ -534,8 +542,8 @@ export class AgentLoop {
       if (!state.stickyInfo?.orchestrating) state.previousTier = undefined;
     } catch (error) {
       if (input.abortSignal?.aborted) {
-        yield* this.captureAbortedPartial(state, input, assembler);
-        return yield* this.abortTurn(input, state);
+        yield* captureAbortedPartial(state, input, assembler);
+        return yield* abortTurn(this.turnExit, input, state);
       }
       const modelError = error instanceof ModelProviderError ? error.error : undefined;
       const stopFailureMsg = modelError?.message ?? (error instanceof Error ? error.message : String(error));
@@ -551,11 +559,11 @@ export class AgentLoop {
         finalMessage: state.finalMessage,
         errors: [agentError("agent_model_error", stopFailureMsg, modelError, modelError?.userHint)],
       });
-      const abortStatus = this.createAbortStatus(input);
+      const abortStatus = createAbortStatus(input);
       if (abortStatus) {
-        yield await this.emitStatus(input, abortStatus);
+        yield await emitStatus(input, abortStatus);
       } else {
-        yield await this.emitStatus(
+        yield await emitStatus(
           input,
           createModelRequestFailedStatus({
             error: result.errors![0]!,
@@ -563,12 +571,12 @@ export class AgentLoop {
           }),
         );
       }
-      return yield* this.terminateTurn(input, state, result, { emitFailureEvent: true });
+      return yield* terminateTurn(this.turnExit, input, state, result, { emitFailureEvent: true });
     }
 
     if (input.abortSignal?.aborted) {
-      yield* this.captureAbortedPartial(state, input, assembler);
-      return yield* this.abortTurn(input, state);
+      yield* captureAbortedPartial(state, input, assembler);
+      return yield* abortTurn(this.turnExit, input, state);
     }
 
     return { kind: "continue", assembler };
@@ -625,7 +633,7 @@ export class AgentLoop {
         // 当前 assistant 消息含不安全的工具片段：恢复响应到达前若被取消，
         // 绝不能把它作为最终消息返回/落库。
         state.finalMessage = undefined;
-        return yield* this.continueWithTransientPrompt(
+        return yield* continueWithTransientPrompt(
           state,
           input,
           buildPartialTextToolCallRecoveryPrompt(assembled.partialTextToolCall),
@@ -654,7 +662,7 @@ export class AgentLoop {
           ),
         ],
       });
-      yield await this.emitStatus(
+      yield await emitStatus(
         input,
         createToolCallRecoveryExhaustedStatus({
           error: result.errors![0]!,
@@ -662,7 +670,7 @@ export class AgentLoop {
           reason: detail,
         }),
       );
-      return yield* this.terminateTurn(input, state, result, { emitFailureEvent: true });
+      return yield* terminateTurn(this.turnExit, input, state, result, { emitFailureEvent: true });
     }
 
     // When jsonrepair silently "fixed" truncated JSON and the response
@@ -690,16 +698,16 @@ export class AgentLoop {
         });
         if (continued.type === "completed") {
           if (continued.status) {
-            yield await this.emitStatus(input, continued.status);
+            yield await emitStatus(input, continued.status);
           }
-          return yield* this.terminateTurn(input, state, continued.result, { emitFailureEvent: true });
+          return yield* terminateTurn(this.turnExit, input, state, continued.result, { emitFailureEvent: true });
         }
         yield continued.event;
         return { kind: "continue" };
       }
 
       // Phase A/B 由共享策略方法处理；Phase C 兜底保持在本方法内。
-      const recovery = yield* this.recoverFromMaxOutputBump(state, input, decision, routedMaxOutputTokens);
+      const recovery = yield* recoverFromMaxOutputBump(this.turnExit, state, input, decision, routedMaxOutputTokens);
       if (recovery !== "exhausted") {
         return { kind: "continue" };
       }
@@ -722,7 +730,7 @@ export class AgentLoop {
           ),
         ],
       });
-      yield await this.emitStatus(
+      yield await emitStatus(
         input,
         createToolCallRecoveryExhaustedStatus({
           error: result.errors![0]!,
@@ -730,11 +738,12 @@ export class AgentLoop {
           reason: "repaired_truncated_tool_calls",
         }),
       );
-      return yield* this.terminateTurn(input, state, result, { emitFailureEvent: true });
+      return yield* terminateTurn(this.turnExit, input, state, result, { emitFailureEvent: true });
     }
 
     if (!assembled.error && toolCalls.length === 0 && textFromMessage(assistantMessage).length === 0) {
-      const recovery = yield* this.recoverFromEmptyResponse(
+      const recovery = yield* recoverFromEmptyResponse(
+        this.turnExit,
         state,
         input,
         decision,
@@ -754,7 +763,7 @@ export class AgentLoop {
         model: request.model,
         attempts: 2,
       });
-      yield await this.emitStatus(input, status);
+      yield await emitStatus(input, status);
       const result = this.createTurnResult(input, {
         type: "success",
         stopReason: "completed",
@@ -764,7 +773,7 @@ export class AgentLoop {
         startedAt: state.startedAt,
         finalMessage: state.messages.filter(m => m.role === "assistant").at(-1),
       });
-      return yield* this.terminateTurn(input, state, result, { errored: true });
+      return yield* terminateTurn(this.turnExit, input, state, result, { errored: true });
     }
 
     state.messages.push(assistantMessage);
@@ -852,7 +861,7 @@ export class AgentLoop {
           const recoveryPrompt = hasTextToolCall
             ? buildPartialTextToolCallRecoveryPrompt(assembled.partialTextToolCall)
             : buildStreamInterruptionRecoveryPrompt(assembled.error.streamInterruption);
-          return yield* this.continueWithTransientPrompt(
+          return yield* continueWithTransientPrompt(
             state,
             input,
             recoveryPrompt,
@@ -895,8 +904,8 @@ export class AgentLoop {
           structuredOutput: state.structuredOutput,
           errors: [error],
         });
-        yield await this.emitStatus(input, createModelRequestFailedStatus({ error, modelError: assembled.error }));
-        return yield* this.terminateTurn(input, state, result, { emitFailureEvent: true });
+        yield await emitStatus(input, createModelRequestFailedStatus({ error, modelError: assembled.error }));
+        return yield* terminateTurn(this.turnExit, input, state, result, { emitFailureEvent: true });
       }
       state.streamInterruptionRecoveryCount = 0;
 
@@ -941,7 +950,7 @@ export class AgentLoop {
         state.jsonSelfCorrectCount < MAX_JSON_SELF_CORRECT_RETRIES
       ) {
         state.jsonSelfCorrectCount++;
-        return yield* this.continueWithTransientPrompt(
+        return yield* continueWithTransientPrompt(
           state,
           input,
           "Your previous tool call contained invalid JSON in the arguments and could not be parsed. " +
@@ -1096,7 +1105,7 @@ export class AgentLoop {
         // 响应到达前被取消时，绝不能把原始消息作为最终消息持久化
         // （与 partial-text 恢复路径的清理一致，经由 helper 的 strip 选项实现）。
         state.finalMessage = undefined;
-        const recovery = yield* this.recoverFromMaxOutputBump(state, input, decision, routedMaxOutputTokens, {
+        const recovery = yield* recoverFromMaxOutputBump(this.turnExit, state, input, decision, routedMaxOutputTokens, {
           stripTrailingErrorPairMessages: true,
         });
         if (recovery !== "exhausted") {
@@ -1126,14 +1135,14 @@ export class AgentLoop {
         finalMessage: state.finalMessage,
         errors: [classified.error],
       });
-      yield await this.emitStatus(
+      yield await emitStatus(
         input,
         createModelRequestFailedStatus({
           error: classified.error,
           modelError: assembled.error,
         }),
       );
-      return yield* this.terminateTurn(input, state, result, { emitFailureEvent: true });
+      return yield* terminateTurn(this.turnExit, input, state, result, { emitFailureEvent: true });
     }
 
     return { kind: "continue" };
@@ -1158,7 +1167,8 @@ export class AgentLoop {
       if (assistantText.length === 0) {
         state.messages.pop();
 
-        const recovery = yield* this.recoverFromEmptyResponse(
+        const recovery = yield* recoverFromEmptyResponse(
+          this.turnExit,
           state,
           input,
           decision,
@@ -1179,7 +1189,7 @@ export class AgentLoop {
           model: request.model,
           attempts: 2,
         });
-        yield await this.emitStatus(input, status);
+        yield await emitStatus(input, status);
         // fall through to normal stop
       }
 
@@ -1195,7 +1205,7 @@ export class AgentLoop {
         state.consecutiveEmptyCount = 0;
         if (state.maxOutputRecoveryCount < MAX_OUTPUT_RECOVERY_LIMIT) {
           state.maxOutputRecoveryCount++;
-          return yield* this.continueWithTransientPrompt(
+          return yield* continueWithTransientPrompt(
             state,
             input,
             "Output token limit hit. Resume directly - no apology, no recap of what you were doing. " +
@@ -1206,7 +1216,7 @@ export class AgentLoop {
         // Exhausted — fall through to normal completion with whatever
         // text was produced so far.
         const status = createMaxOutputRecoveryExhaustedStatus({ attempts: state.maxOutputRecoveryCount });
-        yield await this.emitStatus(input, status);
+        yield await emitStatus(input, status);
       }
 
       const largeFileDecision = state.largeFileRepair.onNoToolCalls();
@@ -1214,9 +1224,9 @@ export class AgentLoop {
         const continued = await this.continueWithSyntheticPrompt(state, input, largeFileDecision);
         if (continued.type === "completed") {
           if (continued.status) {
-            yield await this.emitStatus(input, continued.status);
+            yield await emitStatus(input, continued.status);
           }
-          return yield* this.terminateTurn(input, state, continued.result, { emitFailureEvent: true });
+          return yield* terminateTurn(this.turnExit, input, state, continued.result, { emitFailureEvent: true });
         }
         yield continued.event;
         return { kind: "continue" };
@@ -1225,7 +1235,7 @@ export class AgentLoop {
       if (!assembled.hasPartialTextToolCall && assembled.hasUnparsedTextToolCall) {
         if (!state.hasAttemptedToolCallRetry) {
           state.hasAttemptedToolCallRetry = true;
-          return yield* this.continueWithTransientPrompt(
+          return yield* continueWithTransientPrompt(
             state,
             input,
             getSelfCorrectPrompt(this.config.toolCallFormat ?? assembled.textToolCallFormat, assistantText),
@@ -1264,14 +1274,14 @@ export class AgentLoop {
           structuredOutput: state.structuredOutput,
           errors: [agentError("agent_unsupported_feature", stopBlock.reason)],
         });
-        yield await this.emitStatus(
+        yield await emitStatus(
           input,
           createLifecycleBlockedStatus({
             error: result.errors![0]!,
             stage: "stop",
           }),
         );
-        return yield* this.terminateTurn(input, state, result, { emitFailureEvent: true });
+        return yield* terminateTurn(this.turnExit, input, state, result, { emitFailureEvent: true });
       }
       // 声称-行动守卫（W3）：收尾文本含验证类声称但本 run 无支撑工具成功执行
       // 时，强制一轮纠正（模型补做动作或改口）；每 run 至多一次，误报代价仅
@@ -1285,7 +1295,7 @@ export class AgentLoop {
         const verdict = evaluateClaimGuard(assistantText, state.succeededToolNames);
         if (verdict.kind === "correction") {
           state.hasAttemptedClaimGuardRetry = true;
-          return yield* this.continueWithTransientPrompt(state, input, verdict.prompt, "claim_guard_retry");
+          return yield* continueWithTransientPrompt(state, input, verdict.prompt, "claim_guard_retry");
         }
       }
       // 元认知控制：shaky 自评不静默收尾——带诊断重试一次（非空白重试）。
@@ -1295,7 +1305,7 @@ export class AgentLoop {
         const estimate = parseSelfEstimate(assistantText);
         if (estimate.tag === "shaky") {
           state.hasAttemptedMetacognitiveRetry = true;
-          return yield* this.continueWithTransientPrompt(
+          return yield* continueWithTransientPrompt(
             state,
             input,
             buildMetacognitiveRetryPrompt(estimate.diagnosis),
@@ -1307,7 +1317,7 @@ export class AgentLoop {
 
       const finishStatus = createFinishReasonStatus(assembled.finishReason, assistantText);
       if (finishStatus) {
-        yield await this.emitStatus(input, finishStatus);
+        yield await emitStatus(input, finishStatus);
       }
 
       const result = this.createTurnResult(input, {
@@ -1320,7 +1330,7 @@ export class AgentLoop {
         finalMessage: state.finalMessage,
         structuredOutput: state.structuredOutput,
       });
-      return yield* this.terminateTurn(input, state, result);
+      return yield* terminateTurn(this.turnExit, input, state, result);
     }
 
     return { kind: "continue" };
@@ -1334,7 +1344,7 @@ export class AgentLoop {
   ): AsyncGenerator<AgentEvent, ExecuteToolCallsResult, unknown> {
     yield { type: "tool_calls_detected", sessionId: input.sessionId, turnId: input.turnId, calls: toolCalls };
     if (input.abortSignal?.aborted) {
-      return yield* this.abortTurn(input, state);
+      return yield* abortTurn(this.turnExit, input, state);
     }
 
     // 阶段四 T4.1：durable 边界检查点——工具副作用（写文件/外呼/子代理）执行
@@ -1360,7 +1370,7 @@ export class AgentLoop {
       );
     }
     if (input.abortSignal?.aborted) {
-      return yield* this.abortTurn(input, state);
+      return yield* abortTurn(this.turnExit, input, state);
     }
     yield* this.subagentExecutor.drainEventBuffer();
 
@@ -1466,9 +1476,9 @@ export class AgentLoop {
       const continued = await this.continueWithSyntheticPrompt(state, input, toolResultRepair);
       if (continued.type === "completed") {
         if (continued.status) {
-          yield await this.emitStatus(input, continued.status);
+          yield await emitStatus(input, continued.status);
         }
-        return yield* this.terminateTurn(input, state, continued.result, { emitFailureEvent: true });
+        return yield* terminateTurn(this.turnExit, input, state, continued.result, { emitFailureEvent: true });
       }
       yield continued.event;
       return { kind: "continue" };
@@ -1487,14 +1497,14 @@ export class AgentLoop {
         structuredOutput: state.structuredOutput,
         errors: [agentError("agent_unsupported_feature", lifecycleBlock.reason)],
       });
-      yield await this.emitStatus(
+      yield await emitStatus(
         input,
         createLifecycleBlockedStatus({
           error: result.errors![0]!,
           stage: "tool_lifecycle",
         }),
       );
-      return yield* this.terminateTurn(input, state, result, { emitFailureEvent: true });
+      return yield* terminateTurn(this.turnExit, input, state, result, { emitFailureEvent: true });
     }
 
     // Circuit breaker: detect turns where ALL tool calls returned
@@ -1518,9 +1528,9 @@ export class AgentLoop {
         const continued = await this.continueWithSyntheticPrompt(state, input, fallbackRepair);
         if (continued.type === "completed") {
           if (continued.status) {
-            yield await this.emitStatus(input, continued.status);
+            yield await emitStatus(input, continued.status);
           }
-          return yield* this.terminateTurn(input, state, continued.result, { emitFailureEvent: true });
+          return yield* terminateTurn(this.turnExit, input, state, continued.result, { emitFailureEvent: true });
         }
         yield continued.event;
         return { kind: "continue" };
@@ -1539,7 +1549,7 @@ export class AgentLoop {
       if (state.sameInvalidFingerprintCount >= MAX_SAME_INVALID_FINGERPRINT) {
         if (!state.hasUsedInvalidGracePeriod) {
           state.hasUsedInvalidGracePeriod = true;
-          return yield* this.continueWithTransientPrompt(
+          return yield* continueWithTransientPrompt(
             state,
             input,
             CIRCUIT_BREAKER_GRACE_PROMPT,
@@ -1565,14 +1575,14 @@ export class AgentLoop {
             ),
           ],
         });
-        yield await this.emitStatus(
+        yield await emitStatus(
           input,
           createToolErrorLoopStatus({
             error: result.errors![0]!,
             repeatedFailures: state.sameInvalidFingerprintCount,
           }),
         );
-        return yield* this.terminateTurn(input, state, result, { emitFailureEvent: true });
+        return yield* terminateTurn(this.turnExit, input, state, result, { emitFailureEvent: true });
       }
     } else {
       state.sameInvalidFingerprintCount = 0;
@@ -1607,8 +1617,8 @@ export class AgentLoop {
         structuredOutput: state.structuredOutput,
       });
       const status = createStructuredOutputCompletedStatus();
-      yield await this.emitStatus(input, status);
-      return yield* this.terminateTurn(input, state, result);
+      yield await emitStatus(input, status);
+      return yield* terminateTurn(this.turnExit, input, state, result);
     }
 
     const nextTurnCount = state.turnCount + 1;
@@ -1631,319 +1641,13 @@ export class AgentLoop {
         errors: [maxTurnsError],
       });
       const status = createMaxTurnsStatus({ maxTurns: input.maxTurns, error: maxTurnsError });
-      yield await this.emitStatus(input, status);
-      return yield* this.terminateTurn(input, state, result, { emitFailureEvent: true });
+      yield await emitStatus(input, status);
+      return yield* terminateTurn(this.turnExit, input, state, result, { emitFailureEvent: true });
     }
 
     state.turnCount = nextTurnCount;
     yield { type: "turn_continued", sessionId: input.sessionId, turnId: input.turnId, reason: "next_turn" };
     return { kind: "continue" };
-  }
-
-  private async emitStatus(input: AgentLoopInput, status: AgentStatusMessage): Promise<AgentEvent> {
-    await input.onAgentStatusMessage?.(status);
-    return {
-      type: "agent_status",
-      sessionId: input.sessionId,
-      turnId: input.turnId,
-      event: status.event,
-      detail: status.detail,
-    };
-  }
-
-  private createAbortStatus(input: AgentLoopInput): AgentStatusMessage | undefined {
-    if (!shouldSurfaceAbortStatus(input.abortSignal?.reason)) return undefined;
-    return createTurnAbortedStatus({ reason: stringifyAbortReason(input.abortSignal?.reason) });
-  }
-
-  /**
-   * 空响应恢复的 token 倍增（finishReason=length 时）：clamp 倍增（含 floor）
-   * → 设置 transient cap → empty_output_recovery 事件。此前 4 处逐字重复。
-   */
-  private async *emitEmptyOutputTokenBump(
-    input: AgentLoopInput,
-    decision: RouterDecision,
-    finishReason: string | undefined,
-    routedMaxOutputTokens: number | undefined,
-  ): AsyncGenerator<AgentEvent, void, unknown> {
-    if (finishReason !== "length") return;
-    const previousMaxOutputTokens = this.tokenCaps.currentMaxOutputTokens(decision.provider, decision.model);
-    const nextMaxOutputTokens = clampOutputToModelCap(
-      Math.max((previousMaxOutputTokens ?? 0) * 2, EMPTY_LENGTH_OUTPUT_RETRY_FLOOR),
-      routedMaxOutputTokens,
-    );
-    if (nextMaxOutputTokens !== undefined && nextMaxOutputTokens !== previousMaxOutputTokens) {
-      this.tokenCaps.setTransientTokenCap(decision.provider, decision.model, {
-        requestedMaxOutputTokens: nextMaxOutputTokens,
-      });
-      yield {
-        type: "empty_output_recovery",
-        sessionId: input.sessionId,
-        turnId: input.turnId,
-        provider: decision.provider,
-        model: decision.model,
-        finishReason,
-        previousMaxOutputTokens,
-        nextMaxOutputTokens,
-      };
-    }
-  }
-
-  /**
-   * 恢复路径的「注入 transient 提示并继续」：push 提示 + turn_continued
-   * (model_error) + continue。此前 6+ 处逐字重复收敛于此。
-   */
-  private async *continueWithTransientPrompt(
-    state: TurnRuntimeState,
-    input: AgentLoopInput,
-    prompt: string,
-    purpose: string,
-    reason: AgentLoopTransitionReason = "model_error",
-  ): AsyncGenerator<AgentEvent, TurnStepContinue, unknown> {
-    state.pushTransientSyntheticPrompt(prompt, purpose);
-    yield { type: "turn_continued", sessionId: input.sessionId, turnId: input.turnId, reason };
-    return { kind: "continue" };
-  }
-
-  /**
-   * 共享恢复策略：max-output 触顶的 Phase A（一次性 token 提升）与 Phase B
-   * （截断续跑，至多 MAX_OUTPUT_RECOVERY_LIMIT 次）。原先在 assembleAndRecover 与
-   * handleModelError 各复制一份（TD-AGENT-101）。
-   *
-   * 返回值约定：
-   * - `"bumped"` / `"continuing"`：已产出续跑事件，调用方应结束本步并返回 continue；
-   * - `"exhausted"`：A/B 均不可用，由调用方执行各自的 Phase C 兜底。
-   *
-   * `opts.stripTrailingErrorPairMessages` 仅 model-error 路径需要（错误对消息不得
-   * 进入续跑上下文）；计数器与 try-flag 的推进顺序保持与原实现逐位一致。
-   */
-  private async *recoverFromMaxOutputBump(
-    state: TurnRuntimeState,
-    input: AgentLoopInput,
-    decision: RouterDecision,
-    routedMaxOutputTokens: number | undefined,
-    opts: { stripTrailingErrorPairMessages?: boolean } = {},
-  ): AsyncGenerator<AgentEvent, "bumped" | "continuing" | "exhausted", unknown> {
-    // Phase A: token doubling (if not yet attempted)
-    if (!state.hasAttemptedOutputRetry) {
-      state.hasAttemptedOutputRetry = true;
-      const nextMaxOutputTokens = resolveOutputTokenRetryBump({
-        currentMaxOutputTokens: this.tokenCaps.currentMaxOutputTokens(decision.provider, decision.model),
-        modelMaxOutputTokens: routedMaxOutputTokens,
-      });
-      if (nextMaxOutputTokens !== undefined) {
-        if (opts.stripTrailingErrorPairMessages) {
-          state.messages = stripTrailingErrorPair(state.messages);
-        }
-        const previousOutput = this.tokenCaps.currentMaxOutputTokens(decision.provider, decision.model);
-        this.tokenCaps.setTransientTokenCap(decision.provider, decision.model, {
-          requestedMaxOutputTokens: nextMaxOutputTokens,
-        });
-        yield {
-          type: "token_cap_adjusted",
-          sessionId: input.sessionId,
-          turnId: input.turnId,
-          provider: decision.provider,
-          model: decision.model,
-          cap: "output",
-          previous: previousOutput,
-          next: nextMaxOutputTokens,
-          reason: "max-output-retry-bump",
-        };
-        yield {
-          type: "turn_continued",
-          sessionId: input.sessionId,
-          turnId: input.turnId,
-          reason: "model_error",
-        };
-        return "bumped";
-      }
-    }
-
-    // Phase B: continuation recovery
-    if (state.maxOutputRecoveryCount < MAX_OUTPUT_RECOVERY_LIMIT) {
-      state.maxOutputRecoveryCount++;
-      yield* this.continueWithTransientPrompt(
-        state,
-        input,
-        "Output token limit hit. Resume directly - no apology, no recap of what you were doing. " +
-          "Pick up mid-thought if that is where the cut happened. Break remaining work into smaller pieces.",
-        "max_output_recovery",
-      );
-      return "continuing";
-    }
-
-    return "exhausted";
-  }
-
-  /**
-   * 共享恢复策略：空响应（无错误、无工具调用、无可见文本）的前两级分支——
-   * 连空递增恢复与首次可见文本重试。原先在 assembleAndRecover 与
-   * handleNoToolCalls 各复制一份（TD-AGENT-101）。
-   *
-   * 返回值约定：
-   * - `"recovered-return"`：已产出重试事件，调用方应返回 continue；
-   * - `TurnStepReturn`：连空预算耗尽，本方法已完成终止仪式并透传其返回值，
-   *   调用方应原样作为本步返回值；
-   * - `"unhandled"`：首重预算也已耗尽，两个调用方的第三级兜底不同
-   *   （assemble 走固定 attempts=2 终止；handleNoToolCalls 仅发状态后顺落正常收尾），
-   *   故留在调用方。
-   */
-  private async *recoverFromEmptyResponse(
-    state: TurnRuntimeState,
-    input: AgentLoopInput,
-    decision: RouterDecision,
-    request: CanonicalModelRequest,
-    assembledFinishReason: string | undefined,
-    routedMaxOutputTokens: number | undefined,
-  ): AsyncGenerator<AgentEvent, "recovered-return" | "unhandled" | TurnStepReturn, unknown> {
-    if (state.maxOutputRecoveryCount > 0) {
-      state.consecutiveEmptyCount++;
-      if (
-        state.consecutiveEmptyCount < MAX_CONSECUTIVE_EMPTY &&
-        state.maxOutputRecoveryCount < MAX_OUTPUT_RECOVERY_LIMIT
-      ) {
-        state.maxOutputRecoveryCount++;
-        yield* this.emitEmptyOutputTokenBump(input, decision, assembledFinishReason, routedMaxOutputTokens);
-        yield* this.continueWithTransientPrompt(
-          state,
-          input,
-          "Output token limit hit. Resume directly - no apology, no recap of what you were doing. " +
-            "Pick up mid-sentence if that is where the cut happened.",
-          "max_output_recovery",
-        );
-        return "recovered-return";
-      }
-      // Exhausted consecutive empty retries — surface a UI-only status message
-      // instead of injecting diagnostic assistant text into the model transcript.
-      state.finalMessage = state.messages.filter(m => m.role === "assistant").at(-1);
-      const status = createEmptyResponseStatus({
-        provider: request.provider,
-        model: request.model,
-        attempts: state.consecutiveEmptyCount,
-      });
-      yield await this.emitStatus(input, status);
-      const result = this.createTurnResult(input, {
-        type: "success",
-        stopReason: "completed",
-        usage: state.usage,
-        permissionDenials: state.permissionDenials,
-        turns: state.turnCount,
-        startedAt: state.startedAt,
-        finalMessage: state.finalMessage,
-      });
-      return yield* this.terminateTurn(input, state, result, { errored: true });
-    }
-
-    if (!state.hasAttemptedEmptyRetry) {
-      // First occurrence: prompt the model to produce visible output.
-      state.hasAttemptedEmptyRetry = true;
-      state.maxOutputRecoveryCount++;
-      yield* this.emitEmptyOutputTokenBump(input, decision, assembledFinishReason, routedMaxOutputTokens);
-      yield* this.continueWithTransientPrompt(
-        state,
-        input,
-        "Your previous response was empty (thinking only, no visible text). " +
-          "Please provide your answer as visible text output.",
-        "empty_response_retry",
-      );
-      return "recovered-return";
-    }
-
-    return "unhandled";
-  }
-
-  /**
-   * 统一 turn 终止仪式：可选的 turn_failed 事件 → captureTurn → turn_completed →
-   * return。所有失败/中止/完成出口共用，消除 ~25 处复制粘贴并保证事件顺序
-   * 一致（此前各出口散落 captureTurn，漏写会静默丢 turn 记录）。
-   */
-  private async *terminateTurn(
-    input: AgentLoopInput,
-    state: TurnRuntimeState,
-    result: AgentTurnResult,
-    options: { emitFailureEvent?: boolean; errored?: boolean } = {},
-  ): AsyncGenerator<AgentEvent, TurnStepReturn, unknown> {
-    if (options.emitFailureEvent) {
-      yield { type: "turn_failed", sessionId: input.sessionId, turnId: input.turnId, error: result.errors![0]! };
-    }
-    await this.captureTurn(input, state, options.errored ?? result.type === "error");
-    yield { type: "turn_completed", sessionId: input.sessionId, turnId: input.turnId, result };
-    return { kind: "return", result, messages: state.messages };
-  }
-
-  /**
-   * 中止时捕获已部分生成的 assistant 消息，供 abort 出口复用。经
-   * safeFinalTextMessage 过滤：半截工具调用（含文本编码）绝不落库，思考块
-   * 不回显——取消时不把不安全的工具片段持久化给用户/转录。
-   */
-  private async *captureAbortedPartial(
-    state: TurnRuntimeState,
-    input: AgentLoopInput,
-    assembler: ReturnType<typeof createModelMessageAssemblerState>,
-  ): AsyncGenerator<AgentEvent, void, unknown> {
-    const partialAssembled = assembleAssistantMessage(assembler);
-    const safePartialMessage = safeFinalTextMessage(
-      partialAssembled.message,
-      partialAssembled.hasPartialTextToolCall || partialAssembled.hasTextFallbackToolCalls,
-      partialAssembled.toolCalls,
-    );
-    if (safePartialMessage) {
-      state.finalMessage = safePartialMessage;
-      state.messages.push(safePartialMessage);
-      state.expireConsumedTransientPrompts();
-      state.usage = mergeUsage(state.usage, partialAssembled.usage);
-      yield {
-        type: "assistant_message",
-        sessionId: input.sessionId,
-        turnId: input.turnId,
-        message: safePartialMessage,
-      };
-      await input.onDurableMessage?.(safePartialMessage);
-    }
-  }
-
-  /**
-   * 统一中止终止：createTurnResult(aborted) → 可选 abort 状态 → captureTurn →
-   * turn_completed → return。此前 6 处 abort 块中 3 处不发射 abort 状态导致
-   * UI 提示不一致，此处统一补齐。
-   */
-  private async *abortTurn(
-    input: AgentLoopInput,
-    state: TurnRuntimeState,
-  ): AsyncGenerator<AgentEvent, TurnStepReturn, unknown> {
-    const result = this.createTurnResult(input, {
-      type: "aborted",
-      stopReason: "aborted_streaming",
-      usage: state.usage,
-      permissionDenials: state.permissionDenials,
-      turns: state.turnCount,
-      startedAt: state.startedAt,
-      finalMessage: state.finalMessage,
-    });
-    const status = this.createAbortStatus(input);
-    if (status) {
-      yield await this.emitStatus(input, status);
-    }
-    await this.captureTurn(input, state, result.type === "error");
-    yield { type: "turn_completed", sessionId: input.sessionId, turnId: input.turnId, result };
-    return { kind: "return", result, messages: state.messages };
-  }
-
-  private async captureTurn(input: AgentLoopInput, state: TurnRuntimeState, errored: boolean): Promise<void> {
-    const hook = this.dependencies.context?.captureTurn;
-    if (!hook) return;
-    try {
-      await hook.call(this.dependencies.context, {
-        sessionId: input.sessionId,
-        turnId: input.turnId,
-        messages: state.messages,
-        errored,
-      });
-    } catch {
-      // captureTurn must never break a turn — context impl already
-      // swallows; this catch is defensive.
-    }
   }
 
   private missingToolResultRecoveryContext(): { cwd: string; permissionMode: PermissionMode } {
@@ -2391,16 +2095,9 @@ export class AgentLoop {
     };
   }
 
-  private createTurnResult(
-    input: AgentLoopInput,
-    options: Omit<AgentTurnResult, "sessionId" | "turnId" | "completedAt">,
-  ): AgentTurnResult {
-    return {
-      ...options,
-      sessionId: input.sessionId,
-      turnId: input.turnId,
-      completedAt: this.now().toISOString(),
-    };
+  /** turn 结果构造（sessionId/turnId/completedAt 补齐），now 由本类依赖注入。 */
+  private createTurnResult(input: AgentLoopInput, options: TurnResultOptions): AgentTurnResult {
+    return buildTurnResult(input, options, this.now());
   }
 
   private applyPermissionOverrides(
