@@ -84,6 +84,21 @@ ProjectRuntime.retrieve
 | A7 | `SATI_CASE_DB` 与 knowledge.db 分离时，personal_note 语义路显式关闭并告警，但判例语义源仍注入 caseDb（工具侧可用）而自动注入缺位——两种能力行为不一致，无统一文档 | createLocalGateway.ts:881-899 | 低 |
 | A8 | diagnostics.ts:161 的 migrate 提示未区分 unified/legacy schema（unified 恒为 trigram，提示仅对 legacy 生效） | diagnostics.ts:161 | 低（文档过期） |
 
+### 2.6 A1–A8 处置状态（2026-09-15 复核）
+
+本表是审计快照，逐条复核后状态如下（**不要按上表的行号/描述重新排查**，行号已随 H1–H6 施工而位移）：
+
+| # | 复核结论（2026-09-15） |
+|---|---|
+| A1 | **已处置（显式化语义，issue #366）**：`case-law` 拆成两项——`status`（判例检索是否可用）+ `autoInject`（是否经 provider 自动注入）。独立 `SATI_CASE_DB` 路径报 `ready` 且 `autoInject:false`，`detail` 写明「经 `patent_case_search` 工具可用，不自动注入」，一行清单亦带该提示。 |
+| A2 | **早已修复**（`33b5d7cc7`，2026-08-13，H1–H6）：catch 分支已 push「无图谱」专利 provider，wiki/IPC 保留。 |
+| A3 | **未处置**（中）：文档承诺「一致性自检失败自动降级跳过」而代码只 warn + 写 stats。 |
+| A4 | **已修复**（H3）：`legalFtsDegraded`/`caseLawFtsDegraded` 已接入诊断，运行时粘性降级会把两项如实转 `missing`（`diagnostics.spec.ts` 有回归用例）。 |
+| A5 | **主库路径已修复**（行数探测）；独立 legacy 库仍无行数探测，且 `paths.caseDb` 未做存在性校验——与其余路径型判据（`patentKgDb`/`lawDb`/`vectorsDb`）同一粗粒度，`detail` 已如实标注「未探测」。 |
+| A6 | **未处置**（低）：`vectors.db` 存在即 `ready`，未区分 corpus 是否有消费者。 |
+| A7 | **部分处置**：`case-law` 的「工具可用 / 未自动注入」已由 A1 的 `autoInject` 显式表达；personal_note 语义路与判例语义源的行为差异仍无统一文档。 |
+| A8 | **未处置**（低）：migrate 提示未区分 unified/legacy schema。 |
+
 ## 3. 可运行性验证结论
 
 ### 3.1 后端测试（tests/knowledge/，31 文件）
