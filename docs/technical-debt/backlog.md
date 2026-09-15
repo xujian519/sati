@@ -81,6 +81,12 @@
 - **TD-TEST-001** · 主链路核心缺直接单测（见各模块节 *_GATEWAY* / *_ROUTER*）。工作量：M · 严重级：P1 · 状态：new
 - **TD-TEST-002** · 极薄模块（1 测试文件）：`fs` `lifecycle` `network` `status` `browser`。工作量：S ×5 · 严重级：P3 · 状态：new
 - **TD-TEST-003** · `tests/patent/figuregen/dot.spec.ts` 的两个「真机集成」用例按 `resolveDotBinary()`（PATH 扫描）在**注册期**决定 skip，而本机默认 shell PATH 不含 `/opt/homebrew/bin`（brew 前缀）——同一份 `dist` 在带/不带该前缀的 shell 下 skip 数在 4/6 之间跳（2026-09-13 用探针用例定位：load-time PATH 无前缀 → 两用例 skip）。建议 `resolveDotBinary()` 兜底探测常见 brew 前缀或优先读 `SATI_GRAPHVIZ_DOT`。工作量：S · 严重级：P3 · 状态：new
+- **TD-TEST-004** · 测试用**固定 sleep** 同步 fire-and-forget 副作用（已致 `main` CI 变红）
+  - 类别：E · 严重级：P2 · 工作量：S（单点）/ M（同类普查）· 状态：new
+  - 位置：`tests/gateway/client/eventMapping.spec.ts`（已修）；仓内另有约 40 处 `setTimeout(_, N)` 式固定等待，分布于 25 个 spec，未按「是否在断言异步副作用已完成」分类
+  - 影响：2026-09-15 `main` 的 push CI（run `34923087975` / `cb58aa6db`）因该用例变红，而同内容的 pull_request run 为绿（同树异果 ⇒ 非确定性）。机制：`mapAgentEvent` 的落盘是 fire-and-forget（同步返回 `resultPath`、写盘在其后的 async IIFE，`catch` 静默），测试却用固定 100 ms 预算断言文件存在；失败信息只有「tmp 文件应实际写入」，**与「产品写盘失败」不可区分**，把一次调度停顿伪装成产品缺陷。
+  - 处置（2026-09-15）：该点改有界轮询 `waitForFile(path, 5000)`，失败信息附路径与两种可能；决策见 `docs/notes/implemented/2026-09-15-fire-and-forget-test-sync.md`。**剩余**：其余 ~40 处按上述口径分类，危险项同样改轮询。
+  - 建议：新增测试断言异步完成一律用轮询 helper（可抽共享 `waitFor`），不要用固定 sleep。
 
 ### 文档漂移
 - **TD-I18N-001** · `teamPanel` namespace 缺 2 个 zh key / 1 个 en key。工作量：S · 严重级：P3 · 状态：done（2026-09-11 复核：现为 en 44 / zh 43，仅余 `pill.teamCount_one` —— i18next 的 zh 复数类别只有 `other`，该 key 在 zh 侧按设计不存在，非缺陷；C35 已修 `pill.teamCount` → `pill.teamCount_other` 并加复数回归用例）
