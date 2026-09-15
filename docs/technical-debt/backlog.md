@@ -303,9 +303,10 @@
 **模块概况**：34 文件——append-only JSONL 转录 + 增量读取/投影缓存 + 孤儿 turn 合成 + 跨进程续算（TaskResumeScanner）+ J-Space 账本（workspace/）。类型安全 0 真实 any（`AbortSignal.any` 误报）。性能债集中在账本持久化 O(entries) 每轮重建与全量快照增长。
 
 - **TD-SESSION-N01** · `WorkspaceLedgerStore.read()` 每轮（每次模型调用）全量重扫 transcript 重派生账本
-  - 类别：I · 严重级：P1 · 工作量：M · 状态：new
-  - 位置：`src/session/workspace/WorkspaceLedgerStore.ts:34-40`；`WorkspaceLedgerReader.ts:15-21`
+  - 类别：I · 严重级：P1 · 工作量：M · 状态：**done（2026-09-15，PR #378）**
+  - 位置：`src/session/workspace/WorkspaceLedgerStore.ts`（`read()`）；`WorkspaceLedgerReader.ts`
   - 影响：账本每次模型调用前重新注入，长会话 O(entries) 重扫 + clone。建议：按尾部衔接键缓存最新 workspace_state。对应 `performance-review.md` B 类「每轮全量重建」。
+  - **2026-09-15 处置（PR #378）**：`WorkspaceLedgerReader` 新增 `scanLatestWorkspaceState(entries, cursor?)`，游标记 `scanned`（上轮覆盖的前缀长度）+ `anchor`（该前缀最后一条 entry 的**对象引用**），下轮只扫新增尾部，常见路径 O(1)。失效判据用对象身份而非数组长度：`readTranscript` 返回元素共享数组，transcript 被替换/回滚时 `readFullAndCache` 会产出全新对象，锚必然不匹配 → 从头重扫；长度型守卫恰漏「等长覆盖」（`cp -p` / 同长度原地改写）这一 reader 自己专门设头部指纹兜底的场景（负控制已验证：去掉身份判据后 `workspace-ledger-store.spec.ts` 的等长重写用例返回旧值）。同批修掉 TD-WORKSPACE-N01 的克隆放大。决策见 `docs/notes/implemented/2026-09-15-workspace-ledger-read-path.md`。
 - **TD-SESSION-N02** · `recordWorkspaceState` 每笔写入附加账本全量快照，transcript 单调增长
   - 类别：A · 严重级：P2 · 工作量：L · 状态：new
   - 位置：`src/session/transcript/JsonlTranscriptWriter.ts:232-241`
@@ -315,10 +316,11 @@
   - 位置：`src/session/resume/TaskResumeScanner.ts:98-100`；`42-49`
   - 影响：单会话读盘/提交异常被静默跳过，`TaskResumeScanResult` 无 failed/errored 字段。建议：结果加失败计数并透出首个错误。
 - **TD-SESSION-N04** · `WorkspaceLedger` 持久化边界（Store/Reader）无直接单测
-  - 类别：E · 严重级：P2 · 工作量：S · 状态：new
+  - 类别：E · 严重级：P2 · 工作量：S · 状态：**done（2026-09-15，PR #378）**
   - 位置：`src/session/workspace/WorkspaceLedgerStore.ts`（read/write）、`WorkspaceLedgerReader.ts`
   - 影响：账本从 transcript 重派生、每次模型注入的 I/O 路径及 in-memory 回退边界均无测试。建议：补 file-backed 与 in-memory 两路径 behavior spec。
   - 备注：`TaskResumeScanner` 与 `WorkspaceLedger` 纯状态机已有直接 spec（不列为缺失）。
+  - **2026-09-15 处置（PR #378）**：新增 `tests/session/workspace/workspace-ledger-store.spec.ts`（9 条）覆盖游标复用 / 锚失效 / 数组回退 / file-backed 往返（含克隆语义）/ 等长重写后读到新账本 / 超限 `unavailable`（不回退陈旧态 + 诊断去重一次）/ 未写过账本为空态而非失败 / 无路径内存态；`tests/tool/builtin/workspace/workspace-note.spec.ts` 的 `MemProvider` 适配新签名并补「不可读时拒绝写入且既有账本不变」。
 - **TD-SESSION-N05** · resume 路径合成 turn_result 为 fire-and-forget
   - 类别：C · 严重级：P3 · 工作量：S · 状态：new
   - 位置：`src/session/transcript/interruptedTurn.ts:119-127`；`resume/resumeAgentSession.ts:83-96`
@@ -1241,9 +1243,10 @@
   - 位置：`src/server-manager.ts:716-766`；`scripts/lib/packaged-runtime.sh:62-81`；`scripts/verify-dmg.sh:243-278`
   - 建议：抽共享 `linkRuntimeLayout`，三处引用同一实现。
 - **TD-DESKTOP-N02** · release.sh 与 build-win.bat 的 bundle 配方已分叉（排除清单 + 产物内容不一致）
-  - 类别：F · 严重级：P1 · 工作量：M · 状态：new
+  - 类别：F · 严重级：P1 · 工作量：M · 状态：**done（2026-09-15，PR #377）**
   - 位置：`scripts/release.sh:450-524,551-559`；`scripts/build-win.bat:318-399`
   - 影响：mac 的 sati-main bundle 带 `dist/assets/`（`render_patent_document` 运行时需它）`skills/` 等，而 win 的 `build-win.bat:397` 仅打 `src dist\src scripts node_modules vendor package.json tsconfig.json`——Windows 打包缺运行资产，专利文书渲染可能失效。建议：收敛为单一共享 bundle 清单。
+  - **2026-09-15 处置（PR #377，`fix(desktop)`）**：核对后发现比本条描述更靠下——macOS 走根 `pnpm run build`，其脚本体含 **11 处 `cpSync`**（专利模板 / skills / 知识 wiki / 方法论 data 等非 TS 资产），而 Windows 的 Step 7 只跑裸 `npx tsc` + 一处 `xcopy`，故 `dist/assets` 与 `dist/src/**/data` 在 Windows **从未被生产**（只补 tar 清单三项会得到空目录）。处置：把那 11 处 cpSync 抽成 `scripts/copy-build-assets.mjs` 作单一事实源，根 `build` 与 `build-win.bat` 共用；tar 清单补 `dist\assets skills rules`。**仍未验证**：需在下次 Windows 发版流程实跑 `build-win.bat` 核对 tar 内资产。
 - **TD-DESKTOP-N03** · `ensurePortFreeForGateway` 对 gateway 端口监听者不做身份校验直接优雅→强杀
   - 类别：G · 严重级：P2 · 工作量：S · 状态：**done（已修复 2026-08-23）**
   - 修复：抽出纯谓词 `isSatiRuntimeCommandLine`（导出供测），`ensurePortFreeForGateway` 仅对识别为 Sati 进程的占用者兜底杀，非 Sati 进程放行并 `console.warn`（交给 spawn 报 EADDRINUSE）。新增 `tests/desktop/server-manager.spec.ts` 的 `isSatiRuntimeCommandLine` 正/反用例。typecheck/lint/biome/测试全绿。
@@ -1507,15 +1510,17 @@
 **模块概况**：7 文件 / ~792 行（`src/session/workspace/` 4 文件 447 行 · `src/tool/builtin/workspace/` 2 文件 151 行 · `src/context/workspace/registerLeak.ts` 194 行）；测试 3 spec。纯状态机 + 派生读取，零 `any` 零 `@ts-expect-error`，惯用法干净；债务集中在**读取路径冗余重算**与**降级静默**。
 
 - **TD-WORKSPACE-N01** · `readLatestWorkspaceState` 对**每一个** `workspace_state` 条目都 clone 一次，只留最后一个
-  - 类别：I · 严重级：P2 · 工作量：S · 状态：new
-  - 位置：`src/session/workspace/WorkspaceLedgerReader.ts:15-19`；调用方 `WorkspaceLedgerStore.ts:36-43`、`src/agent/loop/modelRequest.ts:72`
+  - 类别：I · 严重级：P2 · 工作量：S · 状态：**done（2026-09-15，PR #378）**
+  - 位置：`src/session/workspace/WorkspaceLedgerReader.ts`；调用方 `WorkspaceLedgerStore.ts`、`src/agent/loop/modelRequest.ts`
   - 影响：已登记的 TD-SESSION-N01 描述「O(entries) 重扫 + clone」，但真实代价比它描述的重一档：循环体内 `latest = cloneWorkspaceLedgerState(entry.state)` 对每个匹配条目都深拷贝，**前面的拷贝全被丢弃**。叠加 TD-SESSION-N02 已确认的「每笔写入追加一份全量快照」，快照数 S 单调增长 → **每次模型调用**实际开销 ≈ O(N) 浅拷贝 + O(N) 扫描 + **O(S×L) 次深拷贝**（L=账本规模）。修法只有一行。
   - 建议：循环内只记引用，循环后 clone 一次；如仍要缓存，按 TD-SESSION-N01 的尾部衔接键做 O(1) 命中。
+  - **2026-09-15 处置（PR #378）**：与 TD-SESSION-N01 同批落地——`scanLatestWorkspaceState` 循环内只记 `entry.state` 引用（`cursor.state`），一次 clone 由 `WorkspaceLedgerStore.read()` 在返回时按需做；缓存则按尾部衔接键做 O(1) 命中（即 N01 的游标）。
 - **TD-WORKSPACE-N02** · 账本读取丢弃 `diagnostics`：transcript 超 50MB 时账本**静默消失**
-  - 类别：C · 严重级：P2 · 工作量：S · 状态：new
-  - 位置：`src/session/workspace/WorkspaceLedgerStore.ts:38`（只解构 `{ entries }`）；`src/session/transcript/TranscriptReader.ts:176-188`；`src/agent/loop/modelRequest.ts:76-79`
+  - 类别：C · 严重级：P2 · 工作量：S · 状态：**done（2026-09-15，PR #378）**
+  - 位置：`WorkspaceLedgerStore.read()`（原只解构 `{ entries }`）；`src/session/transcript/TranscriptReader.ts:176-188`；`src/agent/loop/modelRequest.ts`
   - 影响：`readTranscript` 在 `size > DEFAULT_MAX_TRANSCRIPT_READ_BYTES`（50MB）时**不抛错**，返回 `entries: []` + 一条 `severity:"error"` 的 `transcript_too_large` 诊断。`read()` 忽略 `diagnostics` → `readLatestWorkspaceState` 返回 undefined → 靠 `?? this.latest` 内存兜底掩盖。后果：(1) 进程内不丢，但**新进程/新会话重开时账本凭空消失**，模型侧只是「没有 `<workspace-state>` 块」，零告警；(2) 长会话越 50MB 后注入的是陈旧内存态而非 transcript 真值，与「transcript 是唯一事实源」的模块契约背离。
   - 建议：`read()` 把 `severity !== "info"` 的诊断经会话诊断通道上报（去重）；`entries` 为空且诊断非空时返回带标记的空态而非静默回退。
+  - **2026-09-15 处置（PR #378）**：`SatiWorkspaceLedgerProvider.read()` 返回改为判别式结果 `{status:"ok",state} | {status:"unavailable",code,message}`；error 级诊断 → `unavailable` 且**不再回退 `this.latest`**；诊断按 `code + line` 去重后经 `createLogger("session")` 上报一次（`transcript_missing` 走 warn）。内存态兜底只保留给「无 transcript 路径」与「路径已声明但 transcript 里确无账本条目」两种情形。三处调用点适配：`modelRequest` / `toolContext` 在 `unavailable` 时跳过注入（前者裸 catch 补 debug 日志）；**`workspace_note` 在 `unavailable` 时拒绝写入**（防「以空态为基座写回、丢掉既有账本」这条数据丢失路径）。决策见 `docs/notes/implemented/2026-09-15-workspace-ledger-read-path.md`。
 - **TD-WORKSPACE-N03** · `registerLeak` 的 ASCII 标点成员在散文里做**子串**匹配，普通标点即误报
   - 类别：F · 严重级：P3 · 工作量：S · 状态：new
   - 位置：`src/context/workspace/registerLeak.ts:16`（`INNER_ONLY` 含 `"??"`、`"?!"`）、`:50`、`:19` + `:55`
@@ -1528,7 +1533,7 @@
   - 影响：归档 change 的 tasks.md 停在 `[ ]`，持续误导后续审计者把「已交付」读成「未交付」。核实结论：`tests/agent/sub/workspace-core-inheritance.spec.ts` **确实存在**（3 个 test，覆盖 protocol note / 无 core 时 no-op），`renderWorkspaceCoreDirective` 亦已落地。**属归档文档漂移，非功能缺口。**
   - 建议：勾选 2.2/3.1/4.1 并注明归档核对日期；在 `README.md` §如何保持新鲜 加入「归档 change 的 tasks.md 随交付回填」。
 
-> **已核实仍成立的存量条目（不重复登记）**：TD-SESSION-N01（每轮重扫仍成立，但**位置行号已漂移**——`read()` 现为 `WorkspaceLedgerStore.ts:36-43`，台账记的 `34-40` 已过期）；TD-SESSION-N04（Store/Reader 无直接单测仍成立：`tests/session/workspace/workspace-ledger.spec.ts` 只测纯状态机与渲染，未 import `WorkspaceLedgerStore`/`readLatestWorkspaceState`）。
+> **存量条目状态（2026-09-15 更新）**：TD-SESSION-N01 与 TD-SESSION-N04 **已 done**（PR #378，账本读取路径专项）——`read()` 改为增量游标扫描，并补齐 Store/Reader 直测；N01 原文记的 `34-40` 行号随施工位移，勿按行号复排查。
 >
 > **健康面**：`applyWorkspaceNote` 五个不变式（开账双字段、Next 非空、Verified 覆盖、Open settle-by、close 须同次 checkpoint）与 core slot swap/parked 降级（`WorkspaceLedger.ts:243-284`）都有直测（spec:26-204，含 swap 后 live 恰为 2、parked 恰为 1 的断言）；A 类无超标函数（最大 `applyWorkspaceNote` ~103 行）。
 
@@ -1638,11 +1643,12 @@
 **模块概况**：新组件 2 个 + 共享助手 1 个 / 239 行 TS（`triz.ts` 182、`bridge-reencode.ts` 37、`keywordMatch.ts` 20），外置数据 `data/` 2 个 JSON / 1651 行；测试 3 spec / 226 行。**总评**：新组件严格遵循既有模式（`bridge-reencode` 与 `five-whys` 逐行同构），触发词机制**无重复**（`keywordMatch.ts` 是既有 `hasAnyKeyword` 死代码收敛后的唯一共享实现，9 件组件全部复用同一 `keywordScore`）。**内联大表问题不存在**：TRIZ 数据已外置 JSON（非 `ipc-classifier.ts` 式 779 行内联），`build` 含 `cpSync(data → dist)`，且惰性加载 + 缓存。
 
 - **TD-METHODOLOGY-N05** · `triz` 的数据文件读取无 fail-safe，异常会穿透到请求装配、**打断该轮对话**
-  - 类别：C · 严重级：**P2** · 工作量：S · 状态：new
+  - 类别：C · 严重级：**P2** · 工作量：S · 状态：**done（2026-09-15，PR #377）**
   - 位置：`src/methodology/runtime/components/triz.ts:38-39`、`:56-57`；调用链 `methodologyInjection.ts:40-48` → `modelRequest.ts:156` → `agentSessionConfig.ts:155-159`
   - 影响：`data/*.json` 缺失或损坏（打包裁剪、磁盘/权限异常、JSON 被误改）时，`execute()` 抛出的异常沿注入链一路**无捕获**，**整个模型请求失败**——一个纯辅助的方法论提示变成主链路单点。这与仓内其他「辅助读」的既有约定相矛盾（workspace 账本读、toolContext 账本读均 wrap 为 best-effort）。
   - 建议：`loadMatrix`/`loadPrinciples` 内 catch 后返回空数据并降级到 `triz.ts:9-10` 已声明的「未识别到参数对时回退为 prompt 引导 LLM 自行查表」路径；或把 `inject` 钩子包一层 try/catch。
   - 证据：`triz.ts:38-39` `JSON.parse(readFileSync(path,"utf8"))` 与 `:56-57` 同型，**均无 try/catch**；对照 `modelRequest.ts:71-79` 与 `toolContext.ts:123-126` 的账本读均为 try/catch + 注释「must never block the request」。
+  - **2026-09-15 处置（PR #377，`fix(methodology)`）**：两层落地——根因层新增导出 `readTrizData<T>(file)`（失败返 `undefined` → 退化为空矩阵/空原理 → 落到 prompt 引导路径；**失败不写缓存**以便重试，告警**按文件去重**因 `buildLookupLines` 两两查表是 O(n²)）；收口层在 `computeMethodologyAddendum` 内包住 `inject`——该处是全部 8 个 `MethodologyComponent` 的唯一必经点，一处守卫同时覆盖 `modelRequest` 与 `cli` 两条构造链（优于本条建议的 `agentSessionConfig`，那里只是其中一条链上的实现点）。测试：`tests/methodology/triz.spec.ts` 2 条 + `tests/agent/loop/methodologyInjection.spec.ts` 3 条。决策见 `docs/notes/implemented/2026-09-15-low-cost-blockers-batch.md`。
 - **TD-METHODOLOGY-N06** · `triz.execute` 偏离既有组件「纯模板」契约，引入 IO 与非确定性
   - 类别：D · 严重级：P3 · 工作量：M · 状态：new
   - 位置：`triz.ts:150-181`（`execute` 内 `detectParamNumbers` → `buildLookupLines` → 条件注入）
@@ -1737,16 +1743,18 @@
   - 建议：catch 口径补 `ui/server` 并在口径表写明；vendored 子树从文件级排名排除或单列小节（`lib/` 是编译产物本就应排除）。
   - ⚠️ 改口径会使指标一次性跳变，须在 `metrics.md` 标注口径变更日期，与 `README.md` §指标口径说明 的既有做法一致。
 - **TD-PROCGATE-001** · PR 追溯门禁被 PR 模板自带 HTML 注释**恒真通过**（门禁空转）
-  - 类别：C/E · 严重级：**P1** · 工作量：S · 状态：new
+  - 类别：C/E · 严重级：**P1** · 工作量：S · 状态：**done（2026-09-15 复核：已由 `cfffe6ae3` 修复，issue #332）**
   - 位置：`.github/scripts/check-pr-issue.mjs` × `.github/PULL_REQUEST_TEMPLATE.md`
+  - **2026-09-15 复核**：`check-pr-issue.mjs:54-55` 已加 `HTML_COMMENT = /<!--[\s\S]*?-->|<!--[\s\S]*$/g` 并在判定前剥离（按 CommonMark 把未闭合注释一并剥离到文末，堵住「复制模板后误删 `-->`」的残余路径）；`check-pr-issue.test.mjs` 用例数 10 → **19**。本条目原登记已不成立，仅留存历史。
   - 影响：门禁是纯正则匹配、**不剥离 HTML 注释**，而 PR 模板的注释里字面写着 `` `Closes #123` `` / `` `Fixes #123` `` 作为填写提示——于是**任何用仓库 PR 模板创建的 PR 都无条件通过**，包括完全没有关联 issue 的 PR。同源问题：`BARE_NUMBER = /#\s*[0-9]+\b/` 使裸 `#1` 即通过；`EXEMPT` 中裸 `n/a` 会命中模板「测试计划」表格里的 `N/A`，豁免口子过宽；`check-pr-issue.test.mjs` 的 10 个用例**没有一条使用真实模板文本**，缺「模板原样 body 必须失败」的负控制——所以这个 bug 能长期存活。
   - 建议：匹配前先剥离 HTML 注释（`body.replace(/<!--[\s\S]*?-->/g, "")`）再走四路判定；补一条以真实模板为输入的负控制用例。
   - 证据（实跑复现）：`PR_BODY="$(cat .github/PULL_REQUEST_TEMPLATE.md)" PR_TITLE="chore: 随手改点东西" node .github/scripts/check-pr-issue.mjs` → `✓ PR 已通过可追溯门禁（检测到 issue 引用）`，`exit=0`。
 - **TD-PROCGATE-002** · `test:pr-tooling` 无任何挂载点，三个门禁负控制测试在 CI 中**从不执行**
-  - 类别：E · 严重级：P2 · 工作量：S · 状态：new
+  - 类别：E · 严重级：P2 · 工作量：S · 状态：**done（2026-09-15，PR #377）**
   - 位置：`package.json:39`；`.github/workflows/ci.yml:57`
   - 影响：`test:pr-tooling` 定义后无任何调用方（CI 不跑、`pnpm lint` 不跑、hooks 不跑），而 CI 的 `quality` job 只单独跑 4 个测试文件中的 1 个。**门禁本体在 CI 里（`check:issue-labels` 挂 `pnpm lint`），但门禁的测试不在**——`sync-labels.test.mjs`（标签门禁的**全部**负控制）、`classify-issue.test.mjs`（含「不得越界读契约影响节」负控制、CLI 行协议回归）、`open-pr.test.mjs` 永不运行。负控制失效意味着门禁哪天被改坏也无人拦。
   - 建议：在 `ci.yml` 的 `quality` job 增加 `pnpm test:pr-tooling` 步骤（替换或并列于现有只跑单文件的 `Self-test PR traceability gate`）。
+  - **2026-09-15 处置（PR #377，`ci`）**：采用「替换为整体挂载 `pnpm test:pr-tooling`」方案，并把该步骤从 install **之前**移到**之后**（`measure-techdebt.test.mjs` 依赖 `typescript`，install 前跑不起来）。整体挂载使今后新增的脚本测试自动进 CI。CI 日志已确认该步骤在 `quality` job 中执行（83 用例）。
 - **TD-PROCGATE-003** · `tech_debt.md` 模板缺「影响 scope」节 → 债务议题**拿不到 `scope:*`**
   - 类别：F/H · 严重级：P2 · 工作量：S · 状态：new
   - 位置：`.github/ISSUE_TEMPLATE/tech_debt.md`

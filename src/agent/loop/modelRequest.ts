@@ -63,18 +63,23 @@ export interface ModelRequestOptions {
  * Re-reading fresh from the store (backed by the transcript) is what lets the
  * ledger survive compaction — the block is injected as a system-prompt
  * addendum rather than living in message history.
+ *
+ * An unreadable transcript yields `status: "unavailable"`; the store has already
+ * logged why, and there is no authoritative ledger to inject, so the block is
+ * simply omitted rather than fabricated from stale in-memory state.
  */
 async function readWorkspaceLedgerBlock(deps: ModelRequestDeps): Promise<WorkspaceLedgerBlock | undefined> {
   if (deps.config.workspaceLedger !== true || !deps.dependencies.workspaceLedger) {
     return undefined;
   }
   try {
-    const state = await deps.dependencies.workspaceLedger.read();
-    if (state === undefined) return undefined;
-    const rendered = renderWorkspaceLedgerBlock(state);
+    const snapshot = await deps.dependencies.workspaceLedger.read();
+    if (snapshot.status !== "ok" || snapshot.state === undefined) return undefined;
+    const rendered = renderWorkspaceLedgerBlock(snapshot.state);
     return rendered.empty ? undefined : rendered;
-  } catch {
+  } catch (error) {
     // Ledger read must never block the request.
+    agentLogger.debug(`workspace ledger read failed: ${error instanceof Error ? error.message : String(error)}`);
     return undefined;
   }
 }
