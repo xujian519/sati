@@ -5,6 +5,7 @@
  * 用法：
  *   node scripts/measure-techdebt.mjs --json          # 输出 JSON（默认）
  *   node scripts/measure-techdebt.mjs --update <path> # 写入/刷新 metrics.md
+ *   node scripts/measure-techdebt.mjs --check [path]  # 校验基线新鲜度（不写文件；过期则非 0 退出）
  *
  * 覆盖指标：
  *   - 体积/复杂度：目录文件数/行数、Top 大文件、TS AST 单函数行数（god function）
@@ -38,6 +39,9 @@ const EXCLUDE_DIRS = new Set([
 
 const GOD_FN_THRESHOLD = Number(process.env.GOD_FN_THRESHOLD ?? 300);
 const TOP_FILES_LIMIT = Number(process.env.TOP_FILES_LIMIT ?? 30);
+
+/** `--check` 未显式给路径时比对的基线。 */
+const DEFAULT_METRICS_PATH = "docs/technical-debt/metrics.md";
 
 // 裸正则模式（type escape 专用模式已废弃，改走 TS AST，见 scanTypeEscapes）。
 const CONSOLE_PATTERN = /console\.(log|error|warn|info|debug)/g;
@@ -613,6 +617,93 @@ function extractHistory(existing) {
   return existing.slice(idx + "## 历史快照".length).trim();
 }
 
+/**
+ * 基线新鲜度校验用的一行式快照时间戳。
+ * 必须挡住它，否则「今天生成的基线明天在 CI 里跑」会无条件变红——时间戳不是内容。
+ */
+const SNAPSHOT_DATE_RE = />\s*最近一次快照：\*\*\d{4}-\d{2}-\d{2}\*\*/;
+
+/**
+ * 把 `metrics.md` 归一化为「可比较的正文」：去掉历史快照段与快照时间戳。
+ * `--update` 写入的是 `<正文>\n\n## 历史快照\n\n<历史>`，故历史段不属于本次内容。
+ * @param {string} markdown
+ * @returns {string}
+ */
+export function normalizeForCheck(markdown) {
+  const bodyEnd = markdown.indexOf("## 历史快照");
+  const body = bodyEnd === -1 ? markdown : markdown.slice(0, bodyEnd);
+  return body.replace(SNAPSHOT_DATE_RE, "> 最近一次快照：**<date>**").trimEnd();
+}
+
+/**
+ * 逐行比较两段正文，返回「快照缺少」与「快照多余」的行（多重集口径，不依赖行序）。
+ *
+ * 用多重集而非按下标逐行比：`--update` 是整篇重写，一行插入会让其后所有行错位，
+ * 按下标比会报出满屏假差异，反而看不出真正变了什么。
+ *
+ * @param {string} actualBody 磁盘上基线文件的正文
+ * @param {string} expectedBody 依当前工作树重算出的正文
+ * @returns {{ missing: string[], extra: string[] }}
+ */
+export function metricBodyDiff(actualBody, expectedBody) {
+  const counts = new Map();
+  for (const line of actualBody.split("\n")) counts.set(line, (counts.get(line) ?? 0) + 1);
+  const missing = [];
+  for (const line of expectedBody.split("\n")) {
+    const n = counts.get(line) ?? 0;
+    if (n > 0) counts.set(line, n - 1);
+    else missing.push(line);
+  }
+  const extra = [];
+  for (const [line, n] of counts) for (let i = 0; i < n; i++) extra.push(line);
+  return { missing, extra };
+}
+
+/** `--check` 的失败指引：如何把基线刷回与工作树一致。 */
+const METRICS_REFRESH_HINT =
+  "node scripts/measure-techdebt.mjs --update docs/technical-debt/metrics.md\n" + "  （等价于 pnpm measure:update）";
+
+/**
+ * 基线新鲜度校验（issue #340）：把当前工作树的**重算结果**与磁盘上的基线正文比对，
+ * 不一致即非 0 退出。挂到 `pnpm lint` 链尾，使「基线静默失真」不再可能——
+ * 2026-09-14 的审计实证过其后果：基线停在 09-11，`createLocalGateway.ts` 声称
+ * 2696 行而实际 448 行，四条 god function 早已不存在，排期却仍照旧数字定。
+ *
+ * 比的是**整篇正文**（而非少数几个数）：正文全部由本脚本生成，全量比对既最简单也最严，
+ * 且新增指标时无需同步维护「关键指标白名单」——白名单本身就会再次成为漂移点。
+ */
+export function checkFreshness(targetPath, renderedBody) {
+  const full = targetPath.startsWith("/") ? targetPath : join(ROOT, targetPath);
+  if (!existsSync(full)) {
+    console.error(`✗ 指标基线不存在：${targetPath}`);
+    console.error(`  请先生成：\n  ${METRICS_REFRESH_HINT}`);
+    process.exitCode = 1;
+    return;
+  }
+  const { missing, extra } = metricBodyDiff(
+    normalizeForCheck(readFileSync(full, "utf8")),
+    normalizeForCheck(renderedBody),
+  );
+  if (missing.length === 0 && extra.length === 0) {
+    console.log(`✓ 指标基线新鲜：${targetPath} 与当前工作树一致`);
+    return;
+  }
+
+  const show = lines => lines.slice(0, 10).map(l => `      ${l}`);
+  console.error(`✗ 指标基线已过期：${targetPath} 与当前工作树不一致。`);
+  console.error(`  基线缺少 ${missing.length} 行（当前工作树应写入）：`);
+  for (const l of show(missing)) console.error(l);
+  if (missing.length > 10) console.error(`      … 另有 ${missing.length - 10} 行`);
+  console.error(`  基线多余 ${extra.length} 行（当前工作树已不再产生）：`);
+  for (const l of show(extra)) console.error(l);
+  if (extra.length > 10) console.error(`      … 另有 ${extra.length - 10} 行`);
+  console.error("");
+  console.error(`  修复：\n  ${METRICS_REFRESH_HINT}`);
+  console.error("  说明：指标口径变更（如新增指标行）同样会让基线变红——这是有意的，");
+  console.error("       口径变更须与基线刷新在同一个 PR 内落地。");
+  process.exitCode = 1;
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const m = await measure();
@@ -628,6 +719,13 @@ async function main() {
     return;
   }
   const md = renderMarkdown(m);
+
+  const checkIdx = args.indexOf("--check");
+  if (checkIdx !== -1) {
+    checkFreshness(args[checkIdx + 1] ?? DEFAULT_METRICS_PATH, md);
+    return;
+  }
+
   if (writeIf(args, md)) {
     console.log(`metrics 已写入 ${args[args.indexOf("--update") + 1]}`);
     return;
