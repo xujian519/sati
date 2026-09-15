@@ -88,6 +88,14 @@
   - 位置：`src/gateway/protocol/version.ts:31` ↔ `CLAUDE.md`
   - 建议：同步 `CLAUDE.md` 及变更表。工作量：S · 严重级：P2 · 状态：done（2026-08-23：设计文档 `docs/design/gateway-protocol-versioning.md` 版本表/状态更新至 1.4；本地 `CLAUDE.md` 同步至 1.4（`CLAUDE.md` gitignored 不入库））
 
+- **TD-DOC-002** · 文档**引用失效**：`community-agent-teams-research.md` §2 现状表引用已删除模块与过时五代的协议版本
+  - 位置：`docs/community-agent-teams-research.md:101`（列 `src/workflow/`：DAG + SafeEvaluator + worker-contract，**该目录已随 #150 删除**，现仅存专利域 `src/patent/workflow/`）；`:106`（写「gateway 协议 1.3」，实为 **1.8**，`src/gateway/protocol/version.ts:53`）
+  - 影响：§2「Sati 现状」是外部读者了解本仓能力的入口，失效引用会让人误以为该模块仍存在。
+  - **与 TD-DOC-001 及 §31 那批文档漂移成因不同**：那批是「迭代后未回填」（代码已改、文字停在旧态），本项是「引用了已删除的对象」——需不同的预防手段（文档路径引用存在性检查，而非「改代码时同步文档」的约定）。
+  - 建议：修正两处；可对 `docs/` 的 `src/**` 路径引用加脚本化校验（本次审计用 `grep` + `[ -e ]` 批量校验，可直接脚本化）。
+  - 工作量：S · 严重级：P3 · 状态：new（issue #369）
+  - 备注：同文档 §1.x 引用的 `src/members.ts`/`src/scheduler.ts`/`src/state.ts`/`src/tools.ts`/`src/client/ActivityPanel.tsx`/`scripts/stress-verify.mjs` 是**被调研项目 dsh-agent-teams 的路径**，非本仓引用，**不属失效**（已核实）。
+
 ### 度量工具（2026-09-11 C42 登记）
 
 - **TD-METRICS-001** · `measure-techdebt.mjs` 指标口径与文档不一致，且 `any` 正则双向失真
