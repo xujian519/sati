@@ -24,7 +24,7 @@
 
 | 能力 | 实现 | 位置 |
 |---|---|---|
-| 写入即落盘 | `recordEntry` 每次 `await appendFile`（无写后缓冲）；`flushCheckpoint` 为契约性 no-op，真实价值在显式 checkpoint 接线 | `src/session/transcript/JsonlTranscriptWriter.ts`、phase4 §9.4 实证修正 2 |
+| 批写 + 显式 flush（**M3 写缓冲后语义**） | `recordEntry` 条目序列化后**入队、不立即落盘**；落盘时机有四：显式 `flushCheckpoint`（**真 flush**）、`turn_result`、累计 64 KB、兜底 50 ms 定时器（`SATI_TRANSCRIPT_FLUSH_THRESHOLD_BYTES` 可调）。无显式 checkpoint 时崩溃最多丢 64 KB / 50 ms 内的 pending 条目 | `src/session/transcript/JsonlTranscriptWriter.ts:44-51`（阈值选项）、`:133-149`（flushCheckpoint 真 flush）、`:287-296`（入队不立即落盘）。**注**：早期「写入即落盘 / `flushCheckpoint` 为契约性 no-op」的表述已过时一代 |
 | 工具副作用前 checkpoint | `executeToolCalls` 在工具执行前 `await input.onFlushCheckpoint?.()`（fail-closed：无法保证持久边界就不发生副作用） | `src/agent/loop/AgentLoop.ts:1250-1253`、`src/agent/turn/TurnRunner.ts:277-279` |
 | 进程内稳定 retryId | `createRetryId(provider, model, scope)`：同 scope（turnId）跨 attempt 哈希稳定；缺 scope 退化为随机 UUID | `src/model/streaming/retryState.ts:41-49`、`streamModel.ts:137-139` |
 | 重试进度透出 | `streamModel` 经 `onRetryProgress` 回调 → router `streamAttempt` 转 `sati_router_retry_progress` 事件（含 retryId/attempt/reason/provider/model，**无 policyKey**） | `streamModel.ts:569-588`、`RouterRuntime.ts:1074-1089` |
@@ -103,6 +103,7 @@ TaskResumeScanner.start()          // gateway 启动点接线（与 ToolResultsC
      校验 maxSeq CAS（乐观锁：登记后 transcript 未被并发写入）
      驱动 AgentLoop 重新走一轮（等效重算断点请求）→ 落 turn_result
 
+（**以下为 v0.2 提案原文，保留作决策记录；该方案未采用** —— 见 §4.2 决策 4「resume-journal 幂等 → 不需要」，实际防重由 transcript 状态 + 内存 `submittedKeys` 承担）
 （登记集合持久化：幂等键 (sessionId, turnId, retryId)，扫描记录落 `.sati/resume-journal.jsonl`——
  扫描中途崩溃不重复续算；transcript 出现新 turn_result 即视为已接管/已完成。
  retryId 来源：断点请求关联的 retry_schedule 条目（T-A）；无则按 createRetryId(provider, model, turnId) 生成，
@@ -125,14 +126,14 @@ TaskResumeScanner.start()          // gateway 启动点接线（与 ToolResultsC
 |---|---|
 | `SATI_TASK_RESUME_ENABLED`（env，默认开） | 开关；`0` 时启动扫描仅做孤儿收尾（现状行为不变） |
 | 续算门禁：仅「明确标记可续算」的任务自动续算（后台任务/工作流 run，session 元数据标记）；普通对话会话中断只收尾不自动续跑（避免意外消耗 token）；**审批挂起的 turn 一律不自动续算**（§2.3） | `SessionMetadataStore` / `session_metadata` 条目 |
-| （删除 v0.1 的 `SATI_CHECKPOINT_EVERY_N_STEPS`：Sati 已「写入即落盘」、`flushCheckpoint` 为 no-op，无批写可刷——该配置无作用对象） | — |
+| （删除 v0.1 的 `SATI_CHECKPOINT_EVERY_N_STEPS`：**决策本身仍成立**——该配置无作用对象；但当时给出的理由「写入即落盘、`flushCheckpoint` 为 no-op」已被 M3 写缓冲取代，现语义为「批写 + 显式 flush」） | — |
 
 ### 2.5 风险与注意事项
 
 1. **续算重发 ≠ 幂等输出**：模型输出非确定，断点请求重发可能产生不同响应——这是**有意的**（续算语义 = 重算断点请求），副作用幂等靠「工具结果取自 transcript」保证，二者必须分开表述（文档/注释中显式化）。
 2. **上下文重建不可逆**：续算点之前的消息若已被压缩（control_boundary），重建按压缩后消息（`findLastCompactBoundaryIndex`，`TranscriptReplay.ts:52`）——与 resume 现状一致（shadowedRanges 恢复路径），首期不做「解压重放」。
 3. **并发竞态**：续算驱动与用户手动提交可能并发；以 resume-journal 幂等键 + transcript maxSeq CAS 收敛，CAS 失败即放弃本次续算（用户已接管）。
-4. **checkpoint IO 成本**：写入即落盘已无写后缓冲，无新增刷盘负担（v0.1 的每 N 步配置已删除）；性能回归用 llm-replay fixture 度量。
+4. **checkpoint IO 成本**：M3 写缓冲下存在批写（64 KB / 50 ms 兜底）与显式 flush 两条落盘路径，`flushCheckpoint` **不再是零成本 no-op**；开销与回归用 llm-replay fixture 度量。
 5. **误续算成本**：(a) 形态判定依赖「request_header 落盘即请求发出」的近似——实际可能未发出或已发出未响应；重发可能重复消耗一次 API 调用；无法确定性区分，接受该成本（与 dsh 同款 durable 边界语义）。
 6. **工具执行非原子**：「工具已执行、结果未落盘」崩溃 → 重算重复执行该工具（副作用重复）。日志无法区分「已执行/未执行」；首期接受（与 dsh 一致），如需消除需工具级幂等键（二期）。
 7. **双轨落盘不一致**：T-A 后 retry 轨迹同时在 `router-events.jsonl`（best-effort）与 transcript（权威）——两处写入失败容忍度不同，诊断时以 transcript 为准；router-events.jsonl 保留为网关诊断日志。
@@ -150,7 +151,7 @@ TaskResumeScanner.start()          // gateway 启动点接线（与 ToolResultsC
 | T-A | 触发重试后 transcript 出现 `retry_schedule` 条目（含 retryId/policyKey/attempt），与 gateway 事件钩子同时可见；**重启后**从 transcript 重建调度表，retryId 与崩溃前一致（跨重启稳定）；log-only 投影不进入模型可见消息；子代理上下文事件不落主会话 | 2.1 |
 | T-B | 手工构造 (a) 形态 transcript（request_header 后无 durable）→ `findOpenRequest` 判定可续算（返回 turnId/provider/model/sequence）；(b) 形态（request_header + 部分 durable）→ 判定不续算；工具结果后崩溃（无 open request）→ 仍走 interrupted 收尾 | 2.2 |
 | T-C | **fixture 驱动续算**：构造 (a) 形态中断 transcript → `TaskResumeScanner.start()` → 自动续算至 `turn_result` 落盘；**不重复执行**已 checkpoint 的工具副作用（spec 断言工具结果取自 transcript，无第二次执行）；已完成 step 不重发（请求计数断言）；**同一 turn 至多一个 turn_result**（投影单发 `turn_completed`、usage 不双计） | 2.0/2.3 |
-| T-C | 同 turn 并发提交（用户手动接管）→ CAS 失败放弃续算、无重复 turn_result；扫描中途崩溃 → resume-journal 幂等键防重复续算；`SATI_TASK_RESUME_ENABLED=0` 时行为与现状完全一致 | 2.3/2.4 |
+| T-C | 同 turn 并发提交（用户手动接管）→ CAS 失败放弃续算、无重复 turn_result；扫描中途崩溃 → 防重由 transcript 状态 + 内存 `submittedKeys` 承担（§4.2 决策 4 **未采用** resume-journal）；`SATI_TASK_RESUME_ENABLED=0` 时行为与现状完全一致 | 2.3/2.4 |
 | T-D | 普通对话会话中断 → 仅 interrupted 收尾不自动续跑；后台任务/工作流 run → 自动续算；审批挂起中的 turn → 不自动续算（收尾 + 提示） | 2.3/2.4 |
 
 ### 3.2 回归
