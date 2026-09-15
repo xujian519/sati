@@ -41,12 +41,21 @@ const { result, checkpointId } = await runGraphWithCheckpoints(graph, { input: "
 - `runWorkflow`（`src/patent/workflow.ts`）保留为兼容入口，行为不变。
 - `manifestToGraph`（`adapter.ts`）：现有 `WorkflowManifest`（线性阶段 + retry 信号回退）
   自动转图执行，输出与 `runWorkflow` **尽力等价**（等价性测试兜底 happy path/中断/回退）。
-  已知差异：
+  **阶段输出解析**（主输出键 `atom.outputSchema[0]` / 非字符串 JSON 序列化 / 空输出回退
+  `state[stage.id]` / 已放行审批门占位 `APPROVED`）与**回退清理**（删 stage-id 键 +
+  atom 输出键）为两路径共用单一实现：`../workflow/stage-primitives.ts`——改这两处语义
+  只需改一个文件，勿在 `adapter.ts` 内另起一份。
+  已知差异（均为**通道**差异，非同一 stage 的输出差异）：
   - 错误重试：runWorkflow 对 handler 错误重试 maxRetries 次（默认 2）并写
     `[WORKFLOW_DEGRADED]` 文本；图路径只执行一次，错误转节点级降级标记；
-  - 放行 approval：runWorkflow 把空输出阶段标 degraded（completed=false），
-    图路径无此概念（completed=true）；
-  - executor 分支：图路径额外写 `state[stage.id]`（runWorkflow 不写）。
+  - 空输出/放行审批的**降级判定通道**：manifest 路径按阶段输出进 `degradedSteps`
+    （空输出即 `degraded: true`，`completed=false`）；图路径无阶段级 degraded 概念，
+    降级只体现为 state 键 `<key>__degradation`（`GraphRunResult.degraded`），
+    故 `completed` 不受影响。同一 stage 的**输出文本**两路径一致（含已放行审批门的
+    `APPROVED` 占位）；
+  - executor 分支：图路径额外写 `state[stage.id]`（runWorkflow 不写）；
+  - 无 handler 无 executor 的阶段：图路径写 `not_implemented` 降级标记（severity
+    critical），manifest 路径进 `degradedSteps`。
 - `runStageHandler`：现有 `StageHandler` 直接作为图节点执行（统一中断转换），
   保留降级（普通错误）与中断（`InterruptStageError` → `GraphInterruptError`）语义。
 

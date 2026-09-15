@@ -4,23 +4,22 @@
  * 从 workflow.ts 拆出（A10 轮次 3）：runStageOnce 从 runWorkflow 闭包抽为
  * 显式参数化函数，消除 7 个闭包变量捕获。副作用时序契约（勿改）：
  * - Object.assign(state, segment) 在 handler 产出后立即合并（state 引用共享）；
- * - 主输出键 = atom.outputSchema[0]，兜底 state[stage.id]；
+ * - 主输出键 / 空输出兜底 / 审批门占位 = `./stage-primitives.js`（与图路径共用单一实现）；
  * - degraded 前缀 `[WORKFLOW_DEGRADED]` 保留错误信息；
  * - approvedGate 经 APPROVAL_GRANTED_KEY 注入 execState（与图路径同一契约）。
  */
 
 import {
   APPROVAL_GRANTED_KEY,
-  APPROVAL_GRANTED_OUTPUT,
   type AtomRegistry,
   type PipelineState,
   type StageHandlerRegistry,
   type StageProvider,
-  isApprovalGateHandler,
   isInterruptStageError,
 } from "../atoms/index.js";
 import type { WorkerContract, WorkerOutputValidation } from "../worker-contract.js";
 import { defaultPatentWorkers, validateWorkerOutput } from "../worker-contract.js";
+import { isApprovalGateStage, resolveStageOutput } from "./stage-primitives.js";
 import type { StageExecutor, WorkflowContext, WorkflowInterrupt, WorkflowStage } from "./types.js";
 
 export type RunStageOnceOptions = {
@@ -65,7 +64,7 @@ export async function runStageOnce(
         // ⚠️ 执行态必须总为拷贝（含无 params 阶段）：放行标记只许 handler 局部可见，
         // 直接写共享 state 会污染后续所有审批门（曾因此发生"无 params 的已批准门
         // 放行后全链路审批门静默放行"的事故，tests/patent/drafting-sop.spec.ts 覆盖）。
-        const approvedGate = isApprovalGateHandler(handler) && options.approvalGrants?.includes(stage.id);
+        const approvedGate = isApprovalGateStage(handler) && options.approvalGrants?.includes(stage.id) === true;
         // 阶段静态参数合并进执行态（不污染共享 state，仅本次 handler 可见）。
         const execState = { ...state, ...(stage.params ?? {}) };
         if (approvedGate) {
@@ -74,14 +73,9 @@ export async function runStageOnce(
         const segment = await handler.execute({ state: execState, provider: options.provider });
         Object.assign(state, segment);
         // 主输出键 = atom.outputSchema[0]（对齐 Mady 约定，文本/JSON 均可）；兜底按 stage.id 引用。
+        // 输出解析与审批门占位是 graph 路径共用的原语（#345）——顺序契约见其模块注释。
         const mainKey = stage.atom !== undefined ? options.atoms.lookup(stage.atom)?.outputSchema?.[0] : undefined;
-        const raw = mainKey !== undefined ? segment[mainKey] : undefined;
-        output = typeof raw === "string" ? raw : raw === undefined ? "" : JSON.stringify(raw, null, 2);
-        if (output.trim().length === 0) output = String(state[stage.id] ?? "");
-        // 已批准审批门放行后无实质输出：占位避免被标记 degraded（语义 = 已人工批准）。
-        if (approvedGate && output.trim().length === 0) {
-          output = APPROVAL_GRANTED_OUTPUT;
-        }
+        output = resolveStageOutput({ segment, mainKey, fallbackValue: state[stage.id], approvedGate });
         state[stage.id] = output;
       } else if (options.executor) {
         output = (await options.executor(stage, options.ctx)) ?? "";

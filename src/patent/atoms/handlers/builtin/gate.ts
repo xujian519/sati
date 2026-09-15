@@ -6,9 +6,11 @@
  * - 图路径：grantApproval 把放行标记写入检查点 state，resume 重放时本 handler
  *   检测到标记即放行（返回空 delta，不中断）；
  * - manifest 路径（runWorkflow）：宿主按 approvalGrants（stageId 粒度）把标记
- *   注入 handler 执行态，本 handler 同样放行；runWorkflow 仅为放行结果补充
- *   占位输出（APPROVAL_GRANTED_OUTPUT，避免无输出被标记 degraded）。
- * 两条路径的"放行判定"都收敛在本 handler，不分散在外层。
+ *   注入 handler 执行态，本 handler 同样放行。
+ * 两条路径的"放行判定"都收敛在本 handler，不分散在外层；放行后的**占位输出**
+ * （APPROVAL_GRANTED_OUTPUT，避免无输出被标记 degraded）两条链路统一由
+ * `../../../workflow/stage-primitives.js` 的 `resolveStageOutput` 补（#345：
+ * 该占位原先只有 manifest 路径有，图路径缺分支）。
  */
 
 import { type Atom } from "../../atom.js";
@@ -28,11 +30,12 @@ import { degraded } from "./llm.js";
 /** 审批门放行标记键：state 中存在该键（truthy）时审批门直接放行。 */
 export const APPROVAL_GRANTED_KEY = "__approval_granted__";
 
-/** 已批准审批门在 manifest 路径的占位输出（图路径无输出概念，不需要）。 */
+/** 已批准审批门放行后的占位输出（两条链路共用，见 `workflow/stage-primitives.ts`）。 */
 export const APPROVAL_GRANTED_OUTPUT = "APPROVED";
 
 /**
- * 判断 handler 是否为"人工放行型门"（按 name 契约，供 runWorkflow 注入放行标记）。
+ * 判断 handler 是否为"人工放行型门"（按 name 契约）——两侧据此注入放行标记
+ * （manifest 路径）与补占位输出（两条链路，见 `workflow/stage-primitives.ts`）。
  * 放行语义 = 人已批准"继续"（approval-gate：确认产出；clarity-gate：强制跨过
  * 清晰度门槛——语义同构，均走 approveStageIds / grantApproval 契约）。
  */
