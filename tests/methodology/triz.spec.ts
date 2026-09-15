@@ -3,7 +3,7 @@ import test from "node:test";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { triz, lookupMatrixCell } from "../../src/methodology/runtime/components/triz.js";
+import { triz, lookupMatrixCell, readTrizData } from "../../src/methodology/runtime/components/triz.js";
 import { MethodologyRegistry, extractMethodologyKeywords } from "../../src/methodology/runtime/MethodologyRegistry.js";
 
 function ctx(goal: string) {
@@ -126,4 +126,37 @@ test("40 原理数据完整（40 条，名称非空）", () => {
 test("triz 已注册进默认组件集", () => {
   const reg = new MethodologyRegistry();
   assert.ok(reg.has("triz"));
+});
+
+// ---------------------------------------------------------------------------
+// fail-safe（#361）：辅助性的方法论注入不得成为主链路单点
+// ---------------------------------------------------------------------------
+
+test("readTrizData：数据文件缺失时返回 undefined 而非抛错", () => {
+  const warns: string[] = [];
+  const originalWarn = console.warn;
+  console.warn = (...args: unknown[]) => warns.push(args.map(String).join(" "));
+  let result: unknown;
+  try {
+    result = readTrizData("triz-does-not-exist.json");
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.equal(result, undefined, "读不到数据必须降级为 undefined，不能把异常抛进注入链");
+  assert.equal(warns.length, 1, `应恰好告警一次: ${warns.join("; ")}`);
+  assert.ok(warns[0]!.includes("triz-does-not-exist.json"), `告警应指出文件: ${warns[0]}`);
+});
+
+test("readTrizData：同一文件重复失败只告警一次（不随查表次数刷屏）", () => {
+  const warns: string[] = [];
+  const originalWarn = console.warn;
+  console.warn = (...args: unknown[]) => warns.push(args.map(String).join(" "));
+  try {
+    readTrizData("triz-repeated-failure.json");
+    readTrizData("triz-repeated-failure.json");
+    readTrizData("triz-repeated-failure.json");
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.equal(warns.length, 1, `重复失败应只告警一次: ${warns.join("; ")}`);
 });

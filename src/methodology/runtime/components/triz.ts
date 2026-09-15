@@ -14,6 +14,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import type { MethodologyComponent } from "../../protocol/types.js";
+import { logger } from "../../../telemetry/logger.js";
 import { keywordScore } from "./keywordMatch.js";
 
 // 触发词仅保留 TRIZ 特有表述（矛盾/冲突/权衡/折中/规避设计）；"改进/优化/
@@ -30,13 +31,44 @@ const TRIGGERS = [
   "design around",
 ] as const;
 
+/** 已告警过的数据文件（避免每次查表都刷屏）。 */
+const warnedDataFiles = new Set<string>();
+
+/**
+ * 读取本组件的数据文件（相对模块位置解析）。
+ *
+ * 方法论注入是**辅助路径**：数据缺失或损坏时必须降级——回退到 prompt 引导
+ * LLM 自行查表（见文件头注释与 execute 的 lookupSection 分支），而不能把异常
+ * 抛进注入链。该异常会穿透 methodologyInjection → computeMethodologyAddendum →
+ * 模型请求构造，使**整轮对话失败**。同仓辅助读的既有约定同此（`modelRequest.ts`
+ * 的账本读，注释 "Ledger read must never block the request"）。
+ *
+ * 失败**不写入缓存**，故下次调用会重试——避免一次瞬时读失败被固定为进程级空态。
+ *
+ * 导出以便单测直接驱动失败分支（与 `lookupMatrixCell` 同例）。
+ */
+export function readTrizData<T>(file: string): T | undefined {
+  try {
+    const path = join(dirname(fileURLToPath(import.meta.url)), "data", file);
+    return JSON.parse(readFileSync(path, "utf8")) as T;
+  } catch (err) {
+    if (!warnedDataFiles.has(file)) {
+      warnedDataFiles.add(file);
+      const reason = err instanceof Error ? err.message : String(err);
+      logger.warn(`TRIZ 数据文件 ${file} 不可读，降级为 prompt 引导（不阻断请求）：${reason}`);
+    }
+    return undefined;
+  }
+}
+
 /** 39×39 矛盾矩阵（[恶化参数][改善参数] = 推荐原理编号数组）。 */
 let matrixCache: number[][][] | null = null;
 
 function loadMatrix(): number[][][] {
   if (matrixCache) return matrixCache;
-  const path = join(dirname(fileURLToPath(import.meta.url)), "data", "triz-matrix.json");
-  matrixCache = JSON.parse(readFileSync(path, "utf8")) as number[][][];
+  const loaded = readTrizData<number[][][]>("triz-matrix.json");
+  if (loaded === undefined) return [];
+  matrixCache = loaded;
   return matrixCache;
 }
 
@@ -53,8 +85,9 @@ let principlesCache: TrizPrinciple[] | null = null;
 
 function loadPrinciples(): TrizPrinciple[] {
   if (principlesCache) return principlesCache;
-  const path = join(dirname(fileURLToPath(import.meta.url)), "data", "triz-principles.json");
-  principlesCache = JSON.parse(readFileSync(path, "utf8")) as TrizPrinciple[];
+  const loaded = readTrizData<TrizPrinciple[]>("triz-principles.json");
+  if (loaded === undefined) return [];
+  principlesCache = loaded;
   return principlesCache;
 }
 

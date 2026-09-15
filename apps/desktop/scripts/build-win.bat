@@ -299,8 +299,16 @@ if errorlevel 1 (
     echo ERROR: tsc build failed
     exit /b 1
 )
-mkdir dist\src\extension\plugins 2>nul
-xcopy /E /I /Y src\extension\plugins\builtin dist\src\extension\plugins\builtin >nul
+REM Step 7b: non-TS assets must sit next to the compiled output. tsc only emits
+REM .ts/.tsx; patent templates, skills, the methodology data files and the
+REM knowledge wiki are resolved at runtime by module location, so a tsc-only
+REM build leaves dist/asset-less and render_patent_document / TRIZ lookups fail.
+REM Shared with the root `build` script so the two platforms cannot drift (#349).
+call node scripts\copy-build-assets.mjs
+if errorlevel 1 (
+    echo ERROR: copy-build-assets failed
+    exit /b 1
+)
 echo OK
 
 REM ---- Step 8: create bundle tars (exclude lists aligned with release.sh) ----
@@ -352,6 +360,17 @@ REM vstore, so the hoist root is never needed after extraction (verified: its
 REM 866 entries have vstore equivalents except 18 dev/browser-only orphans).
 REM (This also covers the old @sati/desktop junction worry: the whole hoist
 REM root, @sati/desktop included, is gone.)
+REM
+REM The item list below must stay in lockstep with release.sh PDM_ITEMS:
+REM   dist\assets  patent document templates -- render_patent_document resolves
+REM                them relative to the module location, so they must ship
+REM                inside the bundle. Produced by Step 7b.
+REM   skills       built-in skills.
+REM   rules        constitutional rule assets; asset-location resolves
+REM                packageRoot/rules/patent. Without it the output-gate rule
+REM                chain SILENTLY degrades to keyword-only (compliance-grade
+REM                degradation with no user-visible signal).
+REM See #349 for the drift that produced this comment.
 cd /d "%REPO_ROOT%"
 tar cf "%RESOURCES%\sati-main-bundle.tar" ^
     --exclude=node_modules/.pnpm/electron* --exclude=node_modules/.pnpm/@electron* ^
@@ -393,7 +412,7 @@ tar cf "%RESOURCES%\sati-main-bundle.tar" ^
     --exclude=edgeclaw-memory-core --exclude=docs --exclude=tests ^
     --exclude=third-party --exclude=dist/tests --exclude=dist/scripts ^
     --exclude=.git --exclude=packages ^
-    src dist\src scripts node_modules vendor package.json tsconfig.json
+    src dist\src dist\assets scripts skills rules node_modules vendor package.json tsconfig.json
 if errorlevel 1 (
     echo ERROR: sati-main tar creation failed
     exit /b 1

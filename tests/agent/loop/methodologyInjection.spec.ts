@@ -110,3 +110,57 @@ test("findFirstUserText：取第一条 user 文本消息并拼接多文本块", 
   );
   assert.equal(findFirstUserText([assistantMessage()]), undefined);
 });
+
+// ---------------------------------------------------------------------------
+// fail-safe（#361）：方法论注入是辅助路径，组件抛错不得阻断整轮请求
+// ---------------------------------------------------------------------------
+
+test("computeMethodologyAddendum：inject 抛错时降级为无 addendum 并告警（不阻断请求）", () => {
+  const messages = [userMessage([{ type: "text", text: "这个结构的强度和重量存在矛盾" }])];
+  const warns: string[] = [];
+  const originalWarn = console.warn;
+  console.warn = (...args: unknown[]) => warns.push(args.map(String).join(" "));
+  let addendum: string | undefined;
+  try {
+    addendum = computeMethodologyAddendum(messages, () => {
+      throw new Error("triz-matrix.json ENOENT");
+    });
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.equal(addendum, undefined, "组件抛错必须被吞掉，不得让模型请求构造失败");
+  assert.equal(warns.length, 1, `应恰好告警一次: ${warns.join("; ")}`);
+  assert.ok(warns[0]!.includes("triz-matrix.json ENOENT"), `告警应带原始原因: ${warns[0]}`);
+});
+
+test("computeMethodologyAddendum：inject 抛非 Error 值同样被降级", () => {
+  const messages = [userMessage([{ type: "text", text: "hi" }])];
+  const originalWarn = console.warn;
+  console.warn = () => {};
+  let addendum: string | undefined;
+  try {
+    addendum = computeMethodologyAddendum(messages, () => {
+      throw "plain string throw";
+    });
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.equal(addendum, undefined);
+});
+
+test("computeMethodologyAddendum：一次失败不影响后续请求正常注入", () => {
+  const messages = [userMessage([{ type: "text", text: "写一份权利要求" }])];
+  const originalWarn = console.warn;
+  console.warn = () => {};
+  try {
+    computeMethodologyAddendum(messages, () => {
+      throw new Error("boom");
+    });
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.equal(
+    computeMethodologyAddendum(messages, text => `methodology: ${text}`),
+    "methodology: 写一份权利要求",
+  );
+});

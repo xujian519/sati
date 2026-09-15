@@ -1,4 +1,5 @@
 import { messageContent, type CanonicalMessage } from "../../model/index.js";
+import { logger } from "../../telemetry/logger.js";
 
 /**
  * Append an optional methodology prompt (from the injected hook) to the system
@@ -36,6 +37,10 @@ export function findFirstUserText(messages: CanonicalMessage[]): string | undefi
  * 单次计算方法论 addendum（keying 于第一条 user 文本）。与拼 system prompt
  * 分离：调用方可复用同一 addendum 既落库审计又拼 prompt，避免同一 inject
  * 回调执行两次导致「记录文本 ≠ 模型实际所见」。
+ *
+ * 方法论注入是**辅助路径**：任何组件抛错都不得阻断本轮请求，故 inject 的调用
+ * 在此收口处兜底。这里是全部 MethodologyComponent 的唯一必经点，一处守卫同时
+ * 覆盖 modelRequest 与 cli 两条构造链（#361）。
  */
 export function computeMethodologyAddendum(
   messages: CanonicalMessage[],
@@ -44,7 +49,13 @@ export function computeMethodologyAddendum(
   if (!inject) return undefined;
   const firstUserText = findFirstUserText(messages);
   if (firstUserText === undefined) return undefined;
-  return inject(firstUserText) || undefined;
+  try {
+    return inject(firstUserText) || undefined;
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    logger.warn(`方法论注入失败，已跳过（不阻断请求）：${reason}`);
+    return undefined;
+  }
 }
 
 /** 把已计算的方法论 addendum 追加到 system prompt（空值原样返回）。 */
