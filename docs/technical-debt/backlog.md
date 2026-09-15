@@ -1291,12 +1291,22 @@
 
 ## 28. apps/desktop（B5 ✅）
 
-**模块概况**：Electron 壳（macOS DMG arm64 + Windows NSIS x64/arm64，Linux 不维护）：9 TS（main/preload/server-manager/onboarding/splash）+ 27 发布脚本。安全基线良好（三窗口 `contextIsolation+sandbox+nodeIntegration:false`、导航白名单）。债务集中在**跨平台构建产物一致性、进程管理误杀邻近进程、文档漂移**。
+**模块概况**：Electron 壳（macOS DMG arm64 + Windows NSIS x64/arm64，Linux 不维护）：12 TS（main/preload/server-manager/runtime-layout/onboarding/splash）+ 26 发布脚本。安全基线良好（三窗口 `contextIsolation+sandbox+nodeIntegration:false`、导航白名单）。债务集中在**跨平台构建产物一致性、进程管理误杀邻近进程、文档漂移**。
 
-- **TD-DESKTOP-N01** · 运行时包布局的符号链接接线在 3 处重复实现
-  - 类别：D · 严重级：P1 · 工作量：M · 状态：new
-  - 位置：`src/server-manager.ts:716-766`；`scripts/lib/packaged-runtime.sh:62-81`；`scripts/verify-dmg.sh:243-278`
-  - 建议：抽共享 `linkRuntimeLayout`，三处引用同一实现。
+- **TD-DESKTOP-N01** · 运行时包布局的符号链接接线在多处重复实现
+  - 类别：D · 严重级：P1 · 工作量：M · 状态：**done（2026-09-15，PR #385）**
+  - 位置：`apps/desktop/src/server-manager.ts:716-766`（原登记缺 `apps/desktop/` 前缀）；`apps/desktop/scripts/lib/packaged-runtime.sh:62-81`；`apps/desktop/scripts/verify-dmg.sh:243-278`
+  - **2026-09-15 处置（PR #385，`refactor(desktop)`）**：核实后本条登记的「三处」实为**两组共 5 处**——
+    ① **铺陈**（`dist`/`src`/`node_modules`/`memory-core` 五条链接）：`server-manager.ts:729-766`、`packaged-runtime.sh:64-83`、`verify-dmg.sh:246-275`；
+    ② **`.pnpm` vstore 重链**（原文措辞未提、且漏了一处）：`server-manager.ts:795-924` + 原文**完全未提及**的 `relink-pnpm-win.mjs`。
+    处置：TS 侧两组抽进 `apps/desktop/src/runtime-layout.ts`（无 electron 依赖 ⇒ **首次可直测**；`server-manager.ts` 1401 → 1205 行，机械派生 + 三段函数体逐行相同核对）；shell 侧两处收敛为 `lib/packaged-runtime.sh` 的 `pd_runtime_stage_links()`（两处真实差异显式参数化：根级 `edgeclaw-memory-core`、logger）；`relink-pnpm-win.mjs` 改为可导入并**补齐「自身无 `.pnpm` 时借用兄弟树 vstore」**——此前它整体跳过 `satiui`，导致该树在验证中**从未被重链**（验证比运行时弱）。
+    证据：`docs/notes/implemented/2026-09-15-desktop-runtime-layout-single-source.md`；19 条新用例 + TS↔shell / TS↔mjs 一致性判据 + 11 类负控制（全部转红后复绿）。
+  - **未验证**：Windows 安装器验证与 DMG 验证未真机实跑（本地无法产出 DMG/NSIS）；残留见下条。
+- **TD-DESKTOP-N07** · 布局接线仍是「每种语言一份」，未收敛为单一实现
+  - 类别：D · 严重级：P3 · 工作量：M · 状态：new
+  - 位置：`apps/desktop/src/runtime-layout.ts`（运行时）↔ `apps/desktop/scripts/lib/packaged-runtime.sh`（L1/L2/L3 验证）↔ `apps/desktop/scripts/relink-pnpm-win.mjs`（Windows 验证）
+  - 现状：跨语言无法共用一个文件，故为「两份实现 + 判据」而非「一份实现」；单侧漂移已由 `tests/desktop/runtime-layout-shell-parity.spec.ts` 与 `tests/desktop/pnpm-vstore-relink-parity.spec.ts` 钉住。
+  - 触发条件：**下次在 Windows / DMG 环境实跑发版流程时**，若确认解包树能稳定拿到编译后的 `runtime-layout.js`，则把 shell 与 mjs 改为调用它（即 #348 建议的方向 1）。届时一并实跑确认：`relinkTrees` 的借用语义、`pd_runtime_stage_links` 第 4 参为 0（verify-dmg.sh 路径）时不建根级 `edgeclaw-memory-core` 是否安全。
 - **TD-DESKTOP-N02** · release.sh 与 build-win.bat 的 bundle 配方已分叉（排除清单 + 产物内容不一致）
   - 类别：F · 严重级：P1 · 工作量：M · 状态：**done（2026-09-15，PR #377）**
   - 位置：`scripts/release.sh:450-524,551-559`；`scripts/build-win.bat:318-399`
