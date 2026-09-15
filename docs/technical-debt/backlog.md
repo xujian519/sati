@@ -1345,3 +1345,527 @@
 - 同批附带：presence-wiring.spec 空 submit_turn 探活帧补齐合法最小载荷（守卫生效后的必要跟进）。
 
 **门禁证据**：root typecheck/lint/format ✅；agent 275、gateway 132（含 2 新增）、UI vitest 101 文件 617 用例 ✅。
+
+---
+
+## 31. 2026-09-14 补审（B7：2026-08-23 审计基线之后新增/大改的模块）
+
+> **背景**：§1–§30 的审计基线为 2026-08-23。此后仓库新增了团队编排 M1–M4、J-Space 工作区账本、专利 clarity/evaluate/claim-chart 子系统、元认知控制、方法论 bridge-reencode/triz、协议 1.8 与跨进程续算等模块，原台账对其**零覆盖或仅零散提及**（`workspace-ledger`/`clarity`/`broadcast-hub`/`metacognitive`/`bridge-reencode` 在库中命中数为 0）。
+>
+> **本次补审**：按 `README.md` §审计方法论 的 A–I 九类专项扫描上述模块，条目编号续接（`TD-PATENT-*` 从 N16 起、`TD-WORKSPACE-*` 从 N01 起、`TD-TEAM-*` 从 N01 起）。
+>
+> **方法**：静态扫描 + 逐条代码核实；凡「疑似债务」读注释/决策记录后被证伪者，移入各节末尾「设计使然」清单，不计为债务。
+
+### 31.1 团队编排（`src/agent/team/` + `src/tool/builtin/team/`，M1–M4）
+
+**模块概况**：`src/agent/team/` 23 文件 + `src/tool/builtin/team/` 8 文件 = **31 文件 / 3425 行**；另 `ui/src/components/team-panel/` 17 文件 / 2140 行、`ui/server/routes/teams.js` 88 行、`src/gateway/teamPanel.ts` 48 行、`src/cli/teamSubsystem.ts` 259 行（装配根）。测试：`tests/agent/team/` **19 spec**、`tests/tool/builtin/team/` **7 spec**、team-panel 5 test。**总评**：静态口径几乎全线干净（`src/` 侧零 `any`/零类型逃逸、零裸 `console.*`、零无注释 catch、零 TODO），债务集中在**文档漂移**与**未缓存重复查询**，无 P0。
+
+- **TD-TEAM-N01** · `CLAUDE.md` 声称「冷恢复 turn 的 approval_pending 不冒泡」，代码已全程接线
+  - 类别：H · 严重级：P2 · 工作量：S · 状态：new
+  - 位置：`CLAUDE.md:164`（对照 `src/agent/team/member/member-scanner.ts:38-40,95-97`、`src/cli/teamSubsystem.ts:94-97`）
+  - 影响：CLAUDE.md 是 agent/维护者的第一事实源。该句会让人误判 HITL 审批在崩溃恢复后失联，从而绕过或重复实现冒泡逻辑（实际已闭环）。
+  - 建议：改写为「M1 已知限制已闭环：`scanTeamMembers` 增 `onEvent?` 透传、`runMemberScan` 接 `TeamApprovalForwarder.handleMemberEvent`」。
+  - 证据：`member-scanner.ts:38-40` 定义 `onEvent?: (member, event) => void`；`:95-97` 直调 `wakeMember(..., { onEvent: event => options.onEvent?.(member, event) })`；`teamSubsystem.ts:97` 接 `teamForwarder.handleMemberEvent(member, event)`，注释明写「M1 已知限制在此闭环，计划 1349 行承诺兑现」。**核实结论：已接线，文档陈述为假。**
+- **TD-TEAM-N02** · `docs/patent-team-usage.md` 八.2 保留同款过时限制
+  - 类别：H · 严重级：P2 · 工作量：S · 状态：new
+  - 位置：`docs/patent-team-usage.md:105`
+  - 影响：面向用户的团队使用说明，「已知限制 2」会让使用者以为重启后成员审批卡片不会出现（实际会，见 N01 证据链）。
+  - 建议：删除该条或改为「已闭环（M2）」。同文件 `:95` 的 `isCaptainOnline` 描述是**正确**的，可作改写参照。
+- **TD-TEAM-N03** · `defaultModelRoute` JSDoc 称「wakeMember 未消费」，实际已消费
+  - 类别：H · 严重级：P2 · 工作量：S · 状态：new
+  - 位置：`src/tool/builtin/team/teamUtils.ts:157-159`（对照 `src/agent/team/member/member-waker.ts:51-57`）
+  - 影响：注释断言会让维护者以为改 `modelRoute` 快照无效而改错地方；实际 `wakeMember` 已把 `modelRoute` 注入 `submitTurn`。
+  - 证据：`teamUtils.ts:159`「当前仅快照存储——wakeMember 未消费」；`member-waker.ts:53-57` `parseModelRouteJson(member.modelRouteJson)` → `...(modelRoute !== undefined ? { modelRoute } : {})`；git `cb0f5418b`。
+- **TD-TEAM-N04** · `buildTeamSubsystem` 205 行单函数（装配根膨胀）
+  - 类别：A · 严重级：P2 · 工作量：M · 状态：new
+  - 位置：`src/cli/teamSubsystem.ts:55-259`
+  - 影响：一个函数内混 6 件事（emit 闭包、forwarder 装配、`runMemberScan`、workerRegistry 注册、`TeamScheduler` 构造含 4 个内联闭包、`runStrandedScan`、`startStartupScan`）。`:74-82` 与 `:174-179` 是刻意对称的两份「completed 收集 + reclaimCompleted」实现，改一处极易漏另一处。
+  - 建议：按 `emitTeamEvent`/`runMemberScan`/`runStrandedScan`/`createSchedulerWake(deps)` 拆子函数；两份 completed 收集抽共享 `createTurnCompletionCollector(...)`。
+- **TD-TEAM-N05** · `TeamScheduler.kickMember` 157 行、四段式（邮箱/任务/回滚/终态防护）
+  - 类别：A · 严重级：P2 · 工作量：M · 状态：new
+  - 位置：`src/agent/team/scheduler/scheduler.ts:146-302`
+  - 影响：单函数内嵌 4 个 `withTeamLock` 临界区、`KickPlan` 计划类型、锁内重读防 TOCTOU、邮箱 ack、唤醒失败回滚 + 终态防护。核心调度路径，M3 集成测试已暴露过一次持锁死锁。
+  - 建议：抽 `claimPlanInLock()` / `deliverMailbox()` / `rollbackDispatch()` 三个私有方法，`kickMember` 只留编排。
+- **TD-TEAM-N06** · 通用编排层 `agent/team` 直依赖专利领域 `src/patent`
+  - 类别：D · 严重级：P2 · 工作量：S · 状态：new
+  - 位置：`src/agent/team/scheduler/scheduler.ts:20`（`import { workerAllowedForRole, type WorkerRegistry } from "../../../patent/worker-contract.js"`）
+  - 影响：`agent/team/` 其余 22 文件只依赖 `node:*`、`gateway/protocol/types`、`telemetry` 与自身（分层自洽）。唯独 scheduler 反向拉入专利域：`WorkerTier`/`WorkerContract` 是专利专业子任务语义，通用任务池无权知晓。非专利团队被强制走 tier 校验路径；`WorkerRegistry` 演进会牵动通用调度器。
+  - 建议：抽 `interface WorkerGate { allows(roleSlug, workerName): boolean }` 放 `agent/team` 侧，专利侧提供 adapter。
+  - 证据：`grep -rn "patent" src/agent/team/` 仅命中 `scheduler.ts:20`（实际 import）与 `task-status.ts:2`（注释）。
+- **TD-TEAM-N07** · 成员会话前缀正则 `/^team[:-]/` 三处独立定义，同步说明只提一处
+  - 类别：F/D · 严重级：P2 · 工作量：S · 状态：new
+  - 位置：`src/session/storage/SessionList.ts:16`、`src/tool/builtin/team/teamUtils.ts:36`、`src/agent/team/protocol/member-key.ts:11`
+  - 影响：`member-key.ts:8-9` 注释只写「必须同步 SessionList.ts」，漏了 `teamUtils.ts:36` 的同款正则（**同名字面量两份**）。改前缀时漏改任一处 → 成员会话泄漏进 `listProjectSessions`/`TaskResumeScanner` 冷恢复双跑，或 `team_*` 工具身份判定 fail-open 成 captain（越权方向）。
+  - 建议：`teamUtils.ts` 从 `agent/team` barrel 导入 `MEMBER_SESSION_PREFIX` 派生正则；另两处注释补齐同步点清单。
+- **TD-TEAM-N08** · `recomputeBlockedByCount` 在团队锁内做 O(n²) 重算
+  - 类别：I · 严重级：P2 · 工作量：S · 状态：new
+  - 位置：`src/tool/builtin/team/teamTasks.ts:47-55`（调用点 `:355`）
+  - 影响：每个任务终态都要对每个任务调 `unsatisfiedDependencies(tasks, t.dependencies)`，而该函数每次 `new Map(tasks.map(...))` → n 任务即 n 次建 n 元素 Map。全程在 `withTeamLock` 临界区内（`:311-393`），阻塞同队全部并发认领/派发。
+  - 建议：一次建 `Map<id,status>` 复用，或仅重算下游子集（增量）。
+- **TD-TEAM-N09** · `TeamShare` 无实例缓存：每次工具调用/每次派发全量重读重解析 JSONL
+  - 类别：I/G · 严重级：P2 · 工作量：M · 状态：new
+  - 位置：`src/agent/team/storage/team-share.ts:50-53,138-159`；消费点 `src/tool/builtin/team/teamShare.ts:112,189`、`src/cli/teamSubsystem.ts:154-164`
+  - 影响：构造即 `load()` → `existsSync` + `readFileSync` 全文 + 逐行 `JSON.parse`。**调度器每次派发任务都 `readSharedBoardSummary` → `new TeamShare(...).summary()`**，即每任务派发 = 一次全量同步读；黑板随轮次单调增长，成本线性恶化，且 `readFileSync` 在调度路径上是同步阻塞。
+  - 建议：进程内按 teamId 缓存实例（dispose 清理）；写路径内存 append 后落盘。
+- **TD-TEAM-N10** · 面板快照每轮 O(teams×members) 过滤 + 每成员一次同步 SQL，且不按 sessionKey 过滤
+  - 类别：I/G · 严重级：P2 · 工作量：M · 状态：new
+  - 位置：`src/gateway/teamPanel.ts:32-46`（`toMemberView` 见 `src/agent/team/views.ts:32-40`）；路由 `ui/server/routes/teams.js:19-31`
+  - 影响：(a) 性能：先 `listTeams()`+`listMembers()`，再对**每个团队**在两份全量数组上 `filter`；`toMemberView` 内 `db.isRetired(sessionKey)` 是每成员一次同步 SQL 往返。UI 每 10s 轮询，多客户端线性叠加。(b) 暴露面：`sessionKey` 入参被 `_input` 丢弃，任何持 token 的浏览器可见全部团队——已在 `gatewayRuntimeOptions.ts:150-155` 登记为信任边界，随多会话使用应复核。
+  - 建议：快照按 `teamId` 预分组一次；批量取 retired 集合替代每成员 SQL；`sessionKey` 传入时按归属过滤。
+- **TD-TEAM-N11** · `runMemberScan` 外层 `.catch` 静默吞掉整次启动扫描失败
+  - 类别：C · 严重级：P2 · 工作量：S · 状态：new
+  - 位置：`src/cli/teamSubsystem.ts:118-121`
+  - 影响：本模块**唯一一处无注释、无日志的吞错点**。`scanTeamMembers` 契约「单成员失败不抛错」只覆盖成员级；若因 db 关闭/枚举异常**整体**抛出，此处静默返回 `{scanned:0, resumed:0}`——冷恢复静默失效，队长侧毫无信号。同文件 `:249` 的 `startStartupScan` catch **有** logger，同一失败域两种待遇。
+  - 建议：补 `logger.error` 后返回。
+- **TD-TEAM-N12** · 派发类 fire-and-forget `.catch(() => undefined)` 静默吞错 ×4
+  - 类别：C · 严重级：P3 · 工作量：S · 状态：new
+  - 位置：`src/tool/builtin/team/teamMailbox.ts:114`；`src/tool/builtin/team/teamTasks.ts:228,396,498`
+  - 影响：设计意图（防重入死锁）成立，但异常被完全吞掉且无日志——若 `kickMember` 因 db 竞态抛出，表现为任务永久滞留 claimed/pending 而无人知晓。
+  - 建议：换 `.catch(error => logger.warn("team dispatch kick failed", { teamId, error }))`（保留 fire-and-forget 语义，仅补可观测）。
+- **TD-TEAM-N13** · `member_status` 事件变体已声明但零发射点（死事件类型）
+  - 类别：F · 严重级：P3 · 工作量：S · 状态：new
+  - 位置：`src/agent/team/protocol/events.ts:14`
+  - 影响：`TeamEvent` 联合类型含 `{ type: "member_status" }`，全仓发射点 **0**（成员状态实际由 `member_idle` + 轮询快照体现）；它同时进了 `docs/event-producer-consumer.md:38`（生产/消费双 `-`）。消费方要为不存在的帧维护分支，类型穷尽性被稀释。
+  - 建议：删除该变体或补发射点。⚠️ 改 `TeamEvent` 属协议载荷，须跑 `pnpm gen:event-matrix`。
+- **TD-TEAM-N14** · `TEAM_MEMBER_RESUME_MARKER` 死导出
+  - 类别：F · 严重级：P3 · 工作量：S · 状态：new
+  - 位置：`src/agent/team/member/member-scanner.ts:24`（经 `src/agent/team/index.ts:24` 再导出）
+  - 影响：`[team-resume]` 标记被导出两次，但全仓无任何 import（只被同文件 `:26` 模板串内联使用）；barrel 导出制造「这是对外契约」的假象。
+  - 建议：去掉 `export` 或从 barrel 移除。
+- **TD-TEAM-N15** · `EVENT_STYLE` 仅覆盖 5/16 事件类型，其余静默降级中性灰
+  - 类别：F · 严重级：P3 · 工作量：S · 状态：new
+  - 位置：`ui/src/components/team-panel/constants.ts:19-27`
+  - 影响：`TeamEvent` 16 个变体，`EVENT_STYLE` 只定义 5 个，其余 11 个（含 `member_stalled_approval`、`team_share_updated`、`task_reassigned`）落到 `FALLBACK_EVENT_STYLE`——「14 种 TeamEvent 彩色徽章」（`docs/patent-team-usage.md` 界面表）名不副实。
+  - 建议：补齐为 `Record<TeamEvent["type"], string>` 让 TS 强制穷尽。
+- **TD-TEAM-N16** · 面板轮询间隔文档/注释三处不一致（实际 10s）
+  - 类别：H · 严重级：P3 · 工作量：S · 状态：new
+  - 位置：`ui/src/components/team-panel/constants.ts:3`（10s）对照 `hooks/useTeamPanel.ts:16,60`（5s）与 `docs/patent-team-usage.md`
+  - 影响：容量估算会按 2 倍偏差计算后端 QPS。
+- **TD-TEAM-N17** · 面板收起为浮标后仍每 10s 拉全量快照
+  - 类别：I · 严重级：P3 · 工作量：S · 状态：new
+  - 位置：`ui/src/components/team-panel/floating-team-panel.tsx:145`（`useTeamPanel` 在 `:242` 收起早退之前调用）
+  - 影响：收起态只需 `activeTeams.length` 与事件脉冲，但 `setInterval` 不感知 view，持续 POST + `setSnapshot`（触发整面板 re-render）。多标签页常驻时是无谓负载。
+  - 建议：`useTeamPanel(sessionId, { enabled: view === "expanded" })`。
+- **TD-TEAM-N18** · `member-tree` 每行 O(tasks) 查找、每次 render 无 memo
+  - 类别：I · 严重级：P3 · 工作量：S · 状态：new
+  - 位置：`ui/src/components/team-panel/member-tree.tsx:47-54`
+  - 影响：`currentTaskOf`/`statsOf` 对每个成员各 `team.tasks.find/filter` 两遍 → O(members×tasks)，未 `useMemo`，快照每 10s 刷新即全量重算。
+  - 建议：`useMemo` 建 `Map<assigneeId, {current, done, total}>` 一次（对照 `task-dag.tsx:35,38,44` 已用 `useMemo`）。
+- **TD-TEAM-N19** · 锁内全表 `listMembers()` 统计 working 数
+  - 类别：I · 严重级：P3 · 工作量：S · 状态：new
+  - 位置：`src/agent/team/scheduler/scheduler.ts:211`
+  - 影响：并发闸判定在团队锁内做 `db.listMembers().filter(...)`——`listMembers()` 是**全库**成员全量读（`team-db.ts:400-407` 无 WHERE），只为数本队几个。每次认领一次，锁内。
+  - 建议：增 `countWorkingMembers(teamId)` 走 `SELECT COUNT(*)`。
+- **TD-TEAM-N20** · `approval-forwarder` 每次 decide 全表 `listMembers().find`
+  - 类别：I · 严重级：P3 · 工作量：S · 状态：new
+  - 位置：`src/agent/team/member/approval-forwarder.ts:78-80`
+  - 影响：每次审批决定拉全库成员再线性查 sessionKey；`TeamDb` 已有按 sessionKey 索引的查询可复用。审批是低频人操作，影响有限，属同类「以全表换单点」。
+  - 建议：增 `getMemberBySessionKey(sessionKey)`（`members.session_key` 无索引，可加）。
+- **TD-TEAM-N21** · 工具层测试约 90 处 `as never` 绕过 `SatiToolRuntimeContext` 类型
+  - 类别：B · 严重级：P3 · 工作量：S · 状态：new
+  - 位置：`tests/tool/builtin/team/teamTasks.spec.ts`（~50）、`teamMailboxStatus.spec.ts`（~25）、`teamArchive.spec.ts`、`teamShare.spec.ts`、`tests/agent/team/taskpool/task-status.spec.ts:33`
+  - 影响：`src/` 侧**零**类型逃逸（本模块强项），但测试把上下文断言成 `never`，意味着 `SatiToolRuntimeContext` 增改字段时这些测试**不会编译报错**——恰是工具层最需回归保护的契约（9 个 `team_*` 全走 `context.sessionId/cwd/currentToolCallId`，任一变化是越权方向风险）。`as never` 比 `as any` 更隐蔽（无告警）。
+  - 建议：抽 `tests/tool/builtin/team/helpers.ts` 的 `makeCtx(partial)` 返回真实类型最小上下文。
+- **TD-TEAM-N22** · `views.ts` / `broadcast.ts` 无直接单测（仅间接覆盖）
+  - 类别：E · 严重级：P3 · 工作量：S · 状态：new
+  - 位置：`src/agent/team/views.ts`（55 行）、`src/agent/team/protocol/broadcast.ts`（12 行）
+  - 影响：两文件是 `team_status` 工具与面板快照**共用**的视图映射单点；`views.ts:48-53` 的「可选字段才输出」语义是 UI 侧 `undefined` 判定的依赖前提，仅靠集成测试间接覆盖。
+  - 建议：补 `views.spec.ts`（含残缺 modelRoute 降级、可选字段省略）与 `broadcast.spec.ts`。
+- **TD-TEAM-N23** · `TeamDb` 613 行单类 ~30 方法（模块最大文件）
+  - 类别：A · 严重级：P3 · 工作量：M · 状态：new
+  - 位置：`src/agent/team/storage/team-db.ts:289-613`
+  - 影响：单类承载 6 类实体读写与迁移；`:540-612` 是 P0-3 追加的审批子域，内聚已跨「团队状态库」与「审批挂起表」两个关注点。
+  - 建议：`pending_approvals` 组抽 `TeamApprovalStore`（同 db 实例）。
+- **TD-TEAM-N24** · 已登记的「静默吞错」`lock.ts:19` 实为带 3 行论证的防御式——**登记失准**
+  - 类别：C · 严重级：P3 · 工作量：S · 状态：new
+  - 位置：`docs/technical-debt/backlog.md:129`（TD-AGENT-104）对照 `src/agent/team/scheduler/lock.ts:16-19`
+  - 影响：核实结论——`await previous.catch(() => undefined)` **不是**无注释静默吞错：`:16-18` 三行注释完整论证了「tail 链归纳证明永不 reject，`.catch` 仅作未来 reject 源的锁自愈兜底」。把它与 `TurnRunner.ts` 真静默点并列，会让修复者误改或误判该项无进展。**属已注释的刻意设计。**
+  - 建议：从 TD-AGENT-104 位置清单移除 `lock.ts:19`；本模块真正的无注释吞错点是 N11。
+- **TD-TEAM-N25** · M2 计划文档「`isCaptainOnline` 未接线」与代码相反（历史快照残留）
+  - 类别：H · 严重级：P3 · 工作量：S · 状态：new
+  - 位置：`docs/superpowers/plans/2026-08-20-agent-teams-m2-taskpool-scheduler.md:1343,1354,1535`（对照 `src/cli/teamSubsystem.ts:148`）
+  - 影响：核实结论——**已接线**（`isCaptainOnline: captainSessionKey => deps.sessionPresence.isActive(captainSessionKey)`）。计划文档三处称「默认常在线/未接线/留 M3」，与代码状态错位。
+  - 建议：计划文档属历史快照不必改内容，但**台账/入口文档不应继续把它当未决项**；在该行标注接线位置。
+- **TD-TEAM-N26** · `team_event` 下游计数文档 ×14 与实际 16 变体不符
+  - 类别：H · 严重级：P3 · 工作量：S · 状态：new
+  - 位置：`docs/event-producer-consumer.md:75`（对照 `src/agent/team/protocol/events.ts:10-59`）
+  - 影响：三处口径互不一致（矩阵 ×14、`events.ts` 16、m3 plan「13 种」）；事件矩阵门禁仅校验外层 `team_event`，变体数漂移不会被拦住。
+  - 建议：以 `events.ts` 为准更新为 16，并在 `events.ts` 头注释注明「变体数漂移需手工同步矩阵」。
+- **TD-TEAM-N27** · 工具 `description` 超长（562/465/431 字符）注入每次模型请求
+  - 类别：A · 严重级：P3 · 工作量：S · 状态：new
+  - 位置：`src/tool/builtin/team/teamTasks.ts:278`（562）、`teamShare.ts:75`（465）、`teamMailbox.ts:48`（431）
+  - 影响：`team_update_task` 的 description 单条 562 字符，把豁免/状态落参全塞进一句。这些 schema 每次会话都进模型请求（成员回合带作业面工具），属常驻 prompt 成本。
+  - 建议：细节移到返回错误消息或系统提示段，`description` 只留主语义。
+  - ⚠️ **红线**：改工具 `description` 会使 llm-replay fixture 失配（`README.md:90`），须走显式重录流程。
+
+**设计使然（已写入决策/注释，登记为意图而非缺陷）**：单进程边界（`team-db.ts:6-9` 无 WAL/跨进程锁，不在支持范围）；`SessionPresence` Map 不做 TTL（为保 known-offline 语义稳定，`sessionPresence.ts:14-17` 有完整论证）；面板快照信任边界（`gatewayRuntimeOptions.ts:150-155` 登记「单用户桌面场景可接受」）；`invalidateTaskAttempt` 与 `retryFailedTask` 双实现（`taskpool/retry.ts:6-9` 记录「故独立实现，不复用」）；`detectDependencyCycle` 运行期不可达（`taskpool/cycle.ts:4-8` 声明为防御性纯函数）；`lock.ts:19`（见 N24）。
+
+**审计结论**：债务集中在两处——(1) **文档/注释漂移**（H 类 6 条，含 3 条 P2，方向一致：代码早已接线、文字停在旧里程碑；四份独立事实源互不同步且无一处可机检锚点）；(2) **通用层被领域耦合 + 未缓存重复查询**（D/I 混合 3 条 P2）。健康面突出：分层约束被显式书写并遵守（`views.ts:5`、`modelRouteJson.ts:7` 陈述「tool 依赖 agent/team，反向会循环」且真的无反向 import）、注释密度与推理质量显著高于仓库均值（多数「疑似债务」读注释即被证伪，N24 即典型）、测试覆盖完整（scheduler 622 行 spec 覆盖 stale-attempt/TOCTOU/终态防护/归档只读/fail-closed 身份等边界）。
+
+### 31.2 J-Space 工作区账本（`src/session/workspace/` + `src/tool/builtin/workspace/` + `registerLeak`）
+
+**模块概况**：7 文件 / ~792 行（`src/session/workspace/` 4 文件 447 行 · `src/tool/builtin/workspace/` 2 文件 151 行 · `src/context/workspace/registerLeak.ts` 194 行）；测试 3 spec。纯状态机 + 派生读取，零 `any` 零 `@ts-expect-error`，惯用法干净；债务集中在**读取路径冗余重算**与**降级静默**。
+
+- **TD-WORKSPACE-N01** · `readLatestWorkspaceState` 对**每一个** `workspace_state` 条目都 clone 一次，只留最后一个
+  - 类别：I · 严重级：P2 · 工作量：S · 状态：new
+  - 位置：`src/session/workspace/WorkspaceLedgerReader.ts:15-19`；调用方 `WorkspaceLedgerStore.ts:36-43`、`src/agent/loop/modelRequest.ts:72`
+  - 影响：已登记的 TD-SESSION-N01 描述「O(entries) 重扫 + clone」，但真实代价比它描述的重一档：循环体内 `latest = cloneWorkspaceLedgerState(entry.state)` 对每个匹配条目都深拷贝，**前面的拷贝全被丢弃**。叠加 TD-SESSION-N02 已确认的「每笔写入追加一份全量快照」，快照数 S 单调增长 → **每次模型调用**实际开销 ≈ O(N) 浅拷贝 + O(N) 扫描 + **O(S×L) 次深拷贝**（L=账本规模）。修法只有一行。
+  - 建议：循环内只记引用，循环后 clone 一次；如仍要缓存，按 TD-SESSION-N01 的尾部衔接键做 O(1) 命中。
+- **TD-WORKSPACE-N02** · 账本读取丢弃 `diagnostics`：transcript 超 50MB 时账本**静默消失**
+  - 类别：C · 严重级：P2 · 工作量：S · 状态：new
+  - 位置：`src/session/workspace/WorkspaceLedgerStore.ts:38`（只解构 `{ entries }`）；`src/session/transcript/TranscriptReader.ts:176-188`；`src/agent/loop/modelRequest.ts:76-79`
+  - 影响：`readTranscript` 在 `size > DEFAULT_MAX_TRANSCRIPT_READ_BYTES`（50MB）时**不抛错**，返回 `entries: []` + 一条 `severity:"error"` 的 `transcript_too_large` 诊断。`read()` 忽略 `diagnostics` → `readLatestWorkspaceState` 返回 undefined → 靠 `?? this.latest` 内存兜底掩盖。后果：(1) 进程内不丢，但**新进程/新会话重开时账本凭空消失**，模型侧只是「没有 `<workspace-state>` 块」，零告警；(2) 长会话越 50MB 后注入的是陈旧内存态而非 transcript 真值，与「transcript 是唯一事实源」的模块契约背离。
+  - 建议：`read()` 把 `severity !== "info"` 的诊断经会话诊断通道上报（去重）；`entries` 为空且诊断非空时返回带标记的空态而非静默回退。
+- **TD-WORKSPACE-N03** · `registerLeak` 的 ASCII 标点成员在散文里做**子串**匹配，普通标点即误报
+  - 类别：F · 严重级：P3 · 工作量：S · 状态：new
+  - 位置：`src/context/workspace/registerLeak.ts:16`（`INNER_ONLY` 含 `"??"`、`"?!"`）、`:50`、`:19` + `:55`
+  - 影响：非 ASCII 的 `⇒/⟸/💀` 语义明确，但 `??` 与 `?!` 是普通标点。因 `workspace_ship` 是**报告型不阻断**，代价为假阳性报告消耗模型注意力、训练用户忽略该工具输出——真正的 register 泄漏被噪音稀释。
+  - 建议：`"??"`/`"?!"` 移入独立「弱信号」清单（或要求连续两个以上）；`STATE_MARKERS` 改词边界匹配。
+  - 证据（实跑 `dist/` 编译产物）：`"Really?!"` → 命中 `?!`；`"为什么??"` → 命中 `??`；`"The plan is ready. phew"` → 命中 `PHEW`。
+- **TD-WORKSPACE-N04** · openspec 归档任务清单未勾选，但对应产物均已存在
+  - 类别：H · 严重级：P3 · 工作量：S · 状态：new
+  - 位置：`openspec/changes/archive/2026-08-21-broadcast-hub/tasks.md:12`（3.1）、`:10`（2.2）、`:16`（4.1）
+  - 影响：归档 change 的 tasks.md 停在 `[ ]`，持续误导后续审计者把「已交付」读成「未交付」。核实结论：`tests/agent/sub/workspace-core-inheritance.spec.ts` **确实存在**（3 个 test，覆盖 protocol note / 无 core 时 no-op），`renderWorkspaceCoreDirective` 亦已落地。**属归档文档漂移，非功能缺口。**
+  - 建议：勾选 2.2/3.1/4.1 并注明归档核对日期；在 `README.md` §如何保持新鲜 加入「归档 change 的 tasks.md 随交付回填」。
+
+> **已核实仍成立的存量条目（不重复登记）**：TD-SESSION-N01（每轮重扫仍成立，但**位置行号已漂移**——`read()` 现为 `WorkspaceLedgerStore.ts:36-43`，台账记的 `34-40` 已过期）；TD-SESSION-N04（Store/Reader 无直接单测仍成立：`tests/session/workspace/workspace-ledger.spec.ts` 只测纯状态机与渲染，未 import `WorkspaceLedgerStore`/`readLatestWorkspaceState`）。
+>
+> **健康面**：`applyWorkspaceNote` 五个不变式（开账双字段、Next 非空、Verified 覆盖、Open settle-by、close 须同次 checkpoint）与 core slot swap/parked 降级（`WorkspaceLedger.ts:243-284`）都有直测（spec:26-204，含 swap 后 live 恰为 2、parked 恰为 1 的断言）；A 类无超标函数（最大 `applyWorkspaceNote` ~103 行）。
+
+### 31.3 专利新子系统（`clarity/` · `evaluate/` · `claim-chart/` · `problem/` · `retry-hints`）
+
+**模块概况**：23 文件 / ~2589 行（`clarity/` 3 文件 283 行 · `evaluate/` 11 文件 1564 行 · `claim-chart/` 7 文件 406 行 · `problem/atomicChecker.ts` 168 行 · `retry-hints.ts` 68 行）；测试 16 spec。全模块 **0 个 `: any` / `as any` / `@ts-expect-error` / `as never`**，`catch {}` 均有意图注释，分层纪律与纯函数化程度高；债务集中在**未接线的预留导出**、**协议字段冗余**与**同构复制**。
+
+- **TD-PATENT-N16** · `deriveNoveltyCoverage` / `deriveDistinguishingFeatures` 经 barrel 导出但**运行时无人消费**
+  - 类别：F · 严重级：P3 · 工作量：M · 状态：new
+  - 位置：`src/patent/claim-chart/runtime/mapping-machine.ts:25-35`、`:38-47`；导出 `src/patent/claim-chart/index.ts:9-10`
+  - 影响：CLAUDE.md 称 claim-chart「映射状态机（场景合法性 + 新颖性/区别特征推导）」已实现全链路，但全仓引用只有 barrel 再导出与 spec——新颖性单篇全覆盖与三步法区别特征提取的**下游消费（novelty/inventiveness 图节点）没有接线**，即「算得出、没人用」。同批的 `verifyVerdictEnvelope` 与 `src/patent/reasoning/` 按 2026-08-30 note 做了「孤儿/预留 API 显式注释定位」，本条漏在该纪律之外，易被误读为「已生效」。
+  - 建议：同款处理——JSDoc 显式写明「预留：接线目标为 novelty/inventiveness 图节点，当前仅测试消费」，或列入接线待办。
+- **TD-PATENT-N17** · `ChartRow.state` 是 `mapping` 的冗余同义字段（`RowState = Mapping`），只写不读且随产物落盘
+  - 类别：F · 严重级：P3 · 工作量：S · 状态：new
+  - 位置：类型 `src/patent/claim-chart/protocol/types.ts:46`、`:55-56`；唯一写点 `src/patent/atoms/handlers/builtin/chart.ts:321`
+  - 影响：两字段承载同一语义，必然漂移；`state` 被写进 `claim-chart-<id>.json` 而渲染读的是 `mapping`，`state` 是纯死重。测试里被迫手工同步两处（`gap-detector.spec.ts:8`、`store.spec.ts`），说明该字段已在污染测试夹具。
+  - 建议：删除 `RowState`/`state` 与 `chart.ts:321`；若确有「行状态可独立于 mapping」的规划，则补读写两侧并在 protocol 注释说明语义。
+- **TD-PATENT-N18** · `loadClaimChart` 只守 `rows`/`elements` 后 `as ClaimChart`；且在 async 路径用 `readFileSync`
+  - 类别：B · 严重级：P3 · 工作量：S · 状态：new
+  - 位置：`src/patent/claim-chart/runtime/store.ts:30-42`（守卫 36、cast 37、`readFileSync` 34）；消费者 `src/patent/atoms/handlers/builtin/chart.ts:312-319`
+  - 影响：守卫仅查两个数组，随后 `return parsed as ClaimChart`——人工编辑或旧版本文件缺 `gaps`/`claimNos`/`targets` 时仍是「合法 ClaimChart」。当前安全**纯属巧合**（唯一消费者只用 `existing?.rows`）；任何未来读 `loaded.gaps.length`（如规划中的离线审计 API）都会裸 `TypeError`。
+  - 建议：守卫扩到 `gaps/claimNos/targets`（缺失即 `return null` + warning），或收窄返回契约为 `Pick<ClaimChart,"rows">`；`readFileSync` 换 `await readFile`。
+- **TD-PATENT-N19** · clarity-gate 降级信号依赖「`outputSchema[0]` 字符串前缀」的隐式契约（**降级本身是设计使然**）
+  - 类别：C · 严重级：P3 · 工作量：S · 状态：new
+  - 位置：`src/patent/atoms/handlers/builtin/clarity.ts:112-119`、`:136-139`、`:158-161`、`:170-173`；声明依据 `clarity.ts:13-15`、`CLAUDE.md:151`
+  - 影响（**核实结论：三条降级路径都 `return failOpenReport(...)`，从不 throw；`failOpenReport` 在报告前置 `[WORKFLOW_DEGRADED]`，被 `workflow.ts:221` 与 `workflow/executor.ts:112` 识别并归入 `degradedSteps`；有直测**——属写入决策记录的「诚实降级」信条，**不作为缺陷**）。仅两点残留：(1) 降级信号完全依赖「主输出键 = `atom.outputSchema[0]` 的字符串前缀」这一隐式契约——若有人把 `clarity_score` 提到 `outputSchema[0]` 之前（`clarity.ts:46`），degraded 归类会静默失效，而 `clarity.spec.ts:204` 自身并未断言该前缀；(2) 无结构化日志，唯一线索是报告正文里的人读文案。
+  - 建议：在 `clarity.spec.ts:204` 补 `assert.ok(out.clarity_report.startsWith("[WORKFLOW_DEGRADED]"))` 把契约钉在该原子自己的 spec 上。
+- **TD-PATENT-N20** · P2-4 反馈回流写侧文档漂移：代码已接线，plan 文档仍写「生产接线待宿主侧落地」
+  - 类别：H · 严重级：P3 · 工作量：S · 状态：new
+  - 位置：`docs/patent-inventiveness-optimization-plan.md:6`、`:270`（陈旧）↔ `src/cli/patentOutputGateFactory.ts:199-206`（生产接线点）、`src/patent/feedback/inventiveness-feedback.ts:76,86,98-102`、`src/patent/graph/README.md:103`
+  - 影响（**核实结论：note 写的「已落地」属实，plan 文档未同步**）：`patentOutputGateFactory.ts:199` 已注册 `onDecisionFeedback`，`:206` 调 `findCaseIdBySession(casesRoot, sessionId)` 反查后追加 `inventiveness-feedback.jsonl`。plan 文档两处未回填，形成三份文档两种说法，后续读者会以 plan 为准重开已完成的接线工作。
+  - 建议：更新该 plan 第 6/270 行为「已接线（2026-08-31 起）」，并链到 note 与 `graph/README.md:103`。
+- **TD-PATENT-N21** · 评测 runner 通过 `registerBuiltinAtoms()` 改写**进程级全局** handler 注册表
+  - 类别：D · 严重级：P3 · 工作量：M · 状态：new
+  - 位置：`src/patent/evaluate/runner.ts:29-32`、`:65`
+  - 影响：`createGraphRunner` 默认 handler 集来自 `registerBuiltinAtoms()` + 全局单例，评测对全局状态产生**副作用**——评测跑过后同进程其它消费者看到的注册表已被填充（且 `includeApproval:false` 只作用于本图构建，全局仍含审批门）。会让测试顺序敏感、并行 spec 互相污染。
+  - 建议：提供 `createBuiltinHandlerRegistry()` 返回新实例（或 `registerBuiltinAtoms(target)` 支持注入），评测用隔离注册表。
+- **TD-PATENT-N22** · 原子写 tmp+rename 在 patent 域被复制第 4 份；`evaluate/scoreboard.ts` 未复用既有 `persist-utils`
+  - 类别：F · 严重级：P2 · 工作量：S · 状态：new
+  - 位置：`src/patent/evaluate/scoreboard.ts:148-153`；同域孪生 `src/patent/persist-utils.ts:25-28`、`document/renderPatentDocument.ts:59-62`、`document/stylePreset.ts:33-35`、`src/tool/builtin/patentWorkflowTool.ts:95`
+  - 影响：同一「mkdir + tmp(.pid+random) + writeFile + rename」模式在 `src/patent` 下有 **4 处**独立实现（外加 `src/tool` 1 处），差异仅 JSON vs 文本、同步 vs 异步。任何一次修复（`crypto.randomUUID`、tmp 泄漏清理、Windows rename 语义、fsync）都必须记得改 4 处；本处还额外丢了 `persist-utils` 已有的加固。
+  - 建议：把 `persist-utils.atomicWriteJson` 泛化为 `atomicWriteText(file, content)` + JSON 包装，四处齐改。
+- **TD-PATENT-N23** · `chemistry/index-store.ts` 与 `figure/index-store.ts` 同构复制（**实测 85/179 行逐字节相同**）
+  - 类别：F · 严重级：P2 · 工作量：M · 状态：new
+  - 位置：`src/patent/chemistry/index-store.ts`（133 行）↔ `src/patent/figure/index-store.ts`（131 行）
+  - 影响：两个索引存储除实体名外逻辑完全一致（读容错、版本守卫、逐条 shape 守卫、队列串行化 upsert、损坏备份）。任一侧的 bug 修复必须手工同步，且**事实上已经不同步**：`upsertFigureIndex` 的排序键多了一个附图编号维度（`figure:110`），`isFigureIndexEntry` 多校验两个标量字段——说明「同构」靠人工维护。
+  - 建议：抽 `src/patent/shared/index-store.ts`（泛型 + 注入 `keyOf/compare/isValidEntry/notice`），两模块退化为 ~30 行参数化调用；同时消化 N24。
+  - 证据：`difflib.SequenceMatcher` 匹配块合计 **85** 行（并集 = 133+131-85 = 179）；`git diff --no-index --numstat` → `46 48`（即 87 行相同），两法一致落在 85–87。逐字节相同块含 `69-76 == 67-74`（`load*Index` 的 ENOENT 与 `readFile` 容错整段）、`114-133 == 112-131`（upsert 尾部 + `backupCorruptIndex` 整段 + 队列声明）。
+  - **勘误**：前序快查给的「union 145 行中 65 行相同」与实测有出入，以本行为准。
+- **TD-PATENT-N24** · `upsertQueues` 进程级 Map 无淘汰、无删除；`.corrupt-<ts>` 备份无保留策略
+  - 类别：G · 严重级：P2 · 工作量：S · 状态：new
+  - 位置：`src/patent/chemistry/index-store.ts:104,116-119,133` 与 `src/patent/figure/index-store.ts:102,114-117,131`（两份同构）；备份 `chemistry:124-130` / `figure:122-128`
+  - 影响：`upsertQueues` 以**文件路径**为键长期驻留，`run` 完成后**从不 `delete`**。专利 case 是「每案一目录」，长驻进程（desktop/server 形态）跨大量 case 后 Map 无界增长，每个 value 是一条已 resolve 的 promise 链（含闭包捕获的 entries）无法回收。`backupCorruptIndex` 每次命中损坏索引都 `copyFile` 出 `.corrupt-<Date.now()>`，无清理/上限——反复 upsert 一个坏索引会持续堆积备份文件。
+  - 建议：`run.finally(() => { if (upsertQueues.get(filePath) === settling) upsertQueues.delete(filePath); })` 或改 LRU（对照 `TranscriptReader` 的 `TAIL_STATE_MAX`）；备份改为「仅当不存在同名 `.corrupt` 时创建」或限保留 N 份。
+- **TD-PATENT-N25** · 测试目录布局与实现目录不一一对应（`clarity`/`problem` 无同名目录，散落为扁平 spec）
+  - 类别：E · 严重级：P3 · 工作量：S · 状态：new
+  - 位置：`tests/patent/clarity.spec.ts`（235 行）；`tests/patent/{atomic-checker,retry-hints}.spec.ts`
+  - 影响：`tests/patent/clarity/` 与 `tests/patent/problem/` **不存在**，而 `evaluate/`、`claim-chart/` 是目录形态。对新加入者「按模块找测试」的心智模型失效。仅布局一致性问题，不影响覆盖。
+  - 建议：迁移为同名目录（注意 import 相对深度由 `../../src/` 变 `../../../src/`），或在 `tests/patent/README` 登记扁平 spec 清单。
+
+> **已核实为设计使然而非缺陷（不登记）**：`verifyVerdictEnvelope` 仅测试消费——`evaluate/consensus.ts:156-158` 显式注释「预留离线审计 API…宿主接线前不参与运行时判定」，且 2026-08-30 note 已将「孤儿/预留 API 显式注释定位」记为决策；同理 `src/patent/reasoning/`、`compare` 原子。
+>
+> **健康面**：`clarity/signals.ts`（机械层）与 `clarity/score.ts`（融合纯函数）职责切得干净——signals 只回答「有没有」、score 只做加权与门判定，`semanticOnly` 是显式字段而非隐式分支；`claim-chart` 的 protocol（纯类型）/runtime（纯函数）/store（唯一 IO）三层堪称模板；`atomicChecker` 与 `retry-hints` **均已真实接线**（`technicalProblemCheck` 被 3 条 `INVENTIVENESS-PROBLEM-*` 规则消费、`buildSlopRevisionHint` 被 `slop-gate` 消费）；A 类无超标函数（最大 `evolve.ts` 293 行/文件，单函数均 <150 行）。测试 19 spec / 117 test 覆盖主链路、边界与降级路径，**零伪测试**。
+
+### 31.4 Agent 循环新增件（`src/agent/loop/` 2026-09 拆解产物 + 元认知/对拍/软提醒）
+
+**模块概况**：9 个新模块 / 2102 行（`turnExit` 185 / `recoveryStrategies` 225 / `modelErrorRecovery` 592 / `responseAssembly` 394 / `modelRequest` 287 / `compactionExecutor` 143 / `metacognitiveControl` 66 / `requestInvariant` 130 / `repeatToolReminder` 80）；配套 9 个直连 spec / 2444 行（**覆盖率 1.16，逐模块均有直连单测**）；零循环依赖、零 `any`、零裸 `console`、零 `TODO`。**拆解运动验收：通过**（见本节末）。
+
+- **TD-AGENT-N01** · request_header 的生产对拍器用同一对入参自比，**恒真、检测不到请求漂移**
+  - 类别：C · 严重级：**P2** · 工作量：S · 状态：new
+  - 位置：`src/agent/loop/AgentLoop.ts:481-485`、`src/agent/loop/requestInvariant.ts:55-104`
+  - 影响：该对拍器是「模型可见 = 已记录」在请求侧的**唯一**验证手段（`CLAUDE.md:153`）。当前实现给出**虚假保证**——比对恒等，无法发现「落盘快照 ≠ 实际发送请求」这类真实漂移（如 router 内部 materialize 改写、tool schema 在 `prepareForModel` 后被过滤），审计者会误以为请求侧已受保护。
+  - 建议：生产路径改用已有牙齿的 `verifyRequestReconstruction`（从**已落盘** transcript 条目独立重建后比对，或在 `router.execute` 前后各取一次快照比对）；若刻意只在 `onRequestHeader` await 窗口做原地改写检测，则把注释与 `CLAUDE.md:153` 的「篡改必报」改为「仅检测入参原地改写」。
+  - 证据：`AgentLoop.ts:481` 以 `(request, decision)` 生成快照，`:484` 又用**同一对** `(request, decision)` 调 `verifyRequestHeaderSnapshot`；被调函数 `requestInvariant.ts:83` 的 expected 即 `buildRequestHeaderSnapshot(request, decision)`，而该函数（`:55-69`）仅读入参、纯函数无副作用 → 除 `:482` 的 `await input.onRequestHeader?.()` 期间有人原地改写入参外，**比对恒等**。`requestInvariant.ts:7` 注释宣称「篡改（如路由后 maxOutputTokens 被改）必报」在生产路径不成立。真正独立的 `verifyRequestReconstruction`（`:114-130`）全仓**仅 tests 调用**（`tests/agent/loop/request-invariant.spec.ts:113,120`），无生产调用点。
+- **TD-AGENT-N02** · `CLAUDE.md:165` 的 AgentLoop 拆解声明与代码实际不符（**三处**）
+  - 类别：H · 严重级：**P2** · 工作量：S · 状态：new
+  - 位置：`CLAUDE.md:165`
+  - 影响：该条是拆解运动的验收声明，也是新人与审计的入口。声明不实会让第二次拆解（6 模块 / 1828 行）在文档层「隐身」，后续维护者不知道新边界存在，回归到直接在 `AgentLoop.ts` 里加逻辑的老路。
+  - 建议：补记 2026-09-14 的 6 个模块（`turnExit`/`recoveryStrategies`/`modelErrorRecovery`/`responseAssembly`/`modelRequest`/`compactionExecutor`）与 4 个 commit；把「4685 行巨型循环」改为当前值；对 `modelErrors.ts` 补专属 spec 或把「各模块配套独立单测」改为「关键模块配套独立单测」。
+  - 证据：三处不符——(1) 上述 6 个模块名在 `CLAUDE.md` 中逐个 `grep -c` = **0**，`:165` 只列 8 月的 8 件 + 阶段四两件，与 `git log`（`9bf02fa54`/`56b349f81`/`b9d8662a9`/`ddcee1a9d`，均 2026-09-14）不符；(2) 「各模块配套独立单测」对 `modelErrors.ts`（591 行，`:165` 明列为 8 模块之一）不成立——`tests/agent/loop/` 下**无** `modelErrors` 专属 spec；(3) `AgentLoop.ts` 现为 **1133 行**（`wc -l`），非 4685 行。
+- **TD-AGENT-N03** · 6 个新模块的类型导出无任何外部消费者（过度导出）
+  - 类别：F · 严重级：P3 · 工作量：S · 状态：new
+  - 位置：`modelRequest.ts:55`、`compactionExecutor.ts:26,37`、`responseAssembly.ts:69,97`、`modelErrorRecovery.ts:64`
+  - 影响：无外部消费者的 `export` 让模块接口面虚胖，误导「这是对外契约」的判断，削弱后续改动自由度。
+  - 建议：降为非导出（同 commit `8b80b37d5`「narrow triz module-internal exports」的既有做法）。
+  - 证据：逐符号全仓 grep（`src`+`tests`+`ui`，排除定义文件本身）**零命中**——`ModelRequestOptions`、`AutoCompactOptions`、`AutoCompactOutcome`、`SyntheticPromptContinuer`、`ResponseAssemblyOutcome`、`RecoveryHandled`。
+- **TD-AGENT-N04** · 请求对拍开关裸读 `process.env`，未进 `ENV_KEY` 集中注册表；开关约定不统一
+  - 类别：C/H · 严重级：P3 · 工作量：S · 状态：new
+  - 位置：`AgentLoop.ts:483`、`src/env.ts:55-70`
+  - 影响：绕过集中注册表意味着该开关不出现在任何 env 清单/文档生成物里；且其真实作用范围与其余开关相悖（见 N01）。开关语义亦不一致：此处 `=== "1"`（显式开）、`ProjectRuntimeRegistry` 的 `TASK_RESUME_ENABLED !== "0"`（默认开）。
+  - 建议：登记进 `ENV_KEY` 统一走 `brandEnv`；`src/env.ts:65` 注释补全为 `SATI_METACOGNITIVE_CONTROL_ENABLED`（现写作 `SATI_METACOGNITIVE_CONTROL`，键名缺 `_ENABLED`）。
+- **TD-AGENT-N05** · `modelRequest.ts` 引入模块级可变全局 `promptCacheGeneration`（跨会话共享）
+  - 类别：D/I · 严重级：P3 · 工作量：S · 状态：new
+  - 位置：`src/agent/loop/modelRequest.ts:38`、`:222`
+  - 影响：自称「装配」的模块内出现进程级可变状态，并发多会话时计数交错，单测无法隔离；该值是后续任何「缓存布局变更」判断的潜在依据，一旦有人据它做决策即成隐蔽 bug。当前仅诊断用途，故 P3。
+  - 建议：改为 `TurnRuntimeState` 上的 per-turn 计数器，或挪进 `deps`（与 `TokenCapManager` 同构）。
+  - 证据：模块顶层 `let promptCacheGeneration = 0`（`:38`）；`:222` `options.previewOnly ? promptCacheGeneration : ++promptCacheGeneration`；模块 JSDoc（`:1-9`）通篇未提该全局。
+
+> **拆解运动验收核查（本次重点）**——结论：**验收通过，但有文档账缺口**。
+> - **测试覆盖：通过**。9 个新模块逐个拥有直连 spec，2444 行测试对 2102 行实现；`turnExit.spec.ts`（9.9 KB）、`responseAssembly.spec.ts`（21 KB）、`modelErrorRecovery.spec.ts`（20 KB）体量饱满，非凑数。全组无「`readFileSync` + 正则扫源码」式伪测试。
+> - **循环依赖：无**。`src/agent/loop/` 全 28 文件 intra-module DFS 零环；`turnExit ← recoveryStrategies ← modelErrorRecovery/responseAssembly` 为清晰单向分层。
+> - **消债实效：真实**，不是搬代码——`turnExit.ts` 的 `terminateTurn` 消灭 ~25 处复制粘贴的终止仪式；`recoveryStrategies.ts` 把双份 max-output/空响应恢复收敛为共享函数（TD-AGENT-101 扩围）；`modelErrorRecovery.ts` 用 `StageOutcome`/`unhandled` 统一了恢复链与装配链的词汇。
+> - **唯一未消的债是文档账**：`CLAUDE.md:165` 未登记这 6 个模块（N02），导致第二次拆解在文档层隐身。
+
+### 31.5 方法论组件（`triz` / `bridge-reencode` / `keywordMatch`）
+
+**模块概况**：新组件 2 个 + 共享助手 1 个 / 239 行 TS（`triz.ts` 182、`bridge-reencode.ts` 37、`keywordMatch.ts` 20），外置数据 `data/` 2 个 JSON / 1651 行；测试 3 spec / 226 行。**总评**：新组件严格遵循既有模式（`bridge-reencode` 与 `five-whys` 逐行同构），触发词机制**无重复**（`keywordMatch.ts` 是既有 `hasAnyKeyword` 死代码收敛后的唯一共享实现，9 件组件全部复用同一 `keywordScore`）。**内联大表问题不存在**：TRIZ 数据已外置 JSON（非 `ipc-classifier.ts` 式 779 行内联），`build` 含 `cpSync(data → dist)`，且惰性加载 + 缓存。
+
+- **TD-METHODOLOGY-N05** · `triz` 的数据文件读取无 fail-safe，异常会穿透到请求装配、**打断该轮对话**
+  - 类别：C · 严重级：**P2** · 工作量：S · 状态：new
+  - 位置：`src/methodology/runtime/components/triz.ts:38-39`、`:56-57`；调用链 `methodologyInjection.ts:40-48` → `modelRequest.ts:156` → `agentSessionConfig.ts:155-159`
+  - 影响：`data/*.json` 缺失或损坏（打包裁剪、磁盘/权限异常、JSON 被误改）时，`execute()` 抛出的异常沿注入链一路**无捕获**，**整个模型请求失败**——一个纯辅助的方法论提示变成主链路单点。这与仓内其他「辅助读」的既有约定相矛盾（workspace 账本读、toolContext 账本读均 wrap 为 best-effort）。
+  - 建议：`loadMatrix`/`loadPrinciples` 内 catch 后返回空数据并降级到 `triz.ts:9-10` 已声明的「未识别到参数对时回退为 prompt 引导 LLM 自行查表」路径；或把 `inject` 钩子包一层 try/catch。
+  - 证据：`triz.ts:38-39` `JSON.parse(readFileSync(path,"utf8"))` 与 `:56-57` 同型，**均无 try/catch**；对照 `modelRequest.ts:71-79` 与 `toolContext.ts:123-126` 的账本读均为 try/catch + 注释「must never block the request」。
+- **TD-METHODOLOGY-N06** · `triz.execute` 偏离既有组件「纯模板」契约，引入 IO 与非确定性
+  - 类别：D · 严重级：P3 · 工作量：M · 状态：new
+  - 位置：`triz.ts:150-181`（`execute` 内 `detectParamNumbers` → `buildLookupLines` → 条件注入）
+  - 影响：既有 7 件组件的 `execute` 全是纯字符串模板（无 IO、无分支、无抛错），注册表与 injector 按纯函数契约调用。`MethodologyComponent` 契约未声明「可读外部数据/可抛错」，未来任何把 `execute` 当纯函数优化或并发批量调用的改动都会踩坑。**属刻意设计且已记录**（`triz.ts:8-10` 注释 + `CLAUDE.md:170`），本项只登记契约口径问题，非缺陷。
+  - 建议：查表下沉为 `execute` 之前的纯函数（数据经依赖注入），或在 `MethodologyComponent` 契约显式标注 `execute` 可读打包数据/可抛错。
+  - 证据：`five-whys.ts:21-43` / `mece.ts` / `swot.ts` / `pdca.ts` / `fishbone.ts` / `first-principles.ts` / `six-hats.ts` 的 `execute` 均为单条 `return { prompt: ... }` 字面量。
+- **TD-METHODOLOGY-N07** · `triz` 每次调用重建原理 Map，且与实际 `paramLabel` 线性查找叠加在 O(k²) 双循环内
+  - 类别：I · 严重级：P3 · 工作量：S · 状态：new
+  - 位置：`triz.ts:123`、`:117-119`、`:131-141`
+  - 影响：绝对开销小（40 条原理、39 个参数），不构成真实性能问题；但违反「每轮重复计算、未缓存检索」的 I 类口径，且与已缓存的 `loadPrinciples` 数组形成「缓存了一半」的不一致写法。
+  - 建议：把 `Map<no, TrizPrinciple>` 与 `Map<no, label>` 一并提到模块级缓存（与 `principlesCache` 同处）。
+  - 证据：`:123` `new Map(loadPrinciples().map(...))` 每次 `principleNames` 调用都重建，而 `principleNames` 处在 `:131-141` 的 `for improving × for worsening` 双循环内（最坏 k² 次）；`paramLabel`（`:117-119`）每次线性扫 39 项。对比 `loadPrinciples()`（`:53-59`）自身已用 `principlesCache`。
+
+### 31.6 协议 1.8 与跨进程续算（`gateway/protocol` · `session/resume` · `session/transcript`）
+
+**模块概况**：`version.ts` 67 行、`src/session/resume/` 2 文件 242 行、`src/session/transcript/` 11 文件（`JsonlTranscriptWriter.ts` 546 行）、`src/agent/loop/modelErrors.ts` 591 行；测试 `tests/session/resume/` 1 spec、`tests/session/transcript/` 5 spec、`tests/gateway/` 29 spec。**总评**：协议 1.8 接线完整且门禁正确（`close_project_sessions` 三处守卫/透传/`method_unavailable` 均有专测），续算链路只读 transcript、零内存态、单会话失败不阻塞，健壮性设计到位。债务集中在「文档滞后一代」（H 类 4 条）与两处重复/裸 catch。
+
+> **三条线索经核实为清白，予以销项**：
+> - **`SATI_CHECKPOINT_EVERY_N_STEPS` 无悬空引用**。全仓唯一命中是 plan 文档的一行删改记录，`src/` 零引用。
+> - **metacognitive 的 reconcile/escalate 无半成品残留**。`metacognitiveControl.ts` 全文 66 行 / 3 个纯函数，无相关符号或分支；`design.md:37` 明确「deferred」并入档——**设计使然**。
+> - **triz 内联大表问题不存在**（数据已外置 JSON 且 build 拷贝，详见 §31.5）。
+
+- **TD-GATEWAY-N01** · 协议版本表**无门禁**，唯一「覆盖」是弱断言（三个来源靠人工同步）
+  - 类别：E/H · 严重级：**P2** · 工作量：M · 状态：new
+  - 位置：`src/gateway/protocol/frames.ts:31`、`src/gateway/server/methodGuards.ts:101`、`src/gateway/protocol/version.ts:1-53`
+  - 影响：`frames.ts` 的方法 union、`methodGuards.ts` 的参数守卫表、`version.ts` 的变更表是**同一事实的三份手写副本**。新增方法若忘记 bump MINOR，**任何测试都不会红**——而 MINOR 恰好是 `feature-detect` 与 `not_configured` 降级的唯一依据（`CLAUDE.md:173`），漏 bump 会让旧客户端对不存在的方法乐观发帧。对比事件侧已有生成式门禁（`pnpm check:event-matrix`），协议方法侧完全没有对应物。
+  - 建议：加 `scripts/check-protocol-version.mjs`（或一个 spec），断言 `frames.ts` 的 `GatewayMethod` 集合 ⊆ `version.ts` 变更表已声明的方法集；把强断言写进版本测试，替掉白名单 `includes`。
+  - 证据：`tests/gateway/discovery-protocol.spec.ts:91` `assert.ok(["1.1",...,"1.8"].includes(SATI_GATEWAY_PROTOCOL_VERSION))` —— 对 8 个取值**全部通过**，不能证明当前是 1.8；`tests/gateway/steer-protocol.spec.ts:52-53` 更弱，仅 `startsWith("1.")` 与自比 `isProtocolCompatible(V, V)`。
+- **TD-SESSION-N08** · 「写入即落盘 / `flushCheckpoint` 为契约性 no-op」在 **4 处文档**已过时一代
+  - 类别：H · 严重级：P3 · 工作量：S · 状态：new
+  - 位置：待更新 4 处 —— `CLAUDE.md:154`、`docs/cross-process-retry-resume-plan.md:27`、`:128`、`docs/deepseek-harness-phase4-plan.md:413`
+  - 影响：该表述直接影响「崩溃会丢多少数据」的判断——按旧文档理解失败窗口是 0；按新实现，**无显式 checkpoint 时最多丢 64 KB 或 50 ms 内的 pending 条目**。审计/值班人员据此评估 durable 语义会得出错误结论。
+  - 建议：4 处统一改为「批写（阈值 64 KB / 兜底 50 ms，`SATI_TRANSCRIPT_FLUSH_THRESHOLD_BYTES` 可调）+ 显式 `flushCheckpoint` durable 边界（工具副作用前 await，fail-closed）」。
+  - 证据：`JsonlTranscriptWriter.ts:44-51` 新增 `flushThresholdBytes`（默认 64 KB）/`flushIntervalMs`（默认 50 ms）；`:133-149` `flushCheckpoint` 已是真 flush（JSDoc `:127-132` 自述「M3 后为真 flush」）；`:287-296` `recordEntry` 明确「M3 写缓冲：条目序列化后入队（**不立即落盘**）」，落盘时机 4 条。
+- **TD-SESSION-N09** · `CLAUDE.md:154` 声称的「resume-journal 防重」机制**不存在**，且已被计划文档明确否决
+  - 类别：H/F · 严重级：P3 · 工作量：S · 状态：new
+  - 位置：`CLAUDE.md:154`；决策依据 `docs/cross-process-retry-resume-plan.md:214`
+  - 影响：文档描述了一个不存在的持久化幂等机制，会让后续维护者以为「跨启动防重有持久化保证」而省掉必要检查——实际只有进程内 `Set` + transcript 状态自推进（崩溃在两次扫描之间则依赖 transcript，语义不同）。
+  - 建议：删除 `CLAUDE.md:154` 括注中的「+ resume-journal 防重」。
+  - 证据：全仓 `grep -ri journal src/` 无该机制（仅无关的 sqlite `journal_mode`）；plan 决策表原文「resume-journal 幂等（`.sati/resume-journal.jsonl`）→ **不需要** → 防重靠 transcript 状态 + 内存 `submittedKeys`」，代码即 `TaskResumeScanner.ts:96` + `:77-79` + `:83-90`。
+- **TD-SESSION-N10** · 启动续算扫描对项目全部会话做**无上限全量转录读**
+  - 类别：I · 严重级：P3 · 工作量：M · 状态：new
+  - 位置：`src/session/resume/TaskResumeScanner.ts:63-67`、`:75-97`
+  - 影响：gateway 启动后 3 s 对所有会话**串行**逐个 `readTranscript` 全量读盘+解析。会话数/转录体量大时形成启动期 IO 与内存峰值；M5 注释已识别该风险但只做延时错峰，未做限流或分页。
+  - 建议：`listProjectSessions` 传 `limit`（分页/按 mtime 取近期 N），或给扫描加并发上限与总量预算。
+  - 证据：`TaskResumeScanner.ts:63-67` 调用 `listProjectSessions({ projectRoot, pilotHome, includeInternal: false })`，**未传 `limit`**；对照 `SessionList.ts:68`（`limit?: number`）与 `:131-134`（`paginateSessions` 支持 `limit/offset`）——**能力已有，调用方未用**。
+- **TD-SESSION-N11** · `findOpenTurn` 与 `findOpenRequest` 是同一括号平衡逻辑的**两份实现**
+  - 类别：F · 严重级：P3 · 工作量：S · 状态：new
+  - 位置：`src/session/transcript/interruptedTurn.ts:34-55` 与 `:156-186`
+  - 影响：同一文件内两份「按 turnId 跟随、遇 `turn_result` 清空候选」的游标逻辑，差异只在活动条目集合与返回粒度。`retry_schedule` 新增条目类型时这类「活动集合」语义一旦需要调整，必须同步改两处，漏改即出现 turn 级与 request 级判定不一致。
+  - 建议：抽 `scanOpenTurn(entries, isActivityEntry)` 共享遍历，两级各自做投影。
+- **TD-SESSION-N12** · 2 处无注释裸 `catch`（`session/transcript` 内唯一未收束项）
+  - 类别：C · 严重级：P3 · 工作量：S · 状态：new
+  - 位置：`src/session/transcript/TranscriptReader.ts:343`、`:425`
+  - 影响：按 `README.md:57` 判定口径，这 2 处属「无注释隐患类」。危害有限（两函数 JSDoc 已述回退语义，且回退方向保守），但与本组其余代码的纪律形成可见落差。对照 `src/agent/loop/` 的 7 处裸 catch **全部**带意图注释。
+  - 建议：补「失败模式 → 回退语义」单行注释。
+- **TD-SESSION-N13** · `synthesizeInterruptedTurn` 返回的内存条目与落盘条目 `entryId` 不同（注释宣称「一致」只对 sequence 成立）
+  - 类别：C · 严重级：P3 · 工作量：S · 状态：new
+  - 位置：`src/session/transcript/interruptedTurn.ts:124-133`（`:130` 自生成 `entryId`）对照 `JsonlTranscriptWriter.ts:535`（`baseEntry()` 再生成一个）
+  - 影响：当前无消费者按 `entryId` 关联两份条目，故无实际故障；但幂等键若将来改用 `entryId`，或做「内存投影 vs 落盘」对账时会失配。注释 `:100-103` 的「一致」承诺不完整（只覆盖 sequence）。
+  - 建议：让 `synthesizeInterruptedTurn` 接受/回传 writer 生成的 `entryId`；否则把注释限定为「sequence 与 parentEntryId 一致」。
+- **TD-SESSION-N14** · `RetryStateTracker` 仍是 test-only 死代码；计划文档「保留」决策的理由**循环论证**、且行号引用已漂移
+  - 类别：F · 严重级：P3 · 工作量：S · 状态：new
+  - 位置：`src/model/streaming/retryState.ts:124-158`（全文件 158 行）
+  - 影响：类占据末尾 35 行，其唯一「消费者」是自己的测试。这构成一个**循环论证的保留决策**：plan 文档 `:212` 以「有测试覆盖…非死代码」为由推翻 `:75` 的删除建议，而测试恰恰是死代码自身带来的。台账口径若接受这种论证，任何死代码只要配一个自测即可免于清理。另 plan `:40` 与 `:75` 对同一事实给出互斥结论。
+  - 建议：二选一——按原议删除（`retry_schedule` 条目 + 事件钩子已承载重试轨迹）；或真正接入为 `RetryJournal`（消费方存在后再保留）。同步修正文档行号（`:40`/`:75` 引用 `retryState.ts:66` 与实际 `:124` 不符）并统一三处口径。
+  - 证据：全仓 `grep -rn RetryStateTracker src tests docs` 仅 2 处命中——定义处与 `tests/model/streaming/retry-state.spec.ts:30-31`，**`src/` 内无任何生产调用点**。同文件其余导出**均有**生产消费者（`createRetryId`、`RetrySchedule`、`createPolicyKey`/`normalizeRetryReason`），故仅该类是死代码。
+
+> **健康面（值得留存的做法）**：① 类型与日志纪律极佳——`src/agent/loop/` 28 文件零 `any`、零裸 `console`、零 `TODO`；`src/methodology/`、`src/session/transcript/`、`src/session/resume/` 同为 0。② 裸 `catch` 几乎全部带「失败模式 → 回退语义」意图注释，`methodology/` 与 `gateway/protocol/` 为 0 裸 catch。③ 续算链路设计克制——只读 transcript 零内存态、`(b)` 形态与挂起审批显式跳过、单会话失败不阻塞且注释说明。④ TRIZ 数据外置 + build 拷贝 + 惰性缓存，主动避开了仓内已知的 `ipc-classifier.ts` 内联大表反模式。⑤ 协议 1.8 的「未实现显式报错、不降级 `not_configured`」例外有专测锁定（`dispatch.spec.ts:198,217,241`）。
+
+---
+
+## 32. 2026-09-14 全仓复扫（度量口径与治理基建）
+
+> **背景**：§31 为盲区补审。本节登记**全仓横切复扫**发现的一类不同性质的债务——不是某个模块的实现问题，而是**债务治理体系自身**的缺陷：度量口径漏项、基线失真、门禁空转。这类债的共同特征是「让前 31 节的优先级排序建立在不可信的数据上」。
+
+- **TD-METRIC-001** · `measure-techdebt.mjs` 漏统计 `as unknown as`（**329 处**最强类型逃逸隐形）
+  - 类别：B/H · 严重级：**P1** · 工作量：S · 状态：new
+  - 位置：`scripts/measure-techdebt.mjs:~208`（`scanTypeEscapes`）
+  - 影响：`scanTypeEscapes` 只统计 TS AST 的 `AnyKeyword` 节点与 `@ts-*` 指令，完全漏掉 `as unknown as X` 双重断言——而它比 `any` **更强**（绕开全部类型检查，`any` 至少会传染且能被 lint 捕获）。后果是「类型纪律很好」的印象（`any` 仅 3 处）与「329 处绕开类型检查」的实际并存，**仪表盘在误导排期决策**。这也解释了为何 §1–§30 的类型债清单长期只有 TD-TYPE-002 一条。
+  - 建议：在 `scanTypeEscapes` 增加 `AsExpression` → `TypeReference` 名为 `unknown` 的检测分支，计入**独立指标** `asUnknownAs`（不要与 `any` 合并——治理成本与语境不同）；同步更新 `README.md` §指标口径说明 与 `metrics.md` 表头。
+  - 证据：实扫 `grep -rEn 'as unknown as' src/ ui/src/ --include='*.ts' --include='*.tsx' | wc -l` → **329**；分布 `tests/tool` 49、`tests/gateway` 46、`tests/agent` 38、`tests/knowledge` 24、`tests/patent` 21、`tests/context` 21、**`ui/src` 19（生产码）**、`tests/session` 16；生产码中值得警惕的是跨层类型未对齐（如 `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts:74` 的 `msg as unknown as NormalizedMessage`，会掩盖协议变更的编译期错误）。
+- **TD-METRIC-002** · 债务指标基线无新鲜度校验，`metrics.md` 可长期静默失真
+  - 类别：H · 严重级：**P1** · 工作量：M · 状态：new
+  - 位置：`scripts/measure-techdebt.mjs`（`--update` 手工触发）；`README.md` §如何保持新鲜
+  - 影响：基线由手工命令刷新，无机制保证与工作树同步。**2026-09-14 实证**：基线停在 09-11，而 09 月拆解运动已让报表严重失真——`createLocalGateway.ts` 记 **2696 行**（实测 **448**）、`AgentLoop.ts` 记 **2430 行**（实测 **1134**）、god-function 表中 `createLocalGateway`(607)/`prepareSessionRuntime`(517)/`createReadFileTool`(509)/`handleModelError`(364) **四条已全部不存在**。本次复扫已重跑基线修正（见 `metrics.md`），但不建机制下次仍会重演。
+  - 建议：二选一——(a) `measure-techdebt.mjs --check` 模式，重算关键指标与快照比对，不一致非 0 退出，挂 `pnpm lint` 链尾（与 `check:event-matrix`、`check:issue-labels` 同构，仓库已有两个同形态门禁可复制）；(b) 在 `metrics.md` 顶部记录快照 commit SHA，比对「HEAD 之后是否改过 `src/`」并提示。**倾向 (a)**，(b) 的「提醒」在 CI 中容易被忽略。
+- **TD-METRIC-003** · 指标口径缺口：空 catch 漏 `ui/server`；vendored 子包污染文件级排名
+  - 类别：H/D · 严重级：P2 · 工作量：S · 状态：new
+  - 位置：`scripts/measure-techdebt.mjs` 的 `catch` 口径（`metrics.md` §指标口径 表）；`src/context/memory/edgeclaw-memory-core/`
+  - 影响：(1) **catch 口径漏掉整个 `ui/server`**——`metrics.md` 报「空 `catch {}` = 0」，但 `ui/server/utils/plugin-loader.js:299` 存在一处；`ui/server` 是 103 文件 / 30,968 行的独立后端，且**裸 `console.*` 口径包含它而 catch 不包含**，两套口径不一致。(2) **vendored 子包污染所有文件级指标**——`edgeclaw-memory-core/`（58 跟踪文件 / 21,081 行，含 `lib/` 编译产物镜像与 2324 行 `ui-source/app.js`，后者是 `/memory-dashboard` 资产、非本仓维护）被完整计入 `src`，Top-30 表有 **4 项**来自该子树，挤占真实本仓文件可见度。
+  - 建议：catch 口径补 `ui/server` 并在口径表写明；vendored 子树从文件级排名排除或单列小节（`lib/` 是编译产物本就应排除）。
+  - ⚠️ 改口径会使指标一次性跳变，须在 `metrics.md` 标注口径变更日期，与 `README.md` §指标口径说明 的既有做法一致。
+- **TD-PROCGATE-001** · PR 追溯门禁被 PR 模板自带 HTML 注释**恒真通过**（门禁空转）
+  - 类别：C/E · 严重级：**P1** · 工作量：S · 状态：new
+  - 位置：`.github/scripts/check-pr-issue.mjs` × `.github/PULL_REQUEST_TEMPLATE.md`
+  - 影响：门禁是纯正则匹配、**不剥离 HTML 注释**，而 PR 模板的注释里字面写着 `` `Closes #123` `` / `` `Fixes #123` `` 作为填写提示——于是**任何用仓库 PR 模板创建的 PR 都无条件通过**，包括完全没有关联 issue 的 PR。同源问题：`BARE_NUMBER = /#\s*[0-9]+\b/` 使裸 `#1` 即通过；`EXEMPT` 中裸 `n/a` 会命中模板「测试计划」表格里的 `N/A`，豁免口子过宽；`check-pr-issue.test.mjs` 的 10 个用例**没有一条使用真实模板文本**，缺「模板原样 body 必须失败」的负控制——所以这个 bug 能长期存活。
+  - 建议：匹配前先剥离 HTML 注释（`body.replace(/<!--[\s\S]*?-->/g, "")`）再走四路判定；补一条以真实模板为输入的负控制用例。
+  - 证据（实跑复现）：`PR_BODY="$(cat .github/PULL_REQUEST_TEMPLATE.md)" PR_TITLE="chore: 随手改点东西" node .github/scripts/check-pr-issue.mjs` → `✓ PR 已通过可追溯门禁（检测到 issue 引用）`，`exit=0`。
+- **TD-PROCGATE-002** · `test:pr-tooling` 无任何挂载点，三个门禁负控制测试在 CI 中**从不执行**
+  - 类别：E · 严重级：P2 · 工作量：S · 状态：new
+  - 位置：`package.json:39`；`.github/workflows/ci.yml:57`
+  - 影响：`test:pr-tooling` 定义后无任何调用方（CI 不跑、`pnpm lint` 不跑、hooks 不跑），而 CI 的 `quality` job 只单独跑 4 个测试文件中的 1 个。**门禁本体在 CI 里（`check:issue-labels` 挂 `pnpm lint`），但门禁的测试不在**——`sync-labels.test.mjs`（标签门禁的**全部**负控制）、`classify-issue.test.mjs`（含「不得越界读契约影响节」负控制、CLI 行协议回归）、`open-pr.test.mjs` 永不运行。负控制失效意味着门禁哪天被改坏也无人拦。
+  - 建议：在 `ci.yml` 的 `quality` job 增加 `pnpm test:pr-tooling` 步骤（替换或并列于现有只跑单文件的 `Self-test PR traceability gate`）。
+- **TD-PROCGATE-003** · `tech_debt.md` 模板缺「影响 scope」节 → 债务议题**拿不到 `scope:*`**
+  - 类别：F/H · 严重级：P2 · 工作量：S · 状态：new
+  - 位置：`.github/ISSUE_TEMPLATE/tech_debt.md`
+  - 影响：三个模板中它是唯一没有「影响 scope」节的，而 scope 自动打标**完全依赖解析该节**。后果：**所有技术债议题零 scope**（实况证据：`#164 #163 #162 #161 #160 #153 #206` 七个 tech-debt 来源议题**全部只有 `tech-debt` 一个标签**），无法按模块筛选、无法统计「债务按模块分布」——而技术债恰恰最需要按模块归类。`docs/issue-management.md` §1 却称作用域是「自动」的。且 `sync-labels.mjs --check` 的「模板 scope 勾选 ↔ 标签双向一致」校验**天然覆盖不到**该模板，缺口不会被门禁发现。
+  - 建议：补上与 bug/feature 逐字一致的「## 影响 scope」节；**附带**补「## 契约影响」节（债务修复若触及 `inputSchema`/事件面/协议同样需前置声明）。
+- **TD-PROCGATE-004** · stale 豁免清单与分诊目标**互相抵销**（`priority: p0/p1` 与 `triage` 议题 120 天后静默关闭）
+  - 类别：D · 严重级：P2 · 工作量：S · 状态：new
+  - 位置：`.github/workflows/stale.yml:35` × `docs/issue-management.md` §3/§5/§6
+  - 影响：豁免清单 `status: in-progress,status: blocked,good first issue,help wanted,pinned` **不含 `status: triage`、不含 `priority: p0/p1`**。后果：一个从未被分诊的议题 90 天后标 `stale`、再 30 天**自动关闭**（无人看管的议题不是被提醒而是被归档）；更严重的是 `priority: p0`/`p1` 按定义是「堵塞/主链路明显受损」，**若未推进到 `in-progress` 也未挂 milestone，同样 120 天后被关**。这与规范 §3「不让任何议题停在 `triage` 无人看管」在机制上互相拆台。
+  - 缓解关系：`exempt-all-milestones: true` 意味着**挂 milestone 的议题天然豁免**——所以本批债务 issue 挂 `v0.2.0` 即受保护，但未挂 milestone 的独立高优缺陷仍暴露。
+  - 建议：优先考虑把 `priority: p0,priority: p1` 加入豁免（高级别议题不该因无人推进而消失）；或在规范 §6 明确写「`triage` 超 120 天会被归档，这是设计而非疏漏」，并让 §5/§6 不再逐字重复同一份豁免清单（重复导致一致性检查发现不了语义冲突）。
+- **TD-PROCGATE-005** · `scope` 分类器与规范三处不符（摘掉会打回 / 与提交 scope 不同名 / 词表第三份）
+  - 类别：D/H · 严重级：P2 · 工作量：M · 状态：new
+  - 位置：`scripts/classify-issue.mjs:22-24`；`scripts/open-pr.mjs` `KNOWN_SCOPES`；`.github/labels.yml`；`docs/issue-management.md` §5
+  - 影响：(1) 「自动打错的标签人工摘掉即可、脚本不会再打回」对 `scope:*` **不成立**——`classifyIssue()` 每次从 body 重推，人去摘掉后下一次 `edited` 事件会加回来；(2) 「`scope:*` 与提交 scope 同名」**不成立**——实测提交 scope 中 `adapters`/`desktop`/`context`/`ui-server`/`board`/`techdebt`/`session`/`task`/`extension`/`telemetry`/`pr`/`pilot`/`code-refinement`/`deps` 共 14 个**无对应标签**，一个 `refactor(adapters)` PR 无法被任何 `scope:` 筛选；(3) scope 词表已有**三份**（`labels.yml` 16 个 / `open-pr.mjs` `KNOWN_SCOPES` / 模板勾选项）。
+  - 建议：修正规范表述或让分类器记录「已人工摘除」状态；确定 `labels.yml` 为唯一事实源并补齐提交侧高频 scope；`open-pr.mjs` 的 `KNOWN_SCOPES` 改为从 `labels.yml` 派生。
+- **TD-PROCGATE-006** · `status: done` 禁令与 `priority` 取值**无枚举门禁**兜底
+  - 类别：E · 严重级：P3 · 工作量：S · 状态：new
+  - 位置：`scripts/sync-labels.mjs:153-156`
+  - 影响：`labels.yml` 与规范宣布「不设 `status: done`」，但 `validateLabels()` 对前缀标签**只校验「前缀后非空」**，不校验取值集合——往 `labels.yml` 加一条 `status: done` 或 `priority: p9`，`pnpm check:issue-labels` **放行**。`scope:` 有双向校验保护，**只有 `status:` 与 `priority:` 裸露**。同时 `priority:*` 全链路无自动化（模板无字段、workflow 不写、门禁不校验），「定级」可被整体跳过且无人发现。
+  - 建议：`validateLabels()` 增加取值枚举断言（`status:` 仅 `triage`/`in-progress`/`blocked`；`priority:` 仅 `p0..p3`），取值集合注释出处避免第四份词表；补 `sync-labels.test.mjs` 负控制。
+- **TD-PROCGATE-007** · 议题治理规范自身文档漂移（§8 checkbox 未回填 / 提交页缺规范链接 / `documentation` 无模板）
+  - 类别：H · 严重级：P3 · 工作量：S · 状态：new
+  - 位置：`docs/issue-management.md:174-176`、`docs/development-standards.md:247`、`.github/ISSUE_TEMPLATE/config.yml`、`.github/labels.yml`
+  - 影响：三处——(1) §8 把「同步标签实体」列为未完成 `[ ]`，但 `gh label list` 显示 38 个标签与 `labels.yml` **逐条一致**（名称/color/description 全对齐），该步骤**早已执行**，规范在描述自身状态时是错的；(2) `config.yml` 的 `contact_links` **未包含 `docs/issue-management.md`**，新议题提交页看不到治理规范；(3) `documentation` 标签无模板引用，文档类议题只能用 bug/feature 模板开、自动落 `bug`/`enhancement`，语义错位需人工改标。
+  - 建议：回填两处 checkbox；`config.yml` 增规范链接；`documentation` 二选一（新增 `documentation.md` 模板，或在规范 §2 明确「文档类用 feature 模板开、手工改标」）。
+
+---
+
+## 33. §31–§32 的设计使然清单（明确**不**作为债务处理）
+
+> 依 `README.md` §边界与约束 与 §31 各节的「设计使然」段汇总。这些是**有意取舍且有决策记录**的项，登记以防后续审计者重复翻案。
+
+| 事项 | 出处 | 理由 |
+|---|---|---|
+| team 单进程边界（无 WAL / 无跨进程锁） | `team-db.ts:6-9` | 多 gateway 共享 `teams.db` 不在支持范围 |
+| `SessionPresence` Map 不做 TTL 清理 | `sessionPresence.ts:14-17` | 清理会让 key 翻回 unknown→在线，导致离线/在线振荡 |
+| 面板快照信任边界（持 token 即可枚举全部团队） | `gatewayRuntimeOptions.ts:150-155` | 单用户桌面场景可接受；随多会话使用应复核（见 TD-TEAM-N10） |
+| `invalidateTaskAttempt` 与 `retryFailedTask` 双实现 | `taskpool/retry.ts:6-9` | 自动转派必须 `reassigning=false` 且不生成 `handoffId`，故不复用 |
+| `detectDependencyCycle` 运行期不可达 | `taskpool/cycle.ts:4-8` | 防御性纯函数，依赖未来可变时成唯一防线 |
+| `lock.ts:19` 的 `.catch(() => undefined)` | `lock.ts:16-18` | tail 链归纳证明永不 reject；**已推翻 TD-AGENT-104 对它的登记**（见 TD-TEAM-N24） |
+| J-Space / metacognitive / bridge-reencode 开关默认关 | `CLAUDE.md:166,168,169` | 拥有者明确、默认关是设计 |
+| metacognitive 的 reconcile / escalate deferred | `openspec/.../metacognitive-control/design.md:37` | 明确分期裁剪，无半成品残留（已核实） |
+| clarity-gate 的 fail-open 降级 | `clarity.ts:13-15`、`CLAUDE.md:151` | 「诚实降级」信条；三条路径都不中断、有 `[WORKFLOW_DEGRADED]` 标记、有直测 |
+| `verifyVerdictEnvelope` / `reasoning/` 仅测试消费 | `evaluate/consensus.ts:156-158` | 显式注释「预留离线审计 API，宿主接线前不参与运行时判定」 |
+| triz 在 `execute` 内读打包数据 | `triz.ts:8-10`、`CLAUDE.md:170` | 刻意设计并已记录；仅契约口径待标注（见 TD-METHODOLOGY-N06） |
+| 专利链路各路 fail-open（反馈反查落空、`derivedFrom` 声明缺失、judge 失败票） | `2026-08-30-patent-audit-fixes.md:32,40` | 「诚实降级」是显式设计信条 |
+| 26 条 structural block 全降级 warn/log | `rules/README.md:232` | 误报率论证充分 |
+| `tech-investigator` 缺 `"legal"` 域 | `docs/team-role-mapping.md:48` | M3 spec 逐字批准 |
+| 续算「首期不续算」三类形态 | `docs/cross-process-retry-resume-plan.md:128,133` | 明确的分期裁剪 |
+| `close_project_sessions` 未实现即显式报错 | `CLAUDE.md:173` | 显式失败优于静默降级 |
+| WS 无 Origin 校验 / token 非常量时间 | `performance-review.md:163` | 本地 loopback 场景明确接受的风险 |
+| team 集成 spec 靠 `--test-force-exit` 收尾 | `code-refinement-plan.md:609` | 官方脚本已知形态 |
+| Linux 桌面不维护 | `CLAUDE.md:21` | 明确范围裁剪 |
+| `ui/server` 双后端保留、不收敛 | `technical-debt-report.md:335` | 2026-08-14 明决策 |
+
+---
+
+## 34. §31–§32 的修复排期建议
+
+**立即可做（S 级、低爆炸半径、消除「错误决策」风险面）**
+1. **TD-PROCGATE-001**（PR 门禁恒真）—— 一行剥离注释 + 一条负控制，**当前所有 PR 的追溯保证都是假的**。
+2. **TD-AGENT-N01**（请求对拍器恒真）—— 观测性缺陷属「可致错误决策」，与上条同类。
+3. **TD-METHODOLOGY-N05**（triz 数据 IO 无 fail-safe）—— **唯一会打断主链路**的项（一个辅助提示能让整轮请求失败）。
+4. **TD-TEAM-N01/N02/N03 + TD-AGENT-N02 + TD-SESSION-N08/N09**（同源文档漂移，可合成一个 docs commit）—— 五条都指向同一根源：**2026-09 的 M3 写缓冲与第二次 AgentLoop 拆解落地后，`CLAUDE.md` 与 plan 文档未同步迭代**。`CLAUDE.md` 现有 **5 处**与实际不符，作为第一事实源这是系统性风险。
+
+**短期（M 级，需排期）**
+5. **TD-METRIC-001/002/003**（度量口径与基线）—— 仪表盘不可信会让**后续所有**排期决策失真，杠杆高于任何单个实现债务。与 `check:event-matrix` 同批做生成式门禁。
+6. **TD-GATEWAY-N01**（协议版本无门禁）—— 与上条同属「门禁缺失」，可合并为一个生成式门禁专项。
+7. **TD-TEAM-N06**（通用层耦合专利域）—— 抽一个接口即可，但越晚改成本越高（§31.1 结论）。
+8. **TD-PROCGATE-003/004**（债务模板缺 scope 节 / stale 与分诊抵销）—— 直接影响本批债务 issue 自身的可管理性。
+
+**中期（P2 专项）**
+9. **TD-TEAM-N09/N10**（黑板与面板快照的缓存/批量查询）、**TD-PATENT-N22/N23/N24**（原子写与索引存储的复制）、**TD-SESSION-N10**（启动扫描全量读）—— 同属「新增期扩张留下的一致性税」，收敛点清晰、爆炸半径小。
+10. **TD-PROCGATE-005/006/007**（scope 词表统一、枚举门禁、规范自查）。
+
+**持续**
+11. 本批 §31 共 **45 条**新条目，其中 P2 以上须在下个季度复扫时逐条核对进展；`README.md` §如何保持新鲜 建议补一条「归档 change 的 tasks.md 随交付回填」（TD-WORKSPACE-N04 的直接教训）。
+
+### 35. 本批复扫对应的 issue（2026-09-14 创建）
+
+> 全部挂在里程碑 **v0.2.0** 下（仓库首个里程碑，此前零 milestone）。类型/优先级标签为创建时携带，`scope:*` 与 `status: triage` 由 `issue-triage.yml` 从正文「## 影响 scope」节**自动打上**。
+>
+> ⚠️ **其中 12 条落在 `scope:other`**（#332–#341、#348、#351、#353、#354、#359、#365）——因为 `ci`/`scripts`/`desktop`/`ui-server`/`adapters` 等**没有对应的 `scope:` 标签**，即 §32 `TD-PROCGATE-005` 待解决的问题。
+
+| 台账条目 | issue | 摘要 |
+|---|---|---|
+| TD-PROCGATE-001 | **#332** | PR 追溯门禁被模板注释恒真通过 |
+| TD-PROCGATE-002 | **#333** | `test:pr-tooling` 无挂载点，负控制测试从不执行 |
+| TD-PROCGATE-005 | **#334** | scope 分类器与规范三处不符 |
+| TD-PROCGATE-003 | **#335** | tech_debt 模板补「影响 scope」节 |
+| TD-PROCGATE-004 | **#336** | stale 豁免与分诊目标抵销 |
+| TD-PROCGATE-006 | **#337** | priority/status 取值枚举门禁 |
+| TD-PROCGATE-007 | **#338** | 议题治理规范自身文档漂移 |
+| TD-METRIC-001 | **#339** | measure-techdebt 漏统计 `as unknown as`（329 处） |
+| TD-METRIC-002 | **#340** | 债务指标基线加新鲜度校验 |
+| TD-METRIC-003 | **#341** | 指标口径缺口（ui/server、vendored 子包） |
+| TD-AGENT-102 | **#342** | TurnRunner.run() 三条失败路径重复样板 |
+| TD-ROUTER-001 + 002（+003） | **#343** | RouterRuntime 巨型闭包（同文件同根因，已合并） |
+| TD-SESSION-N01 | **#344** | WorkspaceLedgerStore.read() 每轮全量重扫 |
+| TD-PATENT-N01 | **#345** | graph/ 与 workflow/ 双轨重复且已漂移 |
+| TD-ALWAYSON-N01 | **#346** | DiscoveryFire god class |
+| TD-PILOT-N02（+N01） | **#347** | Pilot 校验错误走两套通道 |
+| TD-DESKTOP-N01 | **#348** | 运行时布局符号链接接线三处重复 |
+| TD-DESKTOP-N02 | **#349** | Windows 打包缺 `dist/assets`、`skills`、`rules` |
+| TD-TEAM-N01/N02/N03 + TD-AGENT-N02 + TD-SESSION-N08/N09 | **#350** | **`CLAUDE.md` 五处陈述与代码实际不符**（一条汇总） |
+| 13 个 SessionMapper 空壳 | **#351** | 逐字相同的 10 行薄壳收敛为工厂 |
+| TD-PATENT-N23 + N24 | **#352** | index-store 同构复制（85/179 行）+ 队列无淘汰 |
+| TD-CATCH-001 残留 + TD-TEAM-N11 + TD-SESSION-N12 | **#353** | 37 处无注释无参 catch |
+| 端口/超时散落 | **#354** | 5 个渠道端口 + 43 处内联 setTimeout |
+| TD-RULE-N01 | **#355** | rule_check(pack) 缓存失效键覆盖不全 |
+| `ui/server` P0 级候选（文档登记未跟踪） | **#356** | 需先复核再拆分，勿原样搬运 |
+| `rules/README` 遗留 3 项 | **#357** | 规则资产语义增强未排期 |
+| TD-PATENT-N01（验证面） | **#358** | 双链路缺跨链路一致性 fixture |
+| TD-WORKSPACE-N04 + TD-TEAM-N25 + TD-PATENT-N20 | **#359** | 计划文档悬空勾选批量回收 |
+| TD-AGENT-N01 | **#360** | request_header 对拍器恒真 |
+| TD-METHODOLOGY-N05 | **#361** | triz 数据 IO 无 fail-safe（会打断主轮） |
+| TD-GATEWAY-N01 | **#362** | 协议版本无门禁 |
+| TD-TEAM-N06 | **#363** | 通用编排层反向耦合专利域 |
+| TD-WORKSPACE-N02 | **#364** | 账本在 transcript 超 50MB 时静默消失 |
+| （`docs/code-refinement-plan.md:573`） | **#365** | `/api/commands/load` 路径校验放行 `$HOME` 任意文件 |
+| 知识系统 A1–A8（`knowledge-system-report.md`） | **#366** | 诊断恒报 ready 但实际未装配 |
