@@ -245,12 +245,14 @@ test("已产出内容后不再 fallback，但会补出带 provider/model 的终�
   assert.equal(executeFailed.model, "primary-model");
 
   const final = events.at(-1);
-  assert.ok(final?.type === "error");
+  if (final?.type !== "error") {
+    assert.fail(`expected the last event to be an error, got ${JSON.stringify(final)}`);
+  }
   assert.equal(final.error.provider, "main");
   assert.equal(final.error.model, "primary-model");
   assert.equal(h.stats.length, 1, "失败也要落一条统计");
   assert.equal(h.stats[0].model, "primary-model");
-  assert.ok(h.stats[0].usage.totalTokens > 0, "上游死在 usage 事件之前时，用量由 token 估算补齐（不是 0）");
+  assert.ok((h.stats[0].usage.totalTokens ?? 0) > 0, "上游死在 usage 事件之前时，用量由 token 估算补齐（不是 0）");
 });
 
 test("无 fallback 候选时可重试错误走 transient retry 并在同一 attempt 内重试成功", async () => {
@@ -331,8 +333,11 @@ test("所有 attempt 都失败时回放最后一个 attempt 的非错误缓冲�
     events.map(event => event.type),
     ["message_start", "error", "message_start", "error"],
   );
-  assert.ok(events.at(-1)?.type === "error");
-  assert.equal(events.at(-1)?.error.code, "billing");
+  const last = events.at(-1);
+  if (last?.type !== "error") {
+    assert.fail(`expected the last event to be an error, got ${JSON.stringify(last)}`);
+  }
+  assert.equal(last.error.code, "billing");
 });
 
 test("模型不支持所需媒体时按降级请求重发，图片块被替换为占位文本", async () => {

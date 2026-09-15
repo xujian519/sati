@@ -56,7 +56,7 @@ type RuntimeOptions = {
 function makeRuntime(options: RuntimeOptions = {}): ModelRuntime {
   const imageModels = new Set(options.imageModels ?? []);
   return {
-    complete: async (request, opts) => {
+    complete: async (request: CanonicalModelRequest, opts?: { signal?: AbortSignal }) => {
       options.judgeCalls?.push(request);
       if (options.complete) {
         return options.complete(request, opts);
