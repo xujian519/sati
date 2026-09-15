@@ -7,9 +7,9 @@
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1071 / 185194 |
+| src TS 文件 / 行数 | 1071 / 185017 |
 | src JS 文件 | 0 |
-| tests 文件 | 531 |
+| tests 文件 | 532 |
 | ui/src 文件 / 行数 | 465 / 82807 |
 | ui/server 文件 / 行数 | 105 / 31483 |
 
@@ -74,7 +74,6 @@
 | `ui/src/components/chat-v2/MessageRowV2.tsx` | `MessageRowV2` | 429 | function |
 | `ui/src/components/code-editor/view/subcomponents/DocxBuiltinPreview.tsx` | `DocxBuiltinPreview` | 421 | function |
 | `src/gateway/client/eventMapping.ts` | `mapAgentEventForTurn` | 416 | function |
-| `src/always-on/runtime/DiscoveryFire.ts` | `run` | 414 | method |
 | `src/router/RouterRuntime.ts` | `execute` | 411 | function |
 | `ui/src/components/chat-v2/processGrouping.test.ts` | `(anonymous)` | 409 | arrow |
 | `ui/src/components/code-editor/view/subcomponents/SpreadsheetInteractivePreview.tsx` | `SpreadsheetInteractivePreview` | 407 | function |
@@ -125,7 +124,6 @@
 | `src/adapters/channel/feishu/FeishuChannel.ts` | 1337 |
 | `ui/src/components/app-shell/SidebarV2.tsx` | 1310 |
 | `ui/src/components/chat-v2/processGrouping.ts` | 1294 |
-| `src/always-on/runtime/DiscoveryFire.ts` | 1256 |
 | `src/router/RouterRuntime.ts` | 1230 |
 | `ui/src/components/chat/hooks/useChatSessionState.ts` | 1171 |
 | `src/context/memory/edgeclaw-memory-core/src/core/file-memory.ts` | 1139 |
@@ -136,6 +134,7 @@
 | `ui/src/components/main-content/view/MainContent.tsx` | 1111 |
 | `ui/src/components/chat-v2/ComposerV2.tsx` | 1109 |
 | `ui/server/routes/config.js` | 1100 |
+| `src/model/streaming/streamModel.ts` | 1085 |
 
 ## 测试覆盖（tests/<模块> 文件数）
 
@@ -149,8 +148,8 @@
 | gateway | 29 |
 | model | 27 |
 | session | 27 |
+| always-on | 14 |
 | router | 14 |
-| always-on | 13 |
 | mcp | 13 |
 | cron | 11 |
 | extension | 11 |
@@ -174,7 +173,7 @@
 | runtime | 1 |
 | status | 1 |
 
-| **合计** | **514** |
+| **合计** | **515** |
 
 ## i18n en/zh-CN 对齐
 
