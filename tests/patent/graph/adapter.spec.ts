@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  APPROVAL_GRANTED_KEY,
   GraphBuilder,
   InterruptStageError,
   StageHandlerRegistry,
@@ -315,16 +316,102 @@ test("manifestToGraph: disclosure 全流程（放行审批）与 runWorkflow 输
   const graph = manifestToGraph(patentDisclosureManifest, { handlers, atoms: globalAtomRegistry, executor, provider });
   const gr = await graph.run({ ...ctx });
   assert.equal(gr.completed, true);
+  // 真实差异只剩**降级通道**：manifest 路径的空输出阶段进 degradedSteps（completed=false），
+  // 图路径的降级是 state 级标记（degradationSummary），故此处为空。
   assert.deepEqual(gr.degraded, []);
 
-  // 等价性对比：review_gate 除外（runWorkflow 空输出→degraded，图无此概念）。
+  // 输出本身两路径必须一致——**包括审批门阶段**（本用例未放行，故两侧都是空输出；
+  // 已放行场景见下一条用例：图路径补齐占位后同样为 APPROVED，#345）。
   for (const stage of patentDisclosureManifest.stages) {
-    if (stage.id === "review_gate") continue;
     const wfOutput = wf.stages.find(s => s.stageId === stage.id)?.output;
     assert.equal(gr.state[stage.id], wfOutput, `阶段 ${stage.id} 输出对齐`);
   }
+  assert.equal(gr.state.review_gate, "", "未放行的审批门：两路径均为空输出");
+  assert.equal(wf.stages.find(s => s.stageId === "review_gate")?.output, "");
   // consistency 走 reasoning 原子（LLM 产出 JSON），非 executor 透传。
   assert.equal(gr.state.consistency, JSON.stringify({ consistent: true, issues: [] }));
+});
+
+test("manifestToGraph: 已放行审批门——两路径占位输出一致（#345 漂移修复）", async () => {
+  const manifest: WorkflowManifest = {
+    id: "equiv_grant",
+    name: "放行等价",
+    caseType: "test",
+    stages: [
+      {
+        id: "extract_features",
+        strategy: "chain",
+        description: "提取",
+        atom: "extract",
+        params: { extraction_type: "提取技术特征", output_key: "features" },
+      },
+      { id: "gate", strategy: "chain", description: "审批门", atom: "approval-gate" },
+      { id: "report", strategy: "chain", description: "报告" },
+    ],
+  };
+  const executor = async (stage: WorkflowStage): Promise<string> => `[${stage.id}] 完成`;
+  // 对齐 patent_workflow_run 的 workflowCtx 映射：input/text/source_text/extraction_input 同一份输入。
+  const input = "一种自动化分拣装置";
+  const ctx = { input, text: input, source_text: input, extraction_input: input };
+
+  // manifest 路径：放行集合按 stageId 粒度给（approveStageIds / resume 后的 approvalGrants）。
+  const wf = await runWorkflow(manifest, ctx, executor, {
+    handlers: globalStageHandlerRegistry,
+    atoms: globalAtomRegistry,
+    provider,
+    approvalGrants: ["gate"],
+  });
+  // 图路径：放行标记在 state（grantApproval 写检查点后 resume 的执行态）。
+  const graph = manifestToGraph(manifest, {
+    handlers: globalStageHandlerRegistry,
+    atoms: globalAtomRegistry,
+    provider,
+    executor,
+  });
+  const gr = await graph.run({ ...ctx, [APPROVAL_GRANTED_KEY]: true });
+
+  assert.equal(wf.stages.find(s => s.stageId === "gate")?.output, "APPROVED");
+  // 修复前此处是 ""——同一 manifest 两条链路 state 不同，正是本 issue 的漂移点。
+  assert.equal(gr.state.gate, "APPROVED", "图路径已放行审批门同样补占位输出");
+  assert.equal(wf.completed, true);
+  assert.equal(gr.completed, true);
+  assert.deepEqual(wf.degradedSteps, [], "放行不是降级：manifest 路径不标 degraded");
+  assert.deepEqual(gr.degraded, [], "放行不是降级：图路径无降级标记");
+  // 其余阶段输出照旧对齐（占位分支不得影响主输出键解析）。
+  for (const stage of manifest.stages) {
+    assert.equal(gr.state[stage.id], wf.stages.find(s => s.stageId === stage.id)?.output, `阶段 ${stage.id}`);
+  }
+  assert.deepEqual(gr.state.features, ["特征A", "特征B"]);
+});
+
+test("manifestToGraph: 无 handler 无 executor 的阶段——图路径走降级通道（#345 死键修复）", async () => {
+  const manifest: WorkflowManifest = {
+    id: "no_executable",
+    name: "无执行体阶段",
+    caseType: "test",
+    stages: [
+      { id: "preprocess", strategy: "chain", description: "预处理" },
+      { id: "report", strategy: "chain", description: "报告" },
+    ],
+  };
+  // 不给 executor：两个阶段都既无 handler 也无 executor（该阶段没有可执行体）。
+  const graph = manifestToGraph(manifest);
+  const gr = await graph.run({});
+
+  // 修复前写的是 `<id>__degraded`——全仓无读取者，等价于「静默不标记」。
+  assert.equal(gr.state.preprocess__degraded, undefined, "旧死键不再写入");
+  const marks = gr.degraded.filter(m => m.message.includes("preprocess"));
+  assert.equal(marks.length, 1, "阶段未执行必须在引擎降级通道里可见");
+  assert.equal(marks[0]?.reason, "not_implemented");
+  assert.equal(marks[0]?.severity, "critical");
+  assert.equal(gr.state.preprocess, "");
+  // 降级但未中断：引擎的 completed 不看降级标记（残留差异，见决策记录）。
+  assert.equal(gr.completed, true);
+
+  // manifest 路径同一 manifest：标记在 degradedSteps 上（对齐目标）。
+  const wf = await runWorkflow(manifest, {});
+  assert.deepEqual(wf.degradedSteps, ["preprocess", "report"]);
+  assert.equal(wf.completed, false);
 });
 
 test("manifestToGraph: approval-gate 中断（两路径一致暂停）", async () => {

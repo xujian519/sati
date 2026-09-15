@@ -7,16 +7,26 @@
  * - manifestToGraph：现有 WorkflowManifest（线性阶段 + retry 信号回退）转为图，
  *   行为与 runWorkflow 尽力等价（重试/降级文本等已知差异见 README）——retry
  *   回退转条件边（受控循环），approval-gate 中断转 GraphInterruptError（引擎暂停）。
+ * - 阶段输出解析（主输出键 / 空输出兜底 / 审批门占位）与回退清理**不是本文件自有语义**：
+ *   单一实现在 ../workflow/stage-primitives.js，与 manifest 路径共用（#345）。
  */
 
 import type { WorkflowContext, WorkflowManifest, WorkflowStage } from "../workflow.js";
 import { validateWorkflowManifest } from "../workflow.js";
 import { signalMatches } from "../workflow/signal.js";
-import type { AtomRegistry, StageHandler, StageHandlerRegistry, StageProvider } from "../atoms/index.js";
+import { clearStageOutputs, isApprovalGateStage, resolveStageOutput } from "../workflow/stage-primitives.js";
+import {
+  APPROVAL_GRANTED_KEY,
+  type AtomRegistry,
+  type StageHandler,
+  type StageHandlerRegistry,
+  type StageProvider,
+} from "../atoms/index.js";
 import { globalAtomRegistry, globalStageHandlerRegistry, isInterruptStageError } from "../atoms/index.js";
 import type { EdgeRouter, GraphNode, GraphState, StateDelta } from "./types.js";
 import { GRAPH_END, GraphEngineError, GraphInterruptError } from "./types.js";
 import { GraphBuilder, type CompiledGraph } from "./engine.js";
+import { markDegraded } from "./degradation.js";
 import { getStateString } from "./state.js";
 
 // ---------------------------------------------------------------------------
@@ -116,22 +126,30 @@ function makeStageNode(
     if (handler !== undefined) {
       const segment = await runStageHandler(handler, execState, deps.provider ?? provider);
       Object.assign(delta, segment);
-      const raw = mainKey !== undefined ? segment[mainKey] : undefined;
-      if (typeof raw === "string") {
-        output = raw;
-      } else if (raw === undefined) {
-        output = "";
-      } else {
-        output = JSON.stringify(raw, null, 2);
-      }
-      if (output.trim().length === 0) output = String(execState[stage.id] ?? "");
+      // 放行判据与 handler 所见执行态同源（ApprovalGateHandler 内部同样判
+      // state[APPROVAL_GRANTED_KEY]），故「已放行」与「补占位输出」恒同时成立。
+      // #345 前缺此分支：同一 manifest 的已批准审批门在两条链路下 state 不同
+      // （图路径 ""，manifest 路径 "APPROVED"）。
+      const approvedGate = isApprovalGateStage(handler) && Boolean(execState[APPROVAL_GRANTED_KEY]);
+      // 主输出键解析 / 空输出兜底 / 审批门占位 = 与 manifest 路径共用单一实现。
+      output = resolveStageOutput({ segment, mainKey, fallbackValue: execState[stage.id], approvedGate });
     } else if (deps.executor !== undefined) {
       output = (await deps.executor(stage, execState as WorkflowContext)) ?? "";
     }
     delta[stage.id] = output;
     if (output.trim().length === 0 && handler === undefined && deps.executor === undefined) {
-      // 无 handler 无 executor：降级标记（对齐 runWorkflow 的 degraded 阶段）。
-      delta[`${stage.id}__degraded`] = true;
+      // 无 handler 无 executor：该阶段根本没有可执行体（≠ 执行失败），
+      // 走引擎**已消费**的降级通道，与 manifest 路径的 `degraded: true` 对齐。
+      // #345 前此处写 `<id>__degraded`，而该键全仓无读取者（`degradationSummary`
+      // 只认 `__degradation` 后缀）⇒ 无人值守路径上「阶段未执行」被静默报成成功。
+      markDegraded(
+        delta,
+        stage.id,
+        output,
+        "not_implemented",
+        `阶段 "${stage.id}" 无可执行体（无 handler 也无 executor）`,
+        "critical",
+      );
     }
     return delta;
   };
@@ -160,8 +178,8 @@ function makeRetryRouter(
   // 防陈旧复用（对齐 runWorkflow 的 rewind 清理语义）。
   const rewindIndex = stages.findIndex(s => s.id === rewindTo);
   const currentIndex = stages.findIndex(s => s.id === stage.id);
-  const rewindedIds =
-    rewindIndex === -1 || currentIndex === -1 ? [stage.id] : stages.slice(rewindIndex, currentIndex + 1).map(s => s.id);
+  const rewindedStages =
+    rewindIndex === -1 || currentIndex === -1 ? [stage] : stages.slice(rewindIndex, currentIndex + 1);
 
   return async state => {
     const text = getStateString(state, stage.id, "");
@@ -176,15 +194,9 @@ function makeRetryRouter(
       return [nextId];
     }
     state[countKey] = count + 1;
-    for (const id of rewindedIds) {
-      delete (state as GraphState)[id];
-      const atom = stages.find(s => s.id === id)?.atom;
-      if (atom !== undefined) {
-        for (const key of atoms.lookup(atom)?.outputSchema ?? []) {
-          delete (state as GraphState)[key];
-        }
-      }
-    }
+    // 清理被回退阶段的 state 键与其 atom 输出键（防陈旧复用）——与 manifest 路径
+    // 共用单一实现；范围差异（此处清到当前阶段为止）见该函数的模块注释。
+    clearStageOutputs({ state, stages: rewindedStages, atoms });
     return [rewindTo];
   };
 }

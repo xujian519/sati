@@ -432,11 +432,14 @@
 **模块概况**：约 147 文件 / 20.5K 行，最大业务域；`tests/patent` 95 文件覆盖最深，故本节聚焦**代码结构/重复/可观测性/性能**债（省略"缺测试"类）。
 
 - **TD-PATENT-N01** · `graph/` 与 `workflow/` 双轨实现重复（阶段执行/回退清理/降级语义两套并存）
-  - 类别：D · 严重级：P1 · 工作量：M · 状态：new
-  - 位置：`src/patent/graph/adapter.ts:104`（`makeStageNode`/`makeRetryRouter`）
-  - 影响：同一「运行一个阶段」语义在主输出键解析/retry 回退清 state+atom 键/降级文本在 graph 与 workflow 两条路径各实现一遍，改一处易漏另一处。建议：收敛到共用执行原语。
-  - 证据：`graph/adapter.ts:110-121`↔`workflow/executor.ts:78-86`；`:172-183`↔`workflow.ts:313-328`；`:126`↔`workflow/executor.ts:102-109`。
-  - **2026-08-27 复核补充**：双轨在导入面上具体化为跨模块循环边——`patent/workflow-dag.ts:15` 值引 `../workflow/index.js` 的 `FlowGraph`（类定义在 `src/workflow/runtime/DagEngine.ts:23`）；且 `manifestToFlowGraph` 在 src 内除专利 barrel re-export 外零消费方（校验路径双重未接线）。若归一选择保留 workflow FlowGraph，则 patent 应深引 `../workflow/runtime/DagEngine.js` 以免传递性抱住含 agent 适配器的整个 workflow barrel。详见 TD-BOUND-003 SCC-1 边 E2。
+  - 类别：D · 严重级：P1 · 工作量：M · 状态：**done（已修复 2026-09-15，PR #382）**
+  - 修复：抽出 `src/patent/workflow/stage-primitives.ts` 作为**唯一实现**——`resolveStageOutput`（主输出键解析 / 非字符串 JSON 序列化 / 空输出回退 `state[stage.id]` / 已放行审批门占位 `APPROVED`）、`clearStageOutputs`（删 stage-id 键 + atom `outputSchema` 全部键）、`isApprovalGateStage`（容空包装）。三处（`graph/adapter.ts` 的 `makeStageNode`/`makeRetryRouter`、`workflow/executor.ts`、`workflow.ts`）改为调用，差异参数化（兜底取值源、清理范围）而非强行归一。**漂移随之消除**：图路径原缺审批门占位分支 ⇒ 同一 manifest 两条链路 `state[gateStageId]` 不同（`""` vs `"APPROVED"`），现两路径一致。
+  - **口径修正（核码）**：① issue 称「图路径不写占位 → 可能被标记 degraded」不成立——图路径降级只来自 `degradationSummary`（`<key>__degradation`），空输出不被标记，真实差异仅是输出文本；② issue 未列的**第三处漂移**：`makeStageNode` 的 `delta[`<id>__degraded`] = true` 是写而无人读的死键（`degradationSummary` 只认 `__degradation` 后缀），使无人值守路径上「阶段无可执行体」被静默报成成功；`DegradationReason` 里早已声明 `not_implemented` 却零生产者。已改为走引擎已消费的降级通道（`markDegraded(..., "not_implemented", ..., "critical")`），与 manifest 路径 `degraded: true` 判定同向。
+  - 证据：新增 `tests/patent/workflow/stage-primitives.spec.ts`（14 例，直接钉住两个原语的各输入形态）+ `tests/patent/graph/adapter.spec.ts` 新增 2 例跨链路用例（已放行审批门两路径输出/降级判定一致；无执行体阶段走降级通道）；**负控制**：摘掉图路径放行判据 → 前者转红；把死键写回 → 后者转红。`tests/patent/**` 1090 例全绿。
+  - 决策记录：`docs/notes/implemented/2026-09-15-patent-stage-primitives.md`
+  - 位置：`src/patent/graph/adapter.ts`（`makeStageNode`/`makeRetryRouter`）；`workflow/executor.ts`；`workflow.ts`
+  - **残留（已写进 `src/patent/graph/README.md` 的「已知差异」）**：错误重试的表示（`[WORKFLOW_DEGRADED]` 文本 vs `node_failed` 标记）、阶段级 `degraded`/`completed` 通道（图路径 `completed` 不看降级标记）、executor 分支是否写 `state[stage.id]`。**新发现待立项**：图路径放行是全局 state 键（永不清理）⇒ 一次 `grantApproval` 会让同一 run 内后续所有审批门静默放行；`patent_drafting_v1` 有六门，经 `manifestToGraph` 跑时需复核。
+  - **2026-08-27 复核补充**：双轨在导入面上具体化为跨模块循环边——`patent/workflow-dag.ts:15` 值引 `../workflow/index.js` 的 `FlowGraph`（类定义在 `src/workflow/runtime/DagEngine.ts:23`）；且 `manifestToFlowGraph` 在 src 内除专利 barrel re-export 外零消费方（校验路径双重未接线）。若归一选择保留 workflow FlowGraph，则 patent 应深引 `../workflow/runtime/DagEngine.js` 以免传递性抱住含 agent 适配器的整个 workflow barrel。详见 TD-BOUND-003 SCC-1 边 E2。**（该部分已随 #150 闭环：`src/workflow/` 与 `patent/workflow-dag.ts` 均已删除，此处仅存历史。）**
 - **TD-PATENT-N02** · `evidence/engine.ts` 的 `parseRuleSet` ~87 行手写 YAML→类型解析器
   - 类别：B · 严重级：P2 · 工作量：S · 状态：new
   - 位置：`src/patent/evidence/engine.ts:454-541`

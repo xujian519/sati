@@ -32,6 +32,7 @@ import {
   type WorkflowStageResult,
 } from "./workflow/types.js";
 import { signalFor, signalMatches } from "./workflow/signal.js";
+import { clearStageOutputs } from "./workflow/stage-primitives.js";
 import { buildDefaultWorkerMap, runStageOnce } from "./workflow/executor.js";
 import { restoreFromCheckpoint, stageToCheckpointStage } from "./workflow/checkpoint.js";
 import type { WorkerExecutionRecord, WorkerOutputValidation } from "./worker-contract.js";
@@ -321,19 +322,11 @@ export async function runWorkflow(
           continue;
         }
         // 覆盖从 rewindTo 起的结果与 state 键（防陈旧输出被兜底复用），回退重执行。
+        // 清理规则（含原子输出键）与图路径共用单一实现，见 ./workflow/stage-primitives.js；
+        // 范围差异（此处清到清单末尾）是该函数的参数，见其模块注释。
         rewindCounts.set(stage.id, rewindCount);
         results.splice(rewindIndex);
-        for (const rewinded of manifest.stages.slice(rewindIndex)) {
-          delete state[rewinded.id];
-          // 清理原子输出键（2026-08 修复）：只删 stage-id 键时，重跑中某路解析
-          // 失败（如 extract 非 JSON 保留原文）会残留旧一代数组，下游 merge
-          // 混用两代提取结果且无降级告警。
-          if (rewinded.atom !== undefined) {
-            for (const key of atoms.lookup(rewinded.atom)?.outputSchema ?? []) {
-              delete state[key];
-            }
-          }
-        }
+        clearStageOutputs({ state, stages: manifest.stages.slice(rewindIndex), atoms });
         index = rewindIndex;
         continue;
       }
