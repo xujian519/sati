@@ -521,6 +521,26 @@ describe("DiscoveryFire 共用管线：可观测契约", () => {
     assert.equal(h.recorder.writes.length, 1);
   });
 
+  it("关闭会话失败要留痕：每个阶段各记一条 warn（不再静默吞掉）", async () => {
+    const h = setup();
+    await h.fire.run({ runId: "run-seed", startedAt: NOW });
+    h.setCloseSessionFails(true);
+    h.reset();
+
+    await h.fire.rerunPlan({ planId: PLAN_ID, runId: "run-warn", startedAt: NOW });
+
+    assert.deepEqual(h.recorder.warns, [
+      {
+        message: "always-on session close failed",
+        data: { sessionKey: `always-on/execute:project=${h.projectKey}:run=run-warn`, error: "close failed" },
+      },
+      {
+        message: "always-on session close failed",
+        data: { sessionKey: `always-on/report:project=${h.projectKey}:run=run-warn`, error: "close failed" },
+      },
+    ]);
+  });
+
   it("run 与 rerunPlan 对同一计划等价：提示词 / 事件 / 落盘调用 / 返回值", async () => {
     const h = setup();
 

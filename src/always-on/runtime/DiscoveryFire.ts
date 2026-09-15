@@ -307,7 +307,7 @@ export class DiscoveryFire {
       };
     } finally {
       this.deps.sessionOverrides.delete(sessionKey);
-      await this.deps.gateway.closeSession({ sessionKey, reason: "always-on/done" }).catch(() => undefined);
+      await this.closeSessionQuietly(sessionKey);
     }
   }
 
@@ -456,9 +456,7 @@ export class DiscoveryFire {
     } finally {
       this.deps.runContexts.unregister(discoverySessionKey);
       this.deps.sessionOverrides.delete(discoverySessionKey);
-      await this.deps.gateway
-        .closeSession({ sessionKey: discoverySessionKey, reason: "always-on/done" })
-        .catch(() => undefined);
+      await this.closeSessionQuietly(discoverySessionKey);
     }
 
     const discoveryError = pickFirstError(discoveryEvents);
@@ -641,9 +639,7 @@ export class DiscoveryFire {
     } finally {
       this.deps.runContexts.unregister(executionSessionKey);
       this.deps.sessionOverrides.delete(executionSessionKey);
-      await this.deps.gateway
-        .closeSession({ sessionKey: executionSessionKey, reason: "always-on/done" })
-        .catch(() => undefined);
+      await this.closeSessionQuietly(executionSessionKey);
     }
 
     if (executionError) {
@@ -742,9 +738,7 @@ export class DiscoveryFire {
     } finally {
       this.deps.runContexts.unregister(reportSessionKey);
       this.deps.sessionOverrides.delete(reportSessionKey);
-      await this.deps.gateway
-        .closeSession({ sessionKey: reportSessionKey, reason: "always-on/done" })
-        .catch(() => undefined);
+      await this.closeSessionQuietly(reportSessionKey);
     }
 
     const finishedAt = this.deps.now();
@@ -893,9 +887,7 @@ export class DiscoveryFire {
     } finally {
       this.deps.runContexts.unregister(workspaceSessionKey);
       this.deps.sessionOverrides.delete(workspaceSessionKey);
-      await this.deps.gateway
-        .closeSession({ sessionKey: workspaceSessionKey, reason: "always-on/done" })
-        .catch(() => undefined);
+      await this.closeSessionQuietly(workspaceSessionKey);
     }
 
     const cycleId = this.deps.uuid();
@@ -934,6 +926,25 @@ export class DiscoveryFire {
         `workspace cwd ${workspace.cwd} is outside the configured Always-On workspace bases.`,
       );
     }
+  }
+
+  /**
+   * 关闭常驻会话（清理路径）。失败只留日志、不上抛。
+   *
+   * 会话已无用时，关闭失败的后果是 fd / 会话状态残留——值得留痕，但不该中断
+   * 落盘流程，更不该掩盖该阶段真正的错误（清理在 finally 中，上抛会顶掉原始异常）。
+   * 本文件所有「关闭 always-on 会话」都收敛到这里，避免清理语义分叉。
+   *
+   * 注：`deps.logger` 自本方法起才有消费方——此前它被声明并被 AlwaysOnRuntime
+   * 注入，却在整个文件里零引用（死接线）。
+   */
+  private async closeSessionQuietly(sessionKey: string): Promise<void> {
+    await this.deps.gateway.closeSession({ sessionKey, reason: "always-on/done" }).catch(error => {
+      this.deps.logger?.warn("always-on session close failed", {
+        sessionKey,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
   }
 
   private async drainTurn(input: {
