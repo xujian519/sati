@@ -128,10 +128,13 @@
   - **2026-09-14 进展（孪生体已收口为独立模块）**：Pair A/B 的策略方法在早前轮次已抽取并三处复用；本日进一步外迁为 `src/agent/loop/recoveryStrategies.ts`（连同 `continueWithTransientPrompt`/`emitEmptyOutputTokenBump`），共享关系由模块结构而非注释保证，`TokenCapManager` 经 `TurnExitDeps` 显式注入。
   - **2026-09-14 结清**：`handleModelError` 本体（365 行）与 `tryReactiveRecover` 迁入 `src/agent/loop/modelErrorRecovery.ts`，按恢复路径拆为 9 个具名步骤函数（输出上限自愈 / 流中断恢复与耗尽 / 推理内容缺失重试 / 工具结果补齐 / JSON 自纠 / reactive 四决策 / 输出触顶 / 兜底错误面），由 `recoverFromModelError` 显式排序调度（`unhandled` 才落到下一步）；同批补 22 条直测（含「reactive 探针必须在工具结果补齐之后」的顺序锁定），AgentLoop.ts 2130 → 1740 行。决策见 `docs/notes/implemented/2026-09-14-agentloop-model-error-recovery-extraction.md`。
 - **TD-AGENT-102** · `TurnRunner.run()` ~197 行且失败路径重复
-  - 类别：A · 严重级：P1 · 工作量：M · 状态：new
-  - 位置：`src/agent/turn/TurnRunner.ts:149-345`
-  - 影响：转录失败/UserPromptSubmit 阻断/未请求模型三条失败路径各自重复「createErrorResult→recordErrorResult→finishArtifacts→recordFailureStatus→yield」样板。
-  - 建议：抽 `emitEarlyFailure(options, error, messages)` 统一收口。证据：`181-192`/`210-224`/`229-243` 三处结构重复。
+  - 类别：A · 严重级：P1 · 工作量：M · 状态：**done（已修复 2026-09-15，PR #381）**
+  - 修复：复核发现实际是**四条**路径（原记三条，漏了 `run()` 末尾的 loop 抛错 catch）且彼此**不同构**——差异点是「是否把结果落盘」「是否有产物采集器」「是否做 metadata 收尾」，故抽成带可选参数的私有异步生成器 `emitEarlyFailure({options,error,messages,finishArtifacts?,recordResult?,finalizeMetadata?})`，四处改为 `return yield* this.emitEarlyFailure({...})` 并只声明各自差异。**事件矩阵自证收口**：`turn_completed` / `turn_failed` 在 `TurnRunner.ts` 的生产点由各 4 个降为各 1 个，`file_artifacts` 由 4 降为 2。
+  - 一并拉齐的**顺序约定**：产物收尾恒在结果落盘之前（与成功路径一致，`tests/session/turn-file-artifacts.spec.ts:75-78` 断言的正是这条）；原「UserPromptSubmit 阻断」与「未请求模型」两条路径顺序是反的。事件流本身不变，变的只是转录条目顺序。
+  - 契约：`turn_result` / `turn_failed` / `turn_completed` 事件形状未变（`docs/event-producer-consumer.md` 已在同 PR 重新生成，逐事件生产/消费集合与位移前一致）。
+  - 测试：新增 `tests/session/turn-early-failure.spec.ts`（5 例，逐条锁定四条路径的差异点与顺序约定）；负控制——把 helper 内顺序对调后 3 例转红。
+  - 决策记录：`docs/notes/implemented/2026-09-15-turnrunner-early-failure-unification.md`
+  - 位置（结清时）：`src/agent/turn/TurnRunner.ts`
 - **TD-AGENT-103** · `assembleAndRecover` 272 行
   - 类别：A · 严重级：P2 · 工作量：M · 状态：**done（2026-09-14）**
   - 位置（结清时）：`src/agent/loop/responseAssembly.ts`（原 `AgentLoop.ts:577-777`）

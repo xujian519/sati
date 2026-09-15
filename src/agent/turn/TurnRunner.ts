@@ -152,6 +152,61 @@ export class TurnRunner {
     return this.outputGate.reject(index, sessionId, feedback);
   }
 
+  /**
+   * 提前终止的统一样板（#342）：构造错误结果 → 收尾产物 → [结果落盘] →
+   * 记录失败状态 → [metadata 收尾] → `turn_failed` → `turn_completed`。
+   *
+   * 四条失败路径（转录落盘失败 / `UserPromptSubmit` 阻断 / 未请求模型 / loop 抛错）
+   * 原先各自逐行抄了这套五步样板，改一处须记得改四处，且漏改一处就会让某条路径
+   * 产出形状不一致的 `turn_result`。新增第五种提前终止情形时，只需调用本方法并
+   * 声明差异点（见下方可选参数），不要再抄一遍。
+   *
+   * **顺序约定**：产物收尾恒在结果落盘**之前**，与成功路径一致
+   * （`tests/session/turn-file-artifacts.spec.ts` 断言的正是「转录里 `file_artifacts`
+   * 条目先于 `turn_result`」）。#342 收口前 `UserPromptSubmit` 阻断与「未请求模型」
+   * 两条路径是反的，本次一并对齐。
+   *
+   * **契约约束**：不得改动 `turn_result` / `turn_failed` / `turn_completed` 的事件形状
+   * （issue #342 契约项）。改形状须同步 `pnpm gen:event-matrix`。
+   */
+  private async *emitEarlyFailure(args: {
+    options: TurnRunnerOptions;
+    error: ReturnType<typeof agentError>;
+    /** 回填到 `TurnRunnerResult.messages`；各路径语义不同（首条路径只回原输入）。 */
+    messages: CanonicalMessage[];
+    /** 产物采集器收尾。转录落盘已失败时采集器尚未启动，故省略。 */
+    finishArtifacts?: (result: AgentTurnResult) => Promise<FileArtifact[]>;
+    /** 是否把错误结果落盘。转录写入已失败时省略：再写一次必然失败。 */
+    recordResult?: boolean;
+    /** metadata 收尾。早期路径不生成会话标题，故省略。 */
+    finalizeMetadata?: () => Promise<void>;
+  }): AsyncGenerator<AgentEvent, TurnRunnerResult, unknown> {
+    const { options, error } = args;
+    const result = this.createErrorResult(options, error);
+
+    const artifacts = args.finishArtifacts ? await args.finishArtifacts(result) : [];
+    if (artifacts.length > 0) {
+      yield { type: "file_artifacts", sessionId: options.sessionId, turnId: options.turnId, artifacts };
+    }
+
+    if (args.recordResult) {
+      await this.recordErrorResult(options, result);
+    }
+
+    const status = await this.recordTurnFailureStatus(options, error);
+    yield this.toAgentStatusEvent(options, status);
+
+    if (args.finalizeMetadata) {
+      // finalizeSessionMetadata 内部已逐项吞错，这里的兜底只为让本方法的契约
+      // 显式化：这套序列不得向上抛，否则 turn_failed / turn_completed 都发不出去。
+      await this.settleTailWrite("finalizeSessionMetadata", args.finalizeMetadata);
+    }
+
+    yield { type: "turn_failed", sessionId: options.sessionId, turnId: options.turnId, error };
+    yield { type: "turn_completed", sessionId: options.sessionId, turnId: options.turnId, result };
+    return { result, messages: args.messages };
+  }
+
   async *run(options: TurnRunnerOptions): AsyncGenerator<AgentEvent, TurnRunnerResult, unknown> {
     yield { type: "turn_started", sessionId: options.sessionId, turnId: options.turnId };
     // 外发脱敏：凭证类内容在进入 transcript / 模型可见消息之前替换（W1）。
@@ -169,12 +224,12 @@ export class TurnRunner {
       );
     } catch (error) {
       const agentTranscriptError = agentError("agent_transcript_error", "Failed to record accepted input.", error);
-      const result = this.createErrorResult(options, agentTranscriptError);
-      const status = await this.recordTurnFailureStatus(options, agentTranscriptError);
-      yield this.toAgentStatusEvent(options, status);
-      yield { type: "turn_failed", sessionId: options.sessionId, turnId: options.turnId, error: agentTranscriptError };
-      yield { type: "turn_completed", sessionId: options.sessionId, turnId: options.turnId, result };
-      return { result, messages: options.messages };
+      // 采集器尚未启动、结果也无法落盘、标题未生成：只上报失败。
+      return yield* this.emitEarlyFailure({
+        options,
+        error: agentTranscriptError,
+        messages: options.messages,
+      });
     }
 
     await this.persistListingPromptMetadata(options, accepted.messages);
@@ -230,17 +285,8 @@ export class TurnRunner {
     }
     if (userPromptHooks?.effects.some(effect => effect.type === "block")) {
       const error = agentError("agent_unsupported_feature", "UserPromptSubmit hook blocked model execution.");
-      const result = this.createErrorResult(options, error);
-      await this.recordErrorResult(options, result);
-      const artifacts = await finishArtifacts(result);
-      if (artifacts.length > 0) {
-        yield { type: "file_artifacts", sessionId: options.sessionId, turnId: options.turnId, artifacts };
-      }
-      const status = await this.recordTurnFailureStatus(options, error);
-      yield this.toAgentStatusEvent(options, status);
-      yield { type: "turn_failed", sessionId: options.sessionId, turnId: options.turnId, error };
-      yield { type: "turn_completed", sessionId: options.sessionId, turnId: options.turnId, result };
-      return { result, messages };
+      // 阻断发生在标题生成之前，故无 metadata 收尾。
+      return yield* this.emitEarlyFailure({ options, error, messages, finishArtifacts, recordResult: true });
     }
     messages.push(...(userPromptHooks?.messages ?? []));
 
@@ -251,18 +297,14 @@ export class TurnRunner {
         "agent_unsupported_feature",
         "Input was accepted but model execution was not requested.",
       );
-      const result = this.createErrorResult(options, error);
-      await this.recordErrorResult(options, result);
-      const artifacts = await finishArtifacts(result);
-      if (artifacts.length > 0) {
-        yield { type: "file_artifacts", sessionId: options.sessionId, turnId: options.turnId, artifacts };
-      }
-      const status = await this.recordTurnFailureStatus(options, error);
-      yield this.toAgentStatusEvent(options, status);
-      await this.finalizeSessionMetadata(options, sessionTitle);
-      yield { type: "turn_failed", sessionId: options.sessionId, turnId: options.turnId, error };
-      yield { type: "turn_completed", sessionId: options.sessionId, turnId: options.turnId, result };
-      return { result, messages };
+      return yield* this.emitEarlyFailure({
+        options,
+        error,
+        messages,
+        finishArtifacts,
+        recordResult: true,
+        finalizeMetadata: () => this.finalizeSessionMetadata(options, sessionTitle),
+      });
     }
 
     try {
@@ -352,20 +394,14 @@ export class TurnRunner {
       return runResult;
     } catch (error) {
       const normalized = normalizeAgentError(error);
-      const result = this.createErrorResult(options, normalized);
-      const artifacts = await finishArtifacts(result);
-      if (artifacts.length > 0) {
-        yield { type: "file_artifacts", sessionId: options.sessionId, turnId: options.turnId, artifacts };
-      }
-      await this.settleTailWrite("recordTurnResult", () =>
-        this.transcript.recordTurnResult(options.sessionId, options.turnId, result),
-      );
-      const status = await this.recordTurnFailureStatus(options, normalized);
-      yield this.toAgentStatusEvent(options, status);
-      await this.settleTailWrite("finalizeSessionMetadata", () => this.finalizeSessionMetadata(options, sessionTitle));
-      yield { type: "turn_failed", sessionId: options.sessionId, turnId: options.turnId, error: normalized };
-      yield { type: "turn_completed", sessionId: options.sessionId, turnId: options.turnId, result };
-      return { result, messages };
+      return yield* this.emitEarlyFailure({
+        options,
+        error: normalized,
+        messages,
+        finishArtifacts,
+        recordResult: true,
+        finalizeMetadata: () => this.finalizeSessionMetadata(options, sessionTitle),
+      });
     }
   }
 
