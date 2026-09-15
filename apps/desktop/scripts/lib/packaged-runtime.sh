@@ -4,6 +4,14 @@
 
 pd_runtime__fail() { echo "packaged-runtime: $*" >&2; exit 1; }
 
+# 供 pd_runtime_stage_links 汇报铺陈结果；logger 名称为空时静默。
+# （用 if 而非 `[[ ]] &&`：后者在条件为假时返回 1，碰到调用方的 set -e 会误中止。）
+pd_runtime__stage_note() {
+  local logger="$1"
+  shift
+  if [[ -n "$logger" ]]; then "$logger" "$*"; fi
+}
+
 # Mount DMG; sets PD_MOUNT_DIR and PD_APP. Caller must trap pd_runtime_unmount_dmg.
 pd_runtime_mount_dmg() {
   local dmg="$1"
@@ -61,25 +69,54 @@ pd_runtime_extract_bundles() {
   [[ -f "$CCM_DIR/dist/src/cli/sati.js" ]] || pd_runtime__fail "missing sati.js"
   [[ -f "$MEM_DIR/lib/index.js" ]] || pd_runtime__fail "missing memory-core lib"
 
-  if [[ -d "$CCM_DIR/dist" ]]; then
-    ln -sfn "$CCM_DIR/dist" "$SANDBOX/dist"
-    ln -sfn "$CCM_DIR/dist/src" "$SANDBOX/src"
+  pd_runtime_stage_links "$SANDBOX" "$CCM_DIR" "$MEM_DIR" 1
+}
+
+# 把解包出的三份 bundle 铺成运行时能解析的扁平布局（幂等）。
+#
+# 参数：$1=SANDBOX $2=CCM_DIR(sati-main) $3=MEM_DIR(sati-memory-core)
+#       $4=1 时额外建 $SANDBOX/edgeclaw-memory-core（见下「调用方差异」）
+#       $5=可选的日志函数名，被调用时收一条 "Symlinked …" 文案（verify-dmg.sh 用它计入 pass 数）
+#
+# 逐条链接对应 `apps/desktop/src/runtime-layout.ts` 的 stageRuntimeLayout()：
+#   SANDBOX/dist         → CCM/dist        ui/server 的 ../../dist/src/... 解析
+#   SANDBOX/src          → CCM/dist/src    同上（tsx→js 桥）
+#   SANDBOX/node_modules → CCM/node_modules ESM 向父目录找 hoisted 包
+#   CCM/node_modules/edgeclaw-memory-core → MEM  裸 `import "edgeclaw-memory-core"`
+#   SANDBOX/src/context/memory/edgeclaw-memory-core → MEM  memory.js 的相对导入
+# 最后一条要先删掉 tsc 产出的同名空壳目录，否则链接盖不上去。
+#
+# **调用方差异（刻意保留，勿顺手抹平）**：release-l2/l3 一直建根级
+# edgeclaw-memory-core，verify-dmg.sh 从来没建过。本布局下它是冗余的（解析走
+# SANDBOX/node_modules），但删/加都需 DMG/L2 实跑证据，故做成显式参数。
+pd_runtime_stage_links() {
+  local sandbox="$1" ccm="$2" mem="$3" root_memcore="${4:-0}" logger="${5:-}"
+
+  if [[ -d "$ccm/dist" ]]; then
+    ln -sfn "$ccm/dist" "$sandbox/dist"
+    ln -sfn "$ccm/dist/src" "$sandbox/src"
+    pd_runtime__stage_note "$logger" "Symlinked \$SANDBOX/dist → sati-main/dist"
+    pd_runtime__stage_note "$logger" "Symlinked \$SANDBOX/src → sati-main/dist/src (TSX→JS bridge)"
   fi
-  if [[ -d "$MEM_DIR" ]]; then
-    ln -sfn "$MEM_DIR" "$SANDBOX/edgeclaw-memory-core"
-    mkdir -p "$CCM_DIR/node_modules"
-    ln -sfn "$MEM_DIR" "$CCM_DIR/node_modules/edgeclaw-memory-core"
+  if [[ -d "$mem" ]]; then
+    if [[ "$root_memcore" == "1" ]]; then
+      ln -sfn "$mem" "$sandbox/edgeclaw-memory-core"
+    fi
+    mkdir -p "$ccm/node_modules"
+    ln -sfn "$mem" "$ccm/node_modules/edgeclaw-memory-core"
     # UI server routes/memory.js imports via relative path that resolves to
     # $SANDBOX/src/context/memory/edgeclaw-memory-core/lib/index.js.
     # Since $SANDBOX/src is a symlink to sati-main/dist/src, which may
     # contain a stub dir from tsc output, remove it before symlinking.
-    mkdir -p "$SANDBOX/src/context/memory"
-    local _ecmc="$SANDBOX/src/context/memory/edgeclaw-memory-core"
+    mkdir -p "$sandbox/src/context/memory"
+    local _ecmc="$sandbox/src/context/memory/edgeclaw-memory-core"
     if [[ -d "$_ecmc" && ! -L "$_ecmc" ]]; then rm -rf "$_ecmc"; fi
-    ln -sfn "$MEM_DIR" "$_ecmc"
+    ln -sfn "$mem" "$_ecmc"
+    pd_runtime__stage_note "$logger" "Symlinked \$SANDBOX/src/context/memory/edgeclaw-memory-core → sati-memory-core"
   fi
-  if [[ ! -e "$SANDBOX/node_modules" ]]; then
-    ln -sfn "$CCM_DIR/node_modules" "$SANDBOX/node_modules"
+  if [[ ! -e "$sandbox/node_modules" ]]; then
+    ln -sfn "$ccm/node_modules" "$sandbox/node_modules"
+    pd_runtime__stage_note "$logger" "Symlinked \$SANDBOX/node_modules → sati-main/node_modules (ESM resolve)"
   fi
 }
 

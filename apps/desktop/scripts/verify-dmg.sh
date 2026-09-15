@@ -35,6 +35,14 @@ warn() { WARN=$((WARN+1)); echo "  ${YEL}⚠${RST} $*"; }
 info() { echo "  ${DIM}$*${RST}"; }
 hdr()  { echo; echo "${BLD}${CYN}── $* ──${RST}"; }
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# 解包后的布局铺陈与 release-l2/l3 **共用** lib/packaged-runtime.sh 的
+# pd_runtime_stage_links；本脚本原先内联重写了一遍同样的符号链接接线，
+# 两处漂移会让「L1 校验通过」不再蕴含「L2 起的来」。
+# shellcheck source=lib/packaged-runtime.sh
+source "${SCRIPT_DIR}/lib/packaged-runtime.sh"
+
 echo "${BLD}Sati Desktop DMG Verification${RST}"
 echo "${DIM}DMG: ${DMG}${RST}"
 echo "${DIM}Mode: ${MODE}${RST}"
@@ -242,37 +250,9 @@ GW_LOG="$SANDBOX/gateway.log"
 # UI server files use relative imports that resolve outside the satiui/ dir:
 #   projects.js    → ../../dist/src/pilot/index.js  (→ $SANDBOX/dist/)
 #   routes/memory.js → ../../../../src/context/memory/edgeclaw-memory-core/lib/index.js (→ $SANDBOX/src/context/memory/edgeclaw-memory-core/)
-# Create symlinks so these cross-bundle imports resolve in the sandbox.
-if [[ -d "$CCM_DIR/dist" ]]; then
-  ln -sfn "$CCM_DIR/dist" "$SANDBOX/dist"
-  pass "Symlinked \$SANDBOX/dist → sati-main/dist"
-fi
-if [[ -d "$CCM_DIR/dist/src" ]]; then
-  ln -sfn "$CCM_DIR/dist/src" "$SANDBOX/src"
-  pass "Symlinked \$SANDBOX/src → sati-main/dist/src (TSX→JS bridge)"
-fi
-if [[ -d "$MEM_DIR" ]]; then
-  mkdir -p "$SANDBOX/src/context/memory"
-  # The sati-main bundle may contain a stub edgeclaw-memory-core/ dir
-  # from tsc output; remove it so the symlink to the real bundle takes effect.
-  ECMC_LINK="$SANDBOX/src/context/memory/edgeclaw-memory-core"
-  if [[ -d "$ECMC_LINK" && ! -L "$ECMC_LINK" ]]; then
-    rm -rf "$ECMC_LINK"
-  fi
-  ln -sfn "$MEM_DIR" "$ECMC_LINK"
-  # Also expose as a node_modules package so bare `import 'edgeclaw-memory-core'` resolves
-  mkdir -p "$CCM_DIR/node_modules"
-  ln -sfn "$MEM_DIR" "$CCM_DIR/node_modules/edgeclaw-memory-core"
-  pass "Symlinked \$SANDBOX/src/context/memory/edgeclaw-memory-core → sati-memory-core"
-fi
-
-# ESM resolution walks up from the importing file; satiui/server/index.js
-# needs to find hoisted packages (ws, express, etc.) that live in
-# sati-main/node_modules. A parent-level symlink emulates workspace hoisting.
-if [[ ! -e "$SANDBOX/node_modules" ]]; then
-  ln -sfn "$CCM_DIR/node_modules" "$SANDBOX/node_modules"
-  pass "Symlinked \$SANDBOX/node_modules → sati-main/node_modules (ESM resolve)"
-fi
+# 接线由 lib/packaged-runtime.sh 建（与 release-l2/l3 同一实现）。第 4 参 0 =
+# 本脚本历史上不建根级 edgeclaw-memory-core，保留原状（差异理由见该函数注释）。
+pd_runtime_stage_links "$SANDBOX" "$CCM_DIR" "$MEM_DIR" 0 pass
 
 # GATEWAY_PORT is a fresh free port picked above, so there is no stale
 # Sati gateway to clean up (and we must never touch openclaw's 18789).
@@ -416,7 +396,6 @@ pass "Gateway and UI server terminated cleanly"
 # ─────────────── Step 9: onboarding config compatibility ───────────────
 hdr "9. New-user onboarding config (loadPilotConfig)"
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 ONBOARD_TEST="${REPO_ROOT}/tests/desktop/onboarding-config-compat.test.ts"
 
