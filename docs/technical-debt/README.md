@@ -42,6 +42,9 @@ node scripts/measure-techdebt.mjs --json
 # 刷新指标文档（记录历史趋势）
 node scripts/measure-techdebt.mjs --update docs/technical-debt/metrics.md
 
+# 校验基线是否与当前工作树一致（非 0 退出 = 已过期；`pnpm lint` 已挂接）
+node scripts/measure-techdebt.mjs --check docs/technical-debt/metrics.md
+
 # 依赖安全（可选，需 registry 可达）
 pnpm audit --registry https://registry.npmjs.org/
 
@@ -50,6 +53,8 @@ pnpm typecheck && pnpm lint && pnpm format:check
 ```
 
 ### 指标口径说明（重要）
+
+> **2026-09-15（#340）文件清单改为 git 感知**：所有指标此前用 `readdir` 遍历**工作树**，会把 `.gitignore` 忽略的文件计入（本仓实测 `tests/**.test.ts` 5 个、wiki 下若干 md），而它们在 CI 检出树里不存在——同一份代码在开发机与 CI 上算出**不同的数**（532 vs 527 个测试文件），指标不可复现。现统一走 `git ls-files --cached --others --exclude-standard`（= 已跟踪 ∪ 未跟踪但未被忽略），使「本机 = CI」。跨此日期的同比须注意：`tests 文件` 532 → 527、`测试覆盖合计` 515 → 510、`知识卡重复` 72 组 → 70 组。
 
 > **2026-09-11（C42 终审）口径已对齐**：此前所有指标一律只扫 `src/`，与 `docs/code-refinement-plan.md` §六 基线表声明的 `src + ui/src` / `src + ui/server` 不一致——C40/C41 两张横切卡都不得不先自建扫描重建口径才能定目标（见 C41 note「遗留口径问题」）。现已按基线表对齐，`metrics.md` 顶部输出「指标口径」表，`--json` 亦可读出 `scopes` 字段。**跨 2026-09-11 的同比须按同一口径重算。**
 
@@ -84,9 +89,24 @@ pnpm typecheck && pnpm lint && pnpm format:check
 
 ## 如何保持新鲜
 
-1. 每季度或大版本重跑 `measure-techdebt.mjs --update` 更新趋势。
-2. 新功能引入新债时顺手在 `backlog.md` 加一条（或触发一次测量对比）。
-3. 修复项标注 `done` + commit/PR；指标随脚本复核回落。
+1. **门禁强制（2026-09-15 起，issue #340）**：`pnpm lint` 链尾挂着 `pnpm check:techdebt-metrics`
+   （= `measure-techdebt.mjs --check docs/technical-debt/metrics.md`）。它把**当前工作树的重算结果**
+   与磁盘上的基线正文逐行比对，不一致即非 0 退出。**改了任何会影响指标的代码（含新增 i18n key、
+   新增测试文件、口径变更）后，须在同一 PR 内跑 `pnpm measure:update` 刷新基线**——否则 CI 会红。
+   - 比的是**整篇正文**而非少数几个数：正文全部由本脚本生成，全量比对最简单也最严，且新增指标时
+     不必再维护「关键指标白名单」（白名单本身会成为下一个漂移点）。
+   - 快照时间戳与「历史快照」段不计入比对（前者隔日必变、后者是历史记录）。
+   - **口径变更须与基线刷新同 PR 落地**：改了 `SCOPE_DOC` / 指标定义却不同步刷新基线，会让门禁
+     在下一个人的 PR 上才炸，届时难以定位。
+2. 每季度或大版本重跑一次 `pnpm measure:update` 复核趋势（门禁已保证「不静默失真」，这一步是
+   为了**留档趋势**而非防止失真）。
+3. 新功能引入新债时顺手在 `backlog.md` 加一条（或触发一次测量对比）。
+4. 修复项标注 `done` + commit/PR；指标随脚本复核回落。
+
+> **为什么上这道门禁**：基线此前只能手工触发刷新，没有任何机制保证它与工作树同步。2026-09-14
+> 的审计实证了后果——基线停在 09-11，`src/cli/createLocalGateway.ts` 声称 2696 行而实际 448 行，
+> `createLocalGateway`/`prepareSessionRuntime`/`createReadFileTool`/`handleModelError` 四条 god function
+> 表项早已不存在，而债务排期的优先级正是建立在这些数字上。
 
 ## 边界与约束（审计时遵守）
 
