@@ -4,6 +4,15 @@ export {
   type RouterRuntime,
   type RouterRuntimeDeps,
 } from "./RouterRuntime.js";
+export { decideRouterDecision, type RouterDecisionDeps } from "./decision/decideRouterDecision.js";
+export { executeRouterDecision, type RouterExecutionDeps } from "./execution/executeRouterDecision.js";
+export { preserveStickyForCache } from "./sticky/preserveStickyForCache.js";
+export { rerouteDecisionForMedia } from "./media/rerouteDecisionForMedia.js";
+export {
+  downgradeRequestForAttempt,
+  missingForModel,
+  supportsMediaRequirements,
+} from "./media/modelMediaSupport.js";
 export type {
   RouterDecision,
   RouterDecisionInput,
