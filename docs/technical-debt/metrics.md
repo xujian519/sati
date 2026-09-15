@@ -7,9 +7,9 @@
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1071 / 185017 |
+| src TS 文件 / 行数 | 1078 / 185309 |
 | src JS 文件 | 0 |
-| tests 文件 | 532 |
+| tests 文件 | 535 |
 | ui/src 文件 / 行数 | 465 / 82807 |
 | ui/server 文件 / 行数 | 105 / 31483 |
 
@@ -49,7 +49,6 @@
 | `ui/src/components/chat-v2/MessagesPaneV2.tsx` | `MessagesPaneV2` | 1031 | function |
 | `ui/src/components/app-shell/SidebarV2.tsx` | `SidebarV2` | 1008 | function |
 | `ui/src/components/chat/hooks/useChatSessionState.ts` | `useChatSessionState` | 934 | function |
-| `src/router/RouterRuntime.ts` | `createRouterRuntime` | 885 | function |
 | `ui/src/components/main-content-v2/FilesV2.tsx` | `FilesV2` | 853 | function |
 | `ui/src/components/main-content-v2/SkillsV2.tsx` | `ImportFromFolder` | 852 | function |
 | `ui/src/components/chat-v2/MessagesPaneV2.render.test.tsx` | `(anonymous)` | 842 | arrow |
@@ -71,10 +70,10 @@
 | `src/context/memory/edgeclaw-memory-core/src/core/pipeline/heartbeat.ts` | `runHeartbeat` | 477 | method |
 | `ui/src/components/main-content-v2/CronV2.tsx` | `CronFormView` | 476 | function |
 | `ui/src/components/settings/view/modelPool/components/ProviderCard.tsx` | `ProviderCard` | 447 | function |
+| `src/router/execution/executeRouterDecision.ts` | `executeRouterDecision` | 429 | function |
 | `ui/src/components/chat-v2/MessageRowV2.tsx` | `MessageRowV2` | 429 | function |
 | `ui/src/components/code-editor/view/subcomponents/DocxBuiltinPreview.tsx` | `DocxBuiltinPreview` | 421 | function |
 | `src/gateway/client/eventMapping.ts` | `mapAgentEventForTurn` | 416 | function |
-| `src/router/RouterRuntime.ts` | `execute` | 411 | function |
 | `ui/src/components/chat-v2/processGrouping.test.ts` | `(anonymous)` | 409 | arrow |
 | `ui/src/components/code-editor/view/subcomponents/SpreadsheetInteractivePreview.tsx` | `SpreadsheetInteractivePreview` | 407 | function |
 | `ui/src/components/settings/view/integrations/im/components/WeComChannelSection.tsx` | `WeComChannelSection` | 398 | function |
@@ -124,7 +123,6 @@
 | `src/adapters/channel/feishu/FeishuChannel.ts` | 1337 |
 | `ui/src/components/app-shell/SidebarV2.tsx` | 1310 |
 | `ui/src/components/chat-v2/processGrouping.ts` | 1294 |
-| `src/router/RouterRuntime.ts` | 1230 |
 | `ui/src/components/chat/hooks/useChatSessionState.ts` | 1171 |
 | `src/context/memory/edgeclaw-memory-core/src/core/file-memory.ts` | 1139 |
 | `src/agent/loop/AgentLoop.ts` | 1134 |
@@ -135,6 +133,7 @@
 | `ui/src/components/chat-v2/ComposerV2.tsx` | 1109 |
 | `ui/server/routes/config.js` | 1100 |
 | `src/model/streaming/streamModel.ts` | 1085 |
+| `src/always-on/runtime/DiscoveryFire.ts` | 1079 |
 
 ## 测试覆盖（tests/<模块> 文件数）
 
@@ -148,8 +147,8 @@
 | gateway | 29 |
 | model | 27 |
 | session | 27 |
+| router | 17 |
 | always-on | 14 |
-| router | 14 |
 | mcp | 13 |
 | cron | 11 |
 | extension | 11 |
@@ -173,7 +172,7 @@
 | runtime | 1 |
 | status | 1 |
 
-| **合计** | **515** |
+| **合计** | **518** |
 
 ## i18n en/zh-CN 对齐
 

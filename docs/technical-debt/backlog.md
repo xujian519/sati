@@ -168,26 +168,41 @@
 
 ## 2. router（主链路 · B1 ✅）
 
-**模块概况**：26 文件 + 13 spec；负责模型分流/分级（judge）、fallback、zero-usage/瞬时重试、多模态降级、cache-aware 切换。类型面干净（`any` 为 0，`RouterRuntime.ts:631/645/983/1036` 命中均为注释 "any"）；主路径职能过度集中。
+**模块概况**：33 文件 + 17 spec；负责模型分流/分级（judge）、fallback、zero-usage/瞬时重试、多模态降级、cache-aware 切换。类型面干净（`any` 为 0）；主路径职能过度集中——2026-09-15 已把 `createRouterRuntime` 闭包按职责拆开（#384），`RouterRuntime.ts` 只剩装配 190 行。
 
 - **TD-ROUTER-001** · `createRouterRuntime` 877 行 god function
-  - 类别：A · 严重级：P1 · 工作量：L · 状态：new
-  - 位置：`src/router/RouterRuntime.ts:90-966`
+  - 类别：A · 严重级：P1 · 工作量：L · 状态：done（#384）
+  - 位置：原 `src/router/RouterRuntime.ts:94-978`（885 行）
   - 影响：单闭包承载 config 归一、session store/health cache、决策、执行、重试、编排、统计。
-  - 建议：按职责拆 `decision.ts`/`execution.ts`/`sticky.ts`/`media.ts`，入参收敛为 `RuntimeDeps` 注入。证据：`:90` 函数起 `:966` 闭合，内部 `decide :255-466`、`execute :488-898` 均为嵌套闭包。
+  - 处置：入参收敛为 `RouterDecisionDeps` / `RouterExecutionDeps` 两个显式对象，闭包体按职责拆到
+    `decision/` `execution/` `sticky/` `media/` `retry/` 五个目录；`RouterRuntime.ts` 1230 → 190 行，
+    只留装配与 `stream`/`invalidateSticky`/`shutdown`。`createRouterRuntime` 已退出最大方法榜。
+  - 证据：`docs/notes/implemented/2026-09-15-router-runtime-decomposition.md`（31 段已审计编辑的精确重建全等 + 负控制四类漂移均转红）。
 - **TD-ROUTER-002** · `execute()` 嵌套巨型异步生成器（~410 行）
-  - 类别：A · 严重级：P1 · 工作量：M · 状态：new
-  - 位置：`src/router/RouterRuntime.ts:488-898`
-  - 影响：fallback/transient-retry/zero-usage 三套重试分支与「已产出内容是否可重放」状态机咬合紧密。建议：抽单 attempt 执行器 + 重试判定纯函数。
+  - 类别：A · 严重级：P1 · 工作量：M · 状态：done（#384）
+  - 位置：原 `src/router/RouterRuntime.ts:499-909`（411 行）
+  - 影响：fallback/transient-retry/zero-usage 三套重试分支与「已产出内容是否可重放」状态机咬合紧密。
+  - 处置：两条建议均落地——「抽单 attempt 执行器」→ `execution/streamAttempt.ts`（含流错误归类与
+    可中止延时）；「重试判定纯函数」→ `retry/retryGates.ts`（`shouldTransientRetry` /
+    `shouldZeroUsageRetry`，判据表达式逐字搬走、短路顺序不变）。嵌套与「不可测」两处根因消除。
+  - **残留**：`executeRouterDecision` 本体仍有 429 行（比原 411 行**更大**，因判据改走谓词多出调用与
+    实参行），两套重试分支的「发事件 + 算退避 + 等待」编排未拆 ⇒ 已另立 **TD-ROUTER-009**。
 - **TD-ROUTER-003** · `decide()` 决策函数 ~211 行含多层嵌套分支
-  - 类别：A · 严重级：P2 · 工作量：M · 状态：new
-  - 位置：`src/router/RouterRuntime.ts:255-466`
-  - 建议：拆为组合式纯函数 + 谓词表驱动 `resolvedFrom` 溯源。
-  - 2026-08-27 复核：现 `:257-473`（≈217 行），与登记基本一致，未恶化未愈合，仅刷新位置。
+  - 类别：A · 严重级：P2 · 工作量：M · 状态：done（#384）
+  - 位置：原 `src/router/RouterRuntime.ts:257-480`（实测 224 行；台账 2026-08-27 复核记 `:257-473` ≈217 行）
+  - 处置：抽为 `decision/decideRouterDecision.ts` 的 `decideRouterDecision(input, deps)`，`resolveCustom`
+    同文件私有；`RouterDecisionDeps` 显式声明 10 项依赖。分支本身未重写（谓词表驱动的 `resolvedFrom`
+    溯源仍属理想终局，见 `TD-ROUTER-002` 的「一次性重写」备选），但已可逐分支单测。
+  - 证据：`tests/router/router-runtime-decide.spec.ts` 15 条（`resolvedFrom` 五个取值 + 粘性 +
+    cache-aware 切/留 + 媒体重路由 + 编排门控 + 无默认场景抛错 + `invalidateSticky`）。
 - **TD-ROUTER-004** · 生产路径残留裸 `console.log` 未走 `debugLog` 门控
   - 类别：C · 严重级：P2 · 工作量：S · 状态：new
   - 位置：`RouterRuntime.ts:421`；`orchestrate/applyOrchestration.ts:21,42`
   - 建议：改用 `src/shared/debug.js` 的 `debugLog`。对照 `classifyAndRoute.ts:150` 已用 `debugLog`。
+  - **2026-09-15 复核（#384）**：`src/router/` 全量 grep 已无任何 `console.*`；且原引用的
+    `RouterRuntime.ts:421` 在拆分**前**即为 `scenarioType,`（位置早已漂移，非本次引入）。
+    `applyOrchestration.ts:21,42` 现为 `logger.info`。本条疑已由他处修复，**待确认后关闭**，
+    本次不代为判 done。
 - **TD-ROUTER-005** · 静态大对象/规则表与运行时解析函数混布
   - 类别：D · 严重级：P2 · 工作量：S · 状态：new
   - 位置：`config/schema.ts:110-208,222-269`；`utils/modelPricing.ts:10-78`
@@ -201,9 +216,28 @@
   - 位置：`src/router/protocol/errors.ts:1-24`；`index.ts:28-29`
   - 证据：全 `src/` grep 仅命中定义与 re-export，无构造点。建议：删除或补齐实例化。
 - **TD-ROUTER-008** · 主路径（decide/execute）无直接单测
-  - 类别：E · 严重级：P2 · 工作量：M · 状态：new
-  - 位置：`tests/router/` 无 `RouterRuntime.spec.ts`；`tests/test-support/llm-replay.spec.ts:117-122` 仅 passthrough
-  - 建议：为 decide（resolvedFrom 溯源）/execute（fallback/zero-usage/媒体降级）补确定性 spec，LLM 走重放 seam。
+  - 类别：E · 严重级：P2 · 工作量：M · 状态：done（#384）
+  - 位置：`tests/router/` 原无 `RouterRuntime` 主路径 spec；`tests/test-support/llm-replay.spec.ts:117-122` 仅 passthrough
+  - 处置：补 32 条确定性用例，只经公开入口 `createRouterRuntime(...).decide/.execute` 驱动（不 mock 模块）：
+    `router-runtime-decide.spec.ts` 15 条（`resolvedFrom` 溯源、粘性、cache-aware 切换/保留、媒体重路由、
+    编排门控、无默认场景抛错、`materializeRequest`、`invalidateSticky`）、`router-runtime-execute.spec.ts` 11 条
+    （fallback、已产出内容后不重试 + 终态错误、transient retry、zero-usage retry、全失败回放、
+    媒体降级重发、子代理预算、取消）、`retry/retry-gates.spec.ts` 6 条（两谓词真值表 + 内容门控优先）。
+  - 覆盖前：`sati_router_fallback` / `zero_usage_retry` / `transient_retry` / `execute_failed` 四个事件
+    在 `tests/` 下零命中（全量套件的 router 一律 `enabled: false` 直通）。
+  - 注：这些用例是**重构前**先写、对旧闭包跑绿的，抽取后断言一行未改仍全绿 ⇒ 同时充当等价性证据。
+- **TD-ROUTER-009** · `executeRouterDecision` 429 行，两套重试分支副作用编排未拆
+  - 类别：A · 严重级：P3 · 工作量：M · 状态：new
+  - 位置：`src/router/execution/executeRouterDecision.ts` 的 `executeRouterDecision`（429 行，当前 `src/` 最大函数）
+  - 来源：`TD-ROUTER-002` 拆分后的残留（#384）。原 `execute` 为 411 行，抽走单 attempt 执行器与重试谓词后
+    因调用与实参行反而增至 429 行。
+  - 代价：它是「候选分档 + 逐 attempt 编排 + 三套重试的 emit/退避/等待 + 用量统计」的合集，仍然是
+    「读一遍才能改一处」；两套重试分支的副作用块（发 `sati_router_transient_retry` /
+    `sati_router_retry_progress` / `sati_router_zero_usage_retry` + telemetry + `abortableDelay`）各占 40–50 行。
+  - 建议：① 把「候选分档 + 重试参数归一」抽成纯函数 `planAttempts(decision, request, config, modelRuntime, now)`
+    （全纯，可直测多模态分区逻辑）；② 把两套重试分支的 emit+退避抽成 `emitTransientRetry` / `emitZeroUsageRetry`；
+    ③ 可选：内容门控循环抽成二级生成器（`pending` 缓冲 + 哨兵）。三者均不改变 `continue outer`/`break outer` 语义。
+  - 触发条件：下次调整路由策略或重试判定之前先做 ① ②；或本函数再增长超过 450 行时立项。
 
 ---
 
