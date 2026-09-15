@@ -9,6 +9,7 @@
  * 覆盖指标：
  *   - 体积/复杂度：目录文件数/行数、Top 大文件、TS AST 单函数行数（god function）
  *   - 类型安全    ：类型位 any（TS AST 精确）+ @ts-expect-error / @ts-ignore（src + ui/src）
+ *                  另立 `as unknown as T` 双重断言口径（比 any 更强的逃逸，单列不合并）
  *   - 错误&可观测 ：裸 console.*、空 catch、无参 catch（含无注释隐患类）、TODO/HACK/FIXME/XXX
  *   - 分层边界    ：ui/server→src 深层导入、src→ui 导入、ui/server 直连 edgeclaw lib 编译产物
  *   - 测试        ：各 src 模块测试文件数、零/极薄模块
@@ -17,6 +18,7 @@
 import { readFileSync, readdirSync, existsSync, writeFileSync, mkdirSync } from "node:fs";
 import { join, relative, dirname } from "node:path";
 import { createHash } from "node:crypto";
+import { pathToFileURL } from "node:url";
 
 const ROOT = new URL("..", import.meta.url).pathname;
 
@@ -54,6 +56,8 @@ const SCOPE_DOC = {
   console:
     "src + ui/server（.ts/.tsx/.js/.jsx/.mjs/.cjs；豁免两处 C39 收束入口 ui/server/utils/consoleLogger.js 与 ui/src/utils/logging.ts）",
   unsafe: "src + ui/src（.ts/.tsx，含同址 *.spec.*；TS AST 精确统计 AnyKeyword + @ts-* 指令）",
+  asUnknownAs:
+    "src + ui/src（.ts/.tsx，含同址 *.spec.*；TS AST 统计 `x as unknown as T` 双重断言）。**口径变更**：2026-09-15（issue #339）首度纳入——此前该形态完全未统计，故 0 → N 的变化来自口径变更而非新增债务",
   catch: "src + ui/src 产品代码（排除 *.spec.* / *.test.*）",
   todos: "src + ui/src + ui/server + tests（.ts/.tsx/.js/.jsx/.mjs/.cjs）",
 };
@@ -197,17 +201,24 @@ function grepCountByModule(files, pattern) {
 }
 
 /**
- * 类型逃逸（精确口径，2026-09-11 C42 落地）。
+ * 类型逃逸（精确口径，2026-09-11 C42 落地；2026-09-15 补 `as unknown as` 口径）。
  *
  * 旧实现是裸正则（`: any | as any | <any> | any[]`），两个方向都不准：
  *   - **高估**：把注释/字符串里的英文单词 "any" 计入（如 `SnipEngine.ts:64` 的 "any tool_call"）；
  *   - **低估**：漏掉泛型位 `Record<string, any>`（该处文本是 `, any>`，不含 `: any`）。
  * 故改用 TS AST 统计 `AnyKeyword` 节点（只算真正的类型位），指令类
  * （`@ts-expect-error` / `@ts-ignore`）另行计数——两者合起来即 C40 采用的三口径。
+ *
+ * **2026-09-15（issue #339）**：上列三口径全都在「类型位 / 指令」上，而 `x as unknown as T`
+ * 双重断言**两类痕迹都不留**（它既不是 `AnyKeyword` 节点，也不是 `@ts-` 指令），实测仓内
+ * 329 处却一处未被计入——仪表盘因此把「类型纪律很好」（any 仅 3 处）与「329 处绕开全部
+ * 类型检查」并列呈现，直接误导排期。现单立 `asUnknownAs` 口径（**不与 any 合并计数**：
+ * 两者治理成本与语境不同）。详见 `docs/technical-debt/README.md` §指标口径说明。
  */
 async function scanTypeEscapes(files) {
   const t = await initTs();
   const items = [];
+  const asUnknownAsItems = [];
   for (const f of files) {
     if (!f.endsWith(".ts") && !f.endsWith(".tsx")) continue;
     const src = readFileSync(f, "utf8");
@@ -218,6 +229,8 @@ async function scanTypeEscapes(files) {
     const visit = node => {
       if (node.kind === t.SyntaxKind.AnyKeyword)
         items.push({ file: rel, line: lineAt(node.getStart(sf)), kind: "any" });
+      if (isDoubleAssertionThroughUnknown(node, t))
+        asUnknownAsItems.push({ file: rel, line: lineAt(node.getStart(sf)), kind: "as-unknown-as" });
       t.forEachChild(node, visit);
     };
     visit(sf);
@@ -225,12 +238,58 @@ async function scanTypeEscapes(files) {
       items.push({ file: rel, line: src.slice(0, m.index).split("\n").length, kind: m[0] });
     }
   }
+  return {
+    total: items.length,
+    perModule: perModuleOf(items),
+    items,
+    asUnknownAs: {
+      total: asUnknownAsItems.length,
+      perModule: perModuleOf(asUnknownAsItems),
+      items: asUnknownAsItems,
+    },
+  };
+}
+
+/** 把逐处命中按模块聚合（`src/foo/bar.ts` → `foo`）。 */
+export function perModuleOf(items) {
   const perModule = {};
   for (const it of items) {
     const mod = moduleOf(join(ROOT, it.file));
     perModule[mod] = (perModule[mod] ?? 0) + 1;
   }
-  return { total: items.length, perModule, items };
+  return perModule;
+}
+
+/** 剥掉语义透明的括号包装：`(x as unknown) as T` 与 `x as unknown as T` 等价。 */
+function unwrapParens(node, ts) {
+  let n = node;
+  while (n?.kind === ts.SyntaxKind.ParenthesizedExpression) n = n.expression;
+  return n;
+}
+
+/**
+ * 是否为「经 unknown 的双重断言」`x as unknown as T`。
+ *
+ * 为什么单独成指标：`any` 至少会**传染**、也还能被 lint 规则捕获，而双重断言一次性
+ * 绕开全部类型检查且不留类型位痕迹——它是**更强**的逃逸（issue #339）。
+ *
+ * 判定走 AST 而非正则：`AsExpression` 的 expression 仍是 `AsExpression`，且内层
+ * `type` 为 `unknown`。括号是透明包装，故先剥 `ParenthesizedExpression`。
+ * 两个刻意的排除：
+ *   - **单次 `as unknown`**（仅把值加宽到 unknown）不越检查，**不算**；
+ *   - 三元及以上的串联断言（`as unknown as unknown as T`）只在**最外一层**计数，
+ *     故对递归命中的内层加一道负向守卫，避免同一个表达式被重复计入。
+ *
+ * @param {import("typescript").Node} node
+ * @param {typeof import("typescript")} ts
+ * @returns {boolean}
+ */
+export function isDoubleAssertionThroughUnknown(node, ts) {
+  if (node?.kind !== ts.SyntaxKind.AsExpression) return false;
+  const inner = unwrapParens(node.expression, ts);
+  if (inner?.kind !== ts.SyntaxKind.AsExpression) return false;
+  if (inner.type?.kind !== ts.SyntaxKind.UnknownKeyword) return false;
+  return !isDoubleAssertionThroughUnknown(inner, ts);
 }
 
 /**
@@ -479,6 +538,9 @@ function renderMarkdown(m) {
   L.push(`| 指标 | 总量 | 热点模块 |`);
   L.push(`|---|---|---|`);
   L.push(`| \`any\`/\`@ts-expect-error\`/\`@ts-ignore\` | ${m.unsafe.total} | ${topModules(m.unsafe.perModule)} |`);
+  L.push(
+    `| \`as unknown as\`（双重断言） | ${m.unsafe.asUnknownAs.total} | ${topModules(m.unsafe.asUnknownAs.perModule)} |`,
+  );
   L.push(`| 裸 \`console.*\` | ${m.console.total} | ${topModules(m.console.perModule)} |`);
   L.push(`| 空 \`catch {}\` | ${m.catchEmpty.total} | ${topModules(m.catchEmpty.perModule)} |`);
   L.push(`| 无参 \`catch {\`（总计） | ${m.catchNoParam.total} | ${topModules(m.catchNoParam.perModule)} |`);
@@ -573,7 +635,13 @@ async function main() {
   process.stdout.write(md + "\n");
 }
 
-main().catch(e => {
-  console.error(e);
-  process.exit(1);
-});
+// 仅当直接以脚本运行时执行 CLI 逻辑；被 import 时（如 scripts/measure-techdebt.test.mjs）
+// 不触发度量与输出。纯函数（perModuleOf / isDoubleAssertionThroughUnknown）可被单测直接引用。
+const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (isMain) {
+  main().catch(e => {
+    console.error(e);
+    process.exit(1);
+  });
+}

@@ -1,7 +1,7 @@
 # Sati 技术债务指标基线与趋势
 
 > 由 `node scripts/measure-techdebt.mjs --update` 自动生成，谨防手工编辑。
-> 最近一次快照：**2026-09-14**
+> 最近一次快照：**2026-09-15**
 
 ## 规模
 
@@ -11,7 +11,7 @@
 | src JS 文件 | 0 |
 | tests 文件 | 532 |
 | ui/src 文件 / 行数 | 465 / 82807 |
-| ui/server 文件 / 行数 | 103 / 31071 |
+| ui/server 文件 / 行数 | 105 / 31483 |
 
 ## 指标口径
 
@@ -19,6 +19,7 @@
 |---|---|
 | console | src + ui/server（.ts/.tsx/.js/.jsx/.mjs/.cjs；豁免两处 C39 收束入口 ui/server/utils/consoleLogger.js 与 ui/src/utils/logging.ts） |
 | unsafe | src + ui/src（.ts/.tsx，含同址 *.spec.*；TS AST 精确统计 AnyKeyword + @ts-* 指令） |
+| asUnknownAs | src + ui/src（.ts/.tsx，含同址 *.spec.*；TS AST 统计 `x as unknown as T` 双重断言）。**口径变更**：2026-09-15（issue #339）首度纳入——此前该形态完全未统计，故 0 → N 的变化来自口径变更而非新增债务 |
 | catch | src + ui/src 产品代码（排除 *.spec.* / *.test.*） |
 | todos | src + ui/src + ui/server + tests（.ts/.tsx/.js/.jsx/.mjs/.cjs） |
 
@@ -27,6 +28,7 @@
 | 指标 | 总量 | 热点模块 |
 |---|---|---|
 | `any`/`@ts-expect-error`/`@ts-ignore` | 3 | ui/src(3) |
+| `as unknown as`（双重断言） | 27 | ui/src(19) · adapters(2) · tool(2) |
 | 裸 `console.*` | 158 | cli(137) · telemetry(8) · ui/server(5) |
 | 空 `catch {}` | 0 | — |
 | 无参 `catch {`（总计） | 516 | ui/src(115) · adapters(70) · patent(44) |
@@ -126,10 +128,10 @@
 | `src/always-on/runtime/DiscoveryFire.ts` | 1256 |
 | `src/router/RouterRuntime.ts` | 1230 |
 | `ui/src/components/chat/hooks/useChatSessionState.ts` | 1171 |
-| `ui/server/routes/commands.js` | 1149 |
 | `src/context/memory/edgeclaw-memory-core/src/core/file-memory.ts` | 1139 |
 | `src/agent/loop/AgentLoop.ts` | 1134 |
 | `ui/server/routes/agent.js` | 1133 |
+| `ui/server/routes/commands.js` | 1132 |
 | `ui/src/components/main-content-v2/CronV2.tsx` | 1130 |
 | `ui/src/components/main-content/view/MainContent.tsx` | 1111 |
 | `ui/src/components/chat-v2/ComposerV2.tsx` | 1109 |

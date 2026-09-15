@@ -36,7 +36,7 @@
     "check:skills": "node scripts/validate-skills.mjs",
     "check:issue-labels": "node scripts/sync-labels.mjs --check",
     "pr:open": "node scripts/open-pr.mjs",
-    "test:pr-tooling": "node --test scripts/open-pr.test.mjs scripts/sync-labels.test.mjs scripts/classify-issue.test.mjs .github/scripts/check-pr-issue.test.mjs",
+    "test:pr-tooling": "node --test scripts/open-pr.test.mjs scripts/sync-labels.test.mjs scripts/classify-issue.test.mjs scripts/measure-techdebt.test.mjs .github/scripts/check-pr-issue.test.mjs",
     "pretypecheck": "pnpm --filter edgeclaw-memory-core build",
     "typecheck": "tsc --noEmit && pnpm --filter edgeclaw-memory-core typecheck",
     "lint": "eslint src tests scripts apps/desktop && pnpm --filter sati-ui lint && pnpm check:event-matrix && pnpm check:patent-sop && pnpm check:patent-workflow-docs && pnpm check:html-templates && pnpm check:skills && pnpm check:issue-labels",

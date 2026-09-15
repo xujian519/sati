@@ -24,7 +24,7 @@
 | 代码 | 类别 | 检测手段 |
 |---|---|---|
 | A | 体积/复杂度 | `wc -l` Top 文件；TS AST 单函数 > 阈值；平均行/函数 |
-| B | 类型安全 | 类型位 `any`（TS AST）/ `@ts-expect-error` / `@ts-ignore` 按模块聚合 |
+| B | 类型安全 | 类型位 `any`（TS AST）/ `@ts-expect-error` / `@ts-ignore` / `as unknown as` 双重断言（TS AST，独立口径）按模块聚合 |
 | C | 错误 & 可观测 | 裸 `console.*`、空 `catch {}`、无参 `catch {}`（区分总数与**无注释隐患类**）、`TODO` |
 | D | 架构/分层 | `ui/server→src` 深层导入、`src→ui`、循环依赖、protocol/runtime/config 三层符合度 |
 | E | 测试 | 模块测试分布、主链路文件无直接单测、伪测试（`readFileSync`+正则扫源码） |
@@ -53,7 +53,10 @@ pnpm typecheck && pnpm lint && pnpm format:check
 
 > **2026-09-11（C42 终审）口径已对齐**：此前所有指标一律只扫 `src/`，与 `docs/code-refinement-plan.md` §六 基线表声明的 `src + ui/src` / `src + ui/server` 不一致——C40/C41 两张横切卡都不得不先自建扫描重建口径才能定目标（见 C41 note「遗留口径问题」）。现已按基线表对齐，`metrics.md` 顶部输出「指标口径」表，`--json` 亦可读出 `scopes` 字段。**跨 2026-09-11 的同比须按同一口径重算。**
 
-- **`any` 指标已从裸正则改为 TS AST 精确统计**（`scanTypeEscapes`）：旧正则 `: any | as any | <any> | any[]` 两个方向都不准——**高估**（注释/字符串里的英文单词 "any"，如 `SnipEngine.ts:64` 的 "any tool_call"）且**低估**（泛型位 `Record<string, any>` 文本不含 `: any`，被漏掉）。现在只统计真正的类型位 `AnyKeyword` 节点 + `@ts-expect-error`/`@ts-ignore` 指令，`src + ui/src` 实测 **3 处**，与 C40 逐处 `SAFETY` 登记的保留清单完全一致（互为交叉验证）。真正的类型债仍是强转与断言（`as never`/`as unknown as X`/`as string[]`/`!`，见 `backlog.md` TD-TYPE-002）。
+- **`any` 指标已从裸正则改为 TS AST 精确统计**（`scanTypeEscapes`）：旧正则 `: any | as any | <any> | any[]` 两个方向都不准——**高估**（注释/字符串里的英文单词 "any"，如 `SnipEngine.ts:64` 的 "any tool_call"）且**低估**（泛型位 `Record<string, any>` 文本不含 `: any`，被漏掉）。现在只统计真正的类型位 `AnyKeyword` 节点 + `@ts-expect-error`/`@ts-ignore` 指令，`src + ui/src` 实测 **3 处**，与 C40 逐处 `SAFETY` 登记的保留清单完全一致（互为交叉验证）。真正的类型债是强转与断言（`as never`/`as unknown as X`/`as string[]`/`!`，见 `backlog.md` TD-TYPE-002）——其中 `as unknown as X` 已单列口径，见下条。
+- **`as unknown as X` 双重断言：2026-09-15 起单列独立口径 `asUnknownAs`**（issue #339）。此前上条三口径（`AnyKeyword` 节点 + `@ts-*` 指令）**全部落在「类型位 / 指令」上**，而双重断言**两类痕迹都不留**——它既不是 `AnyKeyword` 节点，也不是 `@ts-` 指令，实测 `src + ui/src` **27 处一处未被计入**（`src` 8 · `ui/src` 19）。后果不是少一个数字：仪表盘曾把「类型纪律很好」（`any` 仅 3 处）与「27 处绕开全部类型检查」**并列**呈现，直接误导排期。**不与 `any` 合并计数**——`any` 至少会传染、可被 lint 规则捕获，双重断言一次性绕开全部检查且不留痕迹，属**更强**的逃逸，两者治理成本与语境不同。
+  - **作用域与 `unsafe` 一致**（`src + ui/src`，含同址 `*.spec.*`），不含 `tests/`。**口径交叉核对（重要）**：`#339` 标题里的「329 处」来自 `grep -rEn 'as unknown as' src/ ui/src/`，但该命令**写错了作用域**——`tests/` 不在 `src/` 下，而 issue 正文的分布表列的恰是 `tests/*`（`tests/tool 49`、`tests/gateway 46`…）。按正确作用域实测为 `src` **8** · `ui/src` **19** · `tests/` **294**（合计 321）——issue 的 329 是「`src` + `ui/src` + `tests/`」的合数，与工具声明的 `src + ui/src` 口径本就不可比（数字亦随 09-14 之后的提交漂移）。若日后要把测试文件的逃逸也纳入治理，应比照 `todos` 另立作用域，而非改动本口径。
+  - **口径变更（0 → 27）来自度量口径变更，而非新增债务**——趋势图据此标注，勿与历史快照直接同比。
 - **无参 `catch {`** 拆成两个数：**总计**（未绑定错误变量；仓内 try 体几乎全是 `JSON.parse`/`fs.*`/`new URL`，删 try 会改变行为，故该计数在行为不变前提下不可降）与 **无注释**（隐患类，唯二治理目标）。判定「有注释」认三种形态：catch 行内、catch 上一行、体内（独立注释行或代码行尾注释）。
 - 旧版「静默吞错 catch（体仅注释/空白）」指标**已废弃**：它把**已在函数 JSDoc 说明意图的防御式**与真无说明的静默回退混计（C41 发现并修正）。无参 catch 的意图注释形态统一为「失败模式 → 回退语义」。
 - **裸 `console.*` 仍是正则上界**：会把**注释掉的**调用计入（如 `ui/server/sessionManager.js` 5 处 `// console.error(...)`）；C39 刻意建立的两处收束入口（`ui/server/utils/consoleLogger.js`、`ui/src/utils/logging.ts`）已豁免。收束后 `src/` 真实裸调用 143 处全部按设计豁免（CLI 交互/二维码/`debug.ts`/telemetry 入口）。
