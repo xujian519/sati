@@ -16,6 +16,7 @@
  *   - 测试        ：各 src 模块测试文件数、零/极薄模块
  *   - i18n        ：en / zh-CN 命名空间 key 对齐
  */
+import { execFileSync } from "node:child_process";
 import { readFileSync, readdirSync, existsSync, writeFileSync, mkdirSync } from "node:fs";
 import { join, relative, dirname } from "node:path";
 import { createHash } from "node:crypto";
@@ -83,24 +84,44 @@ async function initTs() {
   return ts;
 }
 
-function listFiles(dir, exts) {
-  const out = [];
-  if (!existsSync(dir)) return out;
-  const walk = d => {
-    const entries = readdirSync(d, { withFileTypes: true });
-    for (const e of entries) {
-      if (e.name.startsWith(".")) continue;
-      const full = join(d, e.name);
-      if (e.isDirectory()) {
-        if (EXCLUDE_DIRS.has(e.name)) continue;
-        walk(full);
-      } else if (exts.some(x => e.name.endsWith(x)) && !e.name.endsWith(".d.ts")) {
-        out.push(full);
-      }
-    }
-  };
-  walk(dir);
-  return out;
+/**
+ * 仓库文件清单（**git 感知**，2026-09-15 修正）。
+ *
+ * 为什么不能用 `readdir` 遍历工作树：磁盘上可能存在**被 `.gitignore` 忽略**的文件
+ * （本仓实测：`tests/**.test.ts` 有 5 个），它们在 CI 的检出树里**不存在**。
+ * 于是同一份代码会在开发者机器上算出 532 个测试文件、在 CI 上算出 527 个——
+ * 指标不可复现，`--check` 门禁也就必然在 CI 上假红（#340 实施时由 CI 实测抓到）。
+ * 指标应描述**仓库**，而非某个人的工作树。
+ *
+ * 口径：`git ls-files --cached --others --exclude-standard` = 已跟踪 ∪ 未跟踪但未被忽略。
+ * 含未跟踪文件是刻意的——本地刚新建、尚未 `git add` 的文件也应计入，否则「先刷新基线、
+ * 再提交」的顺序会漏掉它；排除被忽略者则堵住上面那条不可复现的路径。
+ *
+ * @param {string} dir 绝对目录
+ * @param {string[]} exts 扩展名后缀（如 `[".ts", ".tsx"]`）
+ * @returns {string[]} 绝对路径（升序）
+ */
+export function listFiles(dir, exts) {
+  const relDir = relative(ROOT, dir);
+  if (relDir.startsWith("..")) return [];
+  const prefix = relDir === "" || relDir === "." ? "" : `${relDir}/`;
+  const listing = execFileSync(
+    "git",
+    ["ls-files", "--cached", "--others", "--exclude-standard", "-z", "--", relDir || "."],
+    {
+      cwd: ROOT,
+      encoding: "utf8",
+      maxBuffer: 32 * 1024 * 1024,
+    },
+  );
+  return listing
+    .split("\0")
+    .filter(Boolean)
+    .filter(p => p.startsWith(prefix))
+    .filter(p => exts.some(x => p.endsWith(x)) && !p.endsWith(".d.ts"))
+    .filter(p => !p.split("/").some(seg => seg.startsWith(".") || EXCLUDE_DIRS.has(seg)))
+    .map(p => join(ROOT, p))
+    .sort();
 }
 
 function readLines(file) {
@@ -435,19 +456,14 @@ function knowledgeDupMd() {
   const wikiRoot = join(ROOT, "src", "knowledge", "patent", "wiki");
   if (!existsSync(wikiRoot)) return { groups: 0, files: 0, bytes: 0 };
   const byHash = new Map();
-  const walk = dir => {
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      const p = join(dir, entry.name);
-      if (entry.isDirectory()) walk(p);
-      else if (entry.name.endsWith(".md")) {
-        const buf = readFileSync(p);
-        const h = createHash("sha256").update(buf).digest("hex");
-        if (!byHash.has(h)) byHash.set(h, []);
-        byHash.get(h).push(p);
-      }
-    }
-  };
-  walk(wikiRoot);
+  // 同样走 git 感知清单：本仓 wiki 下存在被 .gitignore 忽略的 md，
+  // 用 readdir 遍历会让本机与 CI 的「重复组数」不一致（#340 实施时实测 72 vs 70）。
+  for (const p of listFiles(wikiRoot, [".md"])) {
+    const buf = readFileSync(p);
+    const h = createHash("sha256").update(buf).digest("hex");
+    if (!byHash.has(h)) byHash.set(h, []);
+    byHash.get(h).push(p);
+  }
   let groups = 0;
   let files = 0;
   let bytes = 0;

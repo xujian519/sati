@@ -9,7 +9,7 @@
 |---|---|
 | src TS 文件 / 行数 | 1070 / 184689 |
 | src JS 文件 | 0 |
-| tests 文件 | 532 |
+| tests 文件 | 527 |
 | ui/src 文件 / 行数 | 465 / 82807 |
 | ui/server 文件 / 行数 | 105 / 31483 |
 
@@ -38,7 +38,7 @@
 | 分层违规 `ui/server→src` | 14 | — |
 | 分层违规 `src→ui` | 0 | — |
 | edgeclaw `lib` 编译产物直连 | 1 | — |
-| 知识卡逐字节重复（组 / 冗余文件 / 冗余字节） | 72 组 · 92 文件 · 546268 B | — |
+| 知识卡逐字节重复（组 / 冗余文件 / 冗余字节） | 70 组 · 90 文件 · 527689 B | — |
 
 ## God function（单函数 ≥ 300 行）
 
@@ -144,7 +144,7 @@
 | patent | 110 |
 | tool | 61 |
 | agent | 55 |
-| knowledge | 42 |
+| knowledge | 38 |
 | context | 29 |
 | gateway | 29 |
 | model | 27 |
@@ -162,9 +162,9 @@
 | cli | 7 |
 | permission | 4 |
 | test-support | 4 |
-| methodology | 3 |
 | telemetry | 3 |
 | board | 2 |
+| methodology | 2 |
 | shared | 2 |
 | task | 2 |
 | browser | 1 |
@@ -174,7 +174,7 @@
 | runtime | 1 |
 | status | 1 |
 
-| **合计** | **515** |
+| **合计** | **510** |
 
 ## i18n en/zh-CN 对齐
 

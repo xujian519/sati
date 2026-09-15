@@ -1,13 +1,14 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import {
   isDoubleAssertionThroughUnknown,
+  listFiles,
   metricBodyDiff,
   normalizeForCheck,
   perModuleOf,
@@ -15,6 +16,7 @@ import {
 
 const SCRIPT = fileURLToPath(new URL("./measure-techdebt.mjs", import.meta.url));
 const METRICS = fileURLToPath(new URL("../docs/technical-debt/metrics.md", import.meta.url));
+const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
 
 /** 跑一次 `--check`，返回退出码（非 0 不抛异常）。 */
 function runCheck(target) {
@@ -112,6 +114,46 @@ test("perModuleOf 按模块聚合（src/ui 前缀规则）", () => {
 
 test("perModuleOf 空输入返回空对象", () => {
   assert.deepEqual(perModuleOf([]), {});
+});
+
+// ---------------------------------------------------------------------------
+// 文件清单必须 git 感知（本机与 CI 口径一致）
+// ---------------------------------------------------------------------------
+
+test("【负控制】listFiles 不返回被 .gitignore 忽略的文件", () => {
+  // 磁盘上存在被忽略的 tests/**.test.ts（本仓实测 5 个），它们在 CI 检出树里不存在。
+  // 若 listFiles 退回 readdir 遍历，本机与 CI 会得出不同的指标，--check 门禁必假红。
+  const files = listFiles(join(REPO_ROOT, "tests"), [".ts", ".tsx", ".js"]).map(f => relative(REPO_ROOT, f));
+  assert.ok(files.length > 0, "tests/ 下应至少有一个文件");
+  const res = spawnSync("git", ["check-ignore", "--stdin"], {
+    cwd: REPO_ROOT,
+    input: files.join("\n"),
+    encoding: "utf8",
+  });
+  // git check-ignore --stdin：有任一被忽略者退 0（并打印之），全部未被忽略退 1。
+  assert.equal(res.status, 1, `以下文件被 .gitignore 忽略却仍被计入：\n${res.stdout}`);
+});
+
+test("【负控制】listFiles 计入未跟踪但未被忽略的新文件", () => {
+  // 「先刷新基线、再 git add」是常见顺序；若只认 --cached，新文件会被漏计。
+  const dir = mkdtempSync(join(REPO_ROOT, "tests", "tmp-listfiles-"));
+  try {
+    const probe = join(dir, "probe.spec.ts");
+    writeFileSync(probe, "// probe\n", "utf8");
+    const files = listFiles(dir, [".ts", ".tsx"]);
+    assert.deepEqual(
+      files.map(f => relative(REPO_ROOT, f)),
+      [relative(REPO_ROOT, probe)],
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("listFiles 按扩展名过滤并排除 .d.ts", () => {
+  const files = listFiles(join(REPO_ROOT, "scripts"), [".mjs"]);
+  assert.ok(files.length > 0);
+  assert.ok(files.every(f => f.endsWith(".mjs")));
 });
 
 // ---------------------------------------------------------------------------

@@ -54,6 +54,8 @@ pnpm typecheck && pnpm lint && pnpm format:check
 
 ### 指标口径说明（重要）
 
+> **2026-09-15（#340）文件清单改为 git 感知**：所有指标此前用 `readdir` 遍历**工作树**，会把 `.gitignore` 忽略的文件计入（本仓实测 `tests/**.test.ts` 5 个、wiki 下若干 md），而它们在 CI 检出树里不存在——同一份代码在开发机与 CI 上算出**不同的数**（532 vs 527 个测试文件），指标不可复现。现统一走 `git ls-files --cached --others --exclude-standard`（= 已跟踪 ∪ 未跟踪但未被忽略），使「本机 = CI」。跨此日期的同比须注意：`tests 文件` 532 → 527、`测试覆盖合计` 515 → 510、`知识卡重复` 72 组 → 70 组。
+
 > **2026-09-11（C42 终审）口径已对齐**：此前所有指标一律只扫 `src/`，与 `docs/code-refinement-plan.md` §六 基线表声明的 `src + ui/src` / `src + ui/server` 不一致——C40/C41 两张横切卡都不得不先自建扫描重建口径才能定目标（见 C41 note「遗留口径问题」）。现已按基线表对齐，`metrics.md` 顶部输出「指标口径」表，`--json` 亦可读出 `scopes` 字段。**跨 2026-09-11 的同比须按同一口径重算。**
 
 - **`any` 指标已从裸正则改为 TS AST 精确统计**（`scanTypeEscapes`）：旧正则 `: any | as any | <any> | any[]` 两个方向都不准——**高估**（注释/字符串里的英文单词 "any"，如 `SnipEngine.ts:64` 的 "any tool_call"）且**低估**（泛型位 `Record<string, any>` 文本不含 `: any`，被漏掉）。现在只统计真正的类型位 `AnyKeyword` 节点 + `@ts-expect-error`/`@ts-ignore` 指令，`src + ui/src` 实测 **3 处**，与 C40 逐处 `SAFETY` 登记的保留清单完全一致（互为交叉验证）。真正的类型债是强转与断言（`as never`/`as unknown as X`/`as string[]`/`!`，见 `backlog.md` TD-TYPE-002）——其中 `as unknown as X` 已单列口径，见下条。
