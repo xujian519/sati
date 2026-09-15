@@ -49,9 +49,6 @@ jobs:
           corepack prepare pnpm@10.32.1 --activate
           pnpm --version
 
-      - name: Self-test PR traceability gate
-        run: node --test .github/scripts/check-pr-issue.test.mjs
-
       - name: Install dependencies
         env:
           # node-gyp 编译原生模块（如 node-pty）时需下载 Node headers，
@@ -60,6 +57,12 @@ jobs:
           npm_config_fetch_retry_mintimeout: "1000"
           npm_config_fetch_retry_maxtimeout: "60000"
         run: pnpm install --frozen-lockfile
+
+      # 议题/PR 工具链与标签门禁的负控制测试。整体挂载（而非逐个单文件）：
+      # 新增脚本测试文件会自动进 CI，不再出现「测试写了但从不执行」。
+      # 必须排在 install 之后 —— measure-techdebt.test.mjs 依赖 typescript。
+      - name: Self-test PR tooling gates
+        run: pnpm test:pr-tooling
 
       - name: Typecheck (root)
         run: pnpm typecheck
