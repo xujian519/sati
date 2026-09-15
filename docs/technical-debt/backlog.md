@@ -603,10 +603,17 @@
 > 复核更正：本模块无真实 TODO/FIXME 注释（4 处命中均为 prompt/契约里「拒收含 fuzzy 'TODO'」的业务语义，非债）。静默吞错 ~21 处 `.catch(()=>undefined)`，多数为 best-effort cleanup 可接受。
 
 - **TD-ALWAYSON-N01** · `DiscoveryFire` god class，`run`/`rerunPlan` 近乎全量复制
-  - 类别：A · 严重级：P1 · 工作量：L · 状态：new
+  - 类别：A · 严重级：P1 · 工作量：L · 状态：**done（2026-09-15 · PR #383）**
   - 位置：`src/always-on/runtime/DiscoveryFire.ts:598`（run）与 `:314`（rerunPlan）
-  - 影响：两方法从 workspace→execution→report→写 plan/state/history 几乎逐行相同（~250-280 行）且各带 5 个 `.catch(()=>undefined)` finally 清理块，修一处须改两处。建议：抽 `private runPipeline(plan, baseHistory)`。
-  - 证据：`:598-1010` 与 `:314-597` 语义逐段对应；`runWorkspacePhase` 被两者共同调用 `:739`/`:360`。
+  - 影响：两方法从 workspace→execution→report→写 plan/state/history 几乎逐行相同（~250-280 行），修一处须改两处。
+  - 处置：抽出 `private runPipeline({runId, startedAt, planRecord, planMarkdown, state})` 承载 Phase 2-4；两个入口各自只保留真正不同的前置（`run` 的 Phase 1 discovery、`rerunPlan` 的计划读回 + 存在性双校验 + 置 ready）。**方法体由原 `run()` 的 Phase 2-4 机械派生**（仅 `planRecord.id`→`planId`、`discoveryCtx.plan.markdown`→入参 `planMarkdown`），脚本对 275 行逐行规范化比对通过且 `biome` 报 `No fixes applied` ⇒ diff 退化为「抽方法 + 纯改名」。`run` 里仅服务「未产出计划即失败」的历史基底改名 `prePlanHistory`。
+  - **口径修正 1（`baseHistory`）**：台账与 issue 建议的签名 `runPipeline(plan, baseHistory)` 把「历史基底」当成真实差异，实核它是**偶然差异且不可观察**——`rerunPlan` 的 `baseHistory` 含 `planId`、`run` 的不含，但 `run` 在每处 `appendHistory` 时又显式补上 `planId`，两条入口产出的 history 记录本就完全相同。故未采纳该签名，改为管线内按 `planRecord` 自建。
+  - **口径修正 2（静默清理计数）**：「两方法各带 5 个 `.catch(()=>undefined)`」不成立。这段管线内每个入口 2 个（execution/report 的 `closeSession`），`run` 另多 1 个 discovery 会话清理；文件中其余 6 个属 `runApplyPhase`/`runWorkspacePhase`/`emitEvent`/`drainTurn`/`releaseDiscoveryLock`，不属这段重复。
+  - **口径修正 3（死接线）**：`deps.logger` 被声明并被 `AlwaysOnRuntime.bindGateway` 注入，却在整个文件里**零引用**。本次把「关闭 always-on 会话」的 5 处清理收敛为 `closeSessionQuietly()` 并接线 logger（失败记 `warn`、仍不上抛）——即 issue 备注建议的「带日志的清理」，未采纳的部分见下。
+  - 未采纳：**把本文件全部 11 处 `.catch(()=>undefined)` 一起改为带日志**。其余 4 处属事件落盘（`emitEvent`/`drainTurn`）与锁删除，失败语义不同，且仓库级口径由 **#353** 统一裁定——在一个文件里先落一套会碎片化该决策。
+  - 验收：新增 `tests/always-on/runtime/discovery-fire-pipeline.spec.ts`（10 例：七条路径的事件序列与落盘调用 + 跨调用方有序 trace + `run`↔`rerunPlan` 等价性）。**负控制三处**：收尾两笔落盘对调 → trace 用例转红；`rerunPlan` 的 `planMarkdown` 置空制造参数漂移 → 等价性用例转红；`closeSessionQuietly` 改回静默吞 → 留痕用例转红。
+  - 证据（指标）：`DiscoveryFire.ts` 1256 → 1078 行（退出「最大文件」榜）；方法 `run`（原 414 行，榜内 `src/` 下最大方法）退出「最大方法」榜；src TS 总行数 185194 → 185017。事件矩阵 `submitTurn` 生产点仅行号位移（`:1138`→`:961`），生产/消费集合未变。
+  - 决策记录：`docs/notes/implemented/2026-09-15-discovery-fire-pipeline.md`
 - **TD-ALWAYSON-N02** · `web/DiscoveryPlanService` 重写一套存储层，与 core 存储双轨并存
   - 类别：D · 严重级：P2 · 工作量：M · 状态：new
   - 位置：`src/always-on/web/DiscoveryPlanService.ts:626-635`、`:215-269`、`:639-663`
