@@ -117,9 +117,9 @@ export class ToolContextFactory {
     const provider = this.host.dependencies.workspaceLedger;
     if (!provider) return undefined;
     try {
-      const state = await provider.read();
-      if (!state) return undefined;
-      return renderWorkspaceCoreDirective(state);
+      const snapshot = await provider.read();
+      if (snapshot.status !== "ok" || snapshot.state === undefined) return undefined;
+      return renderWorkspaceCoreDirective(snapshot.state);
     } catch {
       // 工作区账本读取失败 → 跳过该指令注入，不阻断回合（best-effort）。
       return undefined;

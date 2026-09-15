@@ -5,6 +5,11 @@
  * persists the result. It records and reports state — it never chooses a
  * solution or blocks the agent. Malformed edits are reported as rejected, and
  * a mixed call never drops an independent valid edit.
+ *
+ * The one thing it refuses is writing on top of a ledger it could not read: the
+ * edit would be applied to an empty base and the persisted snapshot would drop
+ * the existing ledger. That is a corrupt write, not a rejected edit, so it
+ * surfaces as a tool error rather than as a `rejected` entry.
  */
 import type { SatiToolDefinition } from "../../protocol/types.js";
 import { SatiToolRuntimeError } from "../../protocol/errors.js";
@@ -59,7 +64,14 @@ export function createWorkspaceNoteTool(): SatiToolDefinition<WorkspaceNoteInput
           "workspace_note is unavailable in this session: the workspace ledger needs a persistent transcript and the workspace-ledger feature enabled.",
         );
       }
-      const current = (await context.workspaceLedger.read()) ?? emptyWorkspaceLedger();
+      const snapshot = await context.workspaceLedger.read();
+      if (snapshot.status === "unavailable") {
+        throw new SatiToolRuntimeError(
+          "tool_execution_failed",
+          `workspace_note: the current ledger could not be read (${snapshot.code}: ${snapshot.message}). Refusing to write, because the edit would be applied to an empty ledger and would drop the existing one.`,
+        );
+      }
+      const current = snapshot.state ?? emptyWorkspaceLedger();
       const result = applyWorkspaceNote(current, input);
       if (result.changed) {
         await context.workspaceLedger.write(result.state, {

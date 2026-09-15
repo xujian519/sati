@@ -116,15 +116,18 @@ export {
   renderWorkspaceCoreDirective,
   renderWorkspaceLedgerBlock,
   readLatestWorkspaceState,
+  scanLatestWorkspaceState,
   WorkspaceLedgerStore,
   MAX_LIVE_CORE,
   type SatiWorkspaceLedgerProvider,
   type WorkspaceCoreEntry,
   type WorkspaceLedgerBlock,
+  type WorkspaceLedgerReadResult,
   type WorkspaceLedgerState,
   type WorkspaceNoteInput,
   type WorkspaceNoteResult,
   type WorkspaceOpenEntry,
+  type WorkspaceStateScanCursor,
   type WorkspaceVerifiedEntry,
 } from "./workspace/index.js";
 export {

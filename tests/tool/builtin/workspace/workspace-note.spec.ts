@@ -7,15 +7,23 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createWorkspaceNoteTool } from "../../../../src/tool/builtin/workspace/WorkspaceNoteTool.js";
-import type { SatiWorkspaceLedgerProvider } from "../../../../src/session/workspace/WorkspaceLedgerStore.js";
+import type {
+  SatiWorkspaceLedgerProvider,
+  WorkspaceLedgerReadResult,
+} from "../../../../src/session/workspace/WorkspaceLedgerStore.js";
 import type { WorkspaceLedgerState } from "../../../../src/session/workspace/WorkspaceLedger.js";
 import type { SatiToolRuntimeContext } from "../../../../src/tool/protocol/types.js";
 
 class MemProvider implements SatiWorkspaceLedgerProvider {
   state: WorkspaceLedgerState | undefined;
   writes = 0;
-  async read(): Promise<WorkspaceLedgerState | undefined> {
-    return this.state;
+  /** 置位后 read() 模拟「transcript 读不到」（如超 50MB）。 */
+  unreadable = false;
+  async read(): Promise<WorkspaceLedgerReadResult> {
+    if (this.unreadable) {
+      return { status: "unavailable", code: "transcript_too_large", message: "too large" };
+    }
+    return { status: "ok", state: this.state };
   }
   async write(state: WorkspaceLedgerState, _ctx: { sessionId: string; turnId: string }): Promise<void> {
     this.state = state;
@@ -79,4 +87,21 @@ test("workspace_note reports unsupported_tool without a provider", async () => {
     () => tool.execute({ goal: "g", next: "n" }, context(undefined as unknown as SatiWorkspaceLedgerProvider)),
     error => (error as { code?: string }).code === "unsupported_tool",
   );
+});
+
+test("workspace_note refuses to write when the ledger cannot be read", async () => {
+  const provider = new MemProvider();
+  const tool = createWorkspaceNoteTool();
+  await tool.execute({ goal: "g", next: "n" }, context(provider));
+  assert.equal(provider.writes, 1);
+  // transcript 变得不可读：此时写回会以空态为基座，丢掉既有账本 → 必须拒绝。
+  provider.unreadable = true;
+  await assert.rejects(
+    () => tool.execute({ goal: "NEW" }, context(provider)),
+    error =>
+      (error as { code?: string }).code === "tool_execution_failed" &&
+      (error as Error).message.includes("transcript_too_large"),
+  );
+  assert.equal(provider.writes, 1, "不可读时不得写入");
+  assert.equal(provider.state!.goal, "g", "既有账本不得被改写");
 });
