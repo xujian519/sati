@@ -3,12 +3,12 @@ import express from "express";
 import { promises as fs } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import os from "os";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import { parseFrontmatter } from "../utils/frontmatter.js";
 import { readSatiConfigFile, resolveModel } from "../services/satiConfig.js";
 import { resolvePilotHome } from "../utils/pilotPaths.js";
+import { COMMAND_PATH_DENIED_MESSAGE, resolveCommandPath } from "../utils/commandPaths.js";
 import { CLAWHUB_NOT_FOUND_MESSAGE, getClawhubPath } from "../utils/clawhub.js";
 import { executeTurnkeySlashCommand } from "../turnkey-slash.js";
 import { getRegisteredCommands } from "../../../src/adapters/channel/protocol/index.js";
@@ -954,7 +954,7 @@ router.post("/list", async (req, res) => {
  */
 router.post("/load", async (req, res) => {
   try {
-    const { commandPath } = req.body;
+    const { commandPath, context } = req.body;
 
     if (!commandPath) {
       return res.status(400).json({
@@ -962,23 +962,23 @@ router.post("/load", async (req, res) => {
       });
     }
 
-    // Security: Prevent path traversal. Allow paths under any
-    const resolvedPath = path.resolve(commandPath);
-    const inHome = resolvedPath.startsWith(path.resolve(os.homedir()));
-    const inSatiSubdir = /\.sati\/(commands|skills)\//.test(resolvedPath);
-    if (!inHome && !inSatiSubdir) {
+    // Security: same whitelist as /execute (see ui/server/utils/commandPaths.js).
+    // Previously this route accepted anything under $HOME, which made it an
+    // arbitrary-file-read primitive over the browser-reachable HTTP server.
+    const resolvedPath = resolveCommandPath(commandPath, context);
+    if (!resolvedPath) {
       return res.status(403).json({
         error: "Access denied",
-        message: "Command must be in a .sati/commands or .sati/skills directory",
+        message: COMMAND_PATH_DENIED_MESSAGE,
       });
     }
 
     // Read and parse the command file
-    const content = await fs.readFile(commandPath, "utf8");
+    const content = await fs.readFile(resolvedPath, "utf8");
     const { data: metadata, content: commandContent } = parseFrontmatter(content);
 
     res.json({
-      path: commandPath,
+      path: resolvedPath,
       metadata,
       content: commandContent,
     });
@@ -1082,31 +1082,14 @@ router.post("/execute", async (req, res) => {
 
     // Load command content
     // Security: validate commandPath is within allowed directories.
-    {
-      const resolvedPath = path.resolve(commandPath);
-      const pilotHome = resolvePilotHome(process.env);
-      const allowedBases = [
-        path.resolve(path.join(pilotHome, "commands")),
-        path.resolve(path.join(pilotHome, "skills")),
-      ];
-      if (context?.projectPath) {
-        allowedBases.push(
-          path.resolve(path.join(context.projectPath, ".sati", "commands")),
-          path.resolve(path.join(context.projectPath, ".sati", "skills")),
-        );
-      }
-      const isUnder = base => {
-        const rel = path.relative(base, resolvedPath);
-        return rel !== "" && !rel.startsWith("..") && !path.isAbsolute(rel);
-      };
-      if (!allowedBases.some(isUnder)) {
-        return res.status(403).json({
-          error: "Access denied",
-          message: "Command must be in a .sati/commands or .sati/skills directory",
-        });
-      }
+    const resolvedPath = resolveCommandPath(commandPath, context);
+    if (!resolvedPath) {
+      return res.status(403).json({
+        error: "Access denied",
+        message: COMMAND_PATH_DENIED_MESSAGE,
+      });
     }
-    const content = await fs.readFile(commandPath, "utf8");
+    const content = await fs.readFile(resolvedPath, "utf8");
     const { data: metadata, content: commandContent } = parseFrontmatter(content);
     // Basic argument replacement ($ARGUMENTS and $1..$N below)
     let processedContent = commandContent;
