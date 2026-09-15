@@ -98,12 +98,12 @@ dsh-agent-teams 是 DeepSeek Harness（DSH，开源 AI agent 宿主，cordis 插
 | 能力面 | Sati 现状 |
 |---|---|
 | 子代理 | `agent` 工具（`src/tool/builtin/agent.ts`）+ `subagent_type` 预设 / SKILL.md 角色，`SubAgentSession`（`src/agent/sub/`）fork 一次性运行：子代理跑完一个循环后返回 5 字段报告回流父代理，sidechain 转录 |
-| 工作流 | 声明式 workflow（`src/workflow/`：DAG + SafeEvaluator + checkpoint + worker-contract），flexible-plan 阶段级计划，plantask HITL 状态机（以上通用）；专利域 `JsonFileManifestCheckpointStore` 断点续跑（`src/patent/workflow/checkpoint.ts`，`resumeCheckpointId` / `approveStageIds`） |
+| 工作流 | 专利域 workflow（`src/patent/workflow/`：executor + checkpoint + types/manifests）、flexible-plan 阶段级计划、plantask HITL 状态机；`JsonFileManifestCheckpointStore` 断点续跑（`src/patent/workflow/checkpoint.ts`，`resumeCheckpointId` / `approveStageIds`）。**注**：通用 `src/workflow/`（DAG + SafeEvaluator + worker-contract）已随 issue #150 删除 |
 | 任务 | `src/task/` 是**后台 bash 任务运行时**（`BackgroundTaskRuntime`：spawn 分离进程 + 输出环形缓冲），不是多智能体任务池 |
 | 常驻执行 | `src/always-on/`：Discovery 计划/报告/工作周期 + workspace 隔离；`src/cron/` 定时任务 |
 | 记忆 | 白盒记忆（`src/context/memory/`，EdgeClawMemoryProvider + edgeclaw-memory-core 子包）、知识库 `knowledge.db`（图谱/判例/法规/wiki）、Dream Mode 压缩与回滚 |
 | 会话持久化 | `JsonlTranscriptWriter` 批写（64 KB / 50 ms 兜底）+ 显式 `flushCheckpoint`（真 flush）；`TaskResumeScanner` 形态断点续算（`request_header` 后无 durable 消息自动续算）；`retry_schedule` 重试轨迹 |
-| 事件/网关 | AgentEvent + GatewayEvent 62 事件（事件矩阵门禁）、gateway 协议 1.3、输出门禁 HITL 审批闭环（GatewayApprovalBus + approvalDecide） |
+| 事件/网关 | AgentEvent + GatewayEvent 62 事件（事件矩阵门禁）、gateway 协议 **1.8**（`src/gateway/protocol/version.ts:53`）、输出门禁 HITL 审批闭环（GatewayApprovalBus + approvalDecide） |
 | UI | `ui/src/components/task-master/`（任务看板：dependencies/subtasks/status）、workflow-run 相关组件、审批卡片 |
 
 ### 2.2 关键差距：Sati 缺"团队编排层"及其底座
