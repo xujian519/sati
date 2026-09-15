@@ -8,6 +8,7 @@ import { isRecord } from "../../model/config/schema.js";
 import { ModelConfigError } from "../../model/protocol/errors.js";
 import { getPilotConfigFilePath, getPilotMemoryRootDir, resolvePilotHome } from "../../shared/paths/index.js";
 import { parseRouterConfig } from "../../router/config/parseRouterConfig.js";
+import { createLogger } from "../../telemetry/index.js";
 import { sha256, stableStringify } from "./hash.js";
 import { mergeConfigSources } from "./merge.js";
 import { parseMemoryConfig } from "./parseMemoryConfig.js";
@@ -31,6 +32,151 @@ import {
 
 const SUPPORTED_SCHEMA_VERSION = 1;
 const ENV_CONFIG_OVERRIDES = [["PILOT_AGENT_MODEL", ["agent", "model"]]] as const;
+
+const logger = createLogger("sati");
+
+/** 单个配置段的解析产物（`parseConfigSections` 的返回值）。 */
+type PilotConfigSections = {
+  agent: PilotAgentConfig;
+  extension: PilotExtensionConfig;
+  memory: ReturnType<typeof parseMemoryConfig>;
+  gateway: ReturnType<typeof parseGatewayConfig>;
+  adapters: ReturnType<typeof parseAdaptersConfig>;
+  router: ReturnType<typeof parseRouterSection>;
+  alwaysOn: ReturnType<typeof parseAlwaysOnConfig>;
+  cron: ReturnType<typeof parseCronConfig>;
+  tools: ReturnType<typeof parseToolsConfig>;
+  patents: ReturnType<typeof parsePatentsConfig>;
+  telemetry: PilotTelemetryConfig;
+  proxy: PilotProxyConfig | undefined;
+};
+
+/**
+ * 逐段解析配置，并保证逃逸的校验异常进入诊断通道（#347）。
+ *
+ * 值校验器（`readString` / `readBoolean` / `readOptionalPositiveInteger` 一族）以
+ * `throw PilotConfigError` 表达 fatal。这类异常若直接冒泡，就绕过了诊断通道：
+ * `error.diagnostics` 为空数组，`PilotConfigStore.reload` 只能记下空诊断，
+ * `getDiagnostics()` 随之丢掉失败原因，UI 便无从呈现「该改哪个字段」。
+ *
+ * 兜住后不变量恢复为「存在 fatal 诊断 ⇔ error.diagnostics 非空」，且对外可见的
+ * code / message 与兜住前完全一致（`throwConfigErrorIfFatal` 用同一条诊断重建错误）。
+ */
+function parseConfigSectionsSafely(
+  rawConfig: PilotRawConfig,
+  model: ReturnType<typeof parseModel>,
+  pilotHome: string,
+  diagnostics: PilotConfigDiagnostic[],
+): PilotConfigSections {
+  try {
+    return parseConfigSections(rawConfig, model, pilotHome, diagnostics);
+  } catch (error) {
+    pushEscapedConfigFailure(error, diagnostics);
+    throwConfigErrorIfFatal(diagnostics);
+    // 上一步必然抛出：逃逸异常已被转写成 fatal 诊断。此行仅为满足控制流。
+    throw error;
+  }
+}
+
+function parseConfigSections(
+  rawConfig: PilotRawConfig,
+  model: ReturnType<typeof parseModel>,
+  pilotHome: string,
+  diagnostics: PilotConfigDiagnostic[],
+): PilotConfigSections {
+  const agent = parseAgent(rawConfig.agent, model, diagnostics);
+  const extension = parseExtension(rawConfig.extension, diagnostics);
+  const memory = parseMemoryConfig(rawConfig.memory, diagnostics, getPilotMemoryRootDir(pilotHome), model);
+  const gateway = parseGatewayConfig(rawConfig.gateway, diagnostics);
+  const adapters = parseAdaptersConfig(rawConfig.adapters, diagnostics);
+  const router = parseRouterSection(rawConfig.router, model, diagnostics);
+
+  if (router?.scenarios?.default && agent.model.id !== router.scenarios.default.id) {
+    // Soft-recover instead of crashing: many users update agent.model through
+    // onboarding/UI without touching the router block, leaving the two out of
+    // sync. Treating that as fatal locks them out of the gateway entirely
+    // (see issue: customer reinstall doesn't help because sati.yaml
+    // survives the wipe). Auto-align router.scenarios.default to agent.model
+    // and warn — agent.model is the canonical source of truth.
+    const previousId = router.scenarios.default.id;
+    router.scenarios.default = {
+      id: agent.model.id,
+      provider: agent.model.provider,
+      model: agent.model.model,
+    };
+    diagnostics.push({
+      code: "CONFIG_MODEL_CONFLICT",
+      severity: "warning",
+      message:
+        `agent.model (${agent.model.id}) and router.scenarios.default (${previousId}) ` +
+        `disagree. Using agent.model and overriding router.scenarios.default ` +
+        `at runtime. Update the yaml to silence this warning.`,
+      path: "agent.model",
+      recoverable: true,
+    });
+  }
+
+  const alwaysOn = parseAlwaysOnConfig(rawConfig.alwaysOn, diagnostics);
+  const cron = parseCronConfig(rawConfig.cron, diagnostics);
+  const tools = parseToolsConfig(rawConfig.tools, diagnostics);
+  const patents = parsePatentsConfig(rawConfig.patents, diagnostics);
+  const telemetry = parseTelemetryConfig(rawConfig.telemetry);
+  const proxy = parseProxyConfig(rawConfig, diagnostics);
+  throwConfigErrorIfFatal(diagnostics);
+
+  return { agent, extension, memory, gateway, adapters, router, alwaysOn, cron, tools, patents, telemetry, proxy };
+}
+
+/**
+ * 把逃逸出配置段解析的异常转写成 fatal 诊断（#347）。
+ *
+ * - 已携带诊断的 `PilotConfigError`（来自 `throwConfigErrorIfFatal`）原样透出；
+ * - 未携带诊断的 `PilotConfigError`（值校验器的裸 throw）按 code / message 转写；
+ * - 其余异常一并兜住并留日志：配置加载的契约是「不崩 + 结构化诊断」，
+ *   未预期异常同样不该绕过该通道（否则调用方只剩一个原始异常，读不出该改哪个字段）。
+ *
+ * 导出仅供单测直接覆盖三种输入形态（与 `parseAgentThinking` 同一取向）。
+ */
+export function configFailureDiagnostics(error: unknown): PilotConfigDiagnostic[] {
+  if (error instanceof PilotConfigError) {
+    if (error.diagnostics.length > 0) {
+      return [...error.diagnostics];
+    }
+    return [
+      {
+        code: error.code,
+        severity: "fatal",
+        message: error.message,
+        recoverable: false,
+      },
+    ];
+  }
+
+  logger.warn("pilot config validation raised an unexpected error; recording it as a fatal diagnostic", error);
+  return [
+    {
+      code: "CONFIG_UNEXPECTED_ERROR",
+      severity: "fatal",
+      message: `Unexpected failure while validating config: ${error instanceof Error ? error.message : String(error)}`,
+      hint: error instanceof Error ? error.name : undefined,
+      recoverable: false,
+    },
+  ];
+}
+
+/**
+ * 把 {@link configFailureDiagnostics} 的结果并入诊断数组。
+ *
+ * `throwConfigErrorIfFatal` 抛出的错误其 `diagnostics` 与传入数组是同一引用，
+ * 此时逐条并入是恒等变换（靠 `includes` 去重），故不会重复入账。
+ */
+function pushEscapedConfigFailure(error: unknown, diagnostics: PilotConfigDiagnostic[]): void {
+  for (const diagnostic of configFailureDiagnostics(error)) {
+    if (!diagnostics.includes(diagnostic)) {
+      diagnostics.push(diagnostic);
+    }
+  }
+}
 
 export function loadPilotConfig(options: PilotConfigLoadOptions = {}): PilotConfigSnapshot {
   const env = options.env ?? process.env;
@@ -84,45 +230,10 @@ export function loadPilotConfig(options: PilotConfigLoadOptions = {}): PilotConf
   // 无法等待网络探测；缓存就绪后，下一次 reload / 重启即可让
   // parseModelConfig 自动补全用户已安装的模型（见 model/ollama/probe.ts）。
   warmOllamaProviders(model);
-  const agent = parseAgent(rawConfig.agent, model, diagnostics);
-  const extension = parseExtension(rawConfig.extension, diagnostics);
-  const memory = parseMemoryConfig(rawConfig.memory, diagnostics, getPilotMemoryRootDir(pilotHome), model);
-  const gateway = parseGatewayConfig(rawConfig.gateway, diagnostics);
-  const adapters = parseAdaptersConfig(rawConfig.adapters, diagnostics);
-  const router = parseRouterSection(rawConfig.router, model, diagnostics);
 
-  if (router?.scenarios?.default && agent.model.id !== router.scenarios.default.id) {
-    // Soft-recover instead of crashing: many users update agent.model through
-    // onboarding/UI without touching the router block, leaving the two out of
-    // sync. Treating that as fatal locks them out of the gateway entirely
-    // (see issue: customer reinstall doesn't help because sati.yaml
-    // survives the wipe). Auto-align router.scenarios.default to agent.model
-    // and warn — agent.model is the canonical source of truth.
-    const previousId = router.scenarios.default.id;
-    router.scenarios.default = {
-      id: agent.model.id,
-      provider: agent.model.provider,
-      model: agent.model.model,
-    };
-    diagnostics.push({
-      code: "CONFIG_MODEL_CONFLICT",
-      severity: "warning",
-      message:
-        `agent.model (${agent.model.id}) and router.scenarios.default (${previousId}) ` +
-        `disagree. Using agent.model and overriding router.scenarios.default ` +
-        `at runtime. Update the yaml to silence this warning.`,
-      path: "agent.model",
-      recoverable: true,
-    });
-  }
-
-  const alwaysOn = parseAlwaysOnConfig(rawConfig.alwaysOn, diagnostics);
-  const cron = parseCronConfig(rawConfig.cron, diagnostics);
-  const tools = parseToolsConfig(rawConfig.tools, diagnostics);
-  const patents = parsePatentsConfig(rawConfig.patents, diagnostics);
-  const telemetry = parseTelemetryConfig(rawConfig.telemetry);
-  const proxy = parseProxyConfig(rawConfig, diagnostics);
-  throwConfigErrorIfFatal(diagnostics);
+  const sections = parseConfigSectionsSafely(rawConfig, model, pilotHome, diagnostics);
+  const { agent, extension, memory, gateway, adapters, router } = sections;
+  const { alwaysOn, cron, tools, patents, telemetry, proxy } = sections;
 
   const redactedSnapshotConfig = redactConfig({
     agent,

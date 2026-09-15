@@ -825,13 +825,15 @@
 **模块概况**：14 文件；`loadPilotConfig` 编排 15+ 子 parser 生成冻结快照，`PilotConfigStore` 缓存/热重载/`lastGoodFacts`/失败计数，辅以合并/脱敏/变更分类。
 
 - **TD-PILOT-N02** · 校验错误走两套通道：结构化诊断 vs 直接 `throw PilotConfigError`
-  - 类别：C · 严重级：**P1** · 工作量：M · 状态：new
-  - 位置：`src/pilot/config/loadPilotConfig.ts:681`；`parseMemoryConfig.ts:452`
-  - 影响：值校验器直接 throw，且 `loadPilotConfig` 仅对 `parseModel` 包了 try/catch（`575-590`），首载时此类 throw 直接冒泡不进诊断数组；`PilotConfigStore.reload` 捕获后因这些 Error 未携带 `diagnostics`，无法向 UI 呈现可读错误。建议：统一让值校验器 push diagnostic，或顶层捕获转成 fatal diagnostic。
+  - 类别：C · 严重级：**P1** · 工作量：M · 状态：**done（已修复 2026-09-15，PR #380）**
+  - 修复：在 `loadPilotConfig` 的各段解析外加兜底 `parseConfigSectionsSafely`——把逃逸的异常经 `configFailureDiagnostics` 转写成 fatal 诊断（未携带诊断的 `PilotConfigError` 按 code/message 转写；非 `PilotConfigError` 记 `CONFIG_UNEXPECTED_ERROR` + `logger.warn`）后再由 `throwConfigErrorIfFatal` 抛出，故对外 `code`/`message` 与兜底前逐字一致，只有 `error.diagnostics` 由空变为非空。不变量恢复为「有 fatal 诊断 ⇔ `error.diagnostics` 非空」，`getDiagnostics()` 不再丢失败原因。值校验器保持纯函数（未采纳「全部改 push」的更彻底方向，理由见决策记录）。新增 `tests/pilot/config/config-error-channel.spec.ts`（5 例：5 类裸 throw 的端到端 + reload→`getDiagnostics()` + 三种转写形态的单测），并做负控制（摘掉兜底后两条集成用例转红）。
+  - 决策记录：`docs/notes/implemented/2026-09-15-pilot-config-error-channel.md`
+  - 位置：`src/pilot/config/loadPilotConfig.ts`；`parseMemoryConfig.ts`
 - **TD-PILOT-N01** · `loadPilotConfig.ts` ~784 行单函数编排 monolith
   - 类别：A · 严重级：P2 · 工作量：M · 状态：new
   - 位置：`src/pilot/config/loadPilotConfig.ts:35-165` + 全文件 784 行
   - 建议：按子系统拆parse+assemble，或拆为 `parse`+`assemble` 两纯函数。
+  - 进展（2026-09-15，随 TD-PILOT-N02 修复）：逐段解析已抽成 `parseConfigSections`（入参 `rawConfig`/`model`/`pilotHome`/`diagnostics`，返回 `PilotConfigSections`），`loadPilotConfig` 只保留源读取/校验/快照装配。**未收口**：`parseConfigSections` 仍是约 40 行的顺序编排，`RuntimeDeps` 式依赖注入与 parse/assemble 纯函数化尚未做。
 - **TD-PILOT-N03** · `warmOllamaProviders` fire-and-forget 无错误处理（未捕获拒绝）
   - 类别：C · 严重级：P2 · 工作量：S · 状态：**done（已修复 2026-08-23）**
   - 修复：`warmOllamaModels` 与 `getCachedOllamaModels`（stale-while-revalidate 后台刷新）的 fire-and-forget 调用加 `.catch(() => {})`（预热为 best-effort，ollama 不可达时忽略，不再 unhandledRejection）；`warmOllamaModels` 增可选 `options.fetchImpl` 透传以便注入失败 fetch。新增 `tests/model/ollamaConfig.spec.ts` 的「warmOllamaModels swallows unreachable-ollama rejection」用例（监听 unhandledRejection 断言不触发）。typecheck/lint/biome/测试全绿。
