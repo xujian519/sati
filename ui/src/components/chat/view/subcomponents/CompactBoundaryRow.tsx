@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import type { ReactNode } from "react";
 import type { ChatMessage, CompactBoundaryShadowedMessage } from "../../types/types";
+import { resolveCompactBoundaryTone } from "./compactBoundaryTone";
 
 /**
  * 压缩边界行：分隔线 + 标签 + token 前后对比 + 「展开压缩前原文」交互。
@@ -22,12 +23,27 @@ export function CompactBoundaryRow({
   const shadowedMessages = Array.isArray(message.shadowedMessages) ? message.shadowedMessages : [];
   const shadowedCount = shadowedMessages.length;
   const shadowedDiagnostics = Array.isArray(message.shadowedDiagnostics) ? message.shadowedDiagnostics : [];
+  // 降级/中断不得与成功共用同一个绿色徽标（上游 #570 移植）。
+  const tone = resolveCompactBoundaryTone(message);
+  const label =
+    tone === "cancelled"
+      ? t("compact.labelCancelled", { defaultValue: "已中断（沿用降级摘要）" })
+      : tone === "degraded"
+        ? t("compact.labelDegraded", { defaultValue: "摘要降级" })
+        : t("compact.label");
+  const lineClass = tone === "ok" ? "bg-emerald-200/70 dark:bg-emerald-900/50" : "bg-amber-200/70 dark:bg-amber-900/50";
+  const badgeClass =
+    tone === "ok"
+      ? "border-emerald-200/80 bg-emerald-50 text-emerald-700 dark:border-emerald-800/60 dark:bg-emerald-950/30 dark:text-emerald-300"
+      : "border-amber-300/80 bg-amber-50 text-amber-700 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-300";
   return (
     <div className="my-2 flex w-full flex-col items-center gap-1.5 px-3 sm:px-0">
       <div className="flex w-full items-center justify-center gap-2">
-        <span className="h-px flex-1 bg-emerald-200/70 dark:bg-emerald-900/50" />
-        <span className="rounded-full border border-emerald-200/80 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-medium tracking-wide text-emerald-700 uppercase dark:border-emerald-800/60 dark:bg-emerald-950/30 dark:text-emerald-300">
-          {t("compact.label")}
+        <span className={`h-px flex-1 ${lineClass}`} />
+        <span
+          className={`rounded-full border px-2.5 py-0.5 text-[11px] font-medium tracking-wide uppercase ${badgeClass}`}
+        >
+          {label}
         </span>
         {typeof message.preTokens === "number" && (
           <span className="text-[11px] text-muted-foreground tabular-nums">
@@ -40,7 +56,7 @@ export function CompactBoundaryRow({
           </span>
         )}
         <span className="text-[11px] text-muted-foreground tabular-nums">{formattedTime}</span>
-        <span className="h-px flex-1 bg-emerald-200/70 dark:bg-emerald-900/50" />
+        <span className={`h-px flex-1 ${lineClass}`} />
       </div>
       {shadowedDiagnostics.length > 0 ? (
         <div className="flex w-full max-w-2xl items-start gap-1.5 rounded-md border border-amber-300/60 bg-amber-50/70 px-2 py-1 text-[11px] text-amber-800 dark:border-amber-700/50 dark:bg-amber-950/30 dark:text-amber-200">
