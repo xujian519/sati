@@ -10,15 +10,26 @@
 import type { GraphNode, GraphState, StateDelta } from "../types.js";
 import { markDegraded } from "../degradation.js";
 import { runStageHandler } from "../adapter.js";
-import type { StageHandler } from "../../atoms/index.js";
+import { APPROVAL_GRANTED_KEY, isApprovalGateHandler, isGateApproved, type StageHandler } from "../../atoms/index.js";
 import { RuleEngine, aggregate, defaultPatentRules, type Verdict } from "../../checker/index.js";
 import type { RuleCheckResult } from "../../checker/types.js";
 import { tryParseJson } from "../../llm-json.js";
 
-/** 现有 StageHandler → 图节点（注入固定 params，合并进执行态，不污染共享 state）。 */
+/**
+ * 现有 StageHandler → 图节点（注入固定 params，合并进执行态，不污染共享 state）。
+ *
+ * 审批门放行（**门粒度**）：节点经 `nodeName` 自知其名，命中放行记录
+ * （`isGateApproved`，由 `grantApproval` 按检查点待执行节点写入）时把放行标记注入
+ * **执行态拷贝**——handler 侧统一读 `APPROVAL_GRANTED_KEY`，共享 state 不留全局标记
+ * （全局标记会让一次放行泄漏到同 run 内后续所有门）。
+ */
 export function handlerNode(handler: StageHandler, params?: Record<string, unknown>): GraphNode {
-  return async ({ state, provider }) => {
-    const execState = params !== undefined ? { ...state, ...params } : state;
+  return async ({ state, provider, nodeName }) => {
+    const approvedGate = nodeName !== undefined && isApprovalGateHandler(handler) && isGateApproved(state, nodeName);
+    const execState =
+      params !== undefined || approvedGate
+        ? { ...state, ...params, ...(approvedGate ? { [APPROVAL_GRANTED_KEY]: true } : {}) }
+        : state;
     return runStageHandler(handler, execState, provider);
   };
 }

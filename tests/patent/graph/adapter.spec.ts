@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   APPROVAL_GRANTED_KEY,
+  APPROVAL_GRANTED_NODES_KEY,
   GraphBuilder,
   InterruptStageError,
   StageHandlerRegistry,
@@ -361,14 +362,14 @@ test("manifestToGraph: 已放行审批门——两路径占位输出一致（#34
     provider,
     approvalGrants: ["gate"],
   });
-  // 图路径：放行标记在 state（grantApproval 写检查点后 resume 的执行态）。
+  // 图路径：放行记录在 state（grantApproval 按检查点 activeNodes 写入的门粒度集合）。
   const graph = manifestToGraph(manifest, {
     handlers: globalStageHandlerRegistry,
     atoms: globalAtomRegistry,
     provider,
     executor,
   });
-  const gr = await graph.run({ ...ctx, [APPROVAL_GRANTED_KEY]: true });
+  const gr = await graph.run({ ...ctx, [APPROVAL_GRANTED_NODES_KEY]: ["gate"] });
 
   assert.equal(wf.stages.find(s => s.stageId === "gate")?.output, "APPROVED");
   // 修复前此处是 ""——同一 manifest 两条链路 state 不同，正是本 issue 的漂移点。
@@ -377,6 +378,9 @@ test("manifestToGraph: 已放行审批门——两路径占位输出一致（#34
   assert.equal(gr.completed, true);
   assert.deepEqual(wf.degradedSteps, [], "放行不是降级：manifest 路径不标 degraded");
   assert.deepEqual(gr.degraded, [], "放行不是降级：图路径无降级标记");
+  // 放行契约（#358）：门粒度集合是唯一事实源，共享 state 永不残留全局放行布尔——
+  // 否则同一 run 内后续审批门会被静默放行（历史事故见 executor.ts 头注释）。
+  assert.equal(gr.state[APPROVAL_GRANTED_KEY], undefined, "共享 state 不得残留全局放行布尔");
   // 其余阶段输出照旧对齐（占位分支不得影响主输出键解析）。
   for (const stage of manifest.stages) {
     assert.equal(gr.state[stage.id], wf.stages.find(s => s.stageId === stage.id)?.output, `阶段 ${stage.id}`);

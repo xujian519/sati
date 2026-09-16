@@ -56,6 +56,11 @@ const { result, checkpointId } = await runGraphWithCheckpoints(graph, { input: "
   - executor 分支：图路径额外写 `state[stage.id]`（runWorkflow 不写）；
   - 无 handler 无 executor 的阶段：图路径写 `not_implemented` 降级标记（severity
     critical），manifest 路径进 `degradedSteps`。
+  **本清单是事实源，但判据的 home 是 `tests/patent/graph/link-consistency.spec.ts`**：
+  该 fixture 用 9 个代表性 manifest 逐条比对两条链路，并把上述差异登记成
+  `LINK_DIFFERENCES`（含理由与来源）+ 用例表**两向一致**——出现未登记差异、登记了却
+  无人实证、或差异**消失**（有人把两链路收敛了）三种情况都会转红。**动放行/降级/回退
+  语义前先跑它**，新增有意差异请同时更新本清单与登记表。
 - `runStageHandler`：现有 `StageHandler` 直接作为图节点执行（统一中断转换），
   保留降级（普通错误）与中断（`InterruptStageError` → `GraphInterruptError`）语义。
 
@@ -120,12 +125,24 @@ secondary/conclude）外，新增：
 图停在审批门暂停等待人工介入（工具路径默认）；自动执行/评测场景传
 `includeApproval: false` 直达规则门收口（如 `createGraphRunner`）。
 
-审批通过（2026-08 补齐闭环）：`grantApproval(store, checkpointId)` 把放行标记
-（`APPROVAL_GRANTED_KEY`）写入检查点 state 并持久化；`patent_workflow_run` 的
-`approveCheckpointId` 参数 = 批准 + 续跑一步到位——resume 时审批门节点重放，
-`ApprovalGateHandler` 检测到标记即放行，后续节点继续执行（不再无限暂停）。
+审批通过（2026-08 补齐闭环，2026-09-16 改为**门粒度**）：`grantApproval(store, checkpointId)`
+把**该检查点正在等待的门节点 id 集合**（值即 `activeNodes`，键 `APPROVAL_GRANTED_NODES_KEY`）
+写入检查点 state 并持久化——**不再写全局布尔**。`patent_workflow_run` 的
+`approveCheckpointId` 参数 = 批准 + 续跑一步到位。resume 时审批门节点重放，节点经
+`GraphNodeContext.nodeName` 自知其名、按 `isGateApproved(state, nodeName)` 判定后把
+`APPROVAL_GRANTED_KEY` 注入**自己的执行态拷贝**（共享 state 不留标记），
+`ApprovalGateHandler` 检测到该标记即放行，后续节点继续执行（不再无限暂停）。
+
+> ⚠️ **放行必须是门粒度，标记只许 handler 局部可见**：历史形态是往共享 state 写全局布尔
+> ⇒ 一次 `grantApproval` 会让**同一 run 内后续所有**审批门静默放行（`patent_drafting_v1`
+> 有六门）。批准**非门**检查点（`activeNodes` 里没有门）不放行任何门——fail-closed。
+> 两套节点工厂都要注入标记：`adapter.ts` 的 `makeStageNode`（按 `stage.id`）与
+> `domains/shared.ts` 的 `handlerNode`（按节点名；域图的审批门一律带 `params`，执行态本是
+> 拷贝，**不能**指望调用方传标记）。改动放行语义后必须跑
+> `tests/patent/graph/link-consistency.spec.ts`。
+
 manifest 路径（`runWorkflow`）对应 `approvalGrants: string[]`（已批准的审批门
-阶段 id），重跑时跳过这些门直接放行。
+阶段 id），重跑时跳过这些门直接放行——与图路径同为**门粒度**（共享同一放行契约）。
 
 消费方式（推荐）：
 ```ts

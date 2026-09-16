@@ -20,6 +20,13 @@ export type StateDelta = Record<string, unknown>;
 /** 节点执行上下文：state 为深拷贝快照（本超步内所有节点看到同一版本）。 */
 export type GraphNodeContext = {
   state: GraphState;
+  /**
+   * 节点在图中注册的名字（引擎注入；直接构造上下文调用节点时为 undefined）。
+   * 供节点判定**自身粒度**的事实——典型用途：审批门放行按门 id 判定
+   * （见 `atoms/handlers/builtin/gate.ts` 的 `isGateApproved`），避免"全局布尔"
+   * 式判定让一次放行泄漏到同 run 内后续所有门。
+   */
+  nodeName?: string;
   /** 复用原子层注入点（callLLM / search）。未注入时 LLM 节点应降级而非抛错。 */
   provider?: StageProvider;
   /** 超时/取消信号（节点策略注入；节点可监听做提前退出）。 */

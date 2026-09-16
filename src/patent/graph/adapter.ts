@@ -17,6 +17,7 @@ import { signalMatches } from "../workflow/signal.js";
 import { clearStageOutputs, isApprovalGateStage, resolveStageOutput } from "../workflow/stage-primitives.js";
 import {
   APPROVAL_GRANTED_KEY,
+  isGateApproved,
   type AtomRegistry,
   type StageHandler,
   type StageHandlerRegistry,
@@ -120,7 +121,15 @@ function makeStageNode(
   const handler = stage.atom !== undefined ? deps.handlers.lookup(stage.atom) : undefined;
   const mainKey = stage.atom !== undefined ? deps.atoms.lookup(stage.atom)?.outputSchema?.[0] : undefined;
   return async ({ state, provider }) => {
-    const execState = stage.params !== undefined ? { ...state, ...stage.params } : state;
+    // 门粒度放行（与 manifest 路径的 approvalGrants: stageId[] 同构）：本节点在图中以
+    // stage.id 注册（见 manifestToGraph 的 addNode），故按 stage.id 判自己是否被批准。
+    const approvedGate = isApprovalGateStage(handler) && isGateApproved(state, stage.id);
+    // ⚠️ 放行标记只许 handler 局部可见：注入**执行态拷贝**，绝不写入共享 state——否则
+    // 一次放行会污染同一 run 内后续所有审批门（同型事故见 workflow/executor.ts 注释）。
+    const execState: GraphState =
+      stage.params !== undefined || approvedGate
+        ? { ...state, ...stage.params, ...(approvedGate ? { [APPROVAL_GRANTED_KEY]: true } : {}) }
+        : state;
     const delta: StateDelta = {};
     let output = "";
     if (handler !== undefined) {
@@ -130,7 +139,6 @@ function makeStageNode(
       // state[APPROVAL_GRANTED_KEY]），故「已放行」与「补占位输出」恒同时成立。
       // #345 前缺此分支：同一 manifest 的已批准审批门在两条链路下 state 不同
       // （图路径 ""，manifest 路径 "APPROVED"）。
-      const approvedGate = isApprovalGateStage(handler) && Boolean(execState[APPROVAL_GRANTED_KEY]);
       // 主输出键解析 / 空输出兜底 / 审批门占位 = 与 manifest 路径共用单一实现。
       output = resolveStageOutput({ segment, mainKey, fallbackValue: execState[stage.id], approvedGate });
     } else if (deps.executor !== undefined) {
