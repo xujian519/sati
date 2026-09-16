@@ -34,6 +34,7 @@ status: triage ──→ status: in-progress ──→ 关闭（完成 / wontfix
 |---|---|---|
 | 标签集合的唯一权威是 `.github/labels.yml` | 该文件本身 | — |
 | 清单自身合规（名唯一、color 为 6 位 hex、描述非空且 ≤100 字符） | — | `pnpm check:issue-labels`（挂 `pnpm lint`） |
+| `status:` / `priority:` 取值在本节状态机与优先级表内（如 `status: done`、`priority: p9` 即红） | 本节 §1 状态机 + 优先级表 | 同上（`scope:` 取值不在此列——由下一条双向校验兜底） |
 | 模板 `labels:` 引用的标签必须已声明 | 各模板 frontmatter | 同上（未声明即红） |
 | 模板「影响 scope」勾选项 ↔ `scope:*` 标签双向一致 | 模板 + 清单 | 同上（任一方向多出即红） |
 | 各模板「影响 scope」勾选项**彼此**一致 | 各模板（GitHub 无法共享片段 ⇒ 同一份清单必然各存一份） | 同上（只改其中一条模板即红） |

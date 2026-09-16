@@ -71,6 +71,36 @@ test("负控制：带前缀标签缺取值被拦", () => {
   assert.ok(errors.some(error => error.includes("缺取值")));
 });
 
+test("负控制：status/priority 取值超出词表被拦", () => {
+  // `status: done` 是规范明令禁止的双写状态（终态由关闭表达）；`p9` / `urgent` 是越界优先级。
+  for (const name of ["status: done", "priority: p9", "priority: urgent"]) {
+    const errors = validateLabels([{ name, color: "d73a4a", description: "越界取值" }], []);
+    assert.ok(
+      errors.some(error => error.includes("超出词表")),
+      `${name} 应被拦`,
+    );
+  }
+});
+
+test("放行对照：status/priority 的合法取值不报", () => {
+  const labels = [
+    "status: triage",
+    "status: in-progress",
+    "status: blocked",
+    "priority: p0",
+    "priority: p1",
+    "priority: p2",
+    "priority: p3",
+  ].map(name => ({ name, color: "d73a4a", description: "合法取值" }));
+  assert.deepEqual(validateLabels(labels, []), []);
+});
+
+test("边界：scope 取值不受词表约束（由模板双向校验兜底）", () => {
+  // 此处的错误来自「标签多出勾选项」，而不是「超出词表」——scope 刻意不在 PREFIX_VALUES 表内。
+  const errors = validateLabels([{ name: "scope:ghost", color: "bfd4f2", description: "未对应模板" }], []);
+  assert.ok(!errors.some(error => error.includes("超出词表")));
+});
+
 test("负控制：模板引用未声明标签被拦", () => {
   const templates = [{ file: "bug_report.md", labels: ["bug", "regression"], scopes: [] }];
   const errors = validateLabels([OK_LABEL], templates);

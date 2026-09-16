@@ -1931,10 +1931,16 @@
     须**人工**跑一次 `node scripts/sync-labels.mjs` 同步实体；`feature_request.md` 的「影响 scope」节此前未记入
     规范 §2 表格，一并补上。决策记录：`docs/notes/implemented/2026-09-16-scope-vocabulary-contract.md`（含 10 条备选）。
 - **TD-PROCGATE-006** · `status: done` 禁令与 `priority` 取值**无枚举门禁**兜底
-  - 类别：E · 严重级：P3 · 工作量：S · 状态：new
+  - 类别：E · 严重级：P3 · 工作量：S · 状态：**done（2026-09-16，PR #405）**
   - 位置：`scripts/sync-labels.mjs:153-156`
   - 影响：`labels.yml` 与规范宣布「不设 `status: done`」，但 `validateLabels()` 对前缀标签**只校验「前缀后非空」**，不校验取值集合——往 `labels.yml` 加一条 `status: done` 或 `priority: p9`，`pnpm check:issue-labels` **放行**。`scope:` 有双向校验保护，**只有 `status:` 与 `priority:` 裸露**。同时 `priority:*` 全链路无自动化（模板无字段、workflow 不写、门禁不校验），「定级」可被整体跳过且无人发现。
   - 建议：`validateLabels()` 增加取值枚举断言（`status:` 仅 `triage`/`in-progress`/`blocked`；`priority:` 仅 `p0..p3`），取值集合注释出处避免第四份词表；补 `sync-labels.test.mjs` 负控制。
+  - 判据：`validateLabels()` 新增 `PREFIX_VALUES` 词表断言（`scope:` 刻意不入表——由模板双向校验兜底，再抄一份即第四份词表）；
+    `sync-labels.test.mjs` 新增 4 例（`status: done` / `priority: p9` / `priority: urgent` 三条负控制 + 7 条合法取值放行对照 +
+    `scope:` 不受词表约束的边界）；**真清单实弹注入**一条 `status: done` → `--check` 退出码 1 并点名越界取值，还原后恢复绿
+    （合成输入的负控制不足以证明门禁在真实清单上生效）。两处规范同 PR 登记（`docs/issue-management.md` §1 规则表、
+    `docs/development-standards.md` 门禁职责表）。**未做**：`priority:*` 的全链路半自动化（模板「严重级」勾选 + 分类器解析），
+    属增量项，见 issue #337 正文。
 - **TD-PROCGATE-007** · 议题治理规范自身文档漂移（§8 checkbox 未回填 / 提交页缺规范链接 / `documentation` 无模板）
   - 类别：H · 严重级：P3 · 工作量：S · 状态：new
   - 位置：`docs/issue-management.md:174-176`、`docs/development-standards.md:247`、`.github/ISSUE_TEMPLATE/config.yml`、`.github/labels.yml`
