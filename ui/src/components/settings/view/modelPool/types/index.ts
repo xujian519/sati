@@ -108,6 +108,16 @@ export type SatiConfig = {
         publishedAtField?: string;
       };
     };
+    /** 论文检索（`paper_search`）。面板不渲染该段，仅经「高级 → 原始 YAML」编辑。 */
+    paperSearch?: {
+      enabled?: boolean;
+      arxiv?: boolean;
+      openalex?: boolean;
+      semanticScholar?: boolean;
+      crossref?: boolean;
+      openalexMailto?: string;
+      semanticScholarApiKey?: string;
+    };
   };
   gateway?: {
     enabled?: boolean;

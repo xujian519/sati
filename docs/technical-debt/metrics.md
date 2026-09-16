@@ -10,7 +10,7 @@
 | src TS 文件 / 行数 | 1032 / 169836 |
 | src JS 文件 | 0 |
 | tests 文件 | 545 |
-| ui/src 文件 / 行数 | 465 / 82807 |
+| ui/src 文件 / 行数 | 466 / 82904 |
 | ui/server 文件 / 行数 | 105 / 31483 |
 
 ## 指标口径
@@ -93,7 +93,7 @@
 | `src/gateway/client/telemetry.ts` | `emitSessionTelemetry` | 333 | function |
 | `ui/src/components/main-content-v2/DashboardV2.tsx` | `DashboardV2` | 332 | function |
 | `ui/src/hooks/useSatiConfig.ts` | `useSatiConfigState` | 332 | function |
-| `ui/src/components/settings/view/agentSearch/components/ToolsSection.tsx` | `ToolsSection` | 328 | function |
+| `ui/src/components/settings/view/agentSearch/components/ToolsSection.tsx` | `ToolsSection` | 327 | function |
 | `ui/src/components/code-editor/view/CodeEditor.tsx` | `CodeEditor` | 310 | function |
 | `ui/src/components/chat-v2/SubagentDetailMessageFlow.tsx` | `SubagentDetailMessageFlow` | 309 | function |
 | `ui/src/components/settings/view/integrations/im/components/WeixinChannelSection.tsx` | `WeixinChannelSection` | 303 | function |

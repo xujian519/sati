@@ -54,10 +54,9 @@ export default function ToolsSection({ config, onChange }: ToolsSectionProps) {
   };
 
   const setProvider = (nextProvider: WebSearchProvider) => {
-    const nextTools = {
-      webSearch: webSearchConfigForProvider(ws, nextProvider, glmDefaultEndpoint),
-    };
-    onChange(patch(config, ["tools"], nextTools));
+    // 只写 tools.webSearch 子键：整段替换 tools 会丢掉面板不渲染的兄弟段
+    // （tools.paperSearch），并在保存时把它从配置文件里抹掉。
+    onChange(patch(config, ["tools", "webSearch"], webSearchConfigForProvider(ws, nextProvider, glmDefaultEndpoint)));
     resetTest();
   };
 
@@ -70,8 +69,8 @@ export default function ToolsSection({ config, onChange }: ToolsSectionProps) {
     } else {
       nextWs[field] = trimmed;
     }
-    const nextTools = Object.keys(nextWs).length > 0 ? { webSearch: nextWs } : undefined;
-    onChange(patch(config, ["tools"], nextTools));
+    const nextWebSearch = Object.keys(nextWs).length > 0 ? nextWs : undefined;
+    onChange(patch(config, ["tools", "webSearch"], nextWebSearch));
     resetTest();
   };
 
@@ -93,7 +92,7 @@ export default function ToolsSection({ config, onChange }: ToolsSectionProps) {
     if (Object.keys(nextWs.customProvider ?? {}).length === 0) {
       delete nextWs.customProvider;
     }
-    onChange(patch(config, ["tools"], { webSearch: nextWs }));
+    onChange(patch(config, ["tools", "webSearch"], nextWs));
     resetTest();
   };
 
