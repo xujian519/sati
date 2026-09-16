@@ -285,6 +285,13 @@ function convertSingleMessage(
             content: typeof trRecord.content === "string" ? trRecord.content : JSON.stringify(trRecord.content),
             isError: Boolean(trRecord.isError),
             toolUseResult: trRecord.toolUseResult,
+            /**
+             * 通用结构化数据通道（`eventMapping` 对任意工具透传的工具 `data`）。
+             * 目前只有 shell 卡片消费它（取权威的 stdout/stderr/exitCode/durationMs，
+             * 免去解析展示用信封），但它是 live 路径上唯一的结构化来源——不透传就只剩
+             * 被截断的 `resultPreview`。
+             */
+            payload: trRecord.payload,
             errorCode: typeof trRecord.errorCode === "string" ? trRecord.errorCode : undefined,
             resultPath: trRecord.resultPath,
             ...(toolResultImages && toolResultImages.length > 0 ? { images: toolResultImages } : {}),
