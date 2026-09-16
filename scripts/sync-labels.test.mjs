@@ -15,6 +15,9 @@ const ROOT = fileURLToPath(new URL("..", import.meta.url));
 
 const OK_LABEL = { name: "bug", color: "d73a4a", description: "缺陷" };
 
+/** 构造一条合法的 scope 标签。 */
+const scopeLabel = name => ({ name: `scope:${name}`, color: "bfd4f2", description: `作用域 ${name}` });
+
 test("parseScopeOptions 提取勾选项并归一化「其他」", () => {
   const markdown = [
     "## 影响 scope",
@@ -84,6 +87,45 @@ test("负控制：多余的 scope 标签被拦（双向校验）", () => {
   const labels = [OK_LABEL, { name: "scope:ghost", color: "bfd4f2", description: "幽灵" }];
   const errors = validateLabels(labels, [{ file: "bug_report.md", labels: [], scopes: [] }]);
   assert.ok(errors.some(error => error.includes("没有对应勾选项")));
+});
+
+test("放行对照：两条模板的 scope 勾选项一致时不报", () => {
+  const templates = [
+    { file: "bug_report.md", labels: [], scopes: ["agent", "other"] },
+    { file: "feature_request.md", labels: [], scopes: ["other", "agent"] },
+  ];
+  assert.deepEqual(validateLabels([OK_LABEL, scopeLabel("agent"), scopeLabel("other")], templates), []);
+});
+
+test("负控制：只改了其中一条模板的勾选项被拦（缺项）", () => {
+  // 模板并集校验（模板 ↔ 标签）在这组输入下**会放行**——`ui` 在另一条模板里存在；
+  // 只有模板之间的比对能发现 feature_request.md 漏了它。
+  const templates = [
+    { file: "bug_report.md", labels: [], scopes: ["agent", "ui"] },
+    { file: "feature_request.md", labels: [], scopes: ["agent"] },
+  ];
+  const labels = [OK_LABEL, scopeLabel("agent"), scopeLabel("ui")];
+  const errors = validateLabels(labels, templates);
+  assert.ok(errors.some(error => error.includes("feature_request.md") && error.includes("缺勾选项「ui」")));
+});
+
+test("负控制：模板多出勾选项同样被拦（比对是双向的）", () => {
+  const templates = [
+    { file: "bug_report.md", labels: [], scopes: ["agent"] },
+    { file: "feature_request.md", labels: [], scopes: ["agent", "ghost"] },
+  ];
+  const labels = [OK_LABEL, scopeLabel("agent"), scopeLabel("ghost")];
+  const errors = validateLabels(labels, templates);
+  assert.ok(errors.some(error => error.includes("feature_request.md") && error.includes("多出勾选项「ghost」")));
+});
+
+test("不含「影响 scope」节的模板不参与模板间比对", () => {
+  // tech_debt.md 尚无该节（TD-PROCGATE-003）：它不产生 scope 标签，不该拖累一致性校验。
+  const templates = [
+    { file: "bug_report.md", labels: [], scopes: ["agent"] },
+    { file: "tech_debt.md", labels: [], scopes: [] },
+  ];
+  assert.deepEqual(validateLabels([OK_LABEL, scopeLabel("agent")], templates), []);
 });
 
 test("集成：仓库当前标签清单与 issue 模板一致", () => {

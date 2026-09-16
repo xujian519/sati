@@ -9,7 +9,11 @@
 #   - 类型标签：无前缀（bug / enhancement / …），表达"这是什么"
 #   - 状态标签：`status: <state>`，表达"处于哪一步"，同时至多一个
 #   - 优先级标签：`priority: p0..p3`，与 docs/technical-debt/README.md 的严重级定义同源
-#   - 作用域标签：`scope: <area>`，与提交 scope 同名，由 issue 模板的「影响 scope」勾选自动打
+#   - 作用域标签：`scope: <area>`，是**提交 scope 的粗粒度子集**——issue 面只收「用户可感知的
+#     独立模块」，提交面允许更细的切分。二者的契约是**单向包含**：每个 `scope:*` 都必须能被
+#     提交侧词表识别（`scripts/open-pr.mjs` 从本文件派生，不另抄一份），反向不成立。收录判据
+#     与「为什么其余模块落 `other`」见 `docs/issue-management.md` §1。由 issue 模板的
+#     「影响 scope」勾选自动打（见 §5）。
 #
 # 状态机（终态由关闭表达，不设 status: done，避免状态双写）：
 #   status: triage → status: in-progress → （关闭）
@@ -113,6 +117,12 @@ labels:
   - name: scope:rule
     color: bfd4f2
     description: 宪法规则引擎
+  # `apps/desktop` 是独立的 workspace 包（`@sati/desktop`）且有独立的命名 CI job
+  # （`Desktop (Windows) build & lint`）⇒ 满足「独立交付边界」判据，与 `scope:ui`
+  # （Web UI）分开。收录判据见 docs/issue-management.md §1。
+  - name: scope:desktop
+    color: bfd4f2
+    description: 桌面端应用外壳（apps/desktop）：Electron 主进程 / 打包发布
   - name: scope:other
     color: bfd4f2
     description: 未列入上述模块的其他作用域
