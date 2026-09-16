@@ -1940,7 +1940,7 @@
     `scope:` 不受词表约束的边界）；**真清单实弹注入**一条 `status: done` → `--check` 退出码 1 并点名越界取值，还原后恢复绿
     （合成输入的负控制不足以证明门禁在真实清单上生效）。两处规范同 PR 登记（`docs/issue-management.md` §1 规则表、
     `docs/development-standards.md` 门禁职责表）。**未做**：`priority:*` 的全链路半自动化（模板「严重级」勾选 + 分类器解析），
-    属增量项，见 issue #337 正文。
+    属增量项，已另开 #406 跟踪（不在本项范围内）。
 - **TD-PROCGATE-007** · 议题治理规范自身文档漂移（§8 checkbox 未回填 / 提交页缺规范链接 / `documentation` 无模板）
   - 类别：H · 严重级：P3 · 工作量：S · 状态：new
   - 位置：`docs/issue-management.md:174-176`、`docs/development-standards.md:247`、`.github/ISSUE_TEMPLATE/config.yml`、`.github/labels.yml`
