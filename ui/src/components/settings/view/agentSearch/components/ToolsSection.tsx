@@ -9,6 +9,7 @@ import { MASK } from "../../../shared/utils/secret";
 import type { SatiConfig } from "../../modelPool/types";
 import { patch } from "../../modelPool/utils/patch";
 import { hasUsableSecret, isMaskedSecret } from "../../modelPool/utils/providerRefs";
+import { isOptionalFeatureEnabled } from "../../../shared/utils/optionalFeature";
 import {
   isWebSearchApiKeyRequired,
   webSearchConfigForProvider,
@@ -30,7 +31,10 @@ export default function ToolsSection({ config, onChange }: ToolsSectionProps) {
   const { t } = useTranslation("settings");
   const glmDefaultEndpoint = "https://api.z.ai/api/paas/v4/web_search";
   const ws = config.tools?.webSearch ?? {};
-  const enabled = ws.enabled !== false;
+  // 段缺失 = 关（上游 #588）：运行期未配置的搜索不再自我唤醒（曾可从
+  // GLM_WEB_SEARCH_API_KEY / TAVILY_API_KEY 推断），面板必须同判据。
+  const enabled = isOptionalFeatureEnabled(config.tools?.webSearch);
+  const paperSearchEnabled = isOptionalFeatureEnabled(config.tools?.paperSearch);
   const provider: WebSearchProvider = ws.provider === "tavily" || ws.provider === "custom" ? ws.provider : "glm";
   const apiKey = typeof ws.apiKey === "string" ? ws.apiKey : "";
   const endpoint = typeof ws.endpoint === "string" ? ws.endpoint : "";
@@ -54,10 +58,9 @@ export default function ToolsSection({ config, onChange }: ToolsSectionProps) {
   };
 
   const setProvider = (nextProvider: WebSearchProvider) => {
-    const nextTools = {
-      webSearch: webSearchConfigForProvider(ws, nextProvider, glmDefaultEndpoint),
-    };
-    onChange(patch(config, ["tools"], nextTools));
+    // 只写 tools.webSearch 子键：整段替换 tools 会丢掉面板不渲染的兄弟段
+    // （tools.paperSearch），并在保存时把它从配置文件里抹掉。
+    onChange(patch(config, ["tools", "webSearch"], webSearchConfigForProvider(ws, nextProvider, glmDefaultEndpoint)));
     resetTest();
   };
 
@@ -70,8 +73,8 @@ export default function ToolsSection({ config, onChange }: ToolsSectionProps) {
     } else {
       nextWs[field] = trimmed;
     }
-    const nextTools = Object.keys(nextWs).length > 0 ? { webSearch: nextWs } : undefined;
-    onChange(patch(config, ["tools"], nextTools));
+    const nextWebSearch = Object.keys(nextWs).length > 0 ? nextWs : undefined;
+    onChange(patch(config, ["tools", "webSearch"], nextWebSearch));
     resetTest();
   };
 
@@ -93,7 +96,7 @@ export default function ToolsSection({ config, onChange }: ToolsSectionProps) {
     if (Object.keys(nextWs.customProvider ?? {}).length === 0) {
       delete nextWs.customProvider;
     }
-    onChange(patch(config, ["tools"], { webSearch: nextWs }));
+    onChange(patch(config, ["tools", "webSearch"], nextWs));
     resetTest();
   };
 
@@ -160,6 +163,7 @@ export default function ToolsSection({ config, onChange }: ToolsSectionProps) {
             }}
           />
         </SettingsRow>
+
         {enabled && (
           <>
             <FormRow
@@ -350,6 +354,18 @@ export default function ToolsSection({ config, onChange }: ToolsSectionProps) {
             </div>
           </>
         )}
+      </SettingsCard>
+      <SettingsCard divided>
+        <SettingsRow
+          label={t("satiConfig.panels.tools.paperSearch.enabled.label")}
+          description={t("satiConfig.panels.tools.paperSearch.enabled.description")}
+        >
+          <SettingsToggle
+            checked={paperSearchEnabled}
+            ariaLabel={t("satiConfig.panels.tools.paperSearch.enabled.label")}
+            onChange={value => onChange(patch(config, ["tools", "paperSearch", "enabled"], value))}
+          />
+        </SettingsRow>
       </SettingsCard>
     </SettingsSection>
   );

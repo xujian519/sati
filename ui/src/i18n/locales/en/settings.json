@@ -1162,10 +1162,16 @@
       },
       "tools": {
         "title": "Search",
-        "description": "Configure the search service used by the agent's web_search tool.",
+        "description": "Configure the search services used by the agent's web_search and paper_search tools.",
         "enabled": {
           "label": "Enable web search",
           "description": "When disabled, the agent will not receive the web_search tool."
+        },
+        "paperSearch": {
+          "enabled": {
+            "label": "Enable literature search",
+            "description": "When disabled, the agent will not receive the paper_search tool and patent workflows lose the paper literature source."
+          }
         },
         "provider": {
           "label": "Search provider",
