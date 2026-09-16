@@ -346,34 +346,14 @@ function deepSeekPlan(mode: ThinkingMode, modelId: string): ThinkingPlan {
   // flash 与 pro 的 effort 映射完全一致（low→low, medium→high, high→high, xhigh→high, max→max）。
   // 旧模型（deepseek-chat 等）保持 high/max 两档语义，避免对旧 API 发送 low。
   const allowedEffort: EffortValue[] = /deepseek-v4/.test(modelId) ? ["low", "high", "max"] : ["high", "max"];
-  // medium 按官方映射到 high；xhigh/max 取最高档 max；其余走 resolveEffort
-  // （未命中即报 unsupported，不再就近取整）。
-  let effort: EffortValue;
-  if (mode === "xhigh" || mode === "max") {
-    effort = "max";
-  } else if (mode === "medium") {
-    effort = "high";
-  } else {
-    const resolved = resolveEffort(mode, allowedEffort);
-    if (resolved === undefined) {
-      return {
-        mode,
-        enabled: true,
-        thinkingType: "enabled",
-        preserve: true,
-        useOpenAICompatibleThinking: true,
-        ...unsupportedEffortField(modelId, mode, allowedEffort),
-      };
-    }
-    effort = resolved;
-  }
+  const effort = threeTierEffort(mode) ?? resolveEffort(mode, allowedEffort);
   return {
     mode,
     enabled: true,
     thinkingType: "enabled",
-    effort,
     preserve: true,
     useOpenAICompatibleThinking: true,
+    ...(effort === undefined ? unsupportedEffortField(modelId, mode, allowedEffort) : { effort }),
     ...(isReasoningOnlyModel(modelId) ? { omitTemperature: true } : {}),
   };
 }
@@ -395,26 +375,12 @@ function kimiPlan(mode: ThinkingMode, modelId: string): ThinkingPlan {
     }
     const plan: ThinkingPlan = { mode, enabled: true, omitTemperature: true };
     if (isK3) {
-      // k3 官方仅 low/high/max 三档；medium 就近取 high（与 DeepSeek 官方映射一致），
+      // k3 官方仅 low/high/max 三档，映射与 DeepSeek 一致（见 threeTierEffort）；
       // 其余走 resolveEffort（未命中即报 unsupported）。
       const allowedEffort: EffortValue[] = ["low", "high", "max"];
-      let effort: EffortValue;
-      if (mode === "xhigh" || mode === "max") {
-        effort = "max";
-      } else if (mode === "medium") {
-        effort = "high";
-      } else {
-        const resolved = resolveEffort(mode, allowedEffort);
-        if (resolved === undefined) {
-          return {
-            mode,
-            enabled: true,
-            thinkingType: "enabled",
-            useOpenAICompatibleThinking: true,
-            ...unsupportedEffortField(modelId, mode, allowedEffort),
-          };
-        }
-        effort = resolved;
+      const effort = threeTierEffort(mode) ?? resolveEffort(mode, allowedEffort);
+      if (effort === undefined) {
+        return { ...plan, ...unsupportedEffortField(modelId, mode, allowedEffort) };
       }
       plan.effort = effort;
       plan.bodyPatch = { reasoning_effort: effort };
@@ -492,6 +458,19 @@ function unsupportedEffortField(
   return {
     unsupportedReason: `Model ${modelId} does not support thinking strength '${mode}'. Supported: ${allowed.join(", ")}.`,
   };
+}
+
+/**
+ * deepseek（v4 与旧模型）与 kimi-k3 共用的官方三档映射：`medium → high`、
+ * `xhigh`/`max` → 最高档 `max`。
+ *
+ * 这是"用哪个取值表达用户所选强度"的厂商命名差异，不是把用户的选择换成别的强度，
+ * 故与 `resolveEffort` 的判据并存；命中三档之外的档位仍返回 `undefined` 交给判据。
+ */
+function threeTierEffort(mode: ThinkingMode): EffortValue | undefined {
+  if (mode === "xhigh" || mode === "max") return "max";
+  if (mode === "medium") return "high";
+  return undefined;
 }
 
 /** 命中返回 `{ effort }`，未命中返回 `{ unsupportedReason }`；供 ThinkingPlan 展开。 */
