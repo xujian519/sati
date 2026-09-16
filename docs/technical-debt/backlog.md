@@ -1897,7 +1897,7 @@
   - 建议：在 `ci.yml` 的 `quality` job 增加 `pnpm test:pr-tooling` 步骤（替换或并列于现有只跑单文件的 `Self-test PR traceability gate`）。
   - **2026-09-15 处置（PR #377，`ci`）**：采用「替换为整体挂载 `pnpm test:pr-tooling`」方案，并把该步骤从 install **之前**移到**之后**（`measure-techdebt.test.mjs` 依赖 `typescript`，install 前跑不起来）。整体挂载使今后新增的脚本测试自动进 CI。CI 日志已确认该步骤在 `quality` job 中执行（83 用例）。
 - **TD-PROCGATE-003** · `tech_debt.md` 模板缺「影响 scope」节 → 债务议题**拿不到 `scope:*`**
-  - 类别：F/H · 严重级：P2 · 工作量：S · 状态：**done（2026-09-17，PR #NNN）**
+  - 类别：F/H · 严重级：P2 · 工作量：S · 状态：**done（2026-09-17，PR #408）**
   - 位置：`.github/ISSUE_TEMPLATE/tech_debt.md`
   - 影响：三个模板中它是唯一没有「影响 scope」节的，而 scope 自动打标**完全依赖解析该节**。后果：**所有技术债议题零 scope**（实况证据：`#164 #163 #162 #161 #160 #153 #206` 七个 tech-debt 来源议题**全部只有 `tech-debt` 一个标签**），无法按模块筛选、无法统计「债务按模块分布」——而技术债恰恰最需要按模块归类。`docs/issue-management.md` §1 却称作用域是「自动」的。且 `sync-labels.mjs --check` 的「模板 scope 勾选 ↔ 标签双向一致」校验**天然覆盖不到**该模板，缺口不会被门禁发现。
   - 建议：补上与 bug/feature 逐字一致的「## 影响 scope」节；**附带**补「## 契约影响」节（债务修复若触及 `inputSchema`/事件面/协议同样需前置声明）。
