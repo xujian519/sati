@@ -85,6 +85,11 @@ function splitShellSections(body: string): { stdout: string; stderr: string } {
 const SHELL_ENVELOPE_RE =
   /^BASH_RESULT\[success\]\[(stdout_data|stderr_only|empty_stdout)\]\nAssertions:\n- exit_code: (-?\d+|null)\n- stdout_visible: (?:true|false)\n- stderr_visible: (?:true|false)\n- retrieved_data_available: (?:true|false)\n- stdout_bytes: \d+\n- stderr_bytes: \d+\nInterpretation: [^\n]+(?:\n\n([\s\S]*))?$/;
 
+/** 正文装配：stdout 与 stderr 各自成段，stderr 带 `stderr:` 标签。 */
+function joinShellSections(stdout: string, stderr: string): string {
+  return [stdout, stderr ? `stderr:\n${stderr}` : ""].filter(Boolean).join("\n\n");
+}
+
 /**
  * shell 类工具结果的展示投影。
  *
@@ -101,7 +106,7 @@ export function shellOutput(result: ToolResult | string | null | undefined): She
     const stdout = typeof structured.stdout === "string" ? structured.stdout : "";
     const stderr = typeof structured.stderr === "string" ? structured.stderr : "";
     return {
-      output: [stdout, stderr ? `stderr:\n${stderr}` : ""].filter(Boolean).join("\n\n"),
+      output: joinShellSections(stdout, stderr),
       exitCode: typeof structured.exitCode === "number" ? structured.exitCode : null,
       durationMs: typeof structured.durationMs === "number" ? structured.durationMs : undefined,
       raw,
@@ -114,7 +119,7 @@ export function shellOutput(result: ToolResult | string | null | undefined): She
   const { stdout, stderr } = splitShellSections(match[3] ?? "");
   const exitCodeText = match[2] ?? "null";
   return {
-    output: [stdout, stderr ? `stderr:\n${stderr}` : ""].filter(Boolean).join("\n\n"),
+    output: joinShellSections(stdout, stderr),
     exitCode: exitCodeText === "null" ? null : Number(exitCodeText),
     durationMs: undefined,
     raw,
