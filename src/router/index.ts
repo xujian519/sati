@@ -17,9 +17,11 @@ export type {
   RouterDecision,
   RouterDecisionInput,
   RouterDecisionResolution,
+  RouterDispatchReport,
   RouterExecuteContext,
   RouterMutationsLog,
   RouterScenarioType,
+  RouterTransformTag,
   SessionRoutingState,
 } from "./protocol/decision.js";
 export type {

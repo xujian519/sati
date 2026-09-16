@@ -1665,14 +1665,18 @@
 
 ### 31.4 Agent 循环新增件（`src/agent/loop/` 2026-09 拆解产物 + 元认知/对拍/软提醒）
 
-**模块概况**：9 个新模块 / 2102 行（`turnExit` 185 / `recoveryStrategies` 225 / `modelErrorRecovery` 592 / `responseAssembly` 394 / `modelRequest` 287 / `compactionExecutor` 143 / `metacognitiveControl` 66 / `requestInvariant` 130 / `repeatToolReminder` 80）；配套 9 个直连 spec / 2444 行（**覆盖率 1.16，逐模块均有直连单测**）；零循环依赖、零 `any`、零裸 `console`、零 `TODO`。**拆解运动验收：通过**（见本节末）。
+**模块概况**：9 个新模块 / 2102 行（`turnExit` 185 / `recoveryStrategies` 225 / `modelErrorRecovery` 592 / `responseAssembly` 394 / `modelRequest` 287 / `compactionExecutor` 143 / `metacognitiveControl` 66 / `requestInvariant` 130 / `repeatToolReminder` 80）；配套 9 个直连 spec / 2444 行（**覆盖率 1.16，逐模块均有直连单测**）；零循环依赖、零 `any`、零裸 `console`、零 `TODO`。**拆解运动验收：通过**（见本节末）。（2026-09-16 附注：`requestInvariant` 因 #360 的派发点判据增至 **238 行**；其余模块行数未变。）
 
 - **TD-AGENT-N01** · request_header 的生产对拍器用同一对入参自比，**恒真、检测不到请求漂移**
-  - 类别：C · 严重级：**P2** · 工作量：S · 状态：new
-  - 位置：`src/agent/loop/AgentLoop.ts:481-485`、`src/agent/loop/requestInvariant.ts:55-104`
-  - 影响：该对拍器是「模型可见 = 已记录」在请求侧的**唯一**验证手段（`CLAUDE.md:153`）。当前实现给出**虚假保证**——比对恒等，无法发现「落盘快照 ≠ 实际发送请求」这类真实漂移（如 router 内部 materialize 改写、tool schema 在 `prepareForModel` 后被过滤），审计者会误以为请求侧已受保护。
-  - 建议：生产路径改用已有牙齿的 `verifyRequestReconstruction`（从**已落盘** transcript 条目独立重建后比对，或在 `router.execute` 前后各取一次快照比对）；若刻意只在 `onRequestHeader` await 窗口做原地改写检测，则把注释与 `CLAUDE.md:153` 的「篡改必报」改为「仅检测入参原地改写」。
-  - 证据：`AgentLoop.ts:481` 以 `(request, decision)` 生成快照，`:484` 又用**同一对** `(request, decision)` 调 `verifyRequestHeaderSnapshot`；被调函数 `requestInvariant.ts:83` 的 expected 即 `buildRequestHeaderSnapshot(request, decision)`，而该函数（`:55-69`）仅读入参、纯函数无副作用 → 除 `:482` 的 `await input.onRequestHeader?.()` 期间有人原地改写入参外，**比对恒等**。`requestInvariant.ts:7` 注释宣称「篡改（如路由后 maxOutputTokens 被改）必报」在生产路径不成立。真正独立的 `verifyRequestReconstruction`（`:114-130`）全仓**仅 tests 调用**（`tests/agent/loop/request-invariant.spec.ts:113,120`），无生产调用点。
+  - 类别：C · 严重级：**P2** · 工作量：S · 状态：done（#386）
+  - 位置：原 `src/agent/loop/AgentLoop.ts:481-485`、`src/agent/loop/requestInvariant.ts:55-104`
+  - 影响：该对拍器是「模型可见 = 已记录」在请求侧的**唯一**验证手段（`CLAUDE.md:153`）。原实现给出**虚假保证**——比对恒等，无法发现「落盘快照 ≠ 实际发送请求」这类真实漂移（如 router 内部 materialize 改写、tool schema 在 `prepareForModel` 后被过滤），审计者会误以为请求侧已受保护。
+  - 处置：**点位与判据分开重做**（台账建议的两个方向经核码后均需修正，见下「口径更正」）。
+    - 点位：新增 `RouterExecuteContext.onDispatchRequest`，router 在两条派发路径（`enabled` attempt 循环、`enabled:false` 直通）**送出首字节前**报出实际请求 + 该 attempt 有效决策 + 实际施行的改写标签（`RouterTransformTag`，7 个）。
+    - 判据：`requestInvariant.verifyDispatchedRequest` 要求「落盘快照与派发请求的字段差异 ⊆ 标签声明字段集」，未声明的改写 fail-loud。标签→字段映射由 `Record<RouterTransformTag, …>` 强制穷尽（漏登记字段 = 编译失败）。
+    - `AgentLoop` 不再自比；仅在 `SATI_VERIFY_REQUEST_RECONSTRUCTION=1` 时经 ctx 提供回调（未开启零开销）。**快照的落盘时机与内容未变**（pre-send 落盘是 `TaskResumeScanner` (a) 形态判定的 durable 基础）。
+  - 证据：负控制（判据在承重）——往 `applyDecisionToRequest` 注入一处未声明的静默系统提示改写 → `tests/agent/loop/request-dispatch-verification.spec.ts` 走**真实路由链路**的用例转红（回合以 `stop_failure` 收尾，消息点名 `systemPromptDigest`），还原后复绿；接线层常驻负控制：同一处未声明漂移，开关关时回合正常完成、开关开时失败。新增 3 个 spec（判据 12 例 / 派发报告 6 例 / 生产接线 4 例），相关目录 417 例全绿。决策记录 `docs/notes/implemented/2026-09-16-request-dispatch-verification.md`。
+  - **口径更正（核码后，与原文两处不同）**：(1) 台账与 issue 推荐的方向 A「生产改用 `verifyRequestReconstruction`」**修不了这个洞**——该函数内部仍是 `verifyRequestHeaderSnapshot(entry.header, request, decision)`，期望值仍由同一对入参派生，落盘条目也是同一对入参算出的；换过去只多一项「落盘—读回」序列化保真。原文称它「真正有牙齿」是核码前的判断。(2) 顺带发现 `RouterDecision.requestPatch` **全仓零写入点**（`RouterRequestPatch` 的 `tools`/`systemPrompt` 分支从未生效）、`RouterMutationsLog` 的 `systemPromptSlim`/`toolsStripped` 也只在类型里存在——本 PR 未清理，映射表已预留 `requestPatch:*` 标签，一旦真有生产者对拍会立即要求同步声明。
 - **TD-AGENT-N02** · `CLAUDE.md:165` 的 AgentLoop 拆解声明与代码实际不符（**三处**）
   - 类别：H · 严重级：**P2** · 工作量：S · 状态：new
   - 位置：`CLAUDE.md:165`

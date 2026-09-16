@@ -13,7 +13,7 @@ import type { RouterConfig, RouterModelRef } from "../config/schema.js";
 import { isFallbackEligible, planFallback } from "../fallback/runFallbackChain.js";
 import type { ProviderHealthTracker } from "../health/ProviderHealthTracker.js";
 import { downgradeRequestForAttempt, missingForModel, supportsMediaRequirements } from "../media/modelMediaSupport.js";
-import type { RouterDecision, RouterExecuteContext } from "../protocol/decision.js";
+import type { RouterDecision, RouterExecuteContext, RouterTransformTag } from "../protocol/decision.js";
 import type { RouterEventBus } from "../protocol/events.js";
 import { stripSubagentTagFromMessages } from "../scenario/subagentDetector.js";
 import type { SessionUsageCache } from "../session/sessionUsageCache.js";
@@ -101,6 +101,104 @@ function isContentEvent(event: CanonicalModelEvent): boolean {
   );
 }
 
+/**
+ * 本次派发**实际施行**了哪些请求改写。
+ *
+ * 取值来自执行期事实（哪些改写分支跑了、夹取有没有改变上限），**不**来自
+ * 「比对快照算出的差异」——对拍的另一侧（调用方持有的落盘快照）由另一份入参
+ * 派生，两处独立，故「差异 ⊆ 声明字段」这条判据能被「注入一个未声明的改写」
+ * 证伪（见 `tests/router/request-dispatch-report.spec.ts` 的负控制）。
+ *
+ * 只声明**它可能改掉哪些快照字段**的标签；未登记在此的标签会被对拍侧视为
+ * 声明失效（映射表在 `src/agent/loop/requestInvariant.ts`）。
+ */
+function appliedTransformTags(args: {
+  isFallbackAttempt: boolean;
+  downgradeUnsupportedMedia: boolean;
+  subagentTagStripped: boolean;
+  requestPatch: RouterDecision["requestPatch"];
+  maxOutputTokensChanged: boolean;
+}): RouterTransformTag[] {
+  const tags: RouterTransformTag[] = [];
+  if (args.isFallbackAttempt) {
+    tags.push("fallbackAttempt");
+  }
+  if (args.downgradeUnsupportedMedia) {
+    tags.push("mediaDowngraded");
+  }
+  if (args.subagentTagStripped) {
+    tags.push("subagentTagStripped");
+  }
+  if (args.maxOutputTokensChanged) {
+    tags.push("maxOutputTokensClamped");
+  }
+  if (args.requestPatch?.messages !== undefined) {
+    tags.push("requestPatch:messages");
+  }
+  if (args.requestPatch?.tools !== undefined) {
+    tags.push("requestPatch:tools");
+  }
+  if (args.requestPatch?.systemPrompt !== undefined) {
+    tags.push("requestPatch:systemPrompt");
+  }
+  return tags;
+}
+
+/**
+ * 派发点：报告实况后立即转交 `streamAttempt`（`yield*` 委托，内层 `return` 成为外层 `return`）。
+ *
+ * 报告与流在同一条语句上，因此不存在「流了但没报」的路径——将来若出现第三条派发
+ * 路径，也会被这同一处收口覆盖。`ctx.onDispatchRequest` 缺省即零开销。
+ */
+async function* streamAttemptWithReport(
+  request: CanonicalModelRequest,
+  decision: RouterDecision,
+  transforms: readonly RouterTransformTag[],
+  ctx: RouterExecuteContext,
+  deps: RouterExecutionDeps,
+  events: RouterEventBus,
+): AsyncGenerator<{ kind: "event"; event: CanonicalModelEvent } | { kind: "outcome"; outcome: AttemptOutcome }> {
+  ctx.onDispatchRequest?.({ request, decision, transforms });
+  yield* streamAttempt(request, deps.modelRuntime, ctx, events);
+}
+
+/**
+ * 直通分支（`enabled: false`）的改写标签。
+ *
+ * 该分支**不**走 `applyDecisionToRequest`，故 `requestPatch` 与 `subagentTagStripped`
+ * 在此不生效，也就不能声明为已施行（声明了会把一条真实差异错误地放行）。
+ */
+function passthroughTransformTags(
+  original: CanonicalModelRequest,
+  dispatched: CanonicalModelRequest,
+): RouterTransformTag[] {
+  return appliedTransformTags({
+    isFallbackAttempt: false,
+    // 直通路径无条件过一遍媒体降级（能力不足的块在此被替换）。
+    downgradeUnsupportedMedia: true,
+    subagentTagStripped: false,
+    requestPatch: undefined,
+    maxOutputTokensChanged: dispatched.maxOutputTokens !== original.maxOutputTokens,
+  });
+}
+
+/** attempt 循环的改写标签（取自本次施行的事实）。 */
+function attemptTransformTags(args: {
+  attemptIndex: number;
+  downgradeUnsupportedMedia: boolean;
+  decision: RouterDecision;
+  original: CanonicalModelRequest;
+  dispatched: CanonicalModelRequest;
+}): RouterTransformTag[] {
+  return appliedTransformTags({
+    isFallbackAttempt: args.attemptIndex > 0,
+    downgradeUnsupportedMedia: args.downgradeUnsupportedMedia,
+    subagentTagStripped: args.decision.mutations.subagentTagStripped === true,
+    requestPatch: args.decision.requestPatch,
+    maxOutputTokensChanged: args.dispatched.maxOutputTokens !== args.original.maxOutputTokens,
+  });
+}
+
 function clampMaxOutputTokensToModelCap(
   request: CanonicalModelRequest,
   modelRuntime: ModelRuntime,
@@ -161,7 +259,14 @@ export async function* executeRouterDecision(
     );
     const cappedPassthroughRequest = clampMaxOutputTokensToModelCap(downgradedPassthrough, deps.modelRuntime);
     let sawErrorEvent = false;
-    for await (const item of streamAttempt(cappedPassthroughRequest, deps.modelRuntime, ctx, events)) {
+    for await (const item of streamAttemptWithReport(
+      cappedPassthroughRequest,
+      decision,
+      passthroughTransformTags(request, cappedPassthroughRequest),
+      ctx,
+      deps,
+      events,
+    )) {
       if (item.kind === "event") {
         if (item.event.type === "error") {
           sawErrorEvent = true;
@@ -293,7 +398,20 @@ export async function* executeRouterDecision(
       const pending: CanonicalModelEvent[] = [];
       let outcome: AttemptOutcome | undefined;
 
-      for await (const item of streamAttempt(attemptRequest, deps.modelRuntime, ctx, events)) {
+      for await (const item of streamAttemptWithReport(
+        attemptRequest,
+        attemptDecision,
+        attemptTransformTags({
+          attemptIndex,
+          downgradeUnsupportedMedia: attemptPlan.downgradeUnsupportedMedia,
+          decision,
+          original: request,
+          dispatched: attemptRequest,
+        }),
+        ctx,
+        deps,
+        events,
+      )) {
         if (item.kind === "outcome") {
           outcome = item.outcome;
           break;
