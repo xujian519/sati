@@ -39,7 +39,7 @@ export interface CompactProgress {
   level: number;
   stage: string;
   label: string;
-  state: "started" | "running" | "failed" | "completed";
+  state: "started" | "running" | "failed" | "cancelled" | "completed";
   pre_tokens?: number;
   reason?: string;
   /** Correlates the in-flight progress with the terminal compact_boundary message. */
@@ -144,6 +144,8 @@ export interface NormalizedMessage {
   compactLevel?: number;
   compactStage?: string;
   compactStageLabel?: string;
+  /** 压缩终态（实时帧顶层字段）；历史投影改从 compactMetadata.status 读。 */
+  compactState?: string;
   compactMetadata?: unknown;
   runId?: string;
   activityId?: string;
