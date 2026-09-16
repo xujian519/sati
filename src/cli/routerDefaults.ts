@@ -5,6 +5,7 @@
  */
 
 import { type PilotAgentModelSelection } from "../pilot/config/types.js";
+import { isOptionalFeatureEnabled } from "../pilot/config/optionalFeature.js";
 import {
   DEFAULT_ALLOWED_TOOLS,
   DEFAULT_JUDGE_TIMEOUT_MS,
@@ -17,33 +18,24 @@ export function ensureRouterConfig(
   defaultSelection: PilotAgentModelSelection,
 ): RouterConfig {
   const defaultRef = { id: defaultSelection.id, provider: defaultSelection.provider, model: defaultSelection.model };
-  if (router?.enabled === false) {
+  // 段缺失 = 关（上游 #588）：未配置 router 的用户不再拿到一个全开的智能路由，
+  // 请求也就不再凭空多出分类调用。
+  if (!router || !isOptionalFeatureEnabled(router)) {
     return { enabled: false };
   }
-  if (router) {
-    // Scenarios is optional at the parse boundary (see schema.ts) — the UI
-    // can persist a partial `router:` block, e.g. user toggled `enabled`
-    // and seeded `tokenSaver.*` without ever opening the Scenarios editor.
-    // Fill `scenarios.default` from `agent.model` so RouterRuntime always
-    // sees a valid map.
-    return {
-      enabled: true,
-      ...router,
-      scenarios: router.scenarios ?? { default: defaultRef },
-      fallback: router.fallback ?? { default: [defaultRef] },
-      tokenSaver: router.tokenSaver ?? buildDefaultTokenSaver(defaultRef),
-      autoOrchestrate: router.autoOrchestrate ?? buildDefaultAutoOrchestrate(),
-      stats: { enabled: true, baselineModel: defaultRef, ...(router.stats ?? {}) },
-    };
-  }
+  // Scenarios is optional at the parse boundary (see schema.ts) — the UI
+  // can persist a partial `router:` block, e.g. user toggled `enabled`
+  // and seeded `tokenSaver.*` without ever opening the Scenarios editor.
+  // Fill `scenarios.default` from `agent.model` so RouterRuntime always
+  // sees a valid map. 只对显式配置过的 router 补默认值。
   return {
     enabled: true,
-    scenarios: { default: defaultRef },
-    fallback: { default: [defaultRef] },
-    zeroUsageRetry: { enabled: true, maxAttempts: 2 },
-    tokenSaver: buildDefaultTokenSaver(defaultRef),
-    autoOrchestrate: buildDefaultAutoOrchestrate(),
-    stats: { enabled: true, baselineModel: defaultRef },
+    ...router,
+    scenarios: router.scenarios ?? { default: defaultRef },
+    fallback: router.fallback ?? { default: [defaultRef] },
+    tokenSaver: router.tokenSaver ?? buildDefaultTokenSaver(defaultRef),
+    autoOrchestrate: router.autoOrchestrate ?? buildDefaultAutoOrchestrate(),
+    stats: { enabled: true, baselineModel: defaultRef, ...(router.stats ?? {}) },
   };
 }
 

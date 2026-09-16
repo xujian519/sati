@@ -9,7 +9,7 @@ emit/dispatch/emitAgentEvent/emitEvent 字符串事件名调用点、对象字�
 
 | 事件 | 生产者 | 消费者 |
 | --- | --- | --- |
-| agent_status | src/adapters/channel/feishu/FeishuChannel.ts:635, src/adapters/channel/weixin/WeixinChannel.ts:836, src/cli/projectRuntimeFactory.ts:150, src/gateway/client/InProcessGateway.ts:413 | src/gateway/client/InProcessGateway.ts:551, submitTurn 流 ×14 |
+| agent_status | src/adapters/channel/feishu/FeishuChannel.ts:635, src/adapters/channel/weixin/WeixinChannel.ts:836, src/cli/projectRuntimeFactory.ts:151, src/gateway/client/InProcessGateway.ts:413 | src/gateway/client/InProcessGateway.ts:551, submitTurn 流 ×14 |
 | approval_pending | src/cli/patentOutputGateFactory.ts:149 | submitTurn 流 ×14 |
 | approval_resolved | src/cli/patentOutputGateFactory.ts:77 | submitTurn 流 ×14 |
 | assistant_attachment | src/gateway/client/eventMapping.ts:258 | submitTurn 流 ×14 |

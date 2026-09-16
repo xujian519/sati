@@ -7,11 +7,11 @@
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1032 / 169836 |
+| src TS 文件 / 行数 | 1033 / 169861 |
 | src JS 文件 | 0 |
-| tests 文件 | 545 |
-| ui/src 文件 / 行数 | 466 / 82904 |
-| ui/server 文件 / 行数 | 105 / 31483 |
+| tests 文件 | 547 |
+| ui/src 文件 / 行数 | 468 / 83034 |
+| ui/server 文件 / 行数 | 105 / 31639 |
 
 ## 指标口径
 
@@ -84,16 +84,16 @@
 | `ui/src/components/chat/tools/components/InteractiveRenderers/AskUserQuestionPanel.tsx` | `AskUserQuestionPanel` | 378 | arrow |
 | `ui/src/components/kanban/hooks/useBoardState.ts` | `useBoardState` | 368 | function |
 | `ui/src/components/chat/hooks/useFileMentions.tsx` | `useFileMentions` | 366 | function |
-| `ui/src/components/settings/view/agentRoute/components/RouterSection.tsx` | `RouterSection` | 355 | function |
-| `src/cli/projectRuntimeFactory.ts` | `createProjectRuntimeResolver` | 349 | function |
+| `ui/src/components/settings/view/agentRoute/components/RouterSection.tsx` | `RouterSection` | 357 | function |
+| `src/cli/projectRuntimeFactory.ts` | `createProjectRuntimeResolver` | 353 | function |
 | `ui/src/components/main-content/view/MainContent.tsx` | `MainContent` | 346 | function |
 | `src/gateway/server/GatewayWsConnection.ts` | `dispatchRequest` | 343 | method |
+| `ui/src/components/settings/view/agentSearch/components/ToolsSection.tsx` | `ToolsSection` | 343 | function |
 | `src/patent/graph/domains/inventiveness.ts` | `buildInventivenessGraph` | 342 | function |
 | `ui/src/components/main-content-v2/PlansAndCronJobs.tsx` | `PlansAndCronJobs` | 334 | function |
 | `src/gateway/client/telemetry.ts` | `emitSessionTelemetry` | 333 | function |
 | `ui/src/components/main-content-v2/DashboardV2.tsx` | `DashboardV2` | 332 | function |
 | `ui/src/hooks/useSatiConfig.ts` | `useSatiConfigState` | 332 | function |
-| `ui/src/components/settings/view/agentSearch/components/ToolsSection.tsx` | `ToolsSection` | 327 | function |
 | `ui/src/components/code-editor/view/CodeEditor.tsx` | `CodeEditor` | 310 | function |
 | `ui/src/components/chat-v2/SubagentDetailMessageFlow.tsx` | `SubagentDetailMessageFlow` | 309 | function |
 | `ui/src/components/settings/view/integrations/im/components/WeixinChannelSection.tsx` | `WeixinChannelSection` | 303 | function |
@@ -159,8 +159,8 @@
 | tool | 61 |
 | agent | 57 |
 | knowledge | 38 |
+| gateway | 30 |
 | context | 29 |
-| gateway | 29 |
 | model | 27 |
 | session | 27 |
 | router | 18 |
@@ -171,9 +171,9 @@
 | rule | 10 |
 | adapters | 9 |
 | pilot | 9 |
+| cli | 8 |
 | literature | 8 |
 | web | 8 |
-| cli | 7 |
 | permission | 4 |
 | test-support | 4 |
 | telemetry | 3 |
@@ -188,7 +188,7 @@
 | runtime | 1 |
 | status | 1 |
 
-| **合计** | **525** |
+| **合计** | **527** |
 
 ## i18n en/zh-CN 对齐
 
@@ -201,7 +201,7 @@
 | common | 435 | 435 | 0 | 0 |
 | kanban | 44 | 44 | 0 | 0 |
 | routing | 64 | 64 | 0 | 0 |
-| settings | 1044 | 1044 | 0 | 0 |
+| settings | 1046 | 1046 | 0 | 0 |
 | sidebar | 125 | 125 | 0 | 0 |
 | stylePanel | 56 | 56 | 0 | 0 |
 | tasks | 94 | 94 | 0 | 0 |
