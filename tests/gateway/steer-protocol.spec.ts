@@ -8,7 +8,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { mapAgentEvent } from "../../src/gateway/client/InProcessGateway.js";
 import { validateMethodParams } from "../../src/gateway/server/methodGuards.js";
-import { SATI_GATEWAY_PROTOCOL_VERSION, isProtocolCompatible } from "../../src/gateway/protocol/version.js";
+import {
+  SATI_GATEWAY_PROTOCOL_VERSION,
+  PROTOCOL_RELEASES,
+  isProtocolCompatible,
+} from "../../src/gateway/protocol/version.js";
 
 test("mapAgentEvent：steer_applied/steer_unapplied 透传并附 runId", () => {
   const applied = mapAgentEvent(
@@ -47,13 +51,17 @@ test("mapAgentEvent：steer_applied/steer_unapplied 透传并附 runId", () => {
   }
 });
 
-test("协议版本 1.6+：同 MAJOR 兼容，低 MINOR 客户端可连接", () => {
-  // 协议已升至 1.7（edit-last-turn），此处只锁 MAJOR=1 与 1.6 引入的兼容语义。
-  assert.ok(SATI_GATEWAY_PROTOCOL_VERSION.startsWith("1."));
-  assert.ok(isProtocolCompatible(SATI_GATEWAY_PROTOCOL_VERSION, SATI_GATEWAY_PROTOCOL_VERSION));
-  assert.ok(isProtocolCompatible("1.6", SATI_GATEWAY_PROTOCOL_VERSION));
-  assert.ok(isProtocolCompatible("1.0", SATI_GATEWAY_PROTOCOL_VERSION));
-  assert.ok(!isProtocolCompatible("2.0", SATI_GATEWAY_PROTOCOL_VERSION));
+test("协议版本 MAJOR=1：同 MAJOR 任意 MINOR 兼容（含更低 MINOR 的旧客户端）", () => {
+  // 本用例只锁**兼容语义**——版本号本身是 version.ts 台账的一部分，由
+  // `pnpm check:protocol-version` 与 protocol-versioning.spec.ts 把关。
+  // 旧的 `startsWith("1.")` + 自比 `isProtocolCompatible(V, V)` 是无牙齿断言
+  // （#362）：前者对 1.x 全部取值通过，后者两侧同源恒真。
+  assert.equal(SATI_GATEWAY_PROTOCOL_VERSION, PROTOCOL_RELEASES[PROTOCOL_RELEASES.length - 1].version);
+  assert.equal(isProtocolCompatible("1.6", SATI_GATEWAY_PROTOCOL_VERSION), true);
+  assert.equal(isProtocolCompatible("1.0", SATI_GATEWAY_PROTOCOL_VERSION), true);
+  assert.equal(isProtocolCompatible(SATI_GATEWAY_PROTOCOL_VERSION, "1.0"), true);
+  assert.equal(isProtocolCompatible("2.0", SATI_GATEWAY_PROTOCOL_VERSION), false);
+  assert.equal(isProtocolCompatible("0.9", SATI_GATEWAY_PROTOCOL_VERSION), false);
 });
 
 test("方法守卫：steer_turn 要求 sessionKey+text，cancel_steer 要求 sessionKey+steerId", () => {
