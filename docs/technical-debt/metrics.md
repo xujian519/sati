@@ -7,11 +7,11 @@
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1032 / 169836 |
+| src TS 文件 / 行数 | 1032 / 169929 |
 | src JS 文件 | 0 |
-| tests 文件 | 545 |
-| ui/src 文件 / 行数 | 465 / 82807 |
-| ui/server 文件 / 行数 | 105 / 31483 |
+| tests 文件 | 546 |
+| ui/src 文件 / 行数 | 465 / 82906 |
+| ui/server 文件 / 行数 | 105 / 31629 |
 
 ## 指标口径
 
@@ -56,15 +56,15 @@
 | `ui/src/components/chat/view/subcomponents/MessageComponent.tsx` | `(anonymous)` | 798 | arrow |
 | `ui/src/components/chat-v2/ComposerV2.tsx` | `ComposerV2` | 780 | function |
 | `ui/src/stores/useSessionStore.ts` | `useSessionStore` | 727 | function |
+| `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` | `useChatRealtimeHandlers` | 719 | function |
 | `ui/src/components/git-panel/hooks/useGitPanelController.ts` | `useGitPanelController` | 704 | function |
-| `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` | `useChatRealtimeHandlers` | 697 | function |
 | `ui/src/components/chat-v2/ChatInterfaceV2.tsx` | `ChatInterfaceV2` | 672 | function |
 | `ui/src/hooks/useProjectsState.ts` | `useProjectsState` | 647 | function |
 | `src/adapters/channel/tui/app/TuiApp.tsx` | `TuiApp` | 643 | function |
 | `src/cli/sati.ts` | `main` | 636 | function |
 | `ui/src/components/app-shell/AppShellV2.tsx` | `AppShellV2` | 630 | function |
 | `ui/src/components/onboarding/view/subcomponents/LlmConfigurationStep.tsx` | `LlmConfigurationStep` | 630 | function |
-| `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` | `(anonymous)` | 600 | arrow |
+| `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` | `(anonymous)` | 622 | arrow |
 | `ui/src/components/main-content/view/MainContent.tsx` | `SplitBody` | 573 | function |
 | `ui/src/components/main-content-v2/CronV2.tsx` | `CronFormView` | 476 | function |
 | `src/router/execution/executeRouterDecision.ts` | `executeRouterDecision` | 449 | function |
@@ -97,13 +97,14 @@
 | `ui/src/components/code-editor/view/CodeEditor.tsx` | `CodeEditor` | 310 | function |
 | `ui/src/components/chat-v2/SubagentDetailMessageFlow.tsx` | `SubagentDetailMessageFlow` | 309 | function |
 | `ui/src/components/settings/view/integrations/im/components/WeixinChannelSection.tsx` | `WeixinChannelSection` | 303 | function |
+| `src/gateway/client/InProcessGateway.ts` | `submitTurn` | 300 | method |
 
 ## Top 30 大文件
 
 | 文件 | 行 |
 |---|---|
 | `ui/src/components/main-content-v2/SkillsV2.tsx` | 2525 |
-| `ui/server/sati-bridge.js` | 2228 |
+| `ui/server/sati-bridge.js` | 2289 |
 | `ui/src/components/code-editor/view/subcomponents/PdfDocumentPreview.tsx` | 1885 |
 | `ui/server/routes/taskmaster.js` | 1850 |
 | `ui/src/components/chat/hooks/useChatComposerState.ts` | 1837 |
@@ -113,7 +114,7 @@
 | `ui/src/components/code-editor/view/subcomponents/CodeEditorBinaryFile.tsx` | 1511 |
 | `src/adapters/channel/weixin/WeixinChannel.ts` | 1497 |
 | `ui/server/routes/git.js` | 1491 |
-| `src/gateway/client/InProcessGateway.ts` | 1421 |
+| `src/gateway/client/InProcessGateway.ts` | 1483 |
 | `ui/src/stores/useSessionStore.ts` | 1404 |
 | `ui/src/components/main-content-v2/DashboardV2.tsx` | 1345 |
 | `src/adapters/channel/feishu/FeishuChannel.ts` | 1337 |
@@ -159,8 +160,8 @@
 | tool | 61 |
 | agent | 57 |
 | knowledge | 38 |
+| gateway | 30 |
 | context | 29 |
-| gateway | 29 |
 | model | 27 |
 | session | 27 |
 | router | 18 |
@@ -188,7 +189,7 @@
 | runtime | 1 |
 | status | 1 |
 
-| **合计** | **525** |
+| **合计** | **526** |
 
 ## i18n en/zh-CN 对齐
 

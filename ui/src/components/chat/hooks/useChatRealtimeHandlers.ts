@@ -586,6 +586,28 @@ export function useChatRealtimeHandlers({
         return;
       }
 
+      // --- Absolute projection (gateway-side epoch projection, 协议 1.9) ---
+      // 帧内容是「本段正文到目前为止的全文」。它只用于把当前流式行**推进**成全文：
+      // 追加（`updateStreaming` 的常规用法）会与已经收到的 delta 叠加成重复文本，
+      // 而无条件覆盖又会回退掉本帧之后才到达的 delta。
+      if (msg.kind === "text" && msg.activeTurnProjection === true) {
+        const projectedText = typeof msg.content === "string" ? msg.content : "";
+        if (!projectedText) return;
+        // 正文出现意味着思考已结束（与 stream_delta 分支同语义）。
+        if (thinkingBySessionRef.current.has(sid)) {
+          thinkingBySessionRef.current.delete(sid);
+          sessionStore.finalizeStreamingThinking(sid, msgRunId);
+        }
+        const streamId = `__streaming_${streamKey}`;
+        const existing = sessionStore.getSessionSlot?.(sid)?.realtimeMessages.find(message => message.id === streamId);
+        const currentText = typeof existing?.content === "string" ? existing.content : "";
+        // 行内容是本段的**片段**（开局被截断、断线期间缺中间段）→ 覆盖成全文；
+        // 行内容不在其中（本帧之后又到了新 delta，行比投影新）→ 丢弃本帧等下次轮询。
+        if (existing && currentText.length > 0 && !projectedText.includes(currentText)) return;
+        sessionStore.updateStreaming?.(sid, projectedText, provider, msgRunId);
+        return;
+      }
+
       const subagentId = typeof msg.subagentId === "string" ? msg.subagentId : "";
       if (msg.isSubagentDetail && subagentId) {
         if (msg.kind === "thinking") {
