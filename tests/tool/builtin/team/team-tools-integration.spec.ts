@@ -30,9 +30,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { createLocalGateway, type CreateLocalGatewayResult } from "../../../../src/cli/createLocalGateway.js";
-import { TeamDb, createTeamMember, memberSessionKey, type TeamScheduler } from "../../../../src/agent/team/index.js";
+import {
+  TeamDb,
+  createTeamMember,
+  memberSessionKey,
+  type TeamScheduler,
+  type WorkerGate,
+} from "../../../../src/agent/team/index.js";
 import type { TeamEventEmitter } from "../../../../src/agent/team/protocol/events.js";
-import { WorkerRegistry, defaultPatentWorkers } from "../../../../src/patent/index.js";
+import { WorkerRegistry, createPatentWorkerGate, defaultPatentWorkers } from "../../../../src/patent/index.js";
 import { SESSION_PRESENCE_GRACE_MS } from "../../../../src/gateway/server/sessionPresence.js";
 import type { ModelRuntime } from "../../../../src/model/index.js";
 import { DEFAULT_MODEL_CAPABILITIES } from "../../../../src/model/protocol/capabilities.js";
@@ -262,12 +268,12 @@ function retryThenCompleteModel(
 }
 
 /** 团队工具 factory 直调（事件链路由 emit 用 no-op，由 gateway 集成用例覆盖）。 */
-function makeTools(db: TeamDb, scheduler: TeamScheduler, workerRegistry?: WorkerRegistry) {
+function makeTools(db: TeamDb, scheduler: TeamScheduler, workerGate?: WorkerGate) {
   const emit: TeamEventEmitter = () => true;
   return {
     teamCreate: createTeamCreateTool({ db, scheduler, emit }),
     teamAddMember: createTeamAddMemberTool({ db, scheduler, emit }),
-    teamCreateTask: createTeamCreateTaskTool({ db, scheduler, emit, workerRegistry }),
+    teamCreateTask: createTeamCreateTaskTool({ db, scheduler, emit, workerGate }),
     teamUpdateTask: createTeamUpdateTaskTool({ db, scheduler, emit }),
     teamArchive: createTeamArchiveTool({ db, scheduler, emit }),
   };
@@ -635,7 +641,7 @@ test("team_create_task：workerName 存在性校验（阶段 3）", async () => 
   const teamScheduler = result.teamSubsystem.scheduler;
   const registry = new WorkerRegistry();
   for (const w of defaultPatentWorkers()) registry.register(w);
-  const tools = makeTools(teamDb, teamScheduler, registry);
+  const tools = makeTools(teamDb, teamScheduler, createPatentWorkerGate(registry));
   const captainCtx = { sessionId: CAPTAIN_SESSION } as never;
   try {
     const created = await tools.teamCreate.execute({ name: "worker 校验团队" }, captainCtx);
@@ -658,7 +664,7 @@ test("team_create_task：workerName 存在性校验（阶段 3）", async () => 
   }
 });
 
-test("team_create_task：createBuiltinRegistry 装配路径透传 workerRegistry（I1 回归）", async () => {
+test("team_create_task：createBuiltinRegistry 装配路径透传 workerGate（I1 回归）", async () => {
   const { result, root } = await makeGateway("registry-wiring", textOnlyModel);
   const teamDb = result.teamSubsystem.db;
   const registry = new WorkerRegistry();
@@ -668,7 +674,7 @@ test("team_create_task：createBuiltinRegistry 装配路径透传 workerRegistry
       db: teamDb,
       scheduler: result.teamSubsystem.scheduler,
       emit: () => true,
-      workerRegistry: registry,
+      workerGate: createPatentWorkerGate(registry),
     },
   });
   const tool = builtin.get("team_create_task") as
@@ -683,7 +689,7 @@ test("team_create_task：createBuiltinRegistry 装配路径透传 workerRegistry
       captainSessionKey: CAPTAIN_SESSION,
       createdAt: new Date().toISOString(),
     });
-    // 幽灵 workerName：拒绝（workerRegistry 已透传，生产路径校验非死代码）
+    // 幽灵 workerName：拒绝（workerGate 已透传，生产路径校验非死代码）
     await assert.rejects(
       () => tool!.execute({ teamId: TEAM_ID, subject: "幽灵 worker", workerName: "no_such_worker" }, captainCtx),
       /worker 未注册/,

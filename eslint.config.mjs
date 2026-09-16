@@ -13,6 +13,29 @@ import globals from "globals";
  * Code formatting is delegated to Biome (biome.json); this config only
  * enforces lint rules that Biome does not cover.
  */
+/**
+ * 危险 API 禁令条目（两个 no-restricted-imports 块共用）。
+ *
+ * 为什么必须是常量而不是各块各写一份：ESLint 的规则配置是**按文件块整体覆盖**而非合并——
+ * 下面「分层门禁」块为 src/agent/team 与 src/tool/builtin/team 重新声明了
+ * no-restricted-imports，若不在该块里重复这些 paths，这两个目录会**静默失去**
+ * child_process.exec/execSync 禁令（看起来像"配了"，实际已被覆盖掉）。
+ */
+const DANGEROUS_IMPORT_PATHS = [
+  {
+    name: "node:child_process",
+    importNames: ["exec", "execSync"],
+    message:
+      "禁止 child_process.exec/execSync：命令经 shell 解释存在注入面。用 execFile/execFileSync(数组参数)替代；确需 shell 时用 spawn 且勿拼接用户输入。",
+  },
+  {
+    name: "child_process",
+    importNames: ["exec", "execSync"],
+    message:
+      "禁止 child_process.exec/execSync：命令经 shell 解释存在注入面。用 execFile/execFileSync(数组参数)替代；确需 shell 时用 spawn 且勿拼接用户输入。",
+  },
+];
+
 export default [
   {
     ignores: [
@@ -65,21 +88,25 @@ export default [
     // tests/scripts(构建/工具层)。核心运行时(src/)是注入风险的主轮廓。
     files: ["src/**/*.{ts,tsx,mts,cts}"],
     rules: {
+      "no-restricted-imports": ["error", { paths: DANGEROUS_IMPORT_PATHS }],
+    },
+  },
+  {
+    // 分层门禁（#363 / TD-TEAM-N06）：通用团队层不得反向依赖专利业务域 src/patent。
+    // 「加一个渠道/域就要改通用层」的耦合方向一旦形成，专利域契约演进会持续牵动通用编排；
+    // 正解是装配点注入领域无关接口（WorkerGate，见 src/agent/team/worker-gate.ts）。
+    // ⚠️ 本块整体覆盖同目录的 no-restricted-imports ⇒ 必须重复 DANGEROUS_IMPORT_PATHS。
+    files: ["src/agent/team/**/*.{ts,tsx,mts,cts}", "src/tool/builtin/team/**/*.{ts,tsx,mts,cts}"],
+    rules: {
       "no-restricted-imports": [
         "error",
         {
-          paths: [
+          paths: DANGEROUS_IMPORT_PATHS,
+          patterns: [
             {
-              name: "node:child_process",
-              importNames: ["exec", "execSync"],
+              group: ["**/patent", "**/patent/**"],
               message:
-                "禁止 child_process.exec/execSync：命令经 shell 解释存在注入面。用 execFile/execFileSync(数组参数)替代；确需 shell 时用 spawn 且勿拼接用户输入。",
-            },
-            {
-              name: "child_process",
-              importNames: ["exec", "execSync"],
-              message:
-                "禁止 child_process.exec/execSync：命令经 shell 解释存在注入面。用 execFile/execFileSync(数组参数)替代；确需 shell 时用 spawn 且勿拼接用户输入。",
+                "通用团队层不得依赖专利业务域（src/patent）：经 WorkerGate 接口注入，装配点见 src/cli/teamSubsystem.ts（#363）。",
             },
           ],
         },

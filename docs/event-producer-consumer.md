@@ -64,12 +64,12 @@ emit/dispatch/emitAgentEvent/emitEvent 字符串事件名调用点、对象字�
 | subagent_tool_calls_detected | src/agent/sub/SubAgentSession.ts:204 | src/gateway/client/InProcessGateway.ts:551 |
 | subagent_tool_result | src/agent/sub/SubAgentSession.ts:212 | src/gateway/client/InProcessGateway.ts:551 |
 | task_claimed | src/agent/team/scheduler/scheduler.ts:270 | - |
-| task_completed | src/tool/builtin/team/teamTasks.ts:367 | - |
-| task_created | src/tool/builtin/team/teamTasks.ts:219 | - |
-| task_failed | src/tool/builtin/team/teamTasks.ts:376 | - |
-| task_reassigned | src/tool/builtin/team/teamTasks.ts:487 | - |
+| task_completed | src/tool/builtin/team/teamTasks.ts:363 | - |
+| task_created | src/tool/builtin/team/teamTasks.ts:215 | - |
+| task_failed | src/tool/builtin/team/teamTasks.ts:372 | - |
+| task_reassigned | src/tool/builtin/team/teamTasks.ts:483 | - |
 | task_retried | src/agent/team/scheduler/scheduler.ts:195 | - |
-| task_updated | src/tool/builtin/team/teamTasks.ts:385 | - |
+| task_updated | src/tool/builtin/team/teamTasks.ts:381 | - |
 | team_archived | src/tool/builtin/team/teamArchive.ts:67 | - |
 | team_created | src/tool/builtin/team/teamManagement.ts:94 | - |
 | team_event | - | submitTurn 流 ×14 |

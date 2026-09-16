@@ -17,7 +17,7 @@ import { beginTaskAttempt, invalidateTaskAttempt, attemptsExhausted } from "../t
 import { retryFailedTask } from "../taskpool/retry.js";
 import { claimDelivery, unreadMessages, MAILBOX_LEASE_MS } from "../mailbox/mailbox.js";
 import type { TeamEventEmitter } from "../protocol/events.js";
-import { workerAllowedForRole, type WorkerRegistry } from "../../../patent/worker-contract.js";
+import type { WorkerGate } from "../worker-gate.js";
 import { withTeamLock } from "./lock.js";
 
 export type TeamSchedulerOptions = {
@@ -30,8 +30,9 @@ export type TeamSchedulerOptions = {
   maxConcurrentMembers?: number;
   /** 队长在线判定（默认常在线）；离线暂停认领。 */
   isCaptainOnline?: (captainSessionKey: string) => boolean;
-  /** 阶段 3：专利 worker 注册表（可选；提供时新任务分派按成员角色 tier 校验）。 */
-  workerRegistry?: WorkerRegistry;
+  /** 阶段 3：worker 门禁（可选；提供时新任务分派按成员角色校验 worker 权限）。领域无关——实现由
+   * 装配点注入（专利侧适配器 `src/patent/team-worker-gate.ts`），编排层不认识任何业务域（#363）。 */
+  workerGate?: WorkerGate;
   /** P1-4：读团队共享黑板摘要（可选；提供时成员任务唤醒 prompt 注入"共享上下文"注记，让成员
    *  turn 0 开局读到黑板已有条目。宿主读 {projectRoot}/.sati/team-workspace/{teamId}/share.jsonl）。 */
   readSharedBoardSummary?: (teamId: string) => string | undefined;
@@ -92,7 +93,7 @@ export class TeamScheduler {
   private readonly wake: (memberId: string, message: string) => Promise<boolean>;
   private readonly maxConcurrentMembers: number;
   private readonly isCaptainOnline: (captainSessionKey: string) => boolean;
-  private readonly workerRegistry?: WorkerRegistry;
+  private readonly workerGate?: WorkerGate;
   private readonly readSharedBoardSummary?: (teamId: string) => string | undefined;
   private readonly mailboxLeaseMs: number;
 
@@ -102,21 +103,20 @@ export class TeamScheduler {
     this.wake = options.wake;
     this.maxConcurrentMembers = options.maxConcurrentMembers ?? 4;
     this.isCaptainOnline = options.isCaptainOnline ?? (() => true);
-    this.workerRegistry = options.workerRegistry;
+    this.workerGate = options.workerGate;
     this.readSharedBoardSummary = options.readSharedBoardSummary;
     this.mailboxLeaseMs = options.mailboxLeaseMs ?? MAILBOX_LEASE_MS;
   }
 
   /**
-   * 阶段 3：成员是否可认领该任务——任务带 workerName 时校验成员角色 tier 权限。
-   * 已认领任务（claimed/in_progress）不受此约束（不夺回）；workerRegistry 未注入
-   * 或 worker 未注册时 fail-open（不阻塞）。
+   * 阶段 3：成员是否可认领该任务——任务带 workerName 时校验成员角色权限。
+   * 已认领任务（claimed/in_progress）不受此约束（不夺回）；workerGate 未注入时 fail-open（不阻塞）。
+   * 权限语义（含「未注册 worker 放行」）整体由 gate 实现承担：编排层只问「能不能干」，
+   * 不认识 worker tier / 契约（#363）。
    */
   private canMemberClaim(member: TeamMemberRow, task: TeamTaskRow): boolean {
-    if (task.workerName === undefined || this.workerRegistry === undefined) return true;
-    const worker = this.workerRegistry.get(task.workerName);
-    if (worker === undefined) return true;
-    return workerAllowedForRole(member.roleSlug, worker);
+    if (task.workerName === undefined || this.workerGate === undefined) return true;
+    return this.workerGate.allows(member.roleSlug, task.workerName);
   }
 
   /**
@@ -203,9 +203,9 @@ export class TeamScheduler {
       // M4：重置后重取快照——刚重置回 pending 的任务本次 kick 即可认领
       //（同次锁内完成，不会滞留 pending 等下一次触发）
       const tasks = this.db.listTasks(teamId);
-      // 阶段 3：新分派任务按 worker tier 过滤——任务带 workerName 且成员角色无权执行该
-      // tier 时对该成员不可认领（已认领任务不受影响，不夺回；workerRegistry 缺失 fail-open）。
-      const claimable = this.workerRegistry === undefined ? tasks : tasks.filter(t => this.canMemberClaim(current, t));
+      // 阶段 3：新分派任务按 worker 权限过滤——任务带 workerName 且成员角色无权执行时对该成员
+      // 不可认领（已认领任务不受影响，不夺回；workerGate 缺失 fail-open）。
+      const claimable = this.workerGate === undefined ? tasks : tasks.filter(t => this.canMemberClaim(current, t));
       const task = ownedOpenTask(tasks, memberId) ?? nextReadyTask(claimable, memberId);
       if (task === undefined) return undefined;
       const working = this.db.listMembers().filter(m => m.teamId === teamId && m.status === "working").length;

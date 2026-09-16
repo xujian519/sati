@@ -353,7 +353,7 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
     db: team.db,
     scheduler: team.scheduler,
     emit: team.emitTeamEvent,
-    workerRegistry: team.workerRegistry,
+    workerGate: team.workerGate,
   });
   // P0-1：成员工具作用域解析器注入——成员会话创建时按角色裁剪工具集。resolver 延迟
   // 求值（每次会话创建时经 getSubagentDefinition 取角色定义，角色由 syncRoleDefinitions
