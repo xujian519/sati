@@ -38,8 +38,42 @@ const EXCLUDE_DIRS = new Set([
   "ui-source",
 ]);
 
+/**
+ * 内嵌 vendored 子包：**仓库相对路径前缀**口径（2026-09-16 · #341）。
+ *
+ * 与 `EXCLUDE_DIRS` 的区别：后者按「任意层级的目录名」豁免（`lib`/`ui-source`/`dist` 无论出现在
+ * 哪一层都算），这里按路径前缀精确匹配，不会误伤同名目录。
+ *
+ * 为什么整体移出文件级指标：`edgeclaw-memory-core` 是从外部项目整体搬入的记忆内核，自带
+ * `package.json` / `tsconfig` / 独立 `build`·`test` 脚本，本仓不参与其演进；它却占 `src` 行数的
+ * 9.0%（49 个 .ts / 16,682 行），并在「Top 大文件」「God function」两张**排期表**里各占 3 席
+ * （`sqlite.ts` 1711 / `llm-extraction.ts` 1624 / `file-memory.ts` 1139；`run` 524 /
+ * `retrieve` 484 / `runHeartbeat` 477）。这两张表的用途是「挑下一个要拆的文件 / 函数」，
+ * 混入非本仓维护的代码会直接误导排期。故按 #341 整体移出，改为在 `metrics.md` 单列一节
+ * （规模 + 自身 Top 文件），既不混排期也不丢可见度。
+ *
+ * 注：该子包的 `lib/`（编译产物）与 `ui-source/`（memory-dashboard 资产）**本就**由
+ * `EXCLUDE_DIRS` 豁免，故这里只需要挡住 `src/` 与 `tests/` 下的 .ts。
+ */
+export const VENDORED_SUBTREES = ["src/context/memory/edgeclaw-memory-core"];
+
+/**
+ * 判断仓库相对路径是否落在 vendored 子包内。
+ *
+ * 按**路径段前缀**匹配（等于 `p` 本身，或以 `p/` 开头），故 `edgeclaw-memory-core-extra/`
+ * 这类同前缀兄弟目录不会被误伤。
+ *
+ * @param {string} relPath 以 `/` 分隔的仓库相对路径
+ * @returns {boolean}
+ */
+export function isVendored(relPath) {
+  return VENDORED_SUBTREES.some(p => relPath === p || relPath.startsWith(`${p}/`));
+}
+
 const GOD_FN_THRESHOLD = Number(process.env.GOD_FN_THRESHOLD ?? 300);
 const TOP_FILES_LIMIT = Number(process.env.TOP_FILES_LIMIT ?? 30);
+/** `metrics.md` 的「vendored 子包」节列出该子包自身最大的几个文件。 */
+const VENDORED_TOP_LIMIT = Number(process.env.VENDORED_TOP_LIMIT ?? 5);
 
 /** `--check` 未显式给路径时比对的基线。 */
 const DEFAULT_METRICS_PATH = "docs/technical-debt/metrics.md";
@@ -63,8 +97,11 @@ const SCOPE_DOC = {
   unsafe: "src + ui/src（.ts/.tsx，含同址 *.spec.*；TS AST 精确统计 AnyKeyword + @ts-* 指令）",
   asUnknownAs:
     "src + ui/src（.ts/.tsx，含同址 *.spec.*；TS AST 统计 `x as unknown as T` 双重断言）。**口径变更**：2026-09-15（issue #339）首度纳入——此前该形态完全未统计，故 0 → N 的变化来自口径变更而非新增债务",
-  catch: "src + ui/src 产品代码（排除 *.spec.* / *.test.*）",
+  catch:
+    "src + ui/src + ui/server 产品代码（排除 *.spec.* / *.test.*）。**口径变更**：2026-09-16（issue #341）纳入 ui/server——此前仅 src + ui/src，于是「空 catch {}」报 0 而 ui/server 实有 1 处，且同为「错误 & 可观测」类的 console/todos 早已含 ui/server，口径自相矛盾",
   todos: "src + ui/src + ui/server + tests（.ts/.tsx/.js/.jsx/.mjs/.cjs）",
+  vendored:
+    "src/context/memory/edgeclaw-memory-core（**整体移出文件级指标**，2026-09-16 issue #341）：外部搬入的记忆内核，自带 package.json / tsconfig 与独立 build·test，不随本仓演进。其 src 与 tests 下的 .ts 此前计入 src 规模与两张排期表，现单列于 metrics.md「vendored 子包」节；该子包自己的 lib/（编译产物）与 ui-source/（memory-dashboard 资产）本就由目录名豁免",
 };
 
 /**
@@ -480,21 +517,47 @@ function knowledgeDupMd() {
   return { groups, files, bytes };
 }
 
-async function measure() {
-  const srcFiles = listFiles(join(ROOT, "src"), [".ts", ".tsx"]);
-  const srcJsFiles = listFiles(join(ROOT, "src"), [".js", ".jsx", ".mjs", ".cjs"]);
+export async function measure() {
+  // 扫描作用域按 SCOPE_DOC 展开（此前全部只用 allSrcForScan = src/）
+  const jsLike = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"];
+
+  // `src/` 先取全量再分流（#341）：过滤掉的文件不是「不存在」，而是**单列**在
+  // `vendored` 分组里由 `renderMarkdown` 单独成节——若直接把它们从扫描集里删掉，
+  // 「已单列」与「该目录已被移除」在输出上不可区分。
+  const srcScanAll = listFiles(join(ROOT, "src"), jsLike);
+  const srcScan = srcScanAll.filter(f => !isVendored(relative(ROOT, f)));
+  const vendoredFiles = srcScanAll.filter(f => isVendored(relative(ROOT, f)));
+  const srcFiles = srcScan.filter(f => f.endsWith(".ts") || f.endsWith(".tsx"));
+  const srcJsFiles = srcScan.filter(f => !f.endsWith(".ts") && !f.endsWith(".tsx"));
+
   const testsFiles = listFiles(join(ROOT, "tests"), [".ts", ".tsx", ".js"]);
   const uiSrcFiles = listFiles(join(ROOT, "ui/src"), [".ts", ".tsx"]);
   const uiServerFiles = listFiles(join(ROOT, "ui/server"), [".js", ".mjs", ".ts"]);
-
-  // 扫描作用域按 SCOPE_DOC 展开（此前全部只用 allSrcForScan = src/）
-  const jsLike = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"];
   const uiServerScan = listFiles(join(ROOT, "ui/server"), jsLike);
   const testsScan = listFiles(join(ROOT, "tests"), jsLike);
-  const productCatchFiles = [...srcFiles, ...uiSrcFiles].filter(f => !isTestFile(f));
+  // catch 口径含 ui/server（2026-09-16 · #341）。`catchEmpty` 与 `catchNoParam` 共用本集合，
+  // 所以两者要么一起含 ui/server、要么一起漏——这正是本 issue 要消除的「口径自相矛盾」。
+  const productCatchFiles = [...srcFiles, ...uiSrcFiles, ...uiServerScan].filter(f => !isTestFile(f));
   const consoleFiles = [...srcFiles, ...srcJsFiles, ...uiServerScan].filter(
     f => !SANCTIONED_CONSOLE_ENTRIES.has(relative(ROOT, f)),
   );
+
+  // vendored 子包整体移出文件级指标，但**单列**报告自身规模与 Top 文件（#341）：
+  // 「已单列」与「该目录已被删除」必须在输出上可区分，否则口径变更会静默变成数据丢失。
+  const vendored = {
+    subtrees: VENDORED_SUBTREES,
+    files: vendoredFiles.length,
+    lines: countLines(vendoredFiles),
+    topFiles: topFiles(vendoredFiles, VENDORED_TOP_LIMIT),
+    godFunctionCount: 0,
+  };
+
+  // God function 与「Top 大文件」同口径：一次扫描后分组，不扫两遍——两侧来自同一份 AST，
+  // 口径不会各自漂移。
+  const srcTsAll = srcScanAll.filter(f => f.endsWith(".ts") || f.endsWith(".tsx"));
+  const godAll = await godFunctions([...srcTsAll, ...uiSrcFiles]);
+  const god = godAll.filter(g => !isVendored(g.file));
+  vendored.godFunctionCount = godAll.filter(g => isVendored(g.file)).length;
 
   return {
     date: new Date().toISOString().slice(0, 10),
@@ -510,6 +573,8 @@ async function measure() {
       uiServerLines: countLines(uiServerFiles),
     },
     topFiles: topFiles([...srcFiles, ...uiSrcFiles, ...uiServerFiles], TOP_FILES_LIMIT),
+    vendored,
+    godFunctions: { threshold: GOD_FN_THRESHOLD, count: god.length, items: god },
     unsafe: await scanTypeEscapes([...srcFiles, ...uiSrcFiles]),
     console: grepCountByModule(consoleFiles, CONSOLE_PATTERN),
     catchEmpty: grepCountByModule(productCatchFiles, EMPTY_CATCH_PATTERN),
@@ -588,6 +653,29 @@ function renderMarkdown(m) {
   L.push(`| 文件 | 行 |`);
   L.push(`|---|---|`);
   for (const f of m.topFiles) L.push(`| \`${f.file}\` | ${f.lines} |`);
+  L.push(``);
+  L.push(`## vendored 子包（单列，不计入上述规模与排名）`);
+  L.push(``);
+  L.push(
+    `> ${m.vendored.subtrees.map(p => `\`${p}\``).join(" · ")} 是从外部项目整体搬入的记忆内核` +
+      `（自带 \`package.json\` / \`tsconfig\` / 独立 \`build\`·\`test\`），本仓不参与其演进。` +
+      `按 #341 从**规模 / Top 大文件 / God function** 三处整体移出，在此单列以免丢失可见度。`,
+  );
+  L.push(``);
+  L.push(`| 子包 | 文件 | 行 | ≥ ${m.godFunctions.threshold} 行函数 |`);
+  L.push(`|---|---|---|---|`);
+  L.push(
+    `| ${m.vendored.subtrees.map(p => `\`${p}\``).join(" · ")} | ${m.vendored.files} | ${m.vendored.lines} | ${m.vendored.godFunctionCount} |`,
+  );
+  L.push(``);
+  if (m.vendored.topFiles.length === 0) L.push(`无。`);
+  else {
+    L.push(`其自身 Top ${m.vendored.topFiles.length} 大文件（**不参与**上方排名）：`);
+    L.push(``);
+    L.push(`| 文件 | 行 |`);
+    L.push(`|---|---|`);
+    for (const f of m.vendored.topFiles) L.push(`| \`${f.file}\` | ${f.lines} |`);
+  }
   L.push(``);
   L.push(`## 测试覆盖（tests/<模块> 文件数）`);
   L.push(``);
@@ -723,12 +811,6 @@ export function checkFreshness(targetPath, renderedBody) {
 async function main() {
   const args = process.argv.slice(2);
   const m = await measure();
-  const allSrcAndUi = [
-    ...listFiles(join(ROOT, "src"), [".ts", ".tsx"]),
-    ...listFiles(join(ROOT, "ui/src"), [".ts", ".tsx"]),
-  ];
-  const god = await godFunctions(allSrcAndUi);
-  m.godFunctions = { threshold: GOD_FN_THRESHOLD, count: god.length, items: god };
 
   if (args.includes("--json")) {
     process.stdout.write(JSON.stringify(m, null, 2) + "\n");

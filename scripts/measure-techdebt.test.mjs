@@ -8,10 +8,13 @@ import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import {
   isDoubleAssertionThroughUnknown,
+  isVendored,
   listFiles,
+  measure,
   metricBodyDiff,
   normalizeForCheck,
   perModuleOf,
+  VENDORED_SUBTREES,
 } from "./measure-techdebt.mjs";
 
 const SCRIPT = fileURLToPath(new URL("./measure-techdebt.mjs", import.meta.url));
@@ -230,4 +233,103 @@ test("【负控制】基线文件不存在时 --check 非 0 退出", () => {
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+// ---------------------------------------------------------------------------
+// 指标口径：catch 纳入 ui/server、vendored 子包单列（issue #341）
+// ---------------------------------------------------------------------------
+
+/**
+ * 判据侧的**独立** vendored 前缀声明。
+ *
+ * 下面的「排名表不含 vendored」类断言若改用被测实现导出的 `isVendored()` 来筛，就会与实现
+ * 同源——「把 `VENDORED_SUBTREES` 清空」这类注入会让实现恒返回 `false`，于是断言
+ * `filter(...) === []` **恒真**、永远不红（首轮负控制实测到这一点：Top 大文件与 God function
+ * 两条判据在注入下保持绿）。故判据自带一份字面前缀，两侧各自独立；再补一条绑定用例
+ * （见「vendored 清单与判据侧前缀一致」）拦住两处各自漂移。
+ */
+const VENDORED_PREFIX = "src/context/memory/edgeclaw-memory-core/";
+
+test("isVendored 清单非空且被判据侧前缀覆盖（两侧漂移守卫）", () => {
+  assert.ok(VENDORED_SUBTREES.length > 0, "vendored 清单为空——两张排期表会重新混入非本仓代码");
+  for (const p of VENDORED_SUBTREES) {
+    assert.ok(VENDORED_PREFIX.startsWith(`${p}/`), `判据侧前缀未覆盖实现清单项：${p}`);
+  }
+});
+
+test("isVendored 命中子包本身及其内部文件", () => {
+  assert.equal(isVendored("src/context/memory/edgeclaw-memory-core"), true);
+  assert.equal(isVendored("src/context/memory/edgeclaw-memory-core/src/core/storage/sqlite.ts"), true);
+  assert.equal(isVendored("src/context/memory/edgeclaw-memory-core/tests/smoke.spec.ts"), true);
+});
+
+test("isVendored 按路径段匹配，不误伤同前缀兄弟目录与同层本仓文件", () => {
+  // 关键边界：若退回字符串前缀匹配，`edgeclaw-memory-core-extra` 会被误判为子包内文件，
+  // 从而把真实本仓文件从排期表里静默抹掉。
+  assert.equal(isVendored("src/context/memory/edgeclaw-memory-core-extra/x.ts"), false);
+  assert.equal(isVendored("src/context/memory/edgeclaw-memory-co"), false);
+  assert.equal(isVendored("src/context/memory/semantic-index.ts"), false);
+  assert.equal(isVendored("src/context/DefaultContextRuntime.ts"), false);
+  assert.equal(isVendored("ui/server/routes/memory.js"), false);
+});
+
+/**
+ * `measure()` 会解析全仓 TS（AST 口径），代价不低——本组用例共享一次结果。
+ * 若每个用例各跑一次，测试时长会随用例数线性增长。
+ */
+let measured = null;
+const measureOnce = () => {
+  measured ??= measure();
+  return measured;
+};
+
+test("【负控制】Top 大文件排名不含 vendored 子包（#341）", async () => {
+  const m = await measureOnce();
+  assert.ok(m.topFiles.length > 0, "排名表为空——用例失效");
+  assert.deepEqual(
+    m.topFiles.filter(f => f.file.startsWith(VENDORED_PREFIX)).map(f => f.file),
+    [],
+    "排名表混入 vendored 子包：该表用途是「挑下一个要拆的文件」，非本仓维护的代码会误导排期",
+  );
+});
+
+test("【负控制】God function 排名不含 vendored 子包（#341）", async () => {
+  const m = await measureOnce();
+  assert.ok(m.godFunctions.items.length > 0, "God function 表为空——用例失效");
+  assert.deepEqual(
+    m.godFunctions.items.filter(g => g.file.startsWith(VENDORED_PREFIX)).map(g => g.file),
+    [],
+    "God function 表混入 vendored 子包",
+  );
+});
+
+test("vendored 子包被单列而非整体消失（#341）", async () => {
+  const m = await measureOnce();
+  // 「已单列」与「该目录被删除」必须在输出上可区分：规模与两张排名表都剔除了它，
+  // 若分组同时为空，读者无从判断是口径调整还是数据丢失。
+  assert.ok(m.vendored.files > 0, "单列分组为空——是「目录没了」而不是「指标被单列」");
+  assert.ok(m.vendored.lines > 0);
+  assert.ok(m.vendored.topFiles.length > 0, "单列小节应含该子包自身的大文件");
+  assert.ok(
+    m.vendored.topFiles.every(f => f.file.startsWith(VENDORED_PREFIX)),
+    "单列小节里出现的应是该子包自身的文件",
+  );
+  assert.ok(m.vendored.godFunctionCount > 0, "受管表剔除了该子包的 ≥300 行函数，单列侧必须仍有计数");
+});
+
+test("src 规模口径剔除 vendored 子包，且与全量对账（#341）", async () => {
+  const m = await measureOnce();
+  const allTs = listFiles(join(REPO_ROOT, "src"), [".ts", ".tsx"]).map(f => relative(REPO_ROOT, f));
+  const vendoredTs = allTs.filter(p => p.startsWith(VENDORED_PREFIX));
+  assert.ok(vendoredTs.length > 0, "该子包应仍有 .ts 文件——否则本用例证明不了任何事");
+  assert.equal(m.stats.srcTsFiles, allTs.length - vendoredTs.length, "src 规模口径应剔除 vendored");
+  // 单列分组的文件集是 .ts/.tsx/.js/... 全量，故只断言「不少于其 .ts 数」。
+  assert.ok(m.vendored.files >= vendoredTs.length);
+});
+
+test("【负控制】catch 口径含 ui/server（#341）", async () => {
+  const m = await measureOnce();
+  // `catchEmpty` 与 `catchNoParam` 由 measure() 里同一个文件集喂入，故钉住其一即可覆盖两者；
+  // 一旦回退成「仅 src + ui/src」，ui/server 会从模块分布里整体消失，「空 catch {}」重新假报 0。
+  assert.ok((m.catchNoParam.perModule["ui/server"] ?? 0) > 0, "ui/server 未进入 catch 口径");
 });
