@@ -417,6 +417,10 @@ export {
   workerAllowedForRole,
 } from "./worker-contract.js";
 
+// 通用编排层的 worker 门禁适配器（#363）：专利域向上适配，供 `src/cli/teamSubsystem.ts` 注入
+// `agent/team`——方向为 patent → 装配点 → agent/team，patent 侧不 import agent/team。
+export { createPatentWorkerGate } from "./team-worker-gate.js";
+
 export {
   RuleEngine,
   aggregate,

@@ -30,6 +30,7 @@ export {
 export { TeamApprovalForwarder, type TeamApprovalForwarderOptions } from "./member/approval-forwarder.js";
 export { MAILBOX_LEASE_MS, unreadMessages, claimDelivery } from "./mailbox/mailbox.js";
 export { withTeamLock } from "./scheduler/lock.js";
+export type { WorkerGate } from "./worker-gate.js";
 export {
   TeamScheduler,
   type TeamSchedulerOptions,

@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { TeamDb, createTeamMember, TeamScheduler } from "../../../../src/agent/team/index.js";
+import { TeamDb, createTeamMember, TeamScheduler, type WorkerGate } from "../../../../src/agent/team/index.js";
 import type { TeamEvent } from "../../../../src/agent/team/protocol/events.js";
 
 type WakeRecord = { memberId: string; message: string };
@@ -15,6 +15,7 @@ async function setup(
     isCaptainOnline?: () => boolean;
     wake?: (memberId: string, message: string) => Promise<boolean>;
     readSharedBoardSummary?: (teamId: string) => string | undefined;
+    workerGate?: WorkerGate;
   } = {},
 ): Promise<{ db: TeamDb; scheduler: TeamScheduler; wakes: WakeRecord[]; emits: EmitRecord[]; root: string }> {
   const root = await mkdtemp(join(tmpdir(), "sati-team-sched-"));
@@ -47,6 +48,7 @@ async function setup(
     maxConcurrentMembers: overrides.maxConcurrentMembers ?? 4,
     isCaptainOnline: overrides.isCaptainOnline ?? (() => true),
     readSharedBoardSummary: overrides.readSharedBoardSummary,
+    workerGate: overrides.workerGate,
   });
   return { db, scheduler, wakes, emits, root };
 }
@@ -615,6 +617,145 @@ test("M4 自动转派防环：attempt 耗尽（attempt >= maxAttempts）保持 f
     assert.equal(task.attempt, 3);
     assert.equal(wakes.length, 0, "无成员被唤醒");
     assert.ok(!emits.some(e => e.event.type === "task_retried"), "不广播 task_retried");
+  } finally {
+    db.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// worker 门禁（#363 / TD-TEAM-N06）：编排层只认领域无关 WorkerGate
+//
+// 收敛前调度器直接 import 专利域的 `WorkerRegistry` + `workerAllowedForRole`，本组用例把
+// 那段内联判定的**全部可观测语义**（三条 fail-open 分支 + 只作用于新任务不夺回已认领任务）
+// 钉在门禁接口上：权限从哪来、怎么算，编排层不再知道，也就不能悄悄漂移。
+// ---------------------------------------------------------------------------
+
+/** 待认领任务（本组用例只需这几个字段）。 */
+function insertPending(db: TeamDb, id: string, options: { workerName?: string; assigneeId?: string } = {}): void {
+  db.insertTask({
+    id,
+    teamId: "t1",
+    subject: "x",
+    description: "",
+    status: "pending",
+    dependencies: [],
+    attempt: 0,
+    reassigning: false,
+    blockedByCount: 0,
+    maxAttempts: 3,
+    createdAt: "2026-08-20T00:00:00.000Z",
+    updatedAt: "2026-08-20T00:00:00.000Z",
+    ...(options.workerName !== undefined ? { workerName: options.workerName } : {}),
+    ...(options.assigneeId !== undefined ? { assigneeId: options.assigneeId } : {}),
+  });
+}
+
+/** 记录型门禁：记录每次查询的实参，判定结果由 `verdict` 决定（默认全部拒绝）。 */
+function recordingGate(verdict: (roleSlug: string, workerName: string) => boolean = () => false): {
+  gate: WorkerGate;
+  calls: Array<[string, string]>;
+} {
+  const calls: Array<[string, string]> = [];
+  return {
+    calls,
+    gate: {
+      has: () => true,
+      allows: (roleSlug, workerName) => {
+        calls.push([roleSlug, workerName]);
+        return verdict(roleSlug, workerName);
+      },
+    },
+  };
+}
+
+test("worker 门禁未注入：带 workerName 的任务照常派发（fail-open，#363 前语义不变）", async () => {
+  const { db, scheduler, wakes, root } = await setup();
+  try {
+    insertPending(db, "t1", { workerName: "patent-search-commander" });
+    await scheduler.kickTeam("t1");
+    assert.equal(wakes.length, 1, "无门禁时不阻塞派发");
+    assert.equal(wakes[0]?.memberId, "m1");
+    assert.equal(db.getTask("t1", "t1")?.assigneeId, "m1");
+  } finally {
+    db.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("worker 门禁：无权限成员被跳过、有权限成员照常认领（过滤，不是整队停摆）", async () => {
+  // m1=researcher（无权），m2=drafter（有权）——两成员都在且 idle，只有过滤生效才会派给 m2
+  const { gate } = recordingGate(roleSlug => roleSlug === "drafter");
+  const { db, scheduler, wakes, root } = await setup({ workerGate: gate });
+  try {
+    insertPending(db, "t1", { workerName: "patent-technical-analyzer" });
+    await scheduler.kickTeam("t1");
+    assert.equal(wakes.length, 1, "有权限的成员仍被唤醒（不是全员停摆）");
+    assert.equal(wakes[0]?.memberId, "m2");
+    assert.equal(db.getTask("t1", "t1")?.assigneeId, "m2");
+  } finally {
+    db.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("worker 门禁：查询实参为 (成员 roleSlug, 任务 workerName)，按成员逐个判定", async () => {
+  const { gate, calls } = recordingGate(() => false); // 全部拒绝：两成员各查一次且都认领不到
+  const { db, scheduler, wakes, root } = await setup({ workerGate: gate });
+  try {
+    insertPending(db, "t1", { workerName: "patent-technical-analyzer" });
+    await scheduler.kickTeam("t1");
+    assert.equal(wakes.length, 0);
+    assert.deepEqual(calls, [
+      ["researcher", "patent-technical-analyzer"],
+      ["drafter", "patent-technical-analyzer"],
+    ]);
+  } finally {
+    db.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("worker 门禁：任务无 workerName 时不查询门禁（判定只作用于声明了 worker 的任务）", async () => {
+  const { gate, calls } = recordingGate(() => false);
+  const { db, scheduler, wakes, root } = await setup({ workerGate: gate });
+  try {
+    insertPending(db, "t1"); // 无 workerName
+    await scheduler.kickTeam("t1");
+    assert.equal(calls.length, 0, "普通任务不得因门禁存在而被判定");
+    assert.equal(wakes[0]?.memberId, "m1", "无 workerName 的任务照常派发");
+  } finally {
+    db.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("worker 门禁：已认领任务不夺回（权限过滤只作用于新认领，不回收在途 ticket）", async () => {
+  const { gate } = recordingGate(() => false); // 一律拒绝
+  const { db, scheduler, wakes, root } = await setup({ workerGate: gate });
+  try {
+    // m1 名下已认领且对 worker 无权限 → 仍须重试（与「不夺回」注释同源）
+    db.insertTask({
+      id: "t1",
+      teamId: "t1",
+      subject: "x",
+      description: "",
+      status: "claimed",
+      assigneeId: "m1",
+      dependencies: [],
+      attempt: 1,
+      attemptId: "a1",
+      reassigning: false,
+      blockedByCount: 0,
+      maxAttempts: 3,
+      workerName: "patent-technical-analyzer",
+      createdAt: "2026-08-20T00:00:00.000Z",
+      updatedAt: "2026-08-20T00:00:00.000Z",
+    });
+    await scheduler.kickMember("t1", "m1");
+    const task = db.getTask("t1", "t1")!;
+    assert.equal(task.attempt, 2, "已认领任务被重试（ownedOpenTask 走未过滤快照）");
+    assert.equal(wakes[0]?.memberId, "m1");
   } finally {
     db.close();
     await rm(root, { recursive: true, force: true });

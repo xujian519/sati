@@ -1470,11 +1470,18 @@
   - 影响：单函数内嵌 4 个 `withTeamLock` 临界区、`KickPlan` 计划类型、锁内重读防 TOCTOU、邮箱 ack、唤醒失败回滚 + 终态防护。核心调度路径，M3 集成测试已暴露过一次持锁死锁。
   - 建议：抽 `claimPlanInLock()` / `deliverMailbox()` / `rollbackDispatch()` 三个私有方法，`kickMember` 只留编排。
 - **TD-TEAM-N06** · 通用编排层 `agent/team` 直依赖专利领域 `src/patent`
-  - 类别：D · 严重级：P2 · 工作量：S · 状态：new
+  - 类别：D · 严重级：P2 · 工作量：S · 状态：**done（#392）**
   - 位置：`src/agent/team/scheduler/scheduler.ts:20`（`import { workerAllowedForRole, type WorkerRegistry } from "../../../patent/worker-contract.js"`）
   - 影响：`agent/team/` 其余 22 文件只依赖 `node:*`、`gateway/protocol/types`、`telemetry` 与自身（分层自洽）。唯独 scheduler 反向拉入专利域：`WorkerTier`/`WorkerContract` 是专利专业子任务语义，通用任务池无权知晓。非专利团队被强制走 tier 校验路径；`WorkerRegistry` 演进会牵动通用调度器。
   - 建议：抽 `interface WorkerGate { allows(roleSlug, workerName): boolean }` 放 `agent/team` 侧，专利侧提供 adapter。
   - 证据：`grep -rn "patent" src/agent/team/` 仅命中 `scheduler.ts:20`（实际 import）与 `task-status.ts:2`（注释）。
+  - **核账更正（作用域偏窄）**：issue 的 grep 只在 `src/agent/team/` 内，漏掉**同型的第二处**——`src/tool/builtin/team/{teamUtils,teamTasks}.ts`（通用团队工具）同样把专利域拉进类型面（`TeamToolsOptions.workerRegistry?: WorkerRegistry` 类型 import 自 patent **barrel** + `teamTasks.ts:171-173` 的存在性校验）。真实形态是 **2 个通用目录 / 3 个消费点**。
+  - **核账补充（该路径此前零判据）**：`scheduler.spec.ts` 的 18 例从未注入过 `workerRegistry`，「无权成员被跳过 / 有权成员照常认领」此前只有 22s 的 gateway 集成用例间接经过，且那两条断的是**工具侧存在性校验**、不是调度侧判定。
+  - 处置（#392）：`src/agent/team/worker-gate.ts` 定义领域无关 `WorkerGate { has(workerName) / allows(roleSlug, workerName) }`（`has` 不可省——省掉则工具侧存在性校验只能继续持 `WorkerRegistry`，接口只覆盖一半消费方）；`src/patent/team-worker-gate.ts` 提供适配器并**刻意不 import `agent/team` 类型**（patent 是业务域，反向 import 通用层在四层六域下仍是方向颠倒），结构一致性由装配点 `src/cli/teamSubsystem.ts` 的 `const workerGate: WorkerGate = createPatentWorkerGate(workerRegistry)` 在编译期把关。`workerRegistry` → `workerGate` 在 `TeamSchedulerOptions` / `TeamToolsOptions` / `TeamSubsystemRuntime` 三处一并更名（option 名是公开契约）。`allows` 的三条 fail-open 分支（未注册 worker / 未登记角色 / 按 tier 白名单）与 `ownedOpenTask` 走**未过滤快照**（已认领不夺回）逐条保持原语义并各自写成判据。
+  - 判据：新增 13 例——调度侧 5（未注入 fail-open / 无权被跳过而有权限照派 / 实参逐条为 `[["researcher",…],["drafter",…]]` / 无 `workerName` 不查门禁 / 已认领不夺回）、适配器 5、分层守卫 2（`tests/agent/team/layering-boundary.spec.ts` 扫**真实源码树**，扫不到文件即失败）、lint 配置断言 1。**负控制 6 组**逐条核对转红名单；其中「`has` 恒真」除预期 4 例外额外打红适配器「读实时状态」用例（该例同时断言 `has(...) === false`），属同一注入多判据承重、非误红。
+  - 防回退门禁：eslint `no-restricted-imports.patterns` 对 `src/agent/team/**` 与 `src/tool/builtin/team/**` 禁止 `**/patent(/**)` 说明符；因 ESLint 规则配置**按块整体覆盖**，同块必须复用抽出的 `DANGEROUS_IMPORT_PATHS` 常量，否则这两个目录会静默失去 `child_process.exec/execSync` 禁令（已在常量注释与 `lint-contract.spec.ts` 断言里写明）。
+  - 未做：同节 `TD-TEAM-N07`（成员会话前缀正则三处独立定义）issue 提过「可一并处理」，本次未动（触及会话身份 fail-closed 判定，值得独立一轮）；worker tier 判定规则本身未改，只搬了判定位置。
+  - 决策记录：`docs/notes/implemented/2026-09-16-team-worker-gate-decoupling.md`。
 - **TD-TEAM-N07** · 成员会话前缀正则 `/^team[:-]/` 三处独立定义，同步说明只提一处
   - 类别：F/D · 严重级：P2 · 工作量：S · 状态：new
   - 位置：`src/session/storage/SessionList.ts:16`、`src/tool/builtin/team/teamUtils.ts:36`、`src/agent/team/protocol/member-key.ts:11`

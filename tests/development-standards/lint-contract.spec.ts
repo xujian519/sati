@@ -48,6 +48,21 @@ test("lint 门禁配置断言：根 eslint.config 保持危险 API 与类型感�
   assert.match(cfg, /"no-restricted-imports": \[/);
 });
 
+test("lint 门禁配置断言：分层门禁（通用团队层不得依赖专利域）保持在位", () => {
+  const cfg = readFileSync(join(repoRoot(), "eslint.config.mjs"), "utf8");
+  // 两个通用团队目录都要在作用域里：少写一个 = 少一半把关（且失败是静默的——没被 lint 到的文件不会报错）。
+  assert.match(cfg, /src\/agent\/team\/\*\*\/\*\.\{ts,tsx,mts,cts\}/, "agent/team 作用域丢失");
+  assert.match(cfg, /src\/tool\/builtin\/team\/\*\*\/\*\.\{ts,tsx,mts,cts\}/, "tool/builtin/team 作用域丢失");
+  // 作用域与规则体在**同一个块内**（ESLint 规则配置按块整体覆盖：files 与 patterns 分家了就是空转）。
+  assert.match(
+    cfg,
+    /files:\s*\["src\/agent\/team\/\*\*[\s\S]{0,900}?\*\*\/patent\/\*\*/,
+    "分层门禁的 files 与 patent patterns 不在同一块内（配置被改写为空转）",
+  );
+  // 危险 API 条目按常量共用：本块重新声明 no-restricted-imports 时必须带上，否则那两个目录静默失去禁令。
+  assert.match(cfg, /paths: DANGEROUS_IMPORT_PATHS/, "no-restricted-imports 块未复用 DANGEROUS_IMPORT_PATHS");
+});
+
 test("no-floating-promises 负控制：未等待的 Promise 会被拦（自测会红）", () => {
   const r = runLint("float-promise.ts");
   assert.ok(r.status !== 0, "eslint 应对未等待的 Promise 非零退出");

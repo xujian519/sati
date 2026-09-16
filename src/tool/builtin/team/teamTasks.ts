@@ -113,7 +113,7 @@ export type TeamCreateTaskOutput = {
 export function createTeamCreateTaskTool(
   options: TeamToolsOptions,
 ): SatiToolDefinition<TeamCreateTaskInput, TeamCreateTaskOutput> {
-  const { db, scheduler, emit, workerRegistry } = options;
+  const { db, scheduler, emit, workerGate } = options;
   return {
     name: "team_create_task",
     outputSchema: {
@@ -165,12 +165,8 @@ export function createTeamCreateTaskTool(
       if (input.maxAttempts !== undefined && (!Number.isInteger(input.maxAttempts) || input.maxAttempts < 1)) {
         throw new SatiToolRuntimeError("invalid_tool_input", `maxAttempts 必须为正整数，收到：${input.maxAttempts}`);
       }
-      // 阶段 3：workerName 存在性校验（锁外，workerRegistry 未注入时跳过——fail-open）。
-      if (
-        input.workerName !== undefined &&
-        workerRegistry !== undefined &&
-        workerRegistry.get(input.workerName) === undefined
-      ) {
+      // 阶段 3：workerName 存在性校验（锁外，workerGate 未注入时跳过——fail-open）。
+      if (input.workerName !== undefined && workerGate !== undefined && !workerGate.has(input.workerName)) {
         throw new SatiToolRuntimeError("invalid_tool_input", `worker 未注册：${input.workerName}`);
       }
       let taskId = "";

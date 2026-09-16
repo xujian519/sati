@@ -13,6 +13,7 @@ import { join as joinPath } from "node:path";
 import {
   type ScanStrandedTasksResult,
   type ScanTeamMembersResult,
+  type WorkerGate,
   TeamApprovalForwarder,
   TeamDb,
   type TeamEvent,
@@ -28,7 +29,7 @@ import {
 } from "../agent/team/index.js";
 import { InProcessGateway } from "../gateway/index.js";
 import { SessionPresence } from "../gateway/server/sessionPresence.js";
-import { WorkerRegistry, defaultPatentWorkers } from "../patent/index.js";
+import { WorkerRegistry, createPatentWorkerGate, defaultPatentWorkers } from "../patent/index.js";
 import { logger } from "../telemetry/index.js";
 import { handleMemberTurnCompleted } from "./gatewaySupport.js";
 
@@ -45,7 +46,9 @@ export type TeamSubsystemRuntime = {
   db: TeamDb;
   scheduler: TeamScheduler;
   emitTeamEvent: (captainSessionKey: string, event: TeamEvent) => boolean;
-  workerRegistry: WorkerRegistry;
+  /** worker 门禁（阶段 3）：team_create_task 的 workerName 存在性校验 + 调度器分派时的角色权限
+   * 校验共用同一实现。领域无关接口——装配点在此把专利 worker 注册表适配进来（#363）。 */
+  workerGate: WorkerGate;
   runMemberScan: () => Promise<ScanTeamMembersResult>;
   runStrandedScan: () => Promise<ScanStrandedTasksResult>;
   /** 成员冷恢复 + stranded 回收的启动扫描；必须在 team 工具注入 registry 之后调用。 */
@@ -135,18 +138,21 @@ export function buildTeamSubsystem(deps: TeamSubsystemDeps): TeamSubsystemRuntim
   // ⚠️ 最终复审 I1（已知边界）：Web 主路径经 ui/server relay 单条共享 ws 连接（sati-bridge 单例），
   // 浏览器关闭不触发 gateway onClose → Web 用户下线判定不生效（fail-open 回到 M2 行为：成员成果
   // 持久化不丢失、C2 有界重试）；CLI/TUI 直连 ws 路径正常。M4 面板接线时以浏览器连接级信号为准。
-  // 阶段 3：专利 worker 注册表——team_create_task 的 workerName 存在性校验 + 调度器分派
-  // 时的角色 tier 校验共用同一实例（缺省仅内置 6 个 worker，provision-* 条款 worker 未注册
-  // 时不阻塞：workerName 校验与分派校验均 fail-open）。
+  // 阶段 3：worker 门禁——专利 worker 注册表（本域资产）在此适配为通用编排层的领域无关接口：
+  // `team_create_task` 的 workerName 存在性校验 + 调度器分派时的角色权限校验共用同一实例
+  //（缺省仅内置 6 个 worker，provision-* 条款 worker 未注册时不阻塞：两处校验均 fail-open）。
+  // 显式标注 `WorkerGate`：适配器刻意不 import agent/team（patent 域不得反向依赖），
+  // 结构一致性由这一行在编译期把关（#363）。
   const workerRegistry = new WorkerRegistry();
   for (const worker of defaultPatentWorkers()) {
     workerRegistry.register(worker);
   }
+  const workerGate: WorkerGate = createPatentWorkerGate(workerRegistry);
   const teamScheduler = new TeamScheduler({
     db: teamDb,
     emit: emitTeamEvent,
     isCaptainOnline: captainSessionKey => deps.sessionPresence.isActive(captainSessionKey),
-    workerRegistry,
+    workerGate,
     // P1-5：邮箱投递租约宽限参数化（默认 60s，调度器邮箱未读判定/租约过期复用）。
     mailboxLeaseMs: deps.mailboxLeaseMs,
     // P1-4：成员任务唤醒 turn 0 注入共享黑板摘要（订阅方读 {projectRoot}/.sati/team-workspace/{teamId}/share.jsonl；
@@ -251,7 +257,7 @@ export function buildTeamSubsystem(deps: TeamSubsystemDeps): TeamSubsystemRuntim
     db: teamDb,
     scheduler: teamScheduler,
     emitTeamEvent,
-    workerRegistry,
+    workerGate,
     runMemberScan,
     runStrandedScan,
     startStartupScan,
