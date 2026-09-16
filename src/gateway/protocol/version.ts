@@ -87,6 +87,13 @@ export const PROTOCOL_RELEASES = [
     version: "1.8",
     note: "2026-09-10: 新增可选 project-lifecycle 方法 close_project_sessions（上游 #568 移植：项目删除前暂停新建、排空在跑 turn 与转录写入器；resume: true 解冻。未实现时服务端显式报错而非 not_configured 降级——删除方必须确知已排空）。",
   },
+  {
+    version: "1.9",
+    note: "2026-09-16: 无新方法；active_turn_snapshot 响应新增可选 projection（上游 #593 移植：本 turn 内各通道的绝对文本投影，事件日志因上限截断丢掉的正文开头由它补齐）。",
+    changes: [
+      "active_turn_snapshot 响应新增可选 projection：{ runId, blocks: [{ kind, epoch, text, inflight? }] }。旧客户端忽略该字段即退回旧行为——正文只有截断后的事件流可用。",
+    ],
+  },
 ] as const satisfies readonly ProtocolReleaseEntry[];
 
 /** 台账条目类型（含 `note` / `changes`）。 */

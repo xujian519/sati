@@ -162,6 +162,30 @@ function extractCompactBoundaryShadowed(compactMetadata: unknown): {
   return result;
 }
 
+/**
+ * 压缩终态。实时帧把它放在顶层（`compactState`），历史投影放在
+ * `compactMetadata`（payload 整包透传）。两条来源都要读，且**缺省即成功**——
+ * 旧 transcript 记录不带终态字段，读不到不能反推为失败。
+ */
+function compactBoundaryState(msg: NormalizedMessage): string | undefined {
+  const direct = typeof msg.compactState === "string" ? msg.compactState : undefined;
+  if (direct) return direct;
+  const status = asRecord(msg.compactMetadata)?.status;
+  return typeof status === "string" ? status : undefined;
+}
+
+/** 摘要是否成功（仅历史投影可提供，来自落盘 extra.summarySucceeded）。 */
+function compactBoundarySummarySucceeded(msg: NormalizedMessage): boolean | undefined {
+  const value = asRecord(msg.compactMetadata)?.summarySucceeded;
+  return typeof value === "boolean" ? value : undefined;
+}
+
+/** 压缩层级（micro / snip / full），仅历史投影可提供。 */
+function compactBoundaryTier(msg: NormalizedMessage): string | undefined {
+  const value = asRecord(msg.compactMetadata)?.tier;
+  return typeof value === "string" ? value : undefined;
+}
+
 function convertSingleMessage(
   msg: NormalizedMessage,
   toolResultMap: Map<string, NormalizedMessage>,
@@ -379,6 +403,9 @@ function convertSingleMessage(
         compactLevel: msg.compactLevel,
         compactStage: msg.compactStage,
         compactStageLabel: msg.compactStageLabel,
+        compactState: compactBoundaryState(msg),
+        compactSummarySucceeded: compactBoundarySummarySucceeded(msg),
+        compactTier: compactBoundaryTier(msg),
         ...extractCompactBoundaryShadowed(msg.compactMetadata),
       };
 

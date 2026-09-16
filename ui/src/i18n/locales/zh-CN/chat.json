@@ -47,6 +47,8 @@
   },
   "compact": {
     "label": "上下文已压缩",
+    "labelDegraded": "摘要降级",
+    "labelCancelled": "已中断（沿用降级摘要）",
     "level": "{{level}} 级",
     "tokens": "压缩前 {{tokens}} tokens",
     "tokensAfter": "{{before}} → {{after}} tokens",
@@ -66,6 +68,8 @@
     "executingTool": "执行工具中...",
     "generating": "正在生成回复",
     "compacting": "正在压缩上下文...",
+    "compactFailed": "上下文压缩失败",
+    "compactCancelled": "上下文压缩已中断",
     "waitingForPermission": "等待授权",
     "retrying": "重连中 {{attempt}}/{{max}}{{delay}}",
     "waitingForSubagent": "等待子任务完成",
@@ -509,6 +513,7 @@
         "contextOverflow": "请运行 /compact、开启新会话、移除大型附件，或在设置中切换到更大上下文模型。",
         "payloadTooLarge": "请减少附件/上下文大小，运行 /compact，或开启新会话后重试。",
         "maxOutput": "请在“设置 → 模型 Provider”中增加最大输出 token，或让 agent 将回答拆成更小部分。",
+        "thinkingStrength": "请在错误信息列出的推理强度中改选一个（该模型不提供当前选择），或切换到支持该强度的模型。",
         "imageTooLarge": "请缩小或移除大型图片后重试。",
         "providerRetry": "请稍后重试、检查 provider API 状态，若反复出现则在设置中切换 provider/model。"
       }

@@ -226,6 +226,90 @@ test("compaction run emits a stable compactionId across events and result", asyn
   }
 });
 
+test("压缩流程硬失败时发出配对 compactionId 的 failed 终态并照旧抛出", async () => {
+  const events: AgentEvent[] = [];
+  const engine = new CompactionEngine({
+    model: {
+      async *stream(): AsyncIterable<CanonicalModelEvent> {
+        yield { type: "message_start", role: "assistant" };
+        yield {
+          type: "text_delta",
+          text: "## Objective\nKeep going.\n\n## Current State\nok.\n\n## Remaining\nContinue.\n\n## Files And Artifacts\nNone.",
+        };
+        yield { type: "message_end", finishReason: "stop" };
+      },
+    },
+    provider: "local",
+    model_: "local-chat",
+    uuid: () => "compact-fail-1",
+    eventEmitter: event => events.push(event),
+    lifecycle: {
+      dispatch(input) {
+        if (input.event === "PostCompact") {
+          throw new Error("post-compact hook exploded");
+        }
+      },
+    },
+  });
+
+  await assert.rejects(
+    () => engine.run({ trigger: "auto", messages: compactFixture(), keepTailRatio: 0.2 }),
+    /post-compact hook exploded/,
+  );
+
+  assert.deepEqual(
+    events.map(event => event.type),
+    ["compact_started", "compact_completed"],
+    "硬失败必须补一条终态，否则 UI 只能看到永远在跑的「正在压缩」",
+  );
+  const completed = events.find(event => event.type === "compact_completed");
+  if (completed?.type !== "compact_completed") assert.fail("expected compact_completed");
+  assert.equal(completed.status, "failed");
+  assert.equal(completed.compactionId, "compact-fail-1", "终态必须与 compact_started 配对同一个 id");
+});
+
+test("用户中断的压缩标记为 cancelled，且不进入摘要失败冷却", async () => {
+  const events: AgentEvent[] = [];
+  const controller = new AbortController();
+  let streamCalls = 0;
+  const engine = new CompactionEngine({
+    model: {
+      async *stream(): AsyncIterable<CanonicalModelEvent> {
+        streamCalls += 1;
+        if (streamCalls === 1) {
+          controller.abort();
+          throw new Error("This operation was aborted");
+        }
+        yield { type: "message_start", role: "assistant" };
+        yield {
+          type: "text_delta",
+          text: "## Objective\nKeep going.\n\n## Current State\nok.\n\n## Remaining\nContinue.\n\n## Files And Artifacts\nNone.",
+        };
+        yield { type: "message_end", finishReason: "stop" };
+      },
+    },
+    provider: "local",
+    model_: "local-chat",
+    eventEmitter: event => events.push(event),
+  });
+
+  const cancelled = await engine.run({
+    trigger: "auto",
+    messages: compactFixture(),
+    keepTailRatio: 0.2,
+    signal: controller.signal,
+  });
+  assert.equal(cancelled.status, "cancelled");
+  const completed = events.find(event => event.type === "compact_completed");
+  if (completed?.type !== "compact_completed") assert.fail("expected compact_completed");
+  assert.equal(completed.status, "cancelled", "中断不得被登记为 fallback（那是摘要失败）");
+
+  // 中断不是摘要失败：若误入 60s 冷却，第二次压缩会跳过模型、静默退化成确定性摘要。
+  const second = await engine.run({ trigger: "auto", messages: compactFixture(), keepTailRatio: 0.2 });
+  assert.equal(streamCalls, 2, "中断不得进入摘要失败冷却");
+  assert.equal(second.status, "success");
+});
+
 test("auto full compaction keeps the best compacted result even when it still blocks", async () => {
   const summaryRequests: CanonicalModelRequest[] = [];
   const engine = new CompactionEngine({

@@ -209,7 +209,7 @@ export type PilotWebSearchCustomProviderConfig = {
  * runtime; `apiKey` and `endpoint` apply to the selected provider.
  */
 export type PilotWebSearchConfig = {
-  /** Defaults to true when omitted. False removes web_search from the tool registry. */
+  /** Missing webSearch section is off; legacy sections without this flag remain enabled（上游 #588）。 */
   enabled?: boolean;
   provider?: PilotWebSearchProvider;
   apiKey?: string;
@@ -219,7 +219,11 @@ export type PilotWebSearchConfig = {
 
 /** 按源开关（缺省全部启用），与 CreateLiteratureRegistryOptions 同形。 */
 export type PilotPaperSearchConfig = {
-  /** Defaults to true when omitted. False removes the literature tools. */
+  /**
+   * Missing paperSearch section is off（未配置即未启用，与 webSearch 同语义，上游 #588 外延）；
+   * legacy sections without this flag remain enabled. False removes the literature
+   * tools **and** the paper source of `patent_workflow_run` 的多源检索。
+   */
   enabled?: boolean;
   /** arXiv 开关（默认 true）。 */
   arxiv?: boolean;

@@ -1117,10 +1117,16 @@
       },
       "tools": {
         "title": "搜索",
-        "description": "配置智能体 web_search 工具使用的搜索服务。",
+        "description": "配置智能体 web_search 与 paper_search 工具使用的搜索服务。",
         "enabled": {
           "label": "启用 Web 搜索",
           "description": "关闭后，智能体将不会获得 web_search 工具。"
+        },
+        "paperSearch": {
+          "enabled": {
+            "label": "启用文献检索",
+            "description": "关闭后，智能体将不会获得 paper_search 工具，专利工作流的多源检索也会失去文献源。"
+          }
         },
         "provider": {
           "label": "搜索提供商",

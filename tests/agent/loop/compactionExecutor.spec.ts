@@ -40,6 +40,7 @@ function snapshot(tokens = 100): TokenBudgetSnapshot {
 function compactionResult(overrides: Partial<CompactionResult> = {}): CompactionResult {
   return {
     compactionId: "cmp-1",
+    status: "success",
     trigger: "auto",
     preTokens: 5000,
     messagesSummarized: 12,

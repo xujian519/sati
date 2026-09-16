@@ -81,6 +81,133 @@ describe("readSatiConfigFile fallback behavior", () => {
   });
 });
 
+describe("optional feature defaults（上游 #588）", () => {
+  it("新用户默认：router 与两个搜索工具关，memory 保持开", () => {
+    const defaults = buildDefaultSatiConfig();
+
+    expect(defaults.router.enabled).toBe(false);
+    expect(defaults.tools.webSearch.enabled).toBe(false);
+    expect(defaults.tools.paperSearch.enabled).toBe(false);
+    // memory 刻意不随本批翻转：翻转会停掉记忆索引调度器
+    expect(defaults.memory.enabled).toBe(true);
+  });
+
+  it("无配置文件时读到的归一配置也是「可选功能关闭」", () => {
+    useTempConfig(null);
+
+    const { config } = readSatiConfigFile();
+
+    expect(config.router).toEqual({ enabled: false });
+    expect(config.tools.webSearch.enabled).toBe(false);
+    expect(config.tools.paperSearch.enabled).toBe(false);
+    expect(config.memory.enabled).toBe(true);
+  });
+
+  it("遗留守卫：段存在但无 enabled 的配置，归一后判为开启", () => {
+    useTempConfig(
+      [
+        "agent:",
+        "  model: openai/gpt-4o-mini",
+        "model:",
+        "  providers:",
+        "    openai:",
+        "      protocol: openai",
+        "      url: https://api.openai.com/v1",
+        "      apiKey: sk-test-legacy",
+        "      models:",
+        "        gpt-4o-mini: {}",
+        "router:",
+        "  scenarios:",
+        "    default: openai/gpt-4o-mini",
+        "tools:",
+        "  webSearch:",
+        "    provider: tavily",
+        "  paperSearch:",
+        "    arxiv: true",
+        "",
+      ].join("\n"),
+    );
+
+    const { config } = readSatiConfigFile();
+
+    expect(config.router.enabled).toBe(true);
+    expect(config.tools.webSearch.enabled).toBe(true);
+    expect(config.tools.paperSearch.enabled).toBe(true);
+  });
+
+  it("遗留守卫的关键后果：读取→保存往返不得把既有功能静默关闭", async () => {
+    const configPath = useTempConfig(
+      [
+        "agent:",
+        "  model: openai/gpt-4o-mini",
+        "model:",
+        "  providers:",
+        "    openai:",
+        "      protocol: openai",
+        "      url: https://api.openai.com/v1",
+        "      apiKey: sk-test-legacy",
+        "      models:",
+        "        gpt-4o-mini: {}",
+        "router:",
+        "  scenarios:",
+        "    default: openai/gpt-4o-mini",
+        "tools:",
+        "  webSearch:",
+        "    provider: tavily",
+        "  paperSearch:",
+        "    arxiv: true",
+        "",
+      ].join("\n"),
+    );
+
+    // 模拟 UI：读到归一配置 → 原样写回
+    await writeSatiConfig(readSatiConfigFile().config);
+
+    const written = readFileSync(configPath, "utf8");
+    expect(written).toMatch(/router:\n\s+enabled: true/);
+    expect(written).toMatch(/webSearch:\n\s+[^\n]*enabled: true/);
+    expect(written).toMatch(/paperSearch:\n\s+enabled: true/);
+    // 兄弟段（paperSearch 的连接器选择）没被写丢
+    expect(written).toContain("arxiv: true");
+  });
+
+  it("显式 enabled 值优先，且归一幂等", async () => {
+    const configPath = useTempConfig(
+      [
+        "agent:",
+        "  model: openai/gpt-4o-mini",
+        "model:",
+        "  providers:",
+        "    openai:",
+        "      protocol: openai",
+        "      url: https://api.openai.com/v1",
+        "      apiKey: sk-test-legacy",
+        "      models:",
+        "        gpt-4o-mini: {}",
+        "router:",
+        "  enabled: true",
+        "tools:",
+        "  webSearch:",
+        "    enabled: true",
+        "    provider: tavily",
+        "  paperSearch:",
+        "    enabled: false",
+        "",
+      ].join("\n"),
+    );
+
+    await writeSatiConfig(readSatiConfigFile().config);
+    const first = readFileSync(configPath, "utf8");
+    await writeSatiConfig(readSatiConfigFile().config);
+
+    expect(readFileSync(configPath, "utf8")).toBe(first);
+    const { config } = readSatiConfigFile();
+    expect(config.router.enabled).toBe(true);
+    expect(config.tools.webSearch.enabled).toBe(true);
+    expect(config.tools.paperSearch.enabled).toBe(false);
+  });
+});
+
 describe("validateSatiConfig gateway validation", () => {
   it("migrates the legacy interactive spreadsheet mode to built-in preview", () => {
     const validation = validateSatiConfig({

@@ -132,3 +132,24 @@ test("unknown provider errors still give actionable settings and provider checks
   assert.match(action.userHint, /timeoutMs/);
   assert.match(action.userHint, /provider API status\/logs/);
 });
+
+test("unsupported_thinking 给出可操作的改选指引（不再静默夹取后必须能改）", () => {
+  // canonicalizeModelRequestError 的形状：ModelRequestError → CanonicalModelError，
+  // retryable 恒为 false（重试同一个强度没有意义）。
+  const error: CanonicalModelError = {
+    provider: "deepseek",
+    protocol: "openai",
+    code: "unsupported_thinking",
+    message: "Model deepseek-chat does not support thinking strength 'low'. Supported: high, max.",
+    retryable: false,
+  };
+
+  const action = modelFailureAction(error);
+
+  assert.equal(action.fixTarget, "settings");
+  assert.equal(action.userHintI18n.key, "chat:agentStatus.modelRequestFailed.actions.thinkingStrength");
+  assert.match(action.userHint, /thinking strength/i);
+  assert.match(action.userHint, /switch to a model/i);
+  // 不得落进通用兜底（那条指引讲的是 base URL / apiKey，与强度无关）
+  assert.doesNotMatch(action.userHint, /base URL\/API key\/model and timeoutMs/);
+});

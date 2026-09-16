@@ -99,6 +99,20 @@ export function buildDefaultSatiConfig() {
     telemetry: {
       enabled: false,
     },
+    // 可选功能默认关（上游 #588）：新用户不再"装完就开着"搜索与智能路由。
+    // memory 刻意保留 enabled: true——它的既有语义是"默认开"，翻转会停掉记忆
+    // 索引调度器（ui/server/services/memoryService.js 以 config.memory?.enabled 为闸）。
+    router: {
+      enabled: false,
+    },
+    tools: {
+      webSearch: {
+        enabled: false,
+      },
+      paperSearch: {
+        enabled: false,
+      },
+    },
   };
 }
 
@@ -107,6 +121,19 @@ export function buildDefaultSatiConfig() {
 function normalizeSatiConfig(input) {
   const source = isRecord(input) ? input : {};
   const normalized = deepMerge(buildDefaultSatiConfig(), source);
+  // 旧配置段蕴含开启（上游 #588）：段存在但没写 `enabled`，是遗留配置在表达 opt-in。
+  // 上面新增的默认值 `enabled: false` 会在「读取 → 保存」往返里把它静默关掉——守卫
+  // 的作用就是把这种段显式物化为 `enabled: true`。`memory` 不在此列：它的默认值未变，
+  // 无需迁移（见 buildDefaultSatiConfig 的说明）。
+  if (isRecord(source.router) && source.router.enabled === undefined) {
+    normalized.router.enabled = true;
+  }
+  if (isRecord(source.tools?.webSearch) && source.tools.webSearch.enabled === undefined) {
+    normalized.tools.webSearch.enabled = true;
+  }
+  if (isRecord(source.tools?.paperSearch) && source.tools.paperSearch.enabled === undefined) {
+    normalized.tools.paperSearch.enabled = true;
+  }
   const sourceOfficePreview = isRecord(source.webui?.officePreview) ? source.webui.officePreview : {};
   const legacySpreadsheetMode = normalizeString(sourceOfficePreview.spreadsheetMode).toLowerCase();
   const configuredService = normalizeString(sourceOfficePreview.service).toLowerCase();
