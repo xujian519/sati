@@ -21,7 +21,7 @@ assignees: ""
 
 ## 影响 scope
 
-<!-- 勾选受影响模块（与提交 scope 对齐），如不确定可不选 -->
+<!-- 勾选受影响模块（列表与 scope:* 标签一一对应），如不确定可不选 -->
 
 - [ ] agent
 - [ ] ui
@@ -38,6 +38,7 @@ assignees: ""
 - [ ] literature
 - [ ] cron
 - [ ] rule
+- [ ] desktop
 - [ ] 其他: <!-- 填写 -->
 
 ## 契约影响（重要）

@@ -4,6 +4,10 @@
  * 重点不在"能打出标签"，而在**不误判**：
  * 契约影响节里有 4–6 个复选框，若分类器越界读取就会给议题糊上错误的 scope 标签，
  * 而错误的自动标签比没有标签更糟（筛选结果失真且无人察觉）。
+ *
+ * 其次是把 `scope:*` 的**投影语义**钉死：分类器每次从正文重推、且只增不减，
+ * 因此「摘掉标签」对 `scope:*` 不成立（下一次 `edited` 会加回来）。规范正文见
+ * `docs/issue-management.md` §5——那里写错过一次，这些用例就是防它再写错。
  */
 
 import assert from "node:assert/strict";
@@ -80,10 +84,51 @@ test("已有状态标签时不再补 triage（尊重人工分诊）", () => {
   assert.deepEqual(labels, ["scope:ui"]);
 });
 
+// ---- `scope:*` 的投影语义（docs/issue-management.md §5）----
+// 规范曾写「自动打错的标签，人工摘掉即可，脚本不会再打回」——这对 `scope:*` **不成立**。
+// 下面三条把真实语义钉死：正文是唯一输入，分类器只增不减。
+
+test("scope:* 是正文的投影：只摘标签不改正文，重新分类会再次打上", () => {
+  // issue-triage.yml 的触发条件含 `edited`，所以摘掉标签后任何一次正文/标题编辑都会走到这里。
+  // 真实场景里议题上还留着 priority:/status:，因此这里不能用"空标签"简化——
+  // 那会掩盖「有标签就整体短路」这类错误实现。
+  const labels = classifyIssue({
+    body: bodyWith("- [x] agent"),
+    existingLabels: ["status: triage", "priority: p2"],
+    allowedScopes: ALLOWED,
+  });
+  assert.deepEqual(labels, ["scope:agent"]);
+});
+
+test("反向：取消正文勾选不会摘掉已打的标签（分类器从不删标签）", () => {
+  const labels = classifyIssue({
+    body: bodyWith("- [ ] agent"),
+    existingLabels: ["scope:agent", "status: in-progress"],
+    allowedScopes: ALLOWED,
+  });
+  assert.deepEqual(labels, []);
+});
+
+test("分类器只产出正文派生的 scope:* 与默认状态，永不产出 priority:/tech-debt", () => {
+  // 这是「priority:* / tech-debt 摘掉即生效」在实现侧的根据：它们根本没有生产者。
+  const labels = classifyIssue({
+    body: bodyWith("- [x] agent\n- [x] 其他: 补个说明"),
+    existingLabels: [],
+    allowedScopes: ALLOWED,
+  });
+  assert.ok(
+    labels.every(label => label.startsWith("scope:") || label === "status: triage"),
+    `意外产出：${labels}`,
+  );
+});
+
 test("集成：仓库清单声明的 scope 与模板勾选项一致", () => {
   const scopes = loadAllowedScopes(ROOT);
   assert.ok(scopes.has("agent"));
   assert.ok(scopes.has("other"));
+  // desktop 是「独立交付边界」判据补上的模块（apps/desktop + 独立 CI job），
+  // 少掉它意味着桌面端议题只能落 scope:other。
+  assert.ok(scopes.has("desktop"));
   assert.ok(scopes.size >= 15);
 });
 

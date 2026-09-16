@@ -19,7 +19,7 @@
 | 类型 | 无 | `bug` `enhancement` `documentation` `tech-debt` `question` `dependencies` … | 模板自带 / 人工 |
 | 状态 | `status:` | `triage` `in-progress` `blocked` | 自动补 `triage`，之后人工推进 |
 | 优先级 | `priority:` | `p0` `p1` `p2` `p3` | 人工（分诊时定） |
-| 作用域 | `scope:` | `agent` `ui` `patent` … 与提交 scope 同名 | **自动**（见 §5） |
+| 作用域 | `scope:` | `agent` `ui` `patent` `desktop` … 提交 scope 词表的**粗粒度子集** | **自动**（见 §5） |
 
 **状态机**（终态由**关闭**表达，不设 `status: done`——避免"标签说完成、议题还开着"的双写）：
 
@@ -36,9 +36,17 @@ status: triage ──→ status: in-progress ──→ 关闭（完成 / wontfix
 | 清单自身合规（名唯一、color 为 6 位 hex、描述非空且 ≤100 字符） | — | `pnpm check:issue-labels`（挂 `pnpm lint`） |
 | 模板 `labels:` 引用的标签必须已声明 | 各模板 frontmatter | 同上（未声明即红） |
 | 模板「影响 scope」勾选项 ↔ `scope:*` 标签双向一致 | 模板 + 清单 | 同上（任一方向多出即红） |
+| 各模板「影响 scope」勾选项**彼此**一致 | 各模板（GitHub 无法共享片段 ⇒ 同一份清单必然各存一份） | 同上（只改其中一条模板即红） |
+| `scope:*` ⊆ 提交 scope 词表（`other` 除外；**反向不成立**） | 提交侧词表由 `.github/labels.yml` **派生** | `scripts/open-pr.test.mjs`（派生 ⇒ 漂移在结构上不可能） |
 | 仓库标签实体与清单一致 | GitHub 仓库设置 | `node scripts/sync-labels.mjs`（**人工触发**，幂等 upsert） |
 
 > `sync-labels.mjs` 不挂 CI：写仓库标签是配置操作，需要 `gh` 凭据与写权限，且 CI 无权代改仓库设置。
+
+**作用域表是人工维护的粗粒度表**：`scope:*` 刻意**不**与 `src/` 目录一一对应——issue 面要的是"用户可感知的模块"。绝大多数源码子模块（`adapters` `context` `ui-server` `session` `permission` …）与流程性作用域（`ci` `scripts` `deps` `release` `techdebt` …）**刻意不收**，归口是 `scope:other`（其描述即"未列入上述模块的其他作用域"）。这不是缺口而是取舍：作用域列表要长到覆盖全部提交 scope，就等于把源码目录树搬进 issue 模板。
+
+新增一项时**必须回答的两个问题**（人工判断，不设机器判据——源码目录与产品模块不是一一映射，无法从目录名机械推导）：① 它是**用户可感知的模块**，而非源码目录或流程？② 它有**独立交付边界**（独立 workspace 包 / 独立命名 CI job / 独立发布流程）？两项都成立才收。本轮据此只补了 `desktop`——它是唯一三者齐备的模块（`@sati/desktop`、CI job `Desktop (Windows) build & lint`、`apps/desktop/RELEASING.md`）；`adapters` `context` `ui-server` `ci` `scripts` 不满足 ②（或不属于 ①），故**不收**。
+
+**契约是单向包含，不是同名**：每个 `scope:*` 都必须能被提交侧词表识别（否则按该模块命名的分支推导不出 scope），但提交面允许更细的切分（`team` `extension` `session` `workflow` `web` …）。`other` 是**标签侧独有**的兜底取值，任何提交都不该带这个 scope。这条契约由派生实现保证：`scripts/open-pr.mjs` 的词表从本清单算出来，不另抄一份。
 
 **优先级定义同源**：`p0`–`p3` 的含义直接沿用 `docs/technical-debt/README.md` §严重级定义，不另立一套——同一个项目里不应该有两套优先级语言。
 
@@ -51,15 +59,15 @@ status: triage ──→ status: in-progress ──→ 关闭（完成 / wontfix
 | 模板 | 标题前缀 | 强制信息 |
 |---|---|---|
 | `bug_report.md` | `bug: ` | 复现步骤、预期/实际行为、**影响 scope**、**契约影响**、环境 |
-| `feature_request.md` | `feat: ` | 价值与动机、现状与痛点、期望方案、契约影响、验收标准 |
-| `tech_debt.md` | `tech-debt: ` | **触发还债条件**（不写不接）、关联决策记录 |
+| `feature_request.md` | `feat: ` | 价值与动机、现状与痛点、期望方案、**影响 scope**、契约影响、验收标准 |
+| `tech_debt.md` | `tech-debt: ` | **触发还债条件**（不写不接）、关联决策记录（**缺「影响 scope」节** ⇒ 债务议题拿不到 `scope:*`，已登记为 `docs/technical-debt/backlog.md` 的 `TD-PROCGATE-003`） |
 
 两个设计要点：
 
 - **「契约影响」节是 Sati 特有的高价值字段**——它把三条会在 CI 阶段咬人的契约（工具 `inputSchema` 改动的 llm-replay 失配、事件面改动的事件矩阵门禁、网关协议版本化）提前到提案阶段。勾选它等于承认"这个改动要付额外门禁成本"。
-- **「影响 scope」节是自动化的输入**，不是装饰——它被 §5 的分类器翻译成 `scope:*` 标签，改动其选项会同时触发标签门禁。
+- **「影响 scope」节是自动化的输入**，不是装饰——它被 §5 的分类器翻译成 `scope:*` 标签，改动其选项会同时触发标签门禁。该节在每条模板里各存一份（GitHub 无法共享片段），所以门禁同时比对**模板↔标签**与**模板↔模板**。
 
-**新增模板的纪律**：模板的 `labels:` 必须已在 `.github/labels.yml` 声明；scope 勾选项必须与 `scope:*` 标签集合一致。两条都由 `pnpm check:issue-labels` 拦。
+**新增模板的纪律**：模板的 `labels:` 必须已在 `.github/labels.yml` 声明；scope 勾选项必须与 `scope:*` 标签集合一致，且与其它模板的勾选项**彼此一致**。三条都由 `pnpm check:issue-labels` 拦。
 
 ---
 
@@ -117,7 +125,15 @@ commit message 中引用议题编号（如 `fix(gateway): 修正握手超时判�
 | `stale.yml` | 每周一 + 手动 | 90 天无活动标 `stale`，再 30 天关闭；`in-progress`/`blocked`/`help wanted`/`good first issue`/`pinned`/有里程碑者豁免 | — |
 | `ci.yml` → `pr-traceability` | `pull_request` | PR 必须可回溯到议题/债编号 | `check-pr-issue.test.mjs` |
 
-**分类器只增不减**：自动打错的标签，人工摘掉即可，脚本不会再打回。唯一例外是 `status:`——若所有状态标签被摘光，会被重新补 `status: triage`（空白状态回到待分诊是刻意行为）。
+**分类器只增不减，而 `scope:*` 是正文的投影**——`classifyIssue()` 每次运行都从正文「影响 scope」节**重新推导**，因此三类标签的可逆性并不相同：
+
+| 标签 | 是否由正文推导 | 人工摘掉标签后会怎样 |
+|---|---|---|
+| `scope:*` | **是**（每次运行重推） | **会被加回来**：只要正文勾选还在，下一次标题/正文编辑（`edited` 事件）就会重新打上 |
+| `priority:*`、`tech-debt` | 否 | 摘掉即生效，脚本永远不会补 |
+| `status:*` | 否 | 摘掉即生效；但**所有**状态标签被摘光时会补回 `status: triage`（空白状态回到待分诊，刻意行为） |
+
+⇒ **撤销一个误打的 `scope:*`，正确动作是两步：取消正文勾选 + 人工摘掉标签。** 只摘标签会在下一次编辑时被加回来。反向也成立：**取消勾选本身不会摘掉已打的标签**（分类器从不删标签），它只影响后续运行是否重新打上——所以「只增不减」的准确含义是"相对正文推导只增不减"，而不是"标签一旦打上就不可逆"。
 
 **分类器只做"能机械判定"的部分**：确认、定级、派发仍由人做。自动化的边界是"把人工勾选翻译成可筛选的标签"，不是替人分诊。
 
@@ -179,8 +195,9 @@ commit message 中引用议题编号（如 `fix(gateway): 修正握手超时判�
 
 ```sh
 pnpm check:issue-labels                        # 清单与模板一致性门禁
-node --test scripts/sync-labels.test.mjs       # 门禁自测（含双向漂移的负控制）
+node --test scripts/sync-labels.test.mjs       # 门禁自测（含双向漂移、模板间漂移的负控制）
 node --test scripts/classify-issue.test.mjs    # 分类器自测（含越界读取的负控制）
+node --test scripts/open-pr.test.mjs           # 提交 scope 词表派生（含包含关系与重叠判定）
 node scripts/sync-labels.mjs --check           # 同上，直接跑
 ```
 

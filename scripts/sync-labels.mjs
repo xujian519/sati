@@ -7,13 +7,16 @@
  *   node scripts/sync-labels.mjs           # 同步：把清单 upsert 到仓库（幂等，需 gh 已登录）
  *   node scripts/sync-labels.mjs --check   # 门禁：校验清单与 issue 模板一致（挂 pnpm lint）
  *
- * `--check` 拦截四类漂移：
+ * `--check` 拦截五类漂移：
  *   1. 清单自身不合规——标签名重复/为空，color 非 6 位 hex，description 为空或超长（GitHub 上限 100）。
  *   2. 模板引用了未声明的标签——`.github/ISSUE_TEMPLATE/*.md` frontmatter 的 `labels:` 必须在清单中。
  *   3. 模板的「影响 scope」勾选项与 `scope:*` 标签集合不一致（双向：模板多出/标签多出都拦）。
  *   4. 带前缀标签（`status:` / `priority:` / `scope:`）缺取值。
+ *   5. 多条模板的「影响 scope」勾选项彼此不一致——GitHub 的 issue 模板无法共享片段，
+ *      同一份清单在每条模板里各抄一遍；只改其中一条时，第 3 条校验仍会通过（因为校验的是
+ *      模板**并集**），缺口只能在这里拦。
  *
- * 第 3 条是这套门禁的核心价值：issue 模板里的 scope 复选框会被
+ * 第 3、5 条是这套门禁的核心价值：issue 模板里的 scope 复选框会被
  * `scripts/classify-issue.mjs` 翻译成 `scope:*` 标签，两处一旦漂移，
  * 自动打标签就会静默失效——所以让它在 lint 阶段就红。
  */
@@ -178,6 +181,33 @@ export function validateLabels(labels, templates) {
   for (const name of declaredScopes) {
     if (!templateScopes.has(name.slice("scope:".length))) {
       errors.push(`标签 ${name} 在 issue 模板的「影响 scope」节中没有对应勾选项`);
+    }
+  }
+
+  // 模板之间的一致性。上面两条校验看的是模板**并集**，因此「只改了其中一条模板」不会
+  // 被它们发现——而 GitHub 的 issue 模板无法共享片段，同一份勾选清单必然在每条模板里
+  // 各存一份。这里以**排序后的第一条**含 scope 节的模板为基准逐条比对。
+  // 不含该节的模板（如 `tech_debt.md`）不参与：它本来就不产生 scope 标签。
+  const withScopes = templates.filter(template => template.scopes.length > 0);
+  if (withScopes.length > 1) {
+    const [reference, ...others] = withScopes;
+    const referenceScopes = new Set(reference.scopes);
+    for (const template of others) {
+      const currentScopes = new Set(template.scopes);
+      for (const scope of referenceScopes) {
+        if (!currentScopes.has(scope)) {
+          errors.push(
+            `${TEMPLATE_DIR}/${template.file} 的「影响 scope」节缺勾选项「${scope}」（与 ${reference.file} 不一致）`,
+          );
+        }
+      }
+      for (const scope of currentScopes) {
+        if (!referenceScopes.has(scope)) {
+          errors.push(
+            `${TEMPLATE_DIR}/${template.file} 的「影响 scope」节多出勾选项「${scope}」（与 ${reference.file} 不一致）`,
+          );
+        }
+      }
     }
   }
 

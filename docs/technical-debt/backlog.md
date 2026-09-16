@@ -1908,10 +1908,28 @@
   - 缓解关系：`exempt-all-milestones: true` 意味着**挂 milestone 的议题天然豁免**——所以本批债务 issue 挂 `v0.2.0` 即受保护，但未挂 milestone 的独立高优缺陷仍暴露。
   - 建议：优先考虑把 `priority: p0,priority: p1` 加入豁免（高级别议题不该因无人推进而消失）；或在规范 §6 明确写「`triage` 超 120 天会被归档，这是设计而非疏漏」，并让 §5/§6 不再逐字重复同一份豁免清单（重复导致一致性检查发现不了语义冲突）。
 - **TD-PROCGATE-005** · `scope` 分类器与规范三处不符（摘掉会打回 / 与提交 scope 不同名 / 词表第三份）
-  - 类别：D/H · 严重级：P2 · 工作量：M · 状态：new
+  - 类别：D/H · 严重级：P2 · 工作量：M · 状态：**done（2026-09-16，PR #395）**
   - 位置：`scripts/classify-issue.mjs:22-24`；`scripts/open-pr.mjs` `KNOWN_SCOPES`；`.github/labels.yml`；`docs/issue-management.md` §5
   - 影响：(1) 「自动打错的标签人工摘掉即可、脚本不会再打回」对 `scope:*` **不成立**——`classifyIssue()` 每次从 body 重推，人去摘掉后下一次 `edited` 事件会加回来；(2) 「`scope:*` 与提交 scope 同名」**不成立**——实测提交 scope 中 `adapters`/`desktop`/`context`/`ui-server`/`board`/`techdebt`/`session`/`task`/`extension`/`telemetry`/`pr`/`pilot`/`code-refinement`/`deps` 共 14 个**无对应标签**，一个 `refactor(adapters)` PR 无法被任何 `scope:` 筛选；(3) scope 词表已有**三份**（`labels.yml` 16 个 / `open-pr.mjs` `KNOWN_SCOPES` / 模板勾选项）。
   - 建议：修正规范表述或让分类器记录「已人工摘除」状态；确定 `labels.yml` 为唯一事实源并补齐提交侧高频 scope；`open-pr.mjs` 的 `KNOWN_SCOPES` 改为从 `labels.yml` 派生。
+  - **2026-09-16 处置（PR #395，`scope:other`）**：三条建议里采纳第 3 条（`KNOWN_SCOPES` 改为从 `labels.yml` **派生**，
+    规模仍为 21 项、行为零变化；`COMMIT_ONLY_SCOPES` 显式声明并被 `duplicateScopeDeclarations()` 约束不得与标签重叠），
+    第 2 条只走「确定唯一事实源」这一半（词表契约定为**单向包含**：`scope:*` ⊆ 提交词表、反向不成立），
+    第 1 条走「修正规范表述」（**否决** issue 建议的"记录已摘除状态"与"对称化自动摘除"两条实现路径，理由见决策记录）。
+    同时把「模板之间勾选项必须一致」**新增进** `pnpm check:issue-labels`——GitHub 无法共享模板片段，
+    同一份清单在两条模板里各存一份，而既有校验只比对模板**并集**，此前「只改一条模板」无任何门禁。
+  - **核码更正**（正文为当日快照，已漂移）：① 提交 scope 频次实为 `main` 全历史 2628 提交的
+    `ui 233 / patent 133 / agent 91 / desktop 61 / …`，去重约 **180 个取值**（正文记的 14 个是子集，且量级与截断快照不符）；
+    ② **PR 从不打 `scope:*` 标签**（无任何生产者），受影响的只有 issue 侧筛选，原文「一个 `refactor(adapters)` PR 无法被筛选」措辞失真；
+    ③ 正文候选清单（`adapters`/`desktop`/`context`）与 §35 的候选清单（`ci`/`scripts`/`desktop`/`ui-server`/`adapters`）**互不一致**
+    ⇒ 分类学本身未定，本轮不照任一清单补齐。
+  - 判据：`scripts/open-pr.test.mjs` 新增「提交 scope 词表由清单派生」9 例（含判据侧**独立**读清单的真值 + 绑定用例 +
+    "other 不进词表" + 提交独有表不得与标签重叠）；`scripts/sync-labels.test.mjs` 新增模板间比对 5 例；
+    `scripts/classify-issue.test.mjs` 新增投影语义 3 例。负控制 7 组注入（派生漏项 / 提升为标签后忘删旧声明 / `other` 混入 /
+    停用模板间比对 / 比对改单向 / 分类器"有标签即短路" / 越界产出 `priority:`）红名单与预测**逐条相等**，相邻用例保持绿。
+  - 副作用：`scope:desktop` 按成文判据补为标签（`apps/desktop` 是独立 workspace 包 + 独立 CI job + 独立发布文档），
+    须**人工**跑一次 `node scripts/sync-labels.mjs` 同步实体；`feature_request.md` 的「影响 scope」节此前未记入
+    规范 §2 表格，一并补上。决策记录：`docs/notes/implemented/2026-09-16-scope-vocabulary-contract.md`（含 10 条备选）。
 - **TD-PROCGATE-006** · `status: done` 禁令与 `priority` 取值**无枚举门禁**兜底
   - 类别：E · 严重级：P3 · 工作量：S · 状态：new
   - 位置：`scripts/sync-labels.mjs:153-156`
@@ -1980,6 +1998,8 @@
 > 全部挂在里程碑 **v0.2.0** 下（仓库首个里程碑，此前零 milestone）。类型/优先级标签为创建时携带，`scope:*` 与 `status: triage` 由 `issue-triage.yml` 从正文「## 影响 scope」节**自动打上**。
 >
 > ⚠️ **其中 12 条落在 `scope:other`**（#332–#341、#348、#351、#353、#354、#359、#365）——因为 `ci`/`scripts`/`desktop`/`ui-server`/`adapters` 等**没有对应的 `scope:` 标签**，即 §32 `TD-PROCGATE-005` 待解决的问题。
+>
+> **2026-09-16 更新（PR #395）**：`scope:desktop` 已按成文判据补上（`docs/issue-management.md` §1 的「用户可感知的模块 + 独立交付边界」两道判据；`apps/desktop` 是独立 workspace 包 + 独立命名 CI job + 独立发布文档）。其余候选（`ci`/`scripts`/`ui-server`/`adapters`）按同一判据**不收**——issue 面要的是用户可感知的模块，而非源码目录的一一映射，细粒度归 `scope:other`，这是取舍不是缺口。已创建的这 12 条**不会追溯改标**（分类器只在 `opened`/`edited` 事件运行），需要时按新词表手工调整。是否进一步扩充仍是开放决定，判据已写进 §1，扩充成本已降到「一行 `labels.yml` + 两条模板」。
 
 | 台账条目 | issue | 摘要 |
 |---|---|---|
