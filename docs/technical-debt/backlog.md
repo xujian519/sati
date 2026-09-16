@@ -1743,19 +1743,24 @@
 
 ### 31.6 协议 1.8 与跨进程续算（`gateway/protocol` · `session/resume` · `session/transcript`）
 
-**模块概况**：`version.ts` 67 行、`src/session/resume/` 2 文件 242 行、`src/session/transcript/` 11 文件（`JsonlTranscriptWriter.ts` 546 行）、`src/agent/loop/modelErrors.ts` 591 行；测试 `tests/session/resume/` 1 spec、`tests/session/transcript/` 5 spec、`tests/gateway/` 29 spec。**总评**：协议 1.8 接线完整且门禁正确（`close_project_sessions` 三处守卫/透传/`method_unavailable` 均有专测），续算链路只读 transcript、零内存态、单会话失败不阻塞，健壮性设计到位。债务集中在「文档滞后一代」（H 类 4 条）与两处重复/裸 catch。
+**模块概况**：`version.ts` 315 行（2026-09-16 台账化：原 67 行的散文变更表 → `PROTOCOL_RELEASES` + `PROTOCOL_METHOD_VERSION` 数据 + `protocolLedgerIssues()`）、`src/session/resume/` 2 文件 242 行、`src/session/transcript/` 11 文件（`JsonlTranscriptWriter.ts` 546 行）、`src/agent/loop/modelErrors.ts` 591 行；测试 `tests/session/resume/` 1 spec、`tests/session/transcript/` 5 spec、`tests/gateway/` 29 spec。**总评**：协议 1.8 接线完整且门禁正确（`close_project_sessions` 三处守卫/透传/`method_unavailable` 均有专测；协议**方法侧**的门禁原缺失，已由 `pnpm check:protocol-version` 补齐，见 TD-GATEWAY-N01），续算链路只读 transcript、零内存态、单会话失败不阻塞，健壮性设计到位。债务集中在「文档滞后一代」（H 类 4 条）与两处重复/裸 catch。
 
 > **三条线索经核实为清白，予以销项**：
 > - **`SATI_CHECKPOINT_EVERY_N_STEPS` 无悬空引用**。全仓唯一命中是 plan 文档的一行删改记录，`src/` 零引用。
 > - **metacognitive 的 reconcile/escalate 无半成品残留**。`metacognitiveControl.ts` 全文 66 行 / 3 个纯函数，无相关符号或分支；`design.md:37` 明确「deferred」并入档——**设计使然**。
 > - **triz 内联大表问题不存在**（数据已外置 JSON 且 build 拷贝，详见 §31.5）。
 
-- **TD-GATEWAY-N01** · 协议版本表**无门禁**，唯一「覆盖」是弱断言（三个来源靠人工同步）
-  - 类别：E/H · 严重级：**P2** · 工作量：M · 状态：new
-  - 位置：`src/gateway/protocol/frames.ts:31`、`src/gateway/server/methodGuards.ts:101`、`src/gateway/protocol/version.ts:1-53`
-  - 影响：`frames.ts` 的方法 union、`methodGuards.ts` 的参数守卫表、`version.ts` 的变更表是**同一事实的三份手写副本**。新增方法若忘记 bump MINOR，**任何测试都不会红**——而 MINOR 恰好是 `feature-detect` 与 `not_configured` 降级的唯一依据（`CLAUDE.md:173`），漏 bump 会让旧客户端对不存在的方法乐观发帧。对比事件侧已有生成式门禁（`pnpm check:event-matrix`），协议方法侧完全没有对应物。
-  - 建议：加 `scripts/check-protocol-version.mjs`（或一个 spec），断言 `frames.ts` 的 `GatewayMethod` 集合 ⊆ `version.ts` 变更表已声明的方法集；把强断言写进版本测试，替掉白名单 `includes`。
-  - 证据：`tests/gateway/discovery-protocol.spec.ts:91` `assert.ok(["1.1",...,"1.8"].includes(SATI_GATEWAY_PROTOCOL_VERSION))` —— 对 8 个取值**全部通过**，不能证明当前是 1.8；`tests/gateway/steer-protocol.spec.ts:52-53` 更弱，仅 `startsWith("1.")` 与自比 `isProtocolCompatible(V, V)`。
+- **TD-GATEWAY-N01** · 协议版本表**无门禁**，唯一「覆盖」是弱断言（三个来源靠人工同步）— **done（#388）**
+  - 类别：E/H · 严重级：**P2** · 工作量：M · 状态：**done（#388，2026-09-16）**
+  - **口径更正（核码结论）**：三份副本的门禁强度并不一致——`methodGuards.ts` 的参数守卫表早已由 `satisfies Record<WsGatewayMethod, ParamSpec>` **编译期**把关，真正完全无门禁的只有 `version.ts` 顶部的散文变更表。**而且它已经漂移两次**：`knowledge_capabilities`（2026-08-06 进入 union，当时常量 1.1）与 `kanban_reorder_columns`（2026-08-26 随 Phase 5.1「列拖拽排序」进入，当时常量 1.5）从未登记——issue 预言的后果**已经发生过**，只是没人发现。
+  - 处置：散文变更表升级为机器可读台账（`PROTOCOL_RELEASES` 记变更理由 + `PROTOCOL_METHOD_VERSION` 记「方法 → 引入版本」，`satisfies Record<WsGatewayMethod, GatewayProtocolVersion>` 双向把关，版本常量改为**由台账末条派生**）；新增 `pnpm check:protocol-version`（`scripts/check-protocol-version.ts`，挂 `pnpm lint` 链尾）——AST 重提 union 成员做两向集合相等 + 守卫表覆盖 + `protocolLedgerIssues()` 版本连续性；两处历史漂移按**引入时点**回溯登记（1.1 / 1.5，故本次**无需 bump**）；`discovery-protocol.spec.ts:91` 的白名单 `includes` 换成字面量强断言，`steer-protocol.spec.ts:52-53` 的 `startsWith("1.")`+自比换成「常量 === 台账末条」与跨版本兼容语义。
+  - 证据：负控制把两处登记从台账摘掉 ⇒ 编译期 `TS1360` 与运行期门禁**各自**逐条点名这两条；再把台账的 `satisfies` 改写成 `as` 绕过编译期 ⇒ typecheck 转绿而运行期门禁仍红（证明后者非冗余）。决策记录 `docs/notes/implemented/2026-09-16-protocol-version-gate.md`。
+- **TD-GATEWAY-N02** · 「新方法登记在**当前**版本而不 bump」无法判定（协议版本门禁的残余缺口）
+  - 类别：E · 严重级：**P3** · 工作量：S · 状态：new
+  - 位置：`src/gateway/protocol/version.ts`（`protocolLedgerIssues`）、`scripts/check-protocol-version.ts`
+  - 影响：`PROTOCOL_METHOD_VERSION` 已堵住「漏登记」，但若把新方法登记在**已发布**的当前版本上（如 1.8）而不 bump，台账自洽性仍然成立 ⇒ 旧客户端会被告知 1.8 就有该方法。判定「当前版本已发布」需要第二事实源（git tag / 上一个 `package.json` 版本 / 已提交的冻结基线）。
+  - 建议：与发布流程合并考虑——`scripts/bump-version.mjs` 只管 `package.json`，可在发布/tag 时把当时的台账快照冻结成 `docs/` 产物，再由门禁比对快照的**已发布部分**。**不得**用「生成器产基线」糊弄：生成物由台账算出即恒真（#360 的教训）。
+
 - **TD-SESSION-N08** · 「写入即落盘 / `flushCheckpoint` 为契约性 no-op」在 **4 处文档**已过时一代
   - 类别：H · 严重级：P3 · 工作量：S · 状态：new
   - 位置：待更新 4 处 —— `CLAUDE.md:154`、`docs/cross-process-retry-resume-plan.md:27`、`:128`、`docs/deepseek-harness-phase4-plan.md:413`
