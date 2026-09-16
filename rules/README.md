@@ -27,7 +27,8 @@ rules/
 > `rules/patent/activation-overrides.yaml`（轻量补丁，加载时字段级覆盖 action）。
 > 接线三链（第三链 policy-bridge 工具拦截由 `SATI_RULE_POLICY_BRIDGE_ENABLED` 门控，默认关）：
 > - **A 链（agent 显式自检）**：`rule_check` scope=patent-full = compliance + nuo 全量
->   （100 条，经 override 降级后 2 block / 2 review / 66 warn / 30 log）；
+>   （100 条，经 override 处置后 2 block / 2 review / 65 warn / 31 log；warn→log 的口径变化
+>   来自 2026-09-16 的去重，见「规则资产语义增强」节）；
 > - **B 链（输出门禁）**：`RuleOutputGate` + `selectGateRules()` 只接入「出现即违规」的
 >   keyword_blocklist 规则（nuo 9 条，排除 compliance PAT-* 与 structural_analysis）——
 >   structural「缺失即违规」对任意输出海量误报，仅适用 rule_check 显式自检。
@@ -110,16 +111,36 @@ rules:
 
 | 类型 | 字段 | 语义 |
 |------|------|------|
-| `keyword_blocklist` | `keywords`（`a\|b\|c` OR 组）、`negationContext`（否定语境放行）、`severityIfFound` | 关键词命中即违规 |
+| `keyword_blocklist` | `keywords`（`a\|b\|c` OR 组）、`negationContext`（否定语境放行）、`additionalNegationWords`（域追加放行词，须与前者同开）、`severityIfFound` | 关键词命中即违规 |
 | `pattern_analysis` | `patterns`（正则）、`minMatches`（至少命中 N 次） | 正则命中次数 ≥ minMatches 即违规 |
 | `structural_analysis` | `requiresAll`（element + patterns）、`minConfidence` | 命中要素占比低于阈值即违规 |
 | `citation_analysis` | `statutes`（法条名 → `{ max }`） | 引用条号超出有效范围即违规（R1） |
+
+### 关键词匹配的四个既有语义（改 `keyword_blocklist` 规则前必读）
+
+1. **子串匹配、大小写敏感**：条目按 `text.indexOf` 逐字匹配（**非**正则、**不**折叠大小写）
+   ⇒ 半角/全角、大写/小写是**不同拼写**，要覆盖就得逐条列出。
+   （对比：`pattern_analysis` 用 `gi` 标志、`structural_analysis` 用 `i`——
+   所以同一个「202X」占位符在 `pattern_analysis` 里写一次就够，在这里不够。）
+2. **`|` 是 OR 组**：一条 entry 内 `a|b|c` 命中任一即算命中；入口（`checkKeywordEntry`）与
+   工具拦截通道（`flattenKeywords`）都按同一规则拍平。
+3. **否定语境只查命中位置之前**：窗口 = 命中前 24 字且不跨句界（`，` **不算**句界；
+   `。；！？…—` 与换行算）⇒「用于防止窃听」可豁免，「窃听检测方法」**不**豁免。
+4. **两键正交**：`negationContext` 是唯一的开关，`additionalNegationWords` 只追加词表
+   （叠加在共享默认词表之上，不是替换）。缺开关时词表不生效——该组合在加载期告警，
+   不静默吞掉；领域词也不加进共享默认词表，否则会同时放大**所有**否定语境规则的放行面。
 
 ## 加载与覆盖
 
 - 内置资产定位：`SATI_RULES_DIR`（规则根，布局镜像仓库 `rules/`，其下 `patent/`）→ `./rules/patent/` → 仓库根 `rules/patent/`
 - `mergeRuleSets` 按 id 覆盖（后出现者胜），可用于分层规则
 - 单文件解析失败不阻塞目录加载（跳过并告警，见 `loadRuleSetDir`）
+- **评审补丁**：`rules/patent/activation-overrides.yaml` 按 id 做字段级合并——`action` 整字段
+  替换；`addKeywords` / `negationContext` / `additionalNegationWords` 为 check 级**增补**
+  （只追加关键词、只覆盖开关，不重声明既有关键词）。增补语义是有意的：`nuo-*.yaml` 由
+  `scripts/port-nuo-rules.ts` 转换生成，手改会被重新移植抹掉；让补丁重声明整条 `check` 又会
+  造出第二份必须同步维护的副本。未知键 / 非法值 / 引用不存在的 id / check 级键打在非
+  `keyword_blocklist` 规则上，一律在加载期告警（"评审写了但没生效"不得静默）。
 
 ## 分层规则包（Rule Pack）
 
@@ -226,7 +247,7 @@ nuo 规则的 `check` 分两类语义，处置方式不同：
 | id | 名称 | 样本验证 |
 |---|---|---|
 | CON-COMP-0101 | 禁止编造占位专利号 | 真实号 `CN201910123456A` 放行；占位符 `CNXXXXXX` 命中 |
-| X-REF-003 | 交叉—禁止编造案例案号 | 真实案号 `（2020）最高法知民终123号` 放行；占位 `（202X）…` 命中（注：全角括号变体需增强，见「遗留」） |
+| X-REF-003 | 交叉—禁止编造案例案号 | 真实案号 `（2020）最高法知民终123号` 放行；占位 `（202X）…` 命中（全角/小写变体已于 2026-09-16 补齐，见「规则资产语义增强」节） |
 
 #### 降级 review（1 条，编造风险保留人工关注，但词有正常合规用法）
 
@@ -239,7 +260,7 @@ nuo 规则的 `check` 分两类语义，处置方式不同：
 | id | 名称 | 理由 |
 |---|---|---|
 | EX-CLM-001 | 权利要求—清楚性要求 | 误伤「讨论清楚性规则」的合规建议（`应避免使用大约/左右`）；keyword_blocklist |
-| EX-SEL-004 | 不授权—违反法律与公序良俗 | 误伤「防窃听装置」合法主题；keyword_blocklist（后续补 negationContext） |
+| EX-SEL-004 | 不授权—违反法律与公序良俗 | 误伤「防窃听装置」合法主题；keyword_blocklist（2026-09-16 已补 negationContext + 域放行词，见「规则资产语义增强」节） |
 | EX-CLM-002 | 权利要求—以说明书为依据 | 完整性提醒 |
 | EX-CMP-001 | 计算机程序—技术方案判断 | 完整性提醒（三要素） |
 | EX-DIS-002 | 说明书—发明内容三要素 | 完整性提醒（技术问题/方案/效果） |
@@ -281,8 +302,8 @@ nuo 规则的 `check` 分两类语义，处置方式不同：
 | id | 名称 | action | 结论 |
 |---|---|---|---|
 | CON-COMP-0105 | 禁止商业宣传用语 | warn | 词表合理（世界领先/行业首创等广告语），提示可接受 ✅ |
-| EX-INV-007 | 创造性—避免事后诸葛亮 | warn | 元讨论词，正常技术分析少用，可接受；与 IPC-GEN-INV-002 重复 → 合并记入遗留 ✅ |
-| IPC-GEN-INV-002 | 三步法不能与事后诸葛亮混淆 | warn | 与 EX-INV-007 重复 ✅ |
+| EX-INV-007 | 创造性—避免事后诸葛亮 | warn | 元讨论词，正常技术分析少用，可接受；与 IPC-GEN-INV-002 重复 → 保留本条，对方降 log（2026-09-16 落地）✅ |
+| IPC-GEN-INV-002 | 三步法不能与事后诸葛亮混淆 | log | 与 EX-INV-007 重复 → 2026-09-16 降 log（同一问题只留一条用户可见提示）✅ |
 | X-STR-002 | 避免模糊措辞 | log | 「大概/也许/不确定」过宽，**保持 log 不升级**（升级 warn 会大量噪音）✅ |
 
 其余 45 structural warn + 16 structural log：默认全量接入（完整性提醒/记录不阻塞）。
@@ -294,20 +315,57 @@ nuo 规则的 `check` 分两类语义，处置方式不同：
 | 真实专利号 `CN201910123456A` | ✅放行 | ✅放行 | ✅放行 | ✅放行 | ✅放行 |
 | 真实案号 `（2020）最高法知民终123号` | ✅放行 | ✅放行 | ✅放行 | ✅放行 | ✅放行 |
 | 合规建议 `应避免使用大约/左右` | ✅放行 | ✅放行 | ❌命中 | ✅放行 | ✅放行 |
-| 防窃听装置（合法主题） | ✅放行 | ✅放行 | ✅放行 | ❌命中 | ✅放行 |
+| 防窃听装置（合法主题） | ✅放行 | ✅放行 | ✅放行 | ✅放行（2026-09-16 起） | ✅放行 |
 | `不存在虚构的技术效果` | ✅放行 | ✅放行 | ✅放行 | ✅放行 | ❌命中 |
 | `不得编造对比文件`（自我提醒） | ✅放行 | ✅放行 | ✅放行 | ✅放行 | ❌命中 |
 | 占位符 `CNXXXXXX`（真违规） | ❌命中 | ✅放行 | — | — | — |
 
 （❌命中 = 误伤/命中证据；✅放行 = 无误伤。命中方向：CON-COMP-0101/X-REF-003 的 ❌ 是「正确命中真违规」，其余 ❌ 是「误伤合法文本」→ 已降级。）
 
+### 规则资产语义增强（2026-09-16，issue #357）
+
+**验证流程**：本节样本表**已可执行** —— 逐条对应
+`tests/rule/rule-asset-review-samples.spec.ts` 的一个用例（每条样本独立成 `test`，
+便于负控制逐条对名）。改动规则资产后跑：
+
+```bash
+node --import tsx --test --test-force-exit "tests/rule/**/*.spec.ts"
+```
+
+判据要求：**误拦面不扩大**（增强只允许补漏报方向或收窄放行面），每条判据都要有负控制
+（移除该判据对应的资产内容 → 目标用例转红、相邻用例仍绿）。本轮 16 组注入的矩阵见
+`docs/notes/implemented/2026-09-16-rule-asset-semantic-enhancements.md`。
+
+三项处置（全部走 `activation-overrides.yaml` 补丁，**不改**转换生成的 `nuo-*.yaml`）：
+
+| 项 | 原状 | 处置 | 样本（转红即回归） |
+|---|---|---|---|
+| **X-REF-003 全角/小写漏报** | 关键词只有半角大写 `(202X)` 一种拼写 | `addKeywords` 追加 3 组 OR（每组 = 半角大写/全角大写/半角小写/全角小写） | 三个案号族 × 三种新拼写 = 9 个变体全部命中；真实案号（数字年份）全/半角仍放行 |
+| **EX-SEL-004 误伤合法安防主题** | 未开否定语境 ⇒ 连默认词表也用不上 | `negationContext: true` + `additionalNegationWords: [防, 反, 抑制, 检测]` | 防窃听装置 / 反窃听系统 / 抑制赌博 / 检测窃听行为 / 避免…克隆人 / 防止窃听 全放行；「可用于赌博」等真违规仍命中 |
+| **EX-INV-007 ↔ IPC-GEN-INV-002 重复** | 两条逐字重复，同一文本产出两条提示 | IPC-GEN-INV-002 降 `log`（沿用 IPC-GEN-INV-001↔EX-INV-001 先例） | 输出门禁只由 EX-INV-007 产出一条该问题提示；重复项仍可被 `rule_check` 检出（log 级） |
+
+**已登记的非对称性（有意保留）**：否定语境只查命中位置**之前**的 24 字窗口，
+故后缀式「窃听检测方法」中的「检测」不构成豁免、文本仍命中 EX-SEL-004。改成双向会同步放大
+所有否定语境规则的放行面，不在本次范围；该行为由样本用例**显式断言**钉住（将来引入后置
+语境豁免时，正是这条用例应当改红）。
+
+**同节其他未接线项**（issue #357 建议一并评估，本次结论：不动，且按内容而非行号引用以避免漂移）：
+
+- 「分层规则包（Rule Pack）」节末的**接线状态**注：`scope=pack` 仅接入 `rule_check`，输出门禁
+  仍只用 `compliance.yaml` —— 属 `TD-RULE-N04`（`selectGateRules` 硬编码 id 前缀）与接线面的
+  产品决策，非语义增强。
+- 同一处注中：`domain` 过滤 v1 由调用方显式传入、`rule_check` 暂不传 —— 属 `TD-RULE-N03`
+  （`evaluateText` 的 domain 过滤线上不生效），改动面在调用方而非规则资产。
+
 ### 遗留（接线时一并处理）
 
-> 工具拦截通道已于 2026-09-11 接线（flag 默认关 + phase 语义门，见
-> `docs/notes/implemented/2026-09-11-policy-bridge-tool-guard-wiring.md`）；下列 1–3 项属
-> **规则资产**语义增强，须独立评审误拦面后再动。
+> **状态：空**（2026-09-16 清空）。原 4 项处置如下，未再新增继承条目。
 
-1. **X-REF-003 全角括号漏报**：规则用半角 `(202X)`，中文文本常用全角 `（202X）` → 增强 pattern 同时覆盖全/半角；
-2. **EX-SEL-004 negationContext**：补「防/反/抑制/检测」放行语境，避免误伤合法安防专利主题；
-3. **EX-INV-007 / IPC-GEN-INV-002 重复**：两条内容同（避免事后诸葛亮），接线时可合并为一条（跨域共享）；
-4. **EX-INV-001 / IPC-GEN-INV-001 重复**：均检查三步法框架，评审已保留前者 warn、后者 log，无遗留动作。
+1. ~~X-REF-003 全角括号漏报~~ → 2026-09-16 已处置（本节上表；issue #357）。
+2. ~~EX-SEL-004 negationContext~~ → 2026-09-16 已处置（本节上表；issue #357）。
+3. ~~EX-INV-007 / IPC-GEN-INV-002 重复~~ → 2026-09-16 已处置（降 log）。
+   口径说明：issue 原文写「可合并为一条（跨域共享）」，但两条分处 examination / ipc 两个
+   **转换生成**文件，删任一条都会被下次 `port-nuo-rules.ts` 重新移植还原；且 issue 自称本项
+   "不改 action 级别"，而去重必然要让其中一条不再产出用户可见意见。故沿用同一章节里
+   EX-INV-001↔IPC-GEN-INV-001 的既有先例（保留前者 warn、后者 log），id 面保持稳定。
+4. EX-INV-001 / IPC-GEN-INV-001 重复 —— 评审已保留前者 warn、后者 log，无遗留动作。
