@@ -1657,17 +1657,25 @@
   - 影响：同一「mkdir + tmp(.pid+random) + writeFile + rename」模式在 `src/patent` 下有 **4 处**独立实现（外加 `src/tool` 1 处），差异仅 JSON vs 文本、同步 vs 异步。任何一次修复（`crypto.randomUUID`、tmp 泄漏清理、Windows rename 语义、fsync）都必须记得改 4 处；本处还额外丢了 `persist-utils` 已有的加固。
   - 建议：把 `persist-utils.atomicWriteJson` 泛化为 `atomicWriteText(file, content)` + JSON 包装，四处齐改。
 - **TD-PATENT-N23** · `chemistry/index-store.ts` 与 `figure/index-store.ts` 同构复制（**实测 85/179 行逐字节相同**）
-  - 类别：F · 严重级：P2 · 工作量：M · 状态：new
+  - 类别：F · 严重级：P2 · 工作量：M · 状态：**done（#391）**
   - 位置：`src/patent/chemistry/index-store.ts`（133 行）↔ `src/patent/figure/index-store.ts`（131 行）
   - 影响：两个索引存储除实体名外逻辑完全一致（读容错、版本守卫、逐条 shape 守卫、队列串行化 upsert、损坏备份）。任一侧的 bug 修复必须手工同步，且**事实上已经不同步**：`upsertFigureIndex` 的排序键多了一个附图编号维度（`figure:110`），`isFigureIndexEntry` 多校验两个标量字段——说明「同构」靠人工维护。
   - 建议：抽 `src/patent/shared/index-store.ts`（泛型 + 注入 `keyOf/compare/isValidEntry/notice`），两模块退化为 ~30 行参数化调用；同时消化 N24。
   - 证据：`difflib.SequenceMatcher` 匹配块合计 **85** 行（并集 = 133+131-85 = 179）；`git diff --no-index --numstat` → `46 48`（即 87 行相同），两法一致落在 85–87。逐字节相同块含 `69-76 == 67-74`（`load*Index` 的 ENOENT 与 `readFile` 容错整段）、`114-133 == 112-131`（upsert 尾部 + `backupCorruptIndex` 整段 + 队列声明）。
   - **勘误**：前序快查给的「union 145 行中 65 行相同」与实测有出入，以本行为准。
+  - 处置（#391）：新增 `src/patent/shared/index-store.ts`（151 行）导出 `createIndexStore(spec)`，注入 `label / version / keyOf / compare / isValidEntry` 五项**真实域差异**；两侧退化为「域声明 + 薄包装」（chem 83 / fig 81 行），全部导出名、类型名与三处 barrel（`chemistry/index.ts`、`figure/index.ts`、`src/patent/index.ts`）逐字不变。`is*IndexEntry` 留在各自域内。**每个实例自带一份队列**，与收敛前「每模块一份 `upsertQueues`」等价。
+  - 等价性证据：两侧既有 15 例（chem 5 + fig 10）在收敛后全部保持绿——它们锁的读容错、版本守卫、逐条过滤、覆盖与排序、并发串行化、备份命名都没变。
+  - 判据：`tests/patent/shared/index-store.spec.ts` 11 例（注入点承重 4 / 队列清退与备份核证 4 / 结构判据 3）。**负控制 7 组**逐条核对转红名单，其中 `compare` 不注入 → 仅新 spec 排序 1 例转红，而 fig 既有排序用例保持绿（其数据下「按路径」与「按编号」同序，无法区分）——证明该新用例不是冗余。
+  - 决策记录：`docs/notes/implemented/2026-09-16-patent-index-store-convergence.md`。
 - **TD-PATENT-N24** · `upsertQueues` 进程级 Map 无淘汰、无删除；`.corrupt-<ts>` 备份无保留策略
-  - 类别：G · 严重级：P2 · 工作量：S · 状态：new
+  - 类别：G · 严重级：P2 · 工作量：S · 状态：**done（#391，队列侧；备份侧核账后不成立）**
   - 位置：`src/patent/chemistry/index-store.ts:104,116-119,133` 与 `src/patent/figure/index-store.ts:102,114-117,131`（两份同构）；备份 `chemistry:124-130` / `figure:122-128`
   - 影响：`upsertQueues` 以**文件路径**为键长期驻留，`run` 完成后**从不 `delete`**。专利 case 是「每案一目录」，长驻进程（desktop/server 形态）跨大量 case 后 Map 无界增长，每个 value 是一条已 resolve 的 promise 链（含闭包捕获的 entries）无法回收。`backupCorruptIndex` 每次命中损坏索引都 `copyFile` 出 `.corrupt-<Date.now()>`，无清理/上限——反复 upsert 一个坏索引会持续堆积备份文件。
   - 建议：`run.finally(() => { if (upsertQueues.get(filePath) === settling) upsertQueues.delete(filePath); })` 或改 LRU（对照 `TranscriptReader` 的 `TAIL_STATE_MAX`）；备份改为「仅当不存在同名 `.corrupt` 时创建」或限保留 N 份。
+  - 处置（#391，队列侧）：改为 `settle` 后**仅在自己仍是队尾**（`upsertQueues.get(filePath) === settled`）时清退该键。无条件 `delete` 会删掉后继的链——后继的 `previous` 指向的 promise 已不在表里，它会与本次**并发**执行，读-改-写竞态回归（负控制实测：该注入精确红在「仅在自己仍是队尾时清退」1 例）。未采纳 LRU：队列的键是「**正在**写」的路径，写完即应消失，且 LRU 会淘汰仍在排队的路径、破坏串行化。
+  - 观测手段：实例暴露 `pendingWrites()`（仍有排队写入的文件路径数）。不暴露则该实现选择没有任何外部可观测差异（条目数、产物字节都相同）。语义是「文件数」而非「请求数」——同一文件的 N 次并发 upsert 共享一条队尾链。
+  - **核账更正（备份侧不成立）**：「反复 upsert 一个坏索引会持续堆积备份」**不可达**——`upsert` 命中 `warning` 时会 `save` 一份过滤掉无效条目、版本已归一的合法文件，因此第二次 `upsert` 的 `load` 不再产生 `warning`，备份只发生一次；可达的堆积路径需要「两次 upsert 之间由外部把索引重新改坏」。新增判据钉住该性质（连读三次 upsert 一个已损坏索引，目录里恰好 1 个 `.corrupt-*`；负控制：把备份移出 `warning` 门控 → 该例精确转红）。
+  - 未做（另行观察，不立项）：仓内三处 `.corrupt-<ts>` 实现语义不同——`CronTaskStore` / `BoardStore` 用 `rename` 把损坏文件**移出原位**后 fail-closed，专利侧用 `copyFile` **保留原位**并继续写入，故不适合抽成同一工具。
 - **TD-PATENT-N25** · 测试目录布局与实现目录不一一对应（`clarity`/`problem` 无同名目录，散落为扁平 spec）
   - 类别：E · 严重级：P3 · 工作量：S · 状态：new
   - 位置：`tests/patent/clarity.spec.ts`（235 行）；`tests/patent/{atomic-checker,retry-hints}.spec.ts`
