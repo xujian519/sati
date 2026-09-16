@@ -5,13 +5,23 @@
  * "真实仓库"用例依赖 cwd 下的 rules/base 与 .sati/（当前无 rules.yaml 清单）。
  */
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import test from "node:test";
 import { parseDocument } from "yaml";
 import {
   candidatePackDirs,
+  computeRulePackFingerprint,
   evaluateText,
   loadRulePack,
   loadRuleSetDir,
@@ -22,8 +32,14 @@ import {
   validatePackManifest,
 } from "../../src/rule/index.js";
 
+/** 把文件 mtime 强制设为「现在 + ms」毫秒：写入与读取可能落在同一毫秒，靠它拉开。 */
+function touchAfter(path: string, ms: number): void {
+  const at = new Date(Date.now() + ms);
+  utimesSync(path, at, at);
+}
+
 /** 在临时目录搭一个三层 fixture：base + domain + overrides + 项目清单。 */
-function makePackFixture(): { manifestPath: string; base: string; domain: string } {
+function makePackFixture(): { root: string; manifestPath: string; base: string; domain: string } {
   const root = mkdtempSync(join(tmpdir(), "sati-rule-pack-"));
   const base = join(root, "base-pack");
   const domain = join(root, "mech-pack");
@@ -113,7 +129,7 @@ function makePackFixture(): { manifestPath: string; base: string; domain: string
   mkdirSync(join(root, ".sati"));
   const manifestPath = join(root, ".sati", "rules.yaml");
   writeFileSync(manifestPath, [`base: ${base}`, `domains:`, `  - ${domain}`, `overrides: ../local-rules`].join("\n"));
-  return { manifestPath, base, domain };
+  return { root, manifestPath, base, domain };
 }
 
 // ---------------------------------------------------------------------------
@@ -323,4 +339,114 @@ test("every bundled pack dir ships a pack.yaml manifest", () => {
     assert.doesNotThrow(() => readFileSync(manifest, "utf8"), `${dir} 缺少 pack.yaml`);
   }
   assert.doesNotThrow(() => readFileSync("rules/base/pack.yaml", "utf8"));
+});
+
+// ---------------------------------------------------------------------------
+// 10. 缓存失效指纹：判据取自**各层实际规则文件**，而不是清单 mtime（#355）
+//
+// 分层包的实际内容由 rules/base/*、rules/domains/*、overrides 决定，清单只是声明。
+// 下列用例逐条钉住「哪些变化必须失效」与「哪些变化不该失效」。
+// ---------------------------------------------------------------------------
+test("computeRulePackFingerprint 同状态幂等（否则每次调用都判定失效、缓存形同虚设）", () => {
+  const { manifestPath } = makePackFixture();
+  assert.equal(computeRulePackFingerprint({ manifestPath }), computeRulePackFingerprint({ manifestPath }));
+});
+
+test("computeRulePackFingerprint 覆盖 base / domain / overrides 各层规则文件，且不依赖清单 mtime", () => {
+  const { root, manifestPath, base, domain } = makePackFixture();
+  const manifestMtime = statSync(manifestPath).mtimeMs;
+  const before = computeRulePackFingerprint({ manifestPath });
+
+  // 只动层规则文件、不动清单——旧键（`<清单>@mtimeMs`）在此**完全不变**
+  touchAfter(join(base, "rules.yaml"), 5_000);
+  const afterBase = computeRulePackFingerprint({ manifestPath });
+  assert.notEqual(afterBase, before, "base 层规则文件变化应改变指纹");
+
+  touchAfter(join(domain, "rules.yaml"), 10_000);
+  const afterDomain = computeRulePackFingerprint({ manifestPath });
+  assert.notEqual(afterDomain, afterBase, "domain 层规则文件变化应改变指纹");
+
+  touchAfter(join(root, "local-rules", "rules.yaml"), 15_000);
+  const afterOverrides = computeRulePackFingerprint({ manifestPath });
+  assert.notEqual(afterOverrides, afterDomain, "overrides 层规则文件变化应改变指纹");
+
+  // 全程清单未被触碰：检出能力与清单 mtime 无关
+  assert.equal(statSync(manifestPath).mtimeMs, manifestMtime);
+});
+
+test("computeRulePackFingerprint 覆盖层目录内新增/删除的规则文件", () => {
+  const { manifestPath, base } = makePackFixture();
+  const before = computeRulePackFingerprint({ manifestPath });
+
+  // 新增文件：若摘要取自「上一次加载的 sources」，新文件永远进不了摘要 ⇒ 必须靠每次
+  // 重新枚举目录覆盖（issue 点名的那个漏洞）。
+  // 此处只断言「新文件被纳入摘要」，不绑摘要的内部拼写（`name@mtime` / 纯内容哈希都算合格）。
+  const added = join(base, "added.yaml");
+  writeFileSync(added, 'version: "1.0"\nrules: {}\n');
+  const afterAdd = computeRulePackFingerprint({ manifestPath });
+  assert.notEqual(afterAdd, before, "新增规则文件应改变指纹");
+  assert.ok(afterAdd.includes("added.yaml"), `新增文件应出现在摘要里，实际:\n${afterAdd}`);
+
+  rmSync(added);
+  assert.notEqual(computeRulePackFingerprint({ manifestPath }), afterAdd, "删除规则文件应改变指纹");
+});
+
+test("computeRulePackFingerprint 只看清单声明的层，不越界到未声明目录", () => {
+  const { root, manifestPath } = makePackFixture();
+  const stray = join(root, "undeclared-pack");
+  mkdirSync(stray);
+  writeFileSync(join(stray, "rules.yaml"), 'version: "1.0"\nrules: {}\n');
+
+  const before = computeRulePackFingerprint({ manifestPath });
+  touchAfter(join(stray, "rules.yaml"), 20_000);
+  assert.equal(
+    computeRulePackFingerprint({ manifestPath }),
+    before,
+    "未声明的包目录不参与加载，其变化不该改变指纹（否则退化成「哈希整个 rules/」）",
+  );
+});
+
+test("computeRulePackFingerprint 清单内容变化但 mtime 不变时仍失效（新增 domain 声明）", () => {
+  const { root, manifestPath, base, domain } = makePackFixture();
+  const newDomain = join(root, "med-pack");
+  mkdirSync(newDomain);
+  writeFileSync(join(newDomain, "rules.yaml"), 'version: "1.0"\nrules: {}\n');
+
+  // 把清单 mtime 冻结后改内容：拒绝「只靠 mtime 判清单」的写法
+  const frozen = new Date(2026, 0, 1, 0, 0, 0);
+  utimesSync(manifestPath, frozen, frozen);
+  const before = computeRulePackFingerprint({ manifestPath });
+
+  writeFileSync(
+    manifestPath,
+    [`base: ${base}`, "domains:", `  - ${domain}`, `  - ${newDomain}`, "overrides: ../local-rules"].join("\n"),
+  );
+  utimesSync(manifestPath, frozen, frozen);
+  const after = computeRulePackFingerprint({ manifestPath });
+
+  assert.equal(statSync(manifestPath).mtimeMs, frozen.getTime(), "前置条件：清单 mtime 前后一致");
+  assert.notEqual(after, before, "清单声明新 domain 应改变指纹");
+  assert.ok(after.includes(newDomain), `新声明的层应被展开进指纹，实际:\n${after}`);
+});
+
+test("computeRulePackFingerprint 清单 mtime 变但内容不变时保持稳定（不做无谓重载）", () => {
+  const { manifestPath } = makePackFixture();
+  const before = computeRulePackFingerprint({ manifestPath });
+  // touch 清单：内容一字未改，只是 mtime 前进（等价内容的重新 checkout / 编辑器保存）
+  touchAfter(manifestPath, 30_000);
+  assert.equal(
+    computeRulePackFingerprint({ manifestPath }),
+    before,
+    "清单内容未变就不该判失效——否则每次 run/checkout 都会白读一遍规则",
+  );
+});
+
+test("computeRulePackFingerprint 与 loadRulePack 用同一份层展开（指纹描述的层确实被加载）", () => {
+  const { manifestPath } = makePackFixture();
+  const fingerprint = computeRulePackFingerprint({ manifestPath });
+  const loaded = loadRulePack({ manifestPath });
+  assert.ok(loaded.sources.length >= 3, "fixture 三层都应有规则文件");
+  for (const source of loaded.sources) {
+    assert.ok(fingerprint.includes(basename(source)), `已加载规则文件 ${source} 应出现在指纹里`);
+  }
 });
