@@ -9,7 +9,7 @@
  */
 
 import { JsonFileStore } from "../persist-utils.js";
-import { APPROVAL_GRANTED_KEY } from "../atoms/index.js";
+import { APPROVAL_GRANTED_NODES_KEY } from "../atoms/index.js";
 import type { CheckpointStore, GraphCheckpoint, GraphRunResult, GraphState, RunOptions } from "./types.js";
 import { cloneState } from "./state.js";
 
@@ -94,10 +94,17 @@ export type CheckpointedRunResult = {
 };
 
 /**
- * 人工批准审批门：把放行标记（`APPROVAL_GRANTED_KEY`）写入检查点 state 并持久化，
- * 返回更新后的检查点。调用方用返回值 resume——
- * 审批门节点重放时 handler 检测到标记即放行（不再中断），后续节点继续执行。
+ * 人工批准审批门：把**被批准的门节点 id 集合**（= 本检查点的 `activeNodes`，即正在等待的
+ * 那道门）写入检查点 state 并持久化，返回更新后的检查点。调用方用返回值 resume——
+ * 审批门节点重放时经 `isGateApproved(state, nodeName)` 判定自己已获批，把放行标记注入
+ * handler **执行态**并放行（不再中断），后续节点继续执行。
  * 幂等：重复批准同一检查点无副作用。检查点不存在时返回 undefined。
+ *
+ * ⚠️ 放行是**门粒度**的：只放行该检查点正在等待的门。批准一个非门检查点
+ * （`activeNodes` 里没有审批门）不会放行任何门——resume 后仍会在门处暂停
+ * （fail-closed，绝不静默放行）。历史形态是往 state 写全局布尔
+ * `APPROVAL_GRANTED_KEY=true`，那会让一次批准放行同 run 内**后续所有**门
+ * （详见 `atoms/handlers/builtin/gate.ts` 的 `APPROVAL_GRANTED_NODES_KEY` 说明）。
  */
 export async function grantApproval(
   store: CheckpointStore,
@@ -105,7 +112,7 @@ export async function grantApproval(
 ): Promise<GraphCheckpoint | undefined> {
   const cp = await store.load(checkpointId);
   if (cp === undefined) return undefined;
-  cp.state[APPROVAL_GRANTED_KEY] = true;
+  cp.state[APPROVAL_GRANTED_NODES_KEY] = [...cp.activeNodes];
   await store.save(cp);
   return cp;
 }

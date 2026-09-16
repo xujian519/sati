@@ -210,7 +210,12 @@ async function runSuperSteps(
           }
           const policy = def.nodePolicies.get(name);
           try {
-            const outcome = await runNodeWithPolicy(node, policy, { state: snapshot, provider: opts.provider });
+            const outcome = await runNodeWithPolicy(node, policy, {
+              state: snapshot,
+              provider: opts.provider,
+              // 节点自知其名（门粒度判定等自身事实的唯一来源，见 GraphNodeContext.nodeName）。
+              nodeName: name,
+            });
             return outcome.ok
               ? ({ name, delta: outcome.delta } as NamedOutcome)
               : ({ name, error: outcome.error } as NamedOutcome);

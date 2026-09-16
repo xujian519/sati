@@ -2,15 +2,17 @@
  * 门控域原子：approval-gate（人机审批门，人工介入中断）+
  * quality-gate（检索质量门槛，确定性）+ slop-gate（反套话评分门，确定性）。
  *
- * 审批闭环（双路径共享同一放行契约）：
- * - 图路径：grantApproval 把放行标记写入检查点 state，resume 重放时本 handler
- *   检测到标记即放行（返回空 delta，不中断）；
- * - manifest 路径（runWorkflow）：宿主按 approvalGrants（stageId 粒度）把标记
- *   注入 handler 执行态，本 handler 同样放行。
- * 两条路径的"放行判定"都收敛在本 handler，不分散在外层；放行后的**占位输出**
- * （APPROVAL_GRANTED_OUTPUT，避免无输出被标记 degraded）两条链路统一由
- * `../../../workflow/stage-primitives.js` 的 `resolveStageOutput` 补（#345：
- * 该占位原先只有 manifest 路径有，图路径缺分支）。
+ * 审批闭环（双路径共享同一放行契约，均为**门粒度**）：
+ * - manifest 路径（runWorkflow）：宿主按 approvalGrants（stageId 集合）判定，命中时把
+ *   放行标记注入 handler 执行态；
+ * - 图路径：grantApproval 把**被批准的门节点 id 集合**写入检查点 state，resume 重放时
+ *   节点按自身节点名判定（`isGateApproved`）并把标记注入 handler 执行态。
+ * 两条路径的"放行判定"都收敛在本 handler 读取的同一个 `APPROVAL_GRANTED_KEY` 上——
+ * 该键**只存在于 handler 的局部执行态**，由节点/宿主按门粒度注入，绝不写入共享 state
+ * （写入共享 state 会让一次放行泄漏到同 run 内后续所有门，见 `workflow/executor.ts` 与
+ * `APPROVAL_GRANTED_NODES_KEY` 的说明）。放行后的**占位输出**（APPROVAL_GRANTED_OUTPUT，
+ * 避免无输出被标记 degraded）两条链路统一由 `../../../workflow/stage-primitives.js` 的
+ * `resolveStageOutput` 补（#345：该占位原先只有 manifest 路径有，图路径缺分支）。
  */
 
 import { type Atom } from "../../atom.js";
@@ -27,8 +29,31 @@ import { buildSlopRevisionHint } from "../../../retry-hints.js";
 import { analyzeSlop } from "../../../slop-engine.js";
 import { degraded } from "./llm.js";
 
-/** 审批门放行标记键：state 中存在该键（truthy）时审批门直接放行。 */
+/**
+ * 审批门放行标记键：**只存在于 handler 的局部执行态**。节点/宿主（`graph/adapter.ts`、
+ * `graph/domains/shared.ts`、`workflow/executor.ts`）按门粒度判定后注入执行态拷贝，
+ * 共享 state 永不出现该键——否则一次放行会污染同 run 内后续所有审批门。
+ * 键名以 `_` 开头 ⇒ 天然被 `collectStateText` 等"业务文本汇总"跳过。
+ */
 export const APPROVAL_GRANTED_KEY = "__approval_granted__";
+
+/**
+ * 门粒度放行记录键（**共享 state**）：值是本次 run 内**被批准的门节点 id 集合**。
+ * 图路径由 `grantApproval` 按检查点 `activeNodes` 写入；节点读它判定自己是否被放行，
+ * 再把 `APPROVAL_GRANTED_KEY` 注入自己的执行态拷贝（分工见上）。
+ * 键名以 `_` 开头 ⇒ 天然被 `collectStateText` 等"业务文本汇总"跳过。
+ */
+export const APPROVAL_GRANTED_NODES_KEY = "__approval_granted_nodes__";
+
+/**
+ * 门粒度放行判定：共享 state 的放行记录是否包含该门节点 id。
+ * 调用方须传**自己在图内的节点名**（节点经 `GraphNodeContext.nodeName` 获得；
+ * 拿不到节点名时不得退化为"任意放行"——fail-closed 更安全）。
+ */
+export function isGateApproved(state: PipelineState, nodeName: string): boolean {
+  const granted = state[APPROVAL_GRANTED_NODES_KEY];
+  return Array.isArray(granted) && granted.some(id => id === nodeName);
+}
 
 /** 已批准审批门放行后的占位输出（两条链路共用，见 `workflow/stage-primitives.ts`）。 */
 export const APPROVAL_GRANTED_OUTPUT = "APPROVED";

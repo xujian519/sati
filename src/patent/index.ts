@@ -346,6 +346,8 @@ export {
   approvalGateAtom,
   ApprovalGateHandler,
   APPROVAL_GRANTED_KEY,
+  APPROVAL_GRANTED_NODES_KEY,
+  isGateApproved,
   APPROVAL_GRANTED_OUTPUT,
   isApprovalGateHandler,
   groundednessAtom,
