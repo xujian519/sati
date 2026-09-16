@@ -2,6 +2,72 @@
 
 本文件按版本记录 Sati 的重要变更。桌面端版本号（`release(desktop)`）与根 `package.json` 由 `scripts/bump-version.mjs` 同步维护。
 
+## v0.2.1 - 2026-09-16
+
+> **版本目标（2026-09-16）**：网关协议 1.9 活跃 turn 绝对投影（长回答刷新不再丢开头）、可选功能「未配置 = 关闭」判据收敛、PilotDeck 2026-09 上游切片分批移植（#574/#587/#588/#590/#593）、issue #147 AgentLoop 拆解第二批六模块收尾，以及技术债集中清算（#334/#339/#340/#341/#343/#346/#348/#352/#355/#357/#358/#362/#363/#365/#366/#376）。
+> **版本说明**：本次由 v0.1.13 直接发布 v0.2.1（0.2.0 未单独发版），条目涵盖 v0.1.13 以来的全部变更。
+> **上游同步（2026-09）**：PilotDeck 2026-09 上游引入方案（`docs/pilotdeck-2026-09-upstream-port-plan.md`，6 项分批含非目标清单）中与本仓库现状不冲突的切片——活跃 turn 绝对投影、可选功能默认关闭、推理强度不静默夹取、shell 卡片展示层解信封、token 计数放行特殊 token 字面量；非目标清单列明的项不在本期范围。
+
+### Feat
+- feat(gateway): 活跃 turn 绝对投影（协议 MINOR 1.9）——长回答进行中刷新会话不再丢失开头，投影载荷抽成具名方法（上游 #593 切片）
+- feat(gateway): 协议方法版本台账化——`PROTOCOL_METHOD_VERSION` 覆盖 `WsGatewayMethod` 每个成员，`SATI_GATEWAY_PROTOCOL_VERSION` 由其派生，新增 `check:protocol-version` 门禁（#362）
+- feat(config): 可选功能「未配置 = 关闭」——未配置的可选能力不再默认启用，判定收敛为单一谓词（上游 #588 裁剪版）
+- feat(scripts): 技术债指标基线加新鲜度校验门禁（issue #340）
+
+### Fix
+- fix(rule): 分层规则包缓存键改为**规则包内容指纹**——长驻进程改层规则文件后即时重载，消除陈旧规则（#355）
+- fix(rule): 规则资产语义增强 3 项——全角字符漏报、安防场景误伤、重复条目去重（#357）
+- fix(patent): 输出门禁审批放行改为**门粒度**，并补跨链路一致性 fixture（#358）
+- fix(agent): 请求重建对拍改在**派发点**执行——未声明的请求改写 fail-loud，替换原先在 AgentLoop 内自比对的假保证
+- fix(agent): 压缩终态可见——降级/中断/失败不再一律显示为「已压缩」
+- fix(context): token 计数放行特殊 token 字面量（上游 #574 移植）
+- fix(model): 推理强度不再静默夹取（上游 #587 判据切片）
+- fix(ui): shell 卡片只显示命令输出，展示层解掉 `BASH_RESULT` 信封（上游 #590 切片）
+- fix(ui): Search 面板切换 provider 不再抹掉 `tools.paperSearch`
+- fix(ui): `/api/commands/load` 改用与 `/execute` 相同的路径白名单（#365）
+- fix(knowledge): 诊断判据改为施效侧上报，消除三处「假 ready」（#376 A6/A8）
+- fix(knowledge): 诊断显式化「可用性」与「自动注入」两项语义（#366）
+- fix(always-on): `DiscoveryFire` 会话清理失败不再静默，并接线此前死掉的 logger（#346）
+- fix(pilot): 配置校验异常统一汇入诊断通道
+- fix(methodology): TRIZ 数据读取加 fail-safe，注入链收口处兜底
+- fix(desktop): Windows 打包补回 `dist/assets`、`skills`、`rules` 并统一资产复制清单
+- fix(desktop): Windows 验证脚本补齐 vstore 借用语义并加跨实现判据（#348）
+- fix(metrics): 债务指标口径修正——`catch` 纳入 `ui/server`、vendored 子包单列（#341）
+- fix(scripts): 指标文件清单改 git 感知，修不可复现的口径缺陷（issue #340）
+- fix(scripts): 债务度量补 `as unknown as` 双重断言口径（issue #339）
+- fix(session): 账本读取改尾部衔接游标扫描（J-Space 读取路径专项），读取失败不再静默
+- fix(ci): 作用域词表单一事实源与 scope 投影语义统一（#334）
+- fix(ci): issue-triage 标签传输改行协议，修标签名含空格被拆坏
+- fix(ci): PR 追溯门禁剥离渲染后不可见内容（issue #332）
+
+### Refactor
+- refactor(agent): issue #147 拆解收尾——AgentLoop 第二批六模块外迁（终止出口与恢复策略、模型错误恢复链、响应装配与异常处置、请求装配与压缩执行器），循环由 4685 行降至约 1133 行
+- refactor(agent): `TurnRunner` 四条提前终止路径统一收口
+- refactor(router): `createRouterRuntime` 巨型闭包按职责拆为模块，并补齐 #343 特征化测试
+- refactor(tool): `read_file` 巨型 execute 按读取类型拆分（TD-TOOL-001）；`patent_workflow_run` 按模式拆分、`patent_pdf_download` 按职责拆分（#152）
+- refactor(patent): 两个索引存储收敛为单一实现并清退 upsert 队列（#352）；graph/workflow 双轨阶段执行原语合一
+- refactor(team): 通用团队层与专利域解耦，worker 校验改经 `WorkerGate` 注入（#363）
+- refactor(adapters): 渠道单轮处理循环与入站分派前置抽为共享实现（#149）
+- refactor(always-on): `DiscoveryFire` 的 run/rerunPlan 收口到共用管线（#346）
+- refactor(desktop): 运行时布局接线抽到可直测的 `runtime-layout` 模块，shell 侧布局铺陈收敛为一份实现（#348）
+- refactor(ui): 压缩终态展示分支改查表与 if/else 链；shell 正文装配收敛为 `joinShellSections`
+- refactor(config): 可选功能判据改为类型谓词，去掉不可达分支
+- refactor(model): 三档厂商映射收敛为 `threeTierEffort`
+- refactor(gateway): 活跃 turn 快照的投影载荷抽成具名方法
+
+### Test
+- test(rule): 规则包内容指纹单元测试与长驻进程缓存失效回归（#355）
+- test(gateway): 协议台账纯函数与两处弱断言换成强断言（#362）
+- test(gateway): 落盘断言改有界轮询，消除固定 sleep 导致的 CI 偶发失败
+- test(router): 补齐 #343 decide/execute 特征化测试并收窄断言与类型标注
+- test(agent): 清理 `responseAssembly` 测试里未使用的 fixture 辅助
+
+### Chore
+- chore(docs): 各批次决策记录落盘（`docs/notes/implemented/2026-09-16-*.md`），技术债台账销项与指标基线重算（多批）
+- chore(docs): 重新生成事件矩阵（AgentLoop 拆解导致行号位移）
+- ci: pr-tooling 门禁测试整体挂进 quality job
+- docs: PilotDeck 2026-09 上游引入方案（6 项分批，含非目标清单）；修正 `CLAUDE.md`、community-agent-teams 调研文档等的过时表述与失效引用
+
 ## v0.1.13 - 2026-09-14
 
 > **版本目标（2026-09-14）**：提示日期语义收口（冻结以保护 prompt cache + 会话内锚定 + 跨日通知，上游 #569/#571）、PilotDeck `v2026.09.10` 可独立部分移植、C40–C42 技术债清算（`any` 收敛 / 无参 `catch` 意图注释 / 指标口径对齐）、P4a 的 `createLocalGateway` 十刀拆分收尾、P6 收敛（删除零消费 DAG 引擎 + policy-bridge 接线）、渠道契约测试与跨渠道共享去重，以及议题治理体系与 CI 稳定性加固。
