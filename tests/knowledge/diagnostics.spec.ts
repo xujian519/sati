@@ -166,7 +166,7 @@ describe("resolveKnowledgeCapabilities", () => {
     assert.equal(fts?.detail, "trigram");
   });
 
-  it("unicode61 模式：ready 但提示升级 trigram 脚本", () => {
+  it("unicode61 且未上报探测明细（旧快照/未接线）：保留升级提示（legacy 口径）", () => {
     const caps = resolveKnowledgeCapabilities(paths(), {
       embeddingConfigured: false,
       rerankConfigured: false,
@@ -186,6 +186,127 @@ describe("resolveKnowledgeCapabilities", () => {
     const fts = caps.find(cap => cap.id === "kg-fts-tokenizer");
     assert.equal(fts?.status, "missing");
     assert.match(fts?.detail ?? "", /LIKE/);
+  });
+
+  it("A8：unified 库 FTS 非 trigram → 指向重建入口，不给只服务 legacy 的 migrate 脚本", () => {
+    // #376 A8：同一个 unicode61 在两种 schema 下治理方式不同；migrate 脚本只写
+    // patent_kg.db 的 nodes_fts*，对 knowledge.db 无效（旧文案会误导统一库用户）。
+    const caps = resolveKnowledgeCapabilities(paths(), {
+      embeddingConfigured: false,
+      rerankConfigured: false,
+      runtime: statsSnapshot({ kgFtsMode: "unicode61", kgFts: { schema: "unified", tablePresent: true } }),
+    });
+    const fts = caps.find(cap => cap.id === "kg-fts-tokenizer");
+    assert.equal(fts?.status, "ready");
+    assert.match(fts?.detail ?? "", /trim-knowledge-db\.ts --rebuild-kg-fts/);
+    assert.doesNotMatch(fts?.detail ?? "", /migrate-kg-fts-trigram/);
+  });
+
+  it("A8：legacy 库 FTS 非 trigram → 保持 migrate 提示", () => {
+    const caps = resolveKnowledgeCapabilities(paths(), {
+      embeddingConfigured: false,
+      rerankConfigured: false,
+      runtime: statsSnapshot({ kgFtsMode: "unicode61", kgFts: { schema: "legacy", tablePresent: true } }),
+    });
+    const fts = caps.find(cap => cap.id === "kg-fts-tokenizer");
+    assert.equal(fts?.status, "ready");
+    assert.match(fts?.detail ?? "", /migrate-kg-fts-trigram/);
+  });
+
+  it("A8：库中无 FTS 表（unified）→ 归因表缺失，不再误指「Node 未编译 FTS5」", () => {
+    // #376 A8：none 的两种成因动作完全不同——表缺失靠重建（Sati 无统一库建表脚本，
+    // 该表由导入管道生成），运行时无 FTS5 只能换运行环境。
+    const caps = resolveKnowledgeCapabilities(paths(), {
+      embeddingConfigured: false,
+      rerankConfigured: false,
+      runtime: statsSnapshot({ kgFtsMode: "like", kgFts: { schema: "unified", tablePresent: false } }),
+    });
+    const fts = caps.find(cap => cap.id === "kg-fts-tokenizer");
+    assert.equal(fts?.status, "missing");
+    assert.match(fts?.detail ?? "", /无 KG FTS 表/);
+    assert.doesNotMatch(fts?.detail ?? "", /Node 未编译/);
+    assert.match(fts?.detail ?? "", /导入管道/, "统一库的 FTS 表由导入管道生成");
+  });
+
+  it("A8：库中无 FTS 表（legacy）→ 指向 migrate 脚本（该脚本会建表）", () => {
+    const caps = resolveKnowledgeCapabilities(paths(), {
+      embeddingConfigured: false,
+      rerankConfigured: false,
+      runtime: statsSnapshot({ kgFtsMode: "like", kgFts: { schema: "legacy", tablePresent: false } }),
+    });
+    const fts = caps.find(cap => cap.id === "kg-fts-tokenizer");
+    assert.equal(fts?.status, "missing");
+    assert.match(fts?.detail ?? "", /migrate-kg-fts-trigram/);
+  });
+
+  it("A8：FTS 表在但运行时无 FTS5 → 保留运行环境口径", () => {
+    const caps = resolveKnowledgeCapabilities(paths(), {
+      embeddingConfigured: false,
+      rerankConfigured: false,
+      runtime: statsSnapshot({ kgFtsMode: "like", kgFts: { schema: "unified", tablePresent: true } }),
+    });
+    const fts = caps.find(cap => cap.id === "kg-fts-tokenizer");
+    assert.equal(fts?.status, "missing");
+    assert.match(fts?.detail ?? "", /未编译 FTS5/);
+  });
+
+  it("A6：vectors.db 只有 kg 语料（无消费者）→ missing 并列出已索引语料", () => {
+    // #376 A6：KG 语义召回已迁 knowledge.db embeddings，legacy 库里的 kg 语料无人读。
+    const caps = resolveKnowledgeCapabilities(allReadyFakePaths(), {
+      embeddingConfigured: false,
+      rerankConfigured: false,
+      runtime: statsSnapshot({ vectorDbProbe: { opened: true, corpora: ["kg"] } }),
+    });
+    const cap = caps.find(c => c.id === "semantic-vectors");
+    assert.equal(cap?.status, "missing");
+    assert.match(cap?.detail ?? "", /无被消费语料/);
+    assert.match(cap?.detail ?? "", /已索引：kg/);
+  });
+
+  it("A6：有 law 语料且法规消费者在位 → ready 并点名消费通道", () => {
+    const caps = resolveKnowledgeCapabilities(allReadyFakePaths(), {
+      embeddingConfigured: false,
+      rerankConfigured: false,
+      runtime: statsSnapshot({ vectorDbProbe: { opened: true, corpora: ["kg", "law"] } }),
+    });
+    const cap = caps.find(c => c.id === "semantic-vectors");
+    assert.equal(cap?.status, "ready");
+    assert.match(cap?.detail ?? "", /法条语义路消费/);
+  });
+
+  it("A6：vectors.db 打开失败 → missing 且带原因（不再因路径存在报 ready）", () => {
+    const caps = resolveKnowledgeCapabilities(allReadyFakePaths(), {
+      embeddingConfigured: false,
+      rerankConfigured: false,
+      runtime: statsSnapshot({ vectorDbProbe: { opened: false, reason: "版本过旧，请重建" } }),
+    });
+    const cap = caps.find(c => c.id === "semantic-vectors");
+    assert.equal(cap?.status, "missing");
+    assert.match(cap?.detail ?? "", /版本过旧/);
+  });
+
+  it("A6：有 law 语料但无法规消费者 → missing（判据与 legal-fts 行同源）", () => {
+    // vectors.db 的 law 语料只喂 LegalMemoryProvider；无 lawDb 且主库无 law_article
+    // 时该 provider 不组装，索引仍在但无人读。
+    const caps = resolveKnowledgeCapabilities(paths({ vectorsDb: "/data/vectors.db" }), {
+      embeddingConfigured: false,
+      rerankConfigured: false,
+      runtime: statsSnapshot({ vectorDbProbe: { opened: true, corpora: ["law"] } }),
+    });
+    assert.equal(caps.find(c => c.id === "legal-fts")?.status, "missing");
+    const cap = caps.find(c => c.id === "semantic-vectors");
+    assert.equal(cap?.status, "missing");
+    assert.match(cap?.detail ?? "", /无法规消费者/);
+  });
+
+  it("A6：无运行时快照时退回路径型粗粒度判定，并标注未探测语料", () => {
+    const caps = resolveKnowledgeCapabilities(allReadyFakePaths(), {
+      embeddingConfigured: false,
+      rerankConfigured: false,
+    });
+    const cap = caps.find(c => c.id === "semantic-vectors");
+    assert.equal(cap?.status, "ready", "未提供快照时与其余路径型判据同一粒度");
+    assert.match(cap?.detail ?? "", /未探测语料/);
   });
 
   it("case-law 判据与装配对齐：空 knowledge.db 不误报 ready（即使 caseDb 指向同一主库）", () => {

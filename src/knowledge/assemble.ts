@@ -67,7 +67,13 @@ export function buildKnowledgeResolvers(options: BuildKnowledgeResolversOptions)
   if (options.vectorsDb) {
     try {
       vectorDb = new VectorDbSearch({ dbPath: options.vectorsDb, logger: options.logger });
+      // 上报**实际已索引语料**（来自刚打开的库，属施效点事实）：诊断据此与消费者的
+      // 语料声明求交，避免只有 "kg" 语料（KG 语义召回已迁 knowledge.db embeddings）
+      // 的库被报成 ready——即「有索引无消费者」（#376 A6）。
+      options.stats?.setVectorDbProbe({ opened: true, corpora: vectorDb.indexedCorpora() });
     } catch (error) {
+      // 打开/版本检查失败同样上报：此前诊断只看路径存在性，会误报 ready。
+      options.stats?.setVectorDbProbe({ opened: false, reason: errorMessage(error) });
       options.logger?.warn?.(`vectors.db 打开失败，跳过 KG/法条语义召回: ${errorMessage(error)}`);
     }
   }

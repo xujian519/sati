@@ -12,12 +12,37 @@
  */
 
 import type { CircuitBreaker, CircuitBreakerState } from "./circuit-breaker.js";
+import type { KgSchema } from "./kg/schema-introspector.js";
 
 /** 知识图谱 FTS tokenizer 实际生效模式（kg-store 探测结果）。 */
 export type KgFtsMode = "trigram" | "unicode61" | "like" | "unknown";
 
 /** wiki 卡语义索引（运行时 JSONL）生命周期状态。 */
 export type WikiSemanticIndexState = "disabled" | "warming" | "ready" | "failed";
+
+/**
+ * KG FTS 探测明细（`kgFtsMode` 的配套事实；诊断据此选对治理建议）。
+ *
+ * 同一个 mode 在两种 schema 下的处置完全不同，且 `mode=none` 有两种成因——
+ * 故这两项必须由**施效侧**（kg-store 探测结果）上报，诊断不应从路径反推：
+ * - `schema`：unified=knowledge.db（`kg_nodes_fts`）/ legacy=patent_kg.db（`nodes_fts*`）；
+ * - `tablePresent`：FTS 表是否存在于库中。false 时 `none` 的成因是「表缺失」
+ *   （如 `trim-knowledge-db.ts --no-fts` 裁掉），而不是「运行时无 FTS5」。
+ */
+export type KgFtsProbe = {
+  schema: KgSchema;
+  tablePresent: boolean;
+};
+
+/**
+ * vectors.db（legacy 语义索引）打开结果与**实际已索引语料**。
+ *
+ * 由 assemble 打开成功后按事实打点：`corpora` 是库里真实存在的语料，
+ * 诊断据此与「被消费语料」求交——只有 `"kg"` 语料的库即「有索引无消费者」
+ * （KG 语义召回已迁 knowledge.db embeddings），不该报 `ready`。
+ * 打开/版本检查失败时用 `opened:false` 上报原因，避免路径存在即报就绪。
+ */
+export type VectorDbProbe = { opened: true; corpora: readonly string[] } | { opened: false; reason: string };
 
 export type KnowledgeRuntimeStatsSnapshot = {
   /** 检索结果缓存命中/未命中次数（同 query 60s TTL 复用）。 */
@@ -33,6 +58,8 @@ export type KnowledgeRuntimeStatsSnapshot = {
   breakers: Array<{ name: string; state: CircuitBreakerState }>;
   /** KG FTS tokenizer 模式（无 KG 时 unknown）。 */
   kgFtsMode: KgFtsMode;
+  /** KG FTS 探测明细（schema + FTS 表是否存在）；缺省=未打点（旧快照/未接线）。 */
+  kgFts?: KgFtsProbe;
   /** wiki 卡语义索引状态。 */
   wikiSemanticIndex: WikiSemanticIndexState;
   /** 判例自动注入（CaseLawMemoryProvider）是否可用。 */
@@ -41,6 +68,8 @@ export type KnowledgeRuntimeStatsSnapshot = {
   caseLawInjects: number;
   /** embedding 查询端与 knowledge.db 库向量一致性自检结果（未自检时 undefined）。 */
   embeddingConsistency?: { ok: boolean; meanCosine: number };
+  /** vectors.db 探测结果（打开结果 + 实际已索引语料）；缺省=未打点（路径未提供或未注入 stats）。 */
+  vectorDbProbe?: VectorDbProbe;
   /** 法规全文引擎 FTS5 已粘性降级（查询期异常后永久走 LIKE；false=未降级/无引擎）。 */
   legalFtsDegraded: boolean;
   /** 判例全文引擎 FTS5 已粘性降级（同上）。 */
@@ -58,10 +87,12 @@ export class KnowledgeRuntimeStats {
   private rerankFailures = 0;
   private readonly breakers = new Map<string, CircuitBreaker>();
   private kgFtsMode: KgFtsMode = "unknown";
+  private kgFts?: KgFtsProbe;
   private wikiSemanticIndex: WikiSemanticIndexState = "disabled";
   private caseLawAvailable = false;
   private caseLawInjects = 0;
   private embeddingConsistency?: { ok: boolean; meanCosine: number };
+  private vectorDbProbe?: VectorDbProbe;
   private legalFtsDegraded = false;
   private caseLawFtsDegraded = false;
   private likeFallbacks = 0;
@@ -98,6 +129,16 @@ export class KnowledgeRuntimeStats {
 
   setKgFtsMode(mode: KgFtsMode): void {
     this.kgFtsMode = mode;
+  }
+
+  /** KG FTS 探测明细（schema + FTS 表存在性；与 setKgFtsMode 同一探测点打点）。 */
+  setKgFtsProbe(probe: KgFtsProbe): void {
+    this.kgFts = probe;
+  }
+
+  /** vectors.db 打开结果与实际已索引语料（assemble 打开成功后/失败时打点）。 */
+  setVectorDbProbe(probe: VectorDbProbe): void {
+    this.vectorDbProbe = probe;
   }
 
   setWikiSemanticIndexState(state: WikiSemanticIndexState): void {
@@ -145,10 +186,12 @@ export class KnowledgeRuntimeStats {
       rerankFailures: this.rerankFailures,
       breakers: Array.from(this.breakers.entries(), ([name, breaker]) => ({ name, state: breaker.state })),
       kgFtsMode: this.kgFtsMode,
+      kgFts: this.kgFts,
       wikiSemanticIndex: this.wikiSemanticIndex,
       caseLawAvailable: this.caseLawAvailable,
       caseLawInjects: this.caseLawInjects,
       embeddingConsistency: this.embeddingConsistency,
+      vectorDbProbe: this.vectorDbProbe,
       legalFtsDegraded: this.legalFtsDegraded,
       caseLawFtsDegraded: this.caseLawFtsDegraded,
       likeFallbacks: this.likeFallbacks,

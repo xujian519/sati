@@ -71,10 +71,70 @@ function withUnifiedStore(t: test.TestContext): KgStore {
   return store;
 }
 
+/**
+ * 建一个最小 unified 库，FTS 表变体可选（issue #376 A8 的判据面）：
+ * trigram / unicode61（旧导入器或外来库）/ none（如 trim --no-fts 裁掉）。
+ */
+function createUnifiedDbWithFts(dir: string, fts: "trigram" | "unicode61" | "none"): string {
+  const dbPath = join(dir, "kg.db");
+  const db = new DatabaseSync(dbPath);
+  db.exec(`
+    CREATE TABLE kg_nodes (
+      id TEXT PRIMARY KEY, node_type TEXT NOT NULL, name TEXT NOT NULL, title TEXT, content TEXT,
+      domain TEXT NOT NULL DEFAULT 'patent', source TEXT, full_ref TEXT, chapter TEXT,
+      article_number TEXT, law_refs TEXT
+    );
+    CREATE TABLE kg_edges (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, source_id TEXT NOT NULL, target_id TEXT NOT NULL,
+      relation TEXT NOT NULL, weight REAL DEFAULT 1.0, evidence TEXT
+    );
+    INSERT INTO kg_nodes (id, node_type, name, title, content) VALUES ('n1', 'Concept', '三步法', '三步法框架', '三步法框架概述');
+  `);
+  if (fts !== "none") {
+    db.exec(`CREATE VIRTUAL TABLE kg_nodes_fts USING fts5(name, title, content, tokenize='${fts}', content='');`);
+    db.exec(
+      `INSERT INTO kg_nodes_fts (rowid, name, title, content) VALUES (1, '三步法', '三步法框架', '三步法框架概述');`,
+    );
+  }
+  db.close();
+  return dbPath;
+}
+
 test("kg-store(unified): schema 探测为 unified，FTS 为 trigram", t => {
   const store = withUnifiedStore(t);
   assert.equal(store.schemaKind(), "unified");
-  assert.equal(store.ftsMode(), "trigram", "kg_nodes_fts 恒为 trigram tokenizer");
+  assert.equal(store.ftsMode(), "trigram", "kg_nodes_fts 建表 SQL 为 tokenize='trigram'");
+  assert.deepEqual(store.ftsProbe(), { schema: "unified", tablePresent: true });
+});
+
+test("kg-store(unified): FTS 表非 trigram 时如实报 unicode61（不再按 schema 硬编码）", t => {
+  // #376 A8：修复前 unified 分支恒返回 trigram，会把这类库报成 trigram（假 ready，
+  // 诊断也不会给任何提示）。tokenizer 以建表 SQL 为准。
+  const dir = mkdtempSync(join(tmpdir(), "kg-store-unified-u61-"));
+  const dbPath = createUnifiedDbWithFts(dir, "unicode61");
+  const store = new KgStore(dbPath);
+  t.after(() => {
+    store.close();
+    rmSync(dir, { recursive: true, force: true });
+  });
+  assert.equal(store.schemaKind(), "unified");
+  assert.equal(store.ftsMode(), "unicode61");
+  assert.deepEqual(store.ftsProbe(), { schema: "unified", tablePresent: true });
+  assert.equal(store.searchByKeyword("三步法", 5).length, 1, "检索路径不变（FTS 命中或 LIKE 兜底）");
+});
+
+test("kg-store(unified): 库中无 FTS 表时 ftsMode=none 且 ftsProbe 指出表缺失", t => {
+  // #376 A8：none 有两种成因，表缺失 ≠ 运行时无 FTS5——ftsProbe.tablePresent 用于区分。
+  const dir = mkdtempSync(join(tmpdir(), "kg-store-unified-nofts-"));
+  const dbPath = createUnifiedDbWithFts(dir, "none");
+  const store = new KgStore(dbPath);
+  t.after(() => {
+    store.close();
+    rmSync(dir, { recursive: true, force: true });
+  });
+  assert.equal(store.ftsMode(), "none");
+  assert.deepEqual(store.ftsProbe(), { schema: "unified", tablePresent: false });
+  assert.equal(store.searchByKeyword("三步法", 5).length, 1, "无 FTS 走 LIKE 降级仍可召回");
 });
 
 test("kg-store(unified): getNode 解析 law_refs JSON 数组", t => {

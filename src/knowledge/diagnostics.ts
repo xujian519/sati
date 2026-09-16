@@ -19,10 +19,28 @@
  *
  * 判定与 `assemble.ts` 的**接线条件**逐条同源（何处接线、用什么判据），
  * 但不再声称「diagnostics 的 ready ⇔ 已装配」。
+ *
+ * ## 运行期事实由施效侧上报（2026-09-16，issue #376 A6/A8）
+ *
+ * 有两类判据无法从「路径是否存在 / 配置是否打开」推出，只能由**真正施效的那一侧**
+ * 在探测点上报（`KnowledgeRuntimeStats.kgFts` / `vectorDbProbe`），诊断只做判定：
+ *
+ * - `vectors.db` 的**实际已索引语料**：库里只有 `"kg"` 语料时，索引没有任何消费者
+ *   （KG 语义召回已迁 knowledge.db embeddings）；打开失败/版本过旧也不是
+ *   「路径存在」能表达的。被消费的语料由消费者自己声明（`LEGAL_VECTOR_CORPUS`），
+ *   诊断与消费者读同一份声明。
+ * - KG FTS 的 **schema 与表存在性**：同一个 `ftsMode` 在两种 schema 下治理方式不同
+ *   （unified 用 `trim-knowledge-db.ts --rebuild-kg-fts`，legacy 用
+ *   `migrate-kg-fts-trigram.mjs`），且 `ftsMode=none` 的两种成因（库中无 FTS 表 /
+ *   运行时无 FTS5）指向完全不同的动作。
+ *
+ * 判据不得由入参反推（两侧同源必恒真，见 #360 教训）：`kgFts` 取自 kg-store 的
+ * 表结构探测结果，`vectorDbProbe` 取自刚打开的 vectors.db 的 `vector_meta`。
  */
 
 import type { KnowledgeDbPaths } from "./config.js";
-import type { KnowledgeRuntimeStatsSnapshot } from "./shared/knowledge-stats.js";
+import type { KgFtsMode, KgFtsProbe, KnowledgeRuntimeStatsSnapshot, VectorDbProbe } from "./shared/knowledge-stats.js";
+import { LEGAL_VECTOR_CORPUS } from "./legal/legal-memory-provider.js";
 import { openKnowledgeDb } from "./shared/db-version.js";
 import { KNOWLEDGE_DB } from "./shared/schema-versions.js";
 
@@ -118,6 +136,11 @@ export function resolveKnowledgeCapabilities(
   // 判据（patentKgDb/lawDb/vectorsDb）同一粗粒度，故 detail 里如实标注「未探测」。
   const caseDocs = probe?.documents ?? 0;
   const standaloneCaseDb = paths.caseDb && paths.caseDb !== paths.knowledgeDb ? paths.caseDb : undefined;
+  const runtime = options.runtime;
+  // 法规消费者是否在位（判据同 legal-fts 行）：semantic-vectors 的 vectors.db 分支只喂
+  // LegalMemoryProvider，故该消费者不在位时索引无人读（#376 A6 的接线侧条件）。
+  const legalLegAvailable = Boolean(probe?.lawArticles || paths.lawDb);
+  const vectorsLegacy = resolveVectorsDbLegacy(paths, runtime?.vectorDbProbe, legalLegAvailable);
   const capabilities: KnowledgeCapability[] = [
     {
       id: "patent-kg",
@@ -190,13 +213,14 @@ export function resolveKnowledgeCapabilities(
     {
       id: "semantic-vectors",
       label: "离线语义索引",
-      // knowledge.db embeddings（XiaoNuo 产物，144K 向量）为主路径；vectors.db 为 legacy。
-      status: probe?.embeddings ? "ready" : paths.vectorsDb ? "ready" : "disabled",
+      // knowledge.db embeddings（XiaoNuo 产物，144K 向量）为主路径；vectors.db 为 legacy 备选。
+      // 备选分支按「实际语料 ∩ 被消费语料 + 消费者在位」判定（#376 A6）：仅看路径存在性
+      // 会把「有索引无消费者」报成 ready。主库 embeddings 分支不在此列——它的消费者
+      // 还有判例语义与项目笔记两条，与法规消费者是否在位无关。
+      status: probe?.embeddings ? "ready" : vectorsLegacy.status,
       detail: probe?.embeddings
         ? `knowledge.db embeddings ${probe.embeddings.toLocaleString()} 条（复用 XiaoNuo 产物）`
-        : paths.vectorsDb
-          ? undefined
-          : "knowledge.db 无 embeddings（语义召回未启用）",
+        : vectorsLegacy.detail,
     },
     {
       id: "rerank",
@@ -209,7 +233,6 @@ export function resolveKnowledgeCapabilities(
   // 静态能力项如实降级——桌面端无 FTS5 的 Node 下不再误报 ready。
   // 注：自动注入本身仍在（引擎转 LIKE），故不动 autoInject；降级事实由
   // status=missing + detail 表达。
-  const runtime = options.runtime;
   if (runtime) {
     for (const cap of capabilities) {
       if (cap.id === "legal-fts" && runtime.legalFtsDegraded) {
@@ -228,12 +251,8 @@ export function resolveKnowledgeCapabilities(
       id: "kg-fts-tokenizer",
       label: "KG FTS 分词器",
       status: mode === "like" ? "missing" : "ready",
-      detail:
-        mode === "trigram"
-          ? "trigram"
-          : mode === "unicode61"
-            ? "unicode61（建议执行 scripts/migrate-kg-fts-trigram.mjs 升级 trigram）"
-            : "FTS5 不可用已回退 LIKE（如桌面端捆绑 Node 未编译 FTS5）",
+      // 提示按 schema 与表存在性分流（#376 A8）：同一条提示对 unified/legacy 不通用。
+      detail: kgFtsDetail(mode, runtime.kgFts),
     });
   }
   if (runtime && runtime.wikiSemanticIndex !== "disabled") {
@@ -246,6 +265,83 @@ export function resolveKnowledgeCapabilities(
     });
   }
   return capabilities;
+}
+
+/**
+ * vectors.db **被消费的语料**声明（各消费者自己的声明取并集）。
+ *
+ * 目前唯一消费者是法条语义路（`LEGAL_VECTOR_CORPUS`）：KG 语义召回已迁
+ * knowledge.db embeddings，故 legacy 库里的 `"kg"` 语料没有消费者。诊断与
+ * 消费者读同一常量，改语料名不会让两侧悄悄错位（issue #376 A6）。
+ */
+const VECTOR_DB_CONSUMED_CORPORA: readonly string[] = [LEGAL_VECTOR_CORPUS];
+
+/**
+ * vectors.db（legacy 语义索引）能力判定（issue #376 A6）。
+ *
+ * 判据 = 「库中实际已索引语料 ∩ 被消费语料 ≠ ∅」且「消费者在位」——只报
+ * 「索引文件在」会掩盖两种「有索引无消费者」：只含 `"kg"` 语料的库，以及
+ * 有 `"law"` 语料但没有法规引擎（`LegalMemoryProvider` 未组装）的库。
+ * 未提供运行时快照时退回路径型粗粒度判定（与其余路径型判据同一粒度，detail
+ * 如实标注「本次未探测语料」）。
+ */
+function resolveVectorsDbLegacy(
+  paths: KnowledgeDbPaths,
+  probe: VectorDbProbe | undefined,
+  legalLegAvailable: boolean,
+): { status: KnowledgeCapabilityStatus; detail: string } {
+  const consumedHint = VECTOR_DB_CONSUMED_CORPORA.join("/");
+  if (!paths.vectorsDb) {
+    return { status: "disabled", detail: "knowledge.db 无 embeddings（语义召回未启用）" };
+  }
+  if (!probe) {
+    return { status: "ready", detail: `vectors.db（本次未探测语料；仅 ${consumedHint} 语料有消费者）` };
+  }
+  if (!probe.opened) {
+    return { status: "missing", detail: `vectors.db 打不开（${probe.reason}），语义召回降级跳过` };
+  }
+  const consumed = probe.corpora.filter(corpus => VECTOR_DB_CONSUMED_CORPORA.includes(corpus));
+  if (consumed.length === 0) {
+    return {
+      status: "missing",
+      detail: `vectors.db 无被消费语料（已索引：${
+        probe.corpora.length > 0 ? probe.corpora.join("/") : "空"
+      }；仅 ${consumedHint} 被法条语义路消费）`,
+    };
+  }
+  if (!legalLegAvailable) {
+    return {
+      status: "missing",
+      detail: `vectors.db 有 ${consumed.join("/")} 语料但无法规消费者（知识库无 law_article 且未配 SATI_LAW_DB）`,
+    };
+  }
+  return { status: "ready", detail: `vectors.db 语料 ${consumed.join("/")}（法条语义路消费）` };
+}
+
+/**
+ * KG FTS 提示文案（按 schema 与表存在性分流，issue #376 A8）。
+ *
+ * 同一个 mode 的治理方式与 schema 绑定：`unicode61` 在 legacy 上可用 migrate
+ * 脚本升级，unified 上该脚本不适用（它只服务 patent_kg.db）。`like`（=表缺失或
+ * prepare 失败）的成因也决定动作：表缺失靠重建，运行时无 FTS5 只能换环境。
+ * 未上报探测明细（旧快照/未接线）时退回改造前的 legacy 口径文案。
+ */
+function kgFtsDetail(mode: KgFtsMode, probe: KgFtsProbe | undefined): string {
+  if (mode === "trigram") return "trigram";
+  if (mode === "unicode61") {
+    if (probe?.schema === "unified") {
+      // knowledge.db 的 kg_nodes_fts 由 XiaoNuo 导入管道建；migrate 脚本只写
+      // patent_kg.db 的 nodes_fts*，故统一库提示重建入口而非 migrate。
+      return "unicode61（knowledge.db 的 kg_nodes_fts 非 trigram；重建：scripts/trim-knowledge-db.ts --rebuild-kg-fts）";
+    }
+    return "unicode61（建议执行 scripts/migrate-kg-fts-trigram.mjs 升级 trigram）";
+  }
+  if (probe && !probe.tablePresent) {
+    return probe.schema === "unified"
+      ? "库中无 KG FTS 表（检索已降级 LIKE）；该表由知识库导入管道生成，trim 的 --rebuild-kg-fts 仅重建已存在的表"
+      : "库中无 KG FTS 表（检索已降级 LIKE）；重建：node scripts/migrate-kg-fts-trigram.mjs <patent_kg.db>";
+  }
+  return "FTS5 不可用已回退 LIKE（如桌面端捆绑 Node 未编译 FTS5）";
 }
 
 /**

@@ -124,6 +124,8 @@ describe("VectorDbSearch", () => {
       assert.equal(vdb.hasCorpus("kg"), true);
       assert.equal(vdb.hasCorpus("law"), false);
       assert.equal(vdb.dimensionsOf("kg"), 4);
+      // 诊断据此判断「有无被消费的语料」（#376 A6）：这里只有 kg，law 缺失。
+      assert.deepEqual(vdb.indexedCorpora(), ["kg"]);
 
       const hits = vdb.search("kg", Float32Array.from([1, 0, 0, 0]), 2);
       assert.equal(hits.length, 2);

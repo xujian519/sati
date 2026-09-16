@@ -84,20 +84,44 @@ ProjectRuntime.retrieve
 | A7 | `SATI_CASE_DB` 与 knowledge.db 分离时，personal_note 语义路显式关闭并告警，但判例语义源仍注入 caseDb（工具侧可用）而自动注入缺位——两种能力行为不一致，无统一文档 | createLocalGateway.ts:881-899 | 低 |
 | A8 | diagnostics.ts:161 的 migrate 提示未区分 unified/legacy schema（unified 恒为 trigram，提示仅对 legacy 生效） | diagnostics.ts:161 | 低（文档过期） |
 
-### 2.6 A1–A8 处置状态（2026-09-15 复核）
+### 2.6 A1–A8 处置状态（2026-09-15 复核，2026-09-16 更新）
 
-本表是审计快照，逐条复核后状态如下（**不要按上表的行号/描述重新排查**，行号已随 H1–H6 施工而位移）：
+本表是审计快照，逐条复核后状态如下（**不要按上表的行号/描述重新排查**，行号已随 H1–H6 施工而位移）。
+2026-09-16（issue #376 / PR #387）后 A1–A8 全部关闭：
 
 | # | 复核结论（2026-09-15） |
 |---|---|
 | A1 | **已处置（显式化语义，issue #366）**：`case-law` 拆成两项——`status`（判例检索是否可用）+ `autoInject`（是否经 provider 自动注入）。独立 `SATI_CASE_DB` 路径报 `ready` 且 `autoInject:false`，`detail` 写明「经 `patent_case_search` 工具可用，不自动注入」，一行清单亦带该提示。 |
 | A2 | **早已修复**（`33b5d7cc7`，2026-08-13，H1–H6）：catch 分支已 push「无图谱」专利 provider，wiki/IPC 保留。 |
-| A3 | **未处置**（中）：文档承诺「一致性自检失败自动降级跳过」而代码只 warn + 写 stats。 |
+| A3 | **已处置（改文档，issue #376）**：`design/import-xiaonuo-knowledge.md` §4.4 的承诺校正为「仅 `warn` + 写 `embeddingConsistency` 快照」，并写明门控属**已知缺口**及其前置条件（检索构造器需先支持 quality 阈值）。 |
 | A4 | **已修复**（H3）：`legalFtsDegraded`/`caseLawFtsDegraded` 已接入诊断，运行时粘性降级会把两项如实转 `missing`（`diagnostics.spec.ts` 有回归用例）。 |
 | A5 | **主库路径已修复**（行数探测）；独立 legacy 库仍无行数探测，且 `paths.caseDb` 未做存在性校验——与其余路径型判据（`patentKgDb`/`lawDb`/`vectorsDb`）同一粗粒度，`detail` 已如实标注「未探测」。 |
-| A6 | **未处置**（低）：`vectors.db` 存在即 `ready`，未区分 corpus 是否有消费者。 |
-| A7 | **部分处置**：`case-law` 的「工具可用 / 未自动注入」已由 A1 的 `autoInject` 显式表达；personal_note 语义路与判例语义源的行为差异仍无统一文档。 |
-| A8 | **未处置**（低）：migrate 提示未区分 unified/legacy schema。 |
+| A6 | **已处置（按实际语料判定，issue #376）**：`assemble` 打开 `vectors.db` 后上报 `vectorDbProbe`（打开结果 + `vector_meta` 实际语料），`semantic-vectors` 的 legacy 分支改为「实际语料 ∩ 被消费语料（`LEGAL_VECTOR_CORPUS`）≠ ∅ 且法规消费者在位」；只有 `kg` 语料、打开失败、无法规消费者三种情形如实报 `missing` 并点名原因。 |
+| A7 | **已处置（补文档，issue #376）**：新增 §2.7「分离配置下的能力矩阵」，并列写出「自动注入只接主库 / 工具侧走 `SATI_CASE_DB` / `personal_note` 工具侧关闭」三处口径，`import-xiaonuo-knowledge.md` 交叉链接。 |
+| A8 | **已处置（探测 + 分流，issue #376）**：`ftsMode()` 不再按 schema 硬编码 trigram，改由建表 SQL 判定 tokenizer（unified 库里非 trigram 的表此前会被报成 trigram = 假 ready）；`kgFts`（schema + 表存在性）随统计上报，提示按 unified/legacy 分流，`none` 的「表缺失 / 运行时无 FTS5」两种成因也各给出动作。 |
+
+### 2.7 分离配置下的能力矩阵（2026-09-16，issue #376 A7）
+
+判例相关的接线读的**不是同一个库**：自动注入（memory provider）只接主库 `knowledge.db`，
+工具侧走 `SATI_CASE_DB`。于是「`SATI_CASE_DB` 指向主库之外的库」时两者行为分叉——此前无一处
+文档并列写出，本表即该事实源（诊断侧表达这一分叉的唯一出口是 `case-law` 的 `autoInject`）。
+
+| 库配置 | 判例自动注入（`case-law`） | `patent_case_search` 工具 | `personal_note` 语义路 | 诊断输出 |
+|---|---|---|---|---|
+| 默认（全部走主库） | 主库引擎 + 主库笔记索引（**同源**） | 主库引擎 + 主库 embeddings | 自动注入侧与工具侧均开启 | `case-law=ready` 且 `autoInject=true` |
+| `SATI_CASE_DB` 指向**另一个**库 | 仍装配（只看 `options.knowledgeDb`，与 `SATI_CASE_DB` 无关），笔记索引同源可用 | 引擎与语义源换成独立库（库内需有 `case`/`judgment` 向量） | **工具侧关闭并告警**（笔记写在主库，命中无法经独立库引擎回源）；自动注入侧不受影响 | 主库有判例时 `ready` + `autoInject=true`；主库无判例而仅独立库 → `ready` + `autoInject=false` + detail 点名 `patent_case_search` |
+| `SATI_CASE_DB` 指向主库自身 | 同「默认」 | 同「默认」 | 开启 | 同「默认」 |
+
+三点读法：
+
+1. **`ready` 不等于「已装配」**：分离配置下判例检索确实可用（工具可查），只是结果不进入模型上下文——
+   故用 `autoInject` 单独表达；`ready + autoInject=false` 是合法组合，且必须显式出现在输出里（#366）。
+2. **`personal_note` 的关闭理由与判例不同**：它不是「有索引无消费者」，而是「索引与回源引擎不同源」——
+   笔记存在主库、回源却要经 `SATI_CASE_DB` 的引擎，docId 落不到同一 id 空间。故工具侧直接关闭该路并
+   告警（`projectRuntimeFactory`），而 `assemble` 的自动注入侧因两侧都取 `knowledgeDb` 而同源，无需关闭。
+3. **独立库的判例语义完全取决于该库自身**：工具侧按 `SATI_CASE_DB` 建
+   `KnowledgeEmbeddingSearch({docTypes:["case","judgment"]})`；该库无对应向量时 `available=false`
+   语义路静默为空（关键词路不受影响），库缺表/打不开时构造抛错并告警关闭语义路。
 
 ## 3. 可运行性验证结论
 

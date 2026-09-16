@@ -192,8 +192,21 @@ export async function checkEmbeddingConsistency(
 
 - 取样：`SELECT c.content, e.vector FROM chunks c JOIN embeddings e ON e.chunk_id = c.id
   WHERE length(c.content) BETWEEN 100 AND 500 ORDER BY RANDOM() LIMIT 8`（content 短于 100 字信噪比低）
-- 判定：平均余弦 < 0.97 → `warn`（"当前 embedding 模型与知识库向量不匹配，建议改用 bge-m3"），语义召回自动降级跳过（复用既有 `CircuitBreaker`/`guarded` 语义降级路径）
-- 挂载点：`assemble.ts` 构造知识解析器时执行一次；结果写入 `KnowledgeRuntimeStats`（供诊断展示）
+- 判定：平均余弦 < 0.97 → `warn`（"当前 embedding 模型与知识库向量不匹配，建议改用 bge-m3"）；
+  结果写入 `KnowledgeRuntimeStats.embeddingConsistency`（供诊断与排障查看）
+- 挂载点：`assemble.ts` 构造知识解析器时执行一次（`setTimeout(0)` 推迟到 server listen 之后，
+  避免首个 await 前的采样 SQL 阻塞启动）
+- **已知缺口（2026-09-16 校正，issue #376 A3）**：本节此前声称自检失败时「语义召回自动降级跳过
+  （复用既有 `CircuitBreaker`/`guarded` 语义降级路径）」——**代码从未实现该门控**：自检结果的出口
+  只有 `warn` 与 stats 两处，全仓无人据此关闭语义路。要真正门控需先给检索构造器
+  （`createKnowledgeEmbeddingSearch` / `VectorDbSearch`）加 quality/阈值参数，再由 `assemble.ts`
+  按自检结果决定是否注入——改动面超出本模块，故如实保留「仅告警」。
+  运行期的语义降级仍由既有两条路径承担：embedding 未配置 → 语义路入口守卫；
+  embedding 调用连续失败 → `CircuitBreaker`（3 连败开闸 120s）。即「模型不匹配但可调用」时
+  语义召回**照常返回结果**，只是相关性差——这是设计内行为，不是缺陷
+- 分离配置（`SATI_CASE_DB` 指向主库之外的库）下各能力的实际落差见
+  `../knowledge-system-report.md` §2.7「分离配置下的能力矩阵」：自动注入只接主库、
+  工具侧走 `SATI_CASE_DB`、`personal_note` 语义路两侧关闭——口径不同是设计使然
 
 ### 4.5 消费端接线
 
