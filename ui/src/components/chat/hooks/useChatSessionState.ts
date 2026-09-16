@@ -194,13 +194,21 @@ function getUserAttachmentNames(message: ChatMessage): string[] {
   return [...explicitNames, ...parsedNames].sort();
 }
 
-function hasEquivalentUserMessage(messages: ChatMessage[], pendingUserMessage: ChatMessage): boolean {
+export function hasEquivalentUserMessage(messages: ChatMessage[], pendingUserMessage: ChatMessage): boolean {
   const pendingText = normalizeUserMessageText(pendingUserMessage.content);
   const pendingImageCount = Array.isArray(pendingUserMessage.images) ? pendingUserMessage.images.length : 0;
   const pendingAttachmentNames = getUserAttachmentNames(pendingUserMessage);
+  // 同一文本连发两次时，文本 + 图片数 + 附件名可能完全一致（例如重复问同一句），
+  // 只按内容比较会把第二次的乐观气泡吞掉。两侧都带 turnId/runId 时以它为身份
+  // （同一 turn 才是同一条消息），否则退回内容比较。
+  const pendingTurnId = pendingUserMessage.turnId || pendingUserMessage.runId;
 
   return messages.some(message => {
     if (message.type !== "user") return false;
+    const messageTurnId = message.turnId || message.runId;
+    if (pendingTurnId || messageTurnId) {
+      return Boolean(pendingTurnId && messageTurnId && pendingTurnId === messageTurnId);
+    }
     if (normalizeUserMessageText(message.content) !== pendingText) return false;
 
     const imageCount = Array.isArray(message.images) ? message.images.length : 0;

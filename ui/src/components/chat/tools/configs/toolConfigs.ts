@@ -1,4 +1,6 @@
 import { logWarn } from "../../../../utils/logging";
+import type { ToolResult } from "../../types/types";
+import { shellOutput } from "../toolPresentation";
 import { parseStructuredTodos, parseTodoMarkdown } from "./todoParsing";
 
 /**
@@ -162,17 +164,21 @@ export const TOOL_CONFIGS: Record<string, ToolDisplayConfig> = {
     result: {
       type: "collapsible",
       title: data => {
-        const content = typeof data === "string" ? data : text(field(data, "content"));
-        if (!content) return "Output (empty)";
-        const lines = content.split("\n").length;
-        return `Output (${lines} line${lines > 1 ? "s" : ""})`;
+        const output = shellOutput(data as ToolResult | string | null | undefined);
+        // 退出码与耗时是用户判断"命令是否真的成功"的第一信息，放在标题上，
+        // 不必展开正文（正文里的信封包装按展示层解掉，见 toolPresentation）。
+        const meta = [
+          output.exitCode === undefined ? "" : `exit ${output.exitCode ?? "null"}`,
+          output.durationMs === undefined ? "" : `${(output.durationMs / 1000).toFixed(1)}s`,
+        ].filter(Boolean);
+        const suffix = meta.length > 0 ? ` · ${meta.join(" · ")}` : "";
+        if (!output.output) return `Output (empty)${suffix}`;
+        const lines = output.output.split("\n").length;
+        return `Output (${lines} line${lines > 1 ? "s" : ""})${suffix}`;
       },
       defaultOpen: false,
       contentType: "text",
-      getContentProps: data => {
-        const content = typeof data === "string" ? data : text(field(data, "content"));
-        return { content };
-      },
+      getContentProps: data => ({ content: shellOutput(data as ToolResult | string | null | undefined).output }),
     },
   },
 

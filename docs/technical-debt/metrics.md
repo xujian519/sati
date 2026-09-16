@@ -10,7 +10,7 @@
 | src TS 文件 / 行数 | 1032 / 169836 |
 | src JS 文件 | 0 |
 | tests 文件 | 545 |
-| ui/src 文件 / 行数 | 465 / 82807 |
+| ui/src 文件 / 行数 | 467 / 83145 |
 | ui/server 文件 / 行数 | 105 / 31483 |
 
 ## 指标口径
@@ -32,8 +32,8 @@
 | `as unknown as`（双重断言） | 26 | ui/src(19) · adapters(2) · tool(2) |
 | 裸 `console.*` | 158 | cli(137) · telemetry(8) · ui/server(5) |
 | 空 `catch {}` | 1 | ui/server(1) |
-| 无参 `catch {`（总计） | 682 | ui/server(175) · ui/src(115) · adapters(70) |
-| ↳ **无注释**（隐患类，目标） | **123** | — |
+| 无参 `catch {`（总计） | 684 | ui/server(175) · ui/src(117) · adapters(70) |
+| ↳ **无注释**（隐患类，目标） | **125** | — |
 | ↳ 已带意图注释 | 559 | — |
 | `TODO/HACK/FIXME/XXX` | 11 | always-on(4) · tests(4) · ui/src(2) |
 | 分层违规 `ui/server→src` | 14 | — |
@@ -119,7 +119,7 @@
 | `src/adapters/channel/feishu/FeishuChannel.ts` | 1337 |
 | `ui/src/components/app-shell/SidebarV2.tsx` | 1310 |
 | `ui/src/components/chat-v2/processGrouping.ts` | 1294 |
-| `ui/src/components/chat/hooks/useChatSessionState.ts` | 1171 |
+| `ui/src/components/chat/hooks/useChatSessionState.ts` | 1179 |
 | `src/agent/loop/AgentLoop.ts` | 1143 |
 | `ui/server/routes/agent.js` | 1133 |
 | `ui/server/routes/commands.js` | 1132 |
@@ -196,7 +196,7 @@
 |---|---|---|---|---|
 | alwaysOn | 156 | 156 | 0 | 0 |
 | auth | 23 | 23 | 0 | 0 |
-| chat | 367 | 367 | 0 | 0 |
+| chat | 366 | 366 | 0 | 0 |
 | codeEditor | 143 | 143 | 0 | 0 |
 | common | 435 | 435 | 0 | 0 |
 | kanban | 44 | 44 | 0 | 0 |
