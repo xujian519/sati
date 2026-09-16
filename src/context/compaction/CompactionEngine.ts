@@ -74,9 +74,17 @@ export const COMPACT_MAX_OUTPUT_TOKENS = 20_000;
 
 const COMPACT_SUMMARY_FAILURE_COOLDOWN_MS = 60_000;
 
+/**
+ * 压缩终止状态。`fallback` = 摘要模型调用失败或不可用，改用确定性摘要降级
+ * （压缩本身仍然生效）；`cancelled` = 用户中断；`failed` = 压缩流程自身抛错，
+ * 未产出边界。UI 据此区分「已压缩」与「压缩失败/中断」。
+ */
+export type CompactionStatus = "success" | "fallback" | "cancelled" | "failed";
+
 export type CompactionResult = {
   /** Stable identity shared by live and persisted representations of this pass. */
   compactionId: string;
+  status: CompactionStatus;
   trigger: CompactionTrigger;
   preTokens: number;
   postTokens?: number;
@@ -182,113 +190,139 @@ export class CompactionEngine {
     let summaryMessage: CanonicalMessage | undefined;
     let summaryError: string | undefined;
     let summaryUsage: CanonicalUsage | undefined;
+    let summaryCancelled = false;
 
-    if (messagesToSummarize.length === 0) {
-      // Nothing to summarize: still emit a boundary so the transcript captures
-      // the intent, but no model call happens.
-    } else {
-      const summaryAnchors =
-        input.protectedToolNames === null
-          ? buildCompactSummaryAnchors(messagesToSummarize, this.protectedToolNames)
-          : undefined;
-      const summaryInput = projectMessagesForSummary(messagesToSummarize);
-      if (this.isSummaryFailureCooldownActive()) {
-        summaryError = this.summaryFailureError ?? "context summary is in cooldown";
-        summaryMessage = buildDeterministicFallbackSummary(messagesToSummarize, summaryError);
+    try {
+      if (messagesToSummarize.length === 0) {
+        // Nothing to summarize: still emit a boundary so the transcript captures
+        // the intent, but no model call happens.
       } else {
-        try {
-          const result = await this.summarize(summaryInput, input.userInstruction, input.signal, summaryAnchors);
-          summaryMessage = wrapSummaryMessage(result.message);
-          summaryUsage = result.usage;
-          this.summaryFailureCooldownUntil = 0;
-          this.summaryFailureError = undefined;
-        } catch (error) {
-          summaryError = error instanceof Error ? error.message : String(error);
-          this.summaryFailureCooldownUntil = Date.now() + COMPACT_SUMMARY_FAILURE_COOLDOWN_MS;
-          this.summaryFailureError = summaryError;
+        const summaryAnchors =
+          input.protectedToolNames === null
+            ? buildCompactSummaryAnchors(messagesToSummarize, this.protectedToolNames)
+            : undefined;
+        const summaryInput = projectMessagesForSummary(messagesToSummarize);
+        if (this.isSummaryFailureCooldownActive()) {
+          summaryError = this.summaryFailureError ?? "context summary is in cooldown";
           summaryMessage = buildDeterministicFallbackSummary(messagesToSummarize, summaryError);
+        } else {
+          try {
+            const result = await this.summarize(summaryInput, input.userInstruction, input.signal, summaryAnchors);
+            summaryMessage = wrapSummaryMessage(result.message);
+            summaryUsage = result.usage;
+            this.summaryFailureCooldownUntil = 0;
+            this.summaryFailureError = undefined;
+          } catch (error) {
+            summaryError = error instanceof Error ? error.message : String(error);
+            // 用户中断不是摘要失败：不进入失败冷却，否则下一次压缩会被 60s 冷却
+            // 挡掉、静默退化成确定性摘要。
+            summaryCancelled = input.signal?.aborted === true;
+            if (!summaryCancelled) {
+              this.summaryFailureCooldownUntil = Date.now() + COMPACT_SUMMARY_FAILURE_COOLDOWN_MS;
+              this.summaryFailureError = summaryError;
+            }
+            summaryMessage = buildDeterministicFallbackSummary(messagesToSummarize, summaryError);
+          }
         }
       }
-    }
 
-    const boundaryMarker = this.createBoundaryMarker({
-      trigger: input.trigger,
-      preTokens,
-      messagesSummarized: messagesToSummarize.length,
-      summarySucceeded: summaryError === undefined,
-    });
-
-    let diagnostics: ContextDiagnostic[];
-    if (summaryError) {
-      diagnostics = [
-        {
-          code: "compact_summary_failed",
-          severity: "warning" as const,
-          message: summaryError,
-        },
-        {
-          code: "compact_summary_fallback_used",
-          severity: "warning" as const,
-          message: "A deterministic fallback summary was used because the LLM summary call failed or is cooling down.",
-        },
-      ];
-    } else if (summaryMessage) {
-      diagnostics = validateSummaryMarkdownStructure(summaryMessage);
-    } else {
-      diagnostics = [];
-    }
-    if (retainedTailExceededBudget && messagesToKeep !== compactPlan.messagesToKeep) {
-      diagnostics.push({
-        code: "compact_retained_tool_output_truncated",
-        severity: "warning",
-        message:
-          "Oversized retained tool output was replaced with a bounded preview so the compacted context can fit the tail budget.",
-      });
-    }
-
-    const result: CompactionResult = {
-      compactionId,
-      trigger: input.trigger,
-      preTokens,
-      messagesSummarized: messagesToSummarize.length,
-      shadowedMessageIndexes: compactPlan.shadowedMessageIndexes,
-      summaryMessage,
-      boundaryMarker,
-      messagesToKeep,
-      attachments: input.attachments ?? [],
-      hookResults: input.hookResults ?? [],
-      diagnostics,
-      error: summaryError,
-    };
-
-    if (summaryMessage) {
-      result.postTokens = this.estimateMessages(buildPostCompactMessages(result));
-    }
-
-    await this.options.lifecycle?.dispatch({
-      event: "PostCompact",
-      payload: {
+      const boundaryMarker = this.createBoundaryMarker({
         trigger: input.trigger,
-        status: summaryError ? "fallback" : "success",
+        preTokens,
+        messagesSummarized: messagesToSummarize.length,
+        summarySucceeded: summaryError === undefined,
+      });
+
+      let diagnostics: ContextDiagnostic[];
+      if (summaryError) {
+        diagnostics = [
+          {
+            code: "compact_summary_failed",
+            severity: "warning" as const,
+            message: summaryError,
+          },
+          {
+            code: "compact_summary_fallback_used",
+            severity: "warning" as const,
+            message:
+              "A deterministic fallback summary was used because the LLM summary call failed or is cooling down.",
+          },
+        ];
+      } else if (summaryMessage) {
+        diagnostics = validateSummaryMarkdownStructure(summaryMessage);
+      } else {
+        diagnostics = [];
+      }
+      if (retainedTailExceededBudget && messagesToKeep !== compactPlan.messagesToKeep) {
+        diagnostics.push({
+          code: "compact_retained_tool_output_truncated",
+          severity: "warning",
+          message:
+            "Oversized retained tool output was replaced with a bounded preview so the compacted context can fit the tail budget.",
+        });
+      }
+
+      const status: CompactionStatus = summaryCancelled ? "cancelled" : summaryError ? "fallback" : "success";
+      const result: CompactionResult = {
+        compactionId,
+        status,
+        trigger: input.trigger,
+        preTokens,
+        messagesSummarized: messagesToSummarize.length,
+        shadowedMessageIndexes: compactPlan.shadowedMessageIndexes,
+        summaryMessage,
+        boundaryMarker,
+        messagesToKeep,
+        attachments: input.attachments ?? [],
+        hookResults: input.hookResults ?? [],
+        diagnostics,
         error: summaryError,
+      };
+
+      if (summaryMessage) {
+        result.postTokens = this.estimateMessages(buildPostCompactMessages(result));
+      }
+
+      await this.options.lifecycle?.dispatch({
+        event: "PostCompact",
+        payload: {
+          trigger: input.trigger,
+          status,
+          error: summaryError,
+          preTokens,
+          postTokens: result.postTokens,
+          summaryUsage,
+        },
+      });
+      this.options.eventEmitter?.({
+        type: "compact_completed",
+        sessionId: input.sessionId ?? "",
+        turnId: input.turnId ?? "",
+        compactionId,
+        trigger: input.trigger,
+        status,
         preTokens,
         postTokens: result.postTokens,
-        summaryUsage,
-      },
-    });
-    this.options.eventEmitter?.({
-      type: "compact_completed",
-      sessionId: input.sessionId ?? "",
-      turnId: input.turnId ?? "",
-      compactionId,
-      trigger: input.trigger,
-      status: summaryError ? "fallback" : "success",
-      preTokens,
-      postTokens: result.postTokens,
-      messagesSummarized: messagesToSummarize.length,
-    });
+        messagesSummarized: messagesToSummarize.length,
+      });
 
-    return result;
+      return result;
+    } catch (error: unknown) {
+      // 硬失败（非摘要降级）：compact_started 已在上方发出，此处补一条带同一
+      // compactionId 的终态，UI 才能把「压缩失败」与「压缩成功」区分开。异常
+      // 照旧抛出——compactionExecutor 的兜底截断与 turn 失败处理依赖它。
+      this.options.eventEmitter?.({
+        type: "compact_completed",
+        sessionId: input.sessionId ?? "",
+        turnId: input.turnId ?? "",
+        compactionId,
+        trigger: input.trigger,
+        status: "failed",
+        preTokens,
+        messagesSummarized: messagesToSummarize.length,
+      });
+      throw error;
+    }
   }
 
   private estimateMessages(messages: CanonicalMessage[]): number {

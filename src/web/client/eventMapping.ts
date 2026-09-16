@@ -396,6 +396,30 @@ function agentStatusToFrames(
   }
 
   if (event.event === "compact_completed") {
+    const status = typeof detail.status === "string" ? detail.status : "success";
+    // 失败/中断不是「已压缩」：产出状态帧让 UI 显示失败步骤，而不是压缩边界行
+    // （上游 #570 移植）。刻意不走 kind:"error"——TurnRunner 会把可见失败状态记为
+    // hasRecordedVisibleFailureStatus，从而吞掉真正的 turn 失败横幅。
+    if (status === "failed" || status === "cancelled") {
+      return [
+        {
+          ...base,
+          kind: "status",
+          text: status === "failed" ? "compaction_failed" : "compaction_cancelled",
+          tokens: 0,
+          canInterrupt: false,
+          compactProgress: {
+            level: detail.level || 1,
+            stage: detail.stage || "compacting",
+            label: detail.label || detail.stage || "Compacting",
+            state: status === "failed" ? "failed" : "cancelled",
+            pre_tokens: detail.preTokens,
+            reason: status,
+            compaction_id: detail.compactionId,
+          },
+        },
+      ];
+    }
     return [
       {
         ...base,
@@ -408,6 +432,7 @@ function agentStatusToFrames(
         compactLevel: detail.level,
         compactStage: detail.stage,
         compactStageLabel: detail.stageLabel || detail.stage,
+        compactState: status,
         compactMetadata: detail,
         ...(detail.tokenBudget ? { tokenBudget: detail.tokenBudget } : {}),
       },

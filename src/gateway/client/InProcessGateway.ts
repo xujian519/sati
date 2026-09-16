@@ -46,6 +46,8 @@ import { AsyncQueue } from "../util/AsyncQueue.js";
 import type {
   GatewayCronController,
   Gateway,
+  GatewayActiveTurnProjection,
+  GatewayActiveTurnProjectionBlock,
   GatewayActiveTurnSnapshot,
   GatewayActiveTurnSnapshotInput,
   GatewayApprovalDecideInput,
@@ -259,12 +261,27 @@ export type InProcessGatewayOptions = {
 const ACTIVE_TURN_EVENT_LIMIT = 500;
 const ACTIVE_TURN_BYTE_LIMIT = 256 * 1024;
 
+type ActiveTurnProjectionBlock = Omit<GatewayActiveTurnProjectionBlock, "inflight">;
+
 type ActiveTurnReplay = {
   sessionKey: string;
   runId: string;
   events: GatewayEvent[];
   bytes: number;
   truncated: boolean;
+  /**
+   * 本 turn 内各通道的连续文本段（上游 #593 移植）。
+   *
+   * 事件日志按条数 / 字节数截断且从**头部** `shift()`——丢掉的正是同一段正文的
+   * 开头，长回答刷新后就成了「从中间开始」。投影保留每段的全文，且**永不参与截断**。
+   */
+  projection: {
+    blocks: ActiveTurnProjectionBlock[];
+    /** 上一段文本属于哪个通道；通道切换即开启新 epoch。 */
+    currentKind?: "text" | "thinking";
+    textEpoch: number;
+    thinkingEpoch: number;
+  };
 };
 
 export class InProcessGateway implements Gateway {
@@ -444,6 +461,7 @@ export class InProcessGateway implements Gateway {
       events: [],
       bytes: 0,
       truncated: false,
+      projection: { blocks: [], textEpoch: 0, thinkingEpoch: 0 },
     });
     this.emitSinks.set(input.sessionKey, event => queue.enqueue(event));
     const emitGatewayFailureStatus = (status: GatewayRecordAgentStatusMessageInput["status"]): Promise<void> => {
@@ -799,6 +817,7 @@ export class InProcessGateway implements Gateway {
         steerItems: [],
       };
     }
+    const projection = this.activeTurnProjectionPayload(replay);
     return {
       active: true,
       sessionKey: replay.sessionKey,
@@ -807,7 +826,29 @@ export class InProcessGateway implements Gateway {
         .filter(event => this.shouldReplayActiveTurnEvent(input.sessionKey, event))
         .map(event => cloneGatewayEvent(event)),
       ...(replay.truncated ? { truncated: true } : {}),
+      ...(projection ? { projection } : {}),
       steerItems: this.router.getActiveSession(input.sessionKey)?.pendingSteerItems() ?? [],
+    };
+  }
+
+  /**
+   * 快照里的绝对投影；本 turn 尚无正文段时返回 `undefined`（对端据此退回旧行为）。
+   *
+   * 只有「当前通道的最后一段」标记 `inflight`：正文/思考交替时上一步的文本段已经定型，
+   * 宿主应把它当完成态渲染（见 `ActiveTurnReplay.projection`）。
+   */
+  private activeTurnProjectionPayload(replay: ActiveTurnReplay): GatewayActiveTurnProjection | undefined {
+    const { blocks, currentKind } = replay.projection;
+    if (blocks.length === 0) return undefined;
+    const lastBlock = blocks[blocks.length - 1];
+    return {
+      runId: replay.runId,
+      blocks: blocks.map(block => ({
+        kind: block.kind,
+        epoch: block.epoch,
+        text: block.text,
+        ...(block === lastBlock && block.kind === currentKind ? { inflight: true } : {}),
+      })),
     };
   }
 
@@ -1198,6 +1239,8 @@ export class InProcessGateway implements Gateway {
   private recordActiveTurnEvent(sessionKey: string, event: GatewayEvent): void {
     const replay = this.activeTurnReplays.get(sessionKey);
     if (!replay) return;
+    // 投影先于截断更新：事件日志可以从头部丢，投影不能（见 ActiveTurnReplay.projection）。
+    this.appendToActiveTurnProjection(replay.projection, event);
     const copy = cloneGatewayEvent(event);
     const bytes = Buffer.byteLength(JSON.stringify(copy), "utf8");
     replay.events.push(copy);
@@ -1208,6 +1251,31 @@ export class InProcessGateway implements Gateway {
       replay.bytes -= Buffer.byteLength(JSON.stringify(dropped), "utf8");
       replay.truncated = true;
     }
+  }
+
+  /**
+   * 把事件累积进绝对投影。
+   *
+   * epoch 递增只发生在**通道切换**处（正文 ↔ 思考交替），因为 `currentKind`
+   * 在 `model_request_started`（turn 内多步模型调用）时被清空：下一步的首个 delta
+   * 必然触发一次切换，于是同一步内同通道的文本合成一段，跨步则切段。
+   * epoch 的语义因此是「该通道的第几段」，空步不占号。
+   */
+  private appendToActiveTurnProjection(projection: ActiveTurnReplay["projection"], event: GatewayEvent): void {
+    if (event.type === "model_request_started") {
+      projection.currentKind = undefined;
+      return;
+    }
+    if (event.type !== "assistant_text_delta" && event.type !== "assistant_thinking_delta") return;
+    const kind = event.type === "assistant_text_delta" ? "text" : "thinking";
+    let block = projection.blocks[projection.blocks.length - 1];
+    if (projection.currentKind !== kind || block === undefined) {
+      projection.currentKind = kind;
+      const epoch = kind === "text" ? (projection.textEpoch += 1) : (projection.thinkingEpoch += 1);
+      block = { kind, epoch, text: "" };
+      projection.blocks.push(block);
+    }
+    block.text += event.text;
   }
 
   private withActiveTurnRunId(sessionKey: string, event: GatewayEvent): GatewayEvent {

@@ -131,6 +131,7 @@ export async function persistCompactSnapshot(
       extra: {
         tier: compact.tier,
         summarySucceeded: compact.result.error === undefined,
+        status: compact.result.status,
       },
     },
   };

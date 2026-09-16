@@ -2,7 +2,7 @@
 import React from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import type { ChatMessage, ChatRunMode } from "../chat/types/types";
+import type { ChatMessage, ChatRunMode, SatiWorkStatus } from "../chat/types/types";
 import MessagesPaneV2, { buildPrefixOffsets, getVirtualMessageWindow } from "./MessagesPaneV2";
 import { getContextStatus } from "./ComposerV2";
 
@@ -39,12 +39,14 @@ function createPaneElement({
   isAssistantWorking = false,
   runMode = "agent",
   planModeActive = false,
+  workingStatus = null,
 }: {
   messages: ChatMessage[];
   activityMessages?: ChatMessage[];
   isAssistantWorking?: boolean;
   runMode?: ChatRunMode;
   planModeActive?: boolean;
+  workingStatus?: SatiWorkStatus | null;
 }) {
   const scrollContainerRef = React.createRef<HTMLDivElement>();
 
@@ -73,6 +75,7 @@ function createPaneElement({
       isAssistantWorking={isAssistantWorking}
       runMode={runMode}
       planModeActive={planModeActive}
+      workingStatus={workingStatus}
     />
   );
 }
@@ -83,6 +86,7 @@ function renderPane(options: {
   isAssistantWorking?: boolean;
   runMode?: ChatRunMode;
   planModeActive?: boolean;
+  workingStatus?: SatiWorkStatus | null;
 }) {
   return render(createPaneElement(options));
 }
@@ -1008,5 +1012,30 @@ describe("buildPrefixOffsets（P3-5 前缀和缓存）", () => {
     const withCached = getVirtualMessageWindow(heights, 0, 400, 12, prefixOffsets);
     expect(withCached).toEqual(withDefault);
     expect(withCached.totalHeight).toBe(650);
+  });
+});
+
+describe("压缩实时步骤的终态", () => {
+  const workingStatusFor = (state: "running" | "failed" | "cancelled"): SatiWorkStatus => ({
+    text: "compacting",
+    tokens: 0,
+    can_interrupt: true,
+    compactProgress: { level: 3, stage: "compacting", label: "Compacting", state },
+  });
+
+  it("运行中显示「正在压缩」", async () => {
+    renderPane({ messages: [makeMessage(0)], isAssistantWorking: true, workingStatus: workingStatusFor("running") });
+    await waitFor(() => expect(screen.getByText("Compacting context...")).toBeTruthy());
+  });
+
+  it("失败不再显示成「正在压缩」", async () => {
+    renderPane({ messages: [makeMessage(0)], isAssistantWorking: true, workingStatus: workingStatusFor("failed") });
+    await waitFor(() => expect(screen.getByText("Context compaction failed")).toBeTruthy());
+    expect(screen.queryByText("Compacting context...")).toBeNull();
+  });
+
+  it("中断显示为已停止（与摘要失败区分）", async () => {
+    renderPane({ messages: [makeMessage(0)], isAssistantWorking: true, workingStatus: workingStatusFor("cancelled") });
+    await waitFor(() => expect(screen.getByText("Context compaction stopped")).toBeTruthy());
   });
 });

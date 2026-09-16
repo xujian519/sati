@@ -7,11 +7,11 @@
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1032 / 169868 |
+| src TS 文件 / 行数 | 1033 / 170049 |
 | src JS 文件 | 0 |
-| tests 文件 | 545 |
-| ui/src 文件 / 行数 | 465 / 82807 |
-| ui/server 文件 / 行数 | 105 / 31483 |
+| tests 文件 | 549 |
+| ui/src 文件 / 行数 | 470 / 83315 |
+| ui/server 文件 / 行数 | 105 / 31783 |
 
 ## 指标口径
 
@@ -56,15 +56,15 @@
 | `ui/src/components/chat/view/subcomponents/MessageComponent.tsx` | `(anonymous)` | 798 | arrow |
 | `ui/src/components/chat-v2/ComposerV2.tsx` | `ComposerV2` | 780 | function |
 | `ui/src/stores/useSessionStore.ts` | `useSessionStore` | 727 | function |
+| `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` | `useChatRealtimeHandlers` | 719 | function |
 | `ui/src/components/git-panel/hooks/useGitPanelController.ts` | `useGitPanelController` | 704 | function |
-| `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` | `useChatRealtimeHandlers` | 697 | function |
 | `ui/src/components/chat-v2/ChatInterfaceV2.tsx` | `ChatInterfaceV2` | 672 | function |
 | `ui/src/hooks/useProjectsState.ts` | `useProjectsState` | 647 | function |
 | `src/adapters/channel/tui/app/TuiApp.tsx` | `TuiApp` | 643 | function |
 | `src/cli/sati.ts` | `main` | 636 | function |
 | `ui/src/components/app-shell/AppShellV2.tsx` | `AppShellV2` | 630 | function |
 | `ui/src/components/onboarding/view/subcomponents/LlmConfigurationStep.tsx` | `LlmConfigurationStep` | 630 | function |
-| `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` | `(anonymous)` | 600 | arrow |
+| `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` | `(anonymous)` | 622 | arrow |
 | `ui/src/components/main-content/view/MainContent.tsx` | `SplitBody` | 573 | function |
 | `ui/src/components/main-content-v2/CronV2.tsx` | `CronFormView` | 476 | function |
 | `src/router/execution/executeRouterDecision.ts` | `executeRouterDecision` | 449 | function |
@@ -84,37 +84,38 @@
 | `ui/src/components/chat/tools/components/InteractiveRenderers/AskUserQuestionPanel.tsx` | `AskUserQuestionPanel` | 378 | arrow |
 | `ui/src/components/kanban/hooks/useBoardState.ts` | `useBoardState` | 368 | function |
 | `ui/src/components/chat/hooks/useFileMentions.tsx` | `useFileMentions` | 366 | function |
-| `ui/src/components/settings/view/agentRoute/components/RouterSection.tsx` | `RouterSection` | 355 | function |
+| `ui/src/components/settings/view/agentRoute/components/RouterSection.tsx` | `RouterSection` | 357 | function |
 | `src/cli/projectRuntimeFactory.ts` | `createProjectRuntimeResolver` | 349 | function |
 | `ui/src/components/main-content/view/MainContent.tsx` | `MainContent` | 346 | function |
 | `src/gateway/server/GatewayWsConnection.ts` | `dispatchRequest` | 343 | method |
+| `ui/src/components/settings/view/agentSearch/components/ToolsSection.tsx` | `ToolsSection` | 343 | function |
 | `src/patent/graph/domains/inventiveness.ts` | `buildInventivenessGraph` | 342 | function |
 | `ui/src/components/main-content-v2/PlansAndCronJobs.tsx` | `PlansAndCronJobs` | 334 | function |
 | `src/gateway/client/telemetry.ts` | `emitSessionTelemetry` | 333 | function |
 | `ui/src/components/main-content-v2/DashboardV2.tsx` | `DashboardV2` | 332 | function |
 | `ui/src/hooks/useSatiConfig.ts` | `useSatiConfigState` | 332 | function |
-| `ui/src/components/settings/view/agentSearch/components/ToolsSection.tsx` | `ToolsSection` | 328 | function |
 | `ui/src/components/code-editor/view/CodeEditor.tsx` | `CodeEditor` | 310 | function |
 | `ui/src/components/chat-v2/SubagentDetailMessageFlow.tsx` | `SubagentDetailMessageFlow` | 309 | function |
 | `ui/src/components/settings/view/integrations/im/components/WeixinChannelSection.tsx` | `WeixinChannelSection` | 303 | function |
+| `src/gateway/client/InProcessGateway.ts` | `submitTurn` | 300 | method |
 
 ## Top 30 大文件
 
 | 文件 | 行 |
 |---|---|
 | `ui/src/components/main-content-v2/SkillsV2.tsx` | 2525 |
-| `ui/server/sati-bridge.js` | 2228 |
+| `ui/server/sati-bridge.js` | 2289 |
 | `ui/src/components/code-editor/view/subcomponents/PdfDocumentPreview.tsx` | 1885 |
 | `ui/server/routes/taskmaster.js` | 1850 |
 | `ui/src/components/chat/hooks/useChatComposerState.ts` | 1837 |
 | `src/adapters/channel/wecom/WeComChannel.ts` | 1764 |
 | `src/model/catalog/providers.ts` | 1593 |
-| `ui/src/components/chat-v2/MessagesPaneV2.tsx` | 1544 |
+| `ui/src/components/chat-v2/MessagesPaneV2.tsx` | 1556 |
 | `ui/src/components/code-editor/view/subcomponents/CodeEditorBinaryFile.tsx` | 1511 |
 | `src/adapters/channel/weixin/WeixinChannel.ts` | 1497 |
 | `ui/server/routes/git.js` | 1491 |
-| `src/gateway/client/InProcessGateway.ts` | 1421 |
-| `ui/src/stores/useSessionStore.ts` | 1404 |
+| `src/gateway/client/InProcessGateway.ts` | 1489 |
+| `ui/src/stores/useSessionStore.ts` | 1406 |
 | `ui/src/components/main-content-v2/DashboardV2.tsx` | 1345 |
 | `src/adapters/channel/feishu/FeishuChannel.ts` | 1337 |
 | `ui/src/components/app-shell/SidebarV2.tsx` | 1310 |
@@ -129,9 +130,9 @@
 | `ui/server/routes/config.js` | 1100 |
 | `src/model/streaming/streamModel.ts` | 1085 |
 | `src/always-on/runtime/DiscoveryFire.ts` | 1079 |
+| `ui/src/components/chat-v2/MessagesPaneV2.render.test.tsx` | 1042 |
 | `src/cli/sati.ts` | 1028 |
 | `src/adapters/channel/protocol/ImLiveReplyController.ts` | 1017 |
-| `ui/src/components/chat-v2/MessagesPaneV2.render.test.tsx` | 1013 |
 
 ## vendored 子包（单列，不计入上述规模与排名）
 
@@ -159,8 +160,8 @@
 | tool | 61 |
 | agent | 57 |
 | knowledge | 38 |
-| context | 29 |
-| gateway | 29 |
+| gateway | 31 |
+| context | 30 |
 | model | 27 |
 | session | 27 |
 | router | 18 |
@@ -171,9 +172,9 @@
 | rule | 10 |
 | adapters | 9 |
 | pilot | 9 |
+| cli | 8 |
 | literature | 8 |
 | web | 8 |
-| cli | 7 |
 | permission | 4 |
 | test-support | 4 |
 | telemetry | 3 |
@@ -188,7 +189,7 @@
 | runtime | 1 |
 | status | 1 |
 
-| **合计** | **525** |
+| **合计** | **529** |
 
 ## i18n en/zh-CN 对齐
 
@@ -196,12 +197,12 @@
 |---|---|---|---|---|
 | alwaysOn | 156 | 156 | 0 | 0 |
 | auth | 23 | 23 | 0 | 0 |
-| chat | 368 | 368 | 0 | 0 |
+| chat | 370 | 370 | 0 | 0 |
 | codeEditor | 143 | 143 | 0 | 0 |
 | common | 435 | 435 | 0 | 0 |
 | kanban | 44 | 44 | 0 | 0 |
 | routing | 64 | 64 | 0 | 0 |
-| settings | 1044 | 1044 | 0 | 0 |
+| settings | 1046 | 1046 | 0 | 0 |
 | sidebar | 125 | 125 | 0 | 0 |
 | stylePanel | 56 | 56 | 0 | 0 |
 | tasks | 94 | 94 | 0 | 0 |

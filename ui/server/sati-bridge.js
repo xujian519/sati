@@ -1107,6 +1107,69 @@ export function getFallbackSessionActivity(localState) {
   };
 }
 
+/**
+ * 活跃 turn 快照 → 喂给 UI 的帧列表。
+ *
+ * 正文分两路，且**两路都保留**（上游 #593 移植，与上游的「滤掉被覆盖的 delta」不同）：
+ *
+ * - `events` 里的 `assistant_text_delta` 会被网关侧上限截断（从**头部**丢，丢的正是
+ *   长回答的开头），仍是正文的增量来源；
+ * - `projection` 的绝对投影给出**完整全文**，UI 侧用它把当前流式行**覆盖**成全文
+ *   （只在行内容是投影片段的子串时覆盖，见 `useChatRealtimeHandlers`）。
+ *
+ * 不滤掉已被覆盖的 delta 有两个原因：① 未实现 `projection` 的旧网关（或旧版 bridge
+ * 对端）必须保持原行为——滤掉就等于正文整体消失，违反协议 MINOR 的 feature-detect
+ * 约定；② 两路合并的收敛点在 UI 的同一条流式行上（覆盖而非追加），不会出现重复文本。
+ *
+ * 只透出 `inflight` 的那一段（仍在增长的当前正文段）：已完成的段在 turn 进行中
+ * 就已随该步的 assistant 消息落进持久转录，UI 的历史刷新会拿到它们，重放再发一遍
+ * 只会重复。
+ *
+ * 帧形状是 `kind: "text"` + 稳定 id，而不是 `stream_delta`：`stream_delta` 在 UI 是
+ * 无条件**前缀追加**，发全文会叠加成重复文本；`kind: "text"` 携带稳定 id，配合
+ * 「推进当前流式行」的处理路径，重复轮询天然幂等。
+ */
+export function buildActiveTurnMessages(snapshot, sessionId, provider) {
+  const events = Array.isArray(snapshot?.events) ? snapshot.events : [];
+  const runId = typeof snapshot?.runId === "string" && snapshot.runId ? snapshot.runId : "unknown";
+  const blocks = Array.isArray(snapshot?.projection?.blocks) ? snapshot.projection.blocks : [];
+  let projectionFrame = null;
+  for (const block of blocks) {
+    if (block?.kind !== "text" || block.inflight !== true) continue;
+    if (typeof block.text !== "string" || !block.text) continue;
+    projectionFrame = createNormalizedMessage({
+      sessionId,
+      provider,
+      kind: "text",
+      role: "assistant",
+      id: `active-turn:${sessionId}:${runId}:text:${block.epoch}`,
+      content: block.text,
+      isFinal: true,
+      activeTurnProjection: true,
+    });
+  }
+
+  // 投影帧代表「本段正文」，插在最后一个正文 delta 的位置。位置很重要：这一帧必须
+  // 在 delta 之后（先由 delta 建出行、再覆盖成全文），而在其后的事件之前——`tool_use`
+  // 会把流式行 finalize 掉（另起新 id），投影若排在其后就会又建一行、显示成重复文本。
+  let lastTextDeltaIndex = -1;
+  for (let index = 0; index < events.length; index += 1) {
+    if (events[index]?.type === "assistant_text_delta") lastTextDeltaIndex = index;
+  }
+
+  const messages = [];
+  let inserted = projectionFrame === null;
+  for (let index = 0; index < events.length; index += 1) {
+    messages.push(...(gatewayEventToFrames(events[index], sessionId, provider) || []));
+    if (!inserted && index === lastTextDeltaIndex) {
+      messages.push(projectionFrame);
+      inserted = true;
+    }
+  }
+  if (!inserted) messages.push(projectionFrame);
+  return messages;
+}
+
 export async function getSessionActivityViaGateway(sessionId, provider = "sati", includeActiveTurnMessages = true) {
   if (!isSatiSessionKey(sessionId)) {
     return { isProcessing: false, activeRunId: null, activeTurnMessages: [] };
@@ -1124,11 +1187,9 @@ export async function getSessionActivityViaGateway(sessionId, provider = "sati",
     }
     return {
       isProcessing: snapshot.active,
-      activeRunId: snapshot.activeRunId ?? null,
+      activeRunId: typeof snapshot.runId === "string" ? snapshot.runId : null,
       activeTurnMessages:
-        snapshot.active && includeActiveTurnMessages && Array.isArray(snapshot.events)
-          ? snapshot.events.flatMap(event => gatewayEventToFrames(event, sessionId, provider) || [])
-          : [],
+        snapshot.active && includeActiveTurnMessages ? buildActiveTurnMessages(snapshot, sessionId, provider) : [],
     };
   } catch (error) {
     logger.warn("[sati-bridge] failed to read active turn snapshot:", error?.message || error);

@@ -47,6 +47,8 @@
   },
   "compact": {
     "label": "Context compacted",
+    "labelDegraded": "Summary degraded",
+    "labelCancelled": "Stopped (fallback summary kept)",
     "level": "Level {{level}}",
     "tokens": "{{tokens}} tokens before compact",
     "tokensAfter": "{{before}} → {{after}} tokens",
@@ -66,7 +68,8 @@
     "executingTool": "Running tool...",
     "generating": "Generating response",
     "compacting": "Compacting context...",
-    "compactingLevel": "Triggering level {{level}} compaction: {{label}}",
+    "compactFailed": "Context compaction failed",
+    "compactCancelled": "Context compaction stopped",
     "waitingForPermission": "Waiting for permission",
     "retrying": "Reconnecting {{attempt}}/{{max}}{{delay}}",
     "waitingForSubagent": "Waiting for subagent",
