@@ -10,7 +10,7 @@
 | src TS 文件 / 行数 | 1032 / 169913 |
 | src JS 文件 | 0 |
 | tests 文件 | 545 |
-| ui/src 文件 / 行数 | 467 / 82961 |
+| ui/src 文件 / 行数 | 467 / 82987 |
 | ui/server 文件 / 行数 | 105 / 31483 |
 
 ## 指标口径
@@ -109,7 +109,7 @@
 | `ui/src/components/chat/hooks/useChatComposerState.ts` | 1837 |
 | `src/adapters/channel/wecom/WeComChannel.ts` | 1764 |
 | `src/model/catalog/providers.ts` | 1593 |
-| `ui/src/components/chat-v2/MessagesPaneV2.tsx` | 1552 |
+| `ui/src/components/chat-v2/MessagesPaneV2.tsx` | 1556 |
 | `ui/src/components/code-editor/view/subcomponents/CodeEditorBinaryFile.tsx` | 1511 |
 | `src/adapters/channel/weixin/WeixinChannel.ts` | 1497 |
 | `ui/server/routes/git.js` | 1491 |

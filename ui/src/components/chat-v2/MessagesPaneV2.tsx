@@ -1417,18 +1417,22 @@ function getLiveStatusStep(
     const progress = workingStatus.compactProgress;
     // 失败/中断的压缩不是「正在压缩」：给出对应标题与 severity，否则用户看到的是
     // 一个永远转圈的「Compacting context...」（上游 #570 移植）。
-    const failed = progress.state === "failed" || progress.state === "cancelled";
+    let title = t("working.compacting", { defaultValue: "Compacting context..." });
+    let severity: "error" | undefined;
+    if (progress.state === "cancelled") {
+      title = t("working.compactCancelled", { defaultValue: "Context compaction stopped" });
+      severity = "error";
+    } else if (progress.state === "failed") {
+      title = t("working.compactFailed", { defaultValue: "Context compaction failed" });
+      severity = "error";
+    }
     return {
       id: "live-compact",
-      title: failed
-        ? progress.state === "cancelled"
-          ? t("working.compactCancelled", { defaultValue: "Context compaction stopped" })
-          : t("working.compactFailed", { defaultValue: "Context compaction failed" })
-        : t("working.compacting", { defaultValue: "Compacting context..." }),
+      title,
       detail: progress.label || progress.stage || "",
       phase: "compact",
       state: progress.state || "running",
-      ...(failed ? { severity: "error" } : {}),
+      ...(severity ? { severity } : {}),
     };
   }
 
