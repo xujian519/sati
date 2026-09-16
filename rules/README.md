@@ -153,7 +153,10 @@ overrides: ./local-rules/   # 可选，相对清单所在目录；项目私有�
 
 **无清单时回退默认**：仅加载 `rules/base`（零配置可用）。坏包不阻塞：单层加载失败记 warning 继续。
 
-> **接线状态（2026-08）**：`scope=pack` 仅接入 `rule_check` 工具（缓存按清单 mtime 失效）；
+> **接线状态（2026-08；缓存口径 2026-09 修订）**：`scope=pack` 仅接入 `rule_check` 工具
+> （缓存按规则包**内容指纹**失效：清单解析结果 + 各已装载层规则文件的 (文件名, mtime)，
+> 见 `computeRulePackFingerprint`——改了 `rules/base/*` 或某 domain 规则文件而没动
+> `.sati/rules.yaml` 时同样会重载；此前只比清单 mtime，长驻进程内会一直按旧规则评估）；
 > 输出门禁（RuleOutputGate）仍只用 `compliance.yaml`，未消费规则包。
 > `evaluateText` 的 `domain` 过滤参数 v1 由调用方显式传入；rule_check 暂不传（内容设计兜底），
 > 为 v2 IPC 领域自动识别铺路。

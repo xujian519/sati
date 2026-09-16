@@ -69,6 +69,7 @@ export {
   findWorkspaceRoot,
 } from "./runtime/asset-location.js";
 export {
+  computeRulePackFingerprint,
   loadRulePack,
   parseRulePackManifest,
   resolvePackDir,

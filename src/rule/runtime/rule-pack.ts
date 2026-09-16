@@ -11,9 +11,11 @@
  *
  * 无清单时回退默认行为：仅加载 rules/base（零配置可用）。
  * 坏包不阻塞：单层加载失败记 warning 继续。
+ * 调用方做缓存失效判断请用 computeRulePackFingerprint（清单 + 各层规则文件），
+ * 只比对清单 mtime 会漏掉「改了层规则文件而没动清单」。
  */
 
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { parseDocument } from "yaml";
 import type { RuleSet } from "../protocol/types.js";
@@ -130,6 +132,41 @@ export function resolvePackDir(nameOrPath: string): string | null {
   return null;
 }
 
+/** 清单展开后的单个层引用（顺序即加载顺序）。 */
+type LayerRef = {
+  /** 层名：`base` / `domain:<name>` / `overrides`。 */
+  name: string;
+  /** 内置包名或路径引用原文。 */
+  ref: string;
+  kind: "builtin" | "path";
+};
+
+/**
+ * 按清单展开层引用序列：base → domains（声明顺序）→ overrides。
+ *
+ * `loadRulePack` 的实际加载与 `computeRulePackFingerprint` 的指纹采集**共用**此函数，
+ * 保证「指纹描述的层集合」与「真正加载的层集合」同源——两处各写一份迟早会让指纹
+ * 指向一组并未参与加载的目录（那正是「缓存键看起来覆盖了、实际没有」的成因）。
+ */
+function resolveLayerRefs(manifest: RulePackManifest): LayerRef[] {
+  const refs: LayerRef[] = [{ name: "base", ref: manifest.base, kind: isAbsolute(manifest.base) ? "path" : "builtin" }];
+  for (const domain of manifest.domains) {
+    refs.push({ name: `domain:${domain}`, ref: domain, kind: isAbsolute(domain) ? "path" : "builtin" });
+  }
+  if (manifest.overrides !== undefined) {
+    refs.push({ name: "overrides", ref: manifest.overrides, kind: "path" });
+  }
+  return refs;
+}
+
+/**
+ * 解析层目录：builtin 走候选目录（找不到返回 null）；path 相对清单所在目录解析
+ * （目录可能不存在，交由加载器记 warning / 由指纹记为占位）。
+ */
+function resolveLayerDir(manifestDir: string, layer: LayerRef): string | null {
+  return layer.kind === "builtin" ? resolvePackDir(layer.ref) : resolve(manifestDir, layer.ref);
+}
+
 /** 校验包目录内的 pack.yaml；问题记 warning（不阻塞规则加载）。 */
 function checkPackManifest(dir: string, layerName: string, warnings: string[]): void {
   const manifestPath = join(dir, PACK_MANIFEST_FILE);
@@ -179,10 +216,11 @@ export function loadRulePack(options: { manifestPath?: string } = {}): RulePackL
 
   const manifestDir = manifestPath !== null ? dirname(manifestPath) : process.cwd();
 
-  const loadLayer = (layerName: string, dirOrPath: string, refType: "builtin" | "path"): void => {
-    const dir = refType === "builtin" ? resolvePackDir(dirOrPath) : resolve(manifestDir, dirOrPath);
+  const loadLayer = (layer: LayerRef): void => {
+    const layerName = layer.name;
+    const dir = resolveLayerDir(manifestDir, layer);
     if (dir === null) {
-      warnings.push(`规则包 ${layerName} 未找到（引用: ${dirOrPath}），跳过`);
+      warnings.push(`规则包 ${layerName} 未找到（引用: ${layer.ref}），跳过`);
       return;
     }
     if (existsSync(join(dir, PACK_MANIFEST_FILE))) {
@@ -199,12 +237,9 @@ export function loadRulePack(options: { manifestPath?: string } = {}): RulePackL
     layerOrder.push({ name: layerName, ruleSet: mergeRuleSets(ruleSets) });
   };
 
-  loadLayer("base", manifest.base, isAbsolute(manifest.base) ? "path" : "builtin");
-  for (const domain of manifest.domains) {
-    loadLayer(`domain:${domain}`, domain, isAbsolute(domain) ? "path" : "builtin");
-  }
-  if (manifest.overrides !== undefined) {
-    loadLayer("overrides", manifest.overrides, "path");
+  // 层集合由 resolveLayerRefs 展开（与 computeRulePackFingerprint 同源）。
+  for (const layer of resolveLayerRefs(manifest)) {
+    loadLayer(layer);
   }
 
   // 逐层合并并记录来源；domain/overrides 覆盖 base 规则时记审计 warning。
@@ -228,6 +263,77 @@ export function loadRulePack(options: { manifestPath?: string } = {}): RulePackL
     manifestPath,
     manifestMtimeMs,
   };
+}
+
+/** 文件 mtime（毫秒）字符串；读不到记 `?`（与「未变化」区分开）。 */
+function mtimeOf(path: string): string {
+  try {
+    return String(statSync(path).mtimeMs);
+  } catch {
+    return "?";
+  }
+}
+
+/** 目录内规则文件摘要：`<文件名>@<mtime>`（按文件名排序）。目录不可读/未解析出时给状态词。 */
+function ruleFileDigest(dir: string | null): string {
+  if (dir === null) return "missing";
+  let entries: string[];
+  try {
+    entries = readdirSync(dir).sort();
+  } catch {
+    return "unreadable";
+  }
+  const parts: string[] = [];
+  for (const entry of entries) {
+    // 规则文件后缀与 loadRuleSetDir 一致；pack.yaml 是包清单而非规则，但其内容决定
+    // 加载 warning（会出现在工具输出里），故一并纳入摘要。
+    if (entry !== PACK_MANIFEST_FILE && !entry.endsWith(".yaml") && !entry.endsWith(".yml")) continue;
+    parts.push(`${entry}@${mtimeOf(join(dir, entry))}`);
+  }
+  return parts.join(",");
+}
+
+/**
+ * 规则包**内容指纹**：清单（路径 + 解析结果）+ 各层实际规则文件的 (文件名, mtime) 集合。
+ * 供调用方做缓存失效判断（`rule_check` 的 pack 缓存键即此值）。
+ *
+ * 判据全部取自**文件系统当前状态**，不取上一次加载的结果，也不由路径旁推：
+ *   - 只用清单 mtime：分层包的实际内容由各层规则文件决定，清单只是声明；改
+ *     `rules/base/*` 或某 domain 规则文件而不动清单时不会失效（陈旧规则集）；
+ *   - 只用上次加载的 `sources`：会漏掉**新增文件**——新文件的 mtime 永远进不了
+ *     上一次的 sources，故这里每次调用都重新枚举目录；
+ *   - 直接哈希整个 `rules/`：清单声明了哪些层参与加载，未声明目录的内容与加载结果
+ *     无关，纳入会让指纹指向并非实际参与的文件。
+ *
+ * 故顺序必须是「先按清单展开层 → 再枚举各层目录」。每次调用会 stat 各层规则文件；
+ * 规则文件数量本身不多（内置 base 4 个、每 domain 数个），开销可接受——这条路径
+ * （`rule_check(scope:"pack")`）不是热路径，而陈旧合规规则是「该拦的没拦」。
+ *
+ * 该函数是**全函数**：清单/目录/文件的读取失败都在内部降级为占位符（`absent` /
+ * `unparsable` / `missing` / `unreadable` / `?`），不抛错。调用方因此不应为它加
+ * 「出错就用旧缓存」的兜底——那会把本缺陷（静默陈旧）原样请回来。
+ */
+export function computeRulePackFingerprint(options: { manifestPath?: string } = {}): string {
+  const manifestPath = resolveRulePackManifestPath(options.manifestPath);
+  let manifest: RulePackManifest = { base: "base", domains: [] };
+  let manifestState = "absent";
+  if (manifestPath !== null) {
+    try {
+      manifest = parseRulePackManifest(readFileSync(manifestPath, "utf8"));
+      // 用**解析结果**而非清单 mtime 描述清单：mtime 变而内容没变（touch / 重新
+      // checkout 等价内容）不该空转重载；内容变则必须失效，与 mtime 是否变动无关。
+      manifestState = JSON.stringify(manifest);
+    } catch {
+      manifestState = "unparsable";
+    }
+  }
+  const manifestDir = manifestPath !== null ? dirname(manifestPath) : process.cwd();
+  const parts = [`manifest:${manifestPath ?? "-"}:${manifestState}`];
+  for (const layer of resolveLayerRefs(manifest)) {
+    const dir = resolveLayerDir(manifestDir, layer);
+    parts.push(`${layer.name}:${dir ?? "-"}:${ruleFileDigest(dir)}`);
+  }
+  return parts.join("\n");
 }
 
 /** layers 摘要（如 "base 8 + domain:mechanical 1 + overrides 1"），供工具输出。 */

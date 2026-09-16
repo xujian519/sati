@@ -1,12 +1,11 @@
-import { statSync } from "node:fs";
 import {
+  computeRulePackFingerprint,
   evaluateText,
   loadPatentComplianceRuleSet,
   loadPatentElectricalRuleSet,
   loadPatentFullRuleSet,
   loadRulePack,
   loadSynonymsAsset,
-  resolveRulePackManifestPath,
   summarizeRulePackLayers,
   type RulePackLoadResult,
   type RuleSet,
@@ -39,26 +38,30 @@ const AVAILABLE_SCOPES = "patent, patent-electrical, patent-full, pack";
  * 允许 agent 在发布合规敏感输出前显式调用规则引擎，对文本执行确定性检查
  * （keyword_blocklist / pattern_analysis / structural_analysis / citation_analysis），
  * 返回违规清单（含 severity / action / 法律依据 / 证据）。
- * 只读、无副作用；规则集按 scope 缓存（scope=pack 按清单路径@mtime 失效）。
+ * 只读、无副作用；规则集按 scope 缓存（scope=pack 按规则包**内容指纹**失效，
+ * 见 packCacheKey）。
  */
 export function createRuleCheckTool(deps?: RuleCheckDeps): SatiToolDefinition<RuleCheckInput> {
   /**
    * 单一缓存：scope → { ruleSet, pack, key }。
-   * pack 的 key = 清单路径@mtime，变化即重载；清单缺失/被删 → key=null 触发重载。
+   * pack 的 key = 规则包内容指纹（清单 + 各层规则文件）；变化即重载。
    * 其余 scope 的 key 恒为 null（仅缓存一次）。
    */
   const cache = new Map<string, { ruleSet: RuleSet; pack: RulePackLoadResult | null; key: string | null }>();
 
-  const packCacheKey = (): string | null => {
-    const manifestPath = resolveRulePackManifestPath();
-    if (manifestPath === null) return null;
-    try {
-      return `${manifestPath}@${statSync(manifestPath).mtimeMs}`;
-    } catch {
-      // 清单在定位后被删除：key 置 null 触发重载
-      return null;
-    }
-  };
+  /**
+   * 规则包缓存键 = 内容指纹（清单 + 各层实际规则文件的 (文件名, mtime)）。
+   *
+   * 曾经的键只覆盖**顶层清单 mtime**：用户改 `rules/base/*` 或某 domain 规则文件而没动
+   * `.sati/rules.yaml` 时，长驻进程（gateway / desktop，Sati 的主形态）内的缓存永不失效，
+   * `rule_check(scope:"pack")` 一直按旧规则评估且没有任何信号——该拦的没拦、已废弃的还在拦。
+   *
+   * 指纹由 `rule-pack.ts` 计算，与真正加载的层集合同源（同一份清单展开逻辑），且每次
+   * 调用都重新枚举各层目录，因此「新增文件」也被覆盖。此处**不做「算不出来就用旧缓存」
+   * 的兜底**：那会把静默陈旧原样请回来；`computeRulePackFingerprint` 内部已把各类读取
+   * 失败降级为占位符，不会抛错。
+   */
+  const packCacheKey = (): string => computeRulePackFingerprint();
 
   const resolve = (scope: string): { ruleSet: RuleSet; pack: RulePackLoadResult | null } => {
     const isPack = scope === "pack" && deps?.loader === undefined;
