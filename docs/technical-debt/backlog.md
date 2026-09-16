@@ -768,12 +768,16 @@
 
 ## 13. rule（宪法规则 · B3 ✅）
 
-**模块概况**：11 TS + 9 测试；YAML（`rules/**`）经 RuleLoader 校验 → RuleEngine 确定性评估 → RuleOutputGate / policy-bridge。已落地分层规则包与输出门禁 HITL 审批闭环；债在**缓存失效键、未接线的 policy-bridge、YAML↔代码约定耦合**。
+**模块概况**：11 TS + 9 测试；YAML（`rules/**`）经 RuleLoader 校验 → RuleEngine 确定性评估 → RuleOutputGate / policy-bridge。已落地分层规则包与输出门禁 HITL 审批闭环；债在**未接线的 policy-bridge**与**YAML↔代码约定耦合**。（2026-09-16 附注：原「缓存失效键」一条已关闭——分层规则包的缓存失效判据改为内容指纹，见 `TD-RULE-N01` 与 `docs/notes/implemented/2026-09-16-rule-pack-cache-fingerprint.md`。）
 
 - **TD-RULE-N01** · `rule_check(pack)` 缓存失效键只覆盖清单 mtime，层规则文件修改不致源
-  - 类别：I · 严重级：P2 · 工作量：S · 状态：new
-  - 位置：`src/tool/builtin/ruleCheck.ts:54-66`、`src/rule/runtime/rule-pack.ts:162-169`
-  - 影响：长驻进程内只改 base/domains/overrides 任一规则文件而未改顶层 `.sati/rules.yaml` 时，`rule_check(scope:"pack")` 返回陈旧规则集。建议：缓存键改为清单 mtime + 各已装载层规则文件 mtime 集合/内容摘要。
+  - 类别：I · 严重级：P2 · 工作量：S · 状态：**done（#389）**
+  - 处置：新增 `computeRulePackFingerprint()`（`src/rule/runtime/rule-pack.ts`）——指纹 = 清单**解析结果** + 各已装载层规则文件的 `(文件名, mtimeMs)`；`ruleCheck.ts` 的 pack 缓存键改调它（原实现为 `<清单路径>@mtimeMs`）。
+  - 口径更正（核码结论）：issue 建议的「清单 mtime + 各已装载层规则文件 mtime 集合」**照字面实现会留一个同型漏洞**——`sources` 是**上一次加载**的产物，新增的层规则文件不在其中，其 mtime 永远进不了摘要（issue 自己在「额外信息」里点到这个风险）。故改为**每次调用重新枚举各层目录**，同时覆盖「原地修改」（mtime）与「增删文件」（文件名集合）。「按目录 mtime」的折中方案也被否决：目录 mtime 只在增删时变，**不覆盖原地修改**，而后者正是主场景（决策记录备选 3）。
+  - 判据同源：层展开抽成 `resolveLayerRefs()`，`loadRulePack` 的加载与指纹采集共用一份（两处各写一份会让指纹指向并未参与加载的目录）。
+  - 负控制（5 组，逐条核对转红名单）：① 把 `packCacheKey` 还原为旧的清单 mtime 实现 ⇒ 工具层 3 例转红（`tests/tool/builtin/rule-check.spec.ts` 的长驻进程三条）、其余 25 例绿；② 指纹丢掉各层枚举 ⇒ 单测「各层规则文件」「新增/删除」「同源」3 例 + 工具层 3 例转红，而「未声明目录」「清单内容」保持绿；③ 摘要只记文件名不记 mtime ⇒ mtime 判据的 3 例转红（「增删文件」「同源」复绿，证明两条机制独立）；④ 指纹额外纳入各层目录的**兄弟目录**（「哈希整目录」折中方案的变体）⇒ 仅「不越界到未声明目录」1 例转红；⑤ 清单 part 改用 mtime 而非解析结果 ⇒ 仅「mtime 变而内容不变时保持稳定」1 例转红。
+  - 位置：`src/tool/builtin/ruleCheck.ts:52-64`、`src/rule/runtime/rule-pack.ts:136-167`（层展开）、`:269-337`（摘要与指纹）
+  - 副作用（行为变化）：改任意层规则文件（原地改/新增/删除）都会在下次 `rule_check(pack)` 重载；内容未变时不重载。`RulePackLoadResult` 结构未动（`manifestMtimeMs` 保留）。
 - **TD-RULE-N02** · policy-bridge 工具拦截通道未接入生产路径
   - 类别：F · 严重级：P2 · 工作量：S · 状态：done
   - 位置：`src/rule/runtime/policy-bridge.ts`
