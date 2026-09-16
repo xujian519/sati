@@ -2,16 +2,18 @@
  * src/patent/chemistry — 化学式识别索引（持久化）。
  *
  * 识别结果（ChemicalStructureResult）以 JSON 文件形式落盘（默认
- * `.sati/chemistry-index.json`，工作区根目录下），供后续检索/校验管线消费。
- * 写入走原子写（同目录临时文件 + rename），同一文件路径的并发 upsert 在进程内
- * 串行化，避免"读-改-写"竞态丢条目——与 figure/index-store.ts 同构。
+ * `.sati/chemistry-index.json`，工作区根目录下），供后续检索/校验管线消费。写入走原子写
+ * （同目录临时文件 + rename），同一文件路径的并发 upsert 在进程内串行化，避免"读-改-写"
+ * 竞态丢条目。
+ *
+ * 读容错/版本守卫/shape 守卫/队列串行化/损坏备份等共性已收敛到
+ * `src/patent/shared/index-store.ts`；本模块只声明化学索引的域差异（来源键为 `sourceKey`、
+ * 按来源键字典序排序、analysis 的校验字段）。
  *
  * 本模块不依赖 tool 层：文件路径由调用方（工具层）经路径沙箱解析后传入。
  */
 
-import { copyFile, mkdir, readFile } from "node:fs/promises";
-import { dirname } from "node:path";
-import { atomicWriteJson } from "../persist-utils.js";
+import { createIndexStore, type IndexFile, type LoadIndexResult } from "../shared/index-store.js";
 import type { ChemicalStructureResult } from "./types.js";
 
 /** 索引文件版本（结构不兼容时升版，旧文件按空索引处理）。 */
@@ -34,17 +36,9 @@ export type ChemistryIndexEntry = {
 };
 
 /** 索引文件结构。 */
-export type ChemistryIndexFile = {
-  version: typeof CHEMISTRY_INDEX_VERSION;
-  updatedAt: string;
-  entries: ChemistryIndexEntry[];
-};
+export type ChemistryIndexFile = IndexFile<typeof CHEMISTRY_INDEX_VERSION, ChemistryIndexEntry>;
 
-export type LoadChemistryIndexResult = {
-  entries: ChemistryIndexEntry[];
-  /** 非致命异常提示（文件损坏/版本不兼容/无效条目被忽略），无则省略。 */
-  warning?: string;
-};
+export type LoadChemistryIndexResult = LoadIndexResult<ChemistryIndexEntry>;
 
 function isChemistryIndexEntry(value: unknown): value is ChemistryIndexEntry {
   if (typeof value !== "object" || value === null) return false;
@@ -64,70 +58,25 @@ function isChemistryIndexEntry(value: unknown): value is ChemistryIndexEntry {
   );
 }
 
+const store = createIndexStore({
+  label: "化学索引",
+  version: CHEMISTRY_INDEX_VERSION,
+  keyOf: entry => entry.sourceKey,
+  compare: (a, b) => a.sourceKey.localeCompare(b.sourceKey),
+  isValidEntry: isChemistryIndexEntry,
+});
+
 /** 读取索引：文件缺失 → 空索引；损坏/版本不兼容 → 空索引 + warning（不抛出）。 */
 export async function loadChemistryIndex(filePath: string): Promise<LoadChemistryIndexResult> {
-  let raw: string;
-  try {
-    raw = await readFile(filePath, "utf8");
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return { entries: [] };
-    throw error;
-  }
-  try {
-    const parsed = JSON.parse(raw) as Partial<ChemistryIndexFile>;
-    if (parsed.version !== CHEMISTRY_INDEX_VERSION || !Array.isArray(parsed.entries)) {
-      return { entries: [], warning: "化学索引版本不兼容或结构异常，已按空索引处理" };
-    }
-    const entries = parsed.entries.filter(isChemistryIndexEntry);
-    const dropped = parsed.entries.length - entries.length;
-    return dropped > 0 ? { entries, warning: `化学索引中存在 ${dropped} 条无效条目，已忽略` } : { entries };
-  } catch {
-    return { entries: [], warning: "化学索引文件损坏，已按空索引处理" };
-  }
+  return store.load(filePath);
 }
 
 /** 整体写回索引（调用方负责保证目录可写；不串行化，批量重建场景用）。 */
 export async function saveChemistryIndex(filePath: string, entries: ChemistryIndexEntry[]): Promise<void> {
-  await mkdir(dirname(filePath), { recursive: true });
-  await atomicWriteJson(
-    filePath,
-    JSON.stringify(
-      { version: CHEMISTRY_INDEX_VERSION, updatedAt: new Date().toISOString(), entries } satisfies ChemistryIndexFile,
-      null,
-      2,
-    ),
-  );
+  return store.save(filePath, entries);
 }
 
 /** 按 sourceKey 合并进索引：同源覆盖、新源追加，排序后写回。 */
 export async function upsertChemistryIndex(filePath: string, entry: ChemistryIndexEntry): Promise<void> {
-  const previous = upsertQueues.get(filePath) ?? Promise.resolve();
-  const run = previous.then(async () => {
-    const { entries, warning } = await loadChemistryIndex(filePath);
-    // 命中损坏/版本不兼容/含无效条目的旧索引时，先保留原始文件备份，
-    // 避免用仅含新条目的内容静默覆盖掉原有的有效条目。
-    if (warning) await backupCorruptIndex(filePath);
-    const next = entries.filter(existing => existing.sourceKey !== entry.sourceKey);
-    next.push(entry);
-    next.sort((a, b) => a.sourceKey.localeCompare(b.sourceKey));
-    await saveChemistryIndex(filePath, next);
-  });
-  // 队列吞掉失败，避免一条失败阻塞后续写入；调用方 await run 感知自身失败。
-  upsertQueues.set(
-    filePath,
-    run.catch(() => {}),
-  );
-  await run;
+  return store.upsert(filePath, entry);
 }
-
-/** 原始索引文件备份（`.corrupt-<时间戳>` 后缀）；备份失败不阻断写入。 */
-async function backupCorruptIndex(filePath: string): Promise<void> {
-  try {
-    await copyFile(filePath, `${filePath}.corrupt-${Date.now()}`);
-  } catch {
-    // 备份失败静默降级，索引写入照常进行。
-  }
-}
-
-/** 进程内写队列：同一文件路径的 upsert 串行执行（防读-改-写竞态）。 */
-const upsertQueues = new Map<string, Promise<unknown>>();

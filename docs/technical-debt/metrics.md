@@ -7,9 +7,9 @@
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1029 / 169464 |
+| src TS 文件 / 行数 | 1030 / 169513 |
 | src JS 文件 | 0 |
-| tests 文件 | 540 |
+| tests 文件 | 541 |
 | ui/src 文件 / 行数 | 465 / 82807 |
 | ui/server 文件 / 行数 | 105 / 31483 |
 
@@ -32,9 +32,9 @@
 | `as unknown as`（双重断言） | 26 | ui/src(19) · adapters(2) · tool(2) |
 | 裸 `console.*` | 158 | cli(137) · telemetry(8) · ui/server(5) |
 | 空 `catch {}` | 1 | ui/server(1) |
-| 无参 `catch {`（总计） | 684 | ui/server(175) · ui/src(115) · adapters(70) |
-| ↳ **无注释**（隐患类，目标） | **124** | — |
-| ↳ 已带意图注释 | 560 | — |
+| 无参 `catch {`（总计） | 682 | ui/server(175) · ui/src(115) · adapters(70) |
+| ↳ **无注释**（隐患类，目标） | **123** | — |
+| ↳ 已带意图注释 | 559 | — |
 | `TODO/HACK/FIXME/XXX` | 11 | always-on(4) · tests(4) · ui/src(2) |
 | 分层违规 `ui/server→src` | 14 | — |
 | 分层违规 `src→ui` | 0 | — |
@@ -155,7 +155,7 @@
 
 | 模块 | 测试文件 |
 |---|---|
-| patent | 111 |
+| patent | 112 |
 | tool | 61 |
 | agent | 56 |
 | knowledge | 38 |
@@ -188,7 +188,7 @@
 | runtime | 1 |
 | status | 1 |
 
-| **合计** | **520** |
+| **合计** | **521** |
 
 ## i18n en/zh-CN 对齐
 
