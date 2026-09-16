@@ -305,6 +305,13 @@ export function modelFailureAction(error: CanonicalModelError | undefined): {
       "Increase max output tokens in Settings → Model Provider, or ask the agent to split the answer into smaller parts.";
     return modelFailureActionResult(hint, "settings", "maxOutput");
   }
+  if (error.code === "unsupported_thinking") {
+    // 推理强度不再静默夹取后（上游 #587 判据改进），用户需要一条明确的改选路径：
+    // 消息正文已列出该模型支持的档位，这里指向选择入口。
+    const hint =
+      "Pick one of the thinking strengths listed in the error (the model does not offer the selected one), or switch to a model that supports it.";
+    return modelFailureActionResult(hint, "settings", "thinkingStrength");
+  }
   if (error.code === "image_too_large") {
     const hint = "Resize or remove large images, then retry.";
     return modelFailureActionResult(hint, "prompt", "imageTooLarge");
