@@ -8,6 +8,8 @@ import { ModelRequestError } from "../protocol/errors.js";
 
 export type ThinkingMode = NonNullable<CanonicalThinkingConfig["mode"]>;
 
+type EffortValue = "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+
 export type ThinkingPlan = {
   mode: ThinkingMode;
   enabled: boolean;
@@ -194,7 +196,7 @@ function openAIPlan(mode: ThinkingMode, modelId: string, officialOpenAIProvider:
     return {
       mode,
       enabled: true,
-      effort: clampEffort(mode, ["medium", "high", "xhigh", "max"]),
+      ...effortField(modelId, mode, ["medium", "high", "xhigh", "max"]),
       useOpenAIReasoning: true,
     };
   }
@@ -202,7 +204,7 @@ function openAIPlan(mode: ThinkingMode, modelId: string, officialOpenAIProvider:
     return {
       mode,
       enabled: true,
-      effort: clampEffort(mode, ["none", "low", "medium", "high", "xhigh", "max"]),
+      ...effortField(modelId, mode, ["none", "low", "medium", "high", "xhigh", "max"]),
       useOpenAIReasoning: true,
     };
   }
@@ -210,7 +212,7 @@ function openAIPlan(mode: ThinkingMode, modelId: string, officialOpenAIProvider:
     return {
       mode,
       enabled: true,
-      effort: clampEffort(mode, ["none", "low", "medium", "high", "xhigh", "max"]),
+      ...effortField(modelId, mode, ["none", "low", "medium", "high", "xhigh", "max"]),
       useOpenAIReasoning: true,
     };
   }
@@ -218,12 +220,12 @@ function openAIPlan(mode: ThinkingMode, modelId: string, officialOpenAIProvider:
     return {
       mode,
       enabled: true,
-      effort: clampEffort(mode, ["none", "low", "medium", "high"]),
+      ...effortField(modelId, mode, ["none", "low", "medium", "high"]),
       useOpenAIReasoning: true,
     };
   }
   if (/^(?:o1|o3|o4)(?:\b|[-_])/.test(modelId)) {
-    return { mode, enabled: true, effort: clampEffort(mode, ["low", "medium", "high"]), useOpenAIReasoning: true };
+    return { mode, enabled: true, ...effortField(modelId, mode, ["low", "medium", "high"]), useOpenAIReasoning: true };
   }
   if (officialOpenAIProvider && modelId.startsWith("gpt")) {
     return {
@@ -242,7 +244,7 @@ function anthropicPlan(mode: ThinkingMode, modelId: string, budgetTokens?: numbe
       mode,
       enabled: true,
       thinkingType: "adaptive",
-      effort: clampEffort(mode, ["low", "medium", "high", "max"]),
+      ...effortField(modelId, mode, ["low", "medium", "high", "max"]),
       useAnthropicOutputEffort: true,
     };
   }
@@ -288,7 +290,7 @@ function qwenPlan(mode: ThinkingMode, modelId: string, providerUrl: string, budg
       mode,
       enabled: true,
       thinkingType: "enabled",
-      effort: clampEffort(mode, ["minimal", "low", "medium", "high", "xhigh"]),
+      ...effortField(modelId, mode, ["minimal", "low", "medium", "high", "xhigh"]),
       useOpenAICompatibleThinking: true,
       preserve: true,
     };
@@ -343,25 +345,15 @@ function deepSeekPlan(mode: ThinkingMode, modelId: string): ThinkingPlan {
   // 官方 v4（文档 2026-08 thinking_mode）：reasoning_effort 仅 low/high/max 三档，
   // flash 与 pro 的 effort 映射完全一致（low→low, medium→high, high→high, xhigh→high, max→max）。
   // 旧模型（deepseek-chat 等）保持 high/max 两档语义，避免对旧 API 发送 low。
-  const allowedEffort: ThinkingPlan["effort"][] = /deepseek-v4/.test(modelId)
-    ? ["low", "high", "max"]
-    : ["high", "max"];
-  // medium 按官方映射到 high；xhigh/max 取最高档 max，其余 clamp。
-  let effort: NonNullable<ThinkingPlan["effort"]>;
-  if (mode === "xhigh" || mode === "max") {
-    effort = "max";
-  } else if (mode === "medium") {
-    effort = "high";
-  } else {
-    effort = clampEffort(mode, allowedEffort);
-  }
+  const allowedEffort: EffortValue[] = /deepseek-v4/.test(modelId) ? ["low", "high", "max"] : ["high", "max"];
+  const effort = threeTierEffort(mode) ?? resolveEffort(mode, allowedEffort);
   return {
     mode,
     enabled: true,
     thinkingType: "enabled",
-    effort,
     preserve: true,
     useOpenAICompatibleThinking: true,
+    ...(effort === undefined ? unsupportedEffortField(modelId, mode, allowedEffort) : { effort }),
     ...(isReasoningOnlyModel(modelId) ? { omitTemperature: true } : {}),
   };
 }
@@ -383,14 +375,12 @@ function kimiPlan(mode: ThinkingMode, modelId: string): ThinkingPlan {
     }
     const plan: ThinkingPlan = { mode, enabled: true, omitTemperature: true };
     if (isK3) {
-      // k3 官方仅 low/high/max 三档；medium 就近取 high（与 DeepSeek 官方映射一致）。
-      let effort: NonNullable<ThinkingPlan["effort"]>;
-      if (mode === "xhigh" || mode === "max") {
-        effort = "max";
-      } else if (mode === "medium") {
-        effort = "high";
-      } else {
-        effort = clampEffort(mode, ["low", "high", "max"]);
+      // k3 官方仅 low/high/max 三档，映射与 DeepSeek 一致（见 threeTierEffort）；
+      // 其余走 resolveEffort（未命中即报 unsupported）。
+      const allowedEffort: EffortValue[] = ["low", "high", "max"];
+      const effort = threeTierEffort(mode) ?? resolveEffort(mode, allowedEffort);
+      if (effort === undefined) {
+        return { ...plan, ...unsupportedEffortField(modelId, mode, allowedEffort) };
       }
       plan.effort = effort;
       plan.bodyPatch = { reasoning_effort: effort };
@@ -435,27 +425,62 @@ function minimaxPlan(mode: ThinkingMode, modelId: string): ThinkingPlan {
   return { mode, enabled: true, splitReasoning: true };
 }
 
-function clampEffort(mode: ThinkingMode, allowed: ThinkingPlan["effort"][]): NonNullable<ThinkingPlan["effort"]> {
-  if (mode === "max" && allowed.includes("max")) {
-    return "max";
+/**
+ * 把请求的思考强度解析到模型允许集合。
+ *
+ * - 命中（含 `max → xhigh` **同义别名**：两者都是"尽可能强"，别删）→ 返回该值；
+ * - 未命中 → 返回 `undefined`，由调用方转成 `unsupportedReason`。
+ *
+ * **不做就近取整**（上游 #587 判据改进）：用户的思考强度是显式选择，按 rank 距离
+ * 静默夹取会让请求"看起来成功了"，实际强度与所选不符且无任何提示。宁可报错，
+ * 报错信息里带上允许集合供用户改选。
+ *
+ * ⚠️ 允许集合在本文件按厂商分支硬编码，UI 侧另有一份更粗的副本
+ * （`ui/src/components/chat/constants/thinkingModeAvailability.ts`，决定下拉里哪些档位
+ * 可选）。两者不一致时会出现"能选但请求报错"。后续方向：把允许集合收敛到模型目录
+ * （`model.catalog`）由两侧共同读取，本批不动。
+ */
+function resolveEffort(mode: ThinkingMode, allowed: readonly EffortValue[]): EffortValue | undefined {
+  if (mode === "max") {
+    // `max` 优先用同名档；厂商把最高档叫 `xhigh` 时按同义别名接受（别反过来）。
+    if (allowed.includes("max")) return "max";
+    return allowed.includes("xhigh") ? "xhigh" : undefined;
   }
-  const normalized = mode === "max" ? "xhigh" : mode;
-  if (allowed.includes(normalized as ThinkingPlan["effort"])) {
-    return normalized as NonNullable<ThinkingPlan["effort"]>;
-  }
-  const rank: Record<string, number> = { none: 0, off: 0, minimal: 1, low: 2, medium: 3, high: 4, xhigh: 5, max: 6 };
-  const requested = rank[mode] ?? 3;
-  let best = allowed[0] as NonNullable<ThinkingPlan["effort"]>;
-  let bestDistance = Infinity;
-  for (const effort of allowed) {
-    if (!effort) continue;
-    const distance = Math.abs((rank[effort] ?? 3) - requested);
-    if (distance < bestDistance) {
-      best = effort;
-      bestDistance = distance;
-    }
-  }
-  return best;
+  return allowed.includes(mode as EffortValue) ? (mode as EffortValue) : undefined;
+}
+
+/** `resolveEffort` 的失败形态：ThinkingPlan 的 `unsupportedReason`（含允许集合）。 */
+function unsupportedEffortField(
+  modelId: string,
+  mode: ThinkingMode,
+  allowed: readonly EffortValue[],
+): { unsupportedReason: string } {
+  return {
+    unsupportedReason: `Model ${modelId} does not support thinking strength '${mode}'. Supported: ${allowed.join(", ")}.`,
+  };
+}
+
+/**
+ * deepseek（v4 与旧模型）与 kimi-k3 共用的官方三档映射：`medium → high`、
+ * `xhigh`/`max` → 最高档 `max`。
+ *
+ * 这是"用哪个取值表达用户所选强度"的厂商命名差异，不是把用户的选择换成别的强度，
+ * 故与 `resolveEffort` 的判据并存；命中三档之外的档位仍返回 `undefined` 交给判据。
+ */
+function threeTierEffort(mode: ThinkingMode): EffortValue | undefined {
+  if (mode === "xhigh" || mode === "max") return "max";
+  if (mode === "medium") return "high";
+  return undefined;
+}
+
+/** 命中返回 `{ effort }`，未命中返回 `{ unsupportedReason }`；供 ThinkingPlan 展开。 */
+function effortField(
+  modelId: string,
+  mode: ThinkingMode,
+  allowed: readonly EffortValue[],
+): { effort: EffortValue } | { unsupportedReason: string } {
+  const effort = resolveEffort(mode, allowed);
+  return effort === undefined ? unsupportedEffortField(modelId, mode, allowed) : { effort };
 }
 
 function clampLevel(mode: ThinkingMode): "low" | "medium" | "high" {

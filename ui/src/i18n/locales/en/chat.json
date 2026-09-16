@@ -513,6 +513,7 @@
         "contextOverflow": "Run /compact, start a new session, remove large attachments, or switch to a larger-context model in Settings.",
         "payloadTooLarge": "Reduce attachments/context size, run /compact, or start a new session before retrying.",
         "maxOutput": "Increase max output tokens in Settings → Model Provider, or ask the agent to split the answer into smaller parts.",
+        "thinkingStrength": "Pick one of the thinking strengths listed in the error (the model does not offer the selected one), or switch to a model that supports it.",
         "imageTooLarge": "Resize or remove large images, then retry.",
         "providerRetry": "Retry later, check provider API status, or switch to another provider/model in Settings if it repeats."
       }

@@ -6,7 +6,13 @@ import type {
   ModelDefinition,
   ProviderConfig,
 } from "../../../src/model/index.js";
-import { defaultAgentThinking, resolveThinkingPlan } from "../../../src/model/thinking/registry.js";
+import {
+  defaultAgentThinking,
+  resolveThinkingPlan,
+  throwIfUnsupportedThinkingPlan,
+  type ThinkingMode,
+  type ThinkingPlan,
+} from "../../../src/model/thinking/registry.js";
 
 // DeepSeek v4 与 Kimi K3/K2.7 的官方思考语义（对照 2026-08 官方文档）：
 // - deepseek-v4-flash / deepseek-v4-pro：reasoning_effort 均支持 low/high/max，
@@ -52,8 +58,12 @@ test("deepseek-v4 off disables thinking via thinking.type=disabled", () => {
 test("deprecated deepseek-chat keeps legacy high/max effort semantics", () => {
   const medium = planFor("deepseek", "deepseek-chat", { mode: "medium", enabled: true });
   assert.equal(medium.effort, "high");
+  // low 不在旧模型的允许集合（high/max）内：不再就近夹取成 high，而是显式报不支持
+  // （上游 #587 判据改进——静默降级会让用户以为所选强度生效了）。
   const low = planFor("deepseek", "deepseek-chat", { mode: "low", enabled: true });
-  assert.equal(low.effort, "high");
+  assert.equal(low.effort, undefined);
+  assert.match(low.unsupportedReason ?? "", /does not support thinking strength 'low'/);
+  assert.match(low.unsupportedReason ?? "", /Supported: high, max\./);
 });
 
 test("non-reasoning deepseek-chat keeps explicit temperature (no omitTemperature)", () => {
@@ -262,6 +272,22 @@ test("gemini-2.5-pro uses thinkingBudget", () => {
   assert.ok(plan.budgetTokens !== undefined);
 });
 
+/** 阿里云 llm-center 的 qwen 分支：允许集合上界是 xhigh（没有 max 档）。 */
+function planForQwenAli(mode: ThinkingMode): ThinkingPlan {
+  return resolveThinkingPlan(
+    { mode, enabled: true },
+    {
+      id: "qwen",
+      protocol: "openai",
+      url: "https://llm-center.ali.modelbest.cn/v1",
+      apiKey: "test",
+      headers: {},
+      models: {},
+    },
+    model("qwen3-max"),
+  );
+}
+
 function planFor(providerId: string, modelId: string, thinking: CanonicalThinkingConfig | undefined) {
   return resolveThinkingPlan(thinking, provider(providerId, modelId), model(modelId));
 }
@@ -342,3 +368,145 @@ function googleProvider(id: string): ProviderConfig {
     models: {},
   };
 }
+
+/* ────────────────────────────────────────────────────────────────────────
+ * 不静默夹取（上游 #587 判据改进）
+ *
+ * 旧行为：请求的强度不在模型允许集合内时按 rank 距离**就近取整**，请求照常成功，
+ * 用户看到的是一次"生效了"的调用。现在改为给出 unsupportedReason（渲染为
+ * `unsupported_thinking` 错误），并把允许集合写进消息里供用户改选。
+ * ──────────────────────────────────────────────────────────────────────── */
+
+/** 十个 `effort` 判定点各一例：请求值不在允许集合内 → 报不支持且不产出 effort。 */
+const UNSUPPORTED_CASES: Array<{
+  name: string;
+  plan: () => ThinkingPlan;
+  mode: string;
+  supported: string;
+}> = [
+  {
+    name: "gpt-5.5-pro / low（允许集合从 medium 起）",
+    plan: () => planForOpenAI("openai", "gpt-5.5-pro", { mode: "low", enabled: true }),
+    mode: "low",
+    supported: "medium, high, xhigh, max",
+  },
+  {
+    name: "gpt-5.6-sol / minimal",
+    plan: () => planForOpenAI("openai", "gpt-5.6-sol", { mode: "minimal", enabled: true }),
+    mode: "minimal",
+    supported: "none, low, medium, high, xhigh, max",
+  },
+  {
+    name: "gpt-5.5 / minimal",
+    plan: () => planForOpenAI("openai", "gpt-5.5", { mode: "minimal", enabled: true }),
+    mode: "minimal",
+    supported: "none, low, medium, high, xhigh, max",
+  },
+  {
+    name: "gpt-5 / xhigh（plain gpt-5 只到 high）",
+    plan: () => planForOpenAI("openai", "gpt-5", { mode: "xhigh", enabled: true }),
+    mode: "xhigh",
+    supported: "none, low, medium, high",
+  },
+  {
+    name: "o3 / minimal",
+    plan: () => planForOpenAI("openai", "o3-mini", { mode: "minimal", enabled: true }),
+    mode: "minimal",
+    supported: "low, medium, high",
+  },
+  {
+    name: "claude-opus-4.8 / minimal",
+    plan: () => planForAnthropic("anthropic", "claude-opus-4.8", { mode: "minimal", enabled: true }),
+    mode: "minimal",
+    supported: "low, medium, high, max",
+  },
+  {
+    name: "deepseek-v4-flash / minimal",
+    plan: () => planFor("deepseek", "deepseek-v4-flash", { mode: "minimal", enabled: true }),
+    mode: "minimal",
+    supported: "low, high, max",
+  },
+  {
+    name: "deprecated deepseek-chat / low（旧模型只到 high/max）",
+    plan: () => planFor("deepseek", "deepseek-chat", { mode: "low", enabled: true }),
+    mode: "low",
+    supported: "high, max",
+  },
+  {
+    name: "kimi-k3 / minimal",
+    plan: () => planFor("moonshot", "kimi-k3", { mode: "minimal", enabled: true }),
+    mode: "minimal",
+    supported: "low, high, max",
+  },
+];
+
+for (const testCase of UNSUPPORTED_CASES) {
+  test(`不夹取：${testCase.name} → unsupportedReason 且不产出 effort`, () => {
+    const plan = testCase.plan();
+    assert.equal(plan.effort, undefined, "不得再就近取整出一个强度");
+    assert.match(plan.unsupportedReason ?? "", new RegExp(`does not support thinking strength '${testCase.mode}'`));
+    assert.ok(
+      plan.unsupportedReason?.includes(`Supported: ${testCase.supported}.`),
+      `消息须列出允许集合（实际：${plan.unsupportedReason}）`,
+    );
+  });
+}
+
+test("命中允许集合时精确透传，不带 unsupportedReason", () => {
+  const cases: Array<[string, ThinkingPlan, string]> = [
+    ["gpt-5.5-pro/high", planForOpenAI("openai", "gpt-5.5-pro", { mode: "high", enabled: true }), "high"],
+    ["gpt-5/medium", planForOpenAI("openai", "gpt-5", { mode: "medium", enabled: true }), "medium"],
+    ["o3/low", planForOpenAI("openai", "o3-mini", { mode: "low", enabled: true }), "low"],
+    [
+      "claude-opus-4.8/medium",
+      planForAnthropic("anthropic", "claude-opus-4.8", { mode: "medium", enabled: true }),
+      "medium",
+    ],
+    ["deepseek-v4-flash/low", planFor("deepseek", "deepseek-v4-flash", { mode: "low", enabled: true }), "low"],
+    ["deepseek-chat/high", planFor("deepseek", "deepseek-chat", { mode: "high", enabled: true }), "high"],
+    ["kimi-k3/low", planFor("moonshot", "kimi-k3", { mode: "low", enabled: true }), "low"],
+  ];
+  for (const [name, plan, expected] of cases) {
+    assert.equal(plan.effort, expected, name);
+    assert.equal(plan.unsupportedReason, undefined, name);
+  }
+});
+
+test("别名锚：max 优先同名档；厂商把最高档叫 xhigh 时按同义别名接受", () => {
+  // 同名档存在 → 用 max
+  assert.equal(planForOpenAI("openai", "gpt-5.5", { mode: "max", enabled: true }).effort, "max");
+  // 只有 xhigh（阿里云 qwen 分支的允许集合上界是 xhigh）→ 别名映射
+  const aliased = planForQwenAli("max");
+  assert.equal(aliased.effort, "xhigh");
+  assert.equal(aliased.unsupportedReason, undefined);
+  // 两者都不允许 → 报不支持，不再退到 high
+  const unsupported = planForOpenAI("openai", "gpt-5", { mode: "max", enabled: true });
+  assert.equal(unsupported.effort, undefined);
+  assert.match(unsupported.unsupportedReason ?? "", /thinking strength 'max'/);
+});
+
+test("unsupported_thinking 经 throwIfUnsupportedThinkingPlan 抛出（错误码稳定）", () => {
+  const plan = planFor("deepseek", "deepseek-chat", { mode: "low", enabled: true });
+  assert.throws(
+    () =>
+      throwIfUnsupportedThinkingPlan(plan, {
+        provider: "deepseek",
+        model: "deepseek-chat",
+        messages: [],
+        stream: false,
+      }),
+    (error: unknown) => (error as { code?: string }).code === "unsupported_thinking",
+  );
+});
+
+test("支持的 plan 不抛错（同一出口不得误伤）", () => {
+  const plan = planFor("deepseek", "deepseek-chat", { mode: "high", enabled: true });
+  assert.doesNotThrow(() =>
+    throwIfUnsupportedThinkingPlan(plan, {
+      provider: "deepseek",
+      model: "deepseek-chat",
+      messages: [],
+      stream: false,
+    }),
+  );
+});
