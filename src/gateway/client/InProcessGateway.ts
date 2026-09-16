@@ -46,6 +46,7 @@ import { AsyncQueue } from "../util/AsyncQueue.js";
 import type {
   GatewayCronController,
   Gateway,
+  GatewayActiveTurnProjection,
   GatewayActiveTurnProjectionBlock,
   GatewayActiveTurnSnapshot,
   GatewayActiveTurnSnapshotInput,
@@ -816,6 +817,7 @@ export class InProcessGateway implements Gateway {
         steerItems: [],
       };
     }
+    const projection = this.activeTurnProjectionPayload(replay);
     return {
       active: true,
       sessionKey: replay.sessionKey,
@@ -824,25 +826,29 @@ export class InProcessGateway implements Gateway {
         .filter(event => this.shouldReplayActiveTurnEvent(input.sessionKey, event))
         .map(event => cloneGatewayEvent(event)),
       ...(replay.truncated ? { truncated: true } : {}),
-      ...(replay.projection.blocks.length > 0
-        ? {
-            projection: {
-              runId: replay.runId,
-              blocks: replay.projection.blocks.map(block => ({
-                kind: block.kind,
-                epoch: block.epoch,
-                text: block.text,
-                // 「当前通道且是最后一段」才是仍在增长的那段：正文/思考交替时
-                // 上一步的文本段已经定型，宿主应把它当完成态渲染。
-                ...(replay.projection.currentKind === block.kind &&
-                block === replay.projection.blocks[replay.projection.blocks.length - 1]
-                  ? { inflight: true }
-                  : {}),
-              })),
-            },
-          }
-        : {}),
+      ...(projection ? { projection } : {}),
       steerItems: this.router.getActiveSession(input.sessionKey)?.pendingSteerItems() ?? [],
+    };
+  }
+
+  /**
+   * 快照里的绝对投影；本 turn 尚无正文段时返回 `undefined`（对端据此退回旧行为）。
+   *
+   * 只有「当前通道的最后一段」标记 `inflight`：正文/思考交替时上一步的文本段已经定型，
+   * 宿主应把它当完成态渲染（见 `ActiveTurnReplay.projection`）。
+   */
+  private activeTurnProjectionPayload(replay: ActiveTurnReplay): GatewayActiveTurnProjection | undefined {
+    const { blocks, currentKind } = replay.projection;
+    if (blocks.length === 0) return undefined;
+    const lastBlock = blocks[blocks.length - 1];
+    return {
+      runId: replay.runId,
+      blocks: blocks.map(block => ({
+        kind: block.kind,
+        epoch: block.epoch,
+        text: block.text,
+        ...(block === lastBlock && block.kind === currentKind ? { inflight: true } : {}),
+      })),
     };
   }
 

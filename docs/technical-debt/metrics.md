@@ -7,7 +7,7 @@
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1032 / 169929 |
+| src TS 文件 / 行数 | 1032 / 169935 |
 | src JS 文件 | 0 |
 | tests 文件 | 546 |
 | ui/src 文件 / 行数 | 465 / 82906 |
@@ -114,7 +114,7 @@
 | `ui/src/components/code-editor/view/subcomponents/CodeEditorBinaryFile.tsx` | 1511 |
 | `src/adapters/channel/weixin/WeixinChannel.ts` | 1497 |
 | `ui/server/routes/git.js` | 1491 |
-| `src/gateway/client/InProcessGateway.ts` | 1483 |
+| `src/gateway/client/InProcessGateway.ts` | 1489 |
 | `ui/src/stores/useSessionStore.ts` | 1404 |
 | `ui/src/components/main-content-v2/DashboardV2.tsx` | 1345 |
 | `src/adapters/channel/feishu/FeishuChannel.ts` | 1337 |
