@@ -20,11 +20,11 @@ import type { AgentRuntimeConfig } from "../runtime/AgentRuntimeConfig.js";
 import type { AgentRuntimeDependencies } from "../runtime/AgentRuntimeDependencies.js";
 import type { TokenBudgetSnapshot } from "../../context/index.js";
 import type { PermissionMode, PermissionRuleSet } from "../../permission/index.js";
-import type { RouterDecision } from "../../router/index.js";
+import type { RouterDecision, RouterDispatchReport } from "../../router/index.js";
 import type { AgentRunMode, AgentLoopInput } from "../protocol/input.js";
 import { buildMetacognitiveRetryPrompt, parseSelfEstimate } from "./metacognitiveControl.js";
 import { evaluateClaimGuard } from "./claimGuard.js";
-import { buildRequestHeaderSnapshot, verifyRequestHeaderSnapshot } from "./requestInvariant.js";
+import { buildRequestHeaderSnapshot, verifyDispatchedRequest } from "./requestInvariant.js";
 import { projectToolResults } from "./projectToolResults.js";
 import type { LargeFileRepairDecision } from "./LargeFileRepair.js";
 import { MAX_OUTPUT_RECOVERY_LIMIT, MAX_SAME_INVALID_FINGERPRINT, TurnRuntimeState } from "./turnRuntimeState.js";
@@ -480,9 +480,9 @@ export class AgentLoop {
     // 写入失败即中止本步（fail-closed：无法记录请求头就不发送）。
     const requestHeader = buildRequestHeaderSnapshot(request, decision);
     await input.onRequestHeader?.(requestHeader);
-    if (process.env.SATI_VERIFY_REQUEST_RECONSTRUCTION === "1") {
-      verifyRequestHeaderSnapshot(requestHeader, request, decision);
-    }
+    // 对拍不在此处做：旧实现在这里用同一对 (request, decision) 自比，恒真（#360）。
+    // 现改为在**派发点**对拍（下方 onDispatchRequest），两侧不同源方能有牙齿。
+    const verifyDispatch = process.env.SATI_VERIFY_REQUEST_RECONSTRUCTION === "1";
     const assembler = createModelMessageAssemblerState();
     try {
       for await (const event of this.dependencies.router.execute(decision, request, {
@@ -490,6 +490,15 @@ export class AgentLoop {
         turnId: input.turnId,
         projectPath: this.config.cwd,
         abortSignal: input.abortSignal,
+        // 生产判据（#360）：实际派发形态 vs 发送前落盘的快照，差异只允许落在
+        // 本次派发的改写标签声明过的字段内；未声明的改写在此 fail-loud。
+        ...(verifyDispatch
+          ? {
+              onDispatchRequest: (report: RouterDispatchReport): void => {
+                verifyDispatchedRequest({ persisted: requestHeader, report });
+              },
+            }
+          : {}),
       })) {
         yield { type: "model_event", sessionId: input.sessionId, turnId: input.turnId, event };
         applyModelEventToAssembler(assembler, event);

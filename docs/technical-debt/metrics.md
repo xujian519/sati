@@ -1,15 +1,15 @@
 # Sati 技术债务指标基线与趋势
 
 > 由 `node scripts/measure-techdebt.mjs --update` 自动生成，谨防手工编辑。
-> 最近一次快照：**2026-09-15**
+> 最近一次快照：**2026-09-16**
 
 ## 规模
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1078 / 185309 |
+| src TS 文件 / 行数 | 1078 / 185589 |
 | src JS 文件 | 0 |
-| tests 文件 | 538 |
+| tests 文件 | 540 |
 | ui/src 文件 / 行数 | 465 / 82807 |
 | ui/server 文件 / 行数 | 105 / 31483 |
 
@@ -69,8 +69,8 @@
 | `src/context/memory/edgeclaw-memory-core/src/core/retrieval/reasoning-loop.ts` | `retrieve` | 484 | method |
 | `src/context/memory/edgeclaw-memory-core/src/core/pipeline/heartbeat.ts` | `runHeartbeat` | 477 | method |
 | `ui/src/components/main-content-v2/CronV2.tsx` | `CronFormView` | 476 | function |
+| `src/router/execution/executeRouterDecision.ts` | `executeRouterDecision` | 449 | function |
 | `ui/src/components/settings/view/modelPool/components/ProviderCard.tsx` | `ProviderCard` | 447 | function |
-| `src/router/execution/executeRouterDecision.ts` | `executeRouterDecision` | 429 | function |
 | `ui/src/components/chat-v2/MessageRowV2.tsx` | `MessageRowV2` | 429 | function |
 | `ui/src/components/code-editor/view/subcomponents/DocxBuiltinPreview.tsx` | `DocxBuiltinPreview` | 421 | function |
 | `src/gateway/client/eventMapping.ts` | `mapAgentEventForTurn` | 416 | function |
@@ -124,8 +124,8 @@
 | `ui/src/components/app-shell/SidebarV2.tsx` | 1310 |
 | `ui/src/components/chat-v2/processGrouping.ts` | 1294 |
 | `ui/src/components/chat/hooks/useChatSessionState.ts` | 1171 |
+| `src/agent/loop/AgentLoop.ts` | 1143 |
 | `src/context/memory/edgeclaw-memory-core/src/core/file-memory.ts` | 1139 |
-| `src/agent/loop/AgentLoop.ts` | 1134 |
 | `ui/server/routes/agent.js` | 1133 |
 | `ui/server/routes/commands.js` | 1132 |
 | `ui/src/components/main-content-v2/CronV2.tsx` | 1130 |
@@ -141,13 +141,13 @@
 |---|---|
 | patent | 111 |
 | tool | 61 |
-| agent | 55 |
+| agent | 56 |
 | knowledge | 38 |
 | context | 29 |
 | gateway | 29 |
 | model | 27 |
 | session | 27 |
-| router | 17 |
+| router | 18 |
 | always-on | 14 |
 | mcp | 13 |
 | cron | 11 |
@@ -172,7 +172,7 @@
 | runtime | 1 |
 | status | 1 |
 
-| **合计** | **518** |
+| **合计** | **520** |
 
 ## i18n en/zh-CN 对齐
 
