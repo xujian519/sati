@@ -12,6 +12,7 @@ import { join } from "node:path";
 import { parseDocument } from "yaml";
 import type {
   ConstitutionalRule,
+  KeywordBlocklistCheck,
   LoadedRuleSet,
   RuleAction,
   RuleCheck,
@@ -43,7 +44,8 @@ export function asRecord(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
-function asStringArray(value: unknown): string[] | null {
+/** 把任意值规整为字符串数组（含非字符串项即整体判非法，返回 null）。 */
+export function asStringArray(value: unknown): string[] | null {
   if (!Array.isArray(value)) return null;
   const out: string[] = [];
   for (const item of value) {
@@ -110,10 +112,23 @@ function parseCheck(raw: unknown, issues: RuleSetValidationIssue[], ruleId: stri
         issues.push({ ruleId, message: `rule ${ruleId}: keyword_blocklist 需要非空 keywords` });
         return null;
       }
+      const additionalNegationWords = asStringArray(record.additionalNegationWords);
+      if (record.additionalNegationWords !== undefined && additionalNegationWords === null) {
+        issues.push({ ruleId, message: `rule ${ruleId}: additionalNegationWords 必须是字符串数组，已忽略` });
+      }
+      // 两键正交：词表不开启过滤，缺开关即"声明了却不生效"——必须显式告警
+      // （默认词表是否启用同样只看 negationContext，故这里用 `!== true` 覆盖显式 false）。
+      if (additionalNegationWords !== null && additionalNegationWords.length > 0 && record.negationContext !== true) {
+        issues.push({
+          ruleId,
+          message: `rule ${ruleId}: 声明了 additionalNegationWords 但未开 negationContext: true，放行词不会生效`,
+        });
+      }
       return {
         type,
         keywords,
         negationContext: record.negationContext === true,
+        ...(additionalNegationWords !== null && additionalNegationWords.length > 0 ? { additionalNegationWords } : {}),
         // severityIfFound 非法值忽略（保持 RuleSeverity 不变量）
         severityIfFound: SEVERITIES.includes(record.severityIfFound as RuleSeverity)
           ? (record.severityIfFound as RuleSeverity)
@@ -376,21 +391,100 @@ export function mergeRuleSets(ruleSets: RuleSet[]): RuleSet {
 }
 
 /**
- * 字段级覆盖规则（按 id 浅合并，不改未覆盖字段）。
- * 与 mergeRuleSets（整条覆盖）互补：用于「评审补丁」场景——只改 action 而不重写
- * 整条规则（避免复制 name/check 等字段漂移）。overrides 中未命中 id 的规则原样保留，
- * overrides 中引用不存在 id 的条目被忽略（由调用方决定是否告警）。
+ * 激活评审补丁（`activation-overrides.yaml` 的单条）。
+ *
+ * 字段语义分两级：
+ *   - `action`：**整字段替换**（评审结论「这条规则该降级/升级」）；
+ *   - `addKeywords` / `negationContext` / `additionalNegationWords`：**check 级增补**
+ *     （评审结论「这条规则的匹配精度要增强」）——只追加/覆盖开关，不重声明既有 keywords。
+ *
+ * 增补语义是有意的：`rules/patent/nuo-*.yaml` 由 `scripts/port-nuo-rules.ts` 转换生成，
+ * 手改会被下一次重新移植静默抹掉；而让补丁**重声明**整条 check 又会在仓里造出第二份
+ * 必须同步维护的副本。增补式补丁既不改生成物，也不产生副本。
+ */
+export type ActivationRulePatch = {
+  action?: RuleAction;
+  /** 追加关键词（`a|b|c` OR 组同样适用），增补既有 keywords 之后。 */
+  addKeywords?: string[];
+  /** 覆盖否定语境开关。 */
+  negationContext?: boolean;
+  /** 追加否定语境放行词（叠在共享默认词表之上）。 */
+  additionalNegationWords?: string[];
+};
+
+/** 补丁对象的允许键（含仅作文档用途的 `reason`）；未知键告警，避免拼错键被静默忽略。 */
+export const ACTIVATION_PATCH_KEYS: readonly string[] = [
+  "action",
+  "addKeywords",
+  "negationContext",
+  "additionalNegationWords",
+  "reason",
+] as const;
+
+/** 把单条补丁施加到规则上；check 级键施加于非 keyword_blocklist 规则时报 issue 并忽略。 */
+function applyActivationPatch(
+  rule: ConstitutionalRule,
+  patch: ActivationRulePatch,
+  issues?: RuleSetValidationIssue[],
+): ConstitutionalRule {
+  const next: ConstitutionalRule = patch.action === undefined ? rule : { ...rule, action: patch.action };
+  const hasCheckPatch =
+    patch.addKeywords !== undefined ||
+    patch.negationContext !== undefined ||
+    patch.additionalNegationWords !== undefined;
+  if (!hasCheckPatch) return next;
+
+  const check = next.check;
+  if (check.type !== "keyword_blocklist") {
+    issues?.push({
+      ruleId: rule.id,
+      message: `激活覆盖 ${rule.id}: check 级键（addKeywords/negationContext/additionalNegationWords）仅支持 keyword_blocklist，当前为 ${check.type}，已忽略`,
+    });
+    return next;
+  }
+  const patchedCheck: KeywordBlocklistCheck = {
+    ...check,
+    ...(patch.addKeywords === undefined ? {} : { keywords: [...check.keywords, ...patch.addKeywords] }),
+    ...(patch.negationContext === undefined ? {} : { negationContext: patch.negationContext }),
+    ...(patch.additionalNegationWords === undefined
+      ? {}
+      : { additionalNegationWords: [...(check.additionalNegationWords ?? []), ...patch.additionalNegationWords] }),
+  };
+  // 两键正交：补丁增补的词表不开启过滤，缺开关即"增补了却不生效"——
+  // 与 RuleLoader 的资产校验同一条判据，补丁路径同样不得静默。
+  if ((patch.additionalNegationWords?.length ?? 0) > 0 && patchedCheck.negationContext !== true) {
+    issues?.push({
+      ruleId: rule.id,
+      message: `激活覆盖 ${rule.id}: 增补了 additionalNegationWords 但未开 negationContext: true，放行词不会生效`,
+    });
+  }
+  return { ...next, check: patchedCheck };
+}
+
+/**
+ * 字段级覆盖规则（按 id 施加 `ActivationRulePatch`，不改未覆盖字段）。
+ * 与 mergeRuleSets（整条覆盖）互补：用于「评审补丁」场景——只改 action / 增补关键词，
+ * 而不重写整条规则（避免复制 name/check 等字段漂移）。
+ * overrides 中未命中 id 的规则原样保留；**引用不存在 id 的补丁会报 issue**
+ * （拼错 id 的补丁此前被静默忽略，等于"评审写了但没生效"）。
  */
 export function applyRuleOverrides(
   ruleSet: RuleSet,
-  overrides: ReadonlyMap<string, Partial<ConstitutionalRule>>,
+  overrides: ReadonlyMap<string, ActivationRulePatch>,
+  issues?: RuleSetValidationIssue[],
 ): RuleSet {
   if (overrides.size === 0) return ruleSet;
-  return {
-    version: ruleSet.version,
-    rules: ruleSet.rules.map(rule => {
-      const override = overrides.get(rule.id);
-      return override === undefined ? rule : { ...rule, ...override };
-    }),
-  };
+  const matched = new Set<string>();
+  const rules = ruleSet.rules.map(rule => {
+    const patch = overrides.get(rule.id);
+    if (patch === undefined) return rule;
+    matched.add(rule.id);
+    return applyActivationPatch(rule, patch, issues);
+  });
+  for (const id of overrides.keys()) {
+    if (!matched.has(id)) {
+      issues?.push({ ruleId: id, message: `激活覆盖 ${id}: 规则集中无此 id（拼写错误或规则已移除），补丁未生效` });
+    }
+  }
+  return { version: ruleSet.version, rules };
 }

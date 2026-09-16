@@ -776,7 +776,7 @@
 
 ## 13. rule（宪法规则 · B3 ✅）
 
-**模块概况**：11 TS + 9 测试；YAML（`rules/**`）经 RuleLoader 校验 → RuleEngine 确定性评估 → RuleOutputGate / policy-bridge。已落地分层规则包与输出门禁 HITL 审批闭环；债在**未接线的 policy-bridge**与**YAML↔代码约定耦合**。（2026-09-16 附注：原「缓存失效键」一条已关闭——分层规则包的缓存失效判据改为内容指纹，见 `TD-RULE-N01` 与 `docs/notes/implemented/2026-09-16-rule-pack-cache-fingerprint.md`。）
+**模块概况**：11 TS + 9 测试；YAML（`rules/**`）经 RuleLoader 校验 → RuleEngine 确定性评估 → RuleOutputGate / policy-bridge。已落地分层规则包与输出门禁 HITL 审批闭环；债在**未接线的 policy-bridge**与**YAML↔代码约定耦合**。（2026-09-16 附注：原「缓存失效键」一条已关闭——分层规则包的缓存失效判据改为内容指纹，见 `TD-RULE-N01` 与 `docs/notes/implemented/2026-09-16-rule-pack-cache-fingerprint.md`。2026-09-16 二次附注：`rules/README`「遗留」3 项已清空并落成 `TD-RULE-N07`；同时把「激活评审补丁」从「仅 action」扩为「action 整替换 + check 级增补」，见 `docs/notes/implemented/2026-09-16-rule-asset-semantic-enhancements.md`。）
 
 - **TD-RULE-N01** · `rule_check(pack)` 缓存失效键只覆盖清单 mtime，层规则文件修改不致源
   - 类别：I · 严重级：P2 · 工作量：S · 状态：**done（#389）**
@@ -806,6 +806,25 @@
   - 类别：C · 严重级：P3 · 工作量：S · 状态：new
   - 位置：`src/rule/runtime/RuleEngine.ts:71-74,97-99`
   - 建议：空 catch 内至少 `console.warn` 或收集进评估结果。
+- **TD-RULE-N07** · `rules/README`「遗留」3 项规则资产语义增强无排期、无跟踪载体
+  - 类别：D · 严重级：P2 · 工作量：S · 状态：**done（#394）**
+  - 处置：3 项全部落成 `rules/patent/activation-overrides.yaml` 的**评审补丁**（不改转换生成的
+    `nuo-*.yaml`）：① X-REF-003 补全/半角+大小写共 9 个漏报变体（`addKeywords` 3 组 OR）；
+    ② EX-SEL-004 开 `negationContext` 并追加域放行词 `[防,反,抑制,检测]`；③ IPC-GEN-INV-002
+    降 `log`（沿用 IPC-GEN-INV-001↔EX-INV-001 先例）。配套两处能力扩展：`ActivationRulePatch`
+    新增 check 级增补键；`KeywordBlocklistCheck` 新增 `additionalNegationWords`（两键正交，
+    缺开关告警）。
+  - 核码更正：issue 称本批「不改 action 级别」——第 3 项去重**必然**改 action（否则同一文本
+    恒有两条用户可见提示）；issue 称两项重复「可合并为一条（跨域共享）」——两条分处两个
+    **生成**文件，删除会被下次 `port-nuo-rules.ts` 重新移植还原，故只能走补丁降级。
+    另：`keyword_blocklist` 是**子串匹配且大小写敏感**，故小写 `202x` 也是漏报变体（issue 未提）。
+  - 判据：`tests/rule/rule-asset-review-samples.spec.ts`（新增 23 例，样本表可执行化）+
+    `tests/rule/patent-full-rule-set.spec.ts`（补丁数量 + 四类补丁告警）。负控制 16 组注入，
+    15 组精确命中预测名单、1 组判为**无效负控制**（补丁 OR 组自包含 ⇒ "基础条目丢失"无可观测
+    差异），矩阵与分类见决策记录。
+  - 位置：`rules/patent/activation-overrides.yaml`、`src/rule/runtime/{RuleLoader,RuleEngine,patent-compliance}.ts`、
+    `src/rule/protocol/types.ts`、`rules/README.md`
+  - 副作用（口径变化）：patent-full 动作分布 `66 warn / 30 log` → `65 warn / 31 log`；补丁条目 29 → 31。
 
 ---
 
@@ -1989,7 +2008,7 @@
 | 端口/超时散落 | **#354** | 5 个渠道端口 + 43 处内联 setTimeout |
 | TD-RULE-N01 | **#355** | rule_check(pack) 缓存失效键覆盖不全 |
 | `ui/server` P0 级候选（文档登记未跟踪） | **#356** | 需先复核再拆分，勿原样搬运 |
-| `rules/README` 遗留 3 项 | **#357** | 规则资产语义增强未排期 |
+| TD-RULE-N07 | **#357** | 规则资产语义增强 3 项（全角漏报 / 安防误伤 / 重复去重；已交付） |
 | TD-PATENT-N01（验证面） | **#358** | 双链路缺跨链路一致性 fixture |
 | TD-WORKSPACE-N04 + TD-TEAM-N25 + TD-PATENT-N20 | **#359** | 计划文档悬空勾选批量回收 |
 | TD-AGENT-N01 | **#360** | request_header 对拍器恒真 |

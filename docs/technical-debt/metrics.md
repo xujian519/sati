@@ -7,9 +7,9 @@
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1032 / 169645 |
+| src TS 文件 / 行数 | 1032 / 169836 |
 | src JS 文件 | 0 |
-| tests 文件 | 544 |
+| tests 文件 | 545 |
 | ui/src 文件 / 行数 | 465 / 82807 |
 | ui/server 文件 / 行数 | 105 / 31483 |
 
@@ -168,9 +168,9 @@
 | mcp | 13 |
 | cron | 11 |
 | extension | 11 |
+| rule | 10 |
 | adapters | 9 |
 | pilot | 9 |
-| rule | 9 |
 | literature | 8 |
 | web | 8 |
 | cli | 7 |
@@ -188,7 +188,7 @@
 | runtime | 1 |
 | status | 1 |
 
-| **合计** | **524** |
+| **合计** | **525** |
 
 ## i18n en/zh-CN 对齐
 

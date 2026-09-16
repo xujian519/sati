@@ -16,7 +16,7 @@ import type {
   StructuralAnalysisCheck,
 } from "../protocol/types.js";
 import { checkSynonymRequirements, type SynonymMap } from "./synonym-engine.js";
-import { hasNegationContext, parseCnNumber } from "./text-utils.js";
+import { DEFAULT_NEGATION_WORDS, hasNegationContext, parseCnNumber } from "./text-utils.js";
 
 /** 证据截断长度。 */
 const EVIDENCE_MAX = 80;
@@ -25,8 +25,24 @@ function truncate(text: string): string {
   return text.length > EVIDENCE_MAX ? `${text.slice(0, EVIDENCE_MAX)}…` : text;
 }
 
+/**
+ * 合并否定语境词表：领域追加词（`additionalNegationWords`）叠在共享默认词表之上。
+ * 追加词优先走本函数而非加进 `DEFAULT_NEGATION_WORDS`——后者是**全局**词表，
+ * 加一个词会同时放大所有否定语境规则（PAT-RISK-001 / PAT-ABS-001 / INV-EVIDENCE-001 …）
+ * 的放行面。
+ */
+function mergeNegationWords(additional: readonly string[] | undefined): readonly string[] {
+  if (additional === undefined || additional.length === 0) return DEFAULT_NEGATION_WORDS;
+  return [...new Set([...DEFAULT_NEGATION_WORDS, ...additional])];
+}
+
 /** 检查单个 keyword_blocklist 条目（"a|b|c" OR 组），返回证据。 */
-function checkKeywordEntry(entry: string, text: string, negationContext: boolean): string[] {
+function checkKeywordEntry(
+  entry: string,
+  text: string,
+  negationContext: boolean,
+  negationWords: readonly string[],
+): string[] {
   const alternatives = entry
     .split("|")
     .map(s => s.trim())
@@ -43,7 +59,7 @@ function checkKeywordEntry(entry: string, text: string, negationContext: boolean
       if (index >= 0 && (best === null || index < best.index)) best = { index, word };
     }
     if (best === null) break;
-    if (!negationContext || !hasNegationContext(text, best.index)) {
+    if (!negationContext || !hasNegationContext(text, best.index, { negationWords })) {
       evidence.push(best.word);
     }
     searchFrom = best.index + best.word.length;
@@ -52,9 +68,14 @@ function checkKeywordEntry(entry: string, text: string, negationContext: boolean
 }
 
 function checkKeywordBlocklist(check: KeywordBlocklistCheck, text: string): string[] {
+  // 两个键正交：`negationContext` 是唯一的开关，`additionalNegationWords` 只提供词。
+  // 「声明了词却没开开关」由 RuleLoader 校验期告警（不在这里静默开启，否则 `negationContext:
+  // false` + 词表这种自相矛盾的组合会变成"词表说了算"，读代码看不出来谁生效）。
+  const negationContext = check.negationContext === true;
+  const negationWords = mergeNegationWords(check.additionalNegationWords);
   const evidence: string[] = [];
   for (const entry of check.keywords) {
-    evidence.push(...checkKeywordEntry(entry, text, check.negationContext === true));
+    evidence.push(...checkKeywordEntry(entry, text, negationContext, negationWords));
   }
   return evidence;
 }

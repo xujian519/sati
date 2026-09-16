@@ -37,6 +37,20 @@ export type KeywordBlocklistCheck = {
   keywords: string[];
   /** 否定语境过滤：命中位置前出现 "防止/避免/不用于/排除" 等否定词时放行（"防止赌博"不排除）。 */
   negationContext?: boolean;
+  /**
+   * 领域追加否定语境词：在共享默认词表（`text-utils.DEFAULT_NEGATION_WORDS`）之上补充
+   * 本域专用放行词（如安防主题的「防/反/抑制/检测」）。
+   *
+   * 与 `negationContext` 正交：本字段只提供词，**不**开启过滤——必须同时声明
+   * `negationContext: true`，否则放行词不生效（该组合在加载校验期告警，不静默吞掉）。
+   *
+   * 领域词走本字段而不加进共享默认词表，是因为后者是**全局**词表：加一个词会同时放大
+   * 所有否定语境规则（PAT-RISK-001 / PAT-ABS-001 / INV-EVIDENCE-001 …）的放行面。
+   *
+   * 语义与 `negationContext` 一致：只查命中位置**之前**的窗口，后缀式写法
+   * （如「窃听检测」中的「检测」）不在豁免范围内。
+   */
+  additionalNegationWords?: string[];
   /** 命中时覆盖的严重级别（缺省用规则级 severity）。 */
   severityIfFound?: RuleSeverity;
 };
