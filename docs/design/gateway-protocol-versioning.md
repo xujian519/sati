@@ -1,6 +1,6 @@
 # Gateway 协议版本化与 ui/server 边界检查 — 落地草案
 
-- 状态：**Part A 已实施**（2026-08-05，协议 1.1 上线：`version.ts` 维护变更表 + hello MAJOR 协商 `isProtocolCompatible` + 新增可选 discovery-plan 方法；2026-08-11 协议 1.2 追加 output-gate HITL approval 方法；2026-08-13 协议 1.3 追加可选 cron 任务更新方法 `cron_update`；2026-08-20 协议 1.4 追加 team-activity-panel 方法 `panel_heartbeat`/`team_panel_snapshot`/`team_tool_call`）；**Part B 进行中**（S1 冻结增量已落地：`ui/eslint.config.js` 配置 `import-x/no-restricted-paths` 白名单；S2 逐个收敛、S3 归零、S4 最终态待排期）
+- 状态：**Part A 已实施**（2026-08-05，协议 1.1 上线：`version.ts` 维护变更表 + hello MAJOR 协商 `isProtocolCompatible` + 新增可选 discovery-plan 方法；2026-08-11 协议 1.2 追加 output-gate HITL approval 方法；2026-08-13 协议 1.3 追加可选 cron 任务更新方法 `cron_update`；2026-08-20 协议 1.4 追加 team-activity-panel 方法 `panel_heartbeat`/`team_panel_snapshot`/`team_tool_call`；1.5–1.8 的完整台账见 `version.ts` 的 `PROTOCOL_RELEASES`，2026-09-16 起变更表改结构化并加 `pnpm check:protocol-version` 门禁）；**Part B 进行中**（S1 冻结增量已落地：`ui/eslint.config.js` 配置 `import-x/no-restricted-paths` 白名单；S2 逐个收敛、S3 归零、S4 最终态待排期）
 - 日期：2026-08-05
 - 关联：`docs/design/gateway-discovery-plans.md`（首个按本规范实施的协议扩展）
 - 约束来源：`CLAUDE.md`"网关协议：前后端通过 gateway WebSocket 帧通信（WsRequestFrame/WsResponseFrame），改协议需版本化"
@@ -11,7 +11,7 @@
 
 | 条目 | 状态 | 代码位置 |
 |------|------|---------|
-| 版本常量 + 变更表 | ✅ 已实施 | `src/gateway/protocol/version.ts`（`SATI_GATEWAY_PROTOCOL_VERSION = "1.4"`，变更表注释 1.0 → 1.4，覆盖 1.1 discovery-plan / 1.2 output-gate approval / 1.3 cron_update / 1.4 team-activity-panel） |
+| 版本常量 + 变更表 | ✅ 已实施（2026-09-16 起**结构化 + 门禁**） | `src/gateway/protocol/version.ts`（`SATI_GATEWAY_PROTOCOL_VERSION` 由台账末条派生 = **1.8**；`PROTOCOL_RELEASES` 记变更理由、`PROTOCOL_METHOD_VERSION` 记「方法 → 引入版本」，`satisfies Record<WsGatewayMethod, …>` 编译期穷尽 + `pnpm check:protocol-version` 运行期两向集合相等） |
 | MAJOR 握手协商（`protocol_mismatch`） | ✅ 已实施 | `src/gateway/server/GatewayWsConnection.ts` + `isProtocolCompatible`（Web 镜像 `SATI_GATEWAY_PROTOCOL_VERSION_WEB = "1.0"`，同 MAJOR 可连） |
 | 可选方法 feature-detect（`not_configured`） | ✅ 已实施 | `GatewayWsConnection.ts` always_on_* / skill_* 分支 |
 | Part B S1 冻结增量（ESLint 白名单） | ✅ 已落地 | `ui/eslint.config.js` `import-x/no-restricted-paths` |
@@ -39,22 +39,22 @@
    - 客户端 MAJOR == 服务端 MAJOR → 允许连接（MINOR 差异仅表示能力差异，可选方法按需探测）；
    - 客户端 MAJOR != 服务端 MAJOR → `hello_ok` 拒绝并返回明确错误码 `protocol_mismatch`（服务端可附带 `serverVersion` 供升级提示）。当前实现无此分支，需在 P1 补。
 3. **变更流程**（新增/修改协议方法必经）：
-   - 更新 `WsGatewayMethod`（frames.ts）→ 更新输入/输出类型 + `Gateway` 接口（types.ts）→ 实现 InProcessGateway → 封装 RemoteGateway → 分发 GatewayWsConnection → **bump MINOR**（version.ts 附注释：变更内容 + 日期 + 关联 PR）→ CHANGELOG 记录。
-4. **版本记录**：version.ts 顶部维护一张简短变更表（版本号 / 内容 / 日期），替代散落的 git log 记忆。
+   - 更新 `WsGatewayMethod`（frames.ts）→ 更新输入/输出类型 + `Gateway` 接口（types.ts）→ 实现 InProcessGateway → 封装 RemoteGateway → 分发 GatewayWsConnection → 在 `PROTOCOL_METHOD_VERSION` 登记（新增方法还须在 `PROTOCOL_RELEASES` 追加一条 MINOR，版本常量随之派生）→ 同步 `methodGuards.ts` 守卫表 → `pnpm check:protocol-version` → CHANGELOG 记录。
+4. **版本记录**：`version.ts` 顶部维护台账（`PROTOCOL_RELEASES`：版本号 / 内容 / 日期；`PROTOCOL_METHOD_VERSION`：每个方法的引入版本），替代散落的 git log 记忆。
 
 ### A3. 文件级改动清单
 
 | 文件 | 改动 |
 |---|---|
-| `src/gateway/protocol/version.ts` | 版本常量 + 变更表注释 + 新增 `MIN_GATEWAY_PROTOCOL_VERSION`（供协商比较） |
+| `src/gateway/protocol/version.ts` | 版本常量（由台账末条派生）+ `PROTOCOL_RELEASES` / `PROTOCOL_METHOD_VERSION` 台账 + `protocolLedgerIssues()` 自洽校验；`MIN_GATEWAY_PROTOCOL_VERSION` 仍**未**引入（协商只按 MAJOR） |
 | `src/gateway/server/GatewayWsConnection.ts` | hello 分支：MAJOR 不匹配时拒绝（`protocol_mismatch`），补测试 |
 | `src/gateway/protocol/index.ts` | 导出版本与协商辅助函数（`isProtocolCompatible`） |
 | `tests/gateway/`（新增 `protocol-versioning.spec.ts`） | 版本比较；hello 协商分支；可选方法 feature-detect 语义 |
-| `scripts/`（可选） | `check-protocol-version.mjs`：检测 protocol/ 目录变更时提示检查版本 bump（CI 软提示，不强制） |
+| `scripts/check-protocol-version.ts` | **已落地**（hard gate，挂 `pnpm lint` 链尾）：AST 提取 `WsGatewayMethod` 联合成员 ↔ 台账两向集合相等 + 守卫表覆盖 + `protocolLedgerIssues()`；issue #362 落地（显式**不做**「软提示」，不一致即 exit 1） |
 
 ### A4. 验收
 
-- 新协议方法上线必须伴随 MINOR bump + 变更表条目（人工 checklist，后续可脚本化）；
+- 新协议方法上线必须伴随变更表条目 + （新增方法时）MINOR bump —— **已脚本化**为 `pnpm check:protocol-version`（2026-09-16，issue #362；原为「人工 checklist，后续可脚本化」）。残余缺口：把新方法登记在**当前**版本而不 bump 无法判定（需发布历史作第二事实源），见台账 `TD-GATEWAY-N02`；
 - hello 协商测试覆盖 mismatch 拒绝路径。
 
 ---
