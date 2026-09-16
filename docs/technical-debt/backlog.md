@@ -683,7 +683,7 @@
 
 ## 11. knowledge（B3 ✅）
 
-**模块概况**：约 44 TS + 1500+ wiki md 卡；kg-store/legal-search 已拆纯件、38 测试覆盖深。债务在**检索编排重复**、**法规 LIKE 降级未对齐**、**DB 行强转与全局缓存**。`ipc-classifier.ts` 数据内联已由 TD-PATENT-N08 登记，不重复。
+**模块概况**：约 44 TS + 1500+ wiki md 卡；kg-store/legal-search 已拆纯件、38 测试覆盖深。债务在**检索编排重复**、**法规 LIKE 降级未对齐**、**DB 行强转与全局缓存**。（2026-09-16 附注：A1–A8 诊断一致性问题已全部关闭，见 `knowledge-system-report.md` §2.6/§2.7 与 `docs/notes/implemented/2026-09-16-knowledge-legacy-a3-a6-a7-a8.md`；该轮新增 N09/N10 两条**刻意的延后项**。）`ipc-classifier.ts` 数据内联已由 TD-PATENT-N08 登记，不重复。
 
 - **TD-KNOWLEDGE-N01** · FTS5 探测+降级编排在 3 个检索引擎近乎逐字重复
   - 类别：D · 严重级：P2 · 工作量：S · 状态：done
@@ -719,6 +719,16 @@
   - Pain×Spread：2×2=4
   - 位置：`src/knowledge/patent/wiki/复审无效/复审无效/**`（内层整树）；外层 `src/knowledge/patent/wiki/复审无效/**`
   - 证据：内层树 206 个 md / 2,112,485 字节；其中 **205 个与外层同相对路径文件逐字节相同**（仅 1 个不同）。占 wiki 全库 1549 卡的 ~13% 为纯重复。复现：`diff -r` 或 `find … -name '*.md' | xargs md5`。
+- **TD-KNOWLEDGE-N09** · 一致性自检结果无门控消费者（模型不匹配时语义召回照常返回）
+  - 类别：C · 严重级：P3 · 工作量：M · 状态：new · 意图：[intentional]（#376 A3 的决策是「先校正文档、不塞门控」）
+  - 位置：`shared/embedding-consistency.ts`（判定）、`assemble.ts:229-243`（挂载点，出口只有 `setEmbeddingConsistency`）、`shared/knowledge-stats.ts`（`embeddingConsistency`）
+  - 影响：查询端 embedding 与库向量模型不匹配（平均余弦 < 0.97）时，语义召回**照常返回结果**——只是相关性差。唯一痕迹是启动期一次 `warn` 与 stats 字段，**没有任何入口据此关闭/降权语义路**，故「embedding 模型选错」这类配置错误会在召回质量上长期不可见。设计文档 §4.4 曾声称「语义召回自动降级跳过（复用熔断路径）」，2026-09-16 已按代码实际行为校正（#376 A3）。
+  - 建议：门控的前置条件是**先给检索构造器加 quality/阈值参数**（`createKnowledgeEmbeddingSearch`、`VectorDbSearch` 均无该参数），再由 `assemble.ts` 按自检结果决定是否注入。若要做成独立诊断项，需先评估 `KnowledgeCapabilityStatus` 新增取值的影响面（会牵动 UI + i18n）。
+- **TD-KNOWLEDGE-N10** · unified 库缺 `kg_nodes_fts` 时 Sati 侧无重建入口
+  - 类别：I · 严重级：P3 · 工作量：S · 状态：new
+  - 位置：`scripts/trim-knowledge-db.ts:155-159`（`rebuildKgFtsIndex` 首行「表不存在，跳过重建」）；`shared/kg/schema-introspector.ts`（只探测表、不建表）
+  - 影响：统一库的 `kg_nodes_fts` 由知识库导入管道生成，Sati 的两个脚本都不建它——`migrate-kg-fts-trigram.mjs` 只服务 `patent_kg.db`，`trim --rebuild-kg-fts` 遇缺表直接跳过。用户用 `trim --no-fts` 裁掉索引（省磁盘）或导入不完整后，KG 检索长期走 LIKE 全表扫描，诊断报 `kg-fts-tokenizer=missing` 且**给出的动作是「由导入管道重建」，无可执行命令**（#376 A8 只修到「归因准确」这一层）。
+  - 建议：让 `rebuildKgFtsIndex` 在表缺失时直接建表（`tokenize='trigram', content='', contentless_delete=1`）并按 `kg_nodes` 回填，使 `--rebuild-kg-fts` 成为对称的重建入口；诊断文案随之可收敛为一条命令。
   - 影响：直接放大 `WikiCardLoader` 冷启动全量扫描（TD-KNOWLEDGE-N06 的 1548 张卡计数含此噪声），检索侧 card-index 若按内容入库则同一裁决规则出现双份，浪费向量行并可能双引同源引用。
   - 建议：确认无消费方后删除嵌套树（git 历史可追回），并加一条 CI/脚本守卫防止再次整树复制（如检查同名相对路径 md 内容相同的对数 > 阈值即告警）。
 
