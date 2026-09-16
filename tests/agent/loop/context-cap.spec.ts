@@ -308,6 +308,7 @@ test("agent loop records a compact boundary when auto compaction fires", async (
       snapshot: tokenBudget.snapshotFromTokens(40, 32_768, { reservedOutputTokens: 32_768 }),
       result: {
         compactionId: "compact-auto-1",
+        status: "success",
         trigger: "auto",
         preTokens: 120,
         postTokens: 40,
@@ -443,6 +444,7 @@ test("agent loop records a compact boundary when auto compaction fires", async (
       extra: {
         tier: "full",
         summarySucceeded: true,
+        status: "success",
       },
     },
   });
@@ -480,6 +482,7 @@ test("agent loop persists a full compaction after recovering from a context erro
         snapshot: tokenBudget.snapshotFromTokens(20, 100),
         result: {
           compactionId: "compact-reactive-1",
+          status: "success",
           trigger: "reactive",
           preTokens: 90,
           postTokens: 20,

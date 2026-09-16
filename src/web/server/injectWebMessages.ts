@@ -102,6 +102,21 @@ export function compactBoundaryMetadata(
     if (Array.isArray(cm.shadowedRanges)) {
       meta.shadowedRanges = cm.shadowedRanges;
     }
+    // 终态必须透出：否则历史投影只能表达「已压缩」，无法区分
+    // 「成功」与「摘要降级 / 用户中断」（上游 #570 移植）。
+    const extra = cm.extra;
+    if (extra && typeof extra === "object" && !Array.isArray(extra)) {
+      const record = extra as Record<string, unknown>;
+      if (typeof record.summarySucceeded === "boolean") {
+        meta.summarySucceeded = record.summarySucceeded;
+      }
+      if (typeof record.tier === "string") {
+        meta.tier = record.tier;
+      }
+      if (typeof record.status === "string") {
+        meta.status = record.status;
+      }
+    }
   }
   return meta;
 }

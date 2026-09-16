@@ -5,6 +5,8 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createAgentProjectSessionStorage } from "../../src/session/storage/ProjectSessionStorage.js";
 import { readWebSessionMessages } from "../../src/web/server/readSessionMessages.js";
+import { compactBoundaryMetadata } from "../../src/web/server/injectWebMessages.js";
+import type { AgentTranscriptEntry } from "../../src/session/transcript/TranscriptEntry.js";
 
 test("web history shows original transcript while hiding compact replacement messages", async () => {
   const projectRoot = await mkdtemp(join(tmpdir(), "pilotdeck-compact-web-project-"));
@@ -109,4 +111,52 @@ test("web history shows original transcript while hiding compact replacement mes
     await rm(projectRoot, { recursive: true, force: true });
     await rm(pilotHome, { recursive: true, force: true });
   }
+});
+
+test("压缩边界元数据透出终态（extra 中的 summarySucceeded / tier / status）", () => {
+  const entry = {
+    type: "control_boundary",
+    sessionId: "s1",
+    turnId: "t1",
+    sequence: 1,
+    createdAt: "2026-09-16T00:00:00.000Z",
+    boundary: {
+      kind: "compact",
+      subtype: "compact_boundary",
+      compactMetadata: {
+        compactionId: "c1",
+        trigger: "auto",
+        preTokens: 120,
+        postTokens: 40,
+        messagesSummarized: 2,
+        extra: { tier: "full", summarySucceeded: false, status: "fallback" },
+      },
+    },
+  } satisfies AgentTranscriptEntry & { type: "control_boundary" };
+
+  const meta = compactBoundaryMetadata(entry);
+  assert.equal(meta.compactionId, "c1");
+  assert.equal(meta.summarySucceeded, false, "降级必须可辨：否则历史投影只能表达「已压缩」");
+  assert.equal(meta.tier, "full");
+  assert.equal(meta.status, "fallback");
+});
+
+test("缺少 extra 的历史边界不臆造终态字段（旧记录兼容）", () => {
+  const entry = {
+    type: "control_boundary",
+    sessionId: "s1",
+    turnId: "t1",
+    sequence: 1,
+    createdAt: "2026-09-16T00:00:00.000Z",
+    boundary: {
+      kind: "compact",
+      subtype: "compact_boundary",
+      compactMetadata: { compactionId: "c2", trigger: "auto", preTokens: 10 },
+    },
+  } satisfies AgentTranscriptEntry & { type: "control_boundary" };
+
+  const meta = compactBoundaryMetadata(entry);
+  assert.equal("summarySucceeded" in meta, false);
+  assert.equal("tier" in meta, false);
+  assert.equal("status" in meta, false);
 });
