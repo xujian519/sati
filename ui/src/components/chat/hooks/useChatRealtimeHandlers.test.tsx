@@ -19,6 +19,7 @@ function createSessionStore() {
   return {
     cancelRunningActivities: vi.fn(),
     getSessionSlot: vi.fn(() => undefined),
+    setActiveSession: vi.fn(),
     setActivities: vi.fn(),
     updateStreaming: vi.fn(),
     updateStreamingThinking: vi.fn(),
@@ -129,5 +130,81 @@ describe("session-status unknown handling", () => {
 
     expect(onSessionProcessing).toHaveBeenCalledWith("sess-1");
     expect(setIsLoading).toHaveBeenCalledWith(true);
+  });
+});
+
+describe("绝对投影帧推进流式行（协议 1.9）", () => {
+  const ROW_ID = "__streaming_sess-1_run-1";
+
+  function projectFrame(content: string) {
+    return {
+      kind: "text",
+      role: "assistant",
+      sessionId: "sess-1",
+      runId: "run-1",
+      id: "active-turn:sess-1:run-1:text:1",
+      content,
+      isFinal: true,
+      activeTurnProjection: true,
+    };
+  }
+
+  function withLiveRow(content: string) {
+    return { realtimeMessages: [{ id: ROW_ID, content, kind: "stream_delta", role: "assistant" }] };
+  }
+
+  it("没有流式行时用投影全文建行", () => {
+    const { sessionStore } = setup();
+    (sessionStore.getSessionSlot as ReturnType<typeof vi.fn>).mockReturnValue({ realtimeMessages: [] });
+
+    act(() => {
+      mocks.listener?.(projectFrame("开头也在的全文"));
+    });
+
+    expect(sessionStore.updateStreaming).toHaveBeenCalledWith("sess-1", "开头也在的全文", "sati", "run-1");
+  });
+
+  it("行内只有被截断后的尾段时，推进成全文（不是追加）", () => {
+    const { sessionStore } = setup();
+    (sessionStore.getSessionSlot as ReturnType<typeof vi.fn>).mockReturnValue(withLiveRow("尾段"));
+
+    act(() => {
+      mocks.listener?.(projectFrame("开头也在的全文尾段"));
+    });
+
+    expect(sessionStore.updateStreaming).toHaveBeenCalledWith("sess-1", "开头也在的全文尾段", "sati", "run-1");
+  });
+
+  it("同一投影重复轮询不改变行内容（幂等）", () => {
+    const { sessionStore } = setup();
+    (sessionStore.getSessionSlot as ReturnType<typeof vi.fn>).mockReturnValue(withLiveRow("全文"));
+
+    act(() => {
+      mocks.listener?.(projectFrame("全文"));
+    });
+
+    expect(sessionStore.updateStreaming).toHaveBeenCalledTimes(1);
+    expect(sessionStore.updateStreaming).toHaveBeenCalledWith("sess-1", "全文", "sati", "run-1");
+  });
+
+  it("行内容比投影新（本帧之后又到了 delta）时丢弃本帧", () => {
+    const { sessionStore } = setup();
+    (sessionStore.getSessionSlot as ReturnType<typeof vi.fn>).mockReturnValue(withLiveRow("全文再加新字"));
+
+    act(() => {
+      mocks.listener?.(projectFrame("全文"));
+    });
+
+    expect(sessionStore.updateStreaming).not.toHaveBeenCalled();
+  });
+
+  it("空投影帧被忽略", () => {
+    const { sessionStore } = setup();
+
+    act(() => {
+      mocks.listener?.(projectFrame(""));
+    });
+
+    expect(sessionStore.updateStreaming).not.toHaveBeenCalled();
   });
 });

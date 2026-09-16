@@ -370,6 +370,26 @@ export type GatewaySteerItemSnapshot = {
   enqueuedAt: number;
 };
 
+/**
+ * 活跃 turn 的**绝对投影**块（协议 1.9）：本 turn 内某通道的一段连续文本。
+ *
+ * `events` 会被条数 / 字节上限截断，且截断从**头部**丢——丢掉的正是同一段正文的
+ * 开头（长回答刷新后从中间开始）。投影按段保留全文，不随 `events` 截断（上游 #593 移植）。
+ */
+export type GatewayActiveTurnProjectionBlock = {
+  kind: "text" | "thinking";
+  /** 本 turn 内该通道的第几段（从 1 起）。 */
+  epoch: number;
+  text: string;
+  /** 该段是否仍在增长（本通道是当前通道）。仅正文段会带此标记。 */
+  inflight?: boolean;
+};
+
+export type GatewayActiveTurnProjection = {
+  runId: string;
+  blocks: GatewayActiveTurnProjectionBlock[];
+};
+
 export type GatewayActiveTurnSnapshot = {
   active: boolean;
   sessionKey: string;
@@ -377,9 +397,13 @@ export type GatewayActiveTurnSnapshot = {
   /**
    * Volatile replay events for the currently active turn. Durable transcript
    * history remains the source of truth after the turn completes.
+   *
+   * 会被上限截断（`truncated`）——正文的完整内容以 `projection` 为准。
    */
   events: GatewayEvent[];
   truncated?: boolean;
+  /** 本 turn 的绝对文本投影（1.9 新增可选字段；旧客户端忽略即可）。 */
+  projection?: GatewayActiveTurnProjection;
   /** 当前排队未注入的插话（turn 不活跃时为空数组）。 */
   steerItems?: GatewaySteerItemSnapshot[];
 };
