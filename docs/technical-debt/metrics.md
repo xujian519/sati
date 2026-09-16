@@ -7,7 +7,7 @@
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1078 / 186146 |
+| src TS 文件 / 行数 | 1029 / 169464 |
 | src JS 文件 | 0 |
 | tests 文件 | 540 |
 | ui/src 文件 / 行数 | 465 / 82807 |
@@ -20,20 +20,21 @@
 | console | src + ui/server（.ts/.tsx/.js/.jsx/.mjs/.cjs；豁免两处 C39 收束入口 ui/server/utils/consoleLogger.js 与 ui/src/utils/logging.ts） |
 | unsafe | src + ui/src（.ts/.tsx，含同址 *.spec.*；TS AST 精确统计 AnyKeyword + @ts-* 指令） |
 | asUnknownAs | src + ui/src（.ts/.tsx，含同址 *.spec.*；TS AST 统计 `x as unknown as T` 双重断言）。**口径变更**：2026-09-15（issue #339）首度纳入——此前该形态完全未统计，故 0 → N 的变化来自口径变更而非新增债务 |
-| catch | src + ui/src 产品代码（排除 *.spec.* / *.test.*） |
+| catch | src + ui/src + ui/server 产品代码（排除 *.spec.* / *.test.*）。**口径变更**：2026-09-16（issue #341）纳入 ui/server——此前仅 src + ui/src，于是「空 catch {}」报 0 而 ui/server 实有 1 处，且同为「错误 & 可观测」类的 console/todos 早已含 ui/server，口径自相矛盾 |
 | todos | src + ui/src + ui/server + tests（.ts/.tsx/.js/.jsx/.mjs/.cjs） |
+| vendored | src/context/memory/edgeclaw-memory-core（**整体移出文件级指标**，2026-09-16 issue #341）：外部搬入的记忆内核，自带 package.json / tsconfig 与独立 build·test，不随本仓演进。其 src 与 tests 下的 .ts 此前计入 src 规模与两张排期表，现单列于 metrics.md「vendored 子包」节；该子包自己的 lib/（编译产物）与 ui-source/（memory-dashboard 资产）本就由目录名豁免 |
 
 ## 异味指标（越少越好）
 
 | 指标 | 总量 | 热点模块 |
 |---|---|---|
 | `any`/`@ts-expect-error`/`@ts-ignore` | 3 | ui/src(3) |
-| `as unknown as`（双重断言） | 27 | ui/src(19) · adapters(2) · tool(2) |
+| `as unknown as`（双重断言） | 26 | ui/src(19) · adapters(2) · tool(2) |
 | 裸 `console.*` | 158 | cli(137) · telemetry(8) · ui/server(5) |
-| 空 `catch {}` | 0 | — |
-| 无参 `catch {`（总计） | 517 | ui/src(115) · adapters(70) · patent(44) |
-| ↳ **无注释**（隐患类，目标） | **40** | — |
-| ↳ 已带意图注释 | 477 | — |
+| 空 `catch {}` | 1 | ui/server(1) |
+| 无参 `catch {`（总计） | 684 | ui/server(175) · ui/src(115) · adapters(70) |
+| ↳ **无注释**（隐患类，目标） | **124** | — |
+| ↳ 已带意图注释 | 560 | — |
 | `TODO/HACK/FIXME/XXX` | 11 | always-on(4) · tests(4) · ui/src(2) |
 | 分层违规 `ui/server→src` | 14 | — |
 | 分层违规 `src→ui` | 0 | — |
@@ -65,9 +66,6 @@
 | `ui/src/components/onboarding/view/subcomponents/LlmConfigurationStep.tsx` | `LlmConfigurationStep` | 630 | function |
 | `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` | `(anonymous)` | 600 | arrow |
 | `ui/src/components/main-content/view/MainContent.tsx` | `SplitBody` | 573 | function |
-| `src/context/memory/edgeclaw-memory-core/src/core/review/dream-review.ts` | `run` | 524 | method |
-| `src/context/memory/edgeclaw-memory-core/src/core/retrieval/reasoning-loop.ts` | `retrieve` | 484 | method |
-| `src/context/memory/edgeclaw-memory-core/src/core/pipeline/heartbeat.ts` | `runHeartbeat` | 477 | method |
 | `ui/src/components/main-content-v2/CronV2.tsx` | `CronFormView` | 476 | function |
 | `src/router/execution/executeRouterDecision.ts` | `executeRouterDecision` | 449 | function |
 | `ui/src/components/settings/view/modelPool/components/ProviderCard.tsx` | `ProviderCard` | 447 | function |
@@ -110,8 +108,6 @@
 | `ui/server/routes/taskmaster.js` | 1850 |
 | `ui/src/components/chat/hooks/useChatComposerState.ts` | 1837 |
 | `src/adapters/channel/wecom/WeComChannel.ts` | 1764 |
-| `src/context/memory/edgeclaw-memory-core/src/core/storage/sqlite.ts` | 1711 |
-| `src/context/memory/edgeclaw-memory-core/src/core/skills/llm-extraction.ts` | 1624 |
 | `src/model/catalog/providers.ts` | 1593 |
 | `ui/src/components/chat-v2/MessagesPaneV2.tsx` | 1544 |
 | `ui/src/components/code-editor/view/subcomponents/CodeEditorBinaryFile.tsx` | 1511 |
@@ -125,7 +121,6 @@
 | `ui/src/components/chat-v2/processGrouping.ts` | 1294 |
 | `ui/src/components/chat/hooks/useChatSessionState.ts` | 1171 |
 | `src/agent/loop/AgentLoop.ts` | 1143 |
-| `src/context/memory/edgeclaw-memory-core/src/core/file-memory.ts` | 1139 |
 | `ui/server/routes/agent.js` | 1133 |
 | `ui/server/routes/commands.js` | 1132 |
 | `ui/src/components/main-content-v2/CronV2.tsx` | 1130 |
@@ -134,6 +129,27 @@
 | `ui/server/routes/config.js` | 1100 |
 | `src/model/streaming/streamModel.ts` | 1085 |
 | `src/always-on/runtime/DiscoveryFire.ts` | 1079 |
+| `src/cli/sati.ts` | 1028 |
+| `src/adapters/channel/protocol/ImLiveReplyController.ts` | 1017 |
+| `ui/src/components/chat-v2/MessagesPaneV2.render.test.tsx` | 1013 |
+
+## vendored 子包（单列，不计入上述规模与排名）
+
+> `src/context/memory/edgeclaw-memory-core` 是从外部项目整体搬入的记忆内核（自带 `package.json` / `tsconfig` / 独立 `build`·`test`），本仓不参与其演进。按 #341 从**规模 / Top 大文件 / God function** 三处整体移出，在此单列以免丢失可见度。
+
+| 子包 | 文件 | 行 | ≥ 300 行函数 |
+|---|---|---|---|
+| `src/context/memory/edgeclaw-memory-core` | 49 | 16682 | 3 |
+
+其自身 Top 5 大文件（**不参与**上方排名）：
+
+| 文件 | 行 |
+|---|---|
+| `src/context/memory/edgeclaw-memory-core/src/core/storage/sqlite.ts` | 1711 |
+| `src/context/memory/edgeclaw-memory-core/src/core/skills/llm-extraction.ts` | 1624 |
+| `src/context/memory/edgeclaw-memory-core/src/core/file-memory.ts` | 1139 |
+| `src/context/memory/edgeclaw-memory-core/src/core/review/dream-review.ts` | 1046 |
+| `src/context/memory/edgeclaw-memory-core/src/core/skills/llm-prompts.ts` | 986 |
 
 ## 测试覆盖（tests/<模块> 文件数）
 

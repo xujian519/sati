@@ -54,6 +54,14 @@ pnpm typecheck && pnpm lint && pnpm format:check
 
 ### 指标口径说明（重要）
 
+> **2026-09-16（#341）catch 口径纳入 `ui/server`、vendored 子包整体移出文件级指标**：两处缺口都会让排期建立在假数字上。
+> ① **catch 口径漏掉整个 `ui/server`**（105 文件 / 31,483 行）——「空 `catch {}`」长期报 **0**，而 `ui/server/utils/plugin-loader.js:299` 实有一处；同为「错误 & 可观测」类的 `console` / `todos` 早已含 `ui/server`，**两套口径自相矛盾**。纳入后：空 catch `0 → 1`、无参 catch `517 → 684`（`ui/server` 持 175）、其中**无注释隐患类 `40 → 124`**（`ui/server` 持 84）。注意 issue 引用的「catch = `src + ui/src`」是**如实声明**（基线表口径），所以这不是实现与文档不一致，而是**口径本身选错了**。
+> ② **`edgeclaw-memory-core` 是外部搬入的记忆内核**（自带 `package.json` / `tsconfig` / 独立 `build`·`test`，不随本仓演进），其 `src/` 与 `tests/` 下的 49 个 `.ts`（16,682 行）此前计入 `src`，并在「Top 大文件」「God function」两张**排期表**里各占 3 席。现按**路径前缀**（`VENDORED_SUBTREES`）整体移出文件级指标，改在 `metrics.md` 新增的「vendored 子包」节单列（规模 + 自身 Top 文件 + ≥300 行函数数）——**单列而非删除**，否则「已单列」与「该目录被删了」在输出上不可区分。规模随之 `1078 / 186146 → 1029 / 169464`。
+> **跨此日期的同比须按同一口径重算**；`TD-METRIC-003` 已销项，决策见 `docs/notes/implemented/2026-09-16-metric-scope-fix.md`。
+> - 勘误：issue 把 `lib/`（编译产物）与 `ui-source/app.js`（2324 行 memory-dashboard 资产）也列为污染源，实测**两者自脚本首版（`4d83bda7f`）起就由 `EXCLUDE_DIRS` 的目录名豁免覆盖**（`ui-source/app.js` 从未进过 Top-30）；真正在污染的只有 `src/` + `tests/` 下那 49 个 `.ts`。
+> - **无注释无参 catch `40 → 124` 是口径变更而非新增债务**：#353 的治理目标据此上调为 124，其「回升超过 45 即立项」的触发条件随之满足（见该 issue 结论）。
+> - 仍未覆盖：God function 表含测试文件的匿名箭头函数（`TD-METRIC-004`）；`ui/src` 的 `.js` / `.jsx` 未进入任何文件级扫描（C39 已记录）。
+
 > **2026-09-15（#340）文件清单改为 git 感知**：所有指标此前用 `readdir` 遍历**工作树**，会把 `.gitignore` 忽略的文件计入（本仓实测 `tests/**.test.ts` 5 个、wiki 下若干 md），而它们在 CI 检出树里不存在——同一份代码在开发机与 CI 上算出**不同的数**（532 vs 527 个测试文件），指标不可复现。现统一走 `git ls-files --cached --others --exclude-standard`（= 已跟踪 ∪ 未跟踪但未被忽略），使「本机 = CI」。跨此日期的同比须注意：`tests 文件` 532 → 527、`测试覆盖合计` 515 → 510、`知识卡重复` 72 组 → 70 组。
 
 > **2026-09-11（C42 终审）口径已对齐**：此前所有指标一律只扫 `src/`，与 `docs/code-refinement-plan.md` §六 基线表声明的 `src + ui/src` / `src + ui/server` 不一致——C40/C41 两张横切卡都不得不先自建扫描重建口径才能定目标（见 C41 note「遗留口径问题」）。现已按基线表对齐，`metrics.md` 顶部输出「指标口径」表，`--json` 亦可读出 `scopes` 字段。**跨 2026-09-11 的同比须按同一口径重算。**

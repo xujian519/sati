@@ -37,6 +37,7 @@
   - 影响：异常被吞且无注释，属隐患。逐条补注释或改结构化错误。
   - 工作量：L · 严重级：P2 · 状态：done（2026-09-11，C41）
   - **2026-09-11 终审（含口径更正）**：✅ **done（C41）**。**本条原始定义有误**——「体仅注释/空白」把**已在函数 JSDoc 说明意图的防御式**与**真无任何说明的静默回退**混计（这也是「151 处」的来源）。按修正后口径（**无注释的无参 catch**；判定「有注释」认 catch 行内 / catch 上一行 / 体内独立注释行或行尾注释三种形态），`src + ui/src` 产品代码 = 总计 **518** / 无注释 **37** / 已注释 **481**。C41 为 107 处真静默吞错补体内意图注释（统一「失败模式 → 回退语义」形态）、18 处登记不重复（已由函数级 JSDoc 或体内自述式告警承载），**隐患类 125 → 37**；零行为变化以编译级证明（`transpileModule({removeComments:true})` 79/79 逐字节相同）。口径定义见 `docs/technical-debt/README.md` §指标口径说明，决策见 `docs/notes/implemented/2026-09-11-c41-catch-todo-governance.md`。
+  - **2026-09-16 口径变更（#390 · TD-METRIC-003）**：catch 口径纳入 `ui/server`，同时 vendored 子包整体移出文件级指标 ⇒ 同一形态的计数变为 总计 **684** / 无注释 **124** / 已注释 **560**（`ui/server` 持 175 / 84 / 91；vendored 移出 8 处，均已带注释）。C41 的结论（37）在 `src + ui/src` 口径下仍成立，只是**不再是全仓数字**；新口径下的残留治理见 #353。
 
 ### Arch/分层
 - **TD-BOUND-001** · `ui/server → src` 深层导入 14 处
@@ -1825,11 +1826,22 @@
   - 影响：基线由手工命令刷新，无机制保证与工作树同步。**2026-09-14 实证**：基线停在 09-11，而 09 月拆解运动已让报表严重失真——`createLocalGateway.ts` 记 **2696 行**（实测 **448**）、`AgentLoop.ts` 记 **2430 行**（实测 **1134**）、god-function 表中 `createLocalGateway`(607)/`prepareSessionRuntime`(517)/`createReadFileTool`(509)/`handleModelError`(364) **四条已全部不存在**。本次复扫已重跑基线修正（见 `metrics.md`），但不建机制下次仍会重演。
   - 建议：二选一——(a) `measure-techdebt.mjs --check` 模式，重算关键指标与快照比对，不一致非 0 退出，挂 `pnpm lint` 链尾（与 `check:event-matrix`、`check:issue-labels` 同构，仓库已有两个同形态门禁可复制）；(b) 在 `metrics.md` 顶部记录快照 commit SHA，比对「HEAD 之后是否改过 `src/`」并提示。**倾向 (a)**，(b) 的「提醒」在 CI 中容易被忽略。
 - **TD-METRIC-003** · 指标口径缺口：空 catch 漏 `ui/server`；vendored 子包污染文件级排名
-  - 类别：H/D · 严重级：P2 · 工作量：S · 状态：new
-  - 位置：`scripts/measure-techdebt.mjs` 的 `catch` 口径（`metrics.md` §指标口径 表）；`src/context/memory/edgeclaw-memory-core/`
-  - 影响：(1) **catch 口径漏掉整个 `ui/server`**——`metrics.md` 报「空 `catch {}` = 0」，但 `ui/server/utils/plugin-loader.js:299` 存在一处；`ui/server` 是 103 文件 / 30,968 行的独立后端，且**裸 `console.*` 口径包含它而 catch 不包含**，两套口径不一致。(2) **vendored 子包污染所有文件级指标**——`edgeclaw-memory-core/`（58 跟踪文件 / 21,081 行，含 `lib/` 编译产物镜像与 2324 行 `ui-source/app.js`，后者是 `/memory-dashboard` 资产、非本仓维护）被完整计入 `src`，Top-30 表有 **4 项**来自该子树，挤占真实本仓文件可见度。
-  - 建议：catch 口径补 `ui/server` 并在口径表写明；vendored 子树从文件级排名排除或单列小节（`lib/` 是编译产物本就应排除）。
-  - ⚠️ 改口径会使指标一次性跳变，须在 `metrics.md` 标注口径变更日期，与 `README.md` §指标口径说明 的既有做法一致。
+  - 类别：H/D · 严重级：P2 · 工作量：S · 状态：**done（#390）**
+  - 位置：`scripts/measure-techdebt.mjs`（`productCatchFiles` / `SCOPE_DOC.catch` / 新增 `VENDORED_SUBTREES`·`isVendored`）；`src/context/memory/edgeclaw-memory-core/`
+  - 处置：① `productCatchFiles` 纳入 `uiServerScan`，`SCOPE_DOC.catch` 同步改写（`catchEmpty` 与 `catchNoParam` 共用该集合 ⇒ 两者一起含 `ui/server`，正是要消除的自相矛盾）；② 新增导出 `VENDORED_SUBTREES = ["src/context/memory/edgeclaw-memory-core"]` 与 `isVendored()`，`src/` 先取全量再分流，vendored 组进入新的 `vendored` 分组并在 `metrics.md` 单列一节（规模 + 自身 Top 5 + ≥300 行函数数）；③ 顺带把 `godFunctions` 从 `main()` 移入 `measure()`，三条 CLI 路径（`--json`/`--check`/`--update`）拿到同一份结果，函数级与文件级指标不再各持一份文件集。
+  - 口径更正（第一处）：issue 引用的「catch = `src + ui/src` 产品代码」是**如实声明**（`docs/code-refinement-plan.md` §六 基线表口径），故这不是「实现与文档不一致」，而是**口径本身选错了**——它声称描述「本项目维护的代码」，却把 105 文件 / 31K 行的本仓后端整体排除。处置方向因此是改口径，而不是改文档迁就。
+  - 口径更正（第二处）：issue 把 `lib/`（编译产物）与 `ui-source/app.js`（2324 行）也列为污染源，实测**两者自脚本首版 `4d83bda7f` 起就由 `EXCLUDE_DIRS` 的目录名豁免覆盖**（`app.js` 从未进过 Top-30）；真正在污染的只有 `src/` + `tests/` 下的 **49 个 `.ts` / 16,682 行**（占 `src` 行数 9.0%）。issue 另记「Top-30 表有 4 项来自该子树」，实测为 **3 项**（`dream-review.ts` 1046 行已跌出 Top-30）。
+  - 一次性跳变（跨此日期同比须按同口径重算）：空 catch `0 → 1`；无参 catch `517 → 684`（+175 `ui/server` − 8 vendored）；其中无注释隐患类 `40 → 124`（+84 `ui/server`，vendored 那 8 处均已带注释）；`as unknown as` `27 → 26`；src TS `1078 / 186146 → 1029 / 169464`；两张排期表各减 3 席。
+  - 连锁影响：**#353 的治理目标按新口径为 124**（`ui/server` 持 84），其「回升超过 45 即立项专项」的触发条件随之满足——已在该 issue 留结论评论。是**口径变更而非新增债务**。
+  - 负控制（4 组注入，逐条核对转红名单，相邻用例保持绿）：① 清空 `VENDORED_SUBTREES` ⇒ 清单守卫 / `isVendored` 命中 / Top 大文件 / God function / 单列 / 规模 6 例转红，而「路径段匹配不误伤」与「catch 含 ui/server」保持绿；② `isVendored` 退回**字符串前缀**匹配 ⇒ 仅「不误伤 `edgeclaw-memory-core-extra`」1 例转红；③ catch 口径回退成 `src + ui/src` ⇒ 仅 catch 用例转红；④ 单列侧 `godFunctionCount` 写死 0 ⇒ 仅「单列而非消失」1 例转红。
+  - 判据同源修正（**负控制实测抓到**）：首版「Top 大文件不含 vendored」用被测实现导出的 `isVendored()` 来筛，与实现同源 ⇒ 注入「清空清单」时 `filter(...) === []` 恒真、判据根本不红。改为判据侧自带独立前缀字面量（`VENDORED_PREFIX`），并补一条绑定用例拦两侧漂移。
+  - 决策记录：`docs/notes/implemented/2026-09-16-metric-scope-fix.md`（含 8 条备选）。
+- **TD-METRIC-004** · 两张排期表含测试文件（排期对象混入）
+  - 类别：H/D · 严重级：P3 · 工作量：S · 状态：new
+  - 位置：`scripts/measure-techdebt.mjs` 的 `godFunctions` 与 `topFiles` 文件集（`src + ui/src` 全量 `.ts/.tsx`，未区分产品代码与测试）
+  - 影响：两张排期表都把测试文件当作本仓产品代码参与排名——God function 表 3 项匿名箭头函数（`MessagesPaneV2.render.test.tsx` 842 / `processGrouping.test.ts` 409 / `CronV2.test.tsx` 384），Top 30 大文件表 1 项（`MessagesPaneV2.render.test.tsx` 1013 行，本次 `TD-METRIC-003` 把 vendored 移出后才补位进榜、此前被挤出可见）。它们不是「待拆函数 / 待拆文件」，却与真实条目并列，读表者无从分辨。与 `TD-METRIC-003` 同型（口径未区分产品代码与测试代码），但**不是同一件事**：测试文件属于本仓、只是不在排期范围内，故未并入 #341 的 PR。
+  - 建议：两处文件集改用与 catch 相同的「产品代码」口径（排除 `*.spec.*` / `*.test.*`）；若认为测试内的超长回调本身也值得治理，应**另立指标**而非混入这两张表。
+  - 触发条件：下次改动 `measure-techdebt.mjs` 的扫描范围时顺带处理（boy-scout）。
 - **TD-PROCGATE-001** · PR 追溯门禁被 PR 模板自带 HTML 注释**恒真通过**（门禁空转）
   - 类别：C/E · 严重级：**P1** · 工作量：S · 状态：**done（2026-09-15 复核：已由 `cfffe6ae3` 修复，issue #332）**
   - 位置：`.github/scripts/check-pr-issue.mjs` × `.github/PULL_REQUEST_TEMPLATE.md`
@@ -1951,7 +1963,7 @@
 | TD-TEAM-N01/N02/N03 + TD-AGENT-N02 + TD-SESSION-N08/N09 | **#350** | **`CLAUDE.md` 五处陈述与代码实际不符**（一条汇总） |
 | 13 个 SessionMapper 空壳 | **#351** | 逐字相同的 10 行薄壳收敛为工厂 |
 | TD-PATENT-N23 + N24 | **#352** | index-store 同构复制（85/179 行）+ 队列无淘汰 |
-| TD-CATCH-001 残留 + TD-TEAM-N11 + TD-SESSION-N12 | **#353** | 37 处无注释无参 catch |
+| TD-CATCH-001 残留 + TD-TEAM-N11 + TD-SESSION-N12 | **#353** | 无注释无参 catch（创建时旧口径 37；#390 口径变更后为 124） |
 | 端口/超时散落 | **#354** | 5 个渠道端口 + 43 处内联 setTimeout |
 | TD-RULE-N01 | **#355** | rule_check(pack) 缓存失效键覆盖不全 |
 | `ui/server` P0 级候选（文档登记未跟踪） | **#356** | 需先复核再拆分，勿原样搬运 |
