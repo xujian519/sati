@@ -65,6 +65,19 @@ export function countTokens(text: string): number {
 }
 
 /**
+ * 编码长度。显式放行全部特殊 token 拼写（`allowedSpecial` / `disallowedSpecial`
+ * 均为空集）。
+ *
+ * js-tiktoken 的 `encode` 默认 `disallowedSpecial = "all"`：文本一旦包含
+ * `<|endoftext|>` 这类字面量就抛 `The text contains a special token that is not
+ * allowed`。工具输出/文件正文出现这类字面量是常见情形，计数不应因此失败——它们
+ * 按普通文本计数（上游 #574 移植）。对不含字面量的文本，结果与默认参数完全一致。
+ */
+function countEncodedTokens(text: string): number {
+  return getTokenizer().encode(text, [], []).length;
+}
+
+/**
  * 带抽样兜底的计数。mode 报告本次结果来自「全量编码」还是「样本外推」，
  * 供测试与诊断区分路径。
  */
@@ -79,16 +92,16 @@ export function countTokensGuarded(text: string): { tokens: number; mode: "full"
   if (text.length > SAMPLE_CHARS) {
     const sample = text.slice(0, SAMPLE_CHARS);
     const t0 = performance.now();
-    const sampleTokens = getTokenizer().encode(sample).length;
+    const sampleTokens = countEncodedTokens(sample);
     if (performance.now() - t0 > PATHOLOGICAL_SAMPLE_THRESHOLD_MS) {
       // 高重复度文本（BPE 二次方退化）：按样本密度外推，避免分钟级阻塞。
       tokens = Math.max(1, Math.round((sampleTokens * text.length) / sample.length));
       mode = "sample";
     } else {
-      tokens = getTokenizer().encode(text).length;
+      tokens = countEncodedTokens(text);
     }
   } else {
-    tokens = getTokenizer().encode(text).length;
+    tokens = countEncodedTokens(text);
   }
   cacheSet(key, tokens);
   return { tokens, mode };

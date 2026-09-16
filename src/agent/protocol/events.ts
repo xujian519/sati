@@ -6,6 +6,7 @@ import type {
 } from "../../model/index.js";
 import type { SatiToolResult } from "../../tool/index.js";
 import type { TokenBudgetSnapshot } from "../../context/budget/TokenBudgetManager.js";
+import type { CompactionStatus } from "../../context/compaction/CompactionEngine.js";
 import type { RouterRetryProgressEvent } from "../../router/protocol/events.js";
 import type { FileArtifact } from "../../session/artifacts/FileArtifact.js";
 import type { AgentError } from "./errors.js";
@@ -55,7 +56,8 @@ export type AgentEvent =
       turnId: string;
       compactionId: string;
       trigger: string;
-      status: string;
+      /** 压缩终态：失败/中断不得被 UI 当作「已压缩」（上游 #570 移植）。 */
+      status: CompactionStatus;
       preTokens: number;
       postTokens?: number;
       messagesSummarized?: number;

@@ -133,6 +133,15 @@ export interface ChatMessage {
   compactLevel?: number;
   compactStage?: string;
   compactStageLabel?: string;
+  /**
+   * 压缩终态（success / fallback / cancelled / failed）。缺省视为成功——旧 transcript
+   * 记录不带该字段，不能因为读不到就报「失败」。
+   */
+  compactState?: string;
+  /** 摘要是否成功（false = 走了确定性降级摘要）。仅历史投影可提供（落盘 extra.summarySucceeded）。 */
+  compactSummarySucceeded?: boolean;
+  /** 压缩层级（micro / snip / full），仅历史投影可提供。 */
+  compactTier?: string;
   /** 该次压缩被遮蔽消息的索引范围（来自 compact_boundary 持久化元数据）。 */
   shadowedRanges?: Array<{ fromIndex: number; toIndex: number }>;
   /** 该次压缩被遮蔽的原文（WebMessage 级扁平化，历史回看展开用）。 */
@@ -171,7 +180,11 @@ export interface CompactProgress {
   level: number;
   stage: string;
   label: string;
-  state: "started" | "running" | "failed" | "completed";
+  /**
+   * `cancelled` = 用户中断压缩（与摘要失败区分）；两者都不得显示成「已压缩」。
+   * 上游 #570 移植。
+   */
+  state: "started" | "running" | "failed" | "cancelled" | "completed";
   pre_tokens?: number;
   reason?: string;
   /** Correlates the in-flight progress with the terminal compact_boundary message. */
