@@ -150,7 +150,7 @@
 | `check:patent-workflow-docs` | `gen-patent-workflow-docs.ts --check` | `assets/workflows/patent/generated/*.yaml` 幂等 |
 | `check:html-templates` | `check-html-templates.mjs` | HTML 交付模板约束 |
 | `check:skills` | `validate-skills.mjs` | skill frontmatter 一致性 |
-| `check:issue-labels` | `sync-labels.mjs --check` | 标签清单（`.github/labels.yml`）与 issue 模板双向一致：模板引用未声明标签、scope 勾选项与 `scope:*` 标签漂移即红 |
+| `check:issue-labels` | `sync-labels.mjs --check` | 标签清单（`.github/labels.yml`）与 issue 模板双向一致：模板引用未声明标签、scope 勾选项与 `scope:*` 标签漂移即红；`status:` / `priority:` 取值超出 `docs/issue-management.md` §1 词表即红 |
 
 > **`check:skills` 语义**：该门禁**警告即阻断**——`validate-skills.mjs` 对 `hard`(exit 1) 与 `warn`(exit 2) 均返回非零；因 lint 用 `&&` 链式，任意 skill 触发告警（如描述 <20 字符）都会让 `pnpm lint` 变红。这是有意的严格策略，改 skill 时需保证其 frontmatter 描述达标。
 

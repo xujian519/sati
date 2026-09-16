@@ -11,7 +11,8 @@
  *   1. 清单自身不合规——标签名重复/为空，color 非 6 位 hex，description 为空或超长（GitHub 上限 100）。
  *   2. 模板引用了未声明的标签——`.github/ISSUE_TEMPLATE/*.md` frontmatter 的 `labels:` 必须在清单中。
  *   3. 模板的「影响 scope」勾选项与 `scope:*` 标签集合不一致（双向：模板多出/标签多出都拦）。
- *   4. 带前缀标签（`status:` / `priority:` / `scope:`）缺取值。
+ *   4. 带前缀标签（`status:` / `priority:` / `scope:`）缺取值；`status:` / `priority:`
+ *      取值超出词表（`scope:` 的取值由第 3 条双向校验兜底，故不在此另立词表）。
  *   5. 多条模板的「影响 scope」勾选项彼此不一致——GitHub 的 issue 模板无法共享片段，
  *      同一份清单在每条模板里各抄一遍；只改其中一条时，第 3 条校验仍会通过（因为校验的是
  *      模板**并集**），缺口只能在这里拦。
@@ -33,6 +34,19 @@ const TEMPLATE_DIR = ".github/ISSUE_TEMPLATE";
 
 /** GitHub 标签描述上限。 */
 const DESCRIPTION_MAX = 100;
+
+/**
+ * 带枚举取值的标签前缀及其合法取值。
+ *
+ * 定义同源：`docs/issue-management.md` §1——状态机（终态由**关闭**表达，故刻意无 `done`）
+ * 与优先级表（`p0`–`p3`，含义沿用 `docs/technical-debt/README.md` §严重级定义）。
+ * `scope:` 不在表内：它的取值集合随 issue 模板变化，且已有双向校验（模板勾选项 ↔ `scope:*`）
+ * 兜底——在此再抄一份就成了第四份词表。
+ */
+const PREFIX_VALUES = {
+  status: ["triage", "in-progress", "blocked"],
+  priority: ["p0", "p1", "p2", "p3"],
+};
 
 /**
  * 解析 issue 模板的 YAML frontmatter。
@@ -154,8 +168,14 @@ export function validateLabels(labels, templates) {
     }
 
     const prefix = /^(status|priority|scope):/.exec(name);
-    if (prefix && name.slice(prefix[0].length).trim() === "") {
-      errors.push(`标签 ${name} 的前缀 ${prefix[0]} 后缺取值`);
+    if (prefix) {
+      const value = name.slice(prefix[0].length).trim();
+      const allowed = PREFIX_VALUES[prefix[1]];
+      if (value === "") {
+        errors.push(`标签 ${name} 的前缀 ${prefix[0]} 后缺取值`);
+      } else if (allowed && !allowed.includes(value)) {
+        errors.push(`标签 ${name} 的取值超出词表（${prefix[1]}: 仅允许 ${allowed.join(" / ")}）`);
+      }
     }
   }
 
