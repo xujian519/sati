@@ -20,8 +20,9 @@ import type {
  *       endpoint: https://api.z.ai/api/paas/v4/web_search
  *
  * Unknown fields produce non-fatal warnings so future additions don't break
- * older deployments.  Returns `undefined` when the section is missing or
- * empty so callers can keep the field off the snapshot entirely.
+ * older deployments. Returns `undefined` when no webSearch / paperSearch block
+ * exists. Preserve a present but empty block: legacy configs use it to opt into
+ * search with credentials supplied by the environment（上游 #588）。
  */
 export function parseToolsConfig(
   rawTools: unknown,
@@ -193,7 +194,9 @@ function parseWebSearch(raw: unknown, diagnostics: PilotConfigDiagnostic[]): Pil
     }
   }
 
-  return Object.keys(result).length > 0 ? result : undefined;
+  // Presence is meaningful even if every legacy/unknown field was discarded
+  // （上游 #588）：空块 = 遗留 opt-in，丢掉它就等于静默关掉这个功能。
+  return result;
 }
 
 function parseCustomProvider(
@@ -400,5 +403,6 @@ function parsePaperSearch(raw: unknown, diagnostics: PilotConfigDiagnostic[]): P
     }
   }
 
-  return Object.keys(result).length > 0 ? result : undefined;
+  // Presence is meaningful even if every field was discarded（上游 #588 语义外延到 paperSearch）。
+  return result;
 }

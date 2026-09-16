@@ -9,6 +9,7 @@ import { MASK } from "../../../shared/utils/secret";
 import type { SatiConfig } from "../../modelPool/types";
 import { patch } from "../../modelPool/utils/patch";
 import { hasUsableSecret, isMaskedSecret } from "../../modelPool/utils/providerRefs";
+import { isOptionalFeatureEnabled } from "../../../shared/utils/optionalFeature";
 import {
   isWebSearchApiKeyRequired,
   webSearchConfigForProvider,
@@ -30,7 +31,10 @@ export default function ToolsSection({ config, onChange }: ToolsSectionProps) {
   const { t } = useTranslation("settings");
   const glmDefaultEndpoint = "https://api.z.ai/api/paas/v4/web_search";
   const ws = config.tools?.webSearch ?? {};
-  const enabled = ws.enabled !== false;
+  // 段缺失 = 关（上游 #588）：运行期未配置的搜索不再自我唤醒（曾可从
+  // GLM_WEB_SEARCH_API_KEY / TAVILY_API_KEY 推断），面板必须同判据。
+  const enabled = isOptionalFeatureEnabled(config.tools?.webSearch);
+  const paperSearchEnabled = isOptionalFeatureEnabled(config.tools?.paperSearch);
   const provider: WebSearchProvider = ws.provider === "tavily" || ws.provider === "custom" ? ws.provider : "glm";
   const apiKey = typeof ws.apiKey === "string" ? ws.apiKey : "";
   const endpoint = typeof ws.endpoint === "string" ? ws.endpoint : "";
@@ -159,6 +163,7 @@ export default function ToolsSection({ config, onChange }: ToolsSectionProps) {
             }}
           />
         </SettingsRow>
+
         {enabled && (
           <>
             <FormRow
@@ -349,6 +354,18 @@ export default function ToolsSection({ config, onChange }: ToolsSectionProps) {
             </div>
           </>
         )}
+      </SettingsCard>
+      <SettingsCard divided>
+        <SettingsRow
+          label={t("satiConfig.panels.tools.paperSearch.enabled.label")}
+          description={t("satiConfig.panels.tools.paperSearch.enabled.description")}
+        >
+          <SettingsToggle
+            checked={paperSearchEnabled}
+            ariaLabel={t("satiConfig.panels.tools.paperSearch.enabled.label")}
+            onChange={value => onChange(patch(config, ["tools", "paperSearch", "enabled"], value))}
+          />
+        </SettingsRow>
       </SettingsCard>
     </SettingsSection>
   );

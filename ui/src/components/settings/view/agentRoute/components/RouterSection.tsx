@@ -8,6 +8,7 @@ import type { SatiConfig } from "../../modelPool/types";
 import { ensureModelRefConfigured } from "../../agentModel/utils/modelRefs";
 import { useDynamicModelOptions } from "../../../../../shared/useDynamicModelOptions";
 import { PageSectionHeader, SettingsCard, SettingsRow, SettingsToggle } from "../../../shared/view";
+import { isOptionalFeatureEnabled } from "../../../shared/utils/optionalFeature";
 import { DEFAULT_RULES, DEFAULT_TIERS, ROUTER_TIER_KEYS } from "../utils/router";
 import ModelPricingEditor from "./ModelPricingEditor";
 import MultimodalModelEditor from "./MultimodalModelEditor";
@@ -25,7 +26,9 @@ export default function RouterSection({ config, onChange }: RouterSectionProps) 
   const { t } = useTranslation("settings");
   const [showAdvanced, setShowAdvanced] = useState(false);
   const r = config.router ?? {};
-  const enabled = r.enabled !== false;
+  // 段缺失 = 关（上游 #588）：运行期 `ensureRouterConfig` 对缺失段返回 enabled:false，
+  // 面板必须同判据，否则显示「开」而实际直通。
+  const enabled = isOptionalFeatureEnabled(config.router);
   const modelOpts = useDynamicModelOptions(config);
 
   const ts = r.tokenSaver ?? {};

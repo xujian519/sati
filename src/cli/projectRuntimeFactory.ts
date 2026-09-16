@@ -42,6 +42,7 @@ import { createModelRuntime, type ModelRuntime } from "../model/index.js";
 import { resolveEmbeddingClient, resolveRerankClient } from "../model/embedding/index.js";
 import { createPolicyKey, normalizeRetryReason } from "../model/streaming/retryState.js";
 import { loadPilotConfig } from "../pilot/index.js";
+import { isOptionalFeatureEnabled } from "../pilot/config/optionalFeature.js";
 import type { PilotConfigDiagnostic, PilotConfigSnapshot } from "../pilot/config/types.js";
 import { createRouterRuntime, type RouterRuntime } from "../router/index.js";
 import type { RouterEvent, RouterEventBus } from "../router/protocol/events.js";
@@ -331,38 +332,38 @@ export function createProjectRuntimeResolver(deps: ProjectRuntimeFactoryDeps): P
         lister: () => pluginRuntime.getAllSkills(),
       },
       // Pass the YAML-configured web-search provider through to the built-in
-      // `web_search` tool. When absent, the tool may infer GLM/Tavily from
-      // provider-specific environment variables.
-      ...(webSearchConfig?.enabled === false
-        ? { webSearch: false as const }
-        : webSearchConfig
-          ? {
-              webSearch: {
-                ...(webSearchConfig.provider ? { provider: webSearchConfig.provider } : {}),
-                ...(webSearchConfig.apiKey ? { apiKey: webSearchConfig.apiKey } : {}),
-                ...(webSearchConfig.endpoint ? { endpoint: webSearchConfig.endpoint } : {}),
-                ...(webSearchConfig.customProvider ? { customProvider: webSearchConfig.customProvider } : {}),
-              },
-            }
-          : {}),
+      // `web_search` tool. An absent or explicitly disabled section keeps search
+      // out of the registry, even when provider credentials are available in the
+      // environment（上游 #588）：未配置的搜索不再凭 GLM_WEB_SEARCH_API_KEY /
+      // TAVILY_API_KEY 自我唤醒。
+      ...(isOptionalFeatureEnabled(webSearchConfig)
+        ? {
+            webSearch: {
+              ...(webSearchConfig.provider ? { provider: webSearchConfig.provider } : {}),
+              ...(webSearchConfig.apiKey ? { apiKey: webSearchConfig.apiKey } : {}),
+              ...(webSearchConfig.endpoint ? { endpoint: webSearchConfig.endpoint } : {}),
+              ...(webSearchConfig.customProvider ? { customProvider: webSearchConfig.customProvider } : {}),
+            },
+          }
+        : { webSearch: false as const }),
       // Pass the YAML-configured literature sources through to the built-in
       // `paper_search` / `paper_list_sources` tools. Config shape matches
       // CreateLiteratureRegistryOptions; undefined fields fall back to defaults
       // (all sources enabled, free no-key).
-      ...(paperSearchConfig?.enabled === false
-        ? { paperSearch: false as const }
-        : paperSearchConfig
-          ? {
-              paperSearch: {
-                arxiv: paperSearchConfig.arxiv,
-                openalex: paperSearchConfig.openalex,
-                semanticScholar: paperSearchConfig.semanticScholar,
-                crossref: paperSearchConfig.crossref,
-                openalexMailto: paperSearchConfig.openalexMailto,
-                semanticScholarApiKey: paperSearchConfig.semanticScholarApiKey,
-              },
-            }
-          : {}),
+      // 段缺失 = 关（上游 #588 语义外延到 paperSearch）：注意这不只影响两个 paper 工具，
+      // `patent_workflow_run` 的多源检索以同一 registry 作为文献源，禁用后回退 nuo 单源。
+      ...(isOptionalFeatureEnabled(paperSearchConfig)
+        ? {
+            paperSearch: {
+              arxiv: paperSearchConfig.arxiv,
+              openalex: paperSearchConfig.openalex,
+              semanticScholar: paperSearchConfig.semanticScholar,
+              crossref: paperSearchConfig.crossref,
+              openalexMailto: paperSearchConfig.openalexMailto,
+              semanticScholarApiKey: paperSearchConfig.semanticScholarApiKey,
+            },
+          }
+        : { paperSearch: false as const }),
       // Pass the YAML-configured patents.downloadDir through to the built-in
       // `patent_pdf_download` tool (runtime-live: read at every execution).
       ...(snapshot.config.patents?.downloadDir
