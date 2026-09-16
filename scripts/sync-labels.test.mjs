@@ -150,10 +150,12 @@ test("负控制：模板多出勾选项同样被拦（比对是双向的）", ()
 });
 
 test("不含「影响 scope」节的模板不参与模板间比对", () => {
-  // tech_debt.md 尚无该节（TD-PROCGATE-003）：它不产生 scope 标签，不该拖累一致性校验。
+  // 合成输入，不绑定仓库实际模板：守的是过滤逻辑本身。
+  // 历史上 tech_debt.md 曾是该类模板（TD-PROCGATE-003，2026-09-17 补节）——当时若没有
+  // 这条过滤，它会以「缺全部勾选项」的姿态拖累另两条模板的比对。留着是为了下一个新增模板。
   const templates = [
     { file: "bug_report.md", labels: [], scopes: ["agent"] },
-    { file: "tech_debt.md", labels: [], scopes: [] },
+    { file: "new_template.md", labels: [], scopes: [] },
   ];
   assert.deepEqual(validateLabels([OK_LABEL, scopeLabel("agent")], templates), []);
 });

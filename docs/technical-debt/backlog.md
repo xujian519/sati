@@ -1897,10 +1897,18 @@
   - 建议：在 `ci.yml` 的 `quality` job 增加 `pnpm test:pr-tooling` 步骤（替换或并列于现有只跑单文件的 `Self-test PR traceability gate`）。
   - **2026-09-15 处置（PR #377，`ci`）**：采用「替换为整体挂载 `pnpm test:pr-tooling`」方案，并把该步骤从 install **之前**移到**之后**（`measure-techdebt.test.mjs` 依赖 `typescript`，install 前跑不起来）。整体挂载使今后新增的脚本测试自动进 CI。CI 日志已确认该步骤在 `quality` job 中执行（83 用例）。
 - **TD-PROCGATE-003** · `tech_debt.md` 模板缺「影响 scope」节 → 债务议题**拿不到 `scope:*`**
-  - 类别：F/H · 严重级：P2 · 工作量：S · 状态：new
+  - 类别：F/H · 严重级：P2 · 工作量：S · 状态：**done（2026-09-17，PR #NNN）**
   - 位置：`.github/ISSUE_TEMPLATE/tech_debt.md`
   - 影响：三个模板中它是唯一没有「影响 scope」节的，而 scope 自动打标**完全依赖解析该节**。后果：**所有技术债议题零 scope**（实况证据：`#164 #163 #162 #161 #160 #153 #206` 七个 tech-debt 来源议题**全部只有 `tech-debt` 一个标签**），无法按模块筛选、无法统计「债务按模块分布」——而技术债恰恰最需要按模块归类。`docs/issue-management.md` §1 却称作用域是「自动」的。且 `sync-labels.mjs --check` 的「模板 scope 勾选 ↔ 标签双向一致」校验**天然覆盖不到**该模板，缺口不会被门禁发现。
   - 建议：补上与 bug/feature 逐字一致的「## 影响 scope」节；**附带**补「## 契约影响」节（债务修复若触及 `inputSchema`/事件面/协议同样需前置声明）。
+  - 判据：`tech_debt.md` 补「## 影响 scope」节（17 项勾选，与 `bug_report.md` / `feature_request.md` 逐字一致）与「## 契约影响（重要）」节
+    （6 项，取 `feature_request.md` 口径——债务修复同样可能触及 i18n 文案与 UI 渲染，`bug_report.md` 的 4 项版不含这两条）。
+    **门禁覆盖实证**：补节后三条模板全部进入模板间比对；临时从 `tech_debt.md` 删去 `patent` / `desktop` 两行 →
+    `--check` 退出码 1 并逐条点名「缺勾选项「patent」（与 bug_report.md 不一致）」，还原后恢复绿（证明该模板不再游离于校验之外）。
+    **分类器 dry-run**：对模板体勾 `patent`+`desktop` → 产出 `scope:patent` `scope:desktop` `status: triage`；勾满「契约影响」节 → 零标签（不越界读取）。
+    ⚠️ 本项还清后暴露一处**新盲区**（记入 `docs/issue-management.md` §2 诚实边界）：**「模板缺整节」不被任何校验发现**——缺的那节连比对对象都不存在，
+    故本项在补节前不会被任何门禁报警。附带建议的「契约影响」节则**至今无模板间校验**（它不产生标签、无下游消费者），
+    三条模板的该节选项已漂移（4 项 vs 6 项）且不会红——是否给 `bug_report.md` 补齐两项未决。
 - **TD-PROCGATE-004** · stale 豁免清单与分诊目标**互相抵销**（`priority: p0/p1` 与 `triage` 议题 120 天后静默关闭）
   - 类别：D · 严重级：P2 · 工作量：S · 状态：new
   - 位置：`.github/workflows/stale.yml:35` × `docs/issue-management.md` §3/§5/§6
@@ -1990,7 +1998,7 @@
 5. **TD-METRIC-001/002/003**（度量口径与基线）—— 仪表盘不可信会让**后续所有**排期决策失真，杠杆高于任何单个实现债务。与 `check:event-matrix` 同批做生成式门禁。
 6. **TD-GATEWAY-N01**（协议版本无门禁）—— 与上条同属「门禁缺失」，可合并为一个生成式门禁专项。
 7. **TD-TEAM-N06**（通用层耦合专利域）—— 抽一个接口即可，但越晚改成本越高（§31.1 结论）。
-8. **TD-PROCGATE-003/004**（债务模板缺 scope 节 / stale 与分诊抵销）—— 直接影响本批债务 issue 自身的可管理性。
+8. **TD-PROCGATE-004**（stale 与分诊抵销）—— 直接影响本批债务 issue 自身的可管理性（同批的 003「债务模板缺 scope 节」已于 2026-09-17 还清）。
 
 **中期（P2 专项）**
 9. **TD-TEAM-N09/N10**（黑板与面板快照的缓存/批量查询）、**TD-PATENT-N22/N23/N24**（原子写与索引存储的复制）、**TD-SESSION-N10**（启动扫描全量读）—— 同属「新增期扩张留下的一致性税」，收敛点清晰、爆炸半径小。

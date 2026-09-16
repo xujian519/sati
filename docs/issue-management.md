@@ -61,7 +61,7 @@ status: triage ──→ status: in-progress ──→ 关闭（完成 / wontfix
 |---|---|---|
 | `bug_report.md` | `bug: ` | 复现步骤、预期/实际行为、**影响 scope**、**契约影响**、环境 |
 | `feature_request.md` | `feat: ` | 价值与动机、现状与痛点、期望方案、**影响 scope**、契约影响、验收标准 |
-| `tech_debt.md` | `tech-debt: ` | **触发还债条件**（不写不接）、关联决策记录（**缺「影响 scope」节** ⇒ 债务议题拿不到 `scope:*`，已登记为 `docs/technical-debt/backlog.md` 的 `TD-PROCGATE-003`） |
+| `tech_debt.md` | `tech-debt: ` | **触发还债条件**（不写不接）、关联决策记录、**影响 scope**、**契约影响** |
 
 两个设计要点：
 
@@ -69,6 +69,10 @@ status: triage ──→ status: in-progress ──→ 关闭（完成 / wontfix
 - **「影响 scope」节是自动化的输入**，不是装饰——它被 §5 的分类器翻译成 `scope:*` 标签，改动其选项会同时触发标签门禁。该节在每条模板里各存一份（GitHub 无法共享片段），所以门禁同时比对**模板↔标签**与**模板↔模板**。
 
 **新增模板的纪律**：模板的 `labels:` 必须已在 `.github/labels.yml` 声明；scope 勾选项必须与 `scope:*` 标签集合一致，且与其它模板的勾选项**彼此一致**。三条都由 `pnpm check:issue-labels` 拦。
+
+> **诚实边界一：`tech_debt.md` 曾长期缺「影响 scope」节**（`TD-PROCGATE-003`，2026-09-17 补）——期间所有技术债议题零 `scope:*`，而本节 §1 却称作用域是「自动」的。这段历史值得留着，因为它揭示了门禁的一个盲区形状：**「模板缺整节」不会被任何校验发现**，缺少的那一节连比对对象都不存在。补齐后三条模板全部参与模板间比对。
+>
+> **诚实边界二：三条模板的「契约影响」节选项并不一致**——`bug_report.md` 4 项，`feature_request.md` 与 `tech_debt.md` 6 项（多出 i18n 文案、UI 渲染两条）。该节**不产生标签**，因此没有模板间一致性校验，这处漂移不会被 `pnpm check:issue-labels` 发现（`bug_report.md` 是否该补齐这两项，未决）。这与上一条构成对照：「影响 scope」节因有下游消费者（分类器）而被门禁看重，「契约影响」节没有下游消费者，于是同为多模板重复内容却无人守。
 
 ---
 
