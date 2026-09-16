@@ -10,6 +10,10 @@ import {
 /**
  * 内容级 token 计数缓存（P0-1 根治）：相同文本全进程只编码一次；
  * 病态（高重复度）长文本走样本外推，避免 js-tiktoken BPE 二次方退化。
+ *
+ * 文件内的 `tok.encode` 计数包装器必须转发全部参数：计数内部走
+ * `encode(text, [], [])`（放行特殊 token 字面量），只接 `text` 会把后两个参数
+ * 丢掉、静默还原成默认 `disallowedSpecial="all"`，从而让包装器自己改变被观察行为。
  */
 
 test("相同文本第二次计数不再调用 tokenizer encode（缓存命中）", () => {
@@ -17,9 +21,10 @@ test("相同文本第二次计数不再调用 tokenizer encode（缓存命中）
   const tok = getTokenizer();
   const original = tok.encode.bind(tok);
   let encodeCalls = 0;
-  tok.encode = ((text: string) => {
+  // 转发全部参数（见文件头说明）。
+  tok.encode = ((...args: Parameters<typeof original>) => {
     encodeCalls += 1;
-    return original(text);
+    return original(...args);
   }) as typeof tok.encode;
 
   try {
@@ -39,9 +44,10 @@ test("不同文本各自编码一次，互不串扰", () => {
   const tok = getTokenizer();
   const original = tok.encode.bind(tok);
   let encodeCalls = 0;
-  tok.encode = ((text: string) => {
+  // 转发全部参数（见文件头说明）。
+  tok.encode = ((...args: Parameters<typeof original>) => {
     encodeCalls += 1;
-    return original(text);
+    return original(...args);
   }) as typeof tok.encode;
 
   try {
@@ -59,9 +65,10 @@ test("空文本不触碰 tokenizer", () => {
   const tok = getTokenizer();
   const original = tok.encode.bind(tok);
   let encodeCalls = 0;
-  tok.encode = ((text: string) => {
+  // 转发全部参数（见文件头说明）。
+  tok.encode = ((...args: Parameters<typeof original>) => {
     encodeCalls += 1;
-    return original(text);
+    return original(...args);
   }) as typeof tok.encode;
 
   try {
@@ -114,9 +121,10 @@ test("缓存 LRU 上限生效：超出上限后最早条目被淘汰（内存有
   const tok = getTokenizer();
   const original = tok.encode.bind(tok);
   let encodeCalls = 0;
-  tok.encode = ((text: string) => {
+  // 转发全部参数（见文件头说明）。
+  tok.encode = ((...args: Parameters<typeof original>) => {
     encodeCalls += 1;
-    return original(text);
+    return original(...args);
   }) as typeof tok.encode;
   try {
     countTokens("unique-text-0-专利内容");
