@@ -1,4 +1,4 @@
-import { KgStore, type KgNeighbor } from "../shared/kg-store.js";
+import { KgStore, type KgNeighbor, type KgSchema } from "../shared/kg-store.js";
 import type { KgNode } from "./types.js";
 
 /**
@@ -131,6 +131,11 @@ export class PatentKgAdapter {
   /** KG FTS tokenizer 实际生效模式（诊断用：trigram/unicode61/none）。 */
   ftsMode(): "trigram" | "unicode61" | "none" {
     return this.store.ftsMode();
+  }
+
+  /** KG FTS 探测明细（诊断用：schema + 库中是否有 FTS 表），与 ftsMode 同源。 */
+  ftsProbe(): { schema: KgSchema; tablePresent: boolean } {
+    return this.store.ftsProbe();
   }
 
   close(): void {

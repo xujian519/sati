@@ -43,6 +43,8 @@ export class KgStore {
   private readonly schema: KgSchema;
   /** 表结构探测结果：trigram FTS 表优先（scripts/migrate-kg-fts-trigram.mjs 生成），否则 unicode61 旧表；无 FTS 时为 null。 */
   private readonly ftsTable: string | null;
+  /** 命中 FTS 表的实际 tokenizer（建表 SQL 判定，见 schema-introspector）。 */
+  private readonly ftsTokenizer: "trigram" | "unicode61";
   private readonly graphTraversal: GraphTraversal;
 
   // 热路径 prepared statements（prepare 一次反复复用，避免每次执行重新编译 SQL）
@@ -59,6 +61,7 @@ export class KgStore {
       this.db = opened.db;
       this.schema = introspected.schema;
       this.ftsTable = introspected.ftsTable;
+      this.ftsTokenizer = introspected.ftsTokenizer;
       this.stmtGetNode = introspected.statements.stmtGetNode;
       this.stmtLikeSearch = introspected.statements.stmtLikeSearch;
       this.stmtFtsSearch = introspected.statements.stmtFtsSearch;
@@ -83,12 +86,22 @@ export class KgStore {
     return this.schema;
   }
 
-  /** 当前生效的 FTS 模式（诊断用）：trigram 表 / unicode61 旧表 / 无 FTS（LIKE 降级）。 */
+  /** 当前生效的 FTS 模式（诊断用）：trigram / unicode61 / 无 FTS（LIKE 降级）。 */
   ftsMode(): "trigram" | "unicode61" | "none" {
+    // 两种情况归入 none：库中无 FTS 表、表在但 prepare 失败（运行时未编译 FTS5）。
     if (this.stmtFtsSearch === null) return "none";
-    // unified schema（kg_nodes_fts）恒为 trigram。
-    if (this.schema === "unified") return "trigram";
-    return this.ftsTable === "nodes_fts_trigram" ? "trigram" : "unicode61";
+    // tokenizer 取建表 SQL 判定结果（**不再按 schema 硬编码**：unified 的
+    // kg_nodes_fts 由外部导入管道建，可能是 unicode61，硬编码会把降级报成 ready）。
+    return this.ftsTokenizer;
+  }
+
+  /**
+   * FTS 探测明细（诊断用，与 ftsMode 同一探测点）：schema 与「库中是否有 FTS 表」。
+   * `ftsMode() === "none"` 有两种成因——表缺失（可用重建脚本修复）与运行时无
+   * FTS5（换 Node/构建）——处置不同，故必须随模式一并上报（issue #376 A8）。
+   */
+  ftsProbe(): { schema: KgSchema; tablePresent: boolean } {
+    return { schema: this.schema, tablePresent: this.ftsTable !== null };
   }
 
   /** 按 id 查询节点（带 LRU 缓存，上限 NODE_CACHE_MAX）。 */

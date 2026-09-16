@@ -25,6 +25,14 @@ import type { LawRecord, LegalSearchSource } from "./types.js";
  * 知识库只读，captureTurn 为空操作。
  */
 
+/**
+ * 本 provider 消费的 vectors.db 语料名。
+ *
+ * 导出以便诊断端（diagnostics.ts）用**同一份声明**判断「该索引有无消费者」——
+ * 判据必须与消费者同源，否则改语料名会让诊断与实际接线悄悄错位（issue #376 A6）。
+ */
+export const LEGAL_VECTOR_CORPUS = "law";
+
 export type LegalMemoryProviderOptions = {
   /** 注入的法条条数上限（默认 3）。 */
   limit?: number;
@@ -187,7 +195,7 @@ export class LegalMemoryProvider implements MemoryResolver {
     const knowledgeEmbeddings = this.knowledgeEmbeddings;
     const vectorDb = this.vectorDb;
     const hasKnowledge = knowledgeEmbeddings?.available === true;
-    const hasLegacy = vectorDb?.hasCorpus("law") === true;
+    const hasLegacy = vectorDb?.hasCorpus(LEGAL_VECTOR_CORPUS) === true;
     if (!hasKnowledge && !hasLegacy) return [];
     // #9c ready 门（P4 异步预热）：knowledge 路矩阵未加载时跳过——embed 结果
     // 对空矩阵毫无意义（一次浪费的 embed API 调用）；同时经 tryWarm 保持预热

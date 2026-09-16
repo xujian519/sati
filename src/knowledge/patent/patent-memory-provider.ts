@@ -157,10 +157,13 @@ export class PatentMemoryProvider implements MemoryResolver {
     this.stats?.registerBreaker("patent:semantic", this.semanticBreaker);
     this.stats?.registerBreaker("patent:rerank", this.rerankBreaker);
     // KG FTS 探测（诊断用）：kgAdapter.ftsMode 反映 kg-store 实际生效的分词器
-    // （trigram/unicode61/none；none 表示 FTS5 不可用已回退 LIKE）。
+    // （trigram/unicode61/none；none 表示 FTS5 不可用已回退 LIKE）。模式之外还上报
+    // schema 与「库中是否有 FTS 表」——同一模式在 unified/legacy 下治理方式不同，
+    // 且 none 的成因（表缺失 vs 运行时无 FTS5）决定提示是否指向重建脚本（#376 A8）。
     if (this.stats && options.kgAdapter) {
       const mode = options.kgAdapter.ftsMode();
       this.stats.setKgFtsMode(mode === "none" ? "like" : mode);
+      this.stats.setKgFtsProbe(options.kgAdapter.ftsProbe());
     }
     const cacheTtlMs = options.cacheTtlMs ?? 60_000;
     this.cache = cacheTtlMs > 0 ? new TtlCache<string, string>({ ttlMs: cacheTtlMs }) : undefined;

@@ -26,8 +26,27 @@ export type KgStoreStatements = {
 export type KgStoreIntrospection = {
   schema: KgSchema;
   ftsTable: string | null;
+  /** 命中的 FTS 表实际 tokenizer（表缺失时为 unicode61，仅占位不被消费）。 */
+  ftsTokenizer: "trigram" | "unicode61";
   statements: KgStoreStatements;
 };
+
+/**
+ * 判定 FTS 表实际 tokenizer（**建表 SQL 是唯一权威来源**）。
+ *
+ * fts5(...) 不写 `tokenize=` 时默认 unicode61——故不能按 schema 推断：
+ * unified 的 `kg_nodes_fts` 由 XiaoNuo 导入管道/`trim-knowledge-db.ts` 建，
+ * 理论上均为 trigram，但旧导入器或外来库可能是 unicode61。此前 unified 分支
+ * 硬编码返回 trigram，会把这种表报成 trigram（假 ready，issue #376 A8）。
+ */
+function detectFtsTokenizer(row: { name: string; sql?: string | null } | undefined): "trigram" | "unicode61" {
+  if (!row) return "unicode61";
+  if (typeof row.sql === "string" && row.sql.length > 0) {
+    return /tokenize\s*=\s*['"]?\s*trigram/i.test(row.sql) ? "trigram" : "unicode61";
+  }
+  // sql 缺失（异常库）时按表名兜底：nodes_fts_trigram 由 migrate 脚本以 trigram 建。
+  return row.name === "nodes_fts_trigram" ? "trigram" : "unicode61";
+}
 
 /** 表是否存在于库中（sqlite_master 探测）。 */
 function tableExists(db: DatabaseSync, name: string): boolean {
@@ -51,11 +70,12 @@ export function introspectKgStore(db: DatabaseSync, dbPath: string): KgStoreIntr
   const ftsRow = db
     .prepare(
       hasUnified
-        ? "SELECT name FROM sqlite_master WHERE type='table' AND name = 'kg_nodes_fts' LIMIT 1"
-        : "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('nodes_fts_trigram', 'nodes_fts') ORDER BY CASE name WHEN 'nodes_fts_trigram' THEN 0 ELSE 1 END LIMIT 1",
+        ? "SELECT name, sql FROM sqlite_master WHERE type='table' AND name = 'kg_nodes_fts' LIMIT 1"
+        : "SELECT name, sql FROM sqlite_master WHERE type='table' AND name IN ('nodes_fts_trigram', 'nodes_fts') ORDER BY CASE name WHEN 'nodes_fts_trigram' THEN 0 ELSE 1 END LIMIT 1",
     )
-    .get() as { name: string } | undefined;
+    .get() as { name: string; sql?: string | null } | undefined;
   const ftsTable = ftsRow?.name ?? null;
+  const ftsTokenizer = detectFtsTokenizer(ftsRow);
 
   // unified: law_refs 为 TEXT JSON 数组（无 version）；legacy: law_refs_count 整数 + version。
   const nodeColumns = hasUnified
@@ -102,6 +122,7 @@ export function introspectKgStore(db: DatabaseSync, dbPath: string): KgStoreIntr
   return {
     schema,
     ftsTable,
+    ftsTokenizer,
     statements: {
       stmtGetNode,
       stmtLikeSearch,

@@ -70,6 +70,11 @@ export class VectorDbSearch {
     return this.corpora.has(corpus);
   }
 
+  /** 已索引语料清单（vector_meta 实际行；诊断用：判断有无被消费的语料）。 */
+  indexedCorpora(): readonly string[] {
+    return Array.from(this.corpora.keys());
+  }
+
   /** 语料维度（无此语料返回 0）。 */
   dimensionsOf(corpus: string): number {
     return this.corpora.get(corpus)?.dimensions ?? 0;
