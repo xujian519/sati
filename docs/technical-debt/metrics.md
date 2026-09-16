@@ -7,11 +7,11 @@
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1033 / 169861 |
+| src TS 文件 / 行数 | 1033 / 169860 |
 | src JS 文件 | 0 |
 | tests 文件 | 547 |
-| ui/src 文件 / 行数 | 468 / 83034 |
-| ui/server 文件 / 行数 | 105 / 31639 |
+| ui/src 文件 / 行数 | 468 / 83036 |
+| ui/server 文件 / 行数 | 105 / 31637 |
 
 ## 指标口径
 
@@ -85,7 +85,7 @@
 | `ui/src/components/kanban/hooks/useBoardState.ts` | `useBoardState` | 368 | function |
 | `ui/src/components/chat/hooks/useFileMentions.tsx` | `useFileMentions` | 366 | function |
 | `ui/src/components/settings/view/agentRoute/components/RouterSection.tsx` | `RouterSection` | 357 | function |
-| `src/cli/projectRuntimeFactory.ts` | `createProjectRuntimeResolver` | 353 | function |
+| `src/cli/projectRuntimeFactory.ts` | `createProjectRuntimeResolver` | 349 | function |
 | `ui/src/components/main-content/view/MainContent.tsx` | `MainContent` | 346 | function |
 | `src/gateway/server/GatewayWsConnection.ts` | `dispatchRequest` | 343 | method |
 | `ui/src/components/settings/view/agentSearch/components/ToolsSection.tsx` | `ToolsSection` | 343 | function |

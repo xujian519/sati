@@ -19,8 +19,8 @@ export function ensureRouterConfig(
 ): RouterConfig {
   const defaultRef = { id: defaultSelection.id, provider: defaultSelection.provider, model: defaultSelection.model };
   // 段缺失 = 关（上游 #588）：未配置 router 的用户不再拿到一个全开的智能路由，
-  // 请求也就不再凭空多出分类调用。
-  if (!router || !isOptionalFeatureEnabled(router)) {
+  // 请求也就不再凭空多出分类调用。判据同时承担「非空」窄化。
+  if (!isOptionalFeatureEnabled(router)) {
     return { enabled: false };
   }
   // Scenarios is optional at the parse boundary (see schema.ts) — the UI

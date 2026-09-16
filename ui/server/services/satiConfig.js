@@ -125,10 +125,8 @@ function normalizeSatiConfig(input) {
   // 上面新增的默认值 `enabled: false` 会在「读取 → 保存」往返里把它静默关掉——守卫
   // 的作用就是把这种段显式物化为 `enabled: true`。`memory` 不在此列：它的默认值未变，
   // 无需迁移（见 buildDefaultSatiConfig 的说明）。
-  for (const key of ["router"]) {
-    if (isRecord(source[key]) && source[key].enabled === undefined) {
-      normalized[key].enabled = true;
-    }
+  if (isRecord(source.router) && source.router.enabled === undefined) {
+    normalized.router.enabled = true;
   }
   if (isRecord(source.tools?.webSearch) && source.tools.webSearch.enabled === undefined) {
     normalized.tools.webSearch.enabled = true;

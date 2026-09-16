@@ -13,7 +13,10 @@
  * `memory.enabled` 刻意不在其中：memory 段无论有无都带着"默认开启"的历史语义，
  * 翻转会让记忆索引调度器停止工作，收益与影响面不成比例。
  * 也不用于 IM 渠道适配器（渠道的启停另有开关语义）。
+ *
+ * 声明为类型谓词：调用点普遍要在"启用"分支里读该段的子字段（`provider` / `apiKey` …），
+ * 谓词把判据与窄化绑在一处，调用点无需再补 `config ? … : {}` 之类的兜底分支。
  */
-export function isOptionalFeatureEnabled(config: { enabled?: boolean } | null | undefined): boolean {
+export function isOptionalFeatureEnabled<T extends { enabled?: boolean }>(config: T | null | undefined): config is T {
   return config != null && config.enabled !== false;
 }

@@ -9,7 +9,9 @@
  *
  * 面板与运行期必须用同一判据，否则会出现「面板显示开、实际关」。这里不直接 import
  * `src/` 的同一函数：`ui/` 与后端只经 gateway API 通信，不跨层引源码。
+ *
+ * 与后端同签名（类型谓词）：面板也要在「启用」分支里读该段的子字段。
  */
-export function isOptionalFeatureEnabled(config: { enabled?: boolean } | null | undefined): boolean {
+export function isOptionalFeatureEnabled<T extends { enabled?: boolean }>(config: T | null | undefined): config is T {
   return config != null && config.enabled !== false;
 }
