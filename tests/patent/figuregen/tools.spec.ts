@@ -185,6 +185,44 @@ test("patent_figure_check：≥2 幅自动跑多图一致性（机械件号对�
   assert.ok(/未在附图中识别/u.test(missingText));
 });
 
+test("patent_figure_check：image_paths 走像素级核查，svg_paths 结构核验行为不变", async () => {
+  const cwd = tempCwd();
+  try {
+    const sharpModule = await import("sharp");
+    const sharp = sharpModule.default;
+    // 灰度着色的栅格图（应在 PX1 报 fail），文件名未声明图号（PX4 warn）
+    const shaded = await sharp({
+      create: { width: 300, height: 200, channels: 3, background: { r: 128, g: 128, b: 128 } },
+    })
+      .png()
+      .toFile(join(cwd, "shaded-scan.png"));
+    assert.ok(shaded.width === 300);
+
+    const tool = createPatentFigureCheckTool();
+    const result = await tool.execute(
+      { image_paths: ["shaded-scan.png"], spec_text: "（无结构化附图）" },
+      makeContext(cwd),
+    );
+    const text = result.content[0].type === "text" ? result.content[0].text : "";
+    assert.ok(text.includes("核验未通过"), "PX1 fail 应使核验判未通过");
+    assert.ok(text.includes("[FAIL] PX1"));
+    assert.ok(text.includes("[WARN] PX4"));
+    assert.ok(text.includes("结构规则：未提供结构化附图"), "仅栅格图时如实声明结构规则不适用");
+
+    // 回归：svg_paths 仍走结构核验（不受 image_paths 影响）
+    const svgTool = createPatentFigureCheckTool();
+    const svgResult = await svgTool.execute(
+      { figures: [FIG], spec_text: "处理模块(20)执行处理。" },
+      makeContext(process.cwd()),
+    );
+    const svgText = svgResult.content[0].type === "text" ? svgResult.content[0].text : "";
+    assert.ok(svgText.includes("核验通过"));
+    assert.ok(!svgText.includes("栅格附图像素级核查"));
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
 test("patent_figure_check：文字面分节结论随报告输出（未分节则注明 V10/V11 未生效）", async () => {
   const tool = createPatentFigureCheckTool();
   const unsectioned = await tool.execute(
