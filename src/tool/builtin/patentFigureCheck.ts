@@ -30,6 +30,8 @@ export type PatentFigureCheckInput = {
   svg_paths?: string[];
   image_paths?: string[];
   spec_text: string;
+  claims_text?: string;
+  description_text?: string;
   document_kind?: string;
   jurisdiction?: string;
 };
@@ -122,7 +124,17 @@ export function createPatentFigureCheckTool(): SatiToolDefinition<PatentFigureCh
         },
         spec_text: {
           type: "string",
-          description: "说明书文字部分全文（权利要求书 + 说明书，不含附图本身）",
+          description: "说明书文字部分全文（权利要求书 + 说明书，不含附图本身）；V2/V3 的判定文本",
+        },
+        claims_text: {
+          type: "string",
+          description:
+            "权利要求书文本（可选）：提供时替代启发式分节作为权利要求面，使 V10（权利要求中附图标记须置于括号内）的判定不再依赖小节标题",
+        },
+        description_text: {
+          type: "string",
+          description:
+            "说明书正文文本（可选）：提供时替代启发式分节作为正文面（V11 判定面）。若含附图说明小节，其括号引用也会被 V11 计为正文引用",
         },
         document_kind: {
           type: "string",
@@ -178,9 +190,21 @@ export function createPatentFigureCheckTool(): SatiToolDefinition<PatentFigureCh
 
       try {
         // 只有栅格图时无 FigureSpec 可核：跳过结构规则（已如实声明），只跑像素门禁。
+        // 显式分面（claims_text/description_text）提供时替代启发式分节，使 V10/V11 不再
+        // 依赖小节标题（调用方通常已知道分界）。
+        const explicitFaces =
+          input.claims_text !== undefined || input.description_text !== undefined
+            ? {
+                ...(input.claims_text === undefined ? {} : { claims: input.claims_text }),
+                ...(input.description_text === undefined
+                  ? {}
+                  : { description: input.description_text, descriptionSansBrief: input.description_text }),
+              }
+            : undefined;
         const result = checkFigures(figures, input.spec_text, {
           documentKind: documentKind,
           jurisdiction: jurisdiction,
+          ...(explicitFaces === undefined ? {} : { faces: explicitFaces }),
           ...(figures.length === 0 ? { skipTextRules: true, skipLayoutRules: true } : {}),
         });
         const pixelResults = await runPixelGateForPaths(imagePaths, context.cwd);

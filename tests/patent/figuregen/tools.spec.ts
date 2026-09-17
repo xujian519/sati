@@ -223,6 +223,25 @@ test("patent_figure_check：image_paths 走像素级核查，svg_paths 结构核
   }
 });
 
+test("patent_figure_check：claims_text/description_text 显式分面替代启发式（V10 不再依赖小节标题）", async () => {
+  const tool = createPatentFigureCheckTool();
+  // 文本无小节标题（启发式会分节失败），但调用方显式给出两个面
+  const result = await tool.execute(
+    {
+      figures: [{ figure_no: 1, kind: "block", nodes: [{ id: "a", label: "壳体(10)", ref: 10 }], edges: [] }],
+      spec_text: "权利要求：壳体10。正文：壳体(10)与盖板连接。",
+      claims_text: "1. 一种装置，包括壳体10。",
+      description_text: "壳体(10)与盖板连接。",
+    },
+    makeContext(process.cwd()),
+  );
+  const text = result.content[0].type === "text" ? result.content[0].text : "";
+  assert.ok(text.includes("文字面分节：已分节"));
+  assert.ok(text.includes("调用方显式分面"));
+  assert.ok(text.includes("[FAIL] V10"), "权利要求面裸标记应判 V10");
+  assert.ok(text.includes("[WARN] V11"), "正文面括号引用应判 V11");
+});
+
 test("patent_figure_check：文字面分节结论随报告输出（未分节则注明 V10/V11 未生效）", async () => {
   const tool = createPatentFigureCheckTool();
   const unsectioned = await tool.execute(
