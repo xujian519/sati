@@ -352,6 +352,7 @@ node --test dist/tests/patent/figuregen/*.js dist/tests/patent/figure-gate.spec.
 | §6.2 | `pnpm tsx scripts/figure-benchmark/gen-compliance.ts` 与基线一致；`tests/scripts/figure-benchmark/gen-compliance.spec.ts` 绿（含语义锚点，不随 `--update` 放宽） |
 | D2/D4 | `pnpm record:replay tests/fixtures/llm-replay/deepseek-v4-flash-basic` 通过，`llm-replay-real.spec` 重放绿，且 `manifest.json` 的 `toolNames`/schema 变更与代码一致（§7） |
 | CAD fixture 可复现 | `npx tsx scripts/record-cad-fixtures.ts` 可重录三份边表；front 视图与既有记录逐点一致（试件定义随脚本入库） |
+| 打印校准 | `npx tsx scripts/figure-print-calibration.ts` 产出 A4 校准页且档位取自当前常量；`tests/scripts/figure-print-calibration.spec.ts` 绿（版面不溢出 + 档位来源 + 确定性）；阈值回填待打印实测 |
 
 ---
 
@@ -378,6 +379,7 @@ node --test dist/tests/patent/figuregen/*.js dist/tests/patent/figure-gate.spec.
 - **未核验的规则**：审查指南 4.3 是否含"横向布置时图顶朝左""图幅与页边距具体数值"等条款——本地 `knowledge.db` 无该节原文，**未核验即不写成规则**；如需补，先拉官方公布文本核对后再进 `cn-drawing-rules.md`。
 - **剖视图的其余形态**（2026-09-17 落地全剖视图后仍不做）：旋转剖、阶梯剖、局部剖；剖面线间距固定 2.5mm（不按剖切面尺寸自适应）；C8 只判"锚点是否落在图内几何范围"，不检测"锚点是否落在空材料处"（剖切缺口内的锚点仍会画）。
 - **CAD 图的参考标记智能放置**（按几何拓扑自动推荐标注位置）：标记锚点仍由调用方按模型坐标给出，自动推荐属启发式。
+- **阈值的打印实测回填**（2026-09-17）：仪器已就绪——`npx tsx scripts/figure-print-calibration.ts` 输出 A4 校准页（字高两行含 2/3、线宽带、虚线/剖面线样块、最小间距、灰阶条，档位全部取自源码常量），打印后回填 `MIN_PRINTED_FONT_MM`/`CAD_LINE_WIDTH_MM`/`CAD_HATCH_LINE_WIDTH_MM`/`PIXEL_MID_GRAY_RANGE`/`PIXEL_WHITE_MIN`/DPI 区间；**在实测结果回来之前维持推导值**（不换一组猜测）。自动化扫描闭环不做（环境相关测量，不入自动化门禁）。
 
 ---
 
