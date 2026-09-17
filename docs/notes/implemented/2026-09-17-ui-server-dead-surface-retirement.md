@@ -49,7 +49,7 @@ Status: implemented
 
 ### 3. 仍成立的缺陷 → 独立载体
 
-**不在本次退役中修**（按域拆分，每条独立 PR 可做；映射见 `backlog.md` §36，裁定表见 §26「处置追加」）。**状态更新（2026-09-17 当日）**：#411 / #414 / #415 / #416 已还清（PR #426–#429，各自的决策记录见 `2026-09-17-rewrite-turn-broadcast.md`、`2026-09-17-agent-external-api-defects.md`、`2026-09-17-git-status-rename-bucket.md`、`2026-09-17-masked-provider-key-probes.md`）；#412 / #413 仍在账：
+**不在本次退役中修**（按域拆分，每条独立 PR 可做；映射见 `backlog.md` §36，裁定表见 §26「处置追加」）。**状态更新（2026-09-17 当日）**：#411 / #414 / #415 / #416 已还清（PR #426–#429，各自的决策记录见 `2026-09-17-rewrite-turn-broadcast.md`、`2026-09-17-agent-external-api-defects.md`、`2026-09-17-git-status-rename-bucket.md`、`2026-09-17-masked-provider-key-probes.md`）；**#412 / #413 亦已于同日还清（PR #425，决策记录 `2026-09-17-shell-race-stale-exemption-bridge-cleanup.md`）——6 条载体至此全部闭环**：
 
 - **#411** chat.js edit/regen 流未广播给兄弟 watcher（复核 #1）
 - **#412** shell.js PTY 会话生命周期竞态 ×2（复核 #2、#3）
