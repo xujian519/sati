@@ -1,0 +1,393 @@
+{
+  "cases": [
+    {
+      "id": "flow-tb-8",
+      "title": "8 步 TB 流程图（单图可印区内）",
+      "figures": [
+        {
+          "figure_no": 1,
+          "width_mm": 52.917,
+          "height_mm": 239.183,
+          "fits_printable_area": true,
+          "printed_font_mm": 3.704
+        }
+      ],
+      "zoom": 1,
+      "page_fit_rate": 1,
+      "printed_font_mm": {
+        "min": 3.704,
+        "median": 3.704,
+        "max": 3.704
+      },
+      "rule_hits": {},
+      "fail_findings": 0,
+      "warn_findings": 0,
+      "ok": true,
+      "spec_faces": {
+        "sectioned": true,
+        "reason": "已识别权利要求面；已识别说明书正文面；已排除附图说明小节"
+      }
+    },
+    {
+      "id": "flow-tb-12",
+      "title": "12 步 TB 流程图（曾静默通过、实被分页切断）",
+      "figures": [
+        {
+          "figure_no": 1,
+          "width_mm": 52.917,
+          "height_mm": 354.542,
+          "fits_printable_area": false,
+          "printed_font_mm": 2.685
+        }
+      ],
+      "zoom": 0.7249,
+      "page_fit_rate": 0,
+      "printed_font_mm": {
+        "min": 2.685,
+        "median": 2.685,
+        "max": 2.685
+      },
+      "rule_hits": {
+        "V7": {
+          "fail": 1,
+          "warn": 0,
+          "info": 0
+        }
+      },
+      "fail_findings": 1,
+      "warn_findings": 0,
+      "ok": false,
+      "spec_faces": {
+        "sectioned": true,
+        "reason": "已识别权利要求面；已识别说明书正文面；已排除附图说明小节"
+      }
+    },
+    {
+      "id": "flow-tb-16",
+      "title": "16 步 TB 流程图（画幅明显超框）",
+      "figures": [
+        {
+          "figure_no": 1,
+          "width_mm": 52.917,
+          "height_mm": 469.9,
+          "fits_printable_area": false,
+          "printed_font_mm": 2.026
+        }
+      ],
+      "zoom": 0.5469,
+      "page_fit_rate": 0,
+      "printed_font_mm": {
+        "min": 2.026,
+        "median": 2.026,
+        "max": 2.026
+      },
+      "rule_hits": {
+        "V7": {
+          "fail": 1,
+          "warn": 0,
+          "info": 0
+        }
+      },
+      "fail_findings": 1,
+      "warn_findings": 0,
+      "ok": false,
+      "spec_faces": {
+        "sectioned": true,
+        "reason": "已识别权利要求面；已识别说明书正文面；已排除附图说明小节"
+      }
+    },
+    {
+      "id": "flow-tb-8-us",
+      "title": "8 步 TB 流程图（US 辖区，英文文字面）",
+      "figures": [
+        {
+          "figure_no": 1,
+          "width_mm": 52.917,
+          "height_mm": 239.183,
+          "fits_printable_area": true,
+          "printed_font_mm": 3.704
+        }
+      ],
+      "zoom": 1,
+      "page_fit_rate": 1,
+      "printed_font_mm": {
+        "min": 3.704,
+        "median": 3.704,
+        "max": 3.704
+      },
+      "rule_hits": {},
+      "fail_findings": 0,
+      "warn_findings": 0,
+      "ok": true,
+      "spec_faces": {
+        "sectioned": false,
+        "reason": "未找到说明书小节标题（说明书/技术领域/背景技术/发明内容/附图说明/具体实施方式），无法分面——V10/V11 未生效"
+      }
+    },
+    {
+      "id": "block-cjk-long",
+      "title": "CJK 长标注方框图（字宽按全角 1em 度量）",
+      "figures": [
+        {
+          "figure_no": 1,
+          "width_mm": 314.325,
+          "height_mm": 37.306,
+          "fits_printable_area": false,
+          "printed_font_mm": 2.003
+        }
+      ],
+      "zoom": 0.5408,
+      "page_fit_rate": 0,
+      "printed_font_mm": {
+        "min": 2.003,
+        "median": 2.003,
+        "max": 2.003
+      },
+      "rule_hits": {
+        "V7": {
+          "fail": 1,
+          "warn": 0,
+          "info": 0
+        }
+      },
+      "fail_findings": 1,
+      "warn_findings": 0,
+      "ok": false,
+      "spec_faces": {
+        "sectioned": true,
+        "reason": "已识别权利要求面；已识别说明书正文面；已排除附图说明小节"
+      }
+    },
+    {
+      "id": "block-latin-long",
+      "title": "Latin 长标注方框图（字宽按半角 0.5em 度量）",
+      "figures": [
+        {
+          "figure_no": 1,
+          "width_mm": 353.219,
+          "height_mm": 37.306,
+          "fits_printable_area": false,
+          "printed_font_mm": 1.783
+        }
+      ],
+      "zoom": 0.4813,
+      "page_fit_rate": 0,
+      "printed_font_mm": {
+        "min": 1.783,
+        "median": 1.783,
+        "max": 1.783
+      },
+      "rule_hits": {
+        "V7": {
+          "fail": 1,
+          "warn": 1,
+          "info": 0
+        }
+      },
+      "fail_findings": 1,
+      "warn_findings": 1,
+      "ok": false,
+      "spec_faces": {
+        "sectioned": true,
+        "reason": "已识别权利要求面；已识别说明书正文面；已排除附图说明小节"
+      }
+    },
+    {
+      "id": "block-lr-3node",
+      "title": "3 节点 LR 方框图（可印区内的正向对照）",
+      "figures": [
+        {
+          "figure_no": 1,
+          "width_mm": 137.054,
+          "height_mm": 37.306,
+          "fits_printable_area": true,
+          "printed_font_mm": 3.704
+        }
+      ],
+      "zoom": 1,
+      "page_fit_rate": 1,
+      "printed_font_mm": {
+        "min": 3.704,
+        "median": 3.704,
+        "max": 3.704
+      },
+      "rule_hits": {},
+      "fail_findings": 0,
+      "warn_findings": 0,
+      "ok": true,
+      "spec_faces": {
+        "sectioned": true,
+        "reason": "已识别权利要求面；已识别说明书正文面；已排除附图说明小节"
+      }
+    },
+    {
+      "id": "block-lr-wide",
+      "title": "6 级 LR 串联方框图（横向超框面）",
+      "figures": [
+        {
+          "figure_no": 1,
+          "width_mm": 272.521,
+          "height_mm": 37.306,
+          "fits_printable_area": false,
+          "printed_font_mm": 2.311
+        }
+      ],
+      "zoom": 0.6238,
+      "page_fit_rate": 0,
+      "printed_font_mm": {
+        "min": 2.311,
+        "median": 2.311,
+        "max": 2.311
+      },
+      "rule_hits": {
+        "V7": {
+          "fail": 1,
+          "warn": 0,
+          "info": 0
+        }
+      },
+      "fail_findings": 1,
+      "warn_findings": 0,
+      "ok": false,
+      "spec_faces": {
+        "sectioned": true,
+        "reason": "已识别权利要求面；已识别说明书正文面；已排除附图说明小节"
+      }
+    },
+    {
+      "id": "bracket-faces",
+      "title": "括号按面判定（权利要求漏括号 + 正文用括号）",
+      "figures": [
+        {
+          "figure_no": 1,
+          "width_mm": 64.029,
+          "height_mm": 94.985,
+          "fits_printable_area": true,
+          "printed_font_mm": 3.704
+        }
+      ],
+      "zoom": 1,
+      "page_fit_rate": 1,
+      "printed_font_mm": {
+        "min": 3.704,
+        "median": 3.704,
+        "max": 3.704
+      },
+      "rule_hits": {
+        "V10": {
+          "fail": 1,
+          "warn": 0,
+          "info": 0
+        },
+        "V11": {
+          "fail": 0,
+          "warn": 1,
+          "info": 0
+        }
+      },
+      "fail_findings": 1,
+      "warn_findings": 1,
+      "ok": false,
+      "spec_faces": {
+        "sectioned": true,
+        "reason": "已识别权利要求面；已识别说明书正文面；已排除附图说明小节"
+      }
+    },
+    {
+      "id": "label-normalization",
+      "title": "同组件跨图两种标注形态（名称归一化，V4 不得误报）",
+      "figures": [
+        {
+          "figure_no": 1,
+          "width_mm": 93.133,
+          "height_mm": 37.306,
+          "fits_printable_area": true,
+          "printed_font_mm": 3.704
+        },
+        {
+          "figure_no": 2,
+          "width_mm": 85.725,
+          "height_mm": 37.306,
+          "fits_printable_area": true,
+          "printed_font_mm": 3.704
+        }
+      ],
+      "zoom": 1,
+      "page_fit_rate": 1,
+      "printed_font_mm": {
+        "min": 3.704,
+        "median": 3.704,
+        "max": 3.704
+      },
+      "rule_hits": {},
+      "fail_findings": 0,
+      "warn_findings": 0,
+      "ok": true,
+      "spec_faces": {
+        "sectioned": true,
+        "reason": "已识别权利要求面；已识别说明书正文面；已排除附图说明小节"
+      }
+    },
+    {
+      "id": "uniform-zoom-mixed",
+      "title": "混排画幅（一图超高 → 统一缩放 < 1 且打印字高不足）",
+      "figures": [
+        {
+          "figure_no": 1,
+          "width_mm": 52.917,
+          "height_mm": 354.542,
+          "fits_printable_area": false,
+          "printed_font_mm": 2.685
+        },
+        {
+          "figure_no": 2,
+          "width_mm": 52.917,
+          "height_mm": 123.825,
+          "fits_printable_area": true,
+          "printed_font_mm": 2.685
+        }
+      ],
+      "zoom": 0.7249,
+      "page_fit_rate": 0.5,
+      "printed_font_mm": {
+        "min": 2.685,
+        "median": 2.685,
+        "max": 2.685
+      },
+      "rule_hits": {
+        "V7": {
+          "fail": 1,
+          "warn": 0,
+          "info": 0
+        }
+      },
+      "fail_findings": 1,
+      "warn_findings": 0,
+      "ok": false,
+      "spec_faces": {
+        "sectioned": true,
+        "reason": "已识别权利要求面；已识别说明书正文面；已排除附图说明小节"
+      }
+    }
+  ],
+  "totals": {
+    "figures": 13,
+    "page_fit_rate": 0.5385,
+    "printed_font_mm": {
+      "min": 1.783,
+      "median": 2.685,
+      "max": 3.704
+    },
+    "rule_hits": {
+      "V10": 1,
+      "V11": 1,
+      "V7": 7
+    },
+    "fail_findings": 7,
+    "warn_findings": 2,
+    "spec_faces_sectioned": {
+      "sectioned": 10,
+      "total": 11
+    }
+  }
+}

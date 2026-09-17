@@ -57,6 +57,41 @@ test("布局：LR 链式流程 x 逐层递增；block 默认 LR", () => {
   assert.ok(byIdBlock.get("in")!.x < byIdBlock.get("cpu")!.x);
 });
 
+test("布局：LR 画幅覆盖全部节点（曾按 TB 语义算幅，节点被 viewBox 裁掉）", () => {
+  const layout = layoutFigure(chainSpec("LR"));
+  const right = Math.max(...layout.nodes.map(node => node.x + node.width));
+  const bottom = Math.max(...layout.nodes.map(node => node.y + node.height));
+  assert.ok(
+    right <= layout.width && bottom <= layout.height,
+    `画幅 ${layout.width}×${layout.height} 未覆盖内容 ${right}×${bottom}`,
+  );
+  // LR 层内纵向堆叠：同层节点按节点高步进，不得重叠
+  const branch: FigureSpec = {
+    figure_no: 2,
+    kind: "block",
+    nodes: [
+      { id: "in", label: "输入模块(10)", ref: 10 },
+      { id: "left", label: "左支路(20)", ref: 20 },
+      { id: "right", label: "右支路(30)", ref: 30 },
+    ],
+    edges: [
+      { from: "in", to: "left" },
+      { from: "in", to: "right" },
+    ],
+  };
+  const branchLayout = layoutFigure(branch);
+  const left = branchLayout.nodes.find(node => node.node.id === "left")!;
+  const right2 = branchLayout.nodes.find(node => node.node.id === "right")!;
+  assert.ok(
+    left.y + left.height <= right2.y || right2.y + right2.height <= left.y,
+    `同层节点不得重叠：left ${left.y}..${left.y + left.height}，right ${right2.y}..${right2.y + right2.height}`,
+  );
+  assert.ok(
+    branchLayout.width >= Math.max(...branchLayout.nodes.map(node => node.x + node.width)),
+    "LR 画幅宽度应覆盖同层最右节点",
+  );
+});
+
 test("布局：判断分支的子节点同层且横向错开", () => {
   const spec: FigureSpec = {
     figure_no: 1,

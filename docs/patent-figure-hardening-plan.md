@@ -1,9 +1,12 @@
 # 专利附图链路加固与 CAD 扩展实施方案
 
-> 状态：**P0 全部 + P1 全部 + P2 阶段一已落地**（P0 见 PR #418；P1 见 #419；P2 见紧随其后的
-> CAD 投影 PR）。实施中的两处对本计划的修正已回写：① §7 重录手册补「录制必须用重放测试 pin 的
-> provider/model」；② §5.2 朝向对齐新增「参考体探测」实做（计划未涵盖 FreeCAD 投影坐标系朝向问题，
-> 实测 front 视图会出 90° 旋转图）。阶段二（几何 DSL）按 D4 不做。
+> 状态：**P0 全部 + P1 全部 + P2 阶段一 + §6.2 评测扩展已落地**（P0 见 PR #418；P1 见 #419；
+> P2 见紧随其后的 CAD 投影 PR；§6.2 生成侧基准见其后的基准 PR）。实施中的三处对本计划的修正
+> 已回写：① §7 重录手册补「录制必须用重放测试 pin 的 provider/model」；② §5.2 朝向对齐新增
+> 「参考体探测」实做（计划未涵盖 FreeCAD 投影坐标系朝向问题，实测 front 视图会出 90° 旋转图）；
+> ③ 计划外修复 `layout.ts` 的 LR 画幅缺陷（生成侧基准建设时发现：block 附图（默认 LR）落点溢出
+> viewBox 被裁掉，见 `docs/notes/implemented/2026-09-17-figure-lr-layout-frame.md`）。阶段二
+> （几何 DSL）按 D4 不做。
 > 范围：`src/patent/figuregen/`、`src/patent/figure/`、`src/tool/builtin/patentFigure*.ts`、`src/patent/atoms/handlers/builtin/`（新增 gate）、`src/patent/workflow/manifests.ts`、新增 `src/patent/figuregen/cad/`
 > 依据：对 `patent_figuregen` 现状的逐行核对与 `dist/` 实测（见 §11）；对照外部同类技能（Python/Graphviz 路线、CAD 隔离、像素级门禁缺失）后的取舍见 §10
 
@@ -270,7 +273,7 @@ stripRefMark("处理模块20")   = "处理模块20"     ← 与上一行为不�
 ### 6.2 防回退断言与评测扩展
 
 - **防回退断言**（借鉴"脚本不得 import matplotlib"式测试）：① 标注格式差异不得触发 V4 fail；② 渲染器输出不得出现非黑白 token（扩展现有 V6 单测到 CAD 路径）；③ `figure_generate` 阶段声明了 gate 原子且阶段描述不含数字（隐藏清单）；④ `readback` 契约变更必须同批更新 fixture 清单（`pnpm record:replay` 门禁）。
-- **评测扩展**：`scripts/figure-benchmark/`（现为分析侧，含 ref P/R/F1、类型准确率）增"生成侧合规基准"——用固定 FigureSpec 集合跑渲染 + 门禁，记录 V 规则命中数、A4 页内率、字高分布，作为 P0-4/P1-2 的回归护栏。
+- **评测扩展**（已落地）：`scripts/figure-benchmark/` 增**生成侧合规基准**——`gen-cases.ts`（11 用例 / 13 图，入库固定 FigureSpec 集合）+ `gen-compliance.ts`（用固定集合跑渲染 + 门禁，记录 V 规则命中数、A4 页内率、打印字高分布与统一缩放系数）+ `tests/fixtures/patent/figuregen-bench/baseline.json`（入库基线，`--update` 刷新）。断言在 `tests/scripts/figure-benchmark/gen-compliance.spec.ts`：基线逐项比对（漂移指出"哪一例、哪一项、从多少到多少"）+ **不随基线放宽的语义锚点**（超框/字高/V4/V10-V11/LR 画幅）。作为 P0-4/P1-2 的回归护栏；该基准在建设中即发现并促成 `layout.ts` 的 LR 画幅缺陷修复（见 `docs/notes/implemented/2026-09-17-figure-lr-layout-frame.md`）。
 
 ---
 
@@ -338,6 +341,7 @@ node --test dist/tests/patent/figuregen/*.js dist/tests/patent/figure-gate.spec.
 | P1-3 | 经 `image_paths` 传入的灰度着色图、过细线、DPI 越界、物理尺寸超框各报一条对应 finding；`svg_paths` 行为不变（回归） |
 | P1-4 | 机械案多图一致性报告非空；`checkFigureConsistency` 有生产调用方 |
 | P2 | 无 FreeCAD 时 fail-closed 不静默回退；有 FreeCAD 时四视图出图并与 A4 判据一致 |
+| §6.2 | `pnpm tsx scripts/figure-benchmark/gen-compliance.ts` 与基线一致；`tests/scripts/figure-benchmark/gen-compliance.spec.ts` 绿（含语义锚点，不随 `--update` 放宽） |
 | D2/D4 | `pnpm record:replay tests/fixtures/llm-replay/deepseek-v4-flash-basic` 通过，`llm-replay-real.spec` 重放绿，且 `manifest.json` 的 `toolNames`/schema 变更与代码一致（§7） |
 
 ---

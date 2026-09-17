@@ -104,12 +104,24 @@ export function layoutFigure(spec: FigureSpec): FigureLayout {
   const rows: FigureNode[][] = Array.from({ length: maxLayer + 1 }, () => []);
   for (const node of spec.nodes) rows[layers.get(node.id) ?? 0].push(node);
 
+  // 层内/层间的外延按方向取轴：TB 层内横向并排（沿轴步进=宽，层间步进=层高），LR 层内
+  // 纵向堆叠（沿轴步进=高，层间步进=层内最宽节点）。画幅必须与落点同源——否则 LR 图的
+  // 节点会排到 viewBox 之外被裁掉（画幅按 TB 语义算过窄/过高）。
   const rowHeights = rows.map(row => Math.max(1, ...row.map(n => sizes.get(n.id)!.height)));
-  const contentW = Math.max(
-    1,
-    ...rows.map(row => row.reduce((sum, n) => sum + sizes.get(n.id)!.width, 0) + Math.max(0, row.length - 1) * SIB_GAP),
+  const rowWidths = rows.map(
+    row => row.reduce((sum, n) => sum + sizes.get(n.id)!.width, 0) + Math.max(0, row.length - 1) * SIB_GAP,
   );
-  const contentH = rowHeights.reduce((sum, h) => sum + h, 0) + Math.max(0, rows.length - 1) * LAYER_GAP;
+  const stackWidths = rows.map(row => Math.max(1, ...row.map(n => sizes.get(n.id)!.width)));
+  const stackHeights = rows.map(
+    row => row.reduce((sum, n) => sum + sizes.get(n.id)!.height, 0) + Math.max(0, row.length - 1) * SIB_GAP,
+  );
+  const layerGaps = Math.max(0, rows.length - 1) * LAYER_GAP;
+  const contentW =
+    direction === "TB"
+      ? Math.max(1, ...rowWidths)
+      : Math.max(1, stackWidths.reduce((sum, w) => sum + w, 0) + layerGaps);
+  const contentH =
+    direction === "TB" ? rowHeights.reduce((sum, h) => sum + h, 0) + layerGaps : Math.max(1, ...stackHeights);
   const width = contentW + MARGIN * 2;
   const height = contentH + MARGIN * 2 + CAPTION_H;
 
@@ -123,9 +135,9 @@ export function layoutFigure(spec: FigureSpec): FigureLayout {
       const x = direction === "TB" ? along : cross;
       const y = direction === "TB" ? cross : along;
       positioned.set(node.id, { node, x, y, width: size.width, height: size.height });
-      along += size.width + SIB_GAP;
+      along += (direction === "TB" ? size.width : size.height) + SIB_GAP;
     }
-    cross += rowHeights[rowIndex] + LAYER_GAP;
+    cross += (direction === "TB" ? rowHeights[rowIndex]! : stackWidths[rowIndex]!) + LAYER_GAP;
   }
 
   const center = (p: PositionedNode) => ({
