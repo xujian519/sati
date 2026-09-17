@@ -1,15 +1,15 @@
 # Sati 技术债务指标基线与趋势
 
 > 由 `node scripts/measure-techdebt.mjs --update` 自动生成，谨防手工编辑。
-> 最近一次快照：**2026-09-16**
+> 最近一次快照：**2026-09-17**
 
 ## 规模
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1033 / 170081 |
+| src TS 文件 / 行数 | 1020 / 169917 |
 | src JS 文件 | 0 |
-| tests 文件 | 549 |
+| tests 文件 | 550 |
 | ui/src 文件 / 行数 | 472 / 83657 |
 | ui/server 文件 / 行数 | 105 / 31783 |
 
@@ -169,8 +169,8 @@
 | mcp | 13 |
 | cron | 11 |
 | extension | 11 |
+| adapters | 10 |
 | rule | 10 |
-| adapters | 9 |
 | pilot | 9 |
 | cli | 8 |
 | literature | 8 |
@@ -189,7 +189,7 @@
 | runtime | 1 |
 | status | 1 |
 
-| **合计** | **529** |
+| **合计** | **530** |
 
 ## i18n en/zh-CN 对齐
 

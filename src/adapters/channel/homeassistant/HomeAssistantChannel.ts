@@ -7,7 +7,7 @@ import { ImPermissionHelper } from "../protocol/ImPermissionHelper.js";
 import { dispatchChannelMessage } from "../protocol/ImInboundDispatch.js";
 import { processChannelTurn } from "../protocol/ImTurnProcessor.js";
 import { resolveWebSocketImpl, type MinimalWebSocketLike } from "../protocol/resolveWebSocketImpl.js";
-import { HomeAssistantSessionMapper } from "./HomeAssistantSessionMapper.js";
+import { ChatSessionMapper } from "../protocol/ChatSessionMapper.js";
 import { renderHomeAssistantEvent } from "./homeassistant-render.js";
 
 const WebSocketImpl = resolveWebSocketImpl();
@@ -19,7 +19,7 @@ export type HomeAssistantChannelOptions = {
   token?: string;
   watchPrefixes?: string[];
   notificationTitle?: string;
-  mapper?: HomeAssistantSessionMapper;
+  mapper?: ChatSessionMapper;
 };
 
 function httpToWs(base: string): string {
@@ -32,7 +32,7 @@ function httpToWs(base: string): string {
 export class HomeAssistantChannel implements ChannelAdapter {
   readonly channelKey: GatewayChannelKey = "homeassistant";
 
-  private readonly mapper: HomeAssistantSessionMapper;
+  private readonly mapper: ChatSessionMapper;
   private readonly url: string;
   private readonly token?: string;
   private readonly watchPrefixes: string[];
@@ -51,7 +51,7 @@ export class HomeAssistantChannel implements ChannelAdapter {
   private readonly permissions = new ImPermissionHelper();
 
   constructor(options: HomeAssistantChannelOptions = {}) {
-    this.mapper = options.mapper ?? new HomeAssistantSessionMapper();
+    this.mapper = options.mapper ?? new ChatSessionMapper("homeassistant");
     this.url = options.url ?? process.env.HASS_URL ?? DEFAULT_URL;
     this.token = options.token ?? process.env.HASS_TOKEN;
     this.watchPrefixes = options.watchPrefixes?.length ? options.watchPrefixes : ["conversation."];

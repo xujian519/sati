@@ -7,7 +7,7 @@ import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
 import { ImPermissionHelper } from "../protocol/ImPermissionHelper.js";
 import { dispatchChannelMessage } from "../protocol/ImInboundDispatch.js";
 import { processChannelTurn } from "../protocol/ImTurnProcessor.js";
-import { DingTalkSessionMapper } from "./DingTalkSessionMapper.js";
+import { ChatSessionMapper } from "../protocol/ChatSessionMapper.js";
 import { renderDingTalkEvent } from "./dingtalk-render.js";
 
 // dingtalk-stream 是可选依赖：这里仅类型化本文件用到的成员，避免 any 逃逸。
@@ -37,13 +37,13 @@ const SEEN_IDS_MAX = 2000;
 export type DingTalkChannelOptions = {
   clientId?: string;
   clientSecret?: string;
-  mapper?: DingTalkSessionMapper;
+  mapper?: ChatSessionMapper;
 };
 
 export class DingTalkChannel implements ChannelAdapter {
   readonly channelKey: GatewayChannelKey = "dingtalk";
 
-  private readonly mapper: DingTalkSessionMapper;
+  private readonly mapper: ChatSessionMapper;
   private readonly clientId: string;
   private readonly clientSecret: string;
 
@@ -57,7 +57,7 @@ export class DingTalkChannel implements ChannelAdapter {
   private seenIds = new Set<string>();
 
   constructor(options: DingTalkChannelOptions = {}) {
-    this.mapper = options.mapper ?? new DingTalkSessionMapper();
+    this.mapper = options.mapper ?? new ChatSessionMapper("dingtalk");
     this.clientId = String(options.clientId ?? process.env.DINGTALK_CLIENT_ID ?? "").trim();
     this.clientSecret = String(options.clientSecret ?? process.env.DINGTALK_CLIENT_SECRET ?? "").trim();
   }

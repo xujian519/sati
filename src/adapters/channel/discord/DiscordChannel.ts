@@ -7,7 +7,7 @@ import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
 import { ImPermissionHelper } from "../protocol/ImPermissionHelper.js";
 import { dispatchChannelMessage } from "../protocol/ImInboundDispatch.js";
 import { processChannelTurn } from "../protocol/ImTurnProcessor.js";
-import { DiscordSessionMapper } from "./DiscordSessionMapper.js";
+import { ChatSessionMapper } from "../protocol/ChatSessionMapper.js";
 import { renderDiscordEvent } from "./discord-render.js";
 
 // discord.js 是可选依赖：这里仅类型化本文件用到的成员，避免 any 逃逸。
@@ -50,13 +50,13 @@ const MAX_MESSAGE_LENGTH = 2000;
 
 export type DiscordChannelOptions = {
   token?: string;
-  mapper?: DiscordSessionMapper;
+  mapper?: ChatSessionMapper;
 };
 
 export class DiscordChannel implements ChannelAdapter {
   readonly channelKey: GatewayChannelKey = "discord";
 
-  private readonly mapper: DiscordSessionMapper;
+  private readonly mapper: ChatSessionMapper;
   private readonly token?: string;
 
   private gateway?: Gateway;
@@ -68,7 +68,7 @@ export class DiscordChannel implements ChannelAdapter {
   private readonly permissions = new ImPermissionHelper();
 
   constructor(options: DiscordChannelOptions = {}) {
-    this.mapper = options.mapper ?? new DiscordSessionMapper();
+    this.mapper = options.mapper ?? new ChatSessionMapper("discord");
     this.token = options.token ?? process.env.DISCORD_BOT_TOKEN;
   }
 

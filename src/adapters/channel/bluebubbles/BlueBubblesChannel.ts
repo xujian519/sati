@@ -6,7 +6,7 @@ import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
 import { ImPermissionHelper } from "../protocol/ImPermissionHelper.js";
 import { dispatchChannelMessage } from "../protocol/ImInboundDispatch.js";
 import { processChannelTurn } from "../protocol/ImTurnProcessor.js";
-import { BlueBubblesSessionMapper } from "./BlueBubblesSessionMapper.js";
+import { ChatSessionMapper } from "../protocol/ChatSessionMapper.js";
 import { renderBlueBubblesEvent } from "./bluebubbles-render.js";
 
 const POLL_MS = 2500;
@@ -15,7 +15,7 @@ const MESSAGE_LIMIT = 50;
 export type BlueBubblesChannelOptions = {
   serverUrl?: string;
   password?: string;
-  mapper?: BlueBubblesSessionMapper;
+  mapper?: ChatSessionMapper;
 };
 
 function normalizeBaseUrl(url: string): string {
@@ -34,7 +34,7 @@ function num(v: unknown): number | null {
 export class BlueBubblesChannel implements ChannelAdapter {
   readonly channelKey: GatewayChannelKey = "bluebubbles";
 
-  private readonly mapper: BlueBubblesSessionMapper;
+  private readonly mapper: ChatSessionMapper;
   private readonly serverUrl: string;
   private readonly password: string;
 
@@ -50,7 +50,7 @@ export class BlueBubblesChannel implements ChannelAdapter {
   private running = false;
 
   constructor(options: BlueBubblesChannelOptions = {}) {
-    this.mapper = options.mapper ?? new BlueBubblesSessionMapper();
+    this.mapper = options.mapper ?? new ChatSessionMapper("bluebubbles");
     this.serverUrl = normalizeBaseUrl(options.serverUrl ?? process.env.BLUEBUBBLES_SERVER_URL ?? "");
     this.password = options.password ?? process.env.BLUEBUBBLES_PASSWORD ?? "";
   }

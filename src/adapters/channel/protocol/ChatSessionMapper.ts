@@ -10,8 +10,9 @@ export type ChatSessionMapperState = {
  * 通用 ChatSessionMapper：会话键形如 `<channelKey>:chat=<chatId>:s_<uuid>`，
  * 支持 `/new` 指令开新会话，并提供活跃映射快照。
  *
- * 渠道侧以固定 `channelKey` 的薄壳子类复用（保留各渠道既有类名与 State 类型导出面），
- * 取代 13 份逐字相同的实现（见 `docs/notes/implemented/2026-09-11-adapters-skill-split.md` 与 issue #149）。
+ * 渠道侧直接以各自的渠道键构造（`new ChatSessionMapper("slack")`），不再经各渠道薄壳子类：
+ * 薄壳只转发 `channelKey` 字面量，无自有成员，删除后渠道的 `mapper` 缝与本类的形状逐字相同
+ * （见 `docs/notes/implemented/2026-09-17-adapters-session-mapper-shells.md`；历史见 issue #149）。
  */
 export class ChatSessionMapper {
   constructor(

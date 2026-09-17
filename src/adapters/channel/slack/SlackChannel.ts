@@ -5,7 +5,7 @@ import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
 import { ImPermissionHelper } from "../protocol/ImPermissionHelper.js";
 import { dispatchChannelMessage } from "../protocol/ImInboundDispatch.js";
 import { processChannelTurn } from "../protocol/ImTurnProcessor.js";
-import { SlackSessionMapper } from "./SlackSessionMapper.js";
+import { ChatSessionMapper } from "../protocol/ChatSessionMapper.js";
 import { renderSlackEvent } from "./slack-render.js";
 
 // @slack/bolt 是可选依赖：这里仅类型化本文件用到的成员，避免 any 逃逸。
@@ -48,13 +48,13 @@ const MAX_MESSAGE_LENGTH = 39000;
 export type SlackChannelOptions = {
   botToken?: string;
   appToken?: string;
-  mapper?: SlackSessionMapper;
+  mapper?: ChatSessionMapper;
 };
 
 export class SlackChannel implements ChannelAdapter {
   readonly channelKey: GatewayChannelKey = "slack";
 
-  private readonly mapper: SlackSessionMapper;
+  private readonly mapper: ChatSessionMapper;
   private readonly botToken?: string;
   private readonly appToken?: string;
 
@@ -67,7 +67,7 @@ export class SlackChannel implements ChannelAdapter {
   private readonly permissions = new ImPermissionHelper();
 
   constructor(options: SlackChannelOptions = {}) {
-    this.mapper = options.mapper ?? new SlackSessionMapper();
+    this.mapper = options.mapper ?? new ChatSessionMapper("slack");
     this.botToken = options.botToken ?? process.env.SLACK_BOT_TOKEN;
     this.appToken = options.appToken ?? process.env.SLACK_APP_TOKEN;
   }

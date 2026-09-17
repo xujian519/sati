@@ -601,7 +601,7 @@
 
 ### 2026-09-11 处置追加（issue #149）
 
-- **已完成**：13 个渠道的 `*SessionMapper.ts`（归一化后逐字相同的 36 行 ×13）收敛为共享 `src/adapters/channel/protocol/ChatSessionMapper.ts` + 各渠道 8 行薄壳，净减约 290 行；类名与 State 类型导出面保持，13 个 `Channel` 零改动。决策见 `docs/notes/implemented/2026-09-11-adapters-skill-split.md`。
+- **已完成**：13 个渠道的 `*SessionMapper.ts`（归一化后逐字相同的 36 行 ×13）收敛为共享 `src/adapters/channel/protocol/ChatSessionMapper.ts` + 各渠道 8 行薄壳，净减约 290 行；类名与 State 类型导出面保持，13 个 `Channel` 零改动。决策见 `docs/notes/implemented/2026-09-11-adapters-skill-split.md`。**（2026-09-17 更新：该处保留的 13 个 8–10 行薄壳已删除，见本节末「2026-09-17 处置追加」；类名导出面经核为零消费者，故随之移除。）**
 - **TD-ADAPTERS-N02** · 13 个渠道的单轮处理循环可抽共享 turn-processor（约 −300 行）
   - 类别：A · 严重级：P2 · 工作量：M · 状态：**done（2026-09-14）**——实际覆盖 14 渠道 15 段循环（比登记多 `wecom-callback`，qq 的 c2c 分支亦在同一文件内），净减 309 行；共享模块 `src/adapters/channel/protocol/ImTurnProcessor.ts`（107 行）+ 直测 15 条
   - 位置：13 个渠道的 `processMessage` 循环，差异仅 `mattermost:215`（ctx 重算 chatId）、`qq:240`（`sendC2CReplyChunked`）、`slack:208`（前置 gateway null 守卫）
@@ -636,8 +636,15 @@
 - **仍待做**：`TD-ADAPTERS-N01` 剩余面——`deliverCronResult` 投递共享化（挂在各渠道 cron 触发路径，与入站分派不同源）；6 个语义不同渠道（webhook/wecom/weixin/feishu/api-server/tui）的分派与轮次路径不适用既有 helper。
 - **N01 done（2026-09-14，收口核对）**：`deliverCronResult` 面经逐渠道核对为**已去重**——13 个实现全部是 3–5 行薄委托（`dingtalk`/`discord`/`email`/`feishu`/`homeassistant`/`matrix`/`signal`/`sms`/`telegram`/`webhook`/`wecom-callback`/`whatsapp` 各 3 行、`weixin` 5 行）到 `protocol/ImCronDelivery.ts#deliverChatCronResult`，无一份自实现；变化的只有各渠道自己的回复函数（`sendReply` / `sendTextMessage` / `deliverReply` / `sendReplyChunked`）与 weixin 的 `userId` 映射，属不可再减的薄包装（同 render 薄包装判例）。另 8 个渠道（api-server/bluebubbles/cli/mattermost/qq/slack/tui/wecom）本就不实现 cron 投递，非债。
 - **明确不做（判例）**：6 处跨文件微重复（`extractText` 的 `string("")` vs `string|null`、`formatError`、`normalizeBaseUrl` ×3、`sendJson` ×2、`sleep` ×3、WS 双形态）按「跨文件微重复不合并」判例保留；18 个 `render` 薄包装保留（它们是 options 未被误改的回归钉，且被 `tests/adapters/channel-render.spec.ts` 直接 import）。
-- **议题收口（issue #149）**：五条去重轴全部落地——`*SessionMapper.ts` 共享（2026-09-11，−290）、`readRequestBody` 共享（N03）、`resolveIncomingMessage` 采用统一（N04，8 改 5 留）、单轮处理循环共享（−309）、入站分派前置共享（−288）；N01/N02/N03/N04 均 done。渠道模块内**剩下的**是单列登记的小项（N05 日志绕过 ChannelLogger / N07 render 薄包装 / N08 吞错密度 / N09 无界 `as` / N10 渠道注册表未覆盖），它们是各自的债条目而非「公共 helper 重复」，不随本议题关闭而消失。
+- **议题收口（issue #149）**：五条去重轴全部落地——`*SessionMapper.ts` 共享（2026-09-11，−290；其 13 个薄壳**残留**于 2026-09-17 清除，PR #410）、`readRequestBody` 共享（N03）、`resolveIncomingMessage` 采用统一（N04，8 改 5 留）、单轮处理循环共享（−309）、入站分派前置共享（−288）；N01/N02/N03/N04 均 done。渠道模块内**剩下的**是单列登记的小项（N05 日志绕过 ChannelLogger / N07 render 薄包装 / N08 吞错密度 / N09 无界 `as` / N10 渠道注册表未覆盖），它们是各自的债条目而非「公共 helper 重复」，不随本议题关闭而消失。
 - **否定结论（省掉一类工作）**：渠道间不存在时间戳/日期格式化重复；`sessionKey` 解析亦无第二份实现。
+
+### 2026-09-17 处置追加（issue #351）
+
+- **done（PR #410）**：13 个渠道的 `*SessionMapper.ts` 薄壳（归一化后同一 shasum，10 行 ×13）删除——渠道改为直接 `new ChatSessionMapper("<渠道键>")`；`src/adapters/index.ts` 摘掉 13 条类导出 + 13 条 State 别名导出（**全仓零消费者**，且 `package.json` 为 `private: true`）。13 个渠道文件各 4 增 4 删、**总行数不变**（事件矩阵 `file:line` 锚点未位移）。
+- **推翻 #149 的落选理由**：该 note 把「删文件、各渠道直接 `new ChatSessionMapper("xxx")`」列为落选，理由是「爆炸半径更大 + 丢失每渠道一个可引用的类名」——核码三条均不成立（barrel 死导出 / 那 13 个 Channel 本来就要改构造点 / `XxxSessionMapperState` 只在自身文件内使用）。#149 的**主决策**（实现共享化）继续有效，本项是它的最后一步。
+- **新增判据**：`tests/adapters/channel-session-mapper.spec.ts`——13 条接线用例（每个渠道默认 mapper 的会话命名空间 == 该渠道自身 `channelKey`，登记值即落盘会话键前缀）+ 5 条共享实现语义用例（此前零直测）；顺带覆盖「渠道之间不得共享 mapper 状态」（负控制 M5）。决策与 6 条负控制表见 `docs/notes/implemented/2026-09-17-adapters-session-mapper-shells.md`。
+- **未做**：不引入工厂/注册表/类型别名兼容层；6 个真实现 mapper（feishu/weixin/qq/wecom/wecom-callback/api-server）不动。
 
 ## 10. always-on（B3 ✅）
 
@@ -2036,7 +2043,7 @@
 | TD-DESKTOP-N01 | **#348** | 运行时布局符号链接接线三处重复 |
 | TD-DESKTOP-N02 | **#349** | Windows 打包缺 `dist/assets`、`skills`、`rules` |
 | TD-TEAM-N01/N02/N03 + TD-AGENT-N02 + TD-SESSION-N08/N09 | **#350** | **`CLAUDE.md` 五处陈述与代码实际不符**（一条汇总） |
-| 13 个 SessionMapper 空壳 | **#351** | 逐字相同的 10 行薄壳收敛为工厂 |
+| 13 个 SessionMapper 空壳 | **#351** | 逐字相同的 10 行薄壳收敛为工厂；**已交付（PR #410）**——薄壳删除、渠道直接构造共享实现（未走工厂，理由见 note） |
 | TD-PATENT-N23 + N24 | **#352** | index-store 同构复制（85/179 行）+ 队列无淘汰 |
 | TD-CATCH-001 残留 + TD-TEAM-N11 + TD-SESSION-N12 | **#353** | 无注释无参 catch（创建时旧口径 37；#390 口径变更后为 124） |
 | 端口/超时散落 | **#354** | 5 个渠道端口 + 43 处内联 setTimeout |

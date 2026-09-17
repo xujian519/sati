@@ -22,7 +22,7 @@
 
 ## 三、命名规范遵循情况与实际例外
 
-CLAUDE.md 规定的「目录 kebab-case、类文件 PascalCase、普通文件 kebab-case」在代码库里得到较高遵循，例如 `adapters/channel/` 下每个渠道统一为 `Channel.ts`（Pascal）+ `SessionMapper.ts`（Pascal）+ `-render.ts`（kebab）。
+CLAUDE.md 规定的「目录 kebab-case、类文件 PascalCase、普通文件 kebab-case」在代码库里得到较高遵循，例如 `adapters/channel/` 下每个渠道统一为 `Channel.ts`（Pascal）+ `-render.ts`（kebab）；有自有 `resolve`/State 语义的 6 个渠道（feishu/weixin/qq/wecom/wecom-callback/api-server）另带 `SessionMapper.ts`（Pascal），其余 13 个渠道直接构造共享的 `protocol/ChatSessionMapper.ts`（薄壳已于 2026-09-17 删除，见 `notes/implemented/2026-09-17-adapters-session-mapper-shells.md`）。
 
 已识别、但**有意保留**的例外：
 

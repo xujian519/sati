@@ -8,7 +8,7 @@ import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
 import { ImPermissionHelper } from "../protocol/ImPermissionHelper.js";
 import { dispatchChannelMessage } from "../protocol/ImInboundDispatch.js";
 import { processChannelTurn } from "../protocol/ImTurnProcessor.js";
-import { MatrixSessionMapper } from "./MatrixSessionMapper.js";
+import { ChatSessionMapper } from "../protocol/ChatSessionMapper.js";
 import { renderMatrixEvent } from "./matrix-render.js";
 
 // matrix-bot-sdk 是可选依赖：这里仅类型化本文件用到的成员，避免 any 逃逸。
@@ -47,13 +47,13 @@ export type MatrixChannelOptions = {
   homeserver?: string;
   userId?: string;
   storagePath?: string;
-  mapper?: MatrixSessionMapper;
+  mapper?: ChatSessionMapper;
 };
 
 export class MatrixChannel implements ChannelAdapter {
   readonly channelKey: GatewayChannelKey = "matrix";
 
-  private readonly mapper: MatrixSessionMapper;
+  private readonly mapper: ChatSessionMapper;
   private readonly accessToken?: string;
   private readonly homeserver?: string;
   private readonly userIdOption?: string;
@@ -68,7 +68,7 @@ export class MatrixChannel implements ChannelAdapter {
   private readonly permissions = new ImPermissionHelper();
 
   constructor(options: MatrixChannelOptions = {}) {
-    this.mapper = options.mapper ?? new MatrixSessionMapper();
+    this.mapper = options.mapper ?? new ChatSessionMapper("matrix");
     this.accessToken = options.accessToken ?? process.env.MATRIX_ACCESS_TOKEN;
     this.homeserver = (options.homeserver ?? process.env.MATRIX_HOMESERVER ?? "").replace(/\/$/, "") || undefined;
     this.userIdOption = options.userId ?? process.env.MATRIX_USER_ID;

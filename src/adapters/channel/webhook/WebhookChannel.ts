@@ -11,7 +11,7 @@ import {
   isVisibleFailureStatusDetail,
 } from "../../../status/agentStatus.js";
 import { readRequestBody } from "../protocol/httpBody.js";
-import { WebhookSessionMapper } from "./WebhookSessionMapper.js";
+import { ChatSessionMapper } from "../protocol/ChatSessionMapper.js";
 import { renderWebhookEvent } from "./webhook-render.js";
 
 const DEFAULT_HOST = "127.0.0.1";
@@ -34,13 +34,13 @@ export type WebhookChannelOptions = {
   routes?: Record<string, WebhookRoute>;
   rateLimit?: number;
   maxBodyBytes?: number;
-  mapper?: WebhookSessionMapper;
+  mapper?: ChatSessionMapper;
 };
 
 export class WebhookChannel implements ChannelAdapter {
   readonly channelKey: GatewayChannelKey = "webhook";
 
-  private readonly mapper: WebhookSessionMapper;
+  private readonly mapper: ChatSessionMapper;
   private readonly host: string;
   private readonly port: number;
   private readonly globalSecret: string;
@@ -58,7 +58,7 @@ export class WebhookChannel implements ChannelAdapter {
   private activeChats = new Set<string>();
 
   constructor(options: WebhookChannelOptions = {}) {
-    this.mapper = options.mapper ?? new WebhookSessionMapper();
+    this.mapper = options.mapper ?? new ChatSessionMapper("webhook");
     this.host = options.host ?? DEFAULT_HOST;
     this.port = Number(options.port ?? DEFAULT_PORT);
     this.globalSecret = options.secret ?? "";

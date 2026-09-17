@@ -9,7 +9,7 @@ import { ImPermissionHelper } from "../protocol/ImPermissionHelper.js";
 import { dispatchChannelMessage } from "../protocol/ImInboundDispatch.js";
 import { processChannelTurn } from "../protocol/ImTurnProcessor.js";
 import { readRequestBody } from "../protocol/httpBody.js";
-import { SmsSessionMapper } from "./SmsSessionMapper.js";
+import { ChatSessionMapper } from "../protocol/ChatSessionMapper.js";
 import { renderSmsEvent } from "./sms-render.js";
 
 // twilio 是可选依赖：这里仅类型化本文件用到的成员，避免 any 逃逸。
@@ -33,13 +33,13 @@ const TWIML_OK = '<?xml version="1.0" encoding="UTF-8"?><Response></Response>';
 
 export type SmsChannelOptions = {
   extra?: Record<string, unknown>;
-  mapper?: SmsSessionMapper;
+  mapper?: ChatSessionMapper;
 };
 
 export class SmsChannel implements ChannelAdapter {
   readonly channelKey: GatewayChannelKey = "sms";
 
-  private readonly mapper: SmsSessionMapper;
+  private readonly mapper: ChatSessionMapper;
   private readonly extra: Record<string, unknown>;
 
   private gateway?: Gateway;
@@ -58,7 +58,7 @@ export class SmsChannel implements ChannelAdapter {
   private readonly permissions = new ImPermissionHelper();
 
   constructor(options: SmsChannelOptions = {}) {
-    this.mapper = options.mapper ?? new SmsSessionMapper();
+    this.mapper = options.mapper ?? new ChatSessionMapper("sms");
     this.extra = options.extra ?? {};
   }
 
