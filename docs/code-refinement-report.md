@@ -80,6 +80,7 @@ C40/C41 两张横切卡都撞上了同一堵墙：**度量工具与基线表两�
 ## 六、遗留清单
 
 1. **P0 级候选 10 项未修**（C24 ×1、C34 ×9，见上）；`ui/server` 另有**死路由 9 条**（taskmaster 8 + `/api/commands/load`）与**退役建议 2 项**（`globalChrome.js` 除关机钩子外全零消费、`always-on-paths.js` 仅剩 parity 测试消费）登记未做。
+   > **[2026-09-17 部分结清 · issue #356]** 上述 `ui/server` 面已处置：死路由 9 条 + 退役模块 2 个**退役完毕**（判据 `ui/server/routes/retired-routes.test.js`）；C34 的 9 条 P0 候选经锚点复核 **8 条仍成立**（P0-6 已由 #365 销项）并各自取得载体 **#411–#416**。⚠️ **本文件的「未修」清单不再是事实源**——活账本为 `docs/technical-debt/backlog.md` §26「处置追加」与 §36。（C24 的 `SkillManager.walkDir` 静默吞错仍未修，见 §26 之外的对应模块节。）
 2. **`ui/server` 深层 import 收口未做**：`ui/server → src/` 实测 14 处（2026-08-12 审计为 20 处/9 文件，C34 清理后有净减）。属 2026-08-14「双后端为有意设计」决策后保留的可选卫生子项。
 3. **`edgeclaw` 编译产物直连 1 处**（`ui/server/routes/memory.js`）：2026-08-17 复核后**决策维持**——`server-manager.ts` 启动期显式建 symlink，是受支持的一等解析路径，禁止改包名导入。
 4. **大文件未拆（保守档明确排除）**：>600 行文件实测 **92**（`src` 不含子包 40 · edgeclaw 子包 10 · `ui/src` 25 · `ui/server` 17；计划 §六 记为「后端 42 / UI 26」，口径为 `src` 与 `ui/src`，两侧均**基本持平**）。各卡已登记的**待拆候选**（行数为 2026-09-11 实测）：`createLocalGateway.ts` 2695、`SkillsV2.tsx` 2525、`AgentLoop.ts` 2429、`sati-bridge.js` 2228、`PdfDocumentPreview.tsx` 1885、`taskmaster.js` 1850、`useChatComposerState.ts` 1837、`CodeEditorBinaryFile.tsx` 1511、`DiscoveryFire.ts` 1255、`RouterRuntime.ts` 1229、`ipc-classifier.ts` 779、`case-law-search.ts` 656。

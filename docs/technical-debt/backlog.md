@@ -1246,8 +1246,9 @@
 
 ## 26. ui/server（B5 ✅）
 
-**模块概况**：约 101 个手写 JS（routes 28 + services 27 + utils 22 + websocket 3）。Express 桥连 gateway 属**有意设计**（决策保留）。最大 `sati-bridge.js` 2055 / `routes/taskmaster.js` 1888 / `routes/git.js` 1490。深 `src/` 导入 12 处（对应 TD-BOUND-001）、`memory.js:14` 直连 `lib/index.js` 维持 TD-BOUND-002 wontfix。
+**模块概况**：约 99 个手写 JS（routes 33 + services 26 + utils 26 + websocket 3；前两组各含测试文件）。Express 桥连 gateway 属**有意设计**（决策保留）。最大 `sati-bridge.js` 2288 / `routes/git.js` 1490 / `routes/taskmaster.js` 1170。深 `src/` 导入 12 处（对应 TD-BOUND-001）、`memory.js:14` 直连 `lib/index.js` 维持 TD-BOUND-002 wontfix。
 > 复核结论：历史「同能力多套实现」中 getProjects/WebSocketServer/repairToolName 三项均已统一收口。
+> **2026-09-17 变更**：C34 那批「只登记」条目已收编入本账（见本节末「处置追加」），零消费死表面退役后文件数与最大文件榜随之下降。
 
 - **TD-UISERVER-N01** · `sati-bridge.js` 成为 god-module（2055 行，桥接+统计+缓存混合）
   - 类别：A · 严重级：P2 · 工作量：M · 状态：new
@@ -1292,6 +1293,40 @@
   - 类别：D · 严重级：P3 · 工作量：S · 状态：new
   - 位置：`middleware/auth.js:8-20`（env API_KEY）vs `routes/agent.js:25-57`（DB api_keys 表）；SSE 头部 `routes/agent.js:64-69` 与 `routes/project-sessions.js:142`、`routes/projects.js:482`
   - 建议：补注释区分或统一；抽共享 SSE 头部 helper。
+
+### 处置追加（2026-09-17 · issue #356）
+
+> **为什么会有这一节**：C34（2026-09-06）在 `docs/code-refinement-plan.md` 里留了 9 条 P0 候选 + 9 条死路由 + 2 项退役建议，此后**没有任何事实源收编它们**——`code-refinement-plan.md` / `code-refinement-report.md` 自 2026-09-11 起退出事实源地位，而本 §26 的 `TD-UISERVER-N01`~`N10` 是**另一批**条目（god-module / 缓存 / 错误码 …），两侧从未对齐。结果：这 20 条 11 天里不上看板、不受 stale 治理、无人认领——治理意义上等于不存在。本节的职责是**先把它们收进活账本，再逐条裁定**。
+
+- **复核结论：登记没有夸大。** 19 条登记项 + 2 项退役建议按**锚点**逐条核码（不按登记行号），**仅 1 条失效**：
+  - **已销项 · P0-6 `/load` 路径校验弱于 `/execute`**：#365（2026-09-15）已让两路由共用 `ui/server/utils/commandPaths.js` 并有 14 例直测，C34 所述的「`inHome` 放行 `$HOME` 任意文件」不复存在。本 PR 顺手退役该路由本体（前端零消费）。
+  - 其余 8 条 P0 候选 + 全部死路由/退役建议**仍成立**；`ui/server` 对该批 11 天零改动，是「登记准确但无人执行」的典型。
+- **口径纠正：9 条 P0 候选不是一类东西。** 其中 6 条是**真实行为缺陷**（广播缺失、PTY 竞态、Map 泄漏、帧解析恒空、R/C 丢失、掩码不识别），只有 3 条与「零消费」相关（`/load`、MCP 死链路、死路由）。所以**不能**按 issue 正文的「确认仍成立的按域拆分为可执行项」把它们和死路由混成一批——死表面可以就地删，缺陷只能另立载体。
+- **退役处置（本 PR 落地 · 零消费面）**：
+
+  | 面 | 处置 | 规模 |
+  |---|---|---|
+  | `routes/taskmaster.js` | 删 4 条 `/prd`（GET/POST/GET-file/DELETE）+ `/detect/:projectName` + `/detect-all` + `/initialize/:projectName` + `/next/:projectName`（**8 条零前端消费路由**）；连带死 helper `detectTaskMasterFolder` / `determineTaskStatus` | 1849 → 1170 行（−679） |
+  | `routes/commands.js` | 删 `POST /load`（P0-6 的载体）；`/list` + `/execute` 保留 | 1131 → 1081 行（−50） |
+  | `utils/globalChrome.js` | **整删**（413 行，除 server-boot 关机钩子外全零消费，`chromeProcess` 在 ui/server 已无启动路径）；`services/server-boot.js` 关机钩子对应清理块移除并留说明注释 | −413 行 |
+  | `services/always-on-paths.js` | **整删**（8 行，仅剩 `getAlwaysOnRoot` 被 parity 测试消费） | −8 行 |
+  | `TaskMasterContext.tsx` | 删 `taskmaster-mcp-status-changed` 死监听（P0-5 前端侧；该 frame 全仓零生产者、后端生产者已于 C34 删除） | −7 行 |
+  | 连带同步 | `commandPaths.js` 头注/`COMMAND_PATH_DENIED_MESSAGE` 措辞改为「只服务 `/execute`」；`pilotPaths.test.js` 删 `getAlwaysOnRoot` parity 用例；`WebSocketContext.noise.test.tsx` 死帧样例改用存活的 `taskmaster-project-updated`；`commands.test.js` 删 8 条 `/load` 路由级用例（策略覆盖由 `commandPaths.test.js` 14 例保留） | −159 行 |
+
+- **仍成立 → 6 条新载体**（每条独立成 issue，**未并成一条**，因为触发条件与爆炸半径各不相同）：
+
+  | 原登记 | 载体 | 一句话债务 |
+  |---|---|---|
+  | C34 P0-1 | **#411** | `chat.js` 的 `edit-last-turn` / `regenerate-last-turn` 用 `writer` 而非 `streamWriter`，兄弟标签页停在 `Processing` |
+  | C34 P0-2 + P0-3 | **#412** | `shell.js` PTY 重连竞态（旧 `close` 清新连接引用 + 挂 30 分钟 kill 定时器）与 `onExit` 误删同 key 新会话（含跨会话串流） |
+  | C34 P0-4 | **#413** | `sati-bridge.js` 三张 per-session Map 慢泄漏（清退全挂在对端终态事件上） |
+  | C34 P0-8 | **#414** | `POST /api/agent` 四项：`getAssistantMessages` 恒空 / 双层 `catch {}` 吞错 / checkout 错变量 / `setSessionId` 全链零调用 |
+  | C34 P0-7 | **#415** | `git.js` `/status` 丢 R/C（同文件 `parseStatusFilePaths` 已有正确实现 ⇒ 两处口径分叉，非「不会写」） |
+  | C34 P0-9 | **#416** | `config.js` `/test-connection` 不识别掩码键（`/models` 与 `/test-web-search` 都有回落，当前前端传明文故未触发） |
+
+- **判据**：新增 `ui/server/routes/retired-routes.test.js`（2 例）钉**存活清单**——taskmaster 仅剩 8 条、commands 仅剩 `POST /list` + `POST /execute`。**刻意不写「退役项不在表里」**：该写法在路由表解析为空时恒真（与 #341「空集放行」同源的失败模式）。3 条负控制（复活死路由 / 改名存活路由 / 删除存活路由）逐条转红且相邻用例保持绿。
+- **维持原判不修**：C34 的 P2「记录不处理 ×10」与 P3 各项不变；`TD-BOUND-002`（`memory.js` 直连编译产物）维持 wontfix。
+- 决策记录与 6 条 `Alternatives considered`：`docs/notes/implemented/2026-09-17-ui-server-dead-surface-retirement.md`。
 
 ---
 
@@ -2048,7 +2083,7 @@
 | TD-CATCH-001 残留 + TD-TEAM-N11 + TD-SESSION-N12 | **#353** | 无注释无参 catch（创建时旧口径 37；#390 口径变更后为 124） |
 | 端口/超时散落 | **#354** | 5 个渠道端口 + 43 处内联 setTimeout |
 | TD-RULE-N01 | **#355** | rule_check(pack) 缓存失效键覆盖不全 |
-| `ui/server` P0 级候选（文档登记未跟踪） | **#356** | 需先复核再拆分，勿原样搬运 |
+| `ui/server` P0 级候选（文档登记未跟踪） | **#356** | **已交付**——20 条登记逐条复核（19 条仍成立）+ 零消费死表面退役；仍成立的 6 条拆成 #411–#416，裁定表见 §26「处置追加」 |
 | TD-RULE-N07 | **#357** | 规则资产语义增强 3 项（全角漏报 / 安防误伤 / 重复去重；已交付） |
 | TD-PATENT-N01（验证面） | **#358** | 双链路缺跨链路一致性 fixture |
 | TD-WORKSPACE-N04 + TD-TEAM-N25 + TD-PATENT-N20 | **#359** | 计划文档悬空勾选批量回收 |
@@ -2059,3 +2094,16 @@
 | TD-WORKSPACE-N02 | **#364** | 账本在 transcript 超 50MB 时静默消失 |
 | （`docs/code-refinement-plan.md:573`） | **#365** | `/api/commands/load` 路径校验放行 `$HOME` 任意文件 |
 | 知识系统 A1–A8（`knowledge-system-report.md`） | **#366** | 诊断恒报 ready 但实际未装配 |
+
+### 36. #356 复核后新立的载体（2026-09-17 创建）
+
+> 全部挂里程碑 **v0.2.0**，标签 `tech-debt` / `priority: p2` / `scope:ui` / `status: triage`。来源是 §26「处置追加」的复核裁定表：这 6 条**不是**新发现，而是 C34 登记项中**复核后仍成立的真实缺陷**——它们此前只存在于已退役的文档里，本次借 #356 取得事实源地位。⚠️ 它们**各自独立**，不要并成一条批处理（触发条件、爆炸半径、判据方向均不同）。
+
+| 台账来源 | issue | 摘要 |
+|---|---|---|
+| C34 P0-1 | **#411** | `chat.js` edit/regen 流用 `writer` 而非 `streamWriter`，兄弟标签页停在 `Processing` |
+| C34 P0-2 + P0-3 | **#412** | `shell.js` PTY 重连竞态 + `onExit` 误删同 key 新会话（合并：同一闭包变量共享根因） |
+| C34 P0-4 | **#413** | `sati-bridge.js` 三张 per-session Map 慢泄漏 |
+| C34 P0-8 | **#414** | `POST /api/agent` 四项缺陷（帧解析恒空 / 吞错 / 错变量 / 零调用） |
+| C34 P0-7 | **#415** | `git.js` `/status` 丢 R/C 变更 |
+| C34 P0-9 | **#416** | `config.js` `/test-connection` 不识别掩码 API key |
