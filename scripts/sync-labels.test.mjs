@@ -164,6 +164,19 @@ test("集成：仓库当前标签清单与 issue 模板一致", () => {
   assert.deepEqual(validateLabels(loadLabels(ROOT), loadTemplates(ROOT)), []);
 });
 
+test("集成：documentation.md 模板存在、自带类型标签且带「影响 scope」节（#338）", () => {
+  // 这三条不是"函数返回字符串"型断言，而是把 #338 的修复本身钉住：
+  // ① 文档类议题必须有自己的模板，否则只能用 bug/feature 模板开、自动落错类型标签；
+  // ② 类型标签必须写在 frontmatter —— 那是 GitHub 侧唯一的自动打标入口；
+  // ③ 必须含「影响 scope」节 —— 缺整节时它既不产生 scope:*，也不会被模板间比对发现
+  //    （见 docs/issue-management.md §2「诚实边界一」，tech_debt.md 曾长期如此）。
+  const templates = loadTemplates(ROOT);
+  const docTemplate = templates.find(template => template.file === "documentation.md");
+  assert.ok(docTemplate, "缺少 documentation.md：文档类议题会退回借 bug/feature 模板开");
+  assert.deepEqual(docTemplate.labels, ["documentation"], "frontmatter 的 labels 必须是 documentation（自动打标入口）");
+  assert.ok(docTemplate.scopes.length > 0, "必须含「影响 scope」节，否则勾选永远投影不出 scope:*");
+});
+
 test("集成：模板 scope 勾选项数量与 scope 标签数量吻合", () => {
   const scopes = new Set(loadTemplates(ROOT).flatMap(template => template.scopes));
   const declared = loadLabels(ROOT).filter(label => label.name.startsWith("scope:"));
