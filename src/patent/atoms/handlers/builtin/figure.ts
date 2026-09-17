@@ -197,6 +197,11 @@ function renderReport(input: {
     `- 附图: ${input.sidecar.figures.map(f => `图${f.figure_no} ${f.file}`).join("；")}（渲染器 ${input.sidecar.renderer}）`,
     `- 生成期核验: ${input.sidecar.check.ok ? "通过" : "有发现"}（文本侧规则未参与）`,
     `- 文本面: ${input.textFaces}${input.skippedTextRules ? "——无说明书文本，V2/V3 未生效" : ""}`,
+    ...(input.result.specFaces === undefined
+      ? []
+      : [
+          `- 文字面分节: ${input.result.specFaces.sectioned ? "已分节" : "未分节"}（${input.result.specFaces.reason}）`,
+        ]),
   ];
   if (input.result.findings.length > 0) {
     lines.push("", "发现：");
