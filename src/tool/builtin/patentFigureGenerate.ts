@@ -10,6 +10,10 @@
  * 默认注册（createBuiltinRegistry `patentFigure: false` 可排除；排除会改变工具集
  * 摘要，需重录 deepseek-v4-flash-basic fixture）。
  *
+ * 落盘产物：`<name>-fig<N>.svg`（每幅）+ `<name>-figures.json`（sidecar：完整
+ * FigureSpec 与生成期核验快照，供下游在有说明书文本时零信息损耗重跑规则，
+ * 见 figuregen/sidecar.ts）+ 可选 `<name>-figures.html`。
+ *
  * 渲染器选择走 SATI_FIGURE_RENDERER 环境变量（builtin 默认 / graphviz 本机可选
  * 增强，复杂大图用）：环境变量而非 inputSchema 选项，避免动 llm-replay 请求键。
  */
@@ -18,7 +22,9 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { isAbsolute, resolve } from "node:path";
 import {
   buildFigureBriefDraft,
+  buildFigureSidecar,
   checkFigures,
+  figureSidecarFileName,
   renderFigureSvg,
   renderFiguresHtml,
   type DocumentKind,
@@ -185,6 +191,28 @@ export function createPatentFigureGenerateTool(): SatiToolDefinition<PatentFigur
           renderedSvgs.set(figure.figure_no, svg);
         }
 
+        // 附图产物 sidecar（v1）：把 FigureSpec 完整落盘，供下游在**有说明书文本时**
+        // 零信息损耗地重跑全部规则（figure-gate 的输入契约，见 figuregen/sidecar.ts）。
+        const sidecarPath = resolve(outputDir, figureSidecarFileName(input.output_name));
+        await writeFile(
+          sidecarPath,
+          `${JSON.stringify(
+            buildFigureSidecar({
+              outputName: input.output_name,
+              renderer,
+              jurisdiction,
+              documentKind,
+              files,
+              figures,
+              check,
+              skipTextRules: true,
+            }),
+            null,
+            2,
+          )}\n`,
+          "utf8",
+        );
+
         const format = input.format ?? "svg";
         if (!FORMATS.includes(format)) {
           throw new SatiToolRuntimeError(
@@ -206,6 +234,7 @@ export function createPatentFigureGenerateTool(): SatiToolDefinition<PatentFigur
           `已生成 ${files.length} 幅附图（黑白线条，审查指南一部一章 4.3/4.6 合规` +
             (renderer === "graphviz" ? "；渲染器: graphviz dot）：" : "）："),
           ...files.map(file => `- 图${file.figure_no}: ${file.path}`),
+          `- 附图 sidecar（FigureSpec 与生成期核验留痕，供 patent_figure_check / 附图门禁复用）: ${sidecarPath}`,
         ];
         if (htmlPath !== undefined) {
           lines.push(`A4 打印版式 HTML（PDF 可经 export_html 产出）: ${htmlPath}`);
@@ -251,6 +280,12 @@ export function createPatentFigureGenerateTool(): SatiToolDefinition<PatentFigur
                   },
                 ]
               : []),
+            {
+              type: "file" as const,
+              path: sidecarPath,
+              mimeType: "application/json",
+              description: "Patent figures sidecar (FigureSpec + generation-time check)",
+            },
           ],
         };
       } catch (err) {

@@ -69,5 +69,16 @@ export {
   resolveDotBinary,
 } from "./render-graphviz.js";
 export { parseFigureSvg, type ParsedFigureSvg } from "./readback.js";
+export {
+  FIGURE_SIDECAR_VERSION,
+  buildFigureSidecar,
+  figureSidecarFileName,
+  findFigureSidecar,
+  parseFigureSidecar,
+  readFigureSidecar,
+  type FigureSidecar,
+  type FigureSidecarCheck,
+  type FigureSidecarFigure,
+} from "./sidecar.js";
 export { renderFiguresHtml, type FiguresHtmlOptions } from "./html.js";
 export { buildFigureBriefDraft, type FigureBriefOptions } from "./brief.js";

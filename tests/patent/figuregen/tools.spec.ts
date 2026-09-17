@@ -14,6 +14,8 @@ import test from "node:test";
 import { createPatentFigureCheckTool } from "../../../src/tool/builtin/patentFigureCheck.js";
 import { createPatentFigureGenerateTool } from "../../../src/tool/builtin/patentFigureGenerate.js";
 import type { SatiToolRuntimeContext } from "../../../src/tool/protocol/types.js";
+import { checkFigures } from "../../../src/patent/figuregen/check.js";
+import { parseFigureSidecar } from "../../../src/patent/figuregen/sidecar.js";
 import type { FigureSpec } from "../../../src/patent/figuregen/types.js";
 
 function makeContext(cwd: string): SatiToolRuntimeContext {
@@ -68,7 +70,48 @@ test("patent_figure_generate：SVG 落盘 + 附图说明草稿", async () => {
     assert.ok(text.includes("图1: "));
     assert.ok(text.includes("图1为本发明实施例提供的一种处理装置的方法流程示意图"));
     const fileBlocks = result.content.filter(block => block.type === "file");
-    assert.equal(fileBlocks.length, 1);
+    // SVG + 附图 sidecar
+    assert.equal(fileBlocks.length, 2);
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("patent_figure_generate：落盘 sidecar，spec 无损且可重放全部规则", async () => {
+  const cwd = tempCwd();
+  try {
+    const tool = createPatentFigureGenerateTool();
+    await tool.execute({ figures: [FIG], output_name: "case-s", document_kind: "utility" }, makeContext(cwd));
+
+    const sidecarPath = join(cwd, ".sati", "figures", "case-s-figures.json");
+    assert.ok(existsSync(sidecarPath), "应落盘 sidecar");
+    const sidecar = parseFigureSidecar(readFileSync(sidecarPath, "utf8"));
+    assert.equal(sidecar.version, 1);
+    assert.equal(sidecar.output_name, "case-s");
+    assert.equal(sidecar.renderer, "builtin");
+    assert.equal(sidecar.jurisdiction, "cn");
+    assert.equal(sidecar.document_kind, "utility");
+    assert.ok(sidecar.generated_at.length > 0, "应记落盘时刻（审计用）");
+    assert.equal(sidecar.check.stage, "generation");
+    assert.equal(sidecar.check.skip_text_rules, true);
+
+    // 无损：sidecar 里的 spec 与入参逐字段一致
+    assert.deepEqual(
+      sidecar.figures.map(f => f.figure_no),
+      [1],
+    );
+    assert.deepEqual(sidecar.figures[0].spec, FIG);
+    assert.equal(sidecar.figures[0].file, "case-s-fig1.svg");
+
+    // 可重放：用 sidecar 的 spec + 说明书文本重跑规则，与直接用入参完全一致
+    const specText = "处理模块(20)执行处理；未提及的风扇(40)。";
+    const fromSidecar = checkFigures(
+      sidecar.figures.map(f => f.spec),
+      specText,
+      { documentKind: "utility" },
+    );
+    const fromInput = checkFigures([FIG], specText, { documentKind: "utility" });
+    assert.deepEqual(fromSidecar, fromInput);
   } finally {
     rmSync(cwd, { recursive: true, force: true });
   }
