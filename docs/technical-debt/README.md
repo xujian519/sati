@@ -84,6 +84,8 @@ pnpm typecheck && pnpm lint && pnpm format:check
 | P2 | 中：局部可维护性/可观测性受损 | 按 Sprint 排期 |
 | P3 | 低：风格/文档/次要卫生 | 顺手清理 |
 
+**这张表是唯一事实源，issue 模板不另立一套**：`.github/ISSUE_TEMPLATE/tech_debt.md` 的「严重级」勾选项就是上表四行（级别词 + 含义 + 处置），由 `scripts/classify-issue.mjs` 翻译成 `priority: pN` 标签（#406）。模板与标签词表的双向一致由 `pnpm check:issue-labels` 守（写成 `P4` 会被拦下而不是静默丢弃），因此**改本表就要同 PR 改模板**——两处是同一份词表的两个落点，不是两份设计。
+
 ## 工作量定义
 
 `S` ≤ 半天 · `M` 1–2 天 · `L` > 2 天（专项，需单独排期）

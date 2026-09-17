@@ -9,7 +9,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { loadLabels, loadTemplates, normalizeScopeOption, parseScopeOptions, validateLabels } from "./sync-labels.mjs";
+import {
+  loadLabels,
+  loadTemplates,
+  normalizeScopeOption,
+  parseScopeOptions,
+  parseSeverityOptions,
+  validateLabels,
+} from "./sync-labels.mjs";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 
@@ -92,7 +99,75 @@ test("放行对照：status/priority 的合法取值不报", () => {
     "priority: p2",
     "priority: p3",
   ].map(name => ({ name, color: "d73a4a", description: "合法取值" }));
-  assert.deepEqual(validateLabels(labels, []), []);
+  // 四个 `priority:` 取值必须都能被模板「严重级」节产出（#406 起的双向校验），
+  // 故放行对照要带上一条含该节的模板——只给标签不给模板不再算"合规"。
+  const templates = [{ file: "tech_debt.md", labels: [], scopes: [], severities: ["p0", "p1", "p2", "p3"] }];
+  assert.deepEqual(validateLabels(labels, templates), []);
+});
+
+test("负控制：「严重级」勾选项没有对应 priority: 标签被拦（含标签名带空格的坑）", () => {
+  const templates = [{ file: "tech_debt.md", labels: [], scopes: [], severities: ["p0", "p9"] }];
+  const labels = [{ name: "priority: p0", color: "d73a4a", description: "堵塞" }];
+  const errors = validateLabels(labels, templates);
+  // 报错文本必须点名 `priority: p9`（带空格）——若实现假设"前缀即标签名起点"，
+  // 这里会漏报或写出 `priority:p9` 这种仓库里不存在的标签名。
+  assert.ok(errors.some(error => error.includes("「p9」") && error.includes("priority: p9")));
+});
+
+test("负控制：模板缺整个「严重级」节时 priority 取值无人对应被拦", () => {
+  const labels = [
+    { name: "priority: p0", color: "d73a4a", description: "堵塞" },
+    { name: "priority: p1", color: "d93f0b", description: "高" },
+  ];
+  const errors = validateLabels(labels, [{ file: "bug_report.md", labels: [], scopes: [] }]);
+  assert.ok(errors.some(error => error.includes("priority: p0") && error.includes("「严重级」节中没有对应勾选项")));
+});
+
+test("负控制：两条模板的「严重级」节彼此不一致被拦（缺项与多项都拦）", () => {
+  const labels = ["p0", "p1", "p2", "p3"].map(value => ({
+    name: `priority: ${value}`,
+    color: "d73a4a",
+    description: `级别 ${value}`,
+  }));
+  const missing = validateLabels(labels, [
+    { file: "a.md", labels: [], scopes: [], severities: ["p0", "p1", "p2", "p3"] },
+    { file: "b.md", labels: [], scopes: [], severities: ["p0", "p1", "p2"] },
+  ]);
+  assert.ok(missing.some(error => error.includes("b.md") && error.includes("缺勾选项「p3」")));
+  const extra = validateLabels(labels, [
+    { file: "a.md", labels: [], scopes: [], severities: ["p0", "p1", "p2", "p3"] },
+    { file: "b.md", labels: [], scopes: [], severities: ["p0", "p1", "p2", "p3", "ghost"] },
+  ]);
+  assert.ok(extra.some(error => error.includes("b.md") && error.includes("多出勾选项「ghost」")));
+});
+
+test("parseSeverityOptions 只认「严重级」节内的级别前缀，并去重", () => {
+  const markdown = [
+    "## 风险与影响",
+    "- [ ] P0 堵塞",
+    "## 严重级",
+    "- [ ] P0 堵塞：阻塞合入、可致错误决策或数据损坏（处置：立即）",
+    "- [x] P2 中：局部可维护性/可观测性受损",
+    "- [ ] P2 中：重复一项",
+    "- [ ] 说不清的严重度",
+    "## 触发还债条件（必填）",
+    "- [ ] P1 高",
+  ].join("\n");
+  // ① 越界读取的形状：把别的节里的 P1 也读进来 → 会多出一个 p1；
+  // ② 认不出的选项**原样保留**（不静默丢弃）：否则「模板写了 P9 / 说不清的严重度」
+  //    会既不被门禁发现、也不被分类器产出，成为又一个看不见的盲区。
+  assert.deepEqual(parseSeverityOptions(markdown), ["p0", "p2", "说不清的严重度"]);
+  assert.deepEqual(parseSeverityOptions("没有这一节"), []);
+});
+
+test("负控制：模板写了认不出的级别（P4）被门禁报成「对不上标签」而非静默丢弃", () => {
+  const templates = [{ file: "tech_debt.md", labels: [], scopes: [], severities: ["p0", "p4 未知"] }];
+  const labels = [{ name: "priority: p0", color: "d73a4a", description: "堵塞" }];
+  const errors = validateLabels(labels, templates);
+  assert.ok(
+    errors.some(error => error.includes("「p4 未知」")),
+    `应点名该勾选项：${JSON.stringify(errors)}`,
+  );
 });
 
 test("边界：scope 取值不受词表约束（由模板双向校验兜底）", () => {
