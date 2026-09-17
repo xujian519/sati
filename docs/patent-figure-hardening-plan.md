@@ -1,6 +1,9 @@
 # 专利附图链路加固与 CAD 扩展实施方案
 
-> 状态：proposed（待评审）
+> 状态：**P0 全部 + P1 全部 + P2 阶段一已落地**（P0 见 PR #418；P1 见 #419；P2 见紧随其后的
+> CAD 投影 PR）。实施中的两处对本计划的修正已回写：① §7 重录手册补「录制必须用重放测试 pin 的
+> provider/model」；② §5.2 朝向对齐新增「参考体探测」实做（计划未涵盖 FreeCAD 投影坐标系朝向问题，
+> 实测 front 视图会出 90° 旋转图）。阶段二（几何 DSL）按 D4 不做。
 > 范围：`src/patent/figuregen/`、`src/patent/figure/`、`src/tool/builtin/patentFigure*.ts`、`src/patent/atoms/handlers/builtin/`（新增 gate）、`src/patent/workflow/manifests.ts`、新增 `src/patent/figuregen/cad/`
 > 依据：对 `patent_figuregen` 现状的逐行核对与 `dist/` 实测（见 §11）；对照外部同类技能（Python/Graphviz 路线、CAD 隔离、像素级门禁缺失）后的取舍见 §10
 

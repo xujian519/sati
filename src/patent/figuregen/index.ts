@@ -80,6 +80,8 @@ export {
   type FigureSidecar,
   type FigureSidecarCheck,
   type FigureSidecarFigure,
+  type FigureSidecarGeometry,
 } from "./sidecar.js";
+export * from "./cad/index.js";
 export { renderFiguresHtml, type FiguresHtmlOptions } from "./html.js";
 export { buildFigureBriefDraft, type FigureBriefOptions } from "./brief.js";

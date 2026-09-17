@@ -52,6 +52,11 @@ export type FigureCheckOptions = {
   /** 生成期无说明书文本可核时跳过 V2/V3（V1/V4/V5/V7/V8/V9 照常）。 */
   skipTextRules?: boolean;
   /**
+   * 显式文字面（调用方已知权利要求/说明书分界时提供，**替代启发式分节**）。
+   * 缺省走 `splitSpecFaces` 的启发式；分节失败时 V10/V11 静默并由 `specFaces.reason` 说明。
+   */
+  faces?: { claims?: string; description?: string; descriptionSansBrief?: string };
+  /**
    * 跳过画幅规则 V7（纸面尺寸 + 打印字高）。
    *
    * 用于**非本模块渲染器产出**的附图骨架（如栅格图/扫描图的分析结果）：那类图的画幅
@@ -276,7 +281,19 @@ export function checkFigures(
   // V10/V11 括号规则（需文字面分节成功；细则第 22 条：权利要求中的附图标记置于括号内，
   // 而说明书正文惯例为"名称+数字"。两个面的括号规则相反，故必须按面判定——
   // 分节失败时两条规则整体跳过并如实声明，不对混合文本猜面判违规。）
-  const faces = options.skipTextRules ? undefined : splitSpecFaces(specText);
+  const explicitFaces = options.faces;
+  const faces =
+    options.skipTextRules === true
+      ? undefined
+      : explicitFaces !== undefined
+        ? {
+            ...explicitFaces,
+            reason:
+              "调用方显式分面（claims_text/description_text）" +
+              (explicitFaces.claims === undefined ? "；未提供权利要求面（V10 未生效）" : "") +
+              (explicitFaces.description === undefined ? "；未提供正文面（V11 未生效）" : ""),
+          }
+        : splitSpecFaces(specText);
   const specFaces =
     faces === undefined
       ? undefined
