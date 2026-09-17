@@ -394,10 +394,13 @@ function handleChatConnection(ws, request) {
           return;
         }
         broadcastRewriteOptimisticFrames(data.sessionId, data.text, userId, ws);
+        // 回答流必须与 sati-command 分支走同一条广播路径：乐观行与 `Processing`
+        // 已经广播给兄弟 watcher，回答流若只回提交页，兄弟页会永远停在
+        // `Processing`（多标签页/多屏是这套代码明确支持并投入维护的场景）。
         await runChatViaGateway(
           data.text,
           { ...data.options, sessionId: data.sessionId, userVisibleInput: data.text },
-          writer,
+          streamWriter,
           "edit-last-turn",
         );
       } else if (data.type === "regenerate-last-turn") {
@@ -414,10 +417,11 @@ function handleChatConnection(ws, request) {
           return;
         }
         broadcastRewriteOptimisticFrames(data.sessionId, result.originalText, userId, ws);
+        // 同上：重新生成的回答流同样走广播（`streamWriter`）
         await runChatViaGateway(
           result.originalText,
           { ...data.options, sessionId: data.sessionId, userVisibleInput: result.originalText },
-          writer,
+          streamWriter,
           "regenerate-last-turn",
         );
       } else if (data.type === "permission-response") {
