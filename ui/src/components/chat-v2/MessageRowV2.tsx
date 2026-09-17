@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { AlertTriangle, Check, ChevronRight, Copy, GitBranch, Loader2, Pencil, RotateCcw } from "lucide-react";
 import { copyTextToClipboard } from "../../utils/clipboard";
+import { UI_TIMEOUTS } from "../../constants/timeouts";
 import { cn } from "../../lib/utils.js";
 import type { Project, SessionProvider } from "../../types/app";
 import { DOCUMENT_SELECTION_ATTACHMENT_KIND, type DocumentSelectionReference } from "../../types/documentSelection";
@@ -541,7 +542,7 @@ function CopyMarkdownButton({ content }: { content: string }) {
     if (!ok) return;
     setCopied(true);
     if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => setCopied(false), 2000);
+    timerRef.current = setTimeout(() => setCopied(false), UI_TIMEOUTS.COPY_FEEDBACK_RESET_MS);
   };
 
   return (

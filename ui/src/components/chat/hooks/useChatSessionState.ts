@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import type { MutableRefObject } from "react";
 import { logError } from "../../../utils/logging";
 import { authenticatedFetch } from "../../../utils/api";
+import { UI_TIMEOUTS } from "../../../constants/timeouts";
 import type { WsMessage } from "../../../contexts/WebSocketContext";
 import type { ChatMessage, ClaudeWorkStatus, SatiWorkStatus } from "../types/types";
 import {
@@ -635,7 +636,7 @@ export function useChatSessionState({
       return;
     }
     pendingInitialScrollRef.current = false;
-    if (!searchScrollActiveRef.current) setTimeout(() => scrollToBottom(), 200);
+    if (!searchScrollActiveRef.current) setTimeout(() => scrollToBottom(), UI_TIMEOUTS.CHAT_RELOAD_SCROLL_SETTLE_MS);
   }, [chatMessages.length, isLoadingSessionMessages, scrollToBottom]);
 
   // Main session loading effect — store-based
@@ -804,7 +805,7 @@ export function useChatSessionState({
           await sessionStore.refreshFromServer(selectedSession.id, buildFetchParams(selectedProject));
 
           if (Boolean(autoScrollToBottom) && isNearBottom()) {
-            setTimeout(() => scrollToBottom(), 200);
+            setTimeout(() => scrollToBottom(), UI_TIMEOUTS.CHAT_RELOAD_SCROLL_SETTLE_MS);
           }
         }
       } catch (error) {
@@ -865,7 +866,7 @@ export function useChatSessionState({
             setVisibleMessageCount(Infinity);
             setAllMessagesLoaded(true);
             allMessagesLoadedRef.current = true;
-            await new Promise(resolve => setTimeout(resolve, 300));
+            await new Promise(resolve => setTimeout(resolve, UI_TIMEOUTS.CHAT_FULL_LOAD_RENDER_SETTLE_MS));
           }
         } catch {
           // Fall through and scroll in current messages
@@ -915,16 +916,19 @@ export function useChatSessionState({
         if (targetElement) {
           targetElement.scrollIntoView({ block: "center", behavior: "smooth" });
           targetElement.classList.add("search-highlight-flash");
-          setTimeout(() => targetElement?.classList.remove("search-highlight-flash"), 4000);
+          setTimeout(
+            () => targetElement?.classList.remove("search-highlight-flash"),
+            UI_TIMEOUTS.SEARCH_HIGHLIGHT_FLASH_MS,
+          );
           searchScrollActiveRef.current = false;
         } else if (retriesLeft > 0) {
-          setTimeout(() => findAndScroll(retriesLeft - 1), 200);
+          setTimeout(() => findAndScroll(retriesLeft - 1), UI_TIMEOUTS.SEARCH_SCROLL_RETRY_INTERVAL_MS);
         } else {
           searchScrollActiveRef.current = false;
         }
       };
 
-      setTimeout(() => findAndScroll(15), 150);
+      setTimeout(() => findAndScroll(15), UI_TIMEOUTS.SEARCH_SCROLL_INITIAL_DELAY_MS);
     };
 
     scrollToTarget();
@@ -1044,7 +1048,7 @@ export function useChatSessionState({
     // 兜底存活探测：turn 开始/结束已有 stream_end/complete 事件驱动，
     // 5s 间隔足以维持中断按钮等状态的实时性，避免 1.2s 高频 session-status
     // 帧触发消费方整树 re-render（长任务数十分钟累计请求量减半）。
-    const timer = setInterval(requestStatus, 5000);
+    const timer = setInterval(requestStatus, UI_TIMEOUTS.SESSION_STATUS_POLL_INTERVAL_MS);
     return () => clearInterval(timer);
   }, [
     currentSessionId,
@@ -1065,7 +1069,10 @@ export function useChatSessionState({
     if (wasLoading && !isLoadingMoreMessages && hasMoreMessages) {
       if (loadAllOverlayTimerRef.current) clearTimeout(loadAllOverlayTimerRef.current);
       setShowLoadAllOverlay(true);
-      loadAllOverlayTimerRef.current = setTimeout(() => setShowLoadAllOverlay(false), 2000);
+      loadAllOverlayTimerRef.current = setTimeout(
+        () => setShowLoadAllOverlay(false),
+        UI_TIMEOUTS.LOAD_ALL_OVERLAY_AUTO_HIDE_MS,
+      );
     }
     if (!hasMoreMessages && !isLoadingMoreMessages) {
       if (loadAllOverlayTimerRef.current) clearTimeout(loadAllOverlayTimerRef.current);
@@ -1114,7 +1121,7 @@ export function useChatSessionState({
         loadAllFinishedTimerRef.current = setTimeout(() => {
           setLoadAllJustFinished(false);
           setShowLoadAllOverlay(false);
-        }, 1000);
+        }, UI_TIMEOUTS.LOAD_ALL_FINISHED_STATE_RESET_MS);
       } else {
         allMessagesLoadedRef.current = false;
         setShowLoadAllOverlay(false);

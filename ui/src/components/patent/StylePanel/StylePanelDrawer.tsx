@@ -10,6 +10,7 @@ import { useCallback, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { Check, ClipboardCopy, Download, FileDown, Loader2, RotateCcw, Save, X } from "lucide-react";
+import { UI_TIMEOUTS } from "../../../constants/timeouts";
 import type { SessionProvider } from "../../../types/app";
 import { useStylePanel } from "./StylePanelContext";
 import StylePanelForm from "./StylePanelForm";
@@ -107,7 +108,7 @@ export default function StylePanelDrawer({
       .writeText(styleJson)
       .then(() => {
         setCopied(true);
-        window.setTimeout(() => setCopied(false), 1500);
+        window.setTimeout(() => setCopied(false), UI_TIMEOUTS.STYLE_COPY_FEEDBACK_RESET_MS);
       })
       .catch(() => {
         // 剪贴板不可用时忽略（隐私模式等场景）

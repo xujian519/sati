@@ -1,5 +1,6 @@
 import { EventEmitter } from "node:events";
 import WebSocket from "ws";
+import { QQBOT_REIDENTIFY_DELAY_MS, QQBOT_RECONNECT_DELAY_MS } from "../../../shared/timeouts.js";
 
 /**
  * QQ Official Bot API Gateway client.
@@ -188,7 +189,7 @@ export class QQBotGateway extends EventEmitter {
       case 9: // Invalid Session
         this.sessionId = null;
         this.lastSeq = null;
-        setTimeout(() => this.sendIdentify(), 2000);
+        setTimeout(() => this.sendIdentify(), QQBOT_REIDENTIFY_DELAY_MS);
         break;
     }
   }
@@ -277,7 +278,7 @@ export class QQBotGateway extends EventEmitter {
       this.reconnectTimer = null;
       this.emit("reconnecting");
       void this.connect().catch(e => this.emit("error", e));
-    }, 5000);
+    }, QQBOT_RECONNECT_DELAY_MS);
   }
 
   private async ensureAccessToken(): Promise<void> {

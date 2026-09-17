@@ -8,6 +8,7 @@ import {
   type ContentReferenceSelectionMode,
   type ReferenceCapabilities,
 } from "../../../../types/contentReference";
+import { UI_TIMEOUTS } from "../../../../constants/timeouts";
 import BuiltinOfficeToolbar from "./BuiltinOfficeToolbar";
 import RegionSelectionOverlay, { type CapturedRegion } from "./RegionSelectionOverlay";
 import { floatingSelectionSingleActionClassName } from "./floatingSelectionAction";
@@ -363,7 +364,7 @@ export default function DocxBuiltinPreview({
   useEffect(() => {
     const schedule = () => {
       if (selectionTimerRef.current !== null) window.clearTimeout(selectionTimerRef.current);
-      selectionTimerRef.current = window.setTimeout(updateSelectionAction, 40);
+      selectionTimerRef.current = window.setTimeout(updateSelectionAction, UI_TIMEOUTS.SELECTION_ACTION_DEBOUNCE_MS);
     };
     const clear = () => setSelectionAction(null);
     document.addEventListener("selectionchange", clear);

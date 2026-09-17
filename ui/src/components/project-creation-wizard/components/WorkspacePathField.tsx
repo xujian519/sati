@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { FolderOpen } from "lucide-react";
 import { logError } from "../../../utils/logging";
+import { UI_TIMEOUTS } from "../../../constants/timeouts";
 import { Button, Input } from "../../../shared/view/ui";
 import { browseFilesystemFolders } from "../data/workspaceApi";
 import { getSuggestionRootPath } from "../utils/pathUtils";
@@ -54,7 +55,7 @@ export default function WorkspacePathField({
       } catch (error) {
         logError("Failed to load path suggestions:", error);
       }
-    }, 200);
+    }, UI_TIMEOUTS.PATH_SUGGESTION_DEBOUNCE_MS);
 
     return () => {
       window.clearTimeout(timerId);

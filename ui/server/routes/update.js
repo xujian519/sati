@@ -1,4 +1,5 @@
 import { logger } from "../utils/consoleLogger.js";
+import { SERVER_TIMEOUTS } from "../utils/timeouts.js";
 import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -369,11 +370,11 @@ router.post("/restart", async (req, res) => {
       child.unref();
 
       // Exit after giving the response time to flush
-      setTimeout(() => process.exit(0), 500);
+      setTimeout(() => process.exit(0), SERVER_TIMEOUTS.UPDATE_EXIT_FLUSH_DELAY_MS);
     } catch (error) {
       logger.error(`[update] Restart failed: ${normalizeUpdateRuntimeError(error)}`);
     }
-  }, 1000);
+  }, SERVER_TIMEOUTS.UPDATE_RESTART_DELAY_MS);
 });
 
 /**

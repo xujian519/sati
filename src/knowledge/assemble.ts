@@ -9,6 +9,7 @@
 
 import { join } from "node:path";
 import type { MemoryResolver } from "../context/memory/MemoryResolver.js";
+import { NEXT_TASK_MS } from "../shared/timeouts.js";
 import type { EmbeddingClient } from "../model/embedding/types.js";
 import type { RerankClient } from "../model/embedding/rerank.js";
 import { KgStore } from "./shared/kg-store.js";
@@ -245,7 +246,7 @@ export function buildKnowledgeResolvers(options: BuildKnowledgeResolversOptions)
         .catch(() => {
           // 自检失败不阻断（consistency 内部已 warn）。
         });
-    }, 0);
+    }, NEXT_TASK_MS);
   }
 
   return resolvers;

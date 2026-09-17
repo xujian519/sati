@@ -15,6 +15,7 @@ import { Button } from "../../../../../../shared/view/ui";
 import { appendAuthToken, authenticatedFetch } from "../../../../../../utils/api";
 import { SettingsCard, SettingsSection } from "../../../../shared/view";
 import { cn } from "../../../../../../lib/utils";
+import { UI_TIMEOUTS } from "../../../../../../constants/timeouts";
 import type { GatewayStatus, TestResult } from "../types";
 
 type FeishuSetupMode = "choose" | "qr" | "manual";
@@ -90,7 +91,7 @@ export default function FeishuChannelSection({ status, onSaved }: FeishuChannelS
         } catch {
           // ignore network errors while polling
         }
-      }, 3000);
+      }, UI_TIMEOUTS.IM_QR_POLL_INTERVAL_MS);
     } catch (err) {
       setQrPhase("error");
       setQrError(err instanceof Error ? err.message : String(err));

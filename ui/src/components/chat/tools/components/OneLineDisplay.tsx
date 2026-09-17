@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { copyTextToClipboard } from "../../../../utils/clipboard";
+import { UI_TIMEOUTS } from "../../../../constants/timeouts";
 
 type ActionType = "copy" | "open-file" | "jump-to-results" | "none";
 
@@ -59,7 +60,7 @@ export const OneLineDisplay: React.FC<OneLineDisplayProps> = ({
         return;
       }
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      setTimeout(() => setCopied(false), UI_TIMEOUTS.COPY_FEEDBACK_RESET_MS);
     } else if (onAction) {
       onAction();
     }

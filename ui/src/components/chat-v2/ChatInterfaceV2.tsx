@@ -7,6 +7,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { MessageSquare } from "lucide-react";
 import { useTasksSettings } from "../../contexts/TasksSettingsContext";
+import { UI_TIMEOUTS } from "../../constants/timeouts";
 import { useToast } from "../../contexts/ToastContext";
 import { api } from "../../utils/api";
 import type { ChatInterfaceProps, ChatMessage, ChatRunMode, Provider } from "../chat/types/types";
@@ -448,7 +449,7 @@ function ChatInterfaceV2({
         });
         // Messages load asynchronously after the session switch; scroll again
         // once the carried history has had a chance to render.
-        setTimeout(() => scrollToBottom?.(), 400);
+        setTimeout(() => scrollToBottom?.(), UI_TIMEOUTS.CHAT_FORK_SCROLL_AFTER_RENDER_MS);
         addToast(
           "success",
           t("fork.ready", {

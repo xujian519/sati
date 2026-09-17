@@ -1,6 +1,7 @@
 import type { Gateway, GatewayChannelKey } from "../../../gateway/index.js";
 import { chunkText } from "../protocol/text.js";
 import type { CronResultDelivery } from "../../../cron/index.js";
+import { SIGNAL_RECEIVE_RETRY_BACKOFF_MS } from "../../../shared/timeouts.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
 import { deliverChatCronResult } from "../protocol/ImCronDelivery.js";
 import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
@@ -250,7 +251,7 @@ export class SignalChannel implements ChannelAdapter {
 
   private async sleepBackoff(signal: AbortSignal): Promise<void> {
     await new Promise<void>(resolve => {
-      const t = setTimeout(() => resolve(), 3000);
+      const t = setTimeout(() => resolve(), SIGNAL_RECEIVE_RETRY_BACKOFF_MS);
       signal.addEventListener(
         "abort",
         () => {

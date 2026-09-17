@@ -11,6 +11,7 @@ import type {
   ProjectsUpdatedMessage,
 } from "../types/app";
 import { isBackgroundTaskSession } from "../types/app";
+import { UI_TIMEOUTS } from "../constants/timeouts";
 
 type UseProjectsStateArgs = {
   sessionId?: string;
@@ -354,7 +355,7 @@ export function useProjectsState({
         loadingProgressTimeoutRef.current = setTimeout(() => {
           setLoadingProgress(null);
           loadingProgressTimeoutRef.current = null;
-        }, 500);
+        }, UI_TIMEOUTS.LOADING_PROGRESS_COMPLETE_HOLD_MS);
       }
 
       return;

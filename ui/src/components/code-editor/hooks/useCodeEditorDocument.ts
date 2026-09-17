@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { logError } from "../../../utils/logging";
 import { api } from "../../../utils/api";
+import { UI_TIMEOUTS } from "../../../constants/timeouts";
 import type { CodeEditorFile } from "../types/types";
 import { isBinaryFile } from "../utils/binaryFile";
 
@@ -160,7 +161,7 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
 
       setSavedContent(content);
       setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 2000);
+      setTimeout(() => setSaveSuccess(false), UI_TIMEOUTS.SAVE_SUCCESS_FEEDBACK_MS);
     } catch (error) {
       const message = getErrorMessage(error);
       logError("Error saving file:", error);

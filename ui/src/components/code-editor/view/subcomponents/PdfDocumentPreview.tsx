@@ -35,6 +35,7 @@ import {
 import pdfWorkerUrl from "pdfjs-dist/legacy/build/pdf.worker.mjs?url";
 import "pdfjs-dist/legacy/web/pdf_viewer.css";
 import type { PageViewport } from "pdfjs-dist";
+import { UI_TIMEOUTS } from "../../../../constants/timeouts";
 import type { DocumentSelectionSource } from "../../../../types/documentSelection";
 import {
   createImageRegionContentReference,
@@ -1318,7 +1319,7 @@ export default function PdfDocumentPreview({
     selectionActionTimerRef.current = window.setTimeout(() => {
       selectionActionTimerRef.current = null;
       updateSelectionAction();
-    }, 40);
+    }, UI_TIMEOUTS.SELECTION_ACTION_DEBOUNCE_MS);
   }, [cancelScheduledSelectionAction, updateSelectionAction]);
 
   useEffect(() => {

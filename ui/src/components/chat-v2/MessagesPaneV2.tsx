@@ -3,6 +3,7 @@ import type { Dispatch, ReactNode, RefObject, SetStateAction } from "react";
 import { useTranslation } from "react-i18next";
 import { XCircle, GitBranch } from "lucide-react";
 import { recordUiDiagnostic, reloadUi } from "../../lib/uiDiagnostics";
+import { UI_TIMEOUTS } from "../../constants/timeouts";
 import type {
   ChatMessage,
   ChatRunMode,
@@ -1100,7 +1101,7 @@ function MessagesPaneV2({
         virtualized: shouldVirtualizeMessages,
       });
       setHasLayoutWarning(true);
-    }, 800);
+    }, UI_TIMEOUTS.LAYOUT_STABILITY_PROBE_MS);
     return () => window.clearTimeout(timer);
   }, [
     isAssistantWorking,
@@ -1521,7 +1522,7 @@ function LiveProcessHeader({
   const [nowMs, setNowMs] = useState(() => Date.now());
 
   useEffect(() => {
-    const timer = window.setInterval(() => setNowMs(Date.now()), 1000);
+    const timer = window.setInterval(() => setNowMs(Date.now()), UI_TIMEOUTS.LIVE_ELAPSED_TICK_MS);
     return () => window.clearInterval(timer);
   }, []);
 

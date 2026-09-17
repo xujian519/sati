@@ -7,6 +7,7 @@ import { randomBytes } from "node:crypto";
 import type { Readable } from "node:stream";
 import type { SatiToolDefinition, SatiToolRuntimeContext } from "../protocol/types.js";
 import type { SatiToolValidationIssue } from "../protocol/schema.js";
+import { EXECUTE_CODE_KILL_ESCALATION_GRACE_MS } from "../../shared/timeouts.js";
 import { isReadOnlyShellCommand } from "./bash/permissions.js";
 import { createRpcServer, EXECUTE_CODE_BASE_ALLOWED_TOOLS, resolveExecuteCodeAllowedTools } from "./executeCodeRpc.js";
 import { collectPythonSyntaxDiagnostics } from "./filesystem/syntaxDiagnostics.js";
@@ -692,10 +693,10 @@ function killProcess(child: ChildProcessByStdio<null, Readable, Readable> | unde
           } catch {
             // 强杀时进程组已退出：信号无意义（best-effort 兜底已完成）。
           }
-        }, 500).unref();
+        }, EXECUTE_CODE_KILL_ESCALATION_GRACE_MS).unref();
     } else {
       child.kill("SIGTERM");
-      if (escalate) setTimeout(() => child?.kill("SIGKILL"), 500).unref();
+      if (escalate) setTimeout(() => child?.kill("SIGKILL"), EXECUTE_CODE_KILL_ESCALATION_GRACE_MS).unref();
     }
   } catch {
     try {

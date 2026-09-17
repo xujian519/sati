@@ -2,6 +2,7 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { logError } from "../utils/logging";
 import { api } from "../utils/api";
+import { UI_TIMEOUTS } from "../constants/timeouts";
 
 const TasksSettingsContext = createContext({
   tasksEnabled: true,
@@ -70,7 +71,7 @@ export const TasksSettingsProvider = ({ children }) => {
     };
 
     // Run check asynchronously without blocking initial render
-    setTimeout(checkInstallation, 0);
+    setTimeout(checkInstallation, UI_TIMEOUTS.NEXT_TASK_MS);
   }, []);
 
   const toggleTasksEnabled = () => {

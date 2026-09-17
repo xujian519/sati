@@ -1,6 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import type { Gateway, GatewayChannelKey } from "../../../gateway/index.js";
 import type { CronResultDelivery } from "../../../cron/index.js";
+import { WHATSAPP_BRIDGE_KILL_ESCALATION_GRACE_MS, WHATSAPP_BRIDGE_READY_POLL_MS } from "../../../shared/timeouts.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
 import { deliverChatCronResult } from "../protocol/ImCronDelivery.js";
 import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
@@ -147,7 +148,7 @@ export class WhatsAppChannel implements ChannelAdapter {
       } catch {
         // bridge 尚在启动：本次探活失败，循环继续重试直到超时（best-effort）。
       }
-      await new Promise(r => setTimeout(r, 400));
+      await new Promise(r => setTimeout(r, WHATSAPP_BRIDGE_READY_POLL_MS));
     }
     return false;
   }
@@ -271,7 +272,7 @@ export class WhatsAppChannel implements ChannelAdapter {
             // SIGKILL 时进程已退出：强杀信号无意义（best-effort 兜底完成）。
           }
           resolve();
-        }, 5000);
+        }, WHATSAPP_BRIDGE_KILL_ESCALATION_GRACE_MS);
         proc.once("exit", () => {
           clearTimeout(t);
           resolve();

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { authenticatedFetch } from "../../../../../../utils/api";
+import { UI_TIMEOUTS } from "../../../../../../constants/timeouts";
 import type { GatewayStatus } from "../types";
 
 type FetchGatewayStatusOptions = { showLoading?: boolean };
@@ -41,7 +42,7 @@ export function useGatewayStatus() {
     }
     const timer = window.setInterval(() => {
       void fetchStatus();
-    }, 3000);
+    }, UI_TIMEOUTS.GATEWAY_STATUS_POLL_INTERVAL_MS);
     return () => window.clearInterval(timer);
   }, [fetchStatus, status?.weixin?.runtime?.state]);
 

@@ -1,4 +1,5 @@
 import { logger } from "./consoleLogger.js";
+import { SERVER_TIMEOUTS } from "./timeouts.js";
 import { spawn } from "child_process";
 import path from "path";
 import { scanPlugins, getPluginsConfig, getPluginDir } from "./plugin-loader.js";
@@ -48,7 +49,7 @@ export function startPluginServer(name, pluginDir, serverEntry) {
         pluginProcess.kill();
         reject(new Error("Plugin server did not report ready within 10 seconds"));
       }
-    }, 10000);
+    }, SERVER_TIMEOUTS.PLUGIN_START_READY_TIMEOUT_MS);
 
     pluginProcess.stdout.on("data", data => {
       if (resolved) return;
@@ -130,7 +131,7 @@ export function stopPluginServer(name) {
         entry.process.kill("SIGKILL");
         cleanup();
       }
-    }, 5000);
+    }, SERVER_TIMEOUTS.PLUGIN_KILL_GRACE_MS);
 
     logger.info(`[Plugins] Server stopped for "${name}"`);
   });

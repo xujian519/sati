@@ -1,4 +1,5 @@
 import { logError } from "../../../../../utils/logging";
+import { UI_TIMEOUTS } from "../../../../../constants/timeouts";
 import {
   SATI_SETTINGS_KEY,
   getSatiSettings,
@@ -67,7 +68,7 @@ export function downloadJson(filename: string, payload: unknown) {
   document.body.appendChild(anchor);
   anchor.click();
   document.body.removeChild(anchor);
-  setTimeout(() => URL.revokeObjectURL(url), 1_000);
+  setTimeout(() => URL.revokeObjectURL(url), UI_TIMEOUTS.DOWNLOAD_BLOB_URL_REVOKE_MS);
 }
 
 export function parsePermissionsImport(raw: string): ParsedPermissionsImport | null {

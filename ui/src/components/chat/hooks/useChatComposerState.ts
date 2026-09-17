@@ -12,6 +12,7 @@ import type {
 import { useDropzone } from "react-dropzone";
 import { logError, logWarn } from "../../../utils/logging";
 import { authenticatedFetch } from "../../../utils/api";
+import { UI_TIMEOUTS } from "../../../constants/timeouts";
 import { isThinkingModeId, thinkingModeToConfig, type ThinkingModeId } from "../constants/thinkingModes";
 import { getEffectiveThinkingMode, type ThinkingModeAvailability } from "../constants/thinkingModeAvailability";
 import { grantSatiToolPermission } from "../utils/chatPermissions";
@@ -349,7 +350,7 @@ export function useChatComposerState({
       editLastTurnTargetRef.current = { sessionId };
       applyInputValue(content);
       setIsUserScrolledUp(false);
-      setTimeout(() => scrollToBottom(), 100);
+      setTimeout(() => scrollToBottom(), UI_TIMEOUTS.CHAT_SEND_SCROLL_SETTLE_MS);
       requestAnimationFrame(() => {
         textareaRef.current?.focus();
       });
@@ -397,7 +398,7 @@ export function useChatComposerState({
       setCanAbortSession(true);
       setClaudeStatus({ text: "Processing", tokens: 0, can_interrupt: true });
       setIsUserScrolledUp(false);
-      setTimeout(() => scrollToBottom(), 100);
+      setTimeout(() => scrollToBottom(), UI_TIMEOUTS.CHAT_SEND_SCROLL_SETTLE_MS);
       onSessionActive?.(sessionId);
       onSessionProcessing?.(sessionId);
     },
@@ -753,7 +754,7 @@ export function useChatComposerState({
         if (handleSubmitRef.current) {
           handleSubmitRef.current(createFakeSubmitEvent());
         }
-      }, 0);
+      }, UI_TIMEOUTS.NEXT_TASK_MS);
     },
     [addMessage, applyInputValue],
   );
@@ -1076,7 +1077,7 @@ export function useChatComposerState({
         setCanAbortSession(true);
         setClaudeStatus({ text: "Processing", tokens: 0, can_interrupt: true });
         setIsUserScrolledUp(false);
-        setTimeout(() => scrollToBottom(), 100);
+        setTimeout(() => scrollToBottom(), UI_TIMEOUTS.CHAT_SEND_SCROLL_SETTLE_MS);
         onSessionActive?.(editLastTurnTarget.sessionId);
         onSessionProcessing?.(editLastTurnTarget.sessionId);
         applyInputValue("");
@@ -1207,7 +1208,7 @@ export function useChatComposerState({
       });
 
       setIsUserScrolledUp(false);
-      setTimeout(() => scrollToBottom(), 100);
+      setTimeout(() => scrollToBottom(), UI_TIMEOUTS.CHAT_SEND_SCROLL_SETTLE_MS);
 
       if (!effectiveSessionId && !submitSelectedSession?.id) {
         if (typeof window !== "undefined") {
@@ -1630,7 +1631,7 @@ export function useChatComposerState({
           }
           pendingSessionGrantResolversRef.current.delete(requestId);
           resolve({ success: false });
-        }, 10_000);
+        }, UI_TIMEOUTS.PERMISSION_GRANT_TIMEOUT_MS);
       });
 
       sendMessage({

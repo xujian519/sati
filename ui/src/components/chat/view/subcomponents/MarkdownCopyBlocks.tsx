@@ -4,6 +4,7 @@ import type { ComponentProps } from "react";
 import { useTranslation } from "react-i18next";
 import type { ExtraProps } from "react-markdown";
 import { copyHtmlToClipboard, copyTextToClipboard } from "../../../../utils/clipboard";
+import { UI_TIMEOUTS } from "../../../../constants/timeouts";
 import { MarkdownSourceContext } from "./markdownSourceContext";
 
 function CopyButton({
@@ -27,7 +28,7 @@ function CopyButton({
   }, []);
   useEffect(() => {
     if (status === "idle") return;
-    const timer = setTimeout(() => setStatus("idle"), 2000);
+    const timer = setTimeout(() => setStatus("idle"), UI_TIMEOUTS.COPY_FEEDBACK_RESET_MS);
     return () => clearTimeout(timer);
   }, [status]);
 

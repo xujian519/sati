@@ -3,6 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { logError, logWarn } from "../utils/logging";
 import { useAuth } from "../components/auth/context/AuthContext";
 import { IS_PLATFORM } from "../constants/config";
+import { UI_TIMEOUTS } from "../constants/timeouts";
 
 /**
  * WebSocket 帧（浏览器经 ui/server 桥转发，见 src/web/client/eventMapping.ts）：
@@ -185,7 +186,7 @@ const useWebSocketProviderState = (): WebSocketContextType => {
             if (websocket.readyState === WebSocket.OPEN) {
               websocket.send(JSON.stringify({ type: "ping" }));
             }
-          }, 30_000);
+          }, UI_TIMEOUTS.WS_PING_INTERVAL_MS);
           websocket.addEventListener("close", () => clearInterval(pingInterval));
 
           if (hasConnectedRef.current) {

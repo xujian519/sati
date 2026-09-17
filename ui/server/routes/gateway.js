@@ -8,6 +8,7 @@ import { suppressNextWatchEvent } from "../services/satiConfigWatcher.js";
 import { reloadSatiConfig } from "../services/satiConfigReloader.js";
 import { readSatiConfigFile } from "../services/satiConfig.js";
 import { getSatiGateway } from "../sati-bridge.js";
+import { SERVER_TIMEOUTS } from "../utils/timeouts.js";
 
 const router = express.Router();
 
@@ -201,7 +202,7 @@ router.post("/feishu/test", async (req, res) => {
 
   const tokenUrl = domainName === "lark" ? LARK_TOKEN_URL : FEISHU_TOKEN_URL;
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 10_000);
+  const timer = setTimeout(() => controller.abort(), SERVER_TIMEOUTS.FEISHU_TOKEN_TIMEOUT_MS);
 
   try {
     const response = await fetch(tokenUrl, {

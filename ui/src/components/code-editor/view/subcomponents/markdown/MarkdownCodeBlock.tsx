@@ -3,6 +3,7 @@ import type { ComponentProps } from "react";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark as prismOneDark } from "react-syntax-highlighter/dist/esm/styles/prism/index.js";
 import { copyTextToClipboard } from "../../../../../utils/clipboard";
+import { UI_TIMEOUTS } from "../../../../../constants/timeouts";
 
 type MarkdownCodeBlockProps = {
   inline?: boolean;
@@ -47,7 +48,7 @@ export default function MarkdownCodeBlock({
           copyTextToClipboard(rawContent).then(success => {
             if (success) {
               setCopied(true);
-              setTimeout(() => setCopied(false), 2000);
+              setTimeout(() => setCopied(false), UI_TIMEOUTS.COPY_FEEDBACK_RESET_MS);
             }
           })
         }

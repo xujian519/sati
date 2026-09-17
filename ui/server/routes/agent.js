@@ -9,6 +9,7 @@ import { userDb, apiKeysDb, githubTokensDb } from "../database/db.js";
 import { addProjectManually } from "../projects.js";
 import { runChatViaGateway } from "../sati-bridge.js";
 import { resolvePilotHome, resolveProjectStorageId, sanitizeSessionIdForPath } from "../utils/pilotPaths.js";
+import { SERVER_TIMEOUTS } from "../utils/timeouts.js";
 import { Octokit } from "@octokit/rest";
 import { IS_PLATFORM } from "../constants/config.js";
 
@@ -1182,7 +1183,7 @@ router.post("/", validateExternalApiKey, async (req, res) => {
       const removeSession = writer.sessionCreated === true;
       setTimeout(() => {
         cleanupProject(finalProjectPath, sessionIdForCleanup, { removeSession });
-      }, 5000);
+      }, SERVER_TIMEOUTS.EXTERNAL_SESSION_CLEANUP_DELAY_MS);
     }
   } catch (error) {
     logger.error("❌ External session error:", error);

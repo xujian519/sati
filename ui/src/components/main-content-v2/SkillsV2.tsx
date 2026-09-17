@@ -28,6 +28,7 @@ import {
 import type { Project } from "../../types/app";
 import { authenticatedFetch } from "../../utils/api";
 import { useTheme } from "../../contexts/ThemeContext";
+import { UI_TIMEOUTS } from "../../constants/timeouts";
 import { zincDarkTheme, zincLightTheme } from "../code-editor/utils/zincThemes";
 import { cn } from "../../lib/utils.js";
 
@@ -1266,7 +1267,7 @@ function InstallFromClawHub({
       } finally {
         setSearching(false);
       }
-    }, 350);
+    }, UI_TIMEOUTS.SKILL_SEARCH_DEBOUNCE_MS);
     return () => {
       if (debounceRef.current) window.clearTimeout(debounceRef.current);
     };

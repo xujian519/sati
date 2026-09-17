@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { logError } from "../../../../utils/logging";
+import { UI_TIMEOUTS } from "../../../../constants/timeouts";
 import { DEFAULT_CODE_EDITOR_SETTINGS } from "../constants";
 import type { CodeEditorSettingsState, ProjectSortOrder, SettingsMainTab } from "../types";
 
@@ -81,7 +82,7 @@ export function useSettingsController({ isOpen, initialTab }: UseSettingsControl
 
   useEffect(() => {
     if (saveStatus === null) return;
-    const timer = window.setTimeout(() => setSaveStatus(null), 2000);
+    const timer = window.setTimeout(() => setSaveStatus(null), UI_TIMEOUTS.SETTINGS_SAVE_STATUS_RESET_MS);
     return () => window.clearTimeout(timer);
   }, [saveStatus]);
 

@@ -5,6 +5,7 @@ import { Button } from "../../../../../../shared/view/ui";
 import { appendAuthToken, authenticatedFetch } from "../../../../../../utils/api";
 import { cn } from "../../../../../../lib/utils";
 import { SettingsCard, SettingsSection } from "../../../../shared/view";
+import { UI_TIMEOUTS } from "../../../../../../constants/timeouts";
 import type { RefreshGatewayStatus } from "../hooks/useGatewayStatus";
 import type { GatewayStatus } from "../types";
 
@@ -116,7 +117,7 @@ export default function WeixinChannelSection({ status, onSaved }: WeixinChannelS
       } catch {
         // Ignore transient network errors while polling.
       }
-    }, 2000);
+    }, UI_TIMEOUTS.WEIXIN_QR_POLL_INTERVAL_MS);
   }, [clearLoginTimers, clearPoll, clearPrepareTimeout, onSaved]);
 
   useEffect(() => {

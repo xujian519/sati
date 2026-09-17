@@ -4,6 +4,7 @@ import Fuse from "fuse.js";
 import { logError } from "../../../utils/logging";
 import { authenticatedFetch } from "../../../utils/api";
 import { isImeEnterEvent } from "../../../utils/ime";
+import { UI_TIMEOUTS } from "../../../constants/timeouts";
 import { safeLocalStorage } from "../utils/chatStorage";
 import type { Project } from "../../../types/app";
 
@@ -321,7 +322,7 @@ export function useSlashCommands({
         } catch {
           // Ignore: setSelectionRange throws on unfocused/hidden inputs in some browsers.
         }
-      }, 0);
+      }, UI_TIMEOUTS.NEXT_TASK_MS);
     },
     [externalInputValueRef, input, slashPosition, setInput, resetCommandMenuState, textareaRef],
   );
