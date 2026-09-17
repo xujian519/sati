@@ -10,6 +10,7 @@ import { dispatchChannelMessage } from "../protocol/ImInboundDispatch.js";
 import { processChannelTurn } from "../protocol/ImTurnProcessor.js";
 import { readRequestBody } from "../protocol/httpBody.js";
 import { ChatSessionMapper } from "../protocol/ChatSessionMapper.js";
+import { CHANNEL_DEFAULT_PORTS } from "../protocol/channel-defaults.js";
 import { renderSmsEvent } from "./sms-render.js";
 
 // twilio 是可选依赖：这里仅类型化本文件用到的成员，避免 any 逃逸。
@@ -26,7 +27,6 @@ try {
 }
 
 const DEFAULT_HOST = "127.0.0.1";
-const DEFAULT_PORT = 8790;
 const DEFAULT_PATH = "/sms/incoming";
 const MAX_BODY_BYTES = 1_048_576;
 const TWIML_OK = '<?xml version="1.0" encoding="UTF-8"?><Response></Response>';
@@ -51,7 +51,8 @@ export class SmsChannel implements ChannelAdapter {
   private fromNumber = "";
   private publicUrl = "";
   private host = DEFAULT_HOST;
-  private port = DEFAULT_PORT;
+  // 显式标 number：字面量表（as const）推不出「可被环境变量/配置改写」的意图
+  private port: number = CHANNEL_DEFAULT_PORTS.sms;
   private path = DEFAULT_PATH;
   private activeChats = new Set<string>();
   private readonly elicitation = new ImElicitationHelper();
@@ -77,7 +78,7 @@ export class SmsChannel implements ChannelAdapter {
     );
     this.fromNumber = String(this.extra.phoneNumber ?? process.env.TWILIO_PHONE_NUMBER ?? "");
     this.host = String(this.extra.webhookHost ?? DEFAULT_HOST);
-    this.port = Number(this.extra.webhookPort ?? process.env.TWILIO_WEBHOOK_PORT ?? DEFAULT_PORT);
+    this.port = Number(this.extra.webhookPort ?? process.env.TWILIO_WEBHOOK_PORT ?? CHANNEL_DEFAULT_PORTS.sms);
     this.path = String(this.extra.webhookPath ?? DEFAULT_PATH);
     this.publicUrl = String(this.extra.publicUrl ?? "");
 

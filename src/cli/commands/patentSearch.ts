@@ -41,7 +41,8 @@ export type PatentSearchArgs = {
 };
 
 const DEFAULT_LIMIT = 20;
-const DEFAULT_PORT = 5433;
+/** Postgres 服务端口默认值（**不是渠道监听端口**，故不入 `adapters/channel/protocol/channel-defaults.ts` 的渠道端口表）。 */
+const DEFAULT_PG_PORT = 5433;
 const DEFAULT_USER = "xujian";
 const DB_NAME = "patent_db";
 
@@ -437,7 +438,7 @@ export function resolveDbConfig(env: Record<string, string> = loadInfraEnv()): {
     host: env.PGHOST ?? "localhost",
     // `||` 与 Shell 的 `${VAR:-default}` 对齐：空串（PG_ATHENA_PORT=）同样兜底，
     // 避免 Number("") === 0 连到 localhost:0。
-    port: Number(env.PG_ATHENA_PORT || env.PGPORT || DEFAULT_PORT),
+    port: Number(env.PG_ATHENA_PORT || env.PGPORT || DEFAULT_PG_PORT),
     user: env.PGUSER ?? DEFAULT_USER,
   };
 }
