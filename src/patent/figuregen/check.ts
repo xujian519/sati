@@ -7,7 +7,9 @@
  * - V3 附图中未出现的附图标记不得在说明书文字部分中提及（细则第 21 条）。
  *   文本侧数字未必是附图标记（如"步骤S20""三步法"），故仅提取括号形式标记
  *   且降级为 WARN，证据供人工确认，避免硬 FAIL 打断撰写流程。
- * - V4 表示同一组成部分的附图标记应当一致（细则第 21 条）
+ * - V4 表示同一组成部分的附图标记应当一致（细则第 21 条）；名称比较经
+ *   normalizeRefLabel 归一化——「处理模块(20)」与「处理模块20」属同一组成部分，
+ *   标注书写形态差异不构成违规
  * - V5 附图中除必需的词语外不应当含有其他注释（细则第 21 条第 3 款，官方全文已核验）：
  *   label 疑似注释性长文（超长单行/多行段落）→ WARN
  * - V7 附图缩小到三分之二时仍应能清晰分辨细节（指南一部一章 4.3，官方已核验）：画幅超限 → WARN
@@ -63,6 +65,20 @@ export function stripRefMark(label: string): string {
   return label
     .replace(/[（(]\s*\d{1,3}\s*[)）]/gu, "")
     .split("\n")[0]
+    .trim();
+}
+
+/**
+ * 附图标记名称归一化（**仅用于比较**，不改变呈现形态）。
+ *
+ * 同一组件在图上可能写作「处理模块(20)」（附图惯例）或「处理模块20」（说明书正文
+ * 惯例：名称+数字、不加括号）——两者指同一组成部分，V4 不得判为名称不一致。
+ * 归一化 = 剥括号标记 + 剥尾部裸数字 + trim；`stripRefMark` 保持对外呈现形态
+ * （brief.ts 依赖其输出格式）。
+ */
+export function normalizeRefLabel(label: string): string {
+  return stripRefMark(label)
+    .replace(/\s*\d{1,3}\s*$/u, "")
     .trim();
 }
 
@@ -163,7 +179,7 @@ export function checkFigures(
     for (const node of figure.nodes) {
       if (node.ref !== undefined) {
         const names = refToNames.get(node.ref) ?? new Set<string>();
-        names.add(stripRefMark(node.label));
+        names.add(normalizeRefLabel(node.label));
         refToNames.set(node.ref, names);
 
         const ids = refToNodeIds.get(node.ref) ?? new Set<string>();

@@ -18,6 +18,7 @@ export type {
 
 export {
   checkFigures,
+  normalizeRefLabel,
   stripRefMark,
   COMMENT_LABEL_LINE_MAX,
   COMMENT_LABEL_LINES_MAX,
