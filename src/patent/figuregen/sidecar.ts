@@ -16,6 +16,7 @@
 
 import { readdir, readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
+import type { CadFinding } from "./cad/checks.js";
 import type { FigureCheckFinding, FigureCheckResult } from "./check.js";
 import type { DocumentKind, FigureSpec, Jurisdiction } from "./types.js";
 
@@ -30,11 +31,28 @@ export type FigureSidecarCheck = {
   findings: FigureCheckFinding[];
 };
 
+/**
+ * 几何来源（可选）：CAD 投影图不由 `FigureSpec` 决定画幅，而由投影几何 + 适配缩放决定
+ * ⇒ 记录来源与投影参数，使核验/审计能区分"本模块排版的图"与"投影来的图"。
+ */
+export type FigureSidecarGeometry = {
+  source: "cad";
+  view: string;
+  /** 适配 A4 可印区的缩放系数（≤1）。 */
+  scale: number;
+  width_mm: number;
+  height_mm: number;
+  hidden_lines: boolean;
+  /** 投影期的几何级检查（几何判据不重跑：记录当时结论供审计）。 */
+  findings?: CadFinding[];
+};
+
 export type FigureSidecarFigure = {
   figure_no: number;
   /** SVG 文件名（相对 sidecar 所在目录）。 */
   file: string;
   spec: FigureSpec;
+  geometry?: FigureSidecarGeometry;
 };
 
 export type FigureSidecar = {
@@ -59,8 +77,8 @@ export type BuildFigureSidecarInput = {
   renderer: string;
   jurisdiction: Jurisdiction;
   documentKind?: DocumentKind;
-  /** 本批产出（figure_no 与文件名/绝对路径）。 */
-  files: readonly { figure_no: number; path: string }[];
+  /** 本批产出（figure_no 与文件名/绝对路径；CAD 图另带几何来源与投影参数）。 */
+  files: readonly { figure_no: number; path: string; geometry?: FigureSidecarGeometry }[];
   figures: readonly FigureSpec[];
   check: FigureCheckResult;
   /** 生成期核验是否跳过文本侧规则（生成期恒为 true）。 */
@@ -72,6 +90,9 @@ export type BuildFigureSidecarInput = {
 /** 组装 sidecar 负载（纯函数：不触盘，便于单测断言结构与无损性）。 */
 export function buildFigureSidecar(input: BuildFigureSidecarInput): FigureSidecar {
   const fileByNo = new Map(input.files.map(file => [file.figure_no, basename(file.path)]));
+  const geometryByNo = new Map(
+    input.files.flatMap(file => (file.geometry === undefined ? [] : [[file.figure_no, file.geometry] as const])),
+  );
   return {
     version: FIGURE_SIDECAR_VERSION,
     generated_at: input.generatedAt ?? new Date().toISOString(),
@@ -87,11 +108,15 @@ export function buildFigureSidecar(input: BuildFigureSidecarInput): FigureSideca
     },
     figures: [...input.figures]
       .sort((a, b) => a.figure_no - b.figure_no)
-      .map(figure => ({
-        figure_no: figure.figure_no,
-        file: fileByNo.get(figure.figure_no) ?? `fig${figure.figure_no}.svg`,
-        spec: figure,
-      })),
+      .map(figure => {
+        const geometry = geometryByNo.get(figure.figure_no);
+        return {
+          figure_no: figure.figure_no,
+          file: fileByNo.get(figure.figure_no) ?? `fig${figure.figure_no}.svg`,
+          spec: figure,
+          ...(geometry === undefined ? {} : { geometry }),
+        };
+      }),
   };
 }
 

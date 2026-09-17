@@ -52,6 +52,7 @@ import { createDocumentStylePresetTool } from "../builtin/documentStylePreset.js
 import { createDocumentStylePanelTool } from "../builtin/documentStylePanel.js";
 import { createPatentFigureCheckTool } from "../builtin/patentFigureCheck.js";
 import { createPatentFigureGenerateTool } from "../builtin/patentFigureGenerate.js";
+import { createPatentFigureProjectTool } from "../builtin/patentFigureProject.js";
 import { createFlexiblePlanTool } from "../builtin/patentFlexiblePlanTool.js";
 import { createPatentMetadataTool } from "../builtin/patentMetadata.js";
 import { createPatentLegalStatusTool } from "../builtin/patentLegalStatus.js";
@@ -210,10 +211,11 @@ export type CreateBuiltinRegistryOptions = {
    */
   documentStyle?: Record<string, never>;
   /**
-   * patent_figure_generate / patent_figure_check（附图生成与细则 21 条双向标记
-   * 核验）。Registered by default（patent_figure_generate 已入 patent_workflow_run
-   * 的 figure_generate 阶段指引，默认可用）。Pass `false` to skip——会改变 patent
-   * 会话工具集摘要，需重录 deepseek-v4-flash-basic fixture（scripts/record-real-fixture.ts）。
+   * patent_figure_generate / patent_figure_check / patent_figure_project（附图生成、
+   * 细则 21 条双向标记核验、STEP 无头投影）。Registered by default（patent_figure_generate
+   * 已入 patent_workflow_run 的 figure_generate 阶段指引，默认可用）。Pass `false` to skip
+   * ——会改变 patent 会话工具集摘要，需重录 deepseek-v4-flash-basic fixture
+   * （scripts/record-real-fixture.ts）。
    */
   patentFigure?: false;
   /**
@@ -366,6 +368,7 @@ export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): T
     if (options?.patentFigure !== false) {
       registry.register(annotate(createPatentFigureGenerateTool(), "patent"));
       registry.register(annotate(createPatentFigureCheckTool(), "patent"));
+      registry.register(annotate(createPatentFigureProjectTool(), "patent"));
     }
     registry.register(annotate(createDraftSpecificationTool(), "patent"));
     registry.register(annotate(createValidateSpecificationTool(), "patent"));
