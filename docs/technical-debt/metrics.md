@@ -11,7 +11,7 @@
 | src JS 文件 | 0 |
 | tests 文件 | 559 |
 | ui/src 文件 / 行数 | 472 / 83652 |
-| ui/server 文件 / 行数 | 105 / 31142 |
+| ui/server 文件 / 行数 | 106 / 31358 |
 
 ## 指标口径
 
@@ -112,9 +112,9 @@
 | `src/adapters/channel/wecom/WeComChannel.ts` | 1764 |
 | `src/model/catalog/providers.ts` | 1593 |
 | `ui/src/components/chat-v2/MessagesPaneV2.tsx` | 1556 |
+| `ui/server/routes/git.js` | 1523 |
 | `ui/src/components/code-editor/view/subcomponents/CodeEditorBinaryFile.tsx` | 1511 |
 | `src/adapters/channel/weixin/WeixinChannel.ts` | 1497 |
-| `ui/server/routes/git.js` | 1491 |
 | `src/gateway/client/InProcessGateway.ts` | 1489 |
 | `ui/src/stores/useSessionStore.ts` | 1406 |
 | `ui/src/components/main-content-v2/DashboardV2.tsx` | 1345 |

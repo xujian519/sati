@@ -228,17 +228,67 @@ function normalizeRepositoryRelativeFilePath(filePath) {
     .trim();
 }
 
+/**
+ * Split `git status --porcelain` output into the four buckets the Git panel
+ * renders (`FILE_STATUS_GROUPS`, see `ui/src/components/git-panel/constants/constants.ts`).
+ *
+ * Entry shapes:
+ *   `XY <path>`            — ordinary entries (`X` = index, `Y` = worktree)
+ *   `R  <old> -> <new>`    — renames/copies carry BOTH paths. The panel lists
+ *                            what exists now, so the **new** path is the one
+ *                            that goes in (same rule `--porcelain` parsing
+ *                            elsewhere in this file already used).
+ *
+ * Invariant: **every non-ignored entry lands in exactly one bucket**, so the
+ * change list and its count always match `git status`. Before, `R`/`C` fell
+ * through every branch and the file vanished from the panel entirely
+ * (issue #415). Mapping:
+ *   `??`            → untracked
+ *   `D` on either side  → deleted   (`MD`, `UD`, `D ` …)
+ *   `A` on either side  → added     (`A `, `AM`, `AA`, `AU`, `UA` …)
+ *   `R` / `C`           → modified  (file exists; its path moved)
+ *   everything else     → modified  (`M*`, `T`, `UU`, …; never dropped)
+ *
+ * @param {string} statusOutput - Raw `git status --porcelain` stdout.
+ * @returns {{modified: string[], added: string[], deleted: string[], untracked: string[]}}
+ */
+export function parseStatusBuckets(statusOutput) {
+  const buckets = { modified: [], added: [], deleted: [], untracked: [] };
+
+  for (const rawLine of String(statusOutput ?? "").split("\n")) {
+    const line = rawLine.trimEnd();
+    if (!line.trim()) continue;
+
+    const indexStatus = line[0];
+    const worktreeStatus = line[1];
+    const statusPath = line.substring(3);
+    const isRenameOrCopy =
+      indexStatus === "R" || worktreeStatus === "R" || indexStatus === "C" || worktreeStatus === "C";
+    const filePath = normalizeRepositoryRelativeFilePath(isRenameOrCopy ? statusPath.split(" -> ").pop() : statusPath);
+    if (!filePath) continue;
+
+    if (indexStatus === "?" && worktreeStatus === "?") {
+      buckets.untracked.push(filePath);
+    } else if (indexStatus === "D" || worktreeStatus === "D") {
+      buckets.deleted.push(filePath);
+    } else if (indexStatus === "A" || worktreeStatus === "A") {
+      buckets.added.push(filePath);
+    } else {
+      buckets.modified.push(filePath);
+    }
+  }
+
+  return buckets;
+}
+
+/**
+ * Flat list of changed paths (bucketed order: modified → added → deleted →
+ * untracked). Kept as the single path-parsing entry for callers that only
+ * need "which files changed", so there is no second `--porcelain` dialect.
+ */
 function parseStatusFilePaths(statusOutput) {
-  return statusOutput
-    .split("\n")
-    .map(line => line.trimEnd())
-    .filter(line => line.trim())
-    .map(line => {
-      const statusPath = line.substring(3);
-      const renamedFilePath = statusPath.split(" -> ")[1];
-      return normalizeRepositoryRelativeFilePath(renamedFilePath || statusPath);
-    })
-    .filter(Boolean);
+  const { modified, added, deleted, untracked } = parseStatusBuckets(statusOutput);
+  return [...modified, ...added, ...deleted, ...untracked];
 }
 
 function buildFilePathCandidates(projectPath, repositoryRootPath, filePath) {
@@ -318,27 +368,9 @@ router.get("/status", async (req, res) => {
     // Get git status
     const { stdout: statusOutput } = await spawnAsync("git", ["status", "--porcelain"], { cwd: projectPath });
 
-    const modified = [];
-    const added = [];
-    const deleted = [];
-    const untracked = [];
-
-    statusOutput.split("\n").forEach(line => {
-      if (!line.trim()) return;
-
-      const status = line.substring(0, 2);
-      const file = line.substring(3);
-
-      if (status === "M " || status === " M" || status === "MM") {
-        modified.push(file);
-      } else if (status === "A " || status === "AM") {
-        added.push(file);
-      } else if (status === "D " || status === " D") {
-        deleted.push(file);
-      } else if (status === "??") {
-        untracked.push(file);
-      }
-    });
+    // 分桶口径集中在 parseStatusBuckets：此前 R/C 落不进任何分支 ⇒
+    // 重命名过的文件在面板里整条消失（#415）
+    const { modified, added, deleted, untracked } = parseStatusBuckets(statusOutput);
 
     res.json({
       branch,
