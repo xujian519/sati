@@ -28,7 +28,7 @@ Status: implemented
 | 2 | shell.js PTY **重连竞态** | **仍成立** | 重连分支设 `existingSession.ws = ws`（`shell.js:153`）；旧连接的 `close` 处理器取**同一 map 条目**并 `session.ws = null` + 挂 30 分钟 kill 定时器（`:447-465`）⇒ 新连接收不到输出、正在用的会话 30 分钟后被 kill |
 | 3 | shell.js `onExit` **误删同 key 新会话** | **仍成立** | 会话身份放在可变闭包变量 `ptySessionKey`（`:86`，`:114` 每次 `init` 重写），`onExit` 读它并 `ptySessionsMap.delete`（`:404`），**未比对实例**。`onData`（`:322-323`）同理 ⇒ 旧 PTY 的输出会写进新会话的 ws 与 buffer（跨会话串流） |
 | 4 | sati-bridge **Map 慢泄漏** | **仍成立**（严重级低） | `sessionState` 仅会话**被删除**时清退（`:299`）；`subagentActivityStarts` 仅终态清退（`:531`）；`pendingAgentToolCalls` 仅在对应 `subagent_started` 到达时清退（`:538-552`）。三处清退都挂在「对端一定发终态事件」上，而中断 turn / gateway 重启恰是该假设不成立时 |
-| 5 | taskmaster **MCP 状态死链路** | **仍成立**（两侧都死） | `taskmaster-mcp-status-changed` **全仓零生产者**（`broadcastMCPStatusChange` 在 C34 已删，且删前也从未被调用）；前端监听在 `TaskMasterContext.tsx:230`（本 PR 删除） |
+| 5 | taskmaster **MCP 状态死链路** | **仍成立**（两侧都死） | `taskmaster-mcp-status-changed` **全仓零生产者**（`broadcastMCPStatusChange` 在 C34 已删，且删前也从未被调用）；前端监听在 `TaskMasterContext.tsx:230`（#356 退役时删除） |
 | 6 | `/load` **路径校验弱于 `/execute`** | **已修 → 销项** | `2026-09-15` 的 #365 已让两条路由共用 `commandPaths.js:resolveCommandPath()`（`commands.js:965-974`），并由新文件 `ui/server/utils/commandPaths.test.js`（14 例）钉住策略。**登记已过时** |
 | 7 | git `/status` **丢 rename/copy** | **仍成立** | `git.js:326-341` 只认 `M`/`A`/`D`/`??`；同文件 `parseStatusFilePaths`（`:231-242`）**已**处理 `" -> "` ⇒ 不是「不会写」，而是两处口径分叉。前端 `FILE_STATUS_GROUPS`（`gitPanelUtils.ts:4-10`）用这四个键算变更列表与计数 ⇒ 重命名文件整条消失 |
 | 8 | agent.js **四项** | **四项全部仍成立** | (a) `getAssistantMessages` 只处理 `typeof msg === "string"`（`:488`）而帧是对象 ⇒ 非流式 `messages` **恒空**（同类的 `getTotalTokens` 两种形态都处理 ⇒ 漏改证据）；(b) `cloneGitHubRepo` 内层 `catch {}`（`:320-322`）吞掉自己上一行的 `throw`（`:317-319`），外层 `catch {}`（`:323-325`）再吞一次 ⇒ 「路径已被别的仓库占用」在日志与响应里都不出现；(c) `existingCheckout.code !== 0` 时抛 `${checkout.stderr}`（`:979`）——引用了上一条命令；(d) `SSEStreamWriter.setSessionId` **全仓零调用**（`:419`），且 `SSEStreamWriter.send()` 不提取 `sessionId` ⇒ 流式路径 `getSessionId()` 恒 `null` ⇒ `cleanupProject` 的 session 分支（`:378-387`）不执行（非流式之所以「看起来正常」：`ResponseCollector.send()` 会从对象帧提取 `sessionId`，`:453-455`） |
@@ -37,7 +37,7 @@ Status: implemented
 **复核口径修正**：登记 #6 是**过时项**（#365 已修），其余 8 项成立。登记确实没有夸大——9 项里
 只有 1 项失效，`ui/server` 在这 11 天里对这批条目**零改动**。
 
-### 2. 死表面退役（本 PR）
+### 2. 死表面退役（#356 落地）
 
 | 目标 | 复核结论 | 依据 |
 |---|---|---|
@@ -49,7 +49,7 @@ Status: implemented
 
 ### 3. 仍成立的缺陷 → 独立载体
 
-**不在本 PR 修**（按域拆分，每条独立 PR 可做；映射见 `backlog.md` §36，裁定表见 §26「处置追加」）：
+**不在本次退役中修**（按域拆分，每条独立 PR 可做；映射见 `backlog.md` §36，裁定表见 §26「处置追加」）：
 
 - **#411** chat.js edit/regen 流未广播给兄弟 watcher（复核 #1）
 - **#412** shell.js PTY 会话生命周期竞态 ×2（复核 #2、#3）
@@ -62,7 +62,7 @@ Status: implemented
 
 - **把 9 条原样搬成 9 个 issue** —— 落选：issue 正文明确禁止；且复核后 #6 已修、#8 是**同文件同域**
   的四项，按域拆成 6 条才是可执行粒度。
-- **本 PR 顺手修掉几条缺陷** —— 落选：与「一个关注点一个提交」冲突，会让「删除死表面」这个**纯减法、
+- **顺手修掉几条缺陷** —— 落选：与「一个关注点一个提交」冲突，会让「删除死表面」这个**纯减法、
   零行为变化**的改动混入行为变更，回滚粒度变粗。先落地减法，后续每个行为 PR 的 diff 只剩行为面。
 - **保留 `/api/commands/load`** —— 落选：#365 的决策记录已把它的下线显式留给 #356；且它的路由级
   回归用例丢失不构成覆盖缺口（策略由 `commandPaths.test.js` 直测，`/execute` 另有路由级用例）。
@@ -88,7 +88,7 @@ Status: implemented
   `routes/taskmaster.js` 19 → 9（无注释 −9 / 已注释 −1）、`utils/globalChrome.js` 10 → 0
   （无注释 −2 / 已注释 −8）、`services/server-boot.js` 1 → 0（已注释 −1），合计 −21 = −11 无注释
   −10 已注释，与 `metrics.md` 一致。⇒ 这是**真实下降而非口径变更**（删掉的死代码自带这些 catch），
-  但**不由本 PR 直接认领**：`#353` 的目标数是「无注释」全量，本 PR 只是改了它的输入。
+  但**不由本次退役直接认领**：`#353` 的目标数是「无注释」全量，本次退役只是改了它的输入。
   逐文件归因表见该 issue 的处置评论。
 - **`ui/server` 的行为缺陷仍无测试**：现有 8 个 `*.test.js` 不覆盖 `/ws` 与 `/shell`。本次删除
   之外的行为缺陷全部靠 #411–#416 跟踪，判据方向写在各自 issue 的「备注」里。
