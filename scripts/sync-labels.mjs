@@ -108,6 +108,44 @@ export function parseScopeOptions(markdown) {
 }
 
 /**
+ * 把模板「严重级」勾选项归一化为 `priority:` 取值。
+ *
+ * 取值与 `docs/technical-debt/README.md` §严重级定义同源（`P0 堵塞` … `P3 低`），
+ * 只认级别前缀——选项后半的含义/处置文本可以改措辞，级别本身不能改。
+ *
+ * **认不出时原样返回（小写化）而不是丢弃**：`P4`、`紧急` 这类写错的选项若被静默丢掉，
+ * 就成了「模板写了但没人管」的盲区（门禁看不见、分类器也不产出，与「缺整节」同型）。
+ * 原样返回后，门禁会把它报成「模板勾选项「p4 未知」没有对应的 priority: p4 未知 标签声明」，
+ * 而分类器侧由白名单过滤兜底——两侧都不静默。
+ * @param {string} text 勾选项文本（可能带 HTML 注释与说明）
+ * @returns {string|null} `p0`–`p3`；认不出则返回清理后的原文；空则 null
+ */
+export function normalizeSeverityOption(text) {
+  const cleaned = text.replace(/<!--[\s\S]*?-->/g, "").trim();
+  if (!cleaned) return null;
+  const match = /^[Pp]([0-3])(?![0-9])/.exec(cleaned);
+  return match === null ? cleaned.toLowerCase() : `p${match[1]}`;
+}
+
+/**
+ * 提取模板「严重级」节的勾选项。
+ * @param {string} markdown 模板全文
+ * @returns {string[]} `p0`–`p3` 列表（保持模板顺序，去重）
+ */
+export function parseSeverityOptions(markdown) {
+  const section = extractSection(markdown, "严重级");
+  if (section === null) return [];
+  const out = [];
+  for (const line of section.split(/\r?\n/)) {
+    const match = /^\s*-\s*\[[ xX]\]\s*(.+?)\s*$/.exec(line);
+    if (match === null) continue;
+    const value = normalizeSeverityOption(match[1]);
+    if (value !== null && !out.includes(value)) out.push(value);
+  }
+  return out;
+}
+
+/**
  * 读取标签清单。文件缺失或结构非法时抛错（门禁宁可 fail-loud）。
  * @param {string} root 仓库根目录
  * @returns {Array<{name: string, color: string, description: string}>}
@@ -121,9 +159,9 @@ export function loadLabels(root) {
 }
 
 /**
- * 读取全部 issue 模板（frontmatter labels + scope 勾选项）。
+ * 读取全部 issue 模板（frontmatter labels + 「影响 scope」/「严重级」勾选项）。
  * @param {string} root 仓库根目录
- * @returns {Array<{file: string, labels: string[], scopes: string[]}>}
+ * @returns {Array<{file: string, labels: string[], scopes: string[], severities: string[]}>}
  */
 export function loadTemplates(root) {
   const dir = join(root, TEMPLATE_DIR);
@@ -134,9 +172,43 @@ export function loadTemplates(root) {
       const markdown = readFileSync(join(dir, file), "utf8");
       const frontmatter = parseFrontmatter(markdown);
       const labels = Array.isArray(frontmatter?.labels) ? frontmatter.labels : [];
-      return { file, labels, scopes: parseScopeOptions(markdown) };
+      return { file, labels, scopes: parseScopeOptions(markdown), severities: parseSeverityOptions(markdown) };
     });
 }
+
+/**
+ * 参与「模板 ↔ 标签取值」双向校验的枚举节。
+ *
+ * 每一节都要回答同一个问题：模板里的勾选项与 `.github/labels.yml` 的带前缀标签是否
+ * **同一份取值**。差异只在该节叫什么、映射到哪个标签名、以及勾选项文本怎么归一化——
+ * 故用一张表驱动，而不是把同一段校验抄两遍（抄两遍就会像「契约影响」节那样各自漂移）。
+ *
+ * ⚠️ 标签名**不都是「前缀 + 取值」**：`scope:` 是 `scope:ui`，而 `priority:` 是
+ * `priority: p0`（带一个空格，与 `status: triage` 同风格）。所以每节自带 `labelOf()`
+ * 与 `declared()`，不能假设统一的分隔符——这正是「照着 scope 抄一份」会踩的坑。
+ */
+const ENUM_SECTIONS = [
+  {
+    title: "影响 scope",
+    field: "scopes",
+    labelOf: value => `scope:${value}`,
+    declared: labels =>
+      labels
+        .map(label => label?.name)
+        .filter(name => typeof name === "string" && name.startsWith("scope:"))
+        .map(name => name.slice("scope:".length)),
+  },
+  {
+    title: "严重级",
+    field: "severities",
+    labelOf: value => `priority: ${value}`,
+    declared: labels =>
+      labels
+        .map(label => label?.name)
+        .filter(name => typeof name === "string" && /^priority:\s*/.test(name))
+        .map(name => name.replace(/^priority:\s*/, "")),
+  },
+];
 
 /**
  * 校验标签清单与模板的一致性。
@@ -188,46 +260,50 @@ export function validateLabels(labels, templates) {
     }
   }
 
-  // 模板 scope 勾选项 ↔ scope:* 标签，双向一致。
-  const declaredScopes = new Set(
-    labels.map(label => label?.name).filter(name => typeof name === "string" && name.startsWith("scope:")),
-  );
-  const templateScopes = new Set(templates.flatMap(template => template.scopes));
-  for (const scope of templateScopes) {
-    if (!declaredScopes.has(`scope:${scope}`)) {
-      errors.push(`模板勾选项「${scope}」没有对应的 scope:${scope} 标签声明`);
+  // 枚举节：模板勾选项 ↔ 带前缀标签，双向一致（当前两节：「影响 scope」→ `scope:*`、
+  // 「严重级」→ `priority: *`）。两节的差异只有节名/标签名构造/归一化，故共用同一段校验。
+  for (const section of ENUM_SECTIONS) {
+    const declared = new Set(section.declared(labels));
+    const fromTemplates = new Set(templates.flatMap(template => template[section.field] ?? []));
+    for (const value of fromTemplates) {
+      if (!declared.has(value)) {
+        errors.push(`模板勾选项「${value}」没有对应的 ${section.labelOf(value)} 标签声明`);
+      }
     }
-  }
-  for (const name of declaredScopes) {
-    if (!templateScopes.has(name.slice("scope:".length))) {
-      errors.push(`标签 ${name} 在 issue 模板的「影响 scope」节中没有对应勾选项`);
+    for (const value of declared) {
+      if (!fromTemplates.has(value)) {
+        errors.push(`标签 ${section.labelOf(value)} 在 issue 模板的「${section.title}」节中没有对应勾选项`);
+      }
     }
   }
 
   // 模板之间的一致性。上面两条校验看的是模板**并集**，因此「只改了其中一条模板」不会
   // 被它们发现——而 GitHub 的 issue 模板无法共享片段，同一份勾选清单必然在每条模板里
-  // 各存一份。这里以**排序后的第一条**含 scope 节的模板为基准逐条比对。
-  // 不含该节的模板不参与：它本来就不产生 scope 标签。2026-09-17 前 `tech_debt.md` 是
-  // 唯一此类模板（TD-PROCGATE-003），补节后全部模板参与比对（2026-09-18 新增的
-  // `documentation.md` 一落地即带该节，其参与方式经负控制实测：删一行勾选项被本条拦下、
-  // 加一行未声明选项被上一条拦下）——这条过滤仍留给下一个新增模板，它未必一落地就带 scope 节。
-  const withScopes = templates.filter(template => template.scopes.length > 0);
-  if (withScopes.length > 1) {
-    const [reference, ...others] = withScopes;
-    const referenceScopes = new Set(reference.scopes);
+  // 各存一份。这里以**排序后的第一条**含该节的模板为基准逐条比对。
+  // 不含该节的模板不参与：它本来就不产生对应的标签。2026-09-17 前 `tech_debt.md` 是
+  // 「影响 scope」节唯一此类模板（TD-PROCGATE-003），补节后全部模板参与比对（2026-09-18
+  // 新增的 `documentation.md` 一落地即带该节，其参与方式经负控制实测：删一行勾选项被本条
+  // 拦下、加一行未声明选项被上一条拦下）——这条过滤仍留给下一个新增模板，它未必一落地就带该节。
+  // 「严重级」节目前只有 `tech_debt.md` 一条模板有（#406）：跨模板比对在此为 no-op，
+  // 但规则先就位——第二个带该节的模板一出现即自动纳管，不必再改门禁。
+  for (const section of ENUM_SECTIONS) {
+    const withSection = templates.filter(template => (template[section.field] ?? []).length > 0);
+    if (withSection.length < 2) continue;
+    const [reference, ...others] = withSection;
+    const referenceValues = new Set(reference[section.field]);
     for (const template of others) {
-      const currentScopes = new Set(template.scopes);
-      for (const scope of referenceScopes) {
-        if (!currentScopes.has(scope)) {
+      const currentValues = new Set(template[section.field]);
+      for (const value of referenceValues) {
+        if (!currentValues.has(value)) {
           errors.push(
-            `${TEMPLATE_DIR}/${template.file} 的「影响 scope」节缺勾选项「${scope}」（与 ${reference.file} 不一致）`,
+            `${TEMPLATE_DIR}/${template.file} 的「${section.title}」节缺勾选项「${value}」（与 ${reference.file} 不一致）`,
           );
         }
       }
-      for (const scope of currentScopes) {
-        if (!referenceScopes.has(scope)) {
+      for (const value of currentValues) {
+        if (!referenceValues.has(value)) {
           errors.push(
-            `${TEMPLATE_DIR}/${template.file} 的「影响 scope」节多出勾选项「${scope}」（与 ${reference.file} 不一致）`,
+            `${TEMPLATE_DIR}/${template.file} 的「${section.title}」节多出勾选项「${value}」（与 ${reference.file} 不一致）`,
           );
         }
       }

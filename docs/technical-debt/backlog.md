@@ -1997,6 +1997,7 @@
     （合成输入的负控制不足以证明门禁在真实清单上生效）。两处规范同 PR 登记（`docs/issue-management.md` §1 规则表、
     `docs/development-standards.md` 门禁职责表）。**未做**：`priority:*` 的全链路半自动化（模板「严重级」勾选 + 分类器解析），
     属增量项，已另开 #406 跟踪（不在本项范围内）。
+  - **2026-09-18 续（#406 · PR #436）**：✅ 上述增量项**已交付**——`tech_debt.md` 新增「严重级」勾选节（选项文本与 `README.md` §严重级定义同源）、`classify-issue.mjs` 解析该节产出 `priority: pN`（多选取最严重、已有 `priority:*` 不加第二个、认不出的级别原样保留以便门禁拦下）、`sync-labels.mjs` 把两节抽象为 `ENUM_SECTIONS` 表驱动校验（模板↔标签双向 + 模板间一致）。真模板实弹注入两组负控制均报红并点名（`P4 未知档` / 删掉 `P0` 行）。决策见 `docs/notes/implemented/2026-09-18-priority-severity-section.md`；`priority:*` 的可逆性随之变为「部分由正文推导」，规范 §5 已同步。
 - **TD-PROCGATE-007** · 议题治理规范自身文档漂移（§8 checkbox 未回填 / 提交页缺规范链接 / `documentation` 无模板）
   - 类别：H · 严重级：P3 · 工作量：S · 状态：done（2026-09-18，PR #435）
   - 位置：`docs/issue-management.md:174-176`、`docs/development-standards.md:247`、`.github/ISSUE_TEMPLATE/config.yml`、`.github/labels.yml`
@@ -2071,7 +2072,7 @@
 | TD-PROCGATE-005 | **#334** | scope 分类器与规范三处不符 |
 | TD-PROCGATE-003 | **#335** | tech_debt 模板补「影响 scope」节 |
 | TD-PROCGATE-004 | **#336** | stale 豁免与分诊目标抵销 |
-| TD-PROCGATE-006 | **#337** | priority/status 取值枚举门禁 |
+| TD-PROCGATE-006 | **#337** | priority/status 取值枚举门禁。**已交付（PR #405）**；同源的增量项 `priority:` 半自动化见 **#406（PR #436）** |
 | TD-PROCGATE-007 | **#338** | 议题治理规范自身文档漂移。**已交付（PR #435）**——§8/开发标准两处 checkbox 回填并附核验证据（39 标签逐条一致）、`config.yml` 增治理规范入口、新增 `documentation.md` 模板（门禁 3 → 4 模板，两组负控制 + 分类器联动实测） |
 | TD-METRIC-001 | **#339** | measure-techdebt 漏统计 `as unknown as`（329 处） |
 | TD-METRIC-002 | **#340** | 债务指标基线加新鲜度校验 |

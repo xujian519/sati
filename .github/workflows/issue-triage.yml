@@ -1,13 +1,17 @@
 name: Issue Triage
 
-# 把 issue 模板里的人工勾选（「影响 scope」节）翻译成机器可筛选的 scope:* 标签，
-# 并给没有任何 status:* 的议题补 status: triage，使新议题默认落在待分诊队列。
+# 把 issue 模板里的人工勾选（「影响 scope」与「严重级」两节）翻译成机器可筛选的
+# scope:* / priority:* 标签，并给没有任何 status:* 的议题补 status: triage，
+# 使新议题默认落在待分诊队列。
 #
-# 只增不减（相对正文推导）：语义分诊（确认、定级、派发）仍由人做，本 workflow 不替人决策。
+# 只增不减（相对正文推导）：语义分诊（确认、派发）仍由人做，本 workflow 不替人决策；
+# 「严重级」勾选只把"定级"这一维变成有兜底的，不替人判断该定哪一级。
 #
-# ⚠️ `scope:*` 是正文「影响 scope」节的**投影**，每次运行都重新推导——只摘标签而不改正文，
-# 下一次编辑（`edited`）会把它加回来；撤销一个误打的 scope，正确动作是**取消正文勾选**。
-# 这一语义与「摘掉即生效」的 `priority:*` / `tech-debt` 不同，详见 `docs/issue-management.md` §5。
+# ⚠️ `scope:*` 与「严重级」推出的 `priority:*` 都是正文的**投影**，每次运行都重新推导——
+# 只摘标签而不改正文，下一次编辑（`edited`）会把它加回来；撤销一个误打的标签，正确动作是
+# **取消正文勾选**。`priority:*` 只在正文确有勾选时才被重推（bug / feature / doc 议题与
+# 未定级的债务议题仍是「摘掉即生效」）；正文多选时取最严重的一档，已有 `priority:*` 时
+# 不加第二个（分诊结论优先）。详见 `docs/issue-management.md` §5。
 #
 # 标签白名单来自 .github/labels.yml；若报 "label not found"，说明清单已变更但
 # 尚未同步——本地跑 `node scripts/sync-labels.mjs` 即可。
