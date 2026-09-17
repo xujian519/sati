@@ -224,13 +224,8 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
 
     if (message.type === "taskmaster-tasks-updated" && message.projectName === currentProject?.name) {
       void refreshTasks();
-      return;
     }
-
-    if (message.type === "taskmaster-mcp-status-changed") {
-      void refreshMCPStatus();
-    }
-  }, [currentProject?.name, latestMessage, refreshMCPStatus, refreshProjects, refreshTasks]);
+  }, [currentProject?.name, latestMessage, refreshProjects, refreshTasks]);
 
   const contextValue = useMemo<TaskMasterContextValue>(
     () => ({

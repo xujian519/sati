@@ -10,8 +10,8 @@
 | src TS 文件 / 行数 | 1020 / 169917 |
 | src JS 文件 | 0 |
 | tests 文件 | 550 |
-| ui/src 文件 / 行数 | 472 / 83657 |
-| ui/server 文件 / 行数 | 105 / 31783 |
+| ui/src 文件 / 行数 | 472 / 83652 |
+| ui/server 文件 / 行数 | 104 / 30514 |
 
 ## 指标口径
 
@@ -32,9 +32,9 @@
 | `as unknown as`（双重断言） | 26 | ui/src(19) · adapters(2) · tool(2) |
 | 裸 `console.*` | 158 | cli(137) · telemetry(8) · ui/server(5) |
 | 空 `catch {}` | 1 | ui/server(1) |
-| 无参 `catch {`（总计） | 684 | ui/server(175) · ui/src(117) · adapters(70) |
-| ↳ **无注释**（隐患类，目标） | **125** | — |
-| ↳ 已带意图注释 | 559 | — |
+| 无参 `catch {`（总计） | 663 | ui/server(154) · ui/src(117) · adapters(70) |
+| ↳ **无注释**（隐患类，目标） | **114** | — |
+| ↳ 已带意图注释 | 549 | — |
 | `TODO/HACK/FIXME/XXX` | 11 | always-on(4) · tests(4) · ui/src(2) |
 | 分层违规 `ui/server→src` | 14 | — |
 | 分层违规 `src→ui` | 0 | — |
@@ -106,7 +106,6 @@
 | `ui/src/components/main-content-v2/SkillsV2.tsx` | 2525 |
 | `ui/server/sati-bridge.js` | 2289 |
 | `ui/src/components/code-editor/view/subcomponents/PdfDocumentPreview.tsx` | 1885 |
-| `ui/server/routes/taskmaster.js` | 1850 |
 | `ui/src/components/chat/hooks/useChatComposerState.ts` | 1837 |
 | `src/adapters/channel/wecom/WeComChannel.ts` | 1764 |
 | `src/model/catalog/providers.ts` | 1593 |
@@ -121,14 +120,15 @@
 | `ui/src/components/app-shell/SidebarV2.tsx` | 1310 |
 | `ui/src/components/chat-v2/processGrouping.ts` | 1294 |
 | `ui/src/components/chat/hooks/useChatSessionState.ts` | 1179 |
+| `ui/server/routes/taskmaster.js` | 1171 |
 | `src/agent/loop/AgentLoop.ts` | 1143 |
 | `ui/server/routes/agent.js` | 1133 |
-| `ui/server/routes/commands.js` | 1132 |
 | `ui/src/components/main-content-v2/CronV2.tsx` | 1130 |
 | `ui/src/components/main-content/view/MainContent.tsx` | 1111 |
 | `ui/src/components/chat-v2/ComposerV2.tsx` | 1109 |
 | `ui/server/routes/config.js` | 1100 |
 | `src/model/streaming/streamModel.ts` | 1085 |
+| `ui/server/routes/commands.js` | 1082 |
 | `src/always-on/runtime/DiscoveryFire.ts` | 1079 |
 | `ui/src/components/chat-v2/MessagesPaneV2.render.test.tsx` | 1042 |
 | `src/cli/sati.ts` | 1028 |
