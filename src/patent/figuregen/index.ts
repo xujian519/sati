@@ -36,7 +36,8 @@ export {
   type Point,
   type RoutedEdge,
 } from "./layout.js";
-export { FIGURE_FONT_SIZE, figureCaption, renderFigureSvg } from "./render-svg.js";
+export { figureCaption, renderFigureSvg } from "./render-svg.js";
+export { FIGURE_FONT_SIZE, isWideChar, measureTextWidth } from "./metrics.js";
 export {
   A4_HEIGHT_MM,
   A4_WIDTH_MM,

@@ -8,10 +8,9 @@
  */
 
 import { layoutFigure, type FigureLayout } from "./layout.js";
+import { FIGURE_FONT_SIZE } from "./metrics.js";
 import type { FigureNode, FigureNodeShape, FigureSpec, Jurisdiction } from "./types.js";
 
-/** 节点文字字号（px）：打印字高判据（check.ts V7）与渲染共用本常量。 */
-export const FIGURE_FONT_SIZE = 14;
 const EDGE_FONT_SIZE = 12;
 
 function fmt(n: number): string {

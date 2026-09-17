@@ -24,6 +24,7 @@
  */
 
 import { layoutFigure } from "./layout.js";
+import { FIGURE_FONT_SIZE } from "./metrics.js";
 import {
   LEGIBILITY_SHRINK_FACTOR,
   MIN_PRINTED_FONT_MM,
@@ -32,7 +33,6 @@ import {
   pxToMm,
   uniformFigureZoom,
 } from "./page-contract.js";
-import { FIGURE_FONT_SIZE } from "./render-svg.js";
 import type { DocumentKind, FigureSpec, Jurisdiction } from "./types.js";
 
 /** V5 阈值：单行 label 最大字符数 / 最大行数（超出视为疑似注释性文字）。 */
