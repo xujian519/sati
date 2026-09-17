@@ -73,15 +73,18 @@ u 对应 −Z，不是"u 就是 X"）。
   纸面配置（哪一视图放哪里）属交付排版约定，需代理师按最终格式复核（同"未核验的规则不写成
   规则"纪律）。
 - **本图是未标注投影图**：附图标记的图面位置需要坐标系统，属后续能力；当前工具只保证投影图
-  本身合规，`spec.nodes` 为空骨架。
-- **不做剖面线/剖视图**：需切平面 + 确定性剖面线绘制（指南 4.3 要求不妨碍标记线）。
+  本身合规，`spec.nodes` 为空骨架。→ **2026-09-17 已补齐**（见下方"相关"）。
+- **不做剖面线/剖视图**：需切平面 + 确定性剖面线绘制（指南 4.3 要求不妨碍标记线）。→
+  **2026-09-17 已补齐**（见下方"相关"）。
 - fixture 因新增工具再次重录（工具集 46 → 47），重放测试的请求键随之刷新。
 - 边数上限 20,000：超大装配投影既不可辨也不可审，超出即 fail-closed。
 
 ## 相关
 
 - 计划：`docs/patent-figure-hardening-plan.md` §5（P2 阶段一）
+- 后续补齐（同一模块）：`docs/notes/implemented/2026-09-17-figure-cad-section-and-numerals.md`
+  （剖视图与剖面线、附图标记标注、边表 v1 → v2 的 `axes.origin`）
 - 实测数据：同计划 §5.1 与 §11（本机 FreeCAD 1.1.3 探测/投影/确定性）
 - 代码：`src/patent/figuregen/cad/`（types/freecad/render-cad/checks）、`src/tool/builtin/patentFigureProject.ts`
 - 测试：`tests/patent/figuregen/cad.spec.ts`（模块）、`tests/patent/figuregen/cad-tool.spec.ts`（工具 + 附图门接线）、
-  fixture `tests/fixtures/patent/cad/plate-front.json`、`plate-iso.json`
+  fixture `tests/fixtures/patent/cad/`（重录脚本 `scripts/record-cad-fixtures.ts`）
