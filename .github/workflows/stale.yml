@@ -3,6 +3,8 @@ name: Stale
 # 长期无活动的 issue 自动标记并关闭——控制噪音，但只是"默认归档"，不是否决：
 # 关闭后写明恢复路径（评论即 reopen），且已排期（有 milestone）与已认领
 # （in-progress / blocked / help wanted / good first issue）的议题一律豁免。
+# 高优先级（p0 / p1）议题同样豁免：按定义它们是「堵塞 / 主链路明显受损」，
+# 不应因无人推进而自动消失——见 docs/issue-management.md §3。
 #
 # 阈值取舍：90 天无活动标记 + 再 30 天关闭。项目规模小、issue 少，宁可放宽
 # 也不要误杀——误关一个真实议题的代价远高于多留一个静默议题。
@@ -32,7 +34,7 @@ jobs:
           days-before-issue-stale: 90
           days-before-issue-close: 30
           stale-issue-label: stale
-          exempt-issue-labels: "status: in-progress,status: blocked,good first issue,help wanted,pinned"
+          exempt-issue-labels: "status: in-progress,status: blocked,good first issue,help wanted,pinned,priority: p0,priority: p1"
           exempt-all-milestones: true
           # 有新活动即摘掉 stale 标签（默认行为，此处显式写明以免被误改）。
           remove-stale-when-updated: true
