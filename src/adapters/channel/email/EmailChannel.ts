@@ -6,7 +6,7 @@ import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
 import { ImPermissionHelper } from "../protocol/ImPermissionHelper.js";
 import { dispatchChannelMessage } from "../protocol/ImInboundDispatch.js";
 import { processChannelTurn } from "../protocol/ImTurnProcessor.js";
-import { EmailSessionMapper } from "./EmailSessionMapper.js";
+import { ChatSessionMapper } from "../protocol/ChatSessionMapper.js";
 import { renderEmailEvent } from "./email-render.js";
 
 // imapflow / nodemailer 是可选依赖：这里仅类型化本文件用到的成员，避免 any 逃逸。
@@ -62,13 +62,13 @@ const DEFAULT_POLL_INTERVAL_MS = 45_000;
 
 export type EmailChannelOptions = {
   extra?: Record<string, unknown>;
-  mapper?: EmailSessionMapper;
+  mapper?: ChatSessionMapper;
 };
 
 export class EmailChannel implements ChannelAdapter {
   readonly channelKey: GatewayChannelKey = "email";
 
-  private readonly mapper: EmailSessionMapper;
+  private readonly mapper: ChatSessionMapper;
   private readonly extra: Record<string, unknown>;
 
   private gateway?: Gateway;
@@ -85,7 +85,7 @@ export class EmailChannel implements ChannelAdapter {
   private stopped = false;
 
   constructor(options: EmailChannelOptions = {}) {
-    this.mapper = options.mapper ?? new EmailSessionMapper();
+    this.mapper = options.mapper ?? new ChatSessionMapper("email");
     this.extra = options.extra ?? {};
   }
 

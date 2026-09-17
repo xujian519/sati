@@ -6,7 +6,7 @@ import { ImPermissionHelper } from "../protocol/ImPermissionHelper.js";
 import { dispatchChannelMessage } from "../protocol/ImInboundDispatch.js";
 import { processChannelTurn } from "../protocol/ImTurnProcessor.js";
 import { resolveWebSocketImpl, type MinimalWebSocketLike } from "../protocol/resolveWebSocketImpl.js";
-import { MattermostSessionMapper } from "./MattermostSessionMapper.js";
+import { ChatSessionMapper } from "../protocol/ChatSessionMapper.js";
 import { renderMattermostEvent } from "./mattermost-render.js";
 
 const WebSocketImpl = resolveWebSocketImpl();
@@ -18,13 +18,13 @@ export type MattermostChannelOptions = {
   token?: string;
   serverUrl?: string;
   teamId?: string;
-  mapper?: MattermostSessionMapper;
+  mapper?: ChatSessionMapper;
 };
 
 export class MattermostChannel implements ChannelAdapter {
   readonly channelKey: GatewayChannelKey = "mattermost";
 
-  private readonly mapper: MattermostSessionMapper;
+  private readonly mapper: ChatSessionMapper;
   private readonly token: string;
   private readonly serverUrl: string;
   private readonly teamId?: string;
@@ -41,7 +41,7 @@ export class MattermostChannel implements ChannelAdapter {
   private readonly permissions = new ImPermissionHelper();
 
   constructor(options: MattermostChannelOptions = {}) {
-    this.mapper = options.mapper ?? new MattermostSessionMapper();
+    this.mapper = options.mapper ?? new ChatSessionMapper("mattermost");
     this.token = options.token ?? process.env.MATTERMOST_TOKEN ?? "";
     this.serverUrl = options.serverUrl ?? process.env.MATTERMOST_URL ?? "";
     this.teamId = options.teamId ?? process.env.MATTERMOST_TEAM_ID;

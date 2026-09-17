@@ -7,7 +7,7 @@ import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
 import { ImPermissionHelper } from "../protocol/ImPermissionHelper.js";
 import { dispatchChannelMessage } from "../protocol/ImInboundDispatch.js";
 import { processChannelTurn } from "../protocol/ImTurnProcessor.js";
-import { WhatsAppSessionMapper } from "./WhatsAppSessionMapper.js";
+import { ChatSessionMapper } from "../protocol/ChatSessionMapper.js";
 import { renderWhatsAppEvent } from "./whatsapp-render.js";
 
 const DEFAULT_BRIDGE_URL = "http://127.0.0.1:3100";
@@ -17,7 +17,7 @@ const READY_TIMEOUT_MS = 15_000;
 export type WhatsAppChannelOptions = {
   bridgePath?: string;
   bridgeUrl?: string;
-  mapper?: WhatsAppSessionMapper;
+  mapper?: ChatSessionMapper;
 };
 
 type InboundMessage = {
@@ -33,7 +33,7 @@ function normalizeBaseUrl(url: string): string {
 export class WhatsAppChannel implements ChannelAdapter {
   readonly channelKey: GatewayChannelKey = "whatsapp";
 
-  private readonly mapper: WhatsAppSessionMapper;
+  private readonly mapper: ChatSessionMapper;
   private readonly bridgePath: string;
   private readonly bridgeUrl: string;
 
@@ -51,7 +51,7 @@ export class WhatsAppChannel implements ChannelAdapter {
   private polling = false;
 
   constructor(options: WhatsAppChannelOptions = {}) {
-    this.mapper = options.mapper ?? new WhatsAppSessionMapper();
+    this.mapper = options.mapper ?? new ChatSessionMapper("whatsapp");
     this.bridgePath = (options.bridgePath ?? process.env.WHATSAPP_BRIDGE_PATH ?? "").trim();
     this.bridgeUrl = normalizeBaseUrl(options.bridgeUrl ?? process.env.WHATSAPP_BRIDGE_URL ?? DEFAULT_BRIDGE_URL);
   }

@@ -7,7 +7,7 @@ import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
 import { ImPermissionHelper } from "../protocol/ImPermissionHelper.js";
 import { dispatchChannelMessage } from "../protocol/ImInboundDispatch.js";
 import { processChannelTurn } from "../protocol/ImTurnProcessor.js";
-import { SignalSessionMapper } from "./SignalSessionMapper.js";
+import { ChatSessionMapper } from "../protocol/ChatSessionMapper.js";
 import { renderSignalEvent } from "./signal-render.js";
 
 const MAX_MESSAGE_LENGTH = 2000;
@@ -16,7 +16,7 @@ const DEFAULT_REST_URL = "http://127.0.0.1:8080";
 export type SignalChannelOptions = {
   restUrl?: string;
   account?: string;
-  mapper?: SignalSessionMapper;
+  mapper?: ChatSessionMapper;
 };
 
 type EnvelopeExtract = {
@@ -63,7 +63,7 @@ function extractTextFromEnvelope(raw: Record<string, unknown>): EnvelopeExtract 
 export class SignalChannel implements ChannelAdapter {
   readonly channelKey: GatewayChannelKey = "signal";
 
-  private readonly mapper: SignalSessionMapper;
+  private readonly mapper: ChatSessionMapper;
   private readonly restUrl: string;
   private readonly account: string;
 
@@ -78,7 +78,7 @@ export class SignalChannel implements ChannelAdapter {
   private recipientByChat = new Map<string, string>();
 
   constructor(options: SignalChannelOptions = {}) {
-    this.mapper = options.mapper ?? new SignalSessionMapper();
+    this.mapper = options.mapper ?? new ChatSessionMapper("signal");
     this.restUrl = normalizeBaseUrl(options.restUrl ?? process.env.SIGNAL_HTTP_URL ?? DEFAULT_REST_URL);
     this.account = options.account ?? process.env.SIGNAL_ACCOUNT ?? "";
   }

@@ -7,7 +7,7 @@ import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
 import { ImPermissionHelper } from "../protocol/ImPermissionHelper.js";
 import { dispatchChannelMessage } from "../protocol/ImInboundDispatch.js";
 import { processChannelTurn } from "../protocol/ImTurnProcessor.js";
-import { TelegramSessionMapper } from "./TelegramSessionMapper.js";
+import { ChatSessionMapper } from "../protocol/ChatSessionMapper.js";
 import { renderTelegramEvent } from "./telegram-render.js";
 
 // grammy 是可选依赖：这里仅类型化本文件用到的成员，避免 any 逃逸。
@@ -46,13 +46,13 @@ const MAX_MESSAGE_LENGTH = 4096;
 export type TelegramChannelOptions = {
   token?: string;
   webhookUrl?: string;
-  mapper?: TelegramSessionMapper;
+  mapper?: ChatSessionMapper;
 };
 
 export class TelegramChannel implements ChannelAdapter {
   readonly channelKey: GatewayChannelKey = "telegram";
 
-  private readonly mapper: TelegramSessionMapper;
+  private readonly mapper: ChatSessionMapper;
   private readonly token?: string;
   private readonly webhookUrl?: string;
 
@@ -64,7 +64,7 @@ export class TelegramChannel implements ChannelAdapter {
   private readonly permissions = new ImPermissionHelper();
 
   constructor(options: TelegramChannelOptions = {}) {
-    this.mapper = options.mapper ?? new TelegramSessionMapper();
+    this.mapper = options.mapper ?? new ChatSessionMapper("telegram");
     this.token = options.token ?? process.env.TELEGRAM_BOT_TOKEN;
     this.webhookUrl = options.webhookUrl;
   }
