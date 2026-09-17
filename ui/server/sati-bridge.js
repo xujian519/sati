@@ -278,18 +278,6 @@ function cleanupSessionBookkeeping(sessionKey) {
   knownAlwaysOnSessions.delete(sessionKey);
 }
 
-/**
- * Evict orphaned session bookkeeping when a project or session is deleted.
- */
-function cleanupDeletedSessionBookkeeping(projectKey, sessionKey) {
-  const resolvedProject = path.resolve(projectKey || GENERAL_HOME);
-  for (const state of sessionState.values()) {
-    if (path.resolve(state.projectKey || GENERAL_HOME) !== resolvedProject) continue;
-    if (sessionKey && state.sessionKey !== sessionKey) continue;
-    cleanupSessionBookkeeping(state.sessionKey);
-  }
-}
-
 // 删除窗口（上游 #568）：项目/会话删除期间封锁新状态创建与新回合启动，
 // 否则迟到的提交会在删除后重建状态、把已删会话复活。
 const deletingProjects = new Set();
