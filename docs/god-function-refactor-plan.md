@@ -1,5 +1,12 @@
 # 巨无霸函数拆解专项实施方案
 
+> **验收状态（2026-09-18 补）**：本文件是历史快照，勾选状态曾长期停留在交付前（见 #359）。
+> 截至 2026-09-18 复核：未勾选 6 项中 **0 项已交付**、**0 项仍未交付**、**6 项无法核实**。
+>
+> - 已交付：无。
+> - 仍未交付：无。
+> - 无法核实：§4「全局协调项（每轮通用清单）」全部 6 行（`:74`-`:79`）—— 这是**每轮通用模板**而非一次性交付项：每行都要在 17 个轮次里各履行一次（「记录本轮基线用例清单」「每轮一 PR」「跨文件移动即 `pnpm gen:event-matrix`」），无单一产物可判，故保持未勾选。本专项的落地结果本次按仓库实态复核确认：`src/mcp/client/` 已拆出 `connection.ts`/`operations.ts`/`errors.ts`/`transport.ts`/`toolSpec.ts`（`McpClient.ts` 102 行）、`src/gateway/client/` 已下沉 6 个模块（`eventMapping.ts`/`attachments.ts`/`telemetry.ts`/`normalizers.ts`/`providerError.ts`/`toolResultSanitize.ts`）、`ui/server/index.js` 211 行（DoD ≤400）；逐轮状态与 DoD 对照见 §6/§7。注：头部自述的 PR #43-#73 在本 clone 的 git 历史中不可见（历史经 squash 导入），故未按 PR 号判交付。
+
 - 创建日期：2026-08-16
 - 状态：**全部完成 ✅（2026-08-17）**——轨道 A（A1-A11，PR #43-#58）+ 轨道 B（B1-B6，PR #59-#73）全部落地（index.js 3845→244 行）；分片后打包校验路径同步修复（verify-dmg.sh 检查 `server/services/server-boot.js`，PR #84）
 - 前置：`docs/technical-debt-report.md` Sprint Backlog #6 / #7 残留 / #12；方法论先例 `docs/agentloop-refactor-plan.md`

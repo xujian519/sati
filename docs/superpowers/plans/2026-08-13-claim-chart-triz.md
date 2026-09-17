@@ -1,5 +1,25 @@
 # Claim Chart 内核 + 五场景接入 + TRIZ 组件 Implementation Plan
 
+> **验收状态（2026-09-18 补）**：本文件是历史快照，勾选状态曾长期停留在交付前（见 #359）。
+> 截至 2026-09-18 复核：未勾选 67 项中 **41 项已交付**（已回填勾选）、**0 项仍未交付**、**26 项无法核实**。
+> 12 个任务的全部交付物（内核五模块 / 原子 / 工具 / 4 manifest / TRIZ 组件与数据 / spec 同步）均已入库，逐项证据见下。
+>
+> - 已交付（按任务列出该任务已核实的步骤及出处）：
+>   - T1 类型定义、Commit —— `src/patent/claim-chart/protocol/types.ts`、commit `e40fce4c`
+>   - T2 写测试、实现、Commit —— `tests/patent/claim-chart/element-validator.spec.ts:12`、`src/patent/claim-chart/runtime/element-validator.ts`、commit `160c15d5`
+>   - T3 写测试、实现、Commit —— `tests/patent/claim-chart/mapping-machine.spec.ts:23`、`src/patent/claim-chart/runtime/mapping-machine.ts`、commit `c22a19e0`
+>   - T4 写测试、实现、Commit —— `tests/patent/claim-chart/gap-detector.spec.ts:10`、`src/patent/claim-chart/runtime/gap-detector.ts`、commit `240a7365`
+>   - T5 写测试、实现、Commit —— `tests/patent/claim-chart/pin-cite-validator.spec.ts:13`、`src/patent/claim-chart/runtime/pin-cite-validator.ts`、commit `63b2a391`
+>   - T6 写测试、实现 store.ts、写 barrel、Commit —— `tests/patent/claim-chart/store.spec.ts:53`、`src/patent/claim-chart/runtime/store.ts`、`src/patent/claim-chart/index.ts`、commit `af806102`
+>   - T7 写测试、实现原子、注册原子、Commit —— `tests/patent/claim-chart/chart-atom.spec.ts:56`、`src/patent/atoms/handlers/builtin/chart.ts`、`src/patent/atoms/index.ts:89`（`globalAtomRegistry.register` 在 `:119`；barrel `src/patent/atoms/handlers/builtin/index.ts:74`）、commit `65f387b2`
+>   - T8 写测试、实现、注册工具、Commit —— `tests/tool/builtin/claimChart.spec.ts:42`、`src/tool/builtin/claimChart.ts:99`、`src/tool/registry/createBuiltinRegistry.ts:43`（注册在 `:361`）、commit `0eb3cb4e`
+>   - T9 写测试、实现 4 manifest、确认导出、Commit —— `tests/patent/claim-chart/manifests.spec.ts:12`、`src/patent/workflow/manifests.ts:184/208/238/262`、`src/patent/index.ts:71-74`、commit `825b0ab4`
+>   - T10 写测试、实现 triz.ts、40 原理数据、注册、Commit —— `tests/methodology/triz.spec.ts:13`、`src/methodology/runtime/components/triz.ts`、`src/methodology/runtime/components/data/triz-principles.json`（40 条，no 1–40）、`src/methodology/runtime/MethodologyRegistry.ts:22`（注册在 `:34`）、commit `c692c437`
+>   - T11 矩阵结构测试、整理数据、Commit —— `tests/methodology/triz.spec.ts:49,64,89`、`src/methodology/runtime/components/data/triz-matrix.json`（39×39、对角线为空、基准格 `[1][14]=[1,8,40,15]`、`[10][9]=[13,28,15,19]`）、commit `0b5038d8`
+>   - T12 spec 同步、端到端冒烟、Commit —— `docs/superpowers/specs/2026-08-13-claim-chart-triz-design.md:76,82`、commit `d360c306`（message 注明「冒烟：已跑 DeepSeek」）
+> - 仍未交付：无。
+> - 无法核实（26 项）：T1 S2「`pnpm typecheck` 验证」；T2/T3/T4/T5 各 S2「运行测试确认失败」+ S4「运行测试确认通过」；T6 S2+S5；T7/T8/T9 各 S2+S5+S6（含「防回归」）；T10 S2+S6；T11 S2+S4；T12 S2「全量测试」+ S3「质量门」——**为什么无法判定**：全部是一次性运行结果（TDD 红态、当次测试/门禁结论），勾选时刻已过，且按本次作业约束不重跑 `pnpm test`/`pnpm check`，仓库现状无法重放该次运行；其中 T10 S6 的「暂缺矩阵数据」中间态已由 T11 补齐（`triz.spec.ts:49` 查表用例已启用）。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 实现专利权利要求要素级证据网格（claim chart）内核与工具，经 4 个新内置 WorkflowManifest 接入五场景（撰写/OA 答复/无效/复审/侵权），并新增 TRIZ 方法论组件（40 原理 + 矛盾矩阵）。
@@ -28,7 +48,7 @@
 **Files:**
 - Create: `src/patent/claim-chart/protocol/types.ts`
 
-- [ ] **Step 1: 写完整类型定义**
+- [x] **Step 1: 写完整类型定义**
 
 ```typescript
 /**
@@ -135,7 +155,7 @@ export interface ClaimChart {
 Run: `pnpm typecheck`
 Expected: PASS（新文件仅类型，无运行时）
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/patent/claim-chart/protocol/types.ts
@@ -150,7 +170,7 @@ git commit -m "feat(patent): claim-chart 协议层类型（要素/行/gap/模式
 - Create: `tests/patent/claim-chart/element-validator.spec.ts`
 - Create: `src/patent/claim-chart/runtime/element-validator.ts`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```typescript
 import assert from "node:assert/strict";
@@ -217,7 +237,7 @@ test("权利要求原文为空或要素列表为空报错", () => {
 Run: `pnpm build && node --test dist/tests/patent/claim-chart/element-validator.spec.js`
 Expected: FAIL（模块不存在，build 报错）
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 ```typescript
 /**
@@ -295,7 +315,7 @@ export function validateElements(elements: ClaimElement[], claimText: string): E
 Run: `pnpm build && node --test dist/tests/patent/claim-chart/element-validator.spec.js`
 Expected: PASS（7 个测试全绿）
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tests/patent/claim-chart/element-validator.spec.ts src/patent/claim-chart/runtime/element-validator.ts
@@ -310,7 +330,7 @@ git commit -m "feat(patent): claim-chart 要素校验器（verbatim 子串 + 编
 - Create: `tests/patent/claim-chart/mapping-machine.spec.ts`
 - Create: `src/patent/claim-chart/runtime/mapping-machine.ts`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```typescript
 import assert from "node:assert/strict";
@@ -385,7 +405,7 @@ test("区别特征 = 主目标上 not-found/needs-evidence 的要素", () => {
 Run: `pnpm build && node --test dist/tests/patent/claim-chart/mapping-machine.spec.js`
 Expected: FAIL（模块不存在）
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 ```typescript
 /**
@@ -446,7 +466,7 @@ export function deriveDistinguishingFeatures(
 Run: `pnpm build && node --test dist/tests/patent/claim-chart/mapping-machine.spec.js`
 Expected: PASS（5 个测试全绿）
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tests/patent/claim-chart/mapping-machine.spec.ts src/patent/claim-chart/runtime/mapping-machine.ts
@@ -461,7 +481,7 @@ git commit -m "feat(patent): claim-chart mapping 状态机（场景合法性 + �
 - Create: `tests/patent/claim-chart/gap-detector.spec.ts`
 - Create: `src/patent/claim-chart/runtime/gap-detector.ts`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```typescript
 import assert from "node:assert/strict";
@@ -504,7 +524,7 @@ test("缺口条目带建议动作", () => {
 Run: `pnpm build && node --test dist/tests/patent/claim-chart/gap-detector.spec.js`
 Expected: FAIL（模块不存在）
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 ```typescript
 /**
@@ -546,7 +566,7 @@ export function detectGaps(rows: ChartRow[]): GapEntry[] {
 Run: `pnpm build && node --test dist/tests/patent/claim-chart/gap-detector.spec.js`
 Expected: PASS（3 个测试全绿）
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tests/patent/claim-chart/gap-detector.spec.ts src/patent/claim-chart/runtime/gap-detector.ts
@@ -561,7 +581,7 @@ git commit -m "feat(patent): claim-chart gap 检测器（缺口聚合/排序/建
 - Create: `tests/patent/claim-chart/pin-cite-validator.spec.ts`
 - Create: `src/patent/claim-chart/runtime/pin-cite-validator.ts`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```typescript
 import assert from "node:assert/strict";
@@ -614,7 +634,7 @@ test("空引用放行（not-found 行允许空证据）", () => {
 Run: `pnpm build && node --test dist/tests/patent/claim-chart/pin-cite-validator.spec.js`
 Expected: FAIL（模块不存在）
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 ```typescript
 /**
@@ -657,7 +677,7 @@ export function verifyQuoteInSource(quote: string, sourceText: string): { ok: bo
 Run: `pnpm build && node --test dist/tests/patent/claim-chart/pin-cite-validator.spec.js`
 Expected: PASS（5 个测试全绿）
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tests/patent/claim-chart/pin-cite-validator.spec.ts src/patent/claim-chart/runtime/pin-cite-validator.ts
@@ -673,7 +693,7 @@ git commit -m "feat(patent): claim-chart pin-cite 校验器（格式 + 段号存
 - Create: `src/patent/claim-chart/runtime/store.ts`
 - Create: `src/patent/claim-chart/index.ts`（barrel）
 
-- [ ] **Step 1: 写失败测试（barrel 导出 + 渲染 + 持久化）**
+- [x] **Step 1: 写失败测试（barrel 导出 + 渲染 + 持久化）**
 
 ```typescript
 import assert from "node:assert/strict";
@@ -744,7 +764,7 @@ test("save/load 往返一致（落盘 data/cases/<caseId>/outputs/）", () => {
 Run: `pnpm build && node --test dist/tests/patent/claim-chart/store.spec.js`
 Expected: FAIL（模块不存在）
 
-- [ ] **Step 3: 实现 store.ts**
+- [x] **Step 3: 实现 store.ts**
 
 ```typescript
 /**
@@ -809,7 +829,7 @@ export function renderChartMarkdown(chart: ClaimChart): string {
 }
 ```
 
-- [ ] **Step 4: 写 barrel**
+- [x] **Step 4: 写 barrel**
 
 `src/patent/claim-chart/index.ts`:
 
@@ -844,7 +864,7 @@ export {
 Run: `pnpm build && node --test dist/tests/patent/claim-chart/store.spec.js`
 Expected: PASS（2 个测试全绿）
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add tests/patent/claim-chart/store.spec.ts src/patent/claim-chart/runtime/store.ts src/patent/claim-chart/index.ts
@@ -861,7 +881,7 @@ git commit -m "feat(patent): claim-chart 持久化与 markdown 渲染（json + m
 - Modify: `src/patent/atoms/handlers/builtin/index.ts`（export 聚合）
 - Modify: `src/patent/atoms/index.ts`（registerBuiltinAtoms 注册）
 
-- [ ] **Step 1: 写失败测试（mock provider + 非法行打回重做 + verified 保留）**
+- [x] **Step 1: 写失败测试（mock provider + 非法行打回重做 + verified 保留）**
 
 ```typescript
 import assert from "node:assert/strict";
@@ -998,7 +1018,7 @@ test("caseId 提供时落盘 json，verified 行在重跑时保留", async () =>
 Run: `pnpm build && node --test dist/tests/patent/claim-chart/chart-atom.spec.js`
 Expected: FAIL（ClaimChartHandler 不存在）
 
-- [ ] **Step 3: 实现原子**
+- [x] **Step 3: 实现原子**
 
 ```typescript
 /**
@@ -1215,7 +1235,7 @@ export class ClaimChartHandler implements StageHandler {
 }
 ```
 
-- [ ] **Step 4: 注册原子**
+- [x] **Step 4: 注册原子**
 
 `src/patent/atoms/handlers/builtin/index.ts` 文件头部注释加 `- chart.ts：claim-chart（要素级证据网格）`，末尾加：
 
@@ -1245,7 +1265,7 @@ Expected: PASS（4 个测试全绿）
 Run: `pnpm build && node --test dist/tests/patent/atoms.spec.js`
 Expected: PASS（registerBuiltinAtoms 相关测试仍绿；若该测试断言原子数量，更新断言为 11 个）
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add tests/patent/claim-chart/chart-atom.spec.ts src/patent/atoms/handlers/builtin/chart.ts src/patent/atoms/handlers/builtin/index.ts src/patent/atoms/index.ts
@@ -1261,7 +1281,7 @@ git commit -m "feat(patent): build-claim-chart 原子（LLM 拆分 + 三关校�
 - Modify: `src/tool/registry/createBuiltinRegistry.ts`
 - Test: `tests/tool/builtin/claimChart.spec.ts`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```typescript
 import assert from "node:assert/strict";
@@ -1325,7 +1345,7 @@ test("claims 为空返回错误", async () => {
 Run: `pnpm build && node --test dist/tests/tool/builtin/claimChart.spec.js`
 Expected: FAIL（模块不存在）
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 ```typescript
 /**
@@ -1499,7 +1519,7 @@ export function createClaimChartTool(): SatiToolDefinition<ClaimChartInput, Clai
 
 注意：若 `src/tool/model-utils.ts` 或 `src/model/protocol/types.ts` 的导入路径与 `patentWorkflowTool.ts` 实际使用不一致，以 `patentWorkflowTool.ts` 头部的实际 import 为准（实现时对齐该文件，不新增依赖）。
 
-- [ ] **Step 4: 注册工具**
+- [x] **Step 4: 注册工具**
 
 `src/tool/registry/createBuiltinRegistry.ts` 头部 import 区（`import { createDraftClaimsTool }` 行附近）加：
 
@@ -1523,7 +1543,7 @@ Expected: PASS（3 个测试全绿）
 Run: `pnpm build && node --test dist/tests/tool/` 2>/dev/null || true
 Expected: 无既有工具测试失败（如 createBuiltinRegistry 有数量断言，同步更新）
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/tool/builtin/claimChart.ts src/tool/registry/createBuiltinRegistry.ts tests/tool/builtin/claimChart.spec.ts
@@ -1538,7 +1558,7 @@ git commit -m "feat(patent): claim_chart_build 工具（复用原子实现，dom
 - Modify: `src/patent/workflow.ts`（新增 4 个 manifest + 目录注册）
 - Test: `tests/patent/claim-chart/manifests.spec.ts`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```typescript
 import assert from "node:assert/strict";
@@ -1586,7 +1606,7 @@ test("无效/复审 manifest 复用同一 id（双场景）且 checkDomains 含 
 Run: `pnpm build && node --test dist/tests/patent/claim-chart/manifests.spec.js`
 Expected: FAIL（导出不存在）
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 在 `src/patent/workflow.ts` 的 `patentInventivenessManifest` 定义之后、`builtinPatentManifests` 之前，插入（对齐 `patentDisclosureManifest` 的 atom 声明风格；`caseType` 值对齐 `WorkflowManifest.caseType` 现有取值集）：
 
@@ -1704,7 +1724,7 @@ export const builtinPatentManifests: readonly BuiltinPatentManifest[] = [
 
 注意：`patent_infringement` 检查域是否已存在于 checker 常量（`src/patent/checker/constants.ts` 有 DOMAIN_INFRINGEMENT），实现时若域名不匹配现有常量集，改用现有域名（如 `patent_invalidity` 系列）——以 checker 常量文件为准。
 
-- [ ] **Step 4: 确认导出**
+- [x] **Step 4: 确认导出**
 
 `src/patent/index.ts` 若为显式导出列表，确认 4 个新 manifest 与 `builtinPatentManifests` 已被导出（`builtinPatentManifests` 已导出；新 manifest 加导出行）。
 
@@ -1718,7 +1738,7 @@ Expected: PASS（3 个测试全绿）
 Run: `pnpm build && node --test dist/tests/patent/workflow.spec.js dist/tests/patent/workflow-dag.spec.js`
 Expected: PASS
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/patent/workflow.ts src/patent/index.ts tests/patent/claim-chart/manifests.spec.ts
@@ -1735,7 +1755,7 @@ git commit -m "feat(patent): 4 个内置 manifest 接入五场景（可专利性
 - Create: `src/methodology/runtime/components/data/triz-principles.json`
 - Modify: `src/methodology/runtime/MethodologyRegistry.ts`（DEFAULT_METHODOLOGY_COMPONENTS 加 triz）
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```typescript
 import assert from "node:assert/strict";
@@ -1796,7 +1816,7 @@ test("triz 已注册进默认组件集", () => {
 Run: `pnpm build && node --test dist/tests/methodology/triz.spec.js`
 Expected: FAIL（模块不存在）
 
-- [ ] **Step 3: 实现 triz.ts**
+- [x] **Step 3: 实现 triz.ts**
 
 ```typescript
 /**
@@ -1870,7 +1890,7 @@ export const triz: MethodologyComponent = {
 };
 ```
 
-- [ ] **Step 4: 写 40 原理数据**
+- [x] **Step 4: 写 40 原理数据**
 
 `src/methodology/runtime/components/data/triz-principles.json`：
 
@@ -1919,7 +1939,7 @@ export const triz: MethodologyComponent = {
 ]
 ```
 
-- [ ] **Step 5: 注册**
+- [x] **Step 5: 注册**
 
 `src/methodology/runtime/MethodologyRegistry.ts` 头部 import 区加 `import { triz } from "./components/triz.js";`，`DEFAULT_METHODOLOGY_COMPONENTS` 数组末尾加 `triz,`。
 
@@ -1932,7 +1952,7 @@ Expected: 除 `lookupMatrixCell 确定性查表` 外的测试 PASS（该测试�
 
 若测试框架不便 skip，则本任务把 `lookupMatrixCell` 测试从 spec 中临时注释，Task 11 恢复。
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add tests/methodology/triz.spec.ts src/methodology/runtime/components/triz.ts src/methodology/runtime/components/data/triz-principles.json src/methodology/runtime/MethodologyRegistry.ts
@@ -1947,7 +1967,7 @@ git commit -m "feat(methodology): TRIZ 组件（40 原理 + 矛盾矩阵查表 +
 - Create: `src/methodology/runtime/components/data/triz-matrix.json`
 - Modify: `tests/methodology/triz.spec.ts`（恢复 lookupMatrixCell 测试 + 加矩阵结构测试）
 
-- [ ] **Step 1: 加矩阵结构测试（失败先行）**
+- [x] **Step 1: 加矩阵结构测试（失败先行）**
 
 在 `tests/methodology/triz.spec.ts` 中恢复 `lookupMatrixCell 确定性查表` 测试并追加：
 
@@ -1982,7 +2002,7 @@ test("矩阵对角线（改善=恶化）为物理矛盾，无经典推荐", () =
 Run: `pnpm build && node --test dist/tests/methodology/triz.spec.js`
 Expected: FAIL（triz-matrix.json 缺失）
 
-- [ ] **Step 3: 整理数据**
+- [x] **Step 3: 整理数据**
 
 矩阵数据为 Altshuller 经典矛盾矩阵（公开领域经典数据）。整理步骤：
 1. 从公开权威源抄录 39×39 矩阵（推荐 Wikipedia "TRIZ" 条目附表或经典教材公开版），数据源 URL 记录进文件注释
@@ -2003,7 +2023,7 @@ Expected: FAIL（triz-matrix.json 缺失）
 Run: `pnpm build && node --test dist/tests/methodology/triz.spec.js`
 Expected: PASS（全部测试绿，含矩阵结构/对角线/查表基准）
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/methodology/runtime/components/data/triz-matrix.json tests/methodology/triz.spec.ts
@@ -2017,7 +2037,7 @@ git commit -m "feat(methodology): TRIZ 39×39 矛盾矩阵数据（Altshuller �
 **Files:**
 - Modify: `docs/superpowers/specs/2026-08-13-claim-chart-triz-design.md`（同步 ClaimChart.elements 字段——Task 1 实现时补充的渲染必需字段）
 
-- [ ] **Step 1: spec 同步**
+- [x] **Step 1: spec 同步**
 
 在 spec 数据模型代码块 `interface ClaimChart` 中加 `elements: ClaimElement[]; // 已拆分的要素（渲染表格左列与 gap list 需要）` 一行，并加一行说明"ClaimChart 含 elements 字段（计划阶段补充：markdown 渲染与 gap list 需要要素文本）"。
 
@@ -2031,11 +2051,11 @@ Expected: 全部 PASS（含新增 tests/patent/claim-chart/ 6 个 spec、tests/m
 Run: `pnpm typecheck && pnpm lint && pnpm format:check`
 Expected: 全部 PASS。若 format:check 报新增文件格式问题：Run `pnpm format` 后重跑三步。
 
-- [ ] **Step 4: 端到端冒烟（可选，需模型环境）**
+- [x] **Step 4: 端到端冒烟（可选，需模型环境）**
 
 在有模型会话中调用 `claim_chart_build`（mode=invalidity，一段示例权利要求 + 一个对比文件 converted 文件路径），确认：claim-chart-*.json / .md 落盘（顶部 gap list + 免责声明）、gap 条目合理、pin-cite 校验拦截幻觉引用。无模型环境则跳过并在 commit message 注明。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add docs/superpowers/specs/2026-08-13-claim-chart-triz-design.md

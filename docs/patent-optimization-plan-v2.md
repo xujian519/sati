@@ -1,5 +1,13 @@
 # 专利搜索与下载模块 — 优化方案 v2
 
+> **验收状态（2026-09-18 补）**：本文件是历史快照，勾选状态曾长期停留在交付前（见 #359）。
+> 截至 2026-09-18 复核：未勾选 18 项中 **2 项已交付**（已回填勾选）、**4 项仍未交付**、**12 项无法核实**。
+> 关键背景（防误读）：正文 16 个任务（P0-01…P3-05）**已全量落地** —— PR #101 / commit `dbdca146`，`CHANGELOG.md:412` 记「专利搜索与下载模块优化 Sprint 1-3 全量落地（16 任务）」。下方 18 项全部是**执行过程清单**（执行前前置 / 每任务 DoD 门禁 / Sprint 出口门禁），不是任务本体，「未勾选」不等于「任务没做」。
+>
+> - 已交付：**C7**（workspace 外绝对路径用例作为 P1-02 回归基线）—— `skills/patent-download/SKILL.md:36` 记录了 `-o ~/Downloads/patents`，回归断言 `tests/patent/tool/patentPdfDownload-input.spec.ts:68,78,86`；**R5**（变更说明齐）—— commit `dbdca146` 符合 `check-commit-msg.mjs` 的 `<type>(<scope>): <subject>`，`CHANGELOG.md:412` 有对应条目；squash 后未保留逐任务 `[P0-01]` 式编号（计划中该形式为示例，非硬要求）。
+> - 仍未交付：**C2**（基线保存）—— 仓库内无 `baseline_before.jsonl`（`git ls-files | grep baseline` 无此文件，PR #101 diff 未新增，`.gitignore` 未忽略）；**D3**（安全扫描）—— 字面 DoD 未满足：SQL 侧 `grep "ILIKE.*\$\{"` 已为 0、`resolveOutputDir` 可写路径集合未变（`src/tool/builtin/patent-pdf-download/outputPaths.ts:28-41`），但 SSL 侧 `CERT_NONE`/`check_hostname` 仍有 2 处（`skills/patent-download/scripts/download_patent_ego.py:262-263`）—— 按本文件 P0-02 风险预案改为显式 `--no-verify-ssl` opt-in（默认已恢复证书校验），故本文件 Sprint 1 出口门禁「代码中 grep 不到 `CERT_NONE`」（现 `:211`）同样已过期；**D5**（日志可追溯）—— 任务编号只出现在代码注释（如 `P1-02：`），运行期 warning/error 文案无 `[P1-01]` 式前缀（`\[P0-\|\[P1-\|\[P2-\|\[P3-` 在 `src/`、`skills/` 的字符串字面量中命中 0；如 `src/tool/builtin/patent-pdf-download/fetchFallback.ts:120` 的 error 串无编号）；**R6**（兼容性报告）—— 全仓无 Breaking Change 清单：`CHANGELOG.md:412` 只记「全量落地」未列 P2-03 文件名统一的 release note 说明，`--with-title` 兼容开关虽已实现（`skills/patent-download/scripts/download_patent_ego.py:408`）但 CHANGELOG 与 SKILL.md 均无迁移指引，P2-01 的 `--keyword-indexed` 仅见于脚本自身 `--help`（`skills/patent-search/scripts/patent_search.sh:41`）。
+> - 无法核实：**C1**（工作区干净 + 分支 `feat/patent-optim-sprint-N`）—— 一次性前置状态，分支名未在仓库留存（`git log --all --format='%d'` 无匹配），历史工作区状态不可复现；**C3**（依赖齐备）—— 环境前置（当前实测 `python3` 3.9.6 ✓、`/Library/PostgreSQL/17/bin/psql` 存在 ✓，但「当时 `pnpm install` 锁一致」属一次性快照）；**C4**（注入载荷备份）—— 计划产物是 `/tmp/patent_db_bad.sql`（或独立测试库），/tmp 按设计不持久化，事后无法判定当时是否生成；**C5**（权限申请）—— 人工/流程审批动作，无仓库产物；**C6**（ego-browser 可用）—— 外部 CLI 环境（`which ego-browser` 现无命中），当时版本 ≥1.2.6 无法回溯；**D1**（静态检查零新增）、**D2**（覆盖率阈值）、**R1**（全量单元测试全绿；其引用的基线文件亦不存在，见 C2）、**R2**（双环境跨平台）、**R3**（性能基线）、**R4**（安全回归专项）—— 均为需实际运行的门禁或度量（`pnpm lint` / `node --test` / 覆盖率 / `docker` / 真实 PG 库 / 外网 badssl / 真实下载），且部分依赖外部环境，**为什么无法判定**：本次作业约束不重跑这些命令，历史运行结果不可重放。
+
 > **版本说明**：v2 是对 v1 方案审阅结论的修订版。修正了 4 处任务落点问题：
 > 1. **TASK-P1-02** 保留现有“输出到任意绝对路径/自定义目录”能力，不再默认限制 workspace 内；
 > 2. **TASK-P2-01** 保留 `--keyword` 现有“标题/摘要关键词匹配”语义，不再静默切换全文索引；
@@ -256,7 +264,7 @@
 - [ ] **C4** 注入安全载荷备份（TASK-P0-01）：SQL 注入测试前，对本地 `patent_db` 做 `pg_dump` 快照到 `/tmp/patent_db_bad.sql` 或使用独立测试库实例
 - [ ] **C5** 权限申请：涉及改动 pilot config 体系（P2-05）/ 新增 npm 包（nock 等）的相关配置权限已获批
 - [ ] **C6** ego-browser 可用：`ego-browser nodejs --version` ≥ 1.2.6 以保证下载拦截 API 可用
-- [ ] **C7（v2 新增）** 记录当前“输出到工作空间外绝对路径”的实际用例（如 `-o ~/Downloads/patents`），作为 P1-02 回归基线
+- [x] **C7（v2 新增）** 记录当前“输出到工作空间外绝对路径”的实际用例（如 `-o ~/Downloads/patents`），作为 P1-02 回归基线
 
 ### 🔄 执行中检查（Per-Task DoD Gate）
 
@@ -305,7 +313,7 @@
   # 路径能力回归（v2 新增）
   python3 skills/patent-download/scripts/download_patent_ego.py CN115690481A -o ~/Downloads/patent-test  # 应成功
   ```
-- [ ] **R5 变更说明齐**：git commit message 遵循 `check-commit-msg.mjs` 校验（如 `feat(patent-search): fix SQL injection in patent_search.sh [P0-01]`）
+- [x] **R5 变更说明齐**：git commit message 遵循 `check-commit-msg.mjs` 校验（如 `feat(patent-search): fix SQL injection in patent_search.sh [P0-01]`）
 - [ ] **R6 兼容性报告**：整理 Breaking Change 清单（如 P2-03 Python 文件名统一 → release note 说明 + `--with-title` 迁移指引；P2-01 新增选项 → 使用说明）
 
 ---

@@ -1,5 +1,25 @@
 # 团队编排层 M2（任务池/邮箱/调度器 + TeamEvent）Implementation Plan
 
+> **验收状态（2026-09-18 补）**：本文件是历史快照，勾选状态曾长期停留在交付前（见 #359）。
+> 截至 2026-09-18 复核：未勾选 57 项中 **51 项已交付**（已回填勾选）、**0 项仍未交付**、**6 项无法核实**。
+>
+> - 已交付（按 Task 分组合并——同一 Task 的各步骤共用同一组产物，故并作一条；括注被回填勾选的原始行号，即**本次插入前**的编号——本次在文首插入 20 行，下面所有 `L…` 现文件对应行均 +20）：
+>   - **Task 1 teams.db v2 迁移 + CRUD（L60/L163/L235/L317/L331/L336）**：`src/agent/team/storage/team-db.ts:141`（`MIGRATIONS`，v2 起累进至 v5）、类型 `:35 TeamTaskRow`／`:56 TeamMessageRow`、CRUD `:425 listTasks`/`:434 getTask`/`:442 insertTask`/`:470 updateTask`/`:498 listMessages`/`:514 insertMessage`/`:522 updateMessage`、barrel `src/agent/team/index.ts:3`；测试 `tests/agent/team/storage/team-db-v2.spec.ts:27,45,55,78,92`，迁移保护补强（M1 遗留）`tests/agent/team/storage/team-db.spec.ts:238`；落地提交 `9d37d836`。
+>   - **Task 2 任务池协议 + searchChatHistory 同步（L352/L458/L498/L551/L562/L567）**：`src/agent/team/taskpool/task-status.ts:9,11,20,22,31`、`src/agent/team/taskpool/attempt.ts:11,33,51,61`、barrel `src/agent/team/index.ts:43-56`；测试 `tests/agent/team/taskpool/task-status.spec.ts:11,21,28`、`tests/agent/team/taskpool/attempt.spec.ts:29,44,59,66`；M1 遗留 #3 闭环——`src/session/search/searchChatHistory.ts:7`（私有副本改为导入共享 `isInternalSession`）、过滤点 `:220`/`:270`，测试 `tests/session/search/search-chat-history.spec.ts:36`；落地提交 `b75854fb`。
+>   - **Task 3 TeamEvent 事件族 + 事件矩阵（L584/L607/L637/L664/L670/L675）**：`src/agent/team/protocol/events.ts:10`（TeamEvent 族）／`:66`（`TeamEventEmitter`）、`src/agent/team/protocol/broadcast.ts:10`（`toGatewayEvent`）、`src/gateway/protocol/types.ts:283-290`（`team_event` 变体）、barrel `src/agent/team/index.ts:59-60`；测试 `tests/agent/team/protocol/events.spec.ts:9`；矩阵行 `docs/event-producer-consumer.md:75`（提交 `10917e35` 对该文件 diff 恰为 +1 行）；落地提交 `10917e35`。
+>   - **Task 4 成员邮箱投递租约（L690/L748/L786/L791）**：`src/agent/team/mailbox/mailbox.ts:9`（`MAILBOX_LEASE_MS`）`:12`（`unreadMessages`）`:26`（`claimDelivery`）、barrel `src/agent/team/index.ts:31`；测试 `tests/agent/team/mailbox/mailbox.spec.ts:22,56`；落地提交 `cc9a1d51`。注：计划内的第三个纯函数 `expiredClaims`（原 L777）已随 `accdc801`（代码精简审阅 A/C 类）移除，其「唤醒失败释放租约」语义并入调度器锁内路径，行为由 `tests/agent/team/scheduler/scheduler.spec.ts:278` 钉住——属实现演进，非未落地。
+>   - **Task 5 事件驱动调度器（L806/L984/L1010/L1173/L1175/L1180）**：`src/agent/team/scheduler/lock.ts:8`（`withTeamLock`）、`src/agent/team/scheduler/scheduler.ts:90`（`TeamScheduler`）`:136 kickTeam`/`:146 kickMember`/`:305 onTaskGraphChanged`/`:310 onMemberIdle`、纯函数 `:52 ownedOpenTask`/`:58 nextReadyTask`/`:66 assignmentPrompt`/`:82 fallbackMailboxPrompt`；测试 `tests/agent/team/scheduler/scheduler.spec.ts:56,148,175,214,243,376,462,494`、`tests/agent/team/scheduler/lock.spec.ts:5,22,36,64`；L1173 按计划「不重复改成员状态写」——该任务提交 `214df0df` 确实未触碰 `member-waker.ts`：turn 内状态写仍由 `src/agent/team/member/member-waker.ts:77` 独占，调度器只在认领／回滚／`onMemberIdle` 写（`scheduler.ts:216,287,295,300,313`）；落地提交 `214df0df`。
+>   - **Task 6 冷恢复扩展（L1195/L1263/L1307/L1312）**：`src/agent/team/member/member-scanner.ts:126`（`scanStrandedTasks`）、`:57`（`scanTeamMembers` 显式 working 跳过，M1 遗留 #2）、`src/agent/team/storage/team-db.ts:355`（`listTeams`）、barrel `src/agent/team/index.ts:23,27-28`；测试 `tests/agent/team/member/stranded-tasks.spec.ts:12,93`、`tests/agent/team/member/member-scanner.spec.ts:194`；落地提交 `50c0d4de`。
+>   - **Task 7 createLocalGateway 接线 + 集成（L1327/L1357/L1390/L1395）**：装配在 `src/cli/teamSubsystem.ts`——`TeamScheduler` + `isCaptainOnline` `:155-158`、`runStrandedScan` `:220`（stranded 锁内复查 `:228-235`）、`startStartupScan` 串行编排（`resetMemberStatuses → runMemberScan → runStrandedScan`）`:240-259`、冷恢复 `onEvent` 审批冒泡 `:99-112`、wake 包装 `onEvent`（`turn_completed` → 收口）`:192-204`；C2 有界 re-claim `src/cli/gatewaySupport.ts:33`；顺手项：`assigneeId === "captain"` 跳过 `src/agent/team/member/member-scanner.ts:146`、`message_delivered` 批次 `sender`/`senders` `src/agent/team/protocol/events.ts:35-38`；dispose 竞态注释 `src/cli/createLocalGateway.ts:386-395`；集成测试 `tests/agent/team/team-gateway-integration.spec.ts:117`（任务图变更 → 认领 → 转录）、`:224`（stranded → invalidate + re-claim）；落地提交 `135fd402`，后续修复 `9f117a26`（C1/C2/I1）、`671bb266`（senders）。
+>   - **Task 8 故障注入验证矩阵（L1409/L1437/L1442/L1448）**：`scripts/team-stress-verify.mjs`、npm script `package.json:28`（`test:team-stress`）；本次复核实跑 `node scripts/team-stress-verify.mjs` → `team-stress-verify: 10/10 scenarios passed`、退出码 0（场景已由 8 扩到 10）；落地提交 `ba27d370`。
+>   - **Task 9 专利团队资产移植（L1462/L1470/L1475）**：`skills/patent-team-composition/SKILL.md`（frontmatter `:1-4`、12 角色总表 `:23`、7 场景角色包与 DAG `:48-129`、创建序列 `:145`、协作纪律 `:152`；`scripts/validate-skills.mjs` 经 `package.json:36,45` 的 `check:skills` 挂 lint）；落地提交 `936a9cff`。
+>   - **Task 10 角色映射表 + 5 缺位角色（L1490/L1505/L1509/L1514）**：`docs/team-role-mapping.md`（总览 `:9`、12 岗映射表 `:15` 起、`:7` 已回填 M3 接线状态）、5 个新角色资产 `skills/patent-teams/{case-manager,formal-examiner,applicant-counsel,defendant-counsel,tech-investigator}/SKILL.md`（`type: role` frontmatter）、运行时装配断言 `tests/cli/team-role-assembly.spec.ts:174`（`listRegisteredRoleIds()` 含 12 岗）；落地提交 `3b5ffbc2`。
+>   - **收尾验证（L1525/L1526/L1527/L1528）**：L1525 全量回归——该行内已回填实况基线（M2 3346 tests / 3343 pass / 0 fail / 3 skip）；L1526 见 Task 8（本次复跑 10/10，含原 8 场景）；L1527——`docs/event-producer-consumer.md:75` 含 `team_event` 行，门禁 `package.json:31` 已挂 lint 链 `package.json:45`；L1528——`git show --numstat 10917e35 -- docs/event-producer-consumer.md` = `1 0`（diff 仅该行）。
+> - 仍未交付：无。
+> - 无法核实：各 Task 的「运行确认失败」红灯步骤共 6 处（L158 Task 1、L453 Task 2、L602 Task 3、L743 Task 4、L979 Task 5、L1258 Task 6）—— TDD 红灯过程步骤无持久产物：测试与实现在同一任务提交落地（如 `9d37d836`），历史时点的 FAIL 无法从仓库复核；其产物均已交付（见上），**未勾选不等于该任务未做**。
+> - **正文 L1343/L1354/L1535 的「`isCaptainOnline` 未接线、留待 M3」已失效（勿据此判「没做」）**：该接线已落地——`src/cli/teamSubsystem.ts:158` `isCaptainOnline: captainSessionKey => deps.sessionPresence.isActive(captainSessionKey)`（数据源 `SessionPresence` `:31`／`createLocalGateway.ts` 返回句柄 `:427`），落地提交 `d87bac0e`（其 diff 同时删去了「未接线——设计承诺…」的旧注释）。同批「留待 M3」项亦已落地：`message_delivered` payload 演进为 `senders[]`（`src/agent/team/protocol/events.ts:37-38`，提交 `671bb266`）、`blockedByCount` 维护（`src/tool/builtin/team/teamTasks.ts:46-52`）。另：正文 L1532/L1534 的 M3 待办（`team_*` 工具与归档流程）对应产物已在 `src/tool/builtin/team/`（11 个工具定义，如 `teamStatus.ts:34`、`teamArchive.ts:26`）落地，提交如 `0ded2f7c`；其逐条验收见 M3/M4 计划文件各自的验收状态段。以上为正文叙述，按要求未改动正文，仅在此标注以免审计者被误导。
+> - 复核口径（2026-09-18）：各 Task 的「全量验证」步骤已按同命令复跑测试范围——`node --test`（`dist/tests/agent/team/**/*.spec.js`）108/108 pass，`node scripts/team-stress-verify.mjs` 10/10。`pnpm typecheck/lint/format:check/test` 级门禁未复跑（本次作业约束禁止），其绿以落地提交与 CI 门禁链为凭。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 在 M1 durable 成员底座之上落地 L1+L2——共享任务池（状态机 + attempt 能力机制）、成员邮箱（投递租约）、事件驱动调度器（原子认领 + 并发闸 + 冷恢复 re-claim）、TeamEvent 事件族（进事件矩阵门禁），并追加专利团队资产移植（7 场景角色包）与角色映射表。
@@ -57,7 +77,7 @@ docs/event-producer-consumer.md  # Task 3 重新生成
 - Modify: `src/agent/team/storage/team-db.ts`
 - Test: `tests/agent/team/storage/team-db-v2.spec.ts`（新）
 
-- [ ] **Step 1: 写失败测试**（v2 迁移建表 + CRUD + 迁移保护）
+- [x] **Step 1: 写失败测试**（v2 迁移建表 + CRUD + 迁移保护）
 
 ```typescript
 // tests/agent/team/storage/team-db-v2.spec.ts
@@ -160,7 +180,7 @@ test("listMessages：按 recipient 过滤 + insert/update 往返", () => {
 Run: `pnpm build && node --test dist/tests/agent/team/storage/team-db-v2.spec.js`
 Expected: FAIL（`insertTask`/`getTask` 不存在；`userVersion()` 返回 1）
 
-- [ ] **Step 3: 实现 v2 迁移与类型**
+- [x] **Step 3: 实现 v2 迁移与类型**
 
 在 `src/agent/team/storage/team-db.ts` 追加（MIGRATIONS 数组 push 第二条）：
 
@@ -232,7 +252,7 @@ export type TeamMessageRow = {
   );`,
 ```
 
-- [ ] **Step 4: 实现 CRUD 方法**（类内追加；SQLite 同步 API，行映射函数 `toTaskRow`/`toMessageRow` 参照既有 `toMemberRow`）
+- [x] **Step 4: 实现 CRUD 方法**（类内追加；SQLite 同步 API，行映射函数 `toTaskRow`/`toMessageRow` 参照既有 `toMemberRow`）
 
 ```typescript
   listTasks(teamId: string): TeamTaskRow[] {
@@ -314,7 +334,7 @@ export type TeamMessageRow = {
   }
 ```
 
-- [ ] **Step 5: 迁移保护测试补强（M1 遗留）**——追加到 `tests/agent/team/storage/team-db.spec.ts`（M1 既有文件）
+- [x] **Step 5: 迁移保护测试补强（M1 遗留）**——追加到 `tests/agent/team/storage/team-db.spec.ts`（M1 既有文件）
 
 ```typescript
 test("高版本库 fail-loud（M1 遗留补强）", () => {
@@ -328,12 +348,12 @@ test("高版本库 fail-loud（M1 遗留补强）", () => {
 
 （若 `:memory:` 单例限制无法复现，改用 `mkdtemp` 真实文件路径建库再重开——见 `tests/agent/team/team-db.spec.ts` 既有写法，参照其临时目录模式。）
 
-- [ ] **Step 6: 全量验证**
+- [x] **Step 6: 全量验证**
 
 Run: `pnpm build && node --test dist/tests/agent/team/`
 Expected: 全部 PASS（含 M1 既有 team 测试）
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/agent/team/storage/team-db.ts tests/agent/team/storage/ tests/agent/team/team-db.spec.ts
@@ -349,7 +369,7 @@ git commit -m "feat(agent): teams.db v2 迁移 tasks/messages 表与 CRUD（Task
 - Modify: `src/session/search/searchChatHistory.ts:392`（M1 遗留：私有 isInternalSession 副本同步）
 - Test: `tests/agent/team/taskpool/task-status.spec.ts`、`tests/agent/team/taskpool/attempt.spec.ts`（新）
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```typescript
 // tests/agent/team/taskpool/task-status.spec.ts
@@ -455,7 +475,7 @@ test("attemptsExhausted：attempt >= maxAttempts 判定", () => {
 Run: `pnpm build && node --test dist/tests/agent/team/taskpool/`
 Expected: FAIL（模块不存在）
 
-- [ ] **Step 3: 实现 task-status.ts**
+- [x] **Step 3: 实现 task-status.ts**
 
 ```typescript
 /**
@@ -495,7 +515,7 @@ export function unsatisfiedDependencies(
 }
 ```
 
-- [ ] **Step 4: 实现 attempt.ts**（纯函数，不可变更新——返回新行，调用方落盘）
+- [x] **Step 4: 实现 attempt.ts**（纯函数，不可变更新——返回新行，调用方落盘）
 
 ```typescript
 import { randomUUID } from "node:crypto";
@@ -548,7 +568,7 @@ export function attemptsExhausted(task: TeamTaskRow): boolean {
 
 `src/agent/team/taskpool/index.ts`：barrel 导出以上全部。
 
-- [ ] **Step 5: searchChatHistory 私有副本同步（M1 遗留 #3）**
+- [x] **Step 5: searchChatHistory 私有副本同步（M1 遗留 #3）**
 
 `src/session/search/searchChatHistory.ts:392` 附近的私有 `isInternalSession` 实现（识别 `channel:` 等内部前缀）不识 `team:` 前缀。改为导入共享实现：
 
@@ -559,12 +579,12 @@ import { isInternalSession } from "../../storage/SessionList.js"; // 或既有�
 
 先 `grep -n "isInternalSession" src/session/` 确认共享实现位置与导出；若共享实现已导出则直接复用并删除私有副本；若未导出则从私有副本提升为共享导出（放 `src/session/storage/SessionList.ts`，与 `TEAM_MEMBER_SESSION_PATTERN` 同文件）。补测试：`team:` 前缀会话在 searchChatHistory 中不可见。
 
-- [ ] **Step 6: 全量验证**
+- [x] **Step 6: 全量验证**
 
 Run: `pnpm build && node --test dist/tests/agent/team/taskpool/ && pnpm lint`
 Expected: 全 PASS；lint 绿
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/agent/team/taskpool/ src/session/search/searchChatHistory.ts src/session/storage/SessionList.ts tests/agent/team/taskpool/
@@ -581,7 +601,7 @@ git commit -m "feat(agent): 任务池协议——状态机白名单 + attempt �
 - Test: `tests/agent/team/protocol/events.spec.ts`（新）
 - Modify: `docs/event-producer-consumer.md`（重新生成）
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```typescript
 // tests/agent/team/protocol/events.spec.ts
@@ -604,7 +624,7 @@ test("toGatewayEvent：TeamEvent 包装为 team_event 帧，载荷保真", () =>
 Run: `pnpm build && node --test dist/tests/agent/team/protocol/events.spec.js`
 Expected: FAIL（模块不存在）
 
-- [ ] **Step 3: 实现 events.ts**
+- [x] **Step 3: 实现 events.ts**
 
 ```typescript
 /**
@@ -634,7 +654,7 @@ export type TeamEvent =
 export type TeamEventEmitter = (captainSessionKey: string, event: TeamEvent) => boolean;
 ```
 
-- [ ] **Step 4: broadcast.ts + GatewayEvent 变体**
+- [x] **Step 4: broadcast.ts + GatewayEvent 变体**
 
 ```typescript
 // src/agent/team/protocol/broadcast.ts
@@ -661,18 +681,18 @@ export function toGatewayEvent(event: TeamEvent): Extract<GatewayEvent, { type: 
       }
 ```
 
-- [ ] **Step 5: 事件矩阵门禁**
+- [x] **Step 5: 事件矩阵门禁**
 
 Run: `pnpm gen:event-matrix && pnpm check:event-matrix`
 Expected: 矩阵重新生成，`docs/event-producer-consumer.md` diff 含 `team_event` 相关行（含 TeamEvent 语汇/emit 边；若 TeamEvent 声明未被 AST 归入 AgentEvent 语汇，按 `scripts/gen-event-matrix.ts:246` 的启发式将 emit 点命名对齐 `emitEvent*` 或在矩阵脚本登记，并说明取舍）
 注意：矩阵门禁对行号敏感——本任务后任何改动 `src/gateway/protocol/types.ts` 行数的后续任务（Task 5/7）完成时须复查 `pnpm check:event-matrix`。
 
-- [ ] **Step 6: 全量验证**
+- [x] **Step 6: 全量验证**
 
 Run: `pnpm build && node --test dist/tests/agent/team/ && pnpm lint`
 Expected: 全 PASS；lint 绿（check:event-matrix 已挂 lint）
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/agent/team/protocol/ src/gateway/protocol/types.ts tests/agent/team/protocol/ docs/event-producer-consumer.md
@@ -687,7 +707,7 @@ git commit -m "feat(agent): TeamEvent 事件族与 gateway team_event 帧（事�
 - Create: `src/agent/team/mailbox/mailbox.ts`、`src/agent/team/mailbox/index.ts`
 - Test: `tests/agent/team/mailbox/mailbox.spec.ts`（新）
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```typescript
 // tests/agent/team/mailbox/mailbox.spec.ts
@@ -745,7 +765,7 @@ test("expiredClaims：已认领未投递且超租约的（用于释放重投）"
 Run: `pnpm build && node --test dist/tests/agent/team/mailbox/mailbox.spec.js`
 Expected: FAIL（模块不存在）
 
-- [ ] **Step 3: 实现 mailbox.ts**
+- [x] **Step 3: 实现 mailbox.ts**
 
 ```typescript
 /**
@@ -783,12 +803,12 @@ export function expiredClaims(rows: readonly TeamMessageRow[], now: number): Tea
 }
 ```
 
-- [ ] **Step 4: 全量验证**
+- [x] **Step 4: 全量验证**
 
 Run: `pnpm build && node --test dist/tests/agent/team/mailbox/mailbox.spec.js`
 Expected: 全 PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/agent/team/mailbox/ tests/agent/team/mailbox/
@@ -803,7 +823,7 @@ git commit -m "feat(agent): 成员邮箱投递租约纯函数（未读/认领/�
 - Create: `src/agent/team/scheduler/lock.ts`、`src/agent/team/scheduler/scheduler.ts`、`src/agent/team/scheduler/index.ts`
 - Test: `tests/agent/team/scheduler/scheduler.spec.ts`（新）
 
-- [ ] **Step 1: 写失败测试**（fake db + fake gateway + fake emit，锁内行为全部可断言）
+- [x] **Step 1: 写失败测试**（fake db + fake gateway + fake emit，锁内行为全部可断言）
 
 ```typescript
 // tests/agent/team/scheduler/scheduler.spec.ts
@@ -981,7 +1001,7 @@ test("ownedOpenTask 优先：claimed/in_progress 且 assignee 成员的先重试
 Run: `pnpm build && node --test dist/tests/agent/team/scheduler/scheduler.spec.js`
 Expected: FAIL（TeamScheduler 不存在）
 
-- [ ] **Step 3: 实现 lock.ts**
+- [x] **Step 3: 实现 lock.ts**
 
 ```typescript
 /**
@@ -1007,7 +1027,7 @@ export async function withTeamLock<T>(key: string, operation: () => Promise<T>):
 }
 ```
 
-- [ ] **Step 4: 实现 scheduler.ts**（核心：邮箱优先 → ownedOpenTask → nextReadyTask，锁内原子认领，失败回滚校验 attemptId）
+- [x] **Step 4: 实现 scheduler.ts**（核心：邮箱优先 → ownedOpenTask → nextReadyTask，锁内原子认领，失败回滚校验 attemptId）
 
 ```typescript
 /**
@@ -1170,14 +1190,14 @@ export class TeamScheduler {
 }
 ```
 
-- [ ] **Step 5: 成员状态迁移补强**（`member-waker.ts`：`updateMemberStatus` 已由 wakeMember 维护；本任务不重复改，调度器独占调用点。若测试暴露「wakeMember 与调度器双写状态」竞态——wakeMember 的 finally 置 idle 与 onMemberIdle 置 idle 幂等，无竞态，注释说明即可）
+- [x] **Step 5: 成员状态迁移补强**（`member-waker.ts`：`updateMemberStatus` 已由 wakeMember 维护；本任务不重复改，调度器独占调用点。若测试暴露「wakeMember 与调度器双写状态」竞态——wakeMember 的 finally 置 idle 与 onMemberIdle 置 idle 幂等，无竞态，注释说明即可）
 
-- [ ] **Step 6: 全量验证**
+- [x] **Step 6: 全量验证**
 
 Run: `pnpm build && node --test dist/tests/agent/team/scheduler/ && pnpm lint`
 Expected: 全 PASS；lint 绿（若 types.ts 行数变化触发矩阵 stale，先 `pnpm gen:event-matrix` 再验）
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/agent/team/scheduler/ tests/agent/team/scheduler/ docs/event-producer-consumer.md
@@ -1192,7 +1212,7 @@ git commit -m "feat(agent): 事件驱动调度器——锁内原子认领/邮箱
 - Modify: `src/agent/team/member/member-scanner.ts`、`src/agent/team/member/member-waker.ts`（文案共享）
 - Test: `tests/agent/team/member/member-scanner.spec.ts`（追加）、`tests/agent/team/member/stranded-tasks.spec.ts`（新）
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```typescript
 // tests/agent/team/member/stranded-tasks.spec.ts
@@ -1260,7 +1280,7 @@ test("working 成员的名下任务不算 stranded（未中断）", async () => 
 Run: `pnpm build && node --test dist/tests/agent/team/member/`
 Expected: FAIL（scanStrandedTasks 不存在）
 
-- [ ] **Step 3: 实现 scanner 扩展**（member-scanner.ts 追加；M1 遗留 #2：scanTeamMembers 跳过 working 成员）
+- [x] **Step 3: 实现 scanner 扩展**（member-scanner.ts 追加；M1 遗留 #2：scanTeamMembers 跳过 working 成员）
 
 ```typescript
 export type ScanStrandedTasksOptions = {
@@ -1304,12 +1324,12 @@ export async function scanStrandedTasks(options: ScanStrandedTasksOptions): Prom
 
 `TeamDb` 补 `listTeams(): TeamRow[]`（当前缺——`team-db.ts:117-131` 只有 upsertTeam/getTeam；实现参照 `listMembers()` 的模式：`SELECT * FROM teams ORDER BY created_at ASC` + `toTeamRow` 映射）。
 
-- [ ] **Step 4: 全量验证**
+- [x] **Step 4: 全量验证**
 
 Run: `pnpm build && node --test dist/tests/agent/team/ && pnpm lint`
 Expected: 全 PASS；lint 绿
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/agent/team/member/ tests/agent/team/member/
@@ -1324,7 +1344,7 @@ git commit -m "feat(agent): 冷恢复扩展——scanner 跳过 working + strand
 - Modify: `src/cli/createLocalGateway.ts`
 - Test: `tests/agent/team/team-gateway-integration.spec.ts`（追加）
 
-- [ ] **Step 1: 接线改造**
+- [x] **Step 1: 接线改造**
 
 `CreateLocalGatewayResult.teamSubsystem` 扩展（`src/cli/createLocalGateway.ts:214` 附近）：
 
@@ -1354,7 +1374,7 @@ export type TeamSubsystemHandle = {
   - 顺手项：`assigneeId === "captain"` 任务跳过 stranded 判定；`isCaptainOnline` 未接线（默认常在线）与 `message_delivered` 批次 sender 语义以注释标注留 M3
 - dispose 竞态注释（M1 遗留 #5）：`dispose` 内 `teamDb.close()` 前的顺序注释——「先关 db 后 registry.invalidate 存在窗口：invalidate 回调可能再触 db 读。M2 调度器已注入 emit/wake 闭包，dispose 后闭包调用由 gateway 生命周期保证不再触发；db.close() 幂等守卫已防双关」；并加 `teamScheduler` 无资源需释放的注释
 
-- [ ] **Step 2: 集成测试追加**（`tests/agent/team/team-gateway-integration.spec.ts`，M1 测试后追加用例）
+- [x] **Step 2: 集成测试追加**（`tests/agent/team/team-gateway-integration.spec.ts`，M1 测试后追加用例）
 
 ```typescript
 test("集成：任务图变更 → 调度器原子认领 → 成员转录产出（fake model）", async () => {
@@ -1387,12 +1407,12 @@ test("集成：任务图变更 → 调度器原子认领 → 成员转录产出�
 
 （若 `turn_completed` 条目类型名与转录实际不符，以 M1 集成测试断言的 `accepted_input` + 实际回合条目为准调整。）
 
-- [ ] **Step 3: 全量验证**
+- [x] **Step 3: 全量验证**
 
 Run: `pnpm build && node --test dist/tests/agent/team/ && pnpm lint && pnpm format:check`
 Expected: 全 PASS；lint/format 绿；若 types.ts/createLocalGateway.ts 行数变化 → `pnpm gen:event-matrix` 后重验
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/cli/createLocalGateway.ts tests/agent/team/team-gateway-integration.spec.ts docs/event-producer-consumer.md
@@ -1406,7 +1426,7 @@ git commit -m "feat(agent): createLocalGateway 接线调度器/stranded 扫描 +
 **Files:**
 - Create: `scripts/team-stress-verify.mjs`（node:sqlite 直接驱动 TeamDb + TeamScheduler 纯逻辑，不启 gateway）
 
-- [ ] **Step 1: 写验证脚本**（设计文档 §八.2：8 成员 × 31 节点多层 DAG + 并发接管 + 迟到写入风暴 + 冷重启 + 认领竞争 + 终态覆盖 + 消息突发 + 归档）
+- [x] **Step 1: 写验证脚本**（设计文档 §八.2：8 成员 × 31 节点多层 DAG + 并发接管 + 迟到写入风暴 + 冷重启 + 认领竞争 + 终态覆盖 + 消息突发 + 归档）
 
 ```javascript
 #!/usr/bin/env node
@@ -1434,18 +1454,18 @@ const { TeamDb, TeamScheduler, createTeamMember, scanStrandedTasks } = await imp
 
 （脚本骨架如上；具体场景实现要求：使用 `mkdtempSync` 临时目录 + `:memory:` 不可跨场景共享；每个场景独立建库；wake 模拟为「写 completed + attemptId 校验通过」的即时完成函数；统计断言硬性抛错。**场景 2/3/6 的断言核心**：`updateTask` 携带旧 attemptId 时必须被 `validateAttemptUpdate` 拒绝（调度器外直调 `validateAttemptUpdate` 断言 + 状态不变）。）
 
-- [ ] **Step 2: 运行验证**
+- [x] **Step 2: 运行验证**
 
 Run: `pnpm build && node scripts/team-stress-verify.mjs`
 Expected: 8 个场景全部通过，输出 `team-stress-verify: 8/8 scenarios passed`，退出码 0
 
-- [ ] **Step 3: 挂 npm script**（根 package.json scripts 追加）
+- [x] **Step 3: 挂 npm script**（根 package.json scripts 追加）
 
 ```json
 "test:team-stress": "pnpm build && node scripts/team-stress-verify.mjs"
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add scripts/team-stress-verify.mjs package.json
@@ -1459,7 +1479,7 @@ git commit -m "test(agent): 团队编排故障注入验证矩阵 8 场景（Task
 **Files:**
 - Create: `skills/patent-team-composition/SKILL.md`
 
-- [ ] **Step 1: 移植资产**（镜像 dsh `apps/cli/config/agent-presets/patent/skills/patent-team-composition/SKILL.md`，适配 Sati 语境）
+- [x] **Step 1: 移植资产**（镜像 dsh `apps/cli/config/agent-presets/patent/skills/patent-team-composition/SKILL.md`，适配 Sati 语境）
 
 要求：
 - 内容主体照搬 dsh 版：12 角色总表（case-manager/researcher/drafter/technical-expert/adversarial-reviewer/applicant-counsel/formal-examiner/invalidity-petitioner/patentee-defender/adjudicator/defendant-counsel/tech-investigator + role id + 立场 + 职责 + 适用场景）、7 场景角色包与任务 DAG（立案 4/撰写 5/答复 5/补正 2/复审 5/无效 6/诉讼 6-7）、立场纪律、创建序列、协作纪律
@@ -1467,12 +1487,12 @@ git commit -m "test(agent): 团队编排故障注入验证矩阵 8 场景（Task
 - 角色 id 与 M2 协议 roleSlug 自由字符串一致，直接可用
 - frontmatter：`type: role` 之外本文档是**技能资产**（非角色注册）——`name: patent-team-composition` + `description`（触发：复杂专利作业建队前）
 
-- [ ] **Step 2: 验证**
+- [x] **Step 2: 验证**
 
 Run: `pnpm build`（不动 TS）+ 人工核验 SKILL.md 格式（frontmatter + 表格渲染）
 Expected: 无编译影响；markdown 结构完整
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add skills/patent-team-composition/SKILL.md
@@ -1487,7 +1507,7 @@ git commit -m "feat(agent): 专利团队资产移植——7 场景角色包与�
 - Create: `docs/team-role-mapping.md`
 - Create: `skills/patent-teams/`（5 个缺位角色 SKILL.md：case-manager / formal-examiner / applicant-counsel / defendant-counsel / tech-investigator）
 
-- [ ] **Step 1: 写映射表**（`docs/team-role-mapping.md`）
+- [x] **Step 1: 写映射表**（`docs/team-role-mapping.md`）
 
 内容要求（表格完整给出，来源：本计划 Task 9 资产 + Sati 现有 `skills/` 34 角色）：
 - 12 团队岗位 ↔ Sati 现有角色映射（复用列 + 差异说明）：
@@ -1502,16 +1522,16 @@ git commit -m "feat(agent): 专利团队资产移植——7 场景角色包与�
 - 新增 5 岗的角色定义（职责/立场/工具域建议）→ 落 `skills/patent-teams/*.md`
 - **明确标注**：「注册接线（registerRoleDefinition + visibleDomains 裁剪）留 M3」——本任务只做资产与映射，不注册
 
-- [ ] **Step 2: 写 5 个缺位角色 SKILL.md**
+- [x] **Step 2: 写 5 个缺位角色 SKILL.md**
 
 每个文件结构（frontmatter `type: role` + name/description + 正文：立场、职责、工具域建议（建议 domains）、协作边界）：内容以 Task 9 资产的角色表为准展开（案例见 `skills/patent-agent/SKILL.md` 的既有格式）。
 
-- [ ] **Step 3: 验证**
+- [x] **Step 3: 验证**
 
 Run: `pnpm lint`（skills 不入 lint 范围则跳过）；人工核验 5 文件格式与映射表一致性
 Expected: 无编译影响；文档互引完整
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add docs/team-role-mapping.md skills/patent-teams/
@@ -1522,10 +1542,10 @@ git commit -m "docs(agent): 团队岗位-角色映射表 + 5 缺位角色资产�
 
 ## 收尾验证
 
-- [ ] `pnpm typecheck && pnpm lint && pnpm format:check && pnpm test`（全量回归基线：M1 为 3306 tests / 3303 pass / 0 fail / 3 skip；M2 实况 3346 tests / 3343 pass / 0 fail / 3 skip，含最终审查修复新增 1 用例）
-- [ ] `node scripts/team-stress-verify.mjs`（8/8 场景）
-- [ ] `pnpm check:event-matrix`（TeamEvent 已入矩阵）
-- [ ] 事件矩阵 diff 仅含 team_event 相关行（纯机械）
+- [x] `pnpm typecheck && pnpm lint && pnpm format:check && pnpm test`（全量回归基线：M1 为 3306 tests / 3303 pass / 0 fail / 3 skip；M2 实况 3346 tests / 3343 pass / 0 fail / 3 skip，含最终审查修复新增 1 用例）
+- [x] `node scripts/team-stress-verify.mjs`（8/8 场景）
+- [x] `pnpm check:event-matrix`（TeamEvent 已入矩阵）
+- [x] 事件矩阵 diff 仅含 team_event 相关行（纯机械）
 
 ## 留待 M3/M4
 

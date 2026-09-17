@@ -6,6 +6,13 @@
 > 适用范围：Sati 专利创造性分析（A22.3 三步法）的 diff 阶段"实际解决的技术问题" 合规校验
 > 决策依据：`docs/problem-atomization-implementation-plan.md` 深度分析结论（复用度 60–70%，砍高阶体验，只做核心基座）
 
+> **验收状态（2026-09-18 补）**：本文件是历史快照，勾选状态曾长期停留在交付前（见 #359）。
+> 截至 2026-09-18 复核：未勾选 1 项中 **1 项已交付**（已回填勾选）、**0 项仍未交付**、**0 项无法核实**。
+>
+> - 已交付：T10（可选）`patent-inventiveness-analysis` SKILL.md 第 4 步补「四检验」提示 —— 证据 `skills/patent-inventiveness-analysis/SKILL.md:58`（「收口校验：技术问题表述须通过原子化四检验…」）。
+> - 仍未交付：无。
+> - 无法核实：无。
+
 ---
 
 ## 一、目标与范围
@@ -211,7 +218,7 @@ pnpm typecheck && pnpm lint && pnpm format:check && pnpm test
 - [x] T7 新建 `tests/patent/atomic-checker.spec.ts`（≥10 用例）
 - [x] T8 新建 `tests/patent/problem-rules.spec.ts`（规则 fixture + 双形态 + Graph 冒烟）
 - [x] T9 回归验证：`pnpm typecheck && pnpm lint && pnpm format:check && pnpm test`
-- [ ] T10（可选）`patent-inventiveness-analysis` SKILL.md 第 4 步补"四检验"提示
+- [x] T10（可选）`patent-inventiveness-analysis` SKILL.md 第 4 步补"四检验"提示
 
 ---
 

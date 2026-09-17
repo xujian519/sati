@@ -1,5 +1,28 @@
 # M3 实施计划：团队工具面 + 调度器补齐 + 角色注册接线
 
+> **验收状态（2026-09-18 补）**：本文件是历史快照，勾选状态曾长期停留在交付前（见 #359）。
+> 截至 2026-09-18 复核：未勾选 88 项中 **61 项已交付**（已回填勾选）、**0 项仍未交付**、**27 项无法核实**。
+>
+> - 已交付 61 项（逐项证据）：
+>   - Task 1：Step 1 单测 `tests/gateway/server/sessionPresence.spec.ts:5`；Step 3 实现 `src/gateway/server/sessionPresence.ts:18,29`；Step 5 提交 `2ac766ce`
+>   - Task 2：Step 1 接线 `src/cli/createLocalGateway.ts:286,427` + `isCaptainOnline` 注入 `src/cli/teamSubsystem.ts:158`；Step 3 提交 `d87bac0e`
+>   - Task 3：Step 1 帧 touch/close `src/gateway/server/GatewayWsConnection.ts:20,57,177`；Step 2 透传 `src/gateway/server/GatewayServer.ts:22,149`；Step 3 `src/cli/satiServer.ts:17,86`；Step 4 `src/cli/sati.ts:262,478`；Step 6 提交 `46bd5774`、`4078c0a0`
+>   - Task 4：Step 1 单测 `tests/tool/builtin/team/teamUtils.spec.ts:16`；Step 3 域 `src/tool/protocol/types.ts:105-106`；Step 4 `src/tool/builtin/team/teamUtils.ts:43,84,105,150` + barrel `src/tool/builtin/team/index.ts:5-6`（`isCaptainSession` 已并入 `resolveActor`/`assertActorParseable`）；Step 6 提交 `84fbd047`
+>   - Task 5：Step 1 单测 `tests/tool/builtin/team/teamManagement.spec.ts:51`；Step 3 实现 `src/tool/builtin/team/teamManagement.ts:37,118,179`；Step 5 提交 `bbe06412`
+>   - Task 6：Step 1 单测 `tests/tool/builtin/team/teamTasks.spec.ts:61`；Step 3 实现 `src/tool/builtin/team/teamTasks.ts:113,255,419`（blockedByCount 重算 `:47`）；Step 5 提交 `95337992`
+>   - Task 7：Step 1 单测 `tests/tool/builtin/team/teamMailboxStatus.spec.ts:45`；Step 3 实现 `src/tool/builtin/team/teamMailbox.ts:31`、`src/tool/builtin/team/teamStatus.ts:31`；Step 5 提交 `e90380fa`
+>   - Task 8：Step 1 单测 `tests/tool/builtin/team/teamArchive.spec.ts:16`、`tests/agent/team/storage/team-db.spec.ts:127`；Step 3 v3 迁移 `src/agent/team/storage/team-db.ts:197,22,223,365`（`isArchived` 未实现，判定改用 `TeamRow.archivedAt`）；Step 4 调度器跳过 `src/agent/team/scheduler/scheduler.ts:129`；Step 5 `src/tool/builtin/team/teamArchive.ts:21`；Step 7 矩阵 `docs/event-producer-consumer.md:73` + 提交 `0ded2f7c`
+>   - Task 9：Step 1 冒烟 `tests/tool/registry/createBuiltinRegistry.spec.ts:9`；Step 3 注册 `src/tool/registry/createBuiltinRegistry.ts:443-452`（`team?: TeamToolsOptions` `:276`）；Step 4 传参 `src/cli/createLocalGateway.ts:352`；Step 7 提交 `78434661`
+>   - Task 10：Step 1 共享收口 `src/cli/gatewaySupport.ts:33`，两处调用 `src/cli/teamSubsystem.ts:83,187`；Step 3 提交 `93d617d9`
+>   - Task 11：Step 1 `src/agent/team/protocol/events.ts:38` + `src/agent/team/scheduler/scheduler.ts:239-246`；Step 2 矩阵 `docs/event-producer-consumer.md:39`；Step 3 提交 `671bb266`
+>   - Task 12：Step 1 集成测试 `tests/tool/builtin/team/team-tools-integration.spec.ts:298`；Step 3 角色兜底注册 `tests/tool/builtin/team/team-tools-integration.spec.ts:315`；Step 5 提交 `03f5cadc`
+>   - Task 13：Step 1 场景 9 `scripts/team-stress-verify.mjs:378`；Step 3 提交 `f216a6bf`
+>   - Task 14：Step 1-5 五份 frontmatter `skills/patent-teams/{case-manager,formal-examiner,applicant-counsel,defendant-counsel,tech-investigator}/SKILL.md:4-9`；Step 6 `skills/patent-team-composition/SKILL.md:16,159`；Step 7 `docs/team-role-mapping.md:7,42`；Step 9 提交 `08746a39`
+>   - Task 15：Step 1-7 七份变体资产 `skills/patent-teams/{researcher,drafter,technical-expert,adversarial-reviewer,invalidity-petitioner,patentee-defender,adjudicator}/SKILL.md:4-9`；Step 8 装配断言 `tests/cli/team-role-assembly.spec.ts:174`；Step 9 嵌套装配 `src/cli/teamRoleAssembly.ts:37` + 单测 `tests/cli/team-role-assembly.spec.ts:93`；Step 10 提交 `79915425`
+>   - Task 16：Step 2 fixture 重录落盘 `tests/fixtures/llm-replay/deepseek-v4-flash-basic/{manifest.json,records.jsonl}`（记录键与工具集改写）+ 提交 `0a27179b`
+> - 仍未交付 0 项：88 条逐条核对后，未发现「点名产物确实不存在」的条目。
+> - 无法核实 27 项（保持未勾选）：「Run test to verify it fails」8 条（Task 1/4/5/6/7/8/9/12 的 Step 2）——TDD 红态是交付前的瞬时状态，事后不可复核；「Run test to verify it passes」8 条（同上各 Step 4-6）+「Build + 回归」6 条（Task 2/3/9/10/13/14）——一次性命令执行，无持久产物（用例与实现见同任务已勾选条目）；Task 16 Step 1/3/4（预检失配、重放校验、全量验证链）——同上，属运行结果而非产物；Task 16 Step 5（记忆更新）——记忆文件不入仓，仓内与本机均无 `agent-teams-m3-complete` 可复核；Task 16 Step 6（最终复审）——复审过程无留痕产物。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 团队编排层从「编程式入口」升级为 agent 驱动——9 个 `team_*` 工具（建队/派单/转派/归档/消息/状态）+ 调度器补齐（isCaptainOnline 在线判定、message_delivered 批次 sender、scanner 路径续派）+ 12 岗角色全量接线。
@@ -67,7 +90,7 @@
 
 语义（**容错优先**）：unknown sessionKey（从未连接/纯 in-process/CLI）视为在线——无法判定的场景不阻塞成员工作；显式「见过连接且断开超过宽限窗」才判离线。宽限窗默认 60s 防瞬断误判。
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // tests/gateway/server/sessionPresence.spec.ts
@@ -118,7 +141,7 @@ test("SessionPresence：activeSessions 只含活跃连接，clear 清空", () =>
 Run: `node --test dist/tests/gateway/server/sessionPresence.spec.js`（先 `pnpm build`）
 Expected: FAIL——`Cannot find module`（文件未创建）。
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 ```ts
 // src/gateway/server/sessionPresence.ts
@@ -186,7 +209,7 @@ export class SessionPresence {
 Run: `node --test dist/tests/gateway/server/sessionPresence.spec.js`
 Expected: PASS——4/4。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/gateway/server/sessionPresence.ts tests/gateway/server/sessionPresence.spec.ts
@@ -202,7 +225,7 @@ git commit -m "feat(gateway): SessionPresence 连接活跃追踪（宽限窗 60s
 
 接线：createLocalGateway 内 `new SessionPresence()` → TeamScheduler 构造传 `isCaptainOnline` → 返回值加 `sessionPresence` 句柄（Task 3 的 sati.ts 透传链消费）。
 
-- [ ] **Step 1: 实现接线（本任务为接线+回归，无新测试——既有 3 个集成用例即回归面：不接线时 unknown → 在线，行为不变）**
+- [x] **Step 1: 实现接线（本任务为接线+回归，无新测试——既有 3 个集成用例即回归面：不接线时 unknown → 在线，行为不变）**
 
 `src/cli/createLocalGateway.ts` 三处修改：
 
@@ -244,7 +267,7 @@ const sessionPresence = new SessionPresence();
 Run: `pnpm build && node --test dist/tests/agent/team/`
 Expected: PASS——既有 3 个集成用例 + 团队单测全过（isCaptainOnline 对 unknown key 返回 true，行为不变）。
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/cli/createLocalGateway.ts
@@ -263,7 +286,7 @@ git commit -m "feat(agent): TeamScheduler 接线 isCaptainOnline（SessionPresen
 
 链路：`sati.ts` 解构 `sessionPresence` → `startSatiServer({ ..., presence })` → `startGatewayServer({ ..., presence })` → 每连接 `new GatewayWsConnection(ws, { ..., presence })` → 帧 touch / onClose close。
 
-- [ ] **Step 1: GatewayWsConnection——options 加 presence、每帧 touch、onClose close**
+- [x] **Step 1: GatewayWsConnection——options 加 presence、每帧 touch、onClose close**
 
 `src/gateway/server/GatewayWsConnection.ts`：
 
@@ -312,7 +335,7 @@ export type GatewayWsConnectionOptions = {
 ```
 （实施时删除 submit_turn 分支内原有的 `const sessionKey = ...` 提取行，改用函数级变量。）
 
-- [ ] **Step 2: GatewayServer——options 透传**
+- [x] **Step 2: GatewayServer——options 透传**
 
 `src/gateway/server/GatewayServer.ts`：`GatewayServerOptions` 加字段 + 构造点透传：
 ```ts
@@ -329,7 +352,7 @@ export type GatewayWsConnectionOptions = {
 ```
 （import：`import type { SessionPresence } from "./sessionPresence.js";`）
 
-- [ ] **Step 3: satiServer——options 透传**
+- [x] **Step 3: satiServer——options 透传**
 
 `src/cli/satiServer.ts`：`StartSatiServerOptions` 加字段 + startGatewayServer 调用传：
 ```ts
@@ -349,7 +372,7 @@ export type GatewayWsConnectionOptions = {
 （import：`import type { SessionPresence } from "../gateway/server/sessionPresence.js";`）
 （`startGatewayServer` 的 options 类型即 `GatewayServerOptions`——Task 3 Step 2 已加字段，无需再改。）
 
-- [ ] **Step 4: sati.ts——解构 + 传参**
+- [x] **Step 4: sati.ts——解构 + 传参**
 
 `src/cli/sati.ts`：两处（~260 行 createLocalGateway 解构、~474 行 startSatiServer 调用）：
 ```ts
@@ -376,7 +399,7 @@ export type GatewayWsConnectionOptions = {
 Run: `pnpm build && node --test dist/tests/gateway/`
 Expected: PASS——gateway 既有测试全过（presence 可选，未注入路径零行为变化）。
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/gateway/server/GatewayWsConnection.ts src/gateway/server/GatewayServer.ts src/cli/satiServer.ts src/cli/sati.ts
@@ -393,7 +416,7 @@ git commit -m "feat(gateway): ws 连接层接线 SessionPresence（帧 touch / o
 - Create: `src/tool/builtin/team/index.ts`（barrel）
 - Test: `tests/tool/builtin/team/teamUtils.spec.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // tests/tool/builtin/team/teamUtils.spec.ts
@@ -499,7 +522,7 @@ test("requireRegisteredRole：注册角色通过；未知角色拒绝", () => {
 Run: `pnpm build && node --test dist/tests/tool/builtin/team/teamUtils.spec.js`
 Expected: FAIL——`Cannot find module`（文件未创建）。
 
-- [ ] **Step 3: ToolDomain 扩展**
+- [x] **Step 3: ToolDomain 扩展**
 
 `src/tool/protocol/types.ts`（ToolDomain 联合类型末尾，`"mcp"` 前）：
 ```ts
@@ -507,7 +530,7 @@ Expected: FAIL——`Cannot find module`（文件未创建）。
   | "team:manage"
 ```
 
-- [ ] **Step 4: 实现 teamUtils.ts 与 barrel**
+- [x] **Step 4: 实现 teamUtils.ts 与 barrel**
 
 ```ts
 // src/tool/builtin/team/teamUtils.ts
@@ -636,7 +659,7 @@ export {
 Run: `pnpm build && node --test dist/tests/tool/builtin/team/teamUtils.spec.js`
 Expected: PASS——4/4（barrel 导入的文件在 Task 5-8 才创建，teamUtils.spec 只测 teamUtils.ts，不触发 barrel）。
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/tool/protocol/types.ts src/tool/builtin/team/teamUtils.ts src/tool/builtin/team/index.ts tests/tool/builtin/team/teamUtils.spec.ts
@@ -653,7 +676,7 @@ git commit -m "feat(tool): ToolDomain 扩展 team/team:manage + team 工具共�
 
 三个管理类工具，domain 标注 `team:manage`（Task 9 注册时打标）。全部 `requireCaptain` 前置（防御性校验——domain 裁剪只影响角色侧工具可见性，直调路径由工具自守）。
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // tests/tool/builtin/team/teamManagement.spec.ts
@@ -809,7 +832,7 @@ test("team_remove_member：退休 + 名下 open 任务 invalidate 回池 + membe
 Run: `pnpm build && node --test dist/tests/tool/builtin/team/teamManagement.spec.js`
 Expected: FAIL——`Cannot find module`。
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 ```ts
 // src/tool/builtin/team/teamManagement.ts
@@ -1035,7 +1058,7 @@ export function createTeamRemoveMemberTool(
 Run: `pnpm build && node --test dist/tests/tool/builtin/team/teamManagement.spec.js`
 Expected: PASS——6/6。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/tool/builtin/team/teamManagement.ts tests/tool/builtin/team/teamManagement.spec.ts
@@ -1056,7 +1079,7 @@ git commit -m "feat(tool): team_create/team_add_member/team_remove_member（管�
 
 **reassign 语义**（与 `nextReadyTask` 过滤一致）：指定成员 → `invalidateTaskAttempt(task, { nextAssigneeId: memberId })`（reassigning 默认 false，`nextReadyTask` 会命中 assigneeId 匹配）→ `kickMember(teamId, memberId)` 立即派发；回池（无 memberId）→ `{ reassigning: true }` → 暂缓自动派发，等队长再指派。
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // tests/tool/builtin/team/teamTasks.spec.ts
@@ -1273,7 +1296,7 @@ test("team_reassign_task：终态任务拒绝；成员会话拒绝", async () =>
 Run: `pnpm build && node --test dist/tests/tool/builtin/team/teamTasks.spec.js`
 Expected: FAIL——`Cannot find module`。
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 ```ts
 // src/tool/builtin/team/teamTasks.ts
@@ -1653,7 +1676,7 @@ export function createTeamReassignTaskTool(
 Run: `pnpm build && node --test dist/tests/tool/builtin/team/teamTasks.spec.js`
 Expected: PASS——6/6。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/tool/builtin/team/teamTasks.ts tests/tool/builtin/team/teamTasks.spec.ts
@@ -1671,7 +1694,7 @@ git commit -m "feat(tool): team_create_task/team_update_task/team_reassign_task�
 
 `team_send_message` 为作业面（`team`）：队长或成员均可发（收件人须为团队成员）；`team_status` 为作业面（`team`）：队长与成员均可查。消息投递复用 mailbox 租约写入（`insertMessage`），锁外 `kickMember(recipient)` 触发既有邮箱优先投递路径。
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // tests/tool/builtin/team/teamMailboxStatus.spec.ts
@@ -1799,7 +1822,7 @@ test("team_status：三视图只读（团队/成员含 roleSlug+modelRoute+retir
 Run: `pnpm build && node --test dist/tests/tool/builtin/team/teamMailboxStatus.spec.js`
 Expected: FAIL——`Cannot find module`。
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 ```ts
 // src/tool/builtin/team/teamMailbox.ts
@@ -2056,7 +2079,7 @@ export function createTeamStatusTool(
 Run: `pnpm build && node --test dist/tests/tool/builtin/team/teamMailboxStatus.spec.js`
 Expected: PASS——3/3。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/tool/builtin/team/teamMailbox.ts src/tool/builtin/team/teamStatus.ts tests/tool/builtin/team/teamMailboxStatus.spec.ts
@@ -2075,7 +2098,7 @@ git commit -m "feat(tool): team_send_message/team_status（邮箱租约投递 + 
 
 归档语义：`team_archive` → 锁内复查（非 archived）→ 置 `archivedAt` + 全部成员 `insertRetired(reason: "team_archived")` → 触发 `team_archived`。调度器认领前检查团队状态（与 isCaptainOnline 同点：archived 或 captain 离线 → 跳过）。归档不可逆（M3 无 unarchive）。
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // tests/tool/builtin/team/teamArchive.spec.ts
@@ -2180,7 +2203,7 @@ test("teams.db v3：archived_at 列迁移 + archiveTeam/isArchived", () => {
 Run: `pnpm build && node --test dist/tests/tool/builtin/team/teamArchive.spec.js dist/tests/agent/team/team-db.spec.js`
 Expected: FAIL——`Cannot find module` + `archiveTeam is not a function`。
 
-- [ ] **Step 3: 存储层 v3 迁移**
+- [x] **Step 3: 存储层 v3 迁移**
 
 `src/agent/team/storage/team-db.ts`：
 
@@ -2226,7 +2249,7 @@ export type TeamRow = {
   }
 ```
 
-- [ ] **Step 4: 调度器 archived 跳过**
+- [x] **Step 4: 调度器 archived 跳过**
 
 `src/agent/team/scheduler/scheduler.ts`——`kickTeam` 与 `kickMember` 开头检查（两处同款，91 行与 102 行）：
 ```ts
@@ -2235,7 +2258,7 @@ export type TeamRow = {
     if (team === undefined || team.archivedAt !== undefined || !this.isCaptainOnline(team.captainSessionKey)) return;
 ```
 
-- [ ] **Step 5: 实现 teamArchive.ts**
+- [x] **Step 5: 实现 teamArchive.ts**
 
 ```ts
 // src/tool/builtin/team/teamArchive.ts
@@ -2311,7 +2334,7 @@ export function createTeamArchiveTool(
 Run: `pnpm build && node --test dist/tests/tool/builtin/team/teamArchive.spec.js dist/tests/agent/team/team-db.spec.js`
 Expected: PASS——2 + 1。
 
-- [ ] **Step 7: 事件矩阵重生成 + Commit**
+- [x] **Step 7: 事件矩阵重生成 + Commit**
 
 ```bash
 pnpm gen:event-matrix
@@ -2330,7 +2353,7 @@ git commit -m "feat(tool): team_archive（teams.db v3 archived_at 迁移 + 调�
 
 9 个工具按 domain 打标注册：管理类 6 个 `team:manage`（team_create/team_add_member/team_remove_member/team_create_task/team_reassign_task/team_archive），作业类 3 个 `team`（team_update_task/team_send_message/team_status）。
 
-- [ ] **Step 1: Write the failing test（冒烟）**
+- [x] **Step 1: Write the failing test（冒烟）**
 
 ```ts
 // tests/tool/registry/createBuiltinRegistry.spec.ts 追加（若文件不存在则新建）
@@ -2388,7 +2411,7 @@ test("createBuiltinRegistry：team options 注入后 9 工具注册且 domain �
 Run: `pnpm build && node --test dist/tests/tool/registry/createBuiltinRegistry.spec.js`
 Expected: FAIL——`工具未注册：team_create`。
 
-- [ ] **Step 3: createBuiltinRegistry 接线**
+- [x] **Step 3: createBuiltinRegistry 接线**
 
 `src/tool/registry/createBuiltinRegistry.ts`：
 
@@ -2436,7 +2459,7 @@ import {
   }
 ```
 
-- [ ] **Step 4: createLocalGateway 传参**
+- [x] **Step 4: createLocalGateway 传参**
 
 `src/cli/createLocalGateway.ts`——`createBuiltinRegistry({ ... })` 调用（~1003 行）加：
 ```ts
@@ -2467,7 +2490,7 @@ Expected: PASS——9 工具注册 + domain 断言全过。
 Run: `node --test dist/tests/agent/team/ dist/tests/tool/`
 Expected: PASS——无回归（team options 可选，未传路径零变化）。
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/tool/registry/createBuiltinRegistry.ts src/cli/createLocalGateway.ts tests/tool/registry/createBuiltinRegistry.spec.ts
@@ -2485,7 +2508,7 @@ git commit -m "feat(tool): 注册 team_* 9 工具（管理面 team:manage / 作�
 
 **做法**：把 C2 检查 + onMemberIdle 调用提取为共享函数 `handleMemberTurnCompleted(db, teamId, memberId)`（createLocalGateway 内模块级函数），wake 包装层与 scanner onEvent 两处复用——消除双份内联（回应 M2 I3 观察项「attemptsExhausted 复用」的延伸）。
 
-- [ ] **Step 1: 实现（接线 + 重构，回归由 Task 12 集成测试覆盖）**
+- [x] **Step 1: 实现（接线 + 重构，回归由 Task 12 集成测试覆盖）**
 
 `src/cli/createLocalGateway.ts`：
 
@@ -2546,7 +2569,7 @@ function handleMemberTurnCompleted(db: TeamDb, teamSchedulerRef: TeamScheduler, 
 Run: `pnpm build && node --test dist/tests/agent/team/`
 Expected: PASS——3 集成用例 + 单测（wake 包装层行为不变：共享函数与原内联逻辑等价）。
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/cli/createLocalGateway.ts
@@ -2564,7 +2587,7 @@ git commit -m "fix(agent): scanner 冷恢复回合结束接 onMemberIdle 续派�
 
 additive 变更：新增 `senders: string[]`（批次完整发送者列表）；`sender` 保留（= senders[0]，兼容既有消费方）。协议不升版（Web 1.0 客户端未知字段忽略）。
 
-- [ ] **Step 1: 实现（类型 + 投递点 + 事件矩阵）**
+- [x] **Step 1: 实现（类型 + 投递点 + 事件矩阵）**
 
 `src/agent/team/protocol/events.ts`：
 ```ts
@@ -2592,14 +2615,14 @@ additive 变更：新增 `senders: string[]`（批次完整发送者列表）；
           });
 ```
 
-- [ ] **Step 2: 事件矩阵重生成 + 回归**
+- [x] **Step 2: 事件矩阵重生成 + 回归**
 
 Run: `pnpm gen:event-matrix && pnpm build && node --test dist/tests/agent/team/`
 Expected: `pnpm gen:event-matrix` 成功（payload 类型变化在矩阵中体现）；团队测试全过（`senders` 为新增必填字段——`message_delivered` 事件构造点已全部更新：scheduler.ts 投递点 + Task 7 teamMailbox.ts 工具投递点）。
 
 > ⚠️ 若 `teamMailbox.ts` 的 `emit` 调用处 TS 报缺 `senders`（Step 1 先于 Task 7 合并时），同步补 `senders: [senderId]`——本计划任务按序执行时 Task 7 已实现该字段（Task 7 代码中已含），直接编译通过。
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/agent/team/protocol/events.ts src/agent/team/scheduler/scheduler.ts docs/event-producer-consumer.md
@@ -2615,7 +2638,7 @@ git commit -m "feat(agent): message_delivered payload 增 senders[] 批次列表
 
 真实 createLocalGateway（fake model）+ 工具直调（factory execute）驱动全链：建队 → 招募 → 建任务 → 调度器认领 → **成员回合内 fake model 发 tool_call 调 team_update_task(completed)** → 任务终结 + 下游解锁 → reassign → archive → isCaptainOnline 离线暂停。fake model 带状态：首轮发工具调用，工具结果后收尾文本。
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 // tests/tool/builtin/team/team-tools-integration.spec.ts
@@ -2811,7 +2834,7 @@ test("集成：isCaptainOnline——captain 显式离线（touch+close 超宽限
 Run: `pnpm build && node --test dist/tests/tool/builtin/team/team-tools-integration.spec.js`
 Expected: FAIL——`Cannot find module` 或 `roleSlug 未知`（角色未注册时 team_create 拒绝——见实施提示）。
 
-- [ ] **Step 3: 角色兜底注册（若 patent-retriever 未注册导致 team_create 拒绝）**
+- [x] **Step 3: 角色兜底注册（若 patent-retriever 未注册导致 team_create 拒绝）**
 
 `syncRoleDefinitions` 在 createLocalGateway 启动时执行（skills 加载后）——集成测试用真实 createLocalGateway，**角色注册应已就绪**（getAllSkills 含 `skills/patent-retriever/`）。若测试环境 skills 未加载（无 skills 目录），则在测试 setup 中显式 `registerRoleDefinition`（参照 Task 4 测试写法）。
 
@@ -2820,7 +2843,7 @@ Expected: FAIL——`Cannot find module` 或 `roleSlug 未知`（角色未注册
 Run: `pnpm build && node --test dist/tests/tool/builtin/team/team-tools-integration.spec.js`
 Expected: PASS——2/2。
 
-- [ ] **Step 5: 全量团队回归 + Commit**
+- [x] **Step 5: 全量团队回归 + Commit**
 
 Run: `node --test dist/tests/agent/team/ dist/tests/tool/builtin/team/`
 Expected: PASS——全量。
@@ -2839,7 +2862,7 @@ git commit -m "test(team): 工具驱动全链集成——成员回合内 team_up
 
 既有脚本结构：`scenario(seq, name, fn)` 辅助 + 8 场景（`makeTask`/`now()` 等辅助在头部）。场景 9 验证**工具层写入路径**（回应 M2 计划「tools 驱动」标注）：工具 factory 直接驱动 create/update/reassign，模拟成员回合完成路径 + blockedByCount 解锁。
 
-- [ ] **Step 1: 追加场景 9（文件末尾、最终统计前）**
+- [x] **Step 1: 追加场景 9（文件末尾、最终统计前）**
 
 ```js
 // ── 场景 9：工具驱动——create/update 写入路径 + blockedByCount 解锁 + reassign 回池 ──
@@ -2935,7 +2958,7 @@ await scenario(9, "工具驱动写入路径", async () => {
 Run: `pnpm build && node scripts/team-stress-verify.mjs`
 Expected: PASS——9/9 场景全过（退出码 0）。
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add scripts/team-stress-verify.mjs
@@ -2953,7 +2976,7 @@ git commit -m "test(team): stress 矩阵扩展场景 9——工具驱动写入�
 
 **frontmatter 惯例**（对照 `skills/patent-retriever/SKILL.md` 等既有角色）：`tools: ["*"]`、`domains: [...]`、`omitTools: [...]`、`readOnly: true|false`、`systemPrompt: |-`。domains 以各文件「工具域建议」小节为准 + 追加 `"team"`（成员作业面必需：`team_update_task`/`team_send_message`/`team_status` 按 domain: team 裁剪可见）。正文「**注册接线留 M3**」标注行删除（接线已落地）。
 
-- [ ] **Step 1: 5 份 frontmatter 补齐（每份一个子步骤，frontmatter 段替换）**
+- [x] **Step 1: 5 份 frontmatter 补齐（每份一个子步骤，frontmatter 段替换）**
 
 frontmatter 模板（按角色替换 domains/systemPrompt）——`case-manager`：
 
@@ -2982,7 +3005,7 @@ systemPrompt: |-
 
 （正文「# 案件管理员」起的内容保持不变；删除「**注册接线留 M3**」句。）
 
-- [ ] **Step 2: formal-examiner**（readOnly: true——审查不改稿）：
+- [x] **Step 2: formal-examiner**（readOnly: true——审查不改稿）：
 
 ```yaml
 ---
@@ -3006,7 +3029,7 @@ systemPrompt: |-
 ---
 ```
 
-- [ ] **Step 3: applicant-counsel**：
+- [x] **Step 3: applicant-counsel**：
 
 ```yaml
 ---
@@ -3031,7 +3054,7 @@ systemPrompt: |-
 ---
 ```
 
-- [ ] **Step 4: defendant-counsel**：
+- [x] **Step 4: defendant-counsel**：
 
 ```yaml
 ---
@@ -3057,7 +3080,7 @@ systemPrompt: |-
 ---
 ```
 
-- [ ] **Step 5: tech-investigator**：
+- [x] **Step 5: tech-investigator**：
 
 ```yaml
 ---
@@ -3082,7 +3105,7 @@ systemPrompt: |-
 ---
 ```
 
-- [ ] **Step 6: composition SKILL.md 两处修正**
+- [x] **Step 6: composition SKILL.md 两处修正**
 
 `skills/patent-team-composition/SKILL.md`：
 
@@ -3096,7 +3119,7 @@ systemPrompt: |-
 - 收口：全部任务完成后 `team_archive` 归档团队；归档保留完整成员与任务历史，可随时复查。
 ```
 
-- [ ] **Step 7: 映射表更新**
+- [x] **Step 7: 映射表更新**
 
 `docs/team-role-mapping.md`：
 1. 头部「**接线状态：…明确留 M3**」改为：
@@ -3111,7 +3134,7 @@ systemPrompt: |-
 Run: `pnpm build && pnpm lint`
 Expected: PASS——`check:patent-sop` 校验手册/YAML 引用五类存在性（SKILL.md frontmatter 变更不影响既有引用；若提示引用缺失则核对引用路径）。
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add skills/patent-teams/ skills/patent-team-composition/SKILL.md docs/team-role-mapping.md
@@ -3127,7 +3150,7 @@ git commit -m "feat(agent): 5 新增角色 frontmatter 补齐（domains 含 team
 
 变体角色 = 基底角色资产（tools/domains 照抄基底）+ `"team"` 域（成员作业必需）+ systemPrompt = 基础职责 + `docs/team-role-mapping.md` 差异列的立场指令。role id（roleSlug）= dsh 岗 id。
 
-- [ ] **Step 1: researcher**（基底 `patent-retriever`：tools ["*"]、domains 含 search/literature/patent/legal/analysis/network/session）
+- [x] **Step 1: researcher**（基底 `patent-retriever`：tools ["*"]、domains 含 search/literature/patent/legal/analysis/network/session）
 
 ```yaml
 ---
@@ -3150,7 +3173,7 @@ systemPrompt: |-
 ---
 ```
 
-- [ ] **Step 2: drafter**（基底 `patent-writer` + `provision-drafting-claims`/`provision-drafting-spec`）
+- [x] **Step 2: drafter**（基底 `patent-writer` + `provision-drafting-claims`/`provision-drafting-spec`）
 
 ```yaml
 ---
@@ -3173,7 +3196,7 @@ systemPrompt: |-
 ---
 ```
 
-- [ ] **Step 3: technical-expert**（基底 `patent-analyzer` + `patent-electrical-agent` H 部补强）
+- [x] **Step 3: technical-expert**（基底 `patent-analyzer` + `patent-electrical-agent` H 部补强）
 
 ```yaml
 ---
@@ -3196,7 +3219,7 @@ systemPrompt: |-
 ---
 ```
 
-- [ ] **Step 4: adversarial-reviewer**（基底 `patent-reviewer` + `patent-quality-checker`，readOnly 保持）
+- [x] **Step 4: adversarial-reviewer**（基底 `patent-reviewer` + `patent-quality-checker`，readOnly 保持）
 
 ```yaml
 ---
@@ -3219,7 +3242,7 @@ systemPrompt: |-
 ---
 ```
 
-- [ ] **Step 5: invalidity-petitioner**（基底 `patent-invalidity-checker` + `provision-invalidity-procedure`，readOnly 保持）
+- [x] **Step 5: invalidity-petitioner**（基底 `patent-invalidity-checker` + `provision-invalidity-procedure`，readOnly 保持）
 
 ```yaml
 ---
@@ -3242,7 +3265,7 @@ systemPrompt: |-
 ---
 ```
 
-- [ ] **Step 6: patentee-defender**（基底 `patent-invalidity-checker` 视角复用 + `provision-defenses` 等条款，立场反转声明）
+- [x] **Step 6: patentee-defender**（基底 `patent-invalidity-checker` 视角复用 + `provision-defenses` 等条款，立场反转声明）
 
 ```yaml
 ---
@@ -3266,7 +3289,7 @@ systemPrompt: |-
 ---
 ```
 
-- [ ] **Step 7: adjudicator**（基底 `patent-reviewer` + `provision-reexamination`，中立裁判指令）
+- [x] **Step 7: adjudicator**（基底 `patent-reviewer` + `provision-reexamination`，中立裁判指令）
 
 ```yaml
 ---
@@ -3290,7 +3313,7 @@ systemPrompt: |-
 ---
 ```
 
-- [ ] **Step 8: 装配验证——12 岗全部可调度**
+- [x] **Step 8: 装配验证——12 岗全部可调度**
 
 Run: `pnpm build && node -e "..."` 或直接验证：
 ```bash
@@ -3298,11 +3321,11 @@ pnpm build && pnpm lint
 ```
 验证方式：新建最小网关（参照 Task 12 测试），断言 `listRegisteredRoleIds()` 含 12 个岗 id：`case-manager, researcher, drafter, technical-expert, adversarial-reviewer, applicant-counsel, formal-examiner, invalidity-petitioner, patentee-defender, adjudicator, defendant-counsel, tech-investigator`（经 `syncRoleDefinitions` 从 `skills/patent-teams/` 装配——若装配循环不覆盖子目录，则在 createLocalGateway 的 syncRoleDefinitions 调用点核查 `getAllSkills` 是否递归扫描 skills/；若未覆盖则本任务需补装配路径，见 Step 9）。
 
-- [ ] **Step 9（条件）：装配路径核查**
+- [x] **Step 9（条件）：装配路径核查**
 
 若 `pluginRuntime.getAllSkills()` 不递归扫描 `skills/patent-teams/` 子目录（5 个新增角色此前未注册的原因——M2 计划标注"注册接线留 M3"），则在 `syncRoleDefinitions` 的调用点（createLocalGateway.ts:1371 附近）核查 skills loader 实现（`src/extension/` 的 skills 扫描逻辑）。若确实不递归，最小改动：syncRoleDefinitions 前把 `skills/patent-teams/` 子目录的 SKILL.md 经同一 `roleFromContribution` 装配路径注册（补一条目录遍历）。**以装配验证结果为准**——角色注册是 M3 完成判据，不可跳过。
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add skills/patent-teams/
@@ -3323,7 +3346,7 @@ git commit -m "feat(agent): 7 个团队变体角色资产（基底 + dsh 岗立�
 Run: `pnpm record:replay`
 Expected: 失配红（toolSchemaDigest 与录制时不同）——确认需要重录。
 
-- [ ] **Step 2: 显式录制重录 fixture（需 API key）**
+- [x] **Step 2: 显式录制重录 fixture（需 API key）**
 
 ```bash
 # 按 scripts/record-real-fixture.ts 的录制流程（含交互式场景回放），重录 deepseek-v4-flash-basic fixture

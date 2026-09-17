@@ -1,5 +1,12 @@
 # BitFun 优秀设计引入方案（修订版 v3.1）—— 文书排版实时调参面板 + KV Cache 无损稳定
 
+> **验收状态（2026-09-18 补）**：本文件是历史快照，勾选状态曾长期停留在交付前（见 #359）。
+> 截至 2026-09-18 复核：未勾选 10 项中 **6 项已交付**（已回填勾选）、**3 项仍未交付**、**1 项无法核实**。正文多处「❌ 未落地」停留在 v3.1（2026-08-20）时点——其后样式面板、预设工具、其余三模板 token 化等均已落地，正文状态列比勾选列更陈旧。
+>
+> - 已交付：① claims-spec/oa-response 面板实时调参 —— 证据 `ui/src/components/patent/StylePanel/StylePanelDrawer.spec.tsx:93`/`:102` + 模板 token 链 `tests/patent/document/renderPatentDocument.spec.ts:295`/`:322`（「预览 ≤1s」无实测记录）；② token 生效断言 —— 证据 `tests/patent/document/renderPatentDocument.spec.ts:295`（`:311` 断言 `--sati-doc-text-base: 14pt`）；③ 预设保存/复用 + 非法名被拒 —— 证据 `src/patent/document/stylePreset.ts:13`/`:25` + `src/tool/builtin/documentStylePreset.ts` + `src/tool/builtin/renderPatentDocument.ts:52`（`style_preset` 入参已接），**存储路径为 `products/<产品>/brand/style-presets/`，与本条验收写的 `~/.sati/style-presets/` 不一致**（v3.1 已记为待对齐决策）；④ 对话驱动面板联动 —— 证据 `src/tool/builtin/documentStylePanel.ts` + `ui/src/components/patent/StylePanel/StylePanelHost.tsx:37` + `tests/web/eventMapping.spec.ts:5`（走 `tool_result` 载荷，**未新增 `style_update` 事件**）；⑤ 语义内容字节经对拍断言不变 —— 证据 `tests/agent/loop/request-invariant.spec.ts:67`/`:82`/`:107` + `CHANGELOG.md` v0.2.1「请求重建对拍改在派发点执行」；⑥ fixture 匹配 —— 证据 `CHANGELOG.md:319` + 提交 `0a27179b`（M3-T16 重录 `tests/fixtures/llm-replay/deepseek-v4-flash-basic`；本次未复跑该 spec）。
+> - 仍未交付：⑦ 排版前后正文 diff 为空的单测 —— 现有 spec 只断言注入的 CSS 变量与模板 token 引用（`tests/patent/document/renderPatentDocument.spec.ts:295`-`:322`），无「剥离标签后正文逐字一致」断言；⑧ `prompt_cache_hit_tokens` 采集 + `supportsPromptCache` 被消费 —— 前半已落地（`src/model/response/normalizeUsage.ts:41`），后半在 `src/model/request/` 仍零消费（仅能力位声明与 `src/model/config/parseModelConfig.ts:303` 的配置校验）；⑨（可选）同任务两轮重放 `prompt_cache_hit_tokens` 占比基线 —— 仓库内无该记录。
+> - 无法核实：⑩ `pnpm check:event-matrix` 通过 —— `style_update` 未新增（`src/` 内零引用），条目本身是一次门禁运行，无产物可判。
+
 - 创建日期：2026-08-20（v1）；2026-08-20（v2 修订，对齐三点反馈）；2026-08-20（v3 修订，对齐代码评审）；2026-08-20（v3.1 实施进度同步）
 - 状态：**实施中**（v3.1：Step 2/3 后端已落地；并行窗口落地预设持久化；本窗口完成 Step 1 两模板 token 化与 Phase A normalizeUsage）
 - 上游：BitFun（`GCWing/BitFun`）「Agentic Mini App」与「KV Cache 前缀字节稳定」两项能力深挖
@@ -223,14 +230,14 @@ render_patent_document(template, sections, style: DocumentStyle)
 
 **验收（可度量）**
 
-- [ ] `claims-spec`/`oa-response` 字号/行距/页边距可经面板实时调整，预览 ≤1s 刷新
-- [ ] **token 生效断言（v3 新增）**：修改 `--sati-doc-text-base`（或 `style.fontSize.base`）后渲染 HTML 的字号变化——此条是 Step 1 完成的前置验收
-- [ ] 调参结果可保存为「事务所样式预设」（`~/.sati/style-presets/`）并一键复用；非法文件名被拒
-- [ ] 对话里说「正文字号 12pt、页边距上下 2cm」能驱动面板联动（依赖 `style_update` 事件通道）
+- [x] `claims-spec`/`oa-response` 字号/行距/页边距可经面板实时调整，预览 ≤1s 刷新
+- [x] **token 生效断言（v3 新增）**：修改 `--sati-doc-text-base`（或 `style.fontSize.base`）后渲染 HTML 的字号变化——此条是 Step 1 完成的前置验收
+- [x] 调参结果可保存为「事务所样式预设」（`~/.sati/style-presets/`）并一键复用；非法文件名被拒
+- [x] 对话里说「正文字号 12pt、页边距上下 2cm」能驱动面板联动（依赖 `style_update` 事件通道）
 - [ ] 排版调整前后正文内容 diff 为空（仅 CSS/token 变化，单测固化）
 - [ ] DeepSeek 会话 usage 采集到 `prompt_cache_hit_tokens`；`supportsPromptCache` 被消费
-- [ ] 语义内容字节序列经对拍断言不变（方案二无损）
-- [ ] **fixture 匹配（v3 新增）**：`pnpm record:replay tests/fixtures/llm-replay/deepseek-v4-flash-basic` 通过，`llm-replay-real.spec.ts` 绿
+- [x] 语义内容字节序列经对拍断言不变（方案二无损）
+- [x] **fixture 匹配（v3 新增）**：`pnpm record:replay tests/fixtures/llm-replay/deepseek-v4-flash-basic` 通过，`llm-replay-real.spec.ts` 绿
 - [ ] **事件矩阵（v3 新增）**：`pnpm check:event-matrix` 通过（如新增 `style_update` 事件）
 - [ ] （可选）同任务两轮重放 `prompt_cache_hit_tokens` 占比基线记录
 

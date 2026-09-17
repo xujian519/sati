@@ -1,5 +1,20 @@
 # 团队编排层 M1：durable 成员底座 Implementation Plan
 
+> **验收状态（2026-09-18 补）**：本文件是历史快照，勾选状态曾长期停留在交付前（见 #359）。
+> 截至 2026-09-18 复核：未勾选 36 项中 **29 项已交付**（已回填勾选）、**0 项仍未交付**、**7 项无法核实**。
+>
+> - 已交付（按 Task 分组合并——同一 Task 的各步骤共用同一组产物，故并作一条；括注被回填勾选的原始行号，即**本次插入前**的编号——本次在文首插入 15 行，下面所有 `L…` 现文件对应行均 +15）：
+>   - **Task 1 teams.db 存储层（L78/L165/L345/L350）**：`src/agent/team/storage/team-db.ts:289`（`class TeamDb`，迁移表 `:141`）、barrel `src/agent/team/index.ts:3`、测试 `tests/agent/team/storage/team-db.spec.ts:16,31,51,74`（迁移／teams／members／retired_members；计划写 `user_version=1`，随 M2–M3 迁移累进断言已改为 4）；落地提交 `31568c6f`。
+>   - **Task 2 成员会话 key + 内部会话过滤（L367/L459/L506/L511）**：`src/agent/team/protocol/member-key.ts:11,13,17`、`src/session/storage/SessionList.ts:46`（`isInternalSession` 导出；`:16` 识别 `team:` 前缀）、测试 `tests/agent/team/protocol/member-key.spec.ts:12,17,23,31` 与 `tests/session/storage/session-list-internal.spec.ts:14,22`；落地提交 `8b7ea692`。
+>   - **Task 3 createTeamMember（L527/L586/L636/L641）**：`src/agent/team/member/member-registry.ts:22`、barrel `src/agent/team/index.ts:6`、测试 `tests/agent/team/member/member-registry.spec.ts:14,37`；落地提交 `3442b6e7`。
+>   - **Task 4 wakeMember（L657/L770/L851/L856）**：`src/agent/team/member/member-waker.ts:35`（提交参数 `:64-72`：成员 sessionKey + `channelKey: "cron"` + `canPrompt: false` + `syntheticMessages` 透传）、barrel `src/agent/team/index.ts:14`、测试 `tests/agent/team/member/member-waker.spec.ts:45,62,80,89,99`；落地提交 `3eb22ac2`。
+>   - **Task 5 scanTeamMembers 冷恢复（L872/L1042/L1131/L1136）**：`src/agent/team/member/member-scanner.ts:48`（`TEAM_MEMBER_RESUME_MARKER` `:24`）、barrel `src/agent/team/index.ts:21`、测试 `tests/agent/team/member/member-scanner.spec.ts:66,108,135,162`（(a) 形态重唤醒／无转录跳过／退休跳过／挂起审批跳过）；落地提交 `be89d442`。
+>   - **Task 6 TeamApprovalForwarder（L1152/L1277/L1354/L1359）**：`src/agent/team/member/approval-forwarder.ts:26`（`handleMemberEvent` `:30`、`decide` 同队校验 `:47`）、barrel `src/agent/team/index.ts:30`、测试 `tests/agent/team/member/approval-forwarder.spec.ts:49,65,76,97,121`；落地提交 `64c008a7`。
+>   - **Task 7 createLocalGateway 接线 + 集成（L1375/L1446/L1534/L1539/L1544）**：装配已由 P4a 第四刀搬至 `src/cli/teamSubsystem.ts:58`（`teamDb` `:59`、`TeamApprovalForwarder` `:70`、`runMemberScan` `:75`），工厂侧返回 `teamSubsystem` 见 `src/cli/createLocalGateway.ts:420-426`，`defaultTeamDbPath` 见 `src/agent/team/index.ts:63`；集成测试 `tests/agent/team/team-gateway-integration.spec.ts:15`（`teamSubsystem` 断言 `:68-69`、成员转录落盘 `:91-93`、转录隔离 `:96-98`、健康成员不误扫 `:101-102`）；落地提交 `78356f7a`。其中 L1539「全量回归 + 门禁」的出处是回归基线记录：`docs/superpowers/plans/2026-08-20-agent-teams-m2-taskpool-scheduler.md:1545`（该文件「收尾验证」第一条）记 M1 基线 3306 tests / 3303 pass / 0 fail / 3 skip。
+> - 仍未交付：无。
+> - 无法核实：各 Task 的「跑测试确认失败」红灯步骤共 7 处（L160 Task 1、L454 Task 2、L581 Task 3、L765 Task 4、L1037 Task 5、L1272 Task 6、L1441 Task 7）—— TDD 红灯过程步骤无持久产物：测试与实现在同一任务提交落地（如 `31568c6f`），历史时点的 FAIL 无法从仓库复核；其产物均已交付（见上），**未勾选不等于该任务未做**。
+> - 复核口径（2026-09-18）：各 Task 的「跑测试确认通过／全量验证」步骤已按同命令复跑——`node --test`（`dist/tests/agent/team/**/*.spec.js`）108/108 pass；另 `tests/session/storage/session-list-internal`、`tests/session/search/search-chat-history`、`tests/agent/team/protocol/member-key` 8/8 pass。`pnpm typecheck/lint/format:check/test` 级门禁未复跑（本次作业约束禁止），其绿以落地提交与 CI 门禁链为凭。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 建立「可唤醒的持续子代理」原语：成员 = 独立持久化会话（独立 sessionKey + 独立转录），经 `gateway.submitTurn` 整条链唤醒，冷恢复与 TaskResumeScanner 互不干扰。
@@ -75,7 +90,7 @@ tests/agent/team/
 - Create: `src/agent/team/index.ts`（本任务先只导出 TeamDb）
 - Test: `tests/agent/team/storage/team-db.spec.ts`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `tests/agent/team/storage/team-db.spec.ts`：
 
@@ -162,7 +177,7 @@ test("retired_members：登记与查询", () => {
 Run: `pnpm build && node --test dist/tests/agent/team/storage/team-db.spec.js`
 Expected: FAIL——`Cannot find module '../../../../src/agent/team/index.js'`（文件不存在）
 
-- [ ] **Step 3: 实现 TeamDb**
+- [x] **Step 3: 实现 TeamDb**
 
 `src/agent/team/storage/team-db.ts`：
 
@@ -342,12 +357,12 @@ export class TeamDb {
 export { TeamDb, type TeamRow, type TeamMemberRow } from "./storage/team-db.js";
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `pnpm build && node --test dist/tests/agent/team/storage/team-db.spec.js`
 Expected: PASS（4 个测试全绿）
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add src/agent/team/storage/team-db.ts src/agent/team/index.ts tests/agent/team/storage/team-db.spec.ts
@@ -364,7 +379,7 @@ git commit -m "feat(agent): team 域 teams.db 最小存储层（TeamDb + user_ve
 - Modify: `src/session/storage/SessionList.ts:39-41`（isInternalSession + 导出）
 - Test: `tests/session/storage/session-list-internal.spec.ts`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `tests/agent/team/protocol/member-key.spec.ts`：
 
@@ -456,7 +471,7 @@ test("listProjectSessions：成员转录不出现（includeInternal: false）", 
 Run: `pnpm build && node --test dist/tests/agent/team/protocol/member-key.spec.js dist/tests/session/storage/session-list-internal.spec.js`
 Expected: FAIL——member-key 模块不存在；isInternalSession 未导出（`SyntaxError: The requested module ... does not provide an export named 'isInternalSession'`）
 
-- [ ] **Step 3: 实现 key 纯函数 + 过滤扩展**
+- [x] **Step 3: 实现 key 纯函数 + 过滤扩展**
 
 `src/agent/team/protocol/member-key.ts`：
 
@@ -503,12 +518,12 @@ export function isInternalSession(sessionId: string): boolean {
 }
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `pnpm build && node --test dist/tests/agent/team/protocol/member-key.spec.js dist/tests/session/storage/session-list-internal.spec.js`
 Expected: PASS（6 个测试全绿）
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add src/agent/team/protocol/member-key.ts tests/agent/team/protocol/member-key.spec.ts src/session/storage/SessionList.ts tests/session/storage/session-list-internal.spec.ts
@@ -524,7 +539,7 @@ git commit -m "feat(agent): 成员会话 key 契约（team: 前缀）与内部�
 - Create: `tests/agent/team/member/member-registry.spec.ts`
 - Modify: `src/agent/team/index.ts`（导出 member-registry 与 member-key）
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `tests/agent/team/member/member-registry.spec.ts`：
 
@@ -583,7 +598,7 @@ test("创建：同一 team 不同成员 sessionKey 不冲突", () => {
 Run: `pnpm build && node --test dist/tests/agent/team/member/member-registry.spec.js`
 Expected: FAIL——`createTeamMember` 未导出
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 `src/agent/team/member/member-registry.ts`：
 
@@ -633,12 +648,12 @@ export { MEMBER_SESSION_PREFIX, memberSessionKey, parseMemberSessionKey } from "
 export { createTeamMember, type MemberModelRoute, type CreateTeamMemberOptions } from "./member/member-registry.js";
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `pnpm build && node --test dist/tests/agent/team/member/member-registry.spec.js`
 Expected: PASS（2 个测试全绿）
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add src/agent/team/member/member-registry.ts src/agent/team/index.ts tests/agent/team/member/member-registry.spec.ts
@@ -654,7 +669,7 @@ git commit -m "feat(agent): createTeamMember 成员注册（路由快照落库 +
 - Create: `tests/agent/team/member/member-waker.spec.ts`
 - Modify: `src/agent/team/index.ts`（导出 member-waker）
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `tests/agent/team/member/member-waker.spec.ts`：
 
@@ -767,7 +782,7 @@ test("唤醒：syntheticMessages 透传", async () => {
 Run: `pnpm build && node --test dist/tests/agent/team/member/member-waker.spec.js`
 Expected: FAIL——`wakeMember` 未导出
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 `src/agent/team/member/member-waker.ts`：
 
@@ -848,12 +863,12 @@ export {
 } from "./member/member-waker.js";
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `pnpm build && node --test dist/tests/agent/team/member/member-waker.spec.js`
 Expected: PASS（5 个测试全绿）
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add src/agent/team/member/member-waker.ts src/agent/team/index.ts tests/agent/team/member/member-waker.spec.ts
@@ -869,7 +884,7 @@ git commit -m "feat(agent): wakeMember 成员唤醒（submitTurn 整条链 + 状
 - Create: `tests/agent/team/member/member-scanner.spec.ts`
 - Modify: `src/agent/team/index.ts`（导出 scanner）
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `tests/agent/team/member/member-scanner.spec.ts`：
 
@@ -1039,7 +1054,7 @@ test("冷恢复：有挂起审批的断点成员跳过", async () => {
 Run: `pnpm build && node --test dist/tests/agent/team/member/member-scanner.spec.js`
 Expected: FAIL——`scanTeamMembers` 未导出
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 `src/agent/team/member/member-scanner.ts`：
 
@@ -1128,12 +1143,12 @@ export {
 } from "./member/member-scanner.js";
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `pnpm build && node --test dist/tests/agent/team/member/member-scanner.spec.js`
 Expected: PASS（4 个测试全绿）
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add src/agent/team/member/member-scanner.ts src/agent/team/index.ts tests/agent/team/member/member-scanner.spec.ts
@@ -1149,7 +1164,7 @@ git commit -m "feat(agent): scanTeamMembers 成员冷恢复（findOpenRequest �
 - Create: `tests/agent/team/member/approval-forwarder.spec.ts`
 - Modify: `src/agent/team/index.ts`（导出转发器）
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `tests/agent/team/member/approval-forwarder.spec.ts`：
 
@@ -1274,7 +1289,7 @@ test("决定回写：队长与成员不同队时拒绝（安全校验）", async
 Run: `pnpm build && node --test dist/tests/agent/team/member/approval-forwarder.spec.js`
 Expected: FAIL——`TeamApprovalForwarder` 未导出
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 `src/agent/team/member/approval-forwarder.ts`：
 
@@ -1351,12 +1366,12 @@ export class TeamApprovalForwarder {
 export { TeamApprovalForwarder, type TeamApprovalForwarderOptions } from "./member/approval-forwarder.js";
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `pnpm build && node --test dist/tests/agent/team/member/approval-forwarder.spec.js`
 Expected: PASS（5 个测试全绿）
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add src/agent/team/member/approval-forwarder.ts src/agent/team/index.ts tests/agent/team/member/approval-forwarder.spec.ts
@@ -1372,7 +1387,7 @@ git commit -m "feat(agent): TeamApprovalForwarder 审批冒泡（成员 pending 
 - Create: `tests/agent/team/team-gateway-integration.spec.ts`
 - Modify: `src/agent/team/index.ts`（导出 teams.db 默认路径常量）
 
-- [ ] **Step 1: 写失败集成测试**
+- [x] **Step 1: 写失败集成测试**
 
 `tests/agent/team/team-gateway-integration.spec.ts`：
 
@@ -1443,7 +1458,7 @@ test("集成：成员唤醒经 submitTurn 整条链产出转录，冷恢复可�
 Run: `pnpm build && node --test dist/tests/agent/team/team-gateway-integration.spec.js`
 Expected: FAIL——`result.teamSubsystem` 不存在（CreateLocalGatewayResult 无此字段）
 
-- [ ] **Step 3: 接线 createLocalGateway**
+- [x] **Step 3: 接线 createLocalGateway**
 
 `src/agent/team/index.ts` 追加：
 
@@ -1531,17 +1546,17 @@ const inProcess = gateway as InProcessGateway;
   runMemberScan();
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `pnpm build && node --test dist/tests/agent/team/team-gateway-integration.spec.js`
 Expected: PASS（集成测试全绿）
 
-- [ ] **Step 5: 全量回归 + 门禁**
+- [x] **Step 5: 全量回归 + 门禁**
 
 Run: `pnpm typecheck && pnpm lint && pnpm format:check && pnpm test`
 Expected: 全绿。特别注意 `tests/session/resume/task-resume-scanner.spec.ts` 与 `tests/session/storage/` 下既有测试不受 `isInternalSession` 扩展影响（always-on 前缀行为未变）。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add src/cli/createLocalGateway.ts src/agent/team/index.ts tests/agent/team/team-gateway-integration.spec.ts

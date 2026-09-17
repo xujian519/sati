@@ -1,5 +1,13 @@
 # 专利创造性判断（A22.3 三步法）优化 — 可执行实施方案
 
+> **验收状态（2026-09-18 补）**：本文件是历史快照，勾选状态曾长期停留在交付前（见 #359）。
+> 截至 2026-09-18 复核：未勾选 1 项中 **1 项已交付**（已回填勾选）、**0 项仍未交付**、**0 项无法核实**。
+> 另注：头部「实施状态」里 P2-4 的「写侧为宿主接线点……生产接线待宿主侧落地（2026-08-18）」已过期——宿主侧接线已于 2026-08-31 落地（commit `e8ca780b`，message 记「complete the P2-4 inventiveness feedback loop」）；本段为补记，未改动该行原文。
+>
+> - 已交付：**§4.1「实现对应『改动点』，未改任何『不做』清单中的语义」** —— 改动点全量落地（PR #109 / `89de63a3`）：检索反思回路 `src/patent/graph/domains/inventiveness.ts:310,335-339`、`llmNode` 重试与超时 `src/patent/graph/domains/shared.ts:44-46`、`combination` 节点 `inventiveness.ts:401-405`、`citation_gate` 节点 `inventiveness.ts:545`、结论方向指标 `src/patent/evaluate/metrics.ts:82`（注册 `src/patent/evaluate/evaluator.ts:76`）、a22.3 基准 `tests/patent/benchmark/fixtures/patent-exam-real-a22.3.json`；P2-4 写侧宿主接线由 `e8ca780b` 补齐 —— `src/cli/patentOutputGateFactory.ts:199` 注册 `onDecisionFeedback`、`:206` 用 `findCaseIdBySession` 反查 caseId、`:208` 追加 `inventiveness-feedback`，测试 `tests/patent/feedback/inventiveness-feedback.spec.ts:88`。「不做」清单核对：收口路径 `patent_workflow` 仍在（`src/tool/builtin/patentWorkflowTool.ts:193`）；无新增运行时依赖（`89de63a3` 未触及 `package.json` / `pnpm-lock.yaml`）；未对 `closest` 之外做多候选扇出（全仓无 `closest_candidate`）；LLM Judge 未进入规则门（`src/tool/builtin/patent-workflow-run/graphRun.ts:248` 注明仅附结果尾部、不改判级）；graph/checker 引擎本体未重构（`89de63a3` 未触及 `src/patent/checker/` 与 `src/patent/graph/engine.ts`）。
+> - 仍未交付：无。
+> - 无法核实：无。
+
 > 方案版本：v0.2（2026-08-17 评审修订版）
 > 评审结论：有条件通过 —— 修复 B1–B4 后 P0 可开工；I1–I5 在对应任务内必须落实；S1–S4 为建议项
 > 编制日期：2026-08-17
@@ -277,7 +285,7 @@ node --test --test-timeout 60000 \
 
 ### 4.1 单任务完成定义（DoD，每个任务合并前逐项勾选）
 
-- [ ] 实现对应“改动点”，未改任何“不做”清单中的语义
+- [x] 实现对应“改动点”，未改任何“不做”清单中的语义
 - [x] 新代码走 `src/patent/**` + `tests/patent/**` 镜像测试（Node test runner，`.spec.ts`）
 - [x] 关键纯函数（citation-check、metrics、query 组装）有确定性单测，不依赖真实 LLM
 - [x] 现有创造性相关回归全绿：

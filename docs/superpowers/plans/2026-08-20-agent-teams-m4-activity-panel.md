@@ -1,5 +1,26 @@
 # 团队编排层 M4：活动面板 + 调度补强 + 缺陷修复 实施计划
 
+> **验收状态（2026-09-18 补）**：本文件是历史快照，勾选状态曾长期停留在交付前（见 #359）。
+> 截至 2026-09-18 复核：未勾选 75 项中 **46 项已交付**（已回填勾选）、**2 项仍未交付**、**27 项无法核实**。
+>
+> - 已交付（T1 失败自动转派）：Step 2 测试 —— `tests/agent/team/taskpool/retry.spec.ts:26,37`（第 3 用例随 `retryableFailedTasks` 在 accdc801 精简删除）；Step 4 实现 —— `src/agent/team/taskpool/retry.ts:15`；Step 5 事件 —— `src/agent/team/protocol/events.ts:23`；Step 6 调度器锁内接线 —— `src/agent/team/scheduler/scheduler.ts:189-201`；Step 7 barrel —— `src/agent/team/index.ts:57`；Step 9 提交 —— `1ed2664a`。
+> - 已交付（T2 modelRoute 消费）：Step 2 共享解析 —— `src/agent/team/member/modelRouteJson.ts:9`（`src/agent/team/views.ts:37` 供 team_status 复用）；Step 3 测试 —— `tests/agent/team/member/member-waker.spec.ts:129`、`tests/agent/team/member/modelRouteJson.spec.ts:9`；Step 5 类型+wakeMember —— `src/gateway/protocol/types.ts:182`、`src/agent/team/member/member-waker.ts:53-69`；Step 6 gateway 消费 —— `src/gateway/client/InProcessGateway.ts:500`、`src/cli/ProjectRuntimeRegistry.ts:631`、`src/cli/agentSessionConfig.ts:72-80`（P4a 重构后落点迁出 createLocalGateway）；Step 8 提交 —— `cb0f5418`。
+> - 已交付（T3 插件 frontmatter）：Step 1 测试 —— `tests/extension/plugins/standalone-skill-loading.spec.ts:38,62`（计划所指 PluginCommandLoader.spec.ts 未建，用例落在既有 fixture 文件）；Step 3 yaml 解析 —— `src/extension/plugins/loading/PluginCommandLoader.ts:3,102,115`；Step 5 提交 —— `212e8655`（消息前缀 fix(plugin)）。
+> - 已交付（T4 domains 缺口）：Step 2 —— 6 个角色资产 `skills/patent-teams/*/SKILL.md:6`（adjudicator/adversarial-reviewer/applicant-counsel/case-manager/formal-examiner 补 literature，drafter 补 legal+literature；tech-investigator 未动）；Step 4 提交 —— `e11460c0`。
+> - 已交付（T5 Web 下线判定）：Step 1 测试 —— `tests/gateway/server/sessionPresence.spec.ts:78`；Step 3 SessionPresence —— `src/gateway/server/sessionPresence.ts:26,68,90`；Step 4 协议 1.4 —— `src/gateway/protocol/version.ts:69,161-164`、`src/gateway/protocol/types.ts:868`、`src/gateway/server/GatewayWsConnection.ts:341`；Step 5 panelHeartbeat —— `src/cli/gatewayRuntimeOptions.ts:144`；Step 6 ui/server 心跳 —— `ui/server/websocket/chat.js:47,105`、`ui/server/team-presence.js:17`、`ui/server/index.js:67`；Step 8 提交 —— `2075e3c8`。
+> - 已交付（T6 面板数据/操作方法）：Step 1 测试 —— `tests/gateway/teamPanel.spec.ts:50`；Step 3 纯函数 —— `src/gateway/teamPanel.ts:25`（`listTeamsForPanel`/`unreadForCaptain` 后被判死代码删除，见 accdc801）；Step 4 接口+分发+实现 —— `src/gateway/protocol/types.ts:874,876`、`src/gateway/server/GatewayWsConnection.ts:346,351`、`src/cli/gatewayRuntimeOptions.ts:155,167`；Step 6 提交 —— `86858c11`。
+> - 已交付（T7 REST 路由）：Step 2 客户端方法 —— `src/gateway/client/RemoteGateway.ts:216,220,224`；Step 3 测试 —— `ui/server/routes/teams.test.js:12`；Step 4 路由+挂载 —— `ui/server/routes/teams.js:21,42,71`、`ui/server/index.js:136`；Step 6 提交 —— `672c25af`。
+> - 已交付（T8 面板数据层）：Step 2 类型/常量 —— `ui/src/components/team-panel/types.ts:35`、`ui/src/components/team-panel/constants.ts:4,55`；Step 3 测试 —— `ui/src/components/team-panel/hooks/useTeamPanel.test.tsx:60`；Step 5 hook —— `ui/src/components/team-panel/hooks/useTeamPanel.ts:56`；Step 7 提交 —— `5ba77264`（该四文件在此提交引入）。
+> - 已交付（T9 面板视图）：Step 2 容器+子视图 —— `dd7c0fdf` 建 TeamPanel/TeamOverview/MemberGrid/TaskBoard/EventStream，现形为 `ui/src/components/team-panel/floating-team-panel.tsx` + `captain-summary.tsx` / `member-tree.tsx` / `task-dag.tsx`（013d4829 重构）；Step 3 i18n —— `ui/src/i18n/locales/en/teamPanel.json`、`ui/src/i18n/locales/zh-CN/teamPanel.json`；Step 4 冒烟测试 —— `ui/src/components/team-panel/floating-team-panel.test.tsx:124`；Step 6 提交 —— `dd7c0fdf`。
+> - 已交付（T10 订阅+挂载）：Step 2 事件流 —— `src/web/client/eventMapping.ts:361`、`ui/src/components/team-panel/hooks/use-team-activity.ts:27`（改用 WebSocket subscribe，理由见该 hook 头注释）；Step 3 入口+主区 —— `ui/src/components/app-shell/SidebarV2.tsx:1201`、`ui/src/components/main-content/view/MainContent.tsx:1098`（MainAreaV2 经 `MainAreaV2.tsx:459` 转发）；Step 5 提交 —— `ca6791dc`。
+> - 已交付（T11 集成/stress/矩阵）：Step 1 集成测试 —— `tests/tool/builtin/team/team-tools-integration.spec.ts:524`；Step 2 防环用例 —— `tests/agent/team/scheduler/scheduler.spec.ts:595`；Step 3 stress 场景 10 —— `scripts/team-stress-verify.mjs:480`；Step 4 事件矩阵 —— `docs/event-producer-consumer.md:71`、`scripts/gen-event-matrix.ts:8,27`；Step 6 提交 —— `d20a5a7c`。
+> - 仍未交付（T12）：Step 3 更新记忆 —— `memory/` 与 `MEMORY.md` 均不存在，无 `memory/agent-teams-m4-complete.md`；Step 5 提交收尾 —— 无 `docs(team): M4 交付记录与记忆更新` 提交，记忆部分同上缺失。
+> - 无法核实（对照读码步骤，无独立产物）：T1 Step 1、T2 Step 1、T4 Step 1、T7 Step 1、T8 Step 1、T9 Step 1、T10 Step 1 —— 结论只能从后果侧推断，无法证明该步单独执行。
+> - 无法核实（运行/验证类瞬时步骤，无留存产物）：T1 Step 3、T1 Step 8、T2 Step 4、T2 Step 7、T3 Step 2、T3 Step 4、T4 Step 3、T5 Step 2、T5 Step 7、T6 Step 2、T6 Step 5、T7 Step 5、T8 Step 4、T8 Step 6、T9 Step 5、T10 Step 4、T11 Step 5 —— TDD「确认失败」/回归/typecheck/冒烟本身不留证据。
+> - 无法核实（T12 Step 1 全量验证链）—— 计划所记「3410 用例全绿」是运行态断言，仓库无留存；本次按作业约束未跑 `pnpm test`。
+> - 无法核实（T12 Step 2 llm-replay 确认）—— fixture 是否重录、重放是否绿无留存证据。
+> - 无法核实（T12 Step 4 最终 code reviewer 全量审查）—— 复审确实发生过（`9abbf0f2`「M4 最终审查 I1」、`e4d44cea`「最终复审」、`dc1aa666`「T12 复审修复」），但「无 Critical/Important 遗留」这一结论无记录可判。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 交付团队编排层第四阶段——Web 全操作活动面板（建队/加人/转派/归档/审批全部入面板）+ 失败任务自动转派 + Web 下线判定接线 + modelRoute 消费 + 插件解析器缺陷修复 + 12 岗 domains 缺口补全。
@@ -43,7 +64,7 @@ llm-replay 约束：重放路径 `createAgentSession` + 无参 `createBuiltinReg
 Run: `sed -n '1,80p' src/agent/team/protocol/events.ts`
 预期：TeamEvent 是判别联合（type 字段 + teamId 等公共字段）。task_retried 仿 task_claimed 形态加 `{ type: "task_retried", teamId, taskId, attempt, memberId? }`（attempt 为重置后的当前值；memberId 为失败时的 assignee——即上次尝试者，可 undefined）。
 
-- [ ] **Step 2: 写失败测试**
+- [x] **Step 2: 写失败测试**
 
 Create: `tests/agent/team/taskpool/retry.spec.ts`
 
@@ -109,7 +130,7 @@ test("retryFailedTask：不可重试（耗尽/非 failed）返回原任务（幂
 
 Run: `pnpm build && find dist/tests/agent/team -name '*.spec.js' | xargs node --test`（新 spec 尚未编译进 dist，build 后仍会报测试文件不存在或 import 失败——先确认 `retryFailedTask` 未导出）
 
-- [ ] **Step 4: 写实现**
+- [x] **Step 4: 写实现**
 
 Create: `src/agent/team/taskpool/retry.ts`
 
@@ -148,7 +169,7 @@ export function retryFailedTask(task: TeamTaskRow): TeamTaskRow {
 }
 ```
 
-- [ ] **Step 5: 协议事件 task_retried**
+- [x] **Step 5: 协议事件 task_retried**
 
 Modify: `src/agent/team/protocol/events.ts`——在 task 相关事件分支加（读文件确认既有成员后追加，仿 task_claimed 形态）：
 
@@ -157,7 +178,7 @@ Modify: `src/agent/team/protocol/events.ts`——在 task 相关事件分支加�
     | { type: "task_retried"; teamId: string; taskId: string; attempt: number; memberId?: string }
 ```
 
-- [ ] **Step 6: scheduler 锁内接线 + 事件广播**
+- [x] **Step 6: scheduler 锁内接线 + 事件广播**
 
 Modify: `src/agent/team/scheduler/scheduler.ts:144-147`（kickMember 锁内，`const tasks = this.db.listTasks(teamId);` 之后、`ownedOpenTask` 之前插入）：
 
@@ -182,7 +203,7 @@ Modify: `src/agent/team/scheduler/scheduler.ts:144-147`（kickMember 锁内，`c
 
 注意：`retryableFailedTasks([t]).length === 1` 写法绕开 filter 与 map 的重复——直接 `tasks.filter(t => t.status === "failed" && !attemptsExhausted(t))` 更直白，二选一（implementer 选直白版）。`team` 变量在 kickMember 顶部已取（锁外），锁内用 `team.captainSessionKey` 广播。
 
-- [ ] **Step 7: barrel 导出**
+- [x] **Step 7: barrel 导出**
 
 Modify: `src/agent/team/index.ts`——仿 taskpool 既有导出加 `export { retryFailedTask, retryableFailedTasks } from "./taskpool/retry.js";`（确认 index.ts 现有 taskpool 导出行的位置与形态）。
 
@@ -190,7 +211,7 @@ Modify: `src/agent/team/index.ts`——仿 taskpool 既有导出加 `export { re
 
 Run: `pnpm build && find dist/tests -name '*.spec.js' | xargs node --test`——retry.spec 3 用例全绿；scheduler 既有测试不回归（影响面：kickMember 锁内新增遍历，无 failed 任务时零行为变化）。
 
-- [ ] **Step 9: 提交**
+- [x] **Step 9: 提交**
 
 ```bash
 git add src/agent/team/taskpool/retry.ts src/agent/team/scheduler/scheduler.ts src/agent/team/protocol/events.ts src/agent/team/index.ts tests/agent/team/taskpool/retry.spec.ts
@@ -214,7 +235,7 @@ git commit -m "feat(team): 失败任务自动转派（failed 未耗尽重置回�
 Run: `grep -n "submitTurn\|prepareSessionRuntime\|createAgentConfig" src/cli/createLocalGateway.ts | head -20`
 预期：submitTurn 是生成器方法，内部经 `createSession`/`prepareSessionRuntime` 构造 agent 配置。**定向核对指引**：找到「input 字段 → 会话 runtime/config」的传递路径（如 workspaceCwd/projectKey 怎么从 input 流到 createSession），modelRoute 仿同一路径加字段。
 
-- [ ] **Step 2: 抽共享 parseModelRouteJson**
+- [x] **Step 2: 抽共享 parseModelRouteJson**
 
 Modify: `src/tool/builtin/team/teamUtils.ts`——把 teamStatus.ts 的 parseModelRoute 提为导出函数（JSON 解析 + 非对象降级 `{}`，注释保留）：
 
@@ -242,7 +263,7 @@ export function parseModelRouteJson(json: string): { provider?: string; model?: 
 
 Modify: `src/tool/builtin/team/teamStatus.ts`——删本地 parseModelRoute，改 import `parseModelRouteJson`（teamUtils 已 import 的 requireTeamMember 等旁追加），视图处 `modelRoute: parseModelRouteJson(m.modelRouteJson)`。
 
-- [ ] **Step 3: 写失败测试**
+- [x] **Step 3: 写失败测试**
 
 Create/Modify: `tests/agent/team/member/member-waker.spec.ts`——现有 wakeMember 测试（若存在）仿照：断言 input 携带 modelRoute。若无现成测试，新建（用 stub gateway 捕获 submitTurn input）：
 
@@ -290,7 +311,7 @@ test("wakeMember：成员快照 modelRoute 传入 submitTurn input（M4 消费�
 Run: `pnpm build && node --test dist/tests/agent/team/member/member-waker.spec.js`
 预期：FAIL——`GatewaySubmitTurnInput` 无 modelRoute 属性（tsc 报 2322 多余属性）或 wakeMember 未传。
 
-- [ ] **Step 5: 改类型 + wakeMember**
+- [x] **Step 5: 改类型 + wakeMember**
 
 Modify: `src/gateway/protocol/types.ts:114-140`——GatewaySubmitTurnInput 末尾加（注释说明 M4）：
 
@@ -314,7 +335,7 @@ const input: GatewaySubmitTurnInput = {
 };
 ```
 
-- [ ] **Step 6: gateway 消费 modelRoute（会话配置覆盖）**
+- [x] **Step 6: gateway 消费 modelRoute（会话配置覆盖）**
 
 Modify: `src/cli/createLocalGateway.ts` submitTurn 实现——在构造 agent 会话配置处（Step 1 定位的路径）消费：
 
@@ -332,7 +353,7 @@ if (input.modelRoute) {
 Run: `pnpm build && node --test dist/tests/agent/team/member/member-waker.spec.js && find dist/tests -name '*.spec.js' | xargs node --test`
 预期：新用例 PASS；团队 suite 与 gateway 相关 suite 不回归（modelRoute 可选字段，既有调用不带它）。
 
-- [ ] **Step 8: 提交**
+- [x] **Step 8: 提交**
 
 ```bash
 git add src/gateway/protocol/types.ts src/agent/team/member/ src/tool/builtin/team/teamStatus.ts src/tool/builtin/team/teamUtils.ts src/cli/createLocalGateway.ts tests/agent/team/member/member-waker.spec.ts
@@ -347,7 +368,7 @@ git commit -m "feat(team): wakeMember 消费成员快照 modelRoute（submitTurn
 - Modify: `src/extension/plugins/loading/PluginCommandLoader.ts:94-123`（parseMarkdownFrontmatter + 删 parseScalar）
 - Test: `tests/extension/plugins/loading/PluginCommandLoader.spec.ts`（新建或扩展现有）
 
-- [ ] **Step 1: 写失败测试（复现缺陷）**
+- [x] **Step 1: 写失败测试（复现缺陷）**
 
 Create: `tests/extension/plugins/loading/PluginCommandLoader.spec.ts`（若已存在则追加用例）：
 
@@ -400,7 +421,7 @@ test("标量类型与现有行为保持（bool/数字/引号字符串）", async
 Run: `pnpm build && find dist/tests/extension -name '*.spec.js' | xargs node --test`
 预期：前两个用例 FAIL（systemPrompt 断言得 `"|-"`、domains 断言得 `{}` 或空对象），第三个 bool/数字可能 PASS（parseScalar 手工转换恰好一致）。
 
-- [ ] **Step 3: 修实现（yaml 解析，对齐 teamRoleAssembly parseSkillFrontmatter 范式）**
+- [x] **Step 3: 修实现（yaml 解析，对齐 teamRoleAssembly parseSkillFrontmatter 范式）**
 
 Modify: `src/extension/plugins/loading/PluginCommandLoader.ts`——import 区加 `import { parse as parseYaml } from "yaml";`，替换 parseMarkdownFrontmatter 实现、删除 parseScalar：
 
@@ -438,7 +459,7 @@ function parseMarkdownFrontmatter(raw: string): { frontmatter: Record<string, un
 Run: `pnpm build && find dist/tests/extension -name '*.spec.js' | xargs node --test`
 预期：新 3 用例全 PASS；既有 extension 测试不回归（解析语义变化：yaml 会做类型推断——若既有断言依赖 parseScalar 的字符串保留行为（如 `description: "a: b"` 引号剥离），yaml 结果一致；无引号的含冒号值 yaml 会解析失败回退空对象——检查既有 fixture 是否有此类内容，若回归则把该 fixture 值加引号（合法 yaml），不改解析器）。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add src/extension/plugins/loading/PluginCommandLoader.ts tests/extension/plugins/loading/PluginCommandLoader.spec.ts
@@ -463,7 +484,7 @@ git commit -m "fix(extension): 插件命令 frontmatter 改 yaml 解析（多行
 Run: `grep -l '^domains:' skills/patent-teams/*/SKILL.md | sort` 与 `grep -A6 '^domains:' skills/patent-teams/*/SKILL.md | grep -B1 'literature'`
 预期：7 个角色资产（adjudicator/adversarial-reviewer/applicant-counsel/case-manager/formal-examiner/drafter 等）domains 无 "literature"；tech-investigator 缺 "legal" **保持不动**（设计意图：检索型角色不接法规域，M3 spec 逐字批准）。drafter 当前无 legal。
 
-- [ ] **Step 2: 逐文件补 domains**
+- [x] **Step 2: 逐文件补 domains**
 
 对 6 个资产（adjudicator/adversarial-reviewer/applicant-counsel/case-manager/formal-examiner 补 `"literature"`；drafter 补 `"legal"` + `"literature"`）：读该文件 domains 段，按现有 YAML 数组风格追加一项（保持字母序与缩进风格）：
 
@@ -478,7 +499,7 @@ domains:
 
 Run: `pnpm lint`（挂 check:patent-sop——手册/YAML 引用五类存在性；若门禁校验 SKILL.md 的 domain 引用则验证新 domain 合法）与 `pnpm build && find dist/tests/agent/team -name '*.spec.js' | xargs node --test`（角色注册测试回归——teamManagement 的 roleSlug 校验测试、builtinSubagentTypes 注册测试）。
 
-- [ ] **Step 4: 提交**
+- [x] **Step 4: 提交**
 
 ```bash
 git add skills/patent-teams/
@@ -499,7 +520,7 @@ git commit -m "feat(team): 12 岗 domains 缺口补全（5 岗补 literature、d
 - Create: `ui/server/team-presence.js`（30s 心跳聚合调 gateway）
 - Test: `tests/gateway/sessionPresence.spec.ts`（panel 维度用例）
 
-- [ ] **Step 1: 写失败测试（SessionPresence panel 维度）**
+- [x] **Step 1: 写失败测试（SessionPresence panel 维度）**
 
 Modify: `tests/gateway/sessionPresence.spec.ts`（既有 presence 测试存在；追加）：
 
@@ -530,7 +551,7 @@ test("panelTouch：面板心跳使直连关闭会话保持在线；心跳停超�
 Run: `pnpm build && node --test dist/tests/gateway/sessionPresence.spec.js`
 预期：FAIL——`panelTouch` 不存在（TypeError）。
 
-- [ ] **Step 3: SessionPresence 扩展**
+- [x] **Step 3: SessionPresence 扩展**
 
 Modify: `src/gateway/server/sessionPresence.ts`：
 
@@ -567,7 +588,7 @@ isActive(sessionKey: string, now: number = Date.now()): boolean {
 
 注意语义：`panelTouch` 只复位离线判定（known-offline → 在线），不清 `closedAt`（面板心跳不是直连）。`activeSessions` 保持直连语义不变（面板数据展示用 presence 单独合并，T6 处理）。
 
-- [ ] **Step 4: 协议 1.4 + gateway 方法**
+- [x] **Step 4: 协议 1.4 + gateway 方法**
 
 Modify: `src/gateway/protocol/version.ts` 变更表（仿既有条目格式）：
 
@@ -592,7 +613,7 @@ Modify: `src/gateway/server/GatewayWsConnection.ts`（cron_stop 的 case 之后�
         return Promise.resolve(notConfigured({ touched: 0 }, "Panel heartbeat not available"));
 ```
 
-- [ ] **Step 5: createLocalGateway 实现 panelHeartbeat**
+- [x] **Step 5: createLocalGateway 实现 panelHeartbeat**
 
 Modify: `src/cli/createLocalGateway.ts`——gateway 对象方法定义区（仿 cronUpdate 所在处）加：
 
@@ -607,7 +628,7 @@ Modify: `src/cli/createLocalGateway.ts`——gateway 对象方法定义区（仿
 
 （`presence` 为 createLocalGateway 内已持有的 SessionPresence 实例——isCaptainOnline 已引用；确认变量名后适配。）
 
-- [ ] **Step 6: ui/server 侧浏览器活跃信号 + 心跳上报**
+- [x] **Step 6: ui/server 侧浏览器活跃信号 + 心跳上报**
 
 Modify: `ui/server/websocket/chat.js`——浏览器消息转发处（读文件定位：wss 连接消息处理里转发到 gateway 的地方，约 62-110 行）维护活跃表：
 
@@ -651,7 +672,7 @@ export function startTeamPresenceHeartbeat({ getBrowserActiveKeys, heartbeat }) 
 Run: `pnpm build && node --test dist/tests/gateway/sessionPresence.spec.js && find dist/tests/gateway -name '*.spec.js' | xargs node --test`
 预期：panel 维度用例 PASS；gateway 既有测试（isActive 语义不回归——无 panelSeenAt 的既有行为完全不变）。
 
-- [ ] **Step 8: 提交**
+- [x] **Step 8: 提交**
 
 ```bash
 git add src/gateway/protocol/version.ts src/gateway/protocol/types.ts src/gateway/server/sessionPresence.ts src/gateway/server/GatewayWsConnection.ts src/cli/createLocalGateway.ts src/gateway/client/RemoteGateway.ts ui/server/team-presence.js ui/server/websocket/chat.js ui/server/index.js tests/gateway/sessionPresence.spec.ts
@@ -668,7 +689,7 @@ git commit -m "feat(gateway): 协议 1.4 panel_heartbeat——Web 下线判定�
 - Modify: `src/cli/createLocalGateway.ts`（两方法实现：TeamDb 直查 + 工具直调）
 - Test: `tests/gateway/teamPanel.spec.ts`（新建）
 
-- [ ] **Step 1: 写失败测试（直调 createLocalGateway 或抽纯函数）**
+- [x] **Step 1: 写失败测试（直调 createLocalGateway 或抽纯函数）**
 
 先读 createLocalGateway 的 team 装配点（setTeamTools 1026 附近）确认 db/scheduler/emit 与 registry 的持有形态，再决定测试形态：**推荐抽纯函数** `buildTeamPanelSnapshot(db, presence)`（新文件 `src/gateway/teamPanel.ts`）供 gateway 方法调用，测试直测纯函数（不拉起全量 gateway）：
 
@@ -735,7 +756,7 @@ test("listTeamsForPanel：含归档态（archivedAt）与无队团队", () => {
 Run: `pnpm build && node --test dist/tests/gateway/teamPanel.spec.js`
 预期：FAIL——`buildTeamPanelSnapshot`/`listTeamsForPanel` 不存在。
 
-- [ ] **Step 3: 实现纯函数模块**
+- [x] **Step 3: 实现纯函数模块**
 
 Create: `src/gateway/teamPanel.ts`：
 
@@ -846,7 +867,7 @@ function parseModelRouteLoose(json: string): { provider?: string; model?: string
 
 **定向核对指引**：确认 TeamDb 是否有 `listTeams`（不带参数）/`listMessages(teamId, memberId)` 的既有签名与 `listTasks(teamId)`——按实际签名适配（`db.listTeams()` 若不存在则改 `listTeams` 真实 API；messages 的 recipient 字段名确认后适配）。
 
-- [ ] **Step 4: gateway 接口 + 分发 + 实现**
+- [x] **Step 4: gateway 接口 + 分发 + 实现**
 
 Modify: `src/gateway/protocol/types.ts` Gateway 接口：
 
@@ -903,7 +924,7 @@ Modify: `src/cli/createLocalGateway.ts`——gateway 对象加两方法（持有
 Run: `pnpm build && node --test dist/tests/gateway/teamPanel.spec.js && find dist/tests/gateway -name '*.spec.js' | xargs node --test`
 预期：纯函数用例 PASS；gateway 既有测试不回归（新增可选方法）。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add src/gateway/teamPanel.ts src/gateway/protocol/types.ts src/gateway/server/GatewayWsConnection.ts src/cli/createLocalGateway.ts tests/gateway/teamPanel.spec.ts
@@ -925,7 +946,7 @@ git commit -m "feat(gateway): 面板数据/操作方法（team_panel_snapshot �
 Run: `sed -n '1,60p' ui/server/routes/discovery-plans.js`（或 commands.js）
 预期：Express Router 形态 + 错误处理中间件 + 挂载方式（index.js 里 `app.use("/api/...", router)`）。RemoteGateway 客户端方法形态：`grep -n "cronUpdate" src/gateway/client/RemoteGateway.ts`。
 
-- [ ] **Step 2: RemoteGateway 客户端方法**
+- [x] **Step 2: RemoteGateway 客户端方法**
 
 Modify: `src/gateway/client/RemoteGateway.ts`——仿 cronUpdate 客户端方法（send 帧 → 映射结果）：
 
@@ -947,7 +968,7 @@ Modify: `src/gateway/client/RemoteGateway.ts`——仿 cronUpdate 客户端方�
 
 （`this.request` 为既有私有方法名，按实际实现适配。）
 
-- [ ] **Step 3: 写失败测试**
+- [x] **Step 3: 写失败测试**
 
 Create: `ui/server/routes/teams.test.js`（对齐 routes 既有测试形态——mock gateway 客户端；先读 `discovery-plans.js` 对应测试确认 mock 模式）：
 
@@ -986,7 +1007,7 @@ test("POST /api/teams/heartbeat → gateway.panelHeartbeat", async () => {
 });
 ```
 
-- [ ] **Step 4: 实现路由**
+- [x] **Step 4: 实现路由**
 
 Create: `ui/server/routes/teams.js`：
 
@@ -1057,7 +1078,7 @@ app.use("/api/teams", createTeamsRouter({ getGateway: ensureGateway }));
 Run: `cd ui && pnpm test`（Vitest/Node runner 对齐既有）或项目内路由测试运行方式（`node --test ui/server/routes/teams.test.js`——按既有路由测试的运行方式）；`pnpm build` 验证 RemoteGateway 类型。
 预期：3 用例 PASS；既有路由测试不回归。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add ui/server/routes/teams.js ui/server/index.js src/gateway/client/RemoteGateway.ts ui/server/routes/teams.test.js
@@ -1079,7 +1100,7 @@ git commit -m "feat(ui): 团队面板 REST 路由（/api/teams panel/action/hear
 Run: `ls ui/src/components/git-panel/ ui/src/components/git-panel/hooks/` 与 `sed -n '1,80p' ui/src/components/git-panel/hooks/useGitPanel.ts`（或实际文件名）
 预期：git-panel 扁平结构（components/ + hooks/ + types.ts + constants.ts + utils.ts）；hook 用 fetch/axios 调 /api/** REST + useState/useEffect。
 
-- [ ] **Step 2: 类型 + 常量**
+- [x] **Step 2: 类型 + 常量**
 
 Create: `ui/src/components/team-panel/types.ts`：
 
@@ -1147,7 +1168,7 @@ export const TEAM_ROLE_OPTIONS = [
 
 （12 岗清单以 `skills/patent-teams/` 目录实际角色为准——implementer ls 该目录核对后定。）
 
-- [ ] **Step 3: 写失败测试**
+- [x] **Step 3: 写失败测试**
 
 Create: `ui/src/components/team-panel/hooks/useTeamPanel.test.tsx`（Vitest + Testing Library，fetch mock 模式对齐 git-panel 既有测试）：
 
@@ -1197,7 +1218,7 @@ describe("useTeamPanel", () => {
 Run: `cd ui && pnpm test -- team-panel`
 预期：FAIL——useTeamPanel 不存在。
 
-- [ ] **Step 5: 实现 hook**
+- [x] **Step 5: 实现 hook**
 
 Create: `ui/src/components/team-panel/hooks/useTeamPanel.ts`：
 
@@ -1272,7 +1293,7 @@ export function useTeamPanel() {
 Run: `cd ui && pnpm test -- team-panel && pnpm typecheck`
 预期：3 用例 PASS；typecheck 绿。
 
-- [ ] **Step 7: 提交**
+- [x] **Step 7: 提交**
 
 ```bash
 git add ui/src/components/team-panel/
@@ -1296,7 +1317,7 @@ git commit -m "feat(ui): 团队面板数据层（useTeamPanel 快照轮询 + 操
 Run: `ls ui/src/components/git-panel/` 与 `sed -n '1,60p' ui/src/components/git-panel/GitPanel.tsx`（或实际容器文件名）
 预期：容器组件接收 hook 数据 + shadcn/ui 组件（Card/Badge/Button）组合；Tailwind 样式内联。
 
-- [ ] **Step 2: 实现容器 + 子视图（视图组件以 tailwind + shadcn 基础组件实现，文案走 i18n t()）**
+- [x] **Step 2: 实现容器 + 子视图（视图组件以 tailwind + shadcn 基础组件实现，文案走 i18n t()）**
 
 Create: `ui/src/components/team-panel/TeamPanel.tsx`：
 
@@ -1341,11 +1362,11 @@ export function TeamPanel() {
 - `TaskBoard`：任务行（taskId/subject/status Badge 按色：pending 灰/claimed 蓝/in_progress 琥珀/completed 绿/failed 红/cancelled 灰 + attempt 计数 + blockedByCount + assigneeId）；操作：队长视角每个非终态任务「转派」下拉（选 idle 成员 → `team_reassign_task`）；「归档团队」按钮 → `team_archive`（confirm 二次确认）。
 - `EventStream`：事件流容器（数据源见 Task 10 接线——useSessionWatch 事件过滤 TeamEvent 类型后滚动渲染；无数据时显示空态文案）。
 
-- [ ] **Step 3: i18n 文案**
+- [x] **Step 3: i18n 文案**
 
 Modify: `ui/src/i18n/locales/en/` 与 `zh-CN/` 对应 namespace——新增 `teamPanel.*` 键（loading/新建团队/添加成员/转派/归档/成员/任务/在线/离线/工作中/空闲/已退休/事件流/空态/操作成功/操作失败等）。**强制项**：UI 新文案必须进 i18n，不硬编码。
 
-- [ ] **Step 4: 组件测试（冒烟）**
+- [x] **Step 4: 组件测试（冒烟）**
 
 Create: `ui/src/components/team-panel/TeamPanel.test.tsx`：
 
@@ -1371,7 +1392,7 @@ describe("TeamPanel", () => {
 Run: `cd ui && pnpm test -- team-panel && pnpm typecheck`
 预期：冒烟测试 PASS；typecheck 绿。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add ui/src/components/team-panel/ ui/src/i18n/locales/
@@ -1393,7 +1414,7 @@ git commit -m "feat(ui): 团队面板视图（概览/成员/任务/事件流 + i
 Run: `grep -rn "GitPanel\|git-panel" ui/src/components/app-shell/` 与 `grep -rn "useSessionWatch" ui/src/components/ | head -5`
 预期：git-panel 已有 SidebarV2 入口 + MainAreaV2 切换的完整先例；useSessionWatch 返回会话事件数组（含类型字段）。
 
-- [ ] **Step 2: 事件流接线**
+- [x] **Step 2: 事件流接线**
 
 Modify: `ui/src/components/team-panel/EventStream.tsx`——用 useSessionWatch 收当前会话事件，过滤 TeamEvent 形态（type 前缀 `team_` 或 M3 事件类型 task_claimed/task_completed/task_failed/task_retried/message_delivered/member_idle 等）：
 
@@ -1412,7 +1433,7 @@ export function EventStream({ teams }: { teams: PanelTeam[] }) {
 
 **定向核对指引**：useSessionWatch 的返回结构与 TeamEvent 经 relay 到达浏览器的帧形态（eventMapping.ts 是否需为 TeamEvent 补映射——若未映射则 UI 收不到，需在 `src/web/client/eventMapping.ts`（Node 侧复用路径）或浏览器侧映射补 TeamEvent 类型）。先跑通确认：浏览器 watch 会话 → gateway emitForSession 广播 TeamEvent → relay 透传 → useSessionWatch 数组中出现 team 事件；若类型被过滤/不识别则补映射。
 
-- [ ] **Step 3: Sidebar 入口 + 主区切换**
+- [x] **Step 3: Sidebar 入口 + 主区切换**
 
 Modify: `ui/src/components/app-shell/SidebarV2.tsx`——仿 GitPanel 入口加「团队」导航项（icon + label i18n `teamPanel.nav`）。
 Modify: `ui/src/components/app-shell/MainAreaV2.tsx`——仿 git 面板切换分支加 `TeamPanel` 渲染（view 状态值按既有枚举/字符串模式）。
@@ -1422,7 +1443,7 @@ Modify: `ui/src/components/app-shell/MainAreaV2.tsx`——仿 git 面板切换�
 Run: `cd ui && pnpm test -- team-panel && pnpm typecheck`
 预期：既有 app-shell 测试不回归；typecheck 绿。（手动冒烟可选：`pnpm dev` 起服务开面板看数据。）
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add ui/src/components/team-panel/ ui/src/components/app-shell/ src/web/client/
@@ -1438,7 +1459,7 @@ git commit -m "feat(ui): 团队面板挂载（Sidebar 入口 + 主区切换 + Te
 - Modify: `tests/` stress 场景（场景 10：失败自动转派；面板 REST 链冒烟）
 - Modify: `docs/event-producer-consumer.md`（task_retried 新事件）
 
-- [ ] **Step 1: 自动转派集成测试**
+- [x] **Step 1: 自动转派集成测试**
 
 Modify: 集成测试（M3 工具驱动全链测试所在文件，`tests/agent/team/` 下找 scheduler 集成 spec）追加：
 
@@ -1452,7 +1473,7 @@ test("失败任务自动转派：成员回合置 failed（未耗尽）→ 调度
 
 （沿用 M3 集成测试 harness 的构造方式；若 harness 不便复用则直接测 scheduler：TeamDb + fake wake + emit 收集，`kickTeam` 后断言任务状态与事件。）
 
-- [ ] **Step 2: 耗尽防环用例**
+- [x] **Step 2: 耗尽防环用例**
 
 追加：
 
@@ -1462,11 +1483,11 @@ test("attempt 达 maxAttempts 的 failed 任务不再重置（防无限循环）
 });
 ```
 
-- [ ] **Step 3: stress 场景 10（自动转派收敛）**
+- [x] **Step 3: stress 场景 10（自动转派收敛）**
 
 Modify: stress 矩阵（`tests/agent/team/stress*.spec.ts` 或既有 stress 文件）追加场景 10：3 成员 + 5 任务链，前两任务成员失败（未耗尽）→ 自动转派收敛到全部 completed；断言最终任务数 + 转派次数 ≤ maxAttempts 总余量。
 
-- [ ] **Step 4: 事件矩阵重生成**
+- [x] **Step 4: 事件矩阵重生成**
 
 Run: `pnpm gen:event-matrix`（新增 task_retried 声明/emit 边入矩阵；若 gen 脚本已自动覆盖则直接 `pnpm check:event-matrix`）
 预期：`docs/event-producer-consumer.md` 更新含 task_retried；lint 门禁绿。
@@ -1476,7 +1497,7 @@ Run: `pnpm gen:event-matrix`（新增 task_retried 声明/emit 边入矩阵；�
 Run: `pnpm build && find dist/tests/agent/team dist/tests/tool -name '*.spec.js' | xargs node --test`
 预期：团队 suite（117+ 用例）与工具 suite 全绿。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add tests/ docs/event-producer-consumer.md
