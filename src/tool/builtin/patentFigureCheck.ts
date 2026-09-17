@@ -10,7 +10,7 @@
  */
 
 import { readFile } from "node:fs/promises";
-import { isAbsolute, resolve } from "node:path";
+import { basename, isAbsolute, resolve } from "node:path";
 import {
   checkFigures,
   parseFigureSvg,
@@ -20,6 +20,7 @@ import {
 } from "../../patent/figuregen/index.js";
 import { figureSpecsToAnalysis } from "../../patent/figure/bridge.js";
 import { checkFigureConsistency } from "../../patent/figure/multi-figure-consistency.js";
+import { analyzeImageBuffer, type PixelFinding, type PixelMetrics } from "../../patent/figuregen/pixel-gate.js";
 import { SatiToolRuntimeError } from "../protocol/errors.js";
 import type { SatiToolDefinition, SatiToolRuntimeContext } from "../protocol/types.js";
 import { FIGURE_INPUT_SCHEMA_REF } from "./patentFigureSchema.js";
@@ -27,10 +28,49 @@ import { FIGURE_INPUT_SCHEMA_REF } from "./patentFigureSchema.js";
 export type PatentFigureCheckInput = {
   figures?: FigureSpec[];
   svg_paths?: string[];
+  image_paths?: string[];
   spec_text: string;
   document_kind?: string;
   jurisdiction?: string;
 };
+
+/** 栅格图核查条目（报告面：文件名 + 指标 + 发现）。 */
+type PixelGateEntry = PixelMetrics & { name: string; findings: PixelFinding[] };
+
+/**
+ * 栅格附图逐张做像素级核查（sharp 动态导入在 `analyzeImageBuffer` 内）。
+ *
+ * 读盘/解码失败**fail-explicit**：栅格图的核验路径只有这一条，静默跳过等于"零门禁
+ * 假装已核验"（与 `readback.ts` 对外部 SVG 的诚实声明不同——那里至少还有结构契约）。
+ */
+async function runPixelGateForPaths(paths: readonly string[], cwd: string): Promise<PixelGateEntry[]> {
+  const entries: PixelGateEntry[] = [];
+  for (const imagePath of paths) {
+    const absolute = isAbsolute(imagePath) ? imagePath : resolve(cwd, imagePath);
+    let buffer: Buffer;
+    try {
+      buffer = await readFile(absolute);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      throw new SatiToolRuntimeError("invalid_tool_input", `无法读取附图图片 ${imagePath}: ${message}`, {
+        tool: "patent_figure_check",
+        path: imagePath,
+      });
+    }
+    try {
+      const { metrics, findings } = await analyzeImageBuffer(buffer, { name: basename(imagePath) });
+      entries.push({ ...metrics, name: basename(imagePath), findings });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      throw new SatiToolRuntimeError(
+        "tool_execution_failed",
+        `栅格附图像素级核查失败 ${imagePath}: ${message}（该核查依赖 sharp 解码图片）`,
+        { tool: "patent_figure_check", path: imagePath },
+      );
+    }
+  }
+  return entries;
+}
 
 export function createPatentFigureCheckTool(): SatiToolDefinition<PatentFigureCheckInput> {
   return {
@@ -48,8 +88,11 @@ export function createPatentFigureCheckTool(): SatiToolDefinition<PatentFigureCh
       "(V11, warn; the description convention is name-then-numeral). V10/V11 need a successful heuristic " +
       "split of the text into claims/description faces — when the split fails the report says so and both " +
       "rules stay silent. Also: canvas legibility (V7), abstract-figure designation (V8) and utility-model drawings " +
-      "requirement (V9). Input: structured `figures` and/or `svg_paths` (re-parses SVGs produced by " +
-      "patent_figure_generate). Pass the full specification text (claims + description). Figures are not " +
+      "requirement (V9). Input: structured `figures`, `svg_paths` (re-parses SVGs produced by " +
+      "patent_figure_generate) and/or `image_paths` for raster drawings (customer scans, CAD exports, third-party " +
+      "images) which get a pixel-level check instead: black-and-white purity, minimum line width, DPI and printed " +
+      "size against the A4 printable area (no OCR — the figure number must be declared via the file name). " +
+      "Pass the full specification text (claims + description). Figures are not " +
       "final until this check reports ok. Registered by default; pass `patentFigure: false` to skip.",
     kind: "custom",
     domain: "patent",
@@ -69,6 +112,13 @@ export function createPatentFigureCheckTool(): SatiToolDefinition<PatentFigureCh
           minItems: 1,
           items: { type: "string" },
           description: "patent_figure_generate 产出的 SVG 文件路径（回读 data-ref 复核已交付文件）",
+        },
+        image_paths: {
+          type: "array",
+          minItems: 1,
+          items: { type: "string" },
+          description:
+            "非本工具产出的栅格附图路径（客户扫描件/CAD 导出/他人绘制的图，支持 jpg/png/gif/webp）：做像素级合规核查（黑白性、线宽、DPI、纸面尺寸）。不做 OCR——图号存在性需由文件名（如 xxx-fig3.png）或调用方声明，未声明会给出提示",
         },
         spec_text: {
           type: "string",
@@ -119,22 +169,31 @@ export function createPatentFigureCheckTool(): SatiToolDefinition<PatentFigureCh
         }
         figures.push({ figure_no: parsed.figureNo, kind: "flowchart", nodes: parsed.nodes, edges: [] });
       }
-      if (figures.length === 0) {
-        throw new SatiToolRuntimeError("invalid_tool_input", "figures 与 svg_paths 至少提供一项", {
+      const imagePaths = input.image_paths ?? [];
+      if (figures.length === 0 && imagePaths.length === 0) {
+        throw new SatiToolRuntimeError("invalid_tool_input", "figures / svg_paths / image_paths 至少提供一项", {
           tool: "patent_figure_check",
         });
       }
 
       try {
+        // 只有栅格图时无 FigureSpec 可核：跳过结构规则（已如实声明），只跑像素门禁。
         const result = checkFigures(figures, input.spec_text, {
           documentKind: documentKind,
           jurisdiction: jurisdiction,
+          ...(figures.length === 0 ? { skipTextRules: true, skipLayoutRules: true } : {}),
         });
+        const pixelResults = await runPixelGateForPaths(imagePaths, context.cwd);
+        const pixelFail = pixelResults.flatMap(r => r.findings.filter(f => f.severity === "fail")).length;
+        const pixelWarn = pixelResults.flatMap(r => r.findings.filter(f => f.severity === "warn")).length;
         const lines: string[] = [
-          `核验${result.ok ? "通过" : "未通过"}（fail=${result.findings.filter(f => f.severity === "fail").length}, ` +
-            `warn=${result.findings.filter(f => f.severity === "warn").length}）：`,
-          `图内标记：${result.refsInFigures.join(", ") || "（无）"}`,
-          `文内括号标记：${result.refsInText.join(", ") || "（无）"}`,
+          `核验${result.ok && pixelFail === 0 ? "通过" : "未通过"}（fail=` +
+            `${result.findings.filter(f => f.severity === "fail").length + pixelFail}, ` +
+            `warn=${result.findings.filter(f => f.severity === "warn").length + pixelWarn}）：`,
+          figures.length === 0
+            ? "结构规则：未提供结构化附图（仅栅格图，本次不适用）"
+            : `图内标记：${result.refsInFigures.join(", ") || "（无）"}`,
+          ...(figures.length === 0 ? [] : [`文内括号标记：${result.refsInText.join(", ") || "（无）"}`]),
           ...(result.specFaces === undefined
             ? []
             : [
@@ -152,6 +211,25 @@ export function createPatentFigureCheckTool(): SatiToolDefinition<PatentFigureCh
             );
           }
         }
+        if (pixelResults.length > 0) {
+          lines.push("", "栅格附图像素级核查（非本工具产出的图；不做 OCR，图号需声明）：");
+          for (const entry of pixelResults) {
+            lines.push(
+              `- ${entry.name}：${entry.width}×${entry.height}px，${entry.dpi}DPI${
+                entry.dpiEstimated ? "（估算）" : ""
+              }，纸面约 ${entry.printedWidthMm?.toFixed(1)}×${entry.printedHeightMm?.toFixed(1)}mm，` +
+                `非白占比 ${(entry.inkRatio * 100).toFixed(2)}%，中间灰占比 ${(entry.midGrayRatio * 100).toFixed(1)}%` +
+                (entry.linePx === undefined ? "" : `，最细线宽约 ${entry.linePx}px`),
+            );
+            for (const finding of entry.findings) {
+              lines.push(
+                `  [${finding.severity.toUpperCase()}] ${finding.rule}: ${finding.message}` +
+                  (finding.evidence ? `\n    ${finding.evidence.join("\n    ")}` : ""),
+              );
+            }
+          }
+        }
+
         // 多图一致性（≥2 幅时自动跑，复用既有纯函数）：跨图标记/名称冲突 +
         // 图文对齐（电学档 R1/C2 与机械档 壳体(10) 分别对齐，见 figure/bridge.ts）。
         // 单图无"跨图"可言，不跑（避免制造噪音）。

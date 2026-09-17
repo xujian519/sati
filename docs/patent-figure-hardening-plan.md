@@ -291,7 +291,12 @@ pnpm build && node --test dist/tests/test-support/llm-replay-real.spec.js
 rm "$FIX/records.jsonl"
 
 # 2) 真实录制（需 ~/.sati/sati.yaml 内配置可用的 provider key；任务文本与原 fixture 保持一致）
-SATI_LLM_REPLAY_RECORD_ROOT="$FIX" \
+#    ⚠️ 必须用重放测试 pin 的 provider/model（tests/test-support/llm-replay-real.spec.ts 的
+#    makeConfig：provider=deepseek, model=deepseek-v4-flash）——录制脚本默认取本机
+#    ~/.sati/sati.yaml 的 agent.model，本机若已切到别的模型（如 deepseek-flash），
+#    录出的请求键与重放侧不一致（实为 NO_REPLAY_RECORD 失配）。用 PILOT_AGENT_MODEL 对齐：
+PILOT_AGENT_MODEL=deepseek/deepseek-v4-flash \
+  SATI_LLM_REPLAY_RECORD_ROOT="$FIX" \
   node --import tsx scripts/record-real-fixture.ts "请用一句话介绍你自己，以及你能为专利工程师提供哪些帮助。"
 
 # 3) 校验 fixture 结构与可驱动性
@@ -304,6 +309,7 @@ pnpm test
 
 **注意事项**：
 - 录制装配必须与 `tests/test-support/llm-replay-real.spec.ts` 一致（`record-real-fixture.ts` 已对齐：内置注册表 + `enabled:false` router + 同一 env hooks）⇒ **不要**在录制期间临时改注册表开关，否则录出的 `toolNames` 与测试装配不符，会再次失配。
+- **provider/model 也必须一致**（2026-09-17 实操修正）：录制脚本取本机 `~/.sati/sati.yaml` 的 `agent.model`，而重放测试 `makeConfig` 固定 `deepseek/deepseek-v4-flash`——**两者一致是请求键成立的前提**。用 `PILOT_AGENT_MODEL=<provider>/<model>` 对齐后再录（步骤 2 已含）。
 - 录制产物不得含 API key（走 `~/.sati/sati.yaml`，仓库外）；提交前 `git diff` 目视确认 fixture 只含 `manifest.json` + `records.jsonl`。
 - CI 无 key，故**重录必须在本地完成并随 PR 提交**；评审时对照 `manifest.json` 的 `toolNames` 是否新增了预期工具。
 
