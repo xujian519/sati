@@ -69,6 +69,7 @@ export {
   resolveDotBinary,
 } from "./render-graphviz.js";
 export { parseFigureSvg, type ParsedFigureSvg } from "./readback.js";
+export { splitSpecFaces, type SpecFaces } from "./spec-sections.js";
 export {
   FIGURE_SIDECAR_VERSION,
   buildFigureSidecar,
@@ -79,6 +80,8 @@ export {
   type FigureSidecar,
   type FigureSidecarCheck,
   type FigureSidecarFigure,
+  type FigureSidecarGeometry,
 } from "./sidecar.js";
+export * from "./cad/index.js";
 export { renderFiguresHtml, type FiguresHtmlOptions } from "./html.js";
 export { buildFigureBriefDraft, type FigureBriefOptions } from "./brief.js";

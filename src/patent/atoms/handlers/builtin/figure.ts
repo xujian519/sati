@@ -47,6 +47,7 @@ import {
   type DocumentKind,
   type FigureCheckResult,
   type FigureSidecar,
+  type FigureSidecarGeometry,
   type FigureSpec,
   type Jurisdiction,
 } from "../../../figuregen/index.js";
@@ -197,6 +198,11 @@ function renderReport(input: {
     `- 附图: ${input.sidecar.figures.map(f => `图${f.figure_no} ${f.file}`).join("；")}（渲染器 ${input.sidecar.renderer}）`,
     `- 生成期核验: ${input.sidecar.check.ok ? "通过" : "有发现"}（文本侧规则未参与）`,
     `- 文本面: ${input.textFaces}${input.skippedTextRules ? "——无说明书文本，V2/V3 未生效" : ""}`,
+    ...(input.result.specFaces === undefined
+      ? []
+      : [
+          `- 文字面分节: ${input.result.specFaces.sectioned ? "已分节" : "未分节"}（${input.result.specFaces.reason}）`,
+        ]),
   ];
   if (input.result.findings.length > 0) {
     lines.push("", "发现：");
@@ -259,10 +265,15 @@ export class FigureGateHandler implements StageHandler {
       forced: Boolean(state[APPROVAL_GRANTED_KEY]),
     });
 
-    // 留痕（无论通过与否）：结论与输入的对应关系可审计。
+    // 留痕（无论通过与否）：结论与输入的对应关系可审计（含 renderer 与 CAD 投影参数）。
     const inputsHash = figureInputsHash({ specs, specText, documentKind, jurisdiction });
     const reportPath = join(dir, "figure-check.json");
-    await writeReport(reportPath, inputsHash, result);
+    await writeReport(reportPath, {
+      inputsHash,
+      result,
+      renderer: sidecar.renderer,
+      figures: sidecar.figures,
+    });
 
     const drifts = await detectFigureDrift(located);
     if (drifts.length > 0) {
@@ -293,27 +304,45 @@ export class FigureGateHandler implements StageHandler {
   }
 }
 
-/** `figure-check.json` v1 契约（inputs_hash 使"结论 ↔ 输入"可核）。 */
+/**
+ * `figure-check.json` v1 契约（inputs_hash 使"结论 ↔ 输入"可核）。
+ *
+ * `renderer` 与 `geometry` 直接取自 sidecar：CAD 投影图的画幅由**投影几何**决定（不由
+ * 本模块布局决定），故把投影参数与投影期几何检查结论一并留痕，使"这张图怎么来的"可审计。
+ */
 export type FigureCheckReport = {
   version: number;
   checked_at: string;
   inputs_hash: string;
   result: FigureCheckResult;
+  renderer?: string;
+  geometry?: readonly (FigureSidecarGeometry & { figure_no: number })[];
 };
 
-export function buildFigureCheckReport(
-  inputsHash: string,
-  result: FigureCheckResult,
-  checkedAt?: string,
-): FigureCheckReport {
+export type FigureCheckReportInput = {
+  inputsHash: string;
+  result: FigureCheckResult;
+  /** sidecar.renderer（builtin / graphviz / cad）。 */
+  renderer?: string;
+  /** sidecar 各图的几何来源（仅 CAD 图有）。 */
+  figures?: readonly { figure_no: number; geometry?: FigureSidecarGeometry }[];
+  checkedAt?: string;
+};
+
+export function buildFigureCheckReport(input: FigureCheckReportInput): FigureCheckReport {
+  const geometry = (input.figures ?? []).flatMap(figure =>
+    figure.geometry === undefined ? [] : [{ figure_no: figure.figure_no, ...figure.geometry }],
+  );
   return {
     version: FIGURE_CHECK_REPORT_VERSION,
-    checked_at: checkedAt ?? new Date().toISOString(),
-    inputs_hash: inputsHash,
-    result,
+    checked_at: input.checkedAt ?? new Date().toISOString(),
+    inputs_hash: input.inputsHash,
+    result: input.result,
+    ...(input.renderer === undefined ? {} : { renderer: input.renderer }),
+    ...(geometry.length === 0 ? {} : { geometry }),
   };
 }
 
-async function writeReport(path: string, inputsHash: string, result: FigureCheckResult): Promise<void> {
-  await writeFile(path, `${JSON.stringify(buildFigureCheckReport(inputsHash, result), null, 2)}\n`, "utf8");
+async function writeReport(path: string, input: FigureCheckReportInput): Promise<void> {
+  await writeFile(path, `${JSON.stringify(buildFigureCheckReport(input), null, 2)}\n`, "utf8");
 }

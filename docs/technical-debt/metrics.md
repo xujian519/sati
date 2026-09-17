@@ -7,9 +7,9 @@
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1024 / 170747 |
+| src TS 文件 / 行数 | 1033 / 172669 |
 | src JS 文件 | 0 |
-| tests 文件 | 552 |
+| tests 文件 | 557 |
 | ui/src 文件 / 行数 | 472 / 83652 |
 | ui/server 文件 / 行数 | 104 / 30514 |
 
@@ -96,6 +96,7 @@
 | `ui/src/hooks/useSatiConfig.ts` | `useSatiConfigState` | 332 | function |
 | `ui/src/components/code-editor/view/CodeEditor.tsx` | `CodeEditor` | 310 | function |
 | `ui/src/components/chat-v2/SubagentDetailMessageFlow.tsx` | `SubagentDetailMessageFlow` | 309 | function |
+| `src/patent/figuregen/check.ts` | `checkFigures` | 306 | function |
 | `ui/src/components/settings/view/integrations/im/components/WeixinChannelSection.tsx` | `WeixinChannelSection` | 303 | function |
 | `src/gateway/client/InProcessGateway.ts` | `submitTurn` | 300 | method |
 
@@ -156,7 +157,7 @@
 
 | 模块 | 测试文件 |
 |---|---|
-| patent | 116 |
+| patent | 121 |
 | tool | 61 |
 | agent | 57 |
 | knowledge | 38 |
@@ -189,7 +190,7 @@
 | runtime | 1 |
 | status | 1 |
 
-| **合计** | **532** |
+| **合计** | **537** |
 
 ## i18n en/zh-CN 对齐
 

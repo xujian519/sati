@@ -12,6 +12,10 @@
  *   标注书写形态差异不构成违规
  * - V5 附图中除必需的词语外不应当含有其他注释（细则第 21 条第 3 款，官方全文已核验）：
  *   label 疑似注释性长文（超长单行/多行段落）→ WARN
+ * - V10 权利要求中的附图标记应当置于括号内（细则第 22 条）：权利要求面出现"名称+裸数字"
+ *   → FAIL（需文字面分节成功；判据收窄至"紧跟列举分隔符/行尾"，避免数量词/数值范围误报）
+ * - V11 说明书正文惯例为"名称+数字"（与权利要求面规则相反）：正文面以括号引用图内标记
+ *   → WARN（排除 式(1)/步骤(1)/图(1) 与附图说明小节"1—混料器"式样）
  * - V7 附图缩小到三分之二时仍应能清晰分辨细节（指南一部一章 4.3，官方已核验）：
  *   **介质锚定**（A4 可印区 + 毫米，常量与 html.ts 同源）——画幅超出可印区会被
  *   分页切断 ⇒ FAIL（metric=page_fit）；打印字高低于最小可辨字高 ⇒ WARN
@@ -33,6 +37,7 @@ import {
   pxToMm,
   uniformFigureZoom,
 } from "./page-contract.js";
+import { splitSpecFaces } from "./spec-sections.js";
 import type { DocumentKind, FigureSpec, Jurisdiction } from "./types.js";
 
 /** V5 阈值：单行 label 最大字符数 / 最大行数（超出视为疑似注释性文字）。 */
@@ -41,11 +46,23 @@ export const COMMENT_LABEL_LINES_MAX = 3;
 
 export type FigureCheckSeverity = "fail" | "warn" | "info";
 
-export type FigureCheckRuleId = "V1" | "V2" | "V3" | "V4" | "V5" | "V7" | "V8" | "V9";
+export type FigureCheckRuleId = "V1" | "V2" | "V3" | "V4" | "V5" | "V7" | "V8" | "V9" | "V10" | "V11";
 
 export type FigureCheckOptions = {
   /** 生成期无说明书文本可核时跳过 V2/V3（V1/V4/V5/V7/V8/V9 照常）。 */
   skipTextRules?: boolean;
+  /**
+   * 显式文字面（调用方已知权利要求/说明书分界时提供，**替代启发式分节**）。
+   * 缺省走 `splitSpecFaces` 的启发式；分节失败时 V10/V11 静默并由 `specFaces.reason` 说明。
+   */
+  faces?: { claims?: string; description?: string; descriptionSansBrief?: string };
+  /**
+   * 跳过画幅规则 V7（纸面尺寸 + 打印字高）。
+   *
+   * 用于**非本模块渲染器产出**的附图骨架（如栅格图/扫描图的分析结果）：那类图的画幅
+   * 与字号由原图决定，用本模块布局结果判 V7 属错误归因（必然误报）。
+   */
+  skipLayoutRules?: boolean;
   /** 发明/实用新型（V9 仅对 utility 生效；US 辖区无此规则）。 */
   documentKind?: DocumentKind;
   /** 辖区（默认 cn）：us 跳过 V8 摘要附图/V9 实用新型规则，违规信息引用 37 CFR 1.84。 */
@@ -70,6 +87,8 @@ export type FigureCheckResult = {
   refsInFigures: number[];
   /** 说明书文字部分以括号形式出现的疑似附图标记（去重升序）。 */
   refsInText: number[];
+  /** 文字面分节情况：V10/V11 是否需要分面、分面是否成功（如实声明，勿静默）。 */
+  specFaces?: { sectioned: boolean; reason: string };
 };
 
 /** 剥离 label 中的括号标记后缀，得到组件名称主干。 */
@@ -259,16 +278,91 @@ export function checkFigures(
     });
   }
 
-  // V7 缩小三分之二可辨（介质锚定：A4 可印区 + 打印字高毫米）
+  // V10/V11 括号规则（需文字面分节成功；细则第 22 条：权利要求中的附图标记置于括号内，
+  // 而说明书正文惯例为"名称+数字"。两个面的括号规则相反，故必须按面判定——
+  // 分节失败时两条规则整体跳过并如实声明，不对混合文本猜面判违规。）
+  const explicitFaces = options.faces;
+  const faces =
+    options.skipTextRules === true
+      ? undefined
+      : explicitFaces !== undefined
+        ? {
+            ...explicitFaces,
+            reason:
+              "调用方显式分面（claims_text/description_text）" +
+              (explicitFaces.claims === undefined ? "；未提供权利要求面（V10 未生效）" : "") +
+              (explicitFaces.description === undefined ? "；未提供正文面（V11 未生效）" : ""),
+          }
+        : splitSpecFaces(specText);
+  const specFaces =
+    faces === undefined
+      ? undefined
+      : {
+          sectioned: faces.claims !== undefined || faces.description !== undefined,
+          reason: faces.reason,
+        };
+
+  // V10 权利要求面：附图标记未置于括号内（"组件名+裸数字"，且其后为列举分隔符或行尾）。
+  // 判据有意收窄：只认"紧跟分隔符/行尾"的裸标记，避免把数量词（"共 20 个"）、
+  // 数值范围（"20℃至 90℃"）判成附图标记——代价是漏掉句中夹缝形态（已在报告面注明）。
+  if (faces?.claims !== undefined && refsInFigures.length > 0) {
+    const evidence: string[] = [];
+    for (const ref of refsInFigures) {
+      const pattern = new RegExp(`[\\u4e00-\\u9fff]{2,}\\s*${ref}(?=\\s*(?:[，,；;、。：:]|$))`, "gmu");
+      const match = pattern.exec(faces.claims);
+      if (match !== null) {
+        evidence.push(`权利要求面出现未加括号的附图标记 ${ref}：「${match[0].trim()}」`);
+      }
+    }
+    if (evidence.length > 0) {
+      findings.push({
+        rule: "V10",
+        severity: "fail",
+        message: us
+          ? "Reference numeral in a claim is not enclosed in parentheses (V10, 37 CFR 1.84; MPEP 608.02)"
+          : "权利要求中的附图标记未置于括号内（V10，细则第 22 条：附图标记应当置于括号内）",
+        evidence,
+      });
+    }
+  }
+
+  // V11 说明书正文面：以括号形式引用附图标记（惯例为"名称+数字"）。
+  // 排除公式/步骤/图号编号（式(1)、步骤(1)、图(1)）与"附图说明"小节（"1—混料器"式样）。
+  if (faces?.description !== undefined && refsInFigures.length > 0) {
+    const scope = faces.descriptionSansBrief ?? faces.description;
+    const evidence: string[] = [];
+    for (const match of scope.matchAll(/[（(]\s*(\d{1,3})\s*[)）]/gu)) {
+      const ref = Number(match[1]);
+      if (!refsInFigures.includes(ref)) continue;
+      const before = scope.slice(Math.max(0, (match.index ?? 0) - 2), match.index ?? 0);
+      if (/(?:式|公式|步骤|第|图|表|claim|step|formula|fig)s?$/iu.test(before)) continue;
+      evidence.push(`说明书正文以括号引用附图标记 ${ref}：「${(match[0] ?? "").trim()}」`);
+    }
+    if (evidence.length > 0) {
+      findings.push({
+        rule: "V11",
+        severity: "warn",
+        message: us
+          ? "Bracketed numeral in the description; the customary form is name-then-numeral (V11)"
+          : "说明书正文以括号形式引用附图标记（V11：正文惯例为「名称+数字」，括号形式仅用于权利要求）",
+        evidence,
+      });
+    }
+  }
+
+  // V7 缩小三分之二可辨（介质锚定：A4 可印区 + 打印字高毫米）；skipLayoutRules 时跳过
+  // （骨架类输入的画幅不由本模块决定，见 FigureCheckOptions.skipLayoutRules）。
   //
   // 判据来自交付形态（A4 打印），不是画幅像素：px 代理与纸面脱钩，12 步流程图画幅
   // 355mm 高仍"通过"却会被分页切断（实测，见 docs/patent-figure-hardening-plan.md §3）。
   // 统一缩放系数（uniformFigureZoom，与 html.ts 同源）保证同文档字高一致，
   // 故字高判定用统一系数而非单图系数（后者会高估实际打印字高）。
-  const paperSizes = figures.map(figure => {
-    const { width, height } = layoutFigure(figure);
-    return { figure_no: figure.figure_no, widthMm: pxToMm(width), heightMm: pxToMm(height) };
-  });
+  const paperSizes = options.skipLayoutRules
+    ? []
+    : figures.map(figure => {
+        const { width, height } = layoutFigure(figure);
+        return { figure_no: figure.figure_no, widthMm: pxToMm(width), heightMm: pxToMm(height) };
+      });
   const zoom = uniformFigureZoom(paperSizes);
   for (const size of paperSizes) {
     const oversize = size.widthMm > PRINTABLE_WIDTH_MM || size.heightMm > PRINTABLE_HEIGHT_MM;
@@ -336,5 +430,6 @@ export function checkFigures(
     findings,
     refsInFigures,
     refsInText,
+    ...(specFaces === undefined ? {} : { specFaces }),
   };
 }

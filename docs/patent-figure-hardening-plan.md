@@ -1,6 +1,9 @@
 # 专利附图链路加固与 CAD 扩展实施方案
 
-> 状态：proposed（待评审）
+> 状态：**P0 全部 + P1 全部 + P2 阶段一已落地**（P0 见 PR #418；P1 见 #419；P2 见紧随其后的
+> CAD 投影 PR）。实施中的两处对本计划的修正已回写：① §7 重录手册补「录制必须用重放测试 pin 的
+> provider/model」；② §5.2 朝向对齐新增「参考体探测」实做（计划未涵盖 FreeCAD 投影坐标系朝向问题，
+> 实测 front 视图会出 90° 旋转图）。阶段二（几何 DSL）按 D4 不做。
 > 范围：`src/patent/figuregen/`、`src/patent/figure/`、`src/tool/builtin/patentFigure*.ts`、`src/patent/atoms/handlers/builtin/`（新增 gate）、`src/patent/workflow/manifests.ts`、新增 `src/patent/figuregen/cad/`
 > 依据：对 `patent_figuregen` 现状的逐行核对与 `dist/` 实测（见 §11）；对照外部同类技能（Python/Graphviz 路线、CAD 隔离、像素级门禁缺失）后的取舍见 §10
 
@@ -291,7 +294,12 @@ pnpm build && node --test dist/tests/test-support/llm-replay-real.spec.js
 rm "$FIX/records.jsonl"
 
 # 2) 真实录制（需 ~/.sati/sati.yaml 内配置可用的 provider key；任务文本与原 fixture 保持一致）
-SATI_LLM_REPLAY_RECORD_ROOT="$FIX" \
+#    ⚠️ 必须用重放测试 pin 的 provider/model（tests/test-support/llm-replay-real.spec.ts 的
+#    makeConfig：provider=deepseek, model=deepseek-v4-flash）——录制脚本默认取本机
+#    ~/.sati/sati.yaml 的 agent.model，本机若已切到别的模型（如 deepseek-flash），
+#    录出的请求键与重放侧不一致（实为 NO_REPLAY_RECORD 失配）。用 PILOT_AGENT_MODEL 对齐：
+PILOT_AGENT_MODEL=deepseek/deepseek-v4-flash \
+  SATI_LLM_REPLAY_RECORD_ROOT="$FIX" \
   node --import tsx scripts/record-real-fixture.ts "请用一句话介绍你自己，以及你能为专利工程师提供哪些帮助。"
 
 # 3) 校验 fixture 结构与可驱动性
@@ -304,6 +312,7 @@ pnpm test
 
 **注意事项**：
 - 录制装配必须与 `tests/test-support/llm-replay-real.spec.ts` 一致（`record-real-fixture.ts` 已对齐：内置注册表 + `enabled:false` router + 同一 env hooks）⇒ **不要**在录制期间临时改注册表开关，否则录出的 `toolNames` 与测试装配不符，会再次失配。
+- **provider/model 也必须一致**（2026-09-17 实操修正）：录制脚本取本机 `~/.sati/sati.yaml` 的 `agent.model`，而重放测试 `makeConfig` 固定 `deepseek/deepseek-v4-flash`——**两者一致是请求键成立的前提**。用 `PILOT_AGENT_MODEL=<provider>/<model>` 对齐后再录（步骤 2 已含）。
 - 录制产物不得含 API key（走 `~/.sati/sati.yaml`，仓库外）；提交前 `git diff` 目视确认 fixture 只含 `manifest.json` + `records.jsonl`。
 - CI 无 key，故**重录必须在本地完成并随 PR 提交**；评审时对照 `manifest.json` 的 `toolNames` 是否新增了预期工具。
 

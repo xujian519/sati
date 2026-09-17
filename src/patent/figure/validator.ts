@@ -40,9 +40,49 @@ function parsePinRef(pin: string): { ref: string; pin?: string } | null {
   return null;
 }
 
-/** 从权利要求/技术方案文本提取元件标记（仅匹配符号库已知前缀，避免误报普通数字）。 */
-export function extractClaimRefs(text: string | undefined, limit = 40): string[] {
-  if (!text) return [];
+/** 数字档排除前缀：这些词后的数字是编号（式(1)/步骤(2)/实施例3…），不是附图标记。 */
+const NUMERAL_PREFIX_EXCLUSION = /(?:式|公式|步骤|例|图|表|第|共|约|款|条|项|章|节|claim|step|formula|fig)$/iu;
+
+/** 纯数字型附图标记（机械/实用新型案：`壳体(10)`、`盖板20`）。 */
+function extractNumericRefs(text: string, limit: number): number[] {
+  const found = new Set<number>();
+  // ① 括号形：`(10)` / `（10）`——前置词排除式(1)/步骤(2)；`(?<!\d)` 与 `(?!\d)` 防
+  //    四位年份（2023）被截出三位数字。
+  for (const match of text.matchAll(/(?<!\d)[（(]\s*(\d{1,3})\s*[)）](?!\d)/gu)) {
+    const before = text.slice(Math.max(0, (match.index ?? 0) - 2), match.index ?? 0);
+    if (NUMERAL_PREFIX_EXCLUSION.test(before)) continue;
+    found.add(Number(match[1]));
+    if (found.size >= limit) return [...found].sort((a, b) => a - b);
+  }
+  // ② 直连形：`壳体10`（≥2 个汉字直接跟数字，其后为列举分隔符或行尾）——与核验器
+  //    V10 同一词法：只认枚举式裸标记，避免把数量词/数值范围判成附图标记。
+  for (const match of text.matchAll(/[\u4e00-\u9fff]{2,}\s*(\d{1,3})(?=\s*(?:[，,；;、。：:]|$))/gmu)) {
+    const digitsStart = (match.index ?? 0) + match[0].length - match[1].length;
+    const before = text.slice(Math.max(0, digitsStart - 2), digitsStart);
+    if (NUMERAL_PREFIX_EXCLUSION.test(before)) continue;
+    found.add(Number(match[1]));
+    if (found.size >= limit) break;
+  }
+  return [...found].sort((a, b) => a - b);
+}
+
+/** 主张文本的两档标记抽取结果。 */
+export type ClaimRefExtraction = {
+  /** 高置信档：符号库已知前缀（R1/C2/IC3）。 */
+  symbols: string[];
+  /** 数字档：机械/实用新型的附图标记数字（壳体(10)、盖板20）。 */
+  numerals: number[];
+};
+
+/**
+ * 两档抽取（供图文对齐与多图一致性使用）。
+ *
+ * 两档分离是有意的：电学档（符号前缀）与机械档（纯数字）的"什么算标记"判据不同，
+ * 混在一处会让电学链路的图文对齐把普通数字判成元件（`extractClaimRefs` 保持只返回
+ * 电学档，行为不变）。
+ */
+export function extractClaimRefsDetailed(text: string | undefined, limit = 40): ClaimRefExtraction {
+  if (!text) return { symbols: [], numerals: [] };
   const found = new Set<string>();
   const pattern = /(?:[\u4e00-\u9fa5]{0,6}?[A-Za-z]{1,4}\d{1,4})/g;
   for (const match of text.matchAll(pattern)) {
@@ -58,7 +98,12 @@ export function extractClaimRefs(text: string | undefined, limit = 40): string[]
     found.add(ref);
     if (found.size >= limit) break;
   }
-  return [...found];
+  return { symbols: [...found], numerals: extractNumericRefs(text, limit) };
+}
+
+/** 从权利要求/技术方案文本提取元件标记（仅匹配符号库已知前缀，避免误报普通数字）。 */
+export function extractClaimRefs(text: string | undefined, limit = 40): string[] {
+  return extractClaimRefsDetailed(text, limit).symbols;
 }
 
 function validateComponentPrefix(component: ElectricalComponent): string | undefined {
