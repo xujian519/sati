@@ -11,7 +11,7 @@
 | src JS 文件 | 0 |
 | tests 文件 | 559 |
 | ui/src 文件 / 行数 | 472 / 83652 |
-| ui/server 文件 / 行数 | 105 / 30980 |
+| ui/server 文件 / 行数 | 105 / 31142 |
 
 ## 指标口径
 
@@ -125,10 +125,10 @@
 | `ui/src/components/chat/hooks/useChatSessionState.ts` | 1179 |
 | `ui/server/routes/taskmaster.js` | 1171 |
 | `src/agent/loop/AgentLoop.ts` | 1143 |
+| `ui/server/routes/config.js` | 1142 |
 | `ui/src/components/main-content-v2/CronV2.tsx` | 1130 |
 | `ui/src/components/main-content/view/MainContent.tsx` | 1111 |
 | `ui/src/components/chat-v2/ComposerV2.tsx` | 1109 |
-| `ui/server/routes/config.js` | 1100 |
 | `src/model/streaming/streamModel.ts` | 1085 |
 | `ui/server/routes/commands.js` | 1082 |
 | `src/always-on/runtime/DiscoveryFire.ts` | 1079 |

@@ -291,6 +291,107 @@ describe("config test-connection route", () => {
   });
 });
 
+describe("masked API keys in provider probes", () => {
+  it("falls back to the saved provider key when /test-connection receives the mask", async () => {
+    const calls = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url, init) => {
+        calls.push({ url: String(url), authorization: init?.headers?.Authorization });
+        return jsonResponse({ choices: [{ message: { content: "ok" } }] });
+      }),
+    );
+
+    const { request } = await createDiskConfigApp(providerConfigYaml({ openai: "sk-stored" }));
+    const response = await request("/api/config/test-connection", {
+      method: "POST",
+      body: JSON.stringify({
+        providerType: "openai",
+        providerId: "openai",
+        baseUrl: "https://api.openai.com",
+        apiKey: MASKED_KEY,
+        model: "gpt-test",
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.ok).toBe(true);
+    expect(calls[0].authorization).toBe("Bearer sk-stored");
+  });
+
+  it("never sends the mask upstream when no saved key exists", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+
+    const { request } = await createDiskConfigApp("schemaVersion: 1\nmodel:\n  providers: {}\n");
+    const response = await request("/api/config/test-connection", {
+      method: "POST",
+      body: JSON.stringify({
+        providerType: "openai",
+        providerId: "openai",
+        baseUrl: "https://api.openai.com",
+        apiKey: MASKED_KEY,
+        model: "gpt-test",
+      }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toBe("baseUrl, apiKey, and model are required");
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
+  it("keeps /models on the same resolution entry as /test-connection", async () => {
+    const calls = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url, init) => {
+        calls.push({ url: String(url), authorization: init?.headers?.Authorization });
+        return jsonResponse({ data: [{ id: "gpt-test" }] });
+      }),
+    );
+
+    const { request } = await createDiskConfigApp(providerConfigYaml({ openai: "sk-stored" }));
+    const response = await request("/api/config/models", {
+      method: "POST",
+      body: JSON.stringify({
+        providerType: "openai",
+        providerId: "openai",
+        baseUrl: "https://api.openai.com",
+        apiKey: MASKED_KEY,
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.ok).toBe(true);
+    expect(calls[0].authorization).toBe("Bearer sk-stored");
+  });
+
+  it("prefers a newly typed key over the saved one", async () => {
+    const calls = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url, init) => {
+        calls.push({ url: String(url), authorization: init?.headers?.Authorization });
+        return jsonResponse({ choices: [{ message: { content: "ok" } }] });
+      }),
+    );
+
+    const { request } = await createDiskConfigApp(providerConfigYaml({ openai: "sk-stored" }));
+    const response = await request("/api/config/test-connection", {
+      method: "POST",
+      body: JSON.stringify({
+        providerType: "openai",
+        providerId: "openai",
+        baseUrl: "https://api.openai.com",
+        apiKey: "sk-typed",
+        model: "gpt-test",
+      }),
+    });
+
+    expect(response.body.ok).toBe(true);
+    expect(calls[0].authorization).toBe("Bearer sk-typed");
+  });
+});
+
 describe("config test-web-search route", () => {
   it("resolves a masked API key from the saved web-search config", async () => {
     const authorizationHeaders = [];
@@ -745,6 +846,25 @@ async function requestStatusJson(app, path, init = {}) {
   } finally {
     await new Promise(resolve => server.close(resolve));
   }
+}
+
+const MASKED_KEY = "********";
+
+/** Minimal valid config with one saved OpenAI-compatible provider key. */
+function providerConfigYaml({ openai }) {
+  return stringifyYaml({
+    schemaVersion: 1,
+    model: {
+      providers: {
+        openai: {
+          protocol: "openai",
+          url: "https://api.openai.com/v1",
+          apiKey: openai,
+          models: { "gpt-test": {} },
+        },
+      },
+    },
+  });
 }
 
 function jsonResponse(payload, overrides = {}) {

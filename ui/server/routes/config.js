@@ -54,6 +54,54 @@ const MASKED_SECRET = "********";
 const DEFAULT_GLM_WEB_SEARCH_ENDPOINT = "https://api.z.ai/api/paas/v4/web_search";
 const DEFAULT_TAVILY_WEB_SEARCH_ENDPOINT = "https://api.tavily.com/search";
 
+/**
+ * True when a value is the settings-page mask rather than a real secret.
+ *
+ * The settings page reads saved keys back masked, so any field the user did
+ * not retype arrives as `MASKED_SECRET`. Every probe that talks to an upstream
+ * provider must treat that value as "use the saved key", never as a key.
+ *
+ * @param {unknown} value - Candidate value from a request body or config.
+ * @returns {boolean} Whether the value is the mask.
+ */
+function isMaskedSecret(value) {
+  return typeof value === "string" && value.trim() === MASKED_SECRET;
+}
+
+/**
+ * Resolve the API key to send upstream for a **model provider** probe
+ * (`/models`, `/test-connection`).
+ *
+ * A masked or omitted key means "the client only has the mask" → fall back to
+ * the key stored for that provider in `sati.yaml`. This is the single entry
+ * both routes go through; `/test-connection` used to send the mask verbatim
+ * (`x-api-key: ********`) and report the resulting 401 as "connection failed".
+ *
+ * Never returns the mask: an unusable/missing stored key yields `""`, and the
+ * caller's own validation then reports the missing key instead of provoking a
+ * guaranteed upstream 401.
+ *
+ * @param {unknown} providerId - Provider key in `model.providers`.
+ * @param {unknown} requestedApiKey - Key from the request body.
+ * @returns {string} Effective key ("" when none is available).
+ */
+function resolveProviderProbeApiKey(providerId, requestedApiKey) {
+  const requested = typeof requestedApiKey === "string" ? requestedApiKey.trim() : "";
+  if (requested && !isMaskedSecret(requested)) return requested;
+
+  const id = typeof providerId === "string" ? providerId.trim() : "";
+  if (!id) return "";
+
+  try {
+    const provider = readSatiConfigFile().config?.model?.providers?.[id];
+    const saved = typeof provider?.apiKey === "string" ? provider.apiKey.trim() : "";
+    return saved && !isMaskedSecret(saved) ? saved : "";
+  } catch {
+    // 配置读取失败 → 视为无已存密钥，由调用方按「缺 key」报错
+    return "";
+  }
+}
+
 function normalizeWebSearchProvider(provider) {
   return provider === "tavily" || provider === "custom" ? provider : "glm";
 }
@@ -110,11 +158,11 @@ function webSearchCredentialScopeMatches(nextConfig, previousConfig) {
 
 function validateMaskedWebSearchKeyReuse(nextConfig, previousConfig) {
   const nextWebSearch = nextConfig?.tools?.webSearch;
-  if (nextWebSearch?.apiKey !== MASKED_SECRET) return null;
+  if (!isMaskedSecret(nextWebSearch?.apiKey)) return null;
 
   const previousWebSearch = previousConfig?.tools?.webSearch;
   const previousKey = typeof previousWebSearch?.apiKey === "string" ? previousWebSearch.apiKey.trim() : "";
-  if (!previousKey || previousKey === MASKED_SECRET) {
+  if (!previousKey || isMaskedSecret(previousKey)) {
     return "Saved Web Search API key is unavailable. Enter the API key again.";
   }
   if (!webSearchCredentialScopeMatches(nextWebSearch, previousWebSearch)) {
@@ -128,7 +176,7 @@ function isRecord(value) {
 }
 
 function containsMaskedValue(value) {
-  if (value === MASKED_SECRET) return true;
+  if (isMaskedSecret(value)) return true;
   if (Array.isArray(value)) return value.some(containsMaskedValue);
   if (!isRecord(value)) return false;
   return Object.values(value).some(containsMaskedValue);
@@ -626,16 +674,8 @@ router.get("/provider", (_req, res) => {
 
 router.post("/models", async (req, res) => {
   const { providerId, providerType, baseUrl, apiKey } = req.body || {};
-  let effectiveApiKey = typeof apiKey === "string" ? apiKey : "";
-  if ((!effectiveApiKey || effectiveApiKey === MASKED_SECRET) && typeof providerId === "string" && providerId.trim()) {
-    try {
-      const record = readSatiConfigFile();
-      const provider = record.config?.model?.providers?.[providerId.trim()];
-      if (typeof provider?.apiKey === "string") effectiveApiKey = provider.apiKey;
-    } catch {
-      /* fall through to validation below */
-    }
-  }
+  // 掩码/缺省 ⇒ 回落到该 provider 已存的 key（与 /test-connection 同一入口）
+  const effectiveApiKey = resolveProviderProbeApiKey(providerId, apiKey);
   if (!baseUrl) {
     return res.status(400).json({ ok: false, error: "baseUrl is required" });
   }
@@ -662,16 +702,17 @@ router.post("/models", async (req, res) => {
     ) {
       urls.unshift(`${ollamaOrigin(normalizedBaseUrl)}/api/tags`);
     }
+    // effectiveApiKey 由 resolveProviderProbeApiKey 保证不是掩码（或为空）
     const headers = isGoogle
-      ? effectiveApiKey && effectiveApiKey !== MASKED_SECRET
+      ? effectiveApiKey
         ? { "x-goog-api-key": effectiveApiKey }
         : {}
       : isAnthropic
         ? {
-            ...(effectiveApiKey && effectiveApiKey !== MASKED_SECRET ? { "x-api-key": effectiveApiKey } : {}),
+            ...(effectiveApiKey ? { "x-api-key": effectiveApiKey } : {}),
             "anthropic-version": "2023-06-01",
           }
-        : effectiveApiKey && effectiveApiKey !== MASKED_SECRET
+        : effectiveApiKey
           ? { Authorization: `Bearer ${effectiveApiKey}` }
           : {};
     const { url, response, responseText } = await fetchWithEndpointFallback(
@@ -709,7 +750,8 @@ router.post("/test-connection", async (req, res) => {
   const normalizedProviderId = String(providerId || "")
     .trim()
     .toLowerCase();
-  const effectiveApiKey = typeof apiKey === "string" ? apiKey.trim() : "";
+  // 掩码 ⇒ 回落到该 provider 已存的 key：掩码永不发往上游（#416）
+  const effectiveApiKey = resolveProviderProbeApiKey(providerId, apiKey);
   const apiKeyRequired = normalizedProviderId !== "ollama";
   if (!baseUrl || !model || (apiKeyRequired && !effectiveApiKey)) {
     return res.status(400).json({
@@ -901,8 +943,8 @@ router.post("/test-web-search", async (req, res) => {
   const resultsPath = typeof custom.resultsPath === "string" ? custom.resultsPath.trim() : "";
   const requestedKey = typeof apiKey === "string" ? apiKey.trim() : "";
   const trimmedEndpoint = typeof endpoint === "string" ? endpoint.trim() : "";
-  let trimmedKey = requestedKey === MASKED_SECRET ? "" : requestedKey;
-  if (requestedKey === MASKED_SECRET) {
+  let trimmedKey = isMaskedSecret(requestedKey) ? "" : requestedKey;
+  if (isMaskedSecret(requestedKey)) {
     try {
       const record = readSatiConfigFile();
       const savedWebSearch = record.config?.tools?.webSearch;
@@ -914,11 +956,11 @@ router.post("/test-web-search", async (req, res) => {
       };
       if (
         typeof savedKey === "string" &&
-        savedKey.trim() !== MASKED_SECRET &&
+        !isMaskedSecret(savedKey) &&
         webSearchCredentialScopeMatches(requestedWebSearch, savedWebSearch)
       ) {
         trimmedKey = savedKey.trim();
-      } else if (typeof savedKey === "string" && savedKey.trim() !== MASKED_SECRET) {
+      } else if (typeof savedKey === "string" && !isMaskedSecret(savedKey)) {
         return res.status(400).json({
           ok: false,
           error:
