@@ -74,8 +74,10 @@ FigureSpec 契约对两个渲染器完全一致，切换渲染器不需要改 sp
 
 ## Sati Migration Note
 
-- P0：figuregen 模块（src/patent/figuregen/）+ 两工具 opt-in 注册
-  （createBuiltinRegistry `patentFigure` 选项）+ 校验器 V1–V4。
+- P0：figuregen 模块（src/patent/figuregen/）+ 两工具**默认注册**
+  （createBuiltinRegistry 的 `patentFigure: false` 可排除）+ 校验器 V1–V4。
+- 附图核验已接成工作流门禁：`patent_drafting_v1` 的 `figure_generate` 阶段挂
+  `figure-gate` 原子（fail 级挂 HITL），不再依赖主代理是否记得调用核验工具。
 - P1：校验器全量规则 V5/V7/V8/V9；SVG 回读复核（patent_figure_check 接
   `svg_paths`）；A4 打印 HTML（generate 接 `format: html|both`）；
   `patent_drafting_v1` 已插 `figure_generate` 透传阶段（slop_clean 之后、
