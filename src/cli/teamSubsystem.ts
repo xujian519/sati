@@ -118,7 +118,11 @@ export function buildTeamSubsystem(deps: TeamSubsystemDeps): TeamSubsystemRuntim
         reclaimCompleted();
         return result;
       })
-      .catch(() => {
+      .catch(error => {
+        // TD-TEAM-N11（#353）：扫描整体失败（db 已关 / 枚举异常）或收口阶段抛错 →
+        // **必须留痕**。失败与「确实没有可恢复成员」的返回值同为 {scanned:0, resumed:0}，
+        // 不记日志时两者不可区分：成员断点整批不复跑，队长侧却毫无信号（冷恢复静默失效）。
+        logger.error("Team member scan failed:", error);
         reclaimCompleted();
         return { scanned: 0, resumed: 0 };
       });

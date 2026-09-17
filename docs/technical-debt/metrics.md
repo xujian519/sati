@@ -7,9 +7,9 @@
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1033 / 173521 |
+| src TS 文件 / 行数 | 1033 / 173525 |
 | src JS 文件 | 0 |
-| tests 文件 | 559 |
+| tests 文件 | 560 |
 | ui/src 文件 / 行数 | 472 / 83658 |
 | ui/server 文件 / 行数 | 107 / 31598 |
 
@@ -173,8 +173,8 @@
 | extension | 11 |
 | adapters | 10 |
 | rule | 10 |
+| cli | 9 |
 | pilot | 9 |
-| cli | 8 |
 | literature | 8 |
 | web | 8 |
 | permission | 4 |
@@ -191,7 +191,7 @@
 | runtime | 1 |
 | status | 1 |
 
-| **合计** | **537** |
+| **合计** | **538** |
 
 ## i18n en/zh-CN 对齐
 
