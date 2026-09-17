@@ -12,7 +12,10 @@
  *   标注书写形态差异不构成违规
  * - V5 附图中除必需的词语外不应当含有其他注释（细则第 21 条第 3 款，官方全文已核验）：
  *   label 疑似注释性长文（超长单行/多行段落）→ WARN
- * - V7 附图缩小到三分之二时仍应能清晰分辨细节（指南一部一章 4.3，官方已核验）：画幅超限 → WARN
+ * - V7 附图缩小到三分之二时仍应能清晰分辨细节（指南一部一章 4.3，官方已核验）：
+ *   **介质锚定**（A4 可印区 + 毫米，常量与 html.ts 同源）——画幅超出可印区会被
+ *   分页切断 ⇒ FAIL（metric=page_fit）；打印字高低于最小可辨字高 ⇒ WARN
+ *   （metric=font_size，证据给出实际 mm 与再缩 2/3 后的 mm）
  * - V8 说明书有附图的应指定一幅摘要附图（指南一部一章 4.5.2）：多图未指定/
  *   指定多幅 → WARN
  * - V9 实用新型附图是说明书组成部分，应当有附图（指南一部二章 7.3 + 细则 20.5）
@@ -21,13 +24,20 @@
  */
 
 import { layoutFigure } from "./layout.js";
+import {
+  LEGIBILITY_SHRINK_FACTOR,
+  MIN_PRINTED_FONT_MM,
+  PRINTABLE_HEIGHT_MM,
+  PRINTABLE_WIDTH_MM,
+  pxToMm,
+  uniformFigureZoom,
+} from "./page-contract.js";
+import { FIGURE_FONT_SIZE } from "./render-svg.js";
 import type { DocumentKind, FigureSpec, Jurisdiction } from "./types.js";
 
 /** V5 阈值：单行 label 最大字符数 / 最大行数（超出视为疑似注释性文字）。 */
 export const COMMENT_LABEL_LINE_MAX = 40;
 export const COMMENT_LABEL_LINES_MAX = 3;
-/** V7 阈值：画幅最大边长（px）。超出则缩小到 2/3 后小于可辨字号。 */
-export const FIGURE_CANVAS_MAX_PX = 1600;
 
 export type FigureCheckSeverity = "fail" | "warn" | "info";
 
@@ -48,6 +58,8 @@ export type FigureCheckFinding = {
   message: string;
   figure_nos?: number[];
   evidence?: string[];
+  /** V7 判定维度：page_fit=可印区/分页切断；font_size=打印字高可辨性。 */
+  metric?: "page_fit" | "font_size";
 };
 
 export type FigureCheckResult = {
@@ -247,17 +259,44 @@ export function checkFigures(
     });
   }
 
-  // V7 缩小三分之二可辨（画幅代理检查）
-  for (const figure of figures) {
+  // V7 缩小三分之二可辨（介质锚定：A4 可印区 + 打印字高毫米）
+  //
+  // 判据来自交付形态（A4 打印），不是画幅像素：px 代理与纸面脱钩，12 步流程图画幅
+  // 355mm 高仍"通过"却会被分页切断（实测，见 docs/patent-figure-hardening-plan.md §3）。
+  // 统一缩放系数（uniformFigureZoom，与 html.ts 同源）保证同文档字高一致，
+  // 故字高判定用统一系数而非单图系数（后者会高估实际打印字高）。
+  const paperSizes = figures.map(figure => {
     const { width, height } = layoutFigure(figure);
-    if (Math.max(width, height) > FIGURE_CANVAS_MAX_PX) {
+    return { figure_no: figure.figure_no, widthMm: pxToMm(width), heightMm: pxToMm(height) };
+  });
+  const zoom = uniformFigureZoom(paperSizes);
+  for (const size of paperSizes) {
+    const oversize = size.widthMm > PRINTABLE_WIDTH_MM || size.heightMm > PRINTABLE_HEIGHT_MM;
+    if (oversize) {
+      findings.push({
+        rule: "V7",
+        severity: "fail",
+        metric: "page_fit",
+        message:
+          `图${size.figure_no} 纸面尺寸 ${size.widthMm.toFixed(1)}×${size.heightMm.toFixed(1)}mm 超出 A4 可印区` +
+          ` ${PRINTABLE_WIDTH_MM}×${PRINTABLE_HEIGHT_MM}mm（V7，指南一部一章 4.3：缩小到三分之二时仍应能清晰分辨` +
+          `图中各个细节）——超出部分会被分页切断，应拆分为多幅附图或减小画幅（当前需缩至 ${(zoom * 100).toFixed(0)}%）`,
+        figure_nos: [size.figure_no],
+      });
+    }
+    const printed = pxToMm(FIGURE_FONT_SIZE) * zoom;
+    if (printed < MIN_PRINTED_FONT_MM) {
       findings.push({
         rule: "V7",
         severity: "warn",
+        metric: "font_size",
         message:
-          `图${figure.figure_no} 画幅 ${Math.round(width)}×${Math.round(height)}px 超过 ${FIGURE_CANVAS_MAX_PX}px` +
-          `（V7，指南一部一章 4.3：缩小到三分之二时仍应能清晰分辨图中各个细节），建议拆分为多幅附图`,
-        figure_nos: [figure.figure_no],
+          `图${size.figure_no} 图内文字打印字高约 ${printed.toFixed(2)}mm 低于最小可辨字高 ${MIN_PRINTED_FONT_MM}mm` +
+          `（V7，指南一部一章 4.3：缩小到三分之二仍应清晰可辨），建议减少节点文字或拆分附图`,
+        figure_nos: [size.figure_no],
+        evidence: [
+          `纸面缩放系数 ${zoom.toFixed(2)}，再缩 2/3 后字高约 ${(printed * LEGIBILITY_SHRINK_FACTOR).toFixed(2)}mm`,
+        ],
       });
     }
   }

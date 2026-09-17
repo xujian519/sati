@@ -10,7 +10,8 @@
 import { layoutFigure, type FigureLayout } from "./layout.js";
 import type { FigureNode, FigureNodeShape, FigureSpec, Jurisdiction } from "./types.js";
 
-const FONT_SIZE = 14;
+/** 节点文字字号（px）：打印字高判据（check.ts V7）与渲染共用本常量。 */
+export const FIGURE_FONT_SIZE = 14;
 const EDGE_FONT_SIZE = 12;
 
 function fmt(n: number): string {
@@ -76,12 +77,12 @@ function renderShape(shape: FigureNodeShape, p: { x: number; y: number; width: n
 
 function renderNodeText(node: FigureNode, p: { x: number; y: number; width: number; height: number }): string {
   const lines = node.label.split("\n");
-  const lineHeight = FONT_SIZE + 7;
-  const startY = p.y + p.height / 2 - ((lines.length - 1) * lineHeight) / 2 + FONT_SIZE / 2 - 3;
+  const lineHeight = FIGURE_FONT_SIZE + 7;
+  const startY = p.y + p.height / 2 - ((lines.length - 1) * lineHeight) / 2 + FIGURE_FONT_SIZE / 2 - 3;
   return lines
     .map(
       (line, i) =>
-        `<text x="${fmt(p.x + p.width / 2)}" y="${fmt(startY + i * lineHeight)}" font-size="${FONT_SIZE}" ` +
+        `<text x="${fmt(p.x + p.width / 2)}" y="${fmt(startY + i * lineHeight)}" font-size="${FIGURE_FONT_SIZE}" ` +
         `text-anchor="middle" fill="#000000">${escapeXml(line)}</text>`,
     )
     .join("");
@@ -133,7 +134,7 @@ export function renderFigureSvg(
     `<path d="M0,1 L9,5 L0,9 Z" fill="#000000"/></marker></defs>\n` +
     edges +
     nodes +
-    `<text x="${fmt(width / 2)}" y="${fmt(height - 16)}" font-size="${FONT_SIZE}" text-anchor="middle" fill="#000000">` +
+    `<text x="${fmt(width / 2)}" y="${fmt(height - 16)}" font-size="${FIGURE_FONT_SIZE}" text-anchor="middle" fill="#000000">` +
     `${figureCaption(spec.figure_no, options.jurisdiction)}</text>\n` +
     `</svg>\n`;
 

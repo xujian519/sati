@@ -22,7 +22,6 @@ export {
   stripRefMark,
   COMMENT_LABEL_LINE_MAX,
   COMMENT_LABEL_LINES_MAX,
-  FIGURE_CANVAS_MAX_PX,
   type FigureCheckFinding,
   type FigureCheckOptions,
   type FigureCheckResult,
@@ -37,7 +36,25 @@ export {
   type Point,
   type RoutedEdge,
 } from "./layout.js";
-export { figureCaption, renderFigureSvg } from "./render-svg.js";
+export { FIGURE_FONT_SIZE, figureCaption, renderFigureSvg } from "./render-svg.js";
+export {
+  A4_HEIGHT_MM,
+  A4_WIDTH_MM,
+  CSS_PX_PER_INCH,
+  LEGIBILITY_SHRINK_FACTOR,
+  MIN_PRINTED_FONT_MM,
+  MM_PER_INCH,
+  PAGE_MARGIN_BOTTOM_MM,
+  PAGE_MARGIN_LEFT_MM,
+  PAGE_MARGIN_RIGHT_MM,
+  PAGE_MARGIN_TOP_MM,
+  PRINTABLE_HEIGHT_MM,
+  PRINTABLE_WIDTH_MM,
+  printedFontMm,
+  pxToMm,
+  uniformFigureZoom,
+  type FigurePaperSize,
+} from "./page-contract.js";
 export {
   buildFigureDot,
   dotEscape,

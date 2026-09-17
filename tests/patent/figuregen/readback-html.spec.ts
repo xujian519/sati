@@ -8,9 +8,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { parseFigureSvg } from "../../../src/patent/figuregen/readback.js";
-import { renderFiguresHtml } from "../../../src/patent/figuregen/html.js";
+import { renderFiguresHtml, svgRootSizeMm } from "../../../src/patent/figuregen/html.js";
 import { renderFigureSvg } from "../../../src/patent/figuregen/render-svg.js";
 import { checkFigures } from "../../../src/patent/figuregen/check.js";
+import {
+  PAGE_MARGIN_BOTTOM_MM,
+  PAGE_MARGIN_LEFT_MM,
+  PAGE_MARGIN_RIGHT_MM,
+  PAGE_MARGIN_TOP_MM,
+  PRINTABLE_HEIGHT_MM,
+  PRINTABLE_WIDTH_MM,
+  uniformFigureZoom,
+} from "../../../src/patent/figuregen/page-contract.js";
 import type { FigureSpec } from "../../../src/patent/figuregen/types.js";
 
 const SPEC: FigureSpec = {
@@ -74,4 +83,52 @@ test("A4 HTML：单文件、@page A4、逐图分页、黑白约束", () => {
   for (const color of colors) {
     assert.ok(color.toUpperCase() === "#000000" || color.toUpperCase() === "#FFFFFF", `发现非黑白颜色 ${color}`);
   }
+});
+
+test("A4 HTML：@page 边距与 max-height/break-inside 与 page-contract 常量同源", () => {
+  const html = renderFiguresHtml([SPEC], { title: "一种处理装置" });
+  assert.ok(
+    html.includes(
+      `size: A4; margin: ${PAGE_MARGIN_TOP_MM}mm ${PAGE_MARGIN_RIGHT_MM}mm ${PAGE_MARGIN_BOTTOM_MM}mm ${PAGE_MARGIN_LEFT_MM}mm;`,
+    ),
+    "页边距须与 page-contract 常量一致（V7 判据与版式同源）",
+  );
+  assert.ok(html.includes(`max-height: ${PRINTABLE_HEIGHT_MM}mm`), "须限制纵向不超出可印高");
+  assert.ok(html.includes("break-inside: avoid"), "图与图号不得跨页切断");
+  assert.ok(PRINTABLE_WIDTH_MM === 170 && PRINTABLE_HEIGHT_MM === 257, "A4 可印区应为 170×257mm");
+});
+
+test("A4 HTML：图幅按纸面毫米定宽（不用 px 定宽，避免 96dpi 打印溢出）", () => {
+  const size = svgRootSizeMm(renderFigureSvg(SPEC).svg);
+  assert.ok(size, "内置渲染器输出应可解析画幅");
+  const html = renderFiguresHtml([SPEC]);
+  assert.ok(
+    html.includes(`style="width: ${size!.widthMm.toFixed(1)}mm"`),
+    `应写入纸面宽度 ${size!.widthMm.toFixed(1)}mm`,
+  );
+});
+
+test("A4 HTML：无法解析画幅的 SVG 走 CSS 兜底（不猜测尺寸）", () => {
+  const html = renderFiguresHtml([SPEC], {
+    renderedSvgs: new Map([[SPEC.figure_no, '<svg xmlns="http://www.w3.org/2000/svg"></svg>']]),
+  });
+  assert.ok(html.includes("figure-box-auto"), "无画幅声明时用兜底类");
+  assert.ok(html.includes("max-width: 100%"));
+});
+
+test("A4 HTML：同文档统一缩放系数（含大图时小图同比例缩小）", () => {
+  const big: FigureSpec = {
+    figure_no: 1,
+    kind: "flowchart",
+    direction: "TB",
+    nodes: Array.from({ length: 20 }, (_, i) => ({ id: `b${i}`, label: `步骤${i + 1}` })),
+    edges: Array.from({ length: 19 }, (_, i) => ({ from: `b${i}`, to: `b${i + 1}` })),
+  };
+  const smallSize = svgRootSizeMm(renderFigureSvg(SPEC).svg)!;
+  const bigSize = svgRootSizeMm(renderFigureSvg(big).svg)!;
+  const zoom = uniformFigureZoom([smallSize, bigSize]);
+  assert.ok(zoom < 1, "含超页大图时统一缩放应小于 1");
+  const html = renderFiguresHtml([SPEC, big]);
+  assert.ok(html.includes(`width: ${(smallSize.widthMm * zoom).toFixed(1)}mm`), "小图按统一系数缩放");
+  assert.ok(html.includes(`width: ${(bigSize.widthMm * zoom).toFixed(1)}mm`), "大图按统一系数缩放");
 });
