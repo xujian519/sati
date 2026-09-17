@@ -6,3 +6,6 @@ contact_links:
   - name: 开发标准
     url: https://github.com/xujian519/sati/blob/main/docs/development-standards.md
     about: 强制规则与完整门禁清单（附录 A）
+  - name: 议题治理规范
+    url: https://github.com/xujian519/sati/blob/main/docs/issue-management.md
+    about: 模板选择、标签体系与状态机、分诊、关闭纪律、过期规则

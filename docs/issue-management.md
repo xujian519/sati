@@ -55,24 +55,29 @@ status: triage ──→ status: in-progress ──→ 关闭（完成 / wontfix
 
 ## 2. 议题模板（`.github/ISSUE_TEMPLATE/`）
 
-三个模板强制报告者补齐关键信息，**禁用空白议题**（`config.yml: blank_issues_enabled: false`）：
+四个模板强制报告者补齐关键信息，**禁用空白议题**（`config.yml: blank_issues_enabled: false`）：
 
 | 模板 | 标题前缀 | 强制信息 |
 |---|---|---|
 | `bug_report.md` | `bug: ` | 复现步骤、预期/实际行为、**影响 scope**、**契约影响**、环境 |
 | `feature_request.md` | `feat: ` | 价值与动机、现状与痛点、期望方案、**影响 scope**、契约影响、验收标准 |
 | `tech_debt.md` | `tech-debt: ` | **触发还债条件**（不写不接）、关联决策记录、**影响 scope**、**契约影响** |
+| `documentation.md` | `docs: ` | 位置（文件 + 章节/行号）、复现步骤、预期/实际行为、**影响 scope** |
 
-两个设计要点：
+四个设计要点：
 
 - **「契约影响」节是 Sati 特有的高价值字段**——它把三条会在 CI 阶段咬人的契约（工具 `inputSchema` 改动的 llm-replay 失配、事件面改动的事件矩阵门禁、网关协议版本化）提前到提案阶段。勾选它等于承认"这个改动要付额外门禁成本"。
-- **「影响 scope」节是自动化的输入**，不是装饰——它被 §5 的分类器翻译成 `scope:*` 标签，改动其选项会同时触发标签门禁。该节在每条模板里各存一份（GitHub 无法共享片段），所以门禁同时比对**模板↔标签**与**模板↔模板**。
+- **`documentation.md` 刻意不含「契约影响」节**：文档议题本身不改变 `inputSchema` / 事件面 / 网关协议，多一个必然勾「不涉及」的节只是噪声。若某项文档改动**同时**要动这些契约（例如文档化的同时要重录 fixture），该议题就不是纯文档议题，应改用 `feature_request` / `tech_debt` 模板登记——这条边界写在新模板的末尾注释里，避免后来人误以为漏写。
+- **「影响 scope」节是自动化的输入**，不是装饰——它被 §5 的分类器翻译成 `scope:*` 标签，改动其选项会同时触发标签门禁。该节在每条模板里各存一份（GitHub 无法共享片段），所以门禁同时比对**模板↔标签**与**模板↔模板**。新增模板必须带该节，否则它既打不出 `scope:*`，也不会被模板间比对发现（见下方诚实边界一）。
+- **分类（类型标签）由模板 frontmatter 承担**：`documentation.md` 自带 `labels: ["documentation"]`。补这条模板的直接动因是——`documentation` 标签此前无任何模板引用，文档类议题只能用 `bug` / `feature_request` 模板开，于是自动落上 `bug` / `enhancement`，语义错位且需人工改标。
 
 **新增模板的纪律**：模板的 `labels:` 必须已在 `.github/labels.yml` 声明；scope 勾选项必须与 `scope:*` 标签集合一致，且与其它模板的勾选项**彼此一致**。三条都由 `pnpm check:issue-labels` 拦。
 
-> **诚实边界一：`tech_debt.md` 曾长期缺「影响 scope」节**（`TD-PROCGATE-003`，2026-09-17 补）——期间所有技术债议题零 `scope:*`，而本节 §1 却称作用域是「自动」的。这段历史值得留着，因为它揭示了门禁的一个盲区形状：**「模板缺整节」不会被任何校验发现**，缺少的那一节连比对对象都不存在。补齐后三条模板全部参与模板间比对。
+> **诚实边界一：`tech_debt.md` 曾长期缺「影响 scope」节**（`TD-PROCGATE-003`，2026-09-17 补）——期间所有技术债议题零 `scope:*`，而本节 §1 却称作用域是「自动」的。这段历史值得留着，因为它揭示了门禁的一个盲区形状：**「模板缺整节」不会被任何校验发现**，缺少的那一节连比对对象都不存在。补齐后四条模板全部参与模板间比对（`documentation.md` 于 2026-09-18 加入，带该节；其参与方式已实测：删一行勾选项即被模板间比对拦下、加一行未声明选项即被模板↔标签比对拦下）。
 >
-> **诚实边界二：三条模板的「契约影响」节选项并不一致**——`bug_report.md` 4 项，`feature_request.md` 与 `tech_debt.md` 6 项（多出 i18n 文案、UI 渲染两条）。该节**不产生标签**，因此没有模板间一致性校验，这处漂移不会被 `pnpm check:issue-labels` 发现（`bug_report.md` 是否该补齐这两项，未决）。这与上一条构成对照：「影响 scope」节因有下游消费者（分类器）而被门禁看重，「契约影响」节没有下游消费者，于是同为多模板重复内容却无人守。
+> **诚实边界二：带「契约影响」节的三条模板，该节选项并不一致**——`bug_report.md` 4 项，`feature_request.md` 与 `tech_debt.md` 6 项（多出 i18n 文案、UI 渲染两条）；`documentation.md` 则**刻意不带**该节。该节**不产生标签**，因此没有模板间一致性校验，这处漂移不会被 `pnpm check:issue-labels` 发现（`bug_report.md` 是否该补齐这两项，未决）。这与上一条构成对照：「影响 scope」节因有下游消费者（分类器）而被门禁看重，「契约影响」节没有下游消费者，于是同为多模板重复内容却无人守。
+>
+> **诚实边界三：类型标签"声明了却无模板引用"不会被任何校验发现**（#338）。`documentation` 标签在 `.github/labels.yml` 里存在了很久，但四条模板的 frontmatter 分别是 `bug` / `enhancement` / `tech-debt`——于是文档类议题只能用 `bug` / `feature_request` 模板开，自动落上语义不符的类型标签、需人工改标。`--check` 校验的是"模板引用的标签必须已声明"这**一个方向**，反向（已声明的标签是否被某条模板引用）刻意不校验：`question` / `dependencies` 等标签本就由人工在议题上直接打，要求"每个标签都有模板"会把这些合法用法判红。因此这条缺口只能靠**人**在新增类型标签时问一句"谁来打它"，与上两条同属"门禁看不见的形状"。
 
 ---
 
@@ -193,8 +198,8 @@ commit message 中引用议题编号（如 `fix(gateway): 修正握手超时判�
 
 **仓库设置（需手动执行一次）**：
 
-- [ ] 同步标签实体：`node scripts/sync-labels.mjs`
-- [ ] （按需）创建版本里程碑：`gh api repos/xujian519/sati/milestones -f title=vX.Y.Z`
+- [x] 同步标签实体：`node scripts/sync-labels.mjs` —— **已完成**（2026-09-18 核验：`gh label list --limit 100` 得 39 条，与 `.github/labels.yml` 的名称/color/description 逐条一致；`pnpm check:issue-labels` 同口径绿）
+- [ ] （按需）创建版本里程碑：`gh api repos/xujian519/sati/milestones -f title=vX.Y.Z` —— **尚无需求，故未建**（保持未勾选即如实反映"该动作未发生"，不是待办遗漏）
 
 **验证命令**：
 

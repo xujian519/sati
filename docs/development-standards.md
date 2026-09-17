@@ -244,7 +244,8 @@
 - [x] **issue 自动分类**：`scripts/classify-issue.mjs` + `.github/workflows/issue-triage.yml`（模板的「影响 scope」勾选 → `scope:*`；无状态标签的新议题落 `status: triage`；只增不减，越界读取契约节有负控制）
 - [x] **过期治理**：`.github/workflows/stale.yml`（90 天无活动标记、再 30 天关闭；`in-progress`/`blocked`/`help wanted`/`good first issue`/`pinned`/有里程碑者豁免）
 - [x] **明细层与决策记录**：`docs/issue-management.md` + `docs/notes/implemented/2026-09-14-issue-management.md`
-- [ ] **仓库设置（需手工执行一次）**：`node scripts/sync-labels.mjs` 同步标签实体；按需 `gh api` 建版本里程碑
+- [x] **仓库设置**：标签实体已同步（2026-09-18 核验：`gh label list --limit 100` 39 条与 `.github/labels.yml` 逐条一致）；版本里程碑按需创建，当前无需求
+- [x] **文档类议题模板**：`.github/ISSUE_TEMPLATE/documentation.md`（`docs: ` 前缀 + `documentation` 标签；补上此前"声明了标签却无模板引用"的缺口），提交页 `config.yml` 亦加入议题治理规范的入口（#338）
 
 ### 稳定后按需（不做，除非有需求）
 

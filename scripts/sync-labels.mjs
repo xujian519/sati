@@ -208,8 +208,9 @@ export function validateLabels(labels, templates) {
   // 被它们发现——而 GitHub 的 issue 模板无法共享片段，同一份勾选清单必然在每条模板里
   // 各存一份。这里以**排序后的第一条**含 scope 节的模板为基准逐条比对。
   // 不含该节的模板不参与：它本来就不产生 scope 标签。2026-09-17 前 `tech_debt.md` 是
-  // 唯一此类模板（TD-PROCGATE-003），补节后三条模板全部参与比对——这条过滤留给下一个
-  // 新增模板，它未必一落地就带 scope 节。
+  // 唯一此类模板（TD-PROCGATE-003），补节后全部模板参与比对（2026-09-18 新增的
+  // `documentation.md` 一落地即带该节，其参与方式经负控制实测：删一行勾选项被本条拦下、
+  // 加一行未声明选项被上一条拦下）——这条过滤仍留给下一个新增模板，它未必一落地就带 scope 节。
   const withScopes = templates.filter(template => template.scopes.length > 0);
   if (withScopes.length > 1) {
     const [reference, ...others] = withScopes;

@@ -1998,10 +1998,11 @@
     `docs/development-standards.md` 门禁职责表）。**未做**：`priority:*` 的全链路半自动化（模板「严重级」勾选 + 分类器解析），
     属增量项，已另开 #406 跟踪（不在本项范围内）。
 - **TD-PROCGATE-007** · 议题治理规范自身文档漂移（§8 checkbox 未回填 / 提交页缺规范链接 / `documentation` 无模板）
-  - 类别：H · 严重级：P3 · 工作量：S · 状态：new
+  - 类别：H · 严重级：P3 · 工作量：S · 状态：done（2026-09-18，PR #435）
   - 位置：`docs/issue-management.md:174-176`、`docs/development-standards.md:247`、`.github/ISSUE_TEMPLATE/config.yml`、`.github/labels.yml`
-  - 影响：三处——(1) §8 把「同步标签实体」列为未完成 `[ ]`，但 `gh label list` 显示 38 个标签与 `labels.yml` **逐条一致**（名称/color/description 全对齐），该步骤**早已执行**，规范在描述自身状态时是错的；(2) `config.yml` 的 `contact_links` **未包含 `docs/issue-management.md`**，新议题提交页看不到治理规范；(3) `documentation` 标签无模板引用，文档类议题只能用 bug/feature 模板开、自动落 `bug`/`enhancement`，语义错位需人工改标。
+  - 影响：三处——(1) §8 把「同步标签实体」列为未完成 `[ ]`，但 `gh label list` 显示标签与 `labels.yml` **逐条一致**（名称/color/description 全对齐），该步骤**早已执行**，规范在描述自身状态时是错的；(2) `config.yml` 的 `contact_links` **未包含 `docs/issue-management.md`**，新议题提交页看不到治理规范；(3) `documentation` 标签无模板引用，文档类议题只能用 bug/feature 模板开、自动落 `bug`/`enhancement`，语义错位需人工改标。
   - 建议：回填两处 checkbox；`config.yml` 增规范链接；`documentation` 二选一（新增 `documentation.md` 模板，或在规范 §2 明确「文档类用 feature 模板开、手工改标」）。
+  - **2026-09-18 处置**：✅ **done（PR #435）**——取 issue 建议的 (a)。① 两处 checkbox 回填并**附核验证据**（2026-09-18：`gh label list --limit 100` 得 **39** 条与 `.github/labels.yml` 逐条一致；issue 原文的 38 是当时读数），「（按需）创建版本里程碑」如实留白并注明"尚无需求，故未建"；② `config.yml` 增加指向 `docs/issue-management.md` 的 `contact_link`；③ 新增 `.github/ISSUE_TEMPLATE/documentation.md`（`docs: ` 前缀 + `labels: ["documentation"]` + 「影响 scope」节，**刻意不含「契约影响」节**并在模板内写明边界）。门禁由「39 标签 / 3 模板」变为「39 标签 / **4** 模板」；两组负控制实测：删一行勾选项被模板间比对拦下、加一行未声明选项被模板↔标签拦下。分类器联动实测：喂入新模板正文（勾选 `ui` + 「其他」）输出 `scope:ui` / `scope:other` / `status: triage`。规范 §2 计数（三个→四个）与「诚实边界」同步更新（新增第三条：类型标签"声明了却无模板引用"无门禁可守）。决策见 `docs/notes/implemented/2026-09-18-documentation-template.md`（内含对 `2026-09-16-scope-vocabulary-contract.md` 两句过期陈述的更正说明——按 note 纪律不改旧 note）。
 
 ---
 
@@ -2071,7 +2072,7 @@
 | TD-PROCGATE-003 | **#335** | tech_debt 模板补「影响 scope」节 |
 | TD-PROCGATE-004 | **#336** | stale 豁免与分诊目标抵销 |
 | TD-PROCGATE-006 | **#337** | priority/status 取值枚举门禁 |
-| TD-PROCGATE-007 | **#338** | 议题治理规范自身文档漂移 |
+| TD-PROCGATE-007 | **#338** | 议题治理规范自身文档漂移。**已交付（PR #435）**——§8/开发标准两处 checkbox 回填并附核验证据（39 标签逐条一致）、`config.yml` 增治理规范入口、新增 `documentation.md` 模板（门禁 3 → 4 模板，两组负控制 + 分类器联动实测） |
 | TD-METRIC-001 | **#339** | measure-techdebt 漏统计 `as unknown as`（329 处） |
 | TD-METRIC-002 | **#340** | 债务指标基线加新鲜度校验 |
 | TD-METRIC-003 | **#341** | 指标口径缺口（ui/server、vendored 子包） |
