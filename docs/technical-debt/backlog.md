@@ -1317,12 +1317,12 @@
 
   | 原登记 | 载体 | 一句话债务 |
   |---|---|---|
-  | C34 P0-1 | **#411** | `chat.js` 的 `edit-last-turn` / `regenerate-last-turn` 用 `writer` 而非 `streamWriter`，兄弟标签页停在 `Processing` |
+  | C34 P0-1 | **#411** | `chat.js` 的 `edit-last-turn` / `regenerate-last-turn` 用 `writer` 而非 `streamWriter`，兄弟标签页停在 `Processing`；**已交付（PR #429）** |
   | C34 P0-2 + P0-3 | **#412** | `shell.js` PTY 重连竞态（旧 `close` 清新连接引用 + 挂 30 分钟 kill 定时器）与 `onExit` 误删同 key 新会话（含跨会话串流） |
   | C34 P0-4 | **#413** | `sati-bridge.js` 三张 per-session Map 慢泄漏（清退全挂在对端终态事件上） |
-  | C34 P0-8 | **#414** | `POST /api/agent` 四项：`getAssistantMessages` 恒空 / 双层 `catch {}` 吞错 / checkout 错变量 / `setSessionId` 全链零调用 |
-  | C34 P0-7 | **#415** | `git.js` `/status` 丢 R/C（同文件 `parseStatusFilePaths` 已有正确实现 ⇒ 两处口径分叉，非「不会写」） |
-  | C34 P0-9 | **#416** | `config.js` `/test-connection` 不识别掩码键（`/models` 与 `/test-web-search` 都有回落，当前前端传明文故未触发） |
+  | C34 P0-8 | **#414** | `POST /api/agent` 四项：`getAssistantMessages` 恒空 / 双层 `catch {}` 吞错 / checkout 错变量 / `setSessionId` 全链零调用；**已交付（PR #426）**——清理目标另发现是 pre-rebrand 改名遗留（`~/.sati/sessions/<id>` 无生产者），改指真实转录位置 |
+  | C34 P0-7 | **#415** | `git.js` `/status` 丢 R/C（同文件 `parseStatusFilePaths` 已有正确实现 ⇒ 两处口径分叉，非「不会写」）；**已交付（PR #428）**——分桶收敛为唯一入口 `parseStatusBuckets()` + 「条目总数守恒」不变式 |
+  | C34 P0-9 | **#416** | `config.js` `/test-connection` 不识别掩码键（`/models` 与 `/test-web-search` 都有回落，当前前端传明文故未触发）；**已交付（PR #427）**——两条 provider 探针共用 `resolveProviderProbeApiKey()`，掩码永不发往上游 |
 
 - **判据**：新增 `ui/server/routes/retired-routes.test.js`（2 例）钉**存活清单**——taskmaster 仅剩 8 条、commands 仅剩 `POST /list` + `POST /execute`。**刻意不写「退役项不在表里」**：该写法在路由表解析为空时恒真（与 #341「空集放行」同源的失败模式）。3 条负控制（复活死路由 / 改名存活路由 / 删除存活路由）逐条转红且相邻用例保持绿。
 - **维持原判不修**：C34 的 P2「记录不处理 ×10」与 P3 各项不变；`TD-BOUND-002`（`memory.js` 直连编译产物）维持 wontfix。
@@ -2083,7 +2083,7 @@
 | TD-CATCH-001 残留 + TD-TEAM-N11 + TD-SESSION-N12 | **#353** | 无注释无参 catch（创建时旧口径 37；#390 口径变更后为 124） |
 | 端口/超时散落 | **#354** | 5 个渠道端口 + 43 处内联 setTimeout |
 | TD-RULE-N01 | **#355** | rule_check(pack) 缓存失效键覆盖不全 |
-| `ui/server` P0 级候选（文档登记未跟踪） | **#356** | **已交付（PR #417）**——20 条登记逐条复核（19 条仍成立）+ 零消费死表面退役；仍成立的 6 条拆成 #411–#416，裁定表见 §26「处置追加」 |
+| `ui/server` P0 级候选（文档登记未跟踪） | **#356** | **已交付（PR #417）**——20 条登记逐条复核（19 条仍成立）+ 零消费死表面退役；仍成立的 6 条拆成 #411–#416，裁定表见 §26「处置追加」。其中 **#411 / #414 / #415 / #416 已还清（PR #426–#429）**，#412 / #413 仍在账 |
 | TD-RULE-N07 | **#357** | 规则资产语义增强 3 项（全角漏报 / 安防误伤 / 重复去重；已交付） |
 | TD-PATENT-N01（验证面） | **#358** | 双链路缺跨链路一致性 fixture |
 | TD-WORKSPACE-N04 + TD-TEAM-N25 + TD-PATENT-N20 | **#359** | 计划文档悬空勾选批量回收 |
@@ -2101,9 +2101,9 @@
 
 | 台账来源 | issue | 摘要 |
 |---|---|---|
-| C34 P0-1 | **#411** | `chat.js` edit/regen 流用 `writer` 而非 `streamWriter`，兄弟标签页停在 `Processing` |
+| C34 P0-1 | **#411** | `chat.js` edit/regen 流用 `writer` 而非 `streamWriter`，兄弟标签页停在 `Processing`；**已交付（PR #429）** |
 | C34 P0-2 + P0-3 | **#412** | `shell.js` PTY 重连竞态 + `onExit` 误删同 key 新会话（合并：同一闭包变量共享根因） |
 | C34 P0-4 | **#413** | `sati-bridge.js` 三张 per-session Map 慢泄漏 |
-| C34 P0-8 | **#414** | `POST /api/agent` 四项缺陷（帧解析恒空 / 吞错 / 错变量 / 零调用） |
-| C34 P0-7 | **#415** | `git.js` `/status` 丢 R/C 变更 |
-| C34 P0-9 | **#416** | `config.js` `/test-connection` 不识别掩码 API key |
+| C34 P0-8 | **#414** | `POST /api/agent` 四项缺陷（帧解析恒空 / 吞错 / 错变量 / 零调用）；**已交付（PR #426）** |
+| C34 P0-7 | **#415** | `git.js` `/status` 丢 R/C 变更；**已交付（PR #428）** |
+| C34 P0-9 | **#416** | `config.js` `/test-connection` 不识别掩码 API key；**已交付（PR #427）** |
