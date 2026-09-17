@@ -23,10 +23,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   CAD_EDGE_TABLE_VERSION,
+  CAD_SECTION_VIEWS,
   type CadAxisImages,
+  type CadCutFace,
   type CadEdge,
   type CadEdgeTable,
+  type CadSection,
   type CadView,
+  isCadSectionView,
   isCadView,
 } from "./types.js";
 
@@ -93,17 +97,29 @@ export type ProjectionScriptOptions = {
   view: CadView;
   /** 离散化容差（毫米）：越小越平滑、边表越大；0.5mm 对交付图足够。 */
   toleranceMm?: number;
+  /**
+   * 剖切（全剖视图）：剖切面垂直于视图方向、位于距模型原点该处（模型坐标沿视线方向的
+   * 值，毫米）。仅轴对齐视图可剖切（`CAD_SECTION_VIEWS`）。
+   */
+  sectionOffsetMm?: number;
 };
 
 /**
  * 生成投影脚本（Python，交给 `freecadcmd` 执行）。
  *
- * 脚本只做三件事：导入 STEP → `TechDraw.project` → 把可见/隐藏边离散化为 JSON 边表
- * （打印在定界标记之间）。**不画图、不产 SVG**——画由 Sati 自己的渲染契约负责。
+ * 脚本只做三件事：导入 STEP → （可选）按半空间剖切 → `TechDraw.project` 并把可见/隐藏边
+ * 离散化为 JSON 边表（打印在定界标记之间）。**不画图、不产 SVG、不投影剖切面**——画与
+ * 投影都由 Sati 自己的契约负责（剖切面轮廓以模型坐标交给 Sati 侧投影）。
  */
 export function buildProjectionScript(options: ProjectionScriptOptions): string {
   const direction = VIEW_DIRECTIONS[options.view];
   const tolerance = options.toleranceMm ?? 0.5;
+  const section = options.sectionOffsetMm;
+  if (section !== undefined && !isCadSectionView(options.view)) {
+    throw new TypeError(`视图 ${options.view} 不能剖切（剖切要求轴对齐视图：${CAD_SECTION_VIEWS.join(", ")}）`);
+  }
+  const axisIndex = direction.findIndex(component => component !== 0);
+  const sectionAxis = axisIndex === 0 ? "X" : axisIndex === 1 ? "Y" : "Z";
   return [
     "# 由 Sati 生成（src/patent/figuregen/cad/freecad.ts）——只输出 JSON 边表，不产出图形。",
     "import json",
@@ -114,6 +130,7 @@ export function buildProjectionScript(options: ProjectionScriptOptions): string 
     `VIEW = ${JSON.stringify(options.view)}`,
     `DIRECTION = App.Vector(${direction[0]}, ${direction[1]}, ${direction[2]})`,
     `TOLERANCE = ${tolerance}`,
+    `SECTION_OFFSET = ${section === undefined ? "None" : String(section)}`,
     "",
     "def _discretize(edge):",
     "    length = edge.Length",
@@ -125,9 +142,10 @@ export function buildProjectionScript(options: ProjectionScriptOptions): string 
     "if shape.isNull():",
     "    raise SystemExit('STEP 读取失败或几何为空: ' + STEP_PATH)",
     "",
-    "# 投影坐标系是 TechDraw 自己挑的（实测 front 视图里 u 对应 -Z）：用三个单位参考体",
-    "# 分别投影，得到模型各轴在投影平面上的像，渲染侧据此对齐朝向。",
-    "def _axis_image(vec):",
+    "# 投影坐标系是 TechDraw 自己挑的（实测 front 视图里 u 对应 -Z）：用四个单位参考体",
+    "# （原点 + 三轴）分别投影，得到模型原点与各轴在投影平面上的像。仅有轴像不足以定出",
+    "# 仿射映射（三轴像含同一个未知平移），故原点像必须一并给出。",
+    "def _probe(vec):",
     "    probe = Part.makeBox(0.001, 0.001, 0.001, vec)",
     "    p0, p1, _, _ = TechDraw.project(probe, DIRECTION)",
     "    probe_edges = list(p0.Edges) + list(p1.Edges)",
@@ -136,7 +154,84 @@ export function buildProjectionScript(options: ProjectionScriptOptions): string 
     "    point = probe_edges[0].discretize(2)[0]",
     "    return [round(point.x, 6), round(point.y, 6)]",
     "",
-    "visible0, visible1, hidden0, hidden1 = TechDraw.project(shape, DIRECTION)",
+    "# 剖切（全剖视图）：保留远离观者的一侧（p·d ≤ offset），露出剖切面。",
+    "# 剖切面轮廓另行以**模型坐标**输出（Sati 侧投影 + 纸面剖面线填充）。",
+    "def _section(shape):",
+    "    bb = shape.BoundBox",
+    "    span = max(bb.XLength, bb.YLength, bb.ZLength, 1.0)",
+    "    margin = span * 2 + 10",
+    "    low = [bb.XMin - margin, bb.YMin - margin, bb.ZMin - margin]",
+    "    high = [bb.XMax + margin, bb.YMax + margin, bb.ZMax + margin]",
+    `    axis = ${axisIndex}`,
+    "    sign = 1 if DIRECTION.x + DIRECTION.y + DIRECTION.z > 0 else -1",
+    "    # 保留 sign*coord ≤ sign*offset 的一侧（远离观者）",
+    "    if sign > 0:",
+    "        high[axis] = SECTION_OFFSET",
+    "    else:",
+    "        low[axis] = SECTION_OFFSET",
+    "    half = Part.makeBox(high[0]-low[0], high[1]-low[1], high[2]-low[2], App.Vector(low[0], low[1], low[2]))",
+    "    kept = shape.common(half)",
+    "    if kept.isNull() or not kept.Faces:",
+    "        raise SystemExit('剖切后几何为空（剖切面在模型范围之外？offset=' + str(SECTION_OFFSET) + '）')",
+    "    unit = App.Vector(0, 0, 0)",
+    "    if axis == 0:",
+    "        unit = App.Vector(sign, 0, 0)",
+    "    elif axis == 1:",
+    "        unit = App.Vector(0, sign, 0)",
+    "    else:",
+    "        unit = App.Vector(0, 0, sign)",
+    "    faces = []",
+    "    for face in kept.Faces:",
+    "        if face.Surface.__class__.__name__ != 'Plane':",
+    "            continue",
+    "        normal = face.normalAt(0, 0)",
+    "        if abs(normal.dot(unit) - 1.0) > 1e-6:",
+    "            continue  # 非剖切面：法向须与视线方向一致（朝观者）",
+    "        if abs(face.CenterOfMass.dot(unit) - SECTION_OFFSET * sign) > 1e-6:",
+    "            continue",
+    "        loops = []",
+    "        wires = [face.OuterWire]",
+    "        for wire in face.Wires:",
+    "            if not wire.isSame(face.OuterWire):",
+    "                loops.append(wire)",
+    "        loops = [face.OuterWire] + loops",
+    "        loops = [[[round(p.x, 4), round(p.y, 4), round(p.z, 4)] for p in _loop_points(w)] for w in loops]",
+    "        faces.append({'loops': loops})",
+    "    return kept, faces",
+    "",
+    "def _loop_points(wire):",
+    "    # 环必须连成**闭合回路**：wire.OrderedEdges 只是「边集合已排序」，并不保证首尾相接地",
+    "    # 串成走向（实测剖切面的边序是乱序）⇒ 按端点做连通性搜索逐边拼接，并在必要时反转",
+    "    # （边的参数方向未必与环走向一致）。拼不成环即 fail-loud：宁可不输出，也不画错剖面线。",
+    "    remaining = [list(e.discretize(int(max(2, min(64, e.Length / 0.2 + 2))))) for e in wire.Edges]",
+    "    if not remaining:",
+    "        raise SystemExit('剖切面轮廓环为空')",
+    "    current = remaining.pop(0)",
+    "    points = list(current)",
+    "    end = current[-1]",
+    "    while remaining:",
+    "        found = None",
+    "        for index, segment in enumerate(remaining):",
+    "            if (segment[0] - end).Length <= 1e-6 or (segment[-1] - end).Length <= 1e-6:",
+    "                found = index",
+    "                break",
+    "        if found is None:",
+    "            raise SystemExit('剖切面轮廓环不闭合（边的端点接不上），拒绝输出可能错误的剖面线')",
+    "        segment = remaining.pop(found)",
+    "        if (segment[0] - end).Length > (segment[-1] - end).Length:",
+    "            segment.reverse()",
+    "        points.extend(segment)",
+    "        end = points[-1]",
+    "    if (points[0] - points[-1]).Length > 1e-3:",
+    "        raise SystemExit('剖切面轮廓环未回到起点（几何异常），拒绝输出可能错误的剖面线')",
+    "    return points",
+    "",
+    "cut_faces = []",
+    "projected = shape",
+    "if SECTION_OFFSET is not None:",
+    "    projected, cut_faces = _section(shape)",
+    "",
+    "visible0, visible1, hidden0, hidden1 = TechDraw.project(projected, DIRECTION)",
     "edges = []",
     "kinds = {}",
     "for kind, group in (('visible', visible0), ('visible', visible1), ('hidden', hidden0), ('hidden', hidden1)):",
@@ -156,13 +251,20 @@ export function buildProjectionScript(options: ProjectionScriptOptions): string 
     "    'view': VIEW,",
     "    'units': 'mm',",
     "    'axes': {",
-    "        'x': _axis_image(App.Vector(1, 0, 0)),",
-    "        'y': _axis_image(App.Vector(0, 1, 0)),",
-    "        'z': _axis_image(App.Vector(0, 0, 1)),",
+    "        'origin': _probe(App.Vector(0, 0, 0)),",
+    "        'x': _probe(App.Vector(1, 0, 0)),",
+    "        'y': _probe(App.Vector(0, 1, 0)),",
+    "        'z': _probe(App.Vector(0, 0, 1)),",
     "    },",
     "    'edges': edges,",
     "    'curveKinds': kinds,",
     "}",
+    "if SECTION_OFFSET is not None:",
+    `    lo = round(min(getattr(shape.BoundBox, '${sectionAxis}Min'), getattr(shape.BoundBox, '${sectionAxis}Max')), 4)`,
+    `    hi = round(max(getattr(shape.BoundBox, '${sectionAxis}Min'), getattr(shape.BoundBox, '${sectionAxis}Max')), 4)`,
+    "    signed = [lo, hi] if DIRECTION.x + DIRECTION.y + DIRECTION.z > 0 else [-hi, -lo]",
+    "    payload['section'] = {'offset_mm': SECTION_OFFSET, 'model_extent_mm': signed}",
+    "    payload['cutFaces'] = cut_faces",
     `print(${JSON.stringify(CAD_JSON_BEGIN)})`,
     "print(json.dumps(payload, ensure_ascii=False))",
     `print(${JSON.stringify(CAD_JSON_END)})`,
@@ -262,6 +364,14 @@ export function parseProjectionOutput(stdout: string): CadEdgeTable {
     });
   }
   const axes = parseAxes(table.axes);
+  const section = parseSection(table.section);
+  const cutFaces = parseCutFaces(table.cutFaces);
+  if (section === undefined && cutFaces !== undefined) {
+    throw new TypeError("投影边表含 cutFaces 但缺少 section 参数（剖切面轮廓的来源不可追溯）");
+  }
+  if (section !== undefined && cutFaces === undefined) {
+    throw new TypeError("投影边表声明了剖切（section）但没有剖切面轮廓（cutFaces）——剖面线无从绘制");
+  }
   const curveKinds: Record<string, number> = {};
   const rawKinds = table.curveKinds;
   if (rawKinds !== null && typeof rawKinds === "object" && !Array.isArray(rawKinds)) {
@@ -275,17 +385,91 @@ export function parseProjectionOutput(stdout: string): CadEdgeTable {
     units: "mm",
     axes,
     edges,
+    ...(section === undefined ? {} : { section }),
+    ...(cutFaces === undefined ? {} : { cutFaces }),
     curveKinds,
   };
 }
 
-/** 解析模型轴像（三个二维向量；缺失/非法即抛错——朝向无法确定时不出图）。 */
-function parseAxes(raw: unknown): CadAxisImages {
-  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
-    throw new TypeError("投影边表缺少 axes（模型轴像）");
+/** 解析剖切参数（缺省 = 整视图；出现但结构非法即抛错）。 */
+function parseSection(raw: unknown): CadSection | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  if (typeof raw !== "object" || Array.isArray(raw)) {
+    throw new TypeError("投影边表 section 应为对象");
   }
   const record = raw as Record<string, unknown>;
-  const read = (key: "x" | "y" | "z"): [number, number] => {
+  const offset = record.offset_mm;
+  if (typeof offset !== "number" || !Number.isFinite(offset)) {
+    throw new TypeError("投影边表 section.offset_mm 应为数字");
+  }
+  const extent = record.model_extent_mm;
+  if (
+    !Array.isArray(extent) ||
+    extent.length < 2 ||
+    typeof extent[0] !== "number" ||
+    typeof extent[1] !== "number" ||
+    !Number.isFinite(extent[0]) ||
+    !Number.isFinite(extent[1])
+  ) {
+    throw new TypeError("投影边表 section.model_extent_mm 应为 [number, number]");
+  }
+  return { offset_mm: offset, model_extent_mm: [extent[0], extent[1]] };
+}
+
+/** 解析剖切面轮廓（模型坐标多环；每个面至少一个环、每环至少 3 点且须闭合）。 */
+function parseCutFaces(raw: unknown): CadCutFace[] | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  if (!Array.isArray(raw)) {
+    throw new TypeError("投影边表 cutFaces 应为数组");
+  }
+  return raw.map((entry, index) => {
+    const loops = (entry as Record<string, unknown> | null)?.["loops"];
+    if (!Array.isArray(loops) || loops.length === 0) {
+      throw new TypeError(`投影边表 cutFaces[${index}].loops 应为非空数组`);
+    }
+    return {
+      loops: loops.map((loop, loopIndex) => {
+        if (!Array.isArray(loop) || loop.length < 3) {
+          throw new TypeError(`投影边表 cutFaces[${index}].loops[${loopIndex}] 至少应有 3 个点`);
+        }
+        const parsed = loop.map(point => {
+          if (
+            !Array.isArray(point) ||
+            point.length < 3 ||
+            typeof point[0] !== "number" ||
+            typeof point[1] !== "number" ||
+            typeof point[2] !== "number" ||
+            !Number.isFinite(point[0]) ||
+            !Number.isFinite(point[1]) ||
+            !Number.isFinite(point[2])
+          ) {
+            throw new TypeError(`投影边表 cutFaces[${index}].loops[${loopIndex}] 的点应为 [number, number, number]`);
+          }
+          return [point[0], point[1], point[2]] as [number, number, number];
+        });
+        // 闭合性必须成立：不闭合的环会被扫描线按"隐式闭合边"处理，剖面线会画到剖切面之外
+        // （实测踩过：边序乱序时不拼接会留下一条跨图的假闭合边）。
+        const first = parsed[0]!;
+        const last = parsed[parsed.length - 1]!;
+        if (Math.hypot(last[0] - first[0], last[1] - first[1], last[2] - first[2]) > 1e-3) {
+          throw new TypeError(
+            `投影边表 cutFaces[${index}].loops[${loopIndex}] 未闭合（首尾点相距超过 0.001mm）——` +
+              "剖面线会画到剖切面之外，拒绝使用该边表",
+          );
+        }
+        return parsed;
+      }),
+    };
+  });
+}
+
+/** 解析模型原点与三轴像（缺失/非法即抛错——映射无法确定时不出图）。 */
+function parseAxes(raw: unknown): CadAxisImages {
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new TypeError("投影边表缺少 axes（模型原点/轴像）");
+  }
+  const record = raw as Record<string, unknown>;
+  const read = (key: "origin" | "x" | "y" | "z"): [number, number] => {
     const value = record[key];
     if (
       !Array.isArray(value) ||
@@ -299,7 +483,7 @@ function parseAxes(raw: unknown): CadAxisImages {
     }
     return [value[0], value[1]];
   };
-  return { x: read("x"), y: read("y"), z: read("z") };
+  return { origin: read("origin"), x: read("x"), y: read("y"), z: read("z") };
 }
 
 export type ProjectStepOptions = {
@@ -308,6 +492,8 @@ export type ProjectStepOptions = {
   stepPath: string;
   view: CadView;
   toleranceMm?: number;
+  /** 剖切（全剖视图）：见 `ProjectionScriptOptions.sectionOffsetMm`。 */
+  sectionOffsetMm?: number;
   timeoutMs?: number;
   /** 注入点：单测传假运行器（不真跑 FreeCAD）。 */
   runner?: CadRunner;
@@ -322,10 +508,14 @@ export type ProjectStepOptions = {
  */
 export async function projectStep(options: ProjectStepOptions): Promise<CadEdgeTable> {
   const runner = options.runner ?? defaultCadRunner;
+  if (options.sectionOffsetMm !== undefined && !isCadSectionView(options.view)) {
+    throw new TypeError(`视图 ${options.view} 不能剖切（剖切要求轴对齐视图：${CAD_SECTION_VIEWS.join(", ")}）`);
+  }
   const script = buildProjectionScript({
     stepPath: options.stepPath,
     view: options.view,
     ...(options.toleranceMm === undefined ? {} : { toleranceMm: options.toleranceMm }),
+    ...(options.sectionOffsetMm === undefined ? {} : { sectionOffsetMm: options.sectionOffsetMm }),
   });
   const dir = await mkdtemp(join(tmpdir(), "sati-cad-"));
   const scriptPath = join(dir, "project.py");

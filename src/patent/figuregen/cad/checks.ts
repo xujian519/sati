@@ -11,6 +11,12 @@
  * - C2 退化短边：可见边总长 < 阈值 → warn（打印后不可辨的碎边）
  * - C3 适配缩放：为适配 A4 可印区而缩放的比例过低 → warn（线宽同比例变细，建议分幅/改比例）
  * - C4 隐藏线：开启隐藏线 → info（CNIPA 实务以剖视图表达内部结构，虚线不得妨碍标记线）
+ * - C5 剖切有效性：请求了剖切但没有剖切面 → fail（剖切面落在模型范围之外，图会退化成
+ *   整视图而**看不到剖面线**——名义剖视图与实交付不符，属交付缺陷）
+ * - C6 剖面线可辨性：有剖切面但一条剖面线也画不出来 → warn（剖切面在纸面过小）
+ * - C7 标注重叠：两个附图标记的标号框相交 → warn（标号糊在一起不可读）
+ * - C8 标注锚点：锚点投影落在绘制几何范围之外 → warn（锚点多半写错了：投影图内没有该处）
+ * - C9 标号越界：标号框超出图幅 → fail（会被画幅裁掉，图面上只剩半截数字）
  *
  * 明确不做（诚实边界）：**最小线间距**检查需要先重建轮廓（相邻边共享端点，逐点距离必然
  * 为 0），属更大的一块工作；当前先以"边数/退化边/缩放"三项覆盖可判定的部分。
@@ -19,7 +25,7 @@
 import type { FigureCheckSeverity } from "../check.js";
 import type { CadEdgeTable } from "./types.js";
 
-export type CadRuleId = "C1" | "C2" | "C3" | "C4";
+export type CadRuleId = "C1" | "C2" | "C3" | "C4" | "C5" | "C6" | "C7" | "C8" | "C9";
 
 export type CadFinding = {
   rule: CadRuleId;
@@ -45,17 +51,42 @@ export function polylineLengthMm(points: readonly (readonly [number, number])[])
 export type CadCheckInput = {
   table: CadEdgeTable;
   /**
-   * 渲染结果（缩放/纸面尺寸）。**缺省时跳过依赖排版的 C2/C3**——C1（边数）不依赖排版，
-   * 故调用方可在渲染前先跑一轮把"投影为空"拦在出图之前。
+   * 渲染结果（缩放/纸面尺寸/剖面线与标注落位）。**缺省时跳过依赖排版的 C2/C3/C6–C9**
+   * ——C1（边数）与 C5（剖切有效性）不依赖排版，故调用方可在渲染前先跑一轮把
+   * "投影为空""没切开"拦在出图之前。
    */
-  render?: { scale: number; widthMm: number; heightMm: number };
+  render?: {
+    scale: number;
+    widthMm: number;
+    heightMm: number;
+    /** 剖面线段数（0 而存在剖切面 ⇒ C6）。 */
+    hatchSegments?: number;
+    /** 标注落位（纸面毫米）。 */
+    labels?: readonly { ref: number; anchorMm: [number, number]; labelMm: [number, number]; boxMm: CadBox }[];
+    /** 绘制几何（不含标注）的纸面范围（C8）。 */
+    geometryBoundsMm?: CadBox;
+  };
   hiddenLines: boolean;
 };
+
+/** 矩形（纸面毫米，SVG 坐标系：top < bottom）。 */
+export type CadBox = { left: number; top: number; right: number; bottom: number };
+
+/** 两个矩形是否相交（边界相切不算：标号贴着放不算重叠）。 */
+function boxesOverlap(a: CadBox, b: CadBox): boolean {
+  return a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+}
+
+/** a 是否完全落在 b 内（边界含等号：正好贴边不算越界）。 */
+function boxWithin(a: CadBox, b: CadBox): boolean {
+  return a.left >= b.left - 1e-9 && a.right <= b.right + 1e-9 && a.top >= b.top - 1e-9 && a.bottom <= b.bottom + 1e-9;
+}
 
 /** 几何级检查（纯函数）。 */
 export function checkCadProjection(input: CadCheckInput): CadFinding[] {
   const findings: CadFinding[] = [];
   const visible = input.table.edges.filter(edge => edge.kind === "visible");
+  const cutFaces = input.table.cutFaces ?? [];
 
   if (visible.length === 0) {
     findings.push({
@@ -105,6 +136,108 @@ export function checkCadProjection(input: CadCheckInput): CadFinding[] {
       severity: "info",
       message: "已绘制隐藏线（虚线）：CNIPA 实务以剖视图表达内部结构，请确认虚线不妨碍附图标记线",
     });
+  }
+
+  // C5 剖切有效性：名义剖视图必须真的切到材料（否则图上没有剖面线，与"剖视图"名不符）
+  if (input.table.section !== undefined && cutFaces.length === 0) {
+    const [min, max] = input.table.section.model_extent_mm;
+    findings.push({
+      rule: "C5",
+      severity: "fail",
+      message:
+        `剖切面位于 ${input.table.section.offset_mm}mm，未切开任何材料（模型沿视线方向范围为 ` +
+        `${min}–${max}mm）：剖切退化为整视图，图上不会出现剖面线，与"剖视图"不符`,
+      evidence: [
+        `视图 ${input.table.view}；剖切面须落在模型范围内部（不含端点）`,
+        `模型沿视线方向范围 ${min}–${max}mm，剖切偏移 ${input.table.section.offset_mm}mm`,
+      ],
+    });
+  } else if (input.table.section !== undefined) {
+    findings.push({
+      rule: "C5",
+      severity: "info",
+      message: `剖切有效：视图 ${input.table.view} 在 ${input.table.section.offset_mm}mm 处剖开，得到 ${cutFaces.length} 个剖切面`,
+    });
+  }
+
+  // C6 剖面线可辨性：有剖切面但一条线也画不出（剖切面在纸面过小）
+  if (input.render !== undefined && cutFaces.length > 0 && input.render.hatchSegments === 0) {
+    findings.push({
+      rule: "C6",
+      severity: "warn",
+      message:
+        `剖切面在纸面上过小，剖面线无法表达（缩放到 ${(input.render.scale * 100).toFixed(0)}% 后不足一条剖面线），` +
+        "建议改用更小范围的剖切、放大视图或分幅出图",
+      evidence: [`剖切面数 ${cutFaces.length}，剖面线段数 ${input.render.hatchSegments ?? 0}`],
+    });
+  }
+
+  // C7 标注重叠 / C8 锚点越界（均依赖渲染落位）
+  const labels = input.render?.labels ?? [];
+  for (let i = 0; i < labels.length; i += 1) {
+    for (let j = i + 1; j < labels.length; j += 1) {
+      if (boxesOverlap(labels[i]!.boxMm, labels[j]!.boxMm)) {
+        findings.push({
+          rule: "C7",
+          severity: "warn",
+          message: `附图标记 ${labels[i]!.ref} 与 ${labels[j]!.ref} 的标号重叠，无法分辨`,
+          evidence: [
+            `标记 ${labels[i]!.ref} 标号位置 (${labels[i]!.labelMm[0].toFixed(1)}, ${labels[i]!.labelMm[1].toFixed(1)})mm，` +
+              `标记 ${labels[j]!.ref} 标号位置 (${labels[j]!.labelMm[0].toFixed(1)}, ${labels[j]!.labelMm[1].toFixed(1)})mm`,
+            "可经 label_offset_mm 显式指定标号位置（纸面毫米偏移）",
+          ],
+        });
+      }
+    }
+  }
+  const bounds = input.render?.geometryBoundsMm;
+  if (bounds !== undefined) {
+    const outside = labels.filter(
+      label =>
+        label.anchorMm[0] < bounds.left - 1e-6 ||
+        label.anchorMm[0] > bounds.right + 1e-6 ||
+        label.anchorMm[1] < bounds.top - 1e-6 ||
+        label.anchorMm[1] > bounds.bottom + 1e-6,
+    );
+    if (outside.length > 0) {
+      findings.push({
+        rule: "C8",
+        severity: "warn",
+        message: `有 ${outside.length} 个附图标记的锚点落在投影几何范围之外（该处图面上没有几何，锚点坐标多半写错）`,
+        evidence: outside
+          .slice(0, 5)
+          .map(
+            label =>
+              `标记 ${label.ref} 锚点 (${label.anchorMm[0].toFixed(1)}, ${label.anchorMm[1].toFixed(1)})mm 超出图内范围 ` +
+              `x ${bounds.left.toFixed(1)}–${bounds.right.toFixed(1)}mm、y ${bounds.top.toFixed(1)}–${bounds.bottom.toFixed(1)}mm`,
+          ),
+      });
+    }
+  }
+
+  // C9 标号越界：标号框必须落在纸面内（超出会被 SVG 画幅裁掉，图面上只剩半截数字）
+  if (input.render !== undefined && labels.length > 0) {
+    const page = { left: 0, top: 0, right: input.render.widthMm, bottom: input.render.heightMm };
+    const clipped = labels.filter(label => !boxWithin(label.boxMm, page));
+    if (clipped.length > 0) {
+      findings.push({
+        rule: "C9",
+        severity: "fail",
+        message:
+          `有 ${clipped.length} 个附图标记的标号超出图幅 ${input.render.widthMm.toFixed(1)}×${input.render.heightMm.toFixed(1)}mm` +
+          "（会被裁掉，图面上只剩半截数字）",
+        evidence: [
+          ...clipped
+            .slice(0, 5)
+            .map(
+              label =>
+                `标记 ${label.ref} 标号框 x ${label.boxMm.left.toFixed(1)}–${label.boxMm.right.toFixed(1)}mm、` +
+                `y ${label.boxMm.top.toFixed(1)}–${label.boxMm.bottom.toFixed(1)}mm 超出图幅`,
+            ),
+          "可用 label_offset_mm 收紧标号位置，或减少同时标注的附图标记",
+        ],
+      });
+    }
   }
 
   return findings;

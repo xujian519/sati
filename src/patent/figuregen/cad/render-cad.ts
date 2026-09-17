@@ -7,17 +7,28 @@
  * 黑白不变式、图号标注、A4 版式、回读自检全部复用既有实现。
  *
  * **朝向对齐**（纯函数，可用录制的边表单测）：实测 `TechDraw.project` 的坐标系由它自己
- * 决定（front 视图里 u 对应 -Z），故 Python 侧另投影三个单位参考体给出模型各轴的像
+ * 决定（front 视图里 u 对应 -Z），故 Python 侧另投影四个单位参考体给出模型原点与各轴的像
  * （`axes`）；本模块按视图定义"屏幕右轴/屏幕上轴"，用点积把 (u,v) 映射为屏幕坐标：
  *
  *   x_screen = (u,v)·normalize(image(right))    y_screen = −(u,v)·normalize(image(up))
+ *
+ * 模型坐标 → 投影坐标的仿射映射由 `projectModelPoints`（`types.ts`）给出——**剖切面轮廓
+ * 与附图标记锚点的投影都在这一处**，FreeCAD 侧不重复实现投影。
  *
  * 视图配置（纸面朝向）取"模型竖直轴在图上竖直"的常规约定；**投影法（第一角/第三角）的
  * 纸面配置属交付排版约定**，本模块不声称遵循其中之一（需按最终申请格式复核）。
  */
 
 import { PRINTABLE_HEIGHT_MM, PRINTABLE_WIDTH_MM } from "../page-contract.js";
-import type { CadAxisImages, CadEdge, CadEdgeTable, CadView } from "./types.js";
+import { measureTextWidth } from "../metrics.js";
+import {
+  projectModelPoints,
+  type CadAxisImages,
+  type CadCutFace,
+  type CadEdge,
+  type CadEdgeTable,
+  type CadView,
+} from "./types.js";
 
 /** 屏幕右轴/上轴（模型坐标，单位向量）。 */
 type ScreenAxes = { right: readonly [number, number, number]; up: readonly [number, number, number] };
@@ -33,6 +44,19 @@ export const CAD_VIEW_SCREEN_AXES: Record<CadView, ScreenAxes> = {
   iso: { right: [1, 0, 0], up: [0, 0, 1] },
 };
 
+/** 附图标记标注（模型坐标锚点 → 图面引线 + 标号）。 */
+export type CadRefAnnotation = {
+  /** 附图标记（与说明书文字部分的核验对象）。 */
+  ref: number;
+  /** 标记锚点（模型坐标，毫米）：投影后作为引线起点。 */
+  atMm: readonly [number, number, number];
+  /**
+   * 标号相对锚点的图面偏移（毫米，+x 向右、+y 向下；SVG 坐标系）。
+   * 缺省按"远离图心"方向自动放置（常规制图做法：标号向图外引）。
+   */
+  labelOffsetMm?: readonly [number, number];
+};
+
 export type CadRenderOptions = {
   /** 图号（SVG 图号标注"图N"，细则第 21 条式样）。 */
   figureNo: number;
@@ -41,11 +65,24 @@ export type CadRenderOptions = {
   hiddenLines?: boolean;
   /** 图面外边距（毫米）。 */
   marginMm?: number;
+  /** 附图标记标注（缺省无标注：出未标注的投影图）。 */
+  annotations?: readonly CadRefAnnotation[];
+};
+
+/** 标号在图面上的落位（纸面毫米；供标注规则检查与报告）。 */
+export type CadLabelPlacement = {
+  ref: number;
+  /** 引线起点（锚点投影，纸面毫米）。 */
+  anchorMm: [number, number];
+  /** 标号锚点（纸面毫米；文本水平居中于此、基线落于此）。 */
+  labelMm: [number, number];
+  /** 文本包围盒（纸面毫米；按 `measureTextWidth` 估算，用于重叠/越界判定）。 */
+  boxMm: { left: number; top: number; right: number; bottom: number };
 };
 
 export type CadRenderResult = {
   svg: string;
-  /** 纸面尺寸（毫米，含外边距）。 */
+  /** 纸面尺寸（毫米，含外边距与标注预留带）。 */
   widthMm: number;
   heightMm: number;
   /** 缩放系数（把几何适配进可印区；≤ 100% 时不放大）。 */
@@ -53,6 +90,14 @@ export type CadRenderResult = {
   /** 可见/隐藏边数（供几何级检查与报告）。 */
   visibleEdges: number;
   hiddenEdges: number;
+  /** 剖切面数（0 = 整视图，无剖面线）。 */
+  cutFaces: number;
+  /** 剖面线段数（0 而 cutFaces > 0 说明剖切面过小，剖面线无法表达）。 */
+  hatchSegments: number;
+  /** 标注落位（缺省无标注时为空数组）。 */
+  labels: CadLabelPlacement[];
+  /** 绘制几何（不含标注）的纸面范围：判定"锚点是否落在图内"用。 */
+  geometryBoundsMm: { left: number; top: number; right: number; bottom: number };
 };
 
 const DEFAULT_MARGIN_MM = 6;
@@ -60,6 +105,18 @@ const DEFAULT_MARGIN_MM = 6;
 export const CAD_LINE_WIDTH_MM = 0.35;
 /** 隐藏线虚线样式（mm）。 */
 export const CAD_HIDDEN_DASH_MM: readonly [number, number] = [1.5, 1];
+/** 剖面线（细实线）线宽与间距（毫米，纸面）：间距指相邻剖面线的垂直距离。 */
+export const CAD_HATCH_LINE_WIDTH_MM = 0.2;
+export const CAD_HATCH_SPACING_MM = 2.5;
+/** 附图标记标号字号（毫米，纸面）与引线长度（毫米，纸面）。 */
+export const CAD_REF_FONT_MM = 3.0;
+export const CAD_REF_LEADER_MM = 6;
+/** 引线止于标号外缘的间隙（毫米，纸面）。 */
+export const CAD_REF_LABEL_GAP_MM = 1.5;
+/** 标注预留带的额外余量（毫米，纸面）：标号外缘与可印区之间留白。 */
+export const CAD_REF_RESERVE_PAD_MM = 1;
+/** 预留带上限（占可印区比例）：防止调用方给出离谱偏移后把几何压到不可见。 */
+export const CAD_MAX_RESERVE_RATIO = 0.2;
 
 function dot(a: readonly [number, number], b: readonly [number, number]): number {
   return a[0] * b[0] + a[1] * b[1];
@@ -108,10 +165,87 @@ function fmt(value: number): string {
   return String(Math.round(value * 1000) / 1000);
 }
 
+/**
+ * 多边形剖面线（45°，纸面毫米间距；扫描线 + 奇偶规则，纯函数）。
+ *
+ * 在旋转到 45° 的坐标系里做横向扫描线：`X=(x+y)/√2, Y=(y−x)/√2` ⇒ 剖面线即 `Y=const`，
+ * 相邻线在纸面上的垂直距离恰为 `spacingMm`。奇偶规则使多环（外环 + 孔/缺口内环）
+ * 自动留空，无需单独处理洞。
+ *
+ * 扫描线相位对齐全局网格（`Y = ceil(Ymin/间距)·间距`）：同一张图的两处剖切面剖面线
+ * 相位一致，且结果与调用顺序无关（确定性）。
+ */
+export function hatchPolylines(
+  loops: readonly (readonly (readonly [number, number])[])[],
+  spacingMm: number,
+): [number, number][][] {
+  if (spacingMm <= 0 || loops.length === 0) return [];
+  const k = Math.SQRT1_2;
+  const rotate = ([x, y]: readonly [number, number]): [number, number] => [(x + y) * k, (y - x) * k];
+  const unrotate = ([x, y]: readonly [number, number]): [number, number] => [(x - y) * k, (x + y) * k];
+  const rotated = loops.map(loop => loop.map(rotate));
+  const allY = rotated.flatMap(loop => loop.map(point => point[1]));
+  const minY = Math.min(...allY);
+  const maxY = Math.max(...allY);
+  const edges: [readonly [number, number], readonly [number, number]][] = [];
+  for (const loop of rotated) {
+    for (let index = 0; index < loop.length; index += 1) {
+      edges.push([loop[index]!, loop[(index + 1) % loop.length]!]);
+    }
+  }
+  const segments: [number, number][][] = [];
+  const first = Math.ceil(minY / spacingMm - 1e-9) * spacingMm;
+  for (let y = first; y <= maxY + 1e-9; y += spacingMm) {
+    const crossings: number[] = [];
+    for (const [a, b] of edges) {
+      // 半开区间（含下端点、不含上端点）：扫描线穿过顶点时只计一次，避免成对错配
+      if ((a[1] <= y && b[1] > y) || (b[1] <= y && a[1] > y)) {
+        const t = (y - a[1]) / (b[1] - a[1]);
+        crossings.push(a[0] + t * (b[0] - a[0]));
+      }
+    }
+    crossings.sort((left, right) => left - right);
+    for (let index = 0; index + 1 < crossings.length; index += 2) {
+      const from = crossings[index]!;
+      const to = crossings[index + 1]!;
+      if (to - from < 1e-9) continue;
+      segments.push([unrotate([from, y]), unrotate([to, y])]);
+    }
+  }
+  return segments;
+}
+
+/**
+ * 剖切面轮廓（模型坐标）→ 纸面多边形。
+ *
+ * `toPaper` 的入参是**图面局部坐标**（屏幕 y 向下），故必须先经屏幕变换：模型坐标 →
+ * 投影坐标 (u,v) → 屏幕坐标，缺任一环都会把剖面线画到剖切面之外（朝向对齐在各视图上
+ * 是轴交换 + 翻转，漏掉它时画出的是一张转置/镜像的影子）。
+ */
+function cutFacePolylines(
+  cutFaces: readonly CadCutFace[],
+  toPaperFromModel: (point: readonly [number, number, number]) => [number, number],
+): [number, number][][][] {
+  return cutFaces.map(face => face.loops.map(loop => loop.map(point => toPaperFromModel(point))));
+}
+
+/** 文本包围盒估算（纸面毫米）：宽度按字符类别累计，高度取字号的 1.2 倍、基线偏下 0.2。 */
+function labelBox(ref: number, labelMm: [number, number]): CadLabelPlacement["boxMm"] {
+  const text = String(ref);
+  const halfWidth = measureTextWidth(text, CAD_REF_FONT_MM) / 2;
+  return {
+    left: labelMm[0] - halfWidth,
+    right: labelMm[0] + halfWidth,
+    top: labelMm[1] - CAD_REF_FONT_MM * 1.0,
+    bottom: labelMm[1] + CAD_REF_FONT_MM * 0.2,
+  };
+}
+
 /** 投影边表 → 黑白 SVG（A4 可印区适配；确定性：无时钟/随机）。 */
 export function renderCadSvg(table: CadEdgeTable, options: CadRenderOptions): CadRenderResult {
   const hiddenLines = options.hiddenLines === true;
   const margin = options.marginMm ?? DEFAULT_MARGIN_MM;
+  const annotations = options.annotations ?? [];
   const drawn: CadEdge[] = table.edges.filter(edge => edge.kind === "visible" || hiddenLines);
   if (drawn.length === 0) {
     throw new TypeError(`视图 ${table.view} 没有可绘制的${hiddenLines ? "" : "可见"}边——请改用其他视图或开启隐藏线`);
@@ -123,10 +257,12 @@ export function renderCadSvg(table: CadEdgeTable, options: CadRenderOptions): Ca
     );
   }
 
-  const projected = drawn.map(edge => ({
-    edge,
-    points: edge.points.map(([u, v]) => [transform.x(u, v), transform.y(u, v)] as const),
-  }));
+  const localFromUv = (u: number, v: number): [number, number] => [transform.x(u, v), transform.y(u, v)];
+  const localFromModel = (point: readonly [number, number, number]): [number, number] => {
+    const [u, v] = projectModelPoints(table.axes, [point])[0]!;
+    return localFromUv(u, v);
+  };
+  const projected = drawn.map(edge => ({ edge, points: edge.points.map(([u, v]) => localFromUv(u, v)) }));
   const xs = projected.flatMap(entry => entry.points.map(point => point[0]));
   const ys = projected.flatMap(entry => entry.points.map(point => point[1]));
   const minX = Math.min(...xs);
@@ -136,13 +272,38 @@ export function renderCadSvg(table: CadEdgeTable, options: CadRenderOptions): Ca
   const geometryWidth = Math.max(1e-6, maxX - minX);
   const geometryHeight = Math.max(1e-6, maxY - minY);
 
-  const availableWidth = PRINTABLE_WIDTH_MM - margin * 2;
-  const availableHeight = PRINTABLE_HEIGHT_MM - margin * 2;
-  const scale = Math.min(1, availableWidth / geometryWidth, availableHeight / geometryHeight);
-  const widthMm = geometryWidth * scale + margin * 2;
-  const heightMm = geometryHeight * scale + margin * 2;
+  // 标注预留带：标号向图外引，故四边各留出"最长引线 + 半个最宽标号 + 余量"。
+  // 有预留带 ⇒ 含标注的纸面尺寸**由构造保证**不超可印区（几何另按可用宽度缩放）。
+  const anchorsLocal = annotations.map(annotation => localFromModel(annotation.atMm));
+  const reserve = (() => {
+    if (annotations.length === 0) return 0;
+    let needed = 0;
+    for (const annotation of annotations) {
+      const offset = annotation.labelOffsetMm;
+      const reach = offset === undefined ? CAD_REF_LEADER_MM : Math.hypot(offset[0], offset[1]);
+      const halfWidth = measureTextWidth(String(annotation.ref), CAD_REF_FONT_MM) / 2;
+      needed = Math.max(needed, Math.min(reach, CAD_REF_LEADER_MM * 6) + halfWidth + CAD_REF_RESERVE_PAD_MM);
+    }
+    const cap = Math.min(PRINTABLE_WIDTH_MM, PRINTABLE_HEIGHT_MM) * CAD_MAX_RESERVE_RATIO;
+    return Math.min(needed, cap);
+  })();
 
-  const toSvg = (x: number, y: number): [number, number] => [margin + (x - minX) * scale, margin + (y - minY) * scale];
+  const availableWidth = PRINTABLE_WIDTH_MM - margin * 2 - reserve * 2;
+  const availableHeight = PRINTABLE_HEIGHT_MM - margin * 2 - reserve * 2;
+  const scale = Math.min(1, availableWidth / geometryWidth, availableHeight / geometryHeight);
+  const band = margin + reserve;
+  const widthMm = geometryWidth * scale + band * 2;
+  const heightMm = geometryHeight * scale + band * 2;
+
+  const toPaper = (x: number, y: number): [number, number] => [band + (x - minX) * scale, band + (y - minY) * scale];
+  const toSvg = toPaper;
+
+  const geometryBoundsMm = {
+    left: band,
+    top: band,
+    right: band + geometryWidth * scale,
+    bottom: band + geometryHeight * scale,
+  };
 
   const paths = projected
     .map(entry => {
@@ -157,13 +318,68 @@ export function renderCadSvg(table: CadEdgeTable, options: CadRenderOptions): Ca
     })
     .join("\n");
 
+  // 剖面线：剖切面轮廓 → 纸面多边形 → 45° 扫描线填充（细实线，先于轮廓绘制）
+  const cutFaces = table.cutFaces ?? [];
+  const toPaperFromModel = (point: readonly [number, number, number]): [number, number] => {
+    const [x, y] = localFromModel(point);
+    return toPaper(x, y);
+  };
+  const hatchSegments: [number, number][][] = [];
+  for (const loops of cutFacePolylines(cutFaces, toPaperFromModel)) {
+    hatchSegments.push(...hatchPolylines(loops, CAD_HATCH_SPACING_MM));
+  }
+  const hatchPath =
+    hatchSegments.length === 0
+      ? ""
+      : `<path d="${hatchSegments
+          .map(([from, to]) => `M${fmt(from[0])} ${fmt(from[1])}L${fmt(to[0])} ${fmt(to[1])}`)
+          .join("")}" fill="none" stroke="#000000" stroke-width="${CAD_HATCH_LINE_WIDTH_MM}"/>\n`;
+
+  // 附图标记：锚点投影 → 引线 → 标号（分组 id 形如 "n-ref-<标记>"，与内置渲染器的
+  // 回读契约同构：patent_figure_check 的 svg_paths 回读可直接复核 CAD 图）
+  const centerPaper: [number, number] = [
+    (geometryBoundsMm.left + geometryBoundsMm.right) / 2,
+    (geometryBoundsMm.top + geometryBoundsMm.bottom) / 2,
+  ];
+  const labels: CadLabelPlacement[] = [];
+  const annotationMarkup = annotations
+    .map((annotation, index) => {
+      const [anchorX, anchorY] = toPaper(...anchorsLocal[index]!);
+      let direction: [number, number] | undefined;
+      let labelMm: [number, number];
+      if (annotation.labelOffsetMm !== undefined) {
+        const [dx, dy] = annotation.labelOffsetMm;
+        labelMm = [anchorX + dx, anchorY + dy];
+        direction = normalize([dx, dy]);
+      } else {
+        direction = normalize([anchorX - centerPaper[0], anchorY - centerPaper[1]]) ?? [0, -1];
+        labelMm = [anchorX + direction[0] * CAD_REF_LEADER_MM, anchorY + direction[1] * CAD_REF_LEADER_MM];
+      }
+      const box = labelBox(annotation.ref, labelMm);
+      labels.push({ ref: annotation.ref, anchorMm: [anchorX, anchorY], labelMm, boxMm: box });
+      const leader =
+        direction === undefined
+          ? ""
+          : `<polyline points="${fmt(anchorX)},${fmt(anchorY)} ` +
+            `${fmt(labelMm[0] - direction[0] * CAD_REF_LABEL_GAP_MM)},` +
+            `${fmt(labelMm[1] - direction[1] * CAD_REF_LABEL_GAP_MM)}" fill="none" ` +
+            `stroke="#000000" stroke-width="${CAD_LINE_WIDTH_MM}"/>`;
+      return (
+        `<g id="n-ref-${annotation.ref}" data-ref="${annotation.ref}">${leader}` +
+        `<text x="${fmt(labelMm[0])}" y="${fmt(labelMm[1])}" font-size="${CAD_REF_FONT_MM}" ` +
+        `text-anchor="middle" fill="#000000">${annotation.ref}</text></g>`
+      );
+    })
+    .join("\n");
+
   const caption = options.jurisdiction === "us" ? `FIG. ${options.figureNo}` : `图${options.figureNo}`;
   const captionY = heightMm - 2;
   const svg =
     `<svg xmlns="http://www.w3.org/2000/svg" width="${fmt(widthMm)}mm" height="${fmt(heightMm)}mm" ` +
     `viewBox="0 0 ${fmt(widthMm)} ${fmt(heightMm)}" font-family="sans-serif">\n` +
     `<rect x="0" y="0" width="${fmt(widthMm)}" height="${fmt(heightMm)}" fill="#FFFFFF"/>\n` +
-    `${paths}\n` +
+    `${hatchPath}${paths}\n` +
+    (annotationMarkup.length > 0 ? `${annotationMarkup}\n` : "") +
     `<text x="${fmt(widthMm / 2)}" y="${fmt(captionY)}" font-size="3.5" text-anchor="middle" fill="#000000">` +
     `${escapeXml(caption)}</text>\n` +
     `</svg>\n`;
@@ -175,5 +391,9 @@ export function renderCadSvg(table: CadEdgeTable, options: CadRenderOptions): Ca
     scale,
     visibleEdges: table.edges.filter(edge => edge.kind === "visible").length,
     hiddenEdges: table.edges.filter(edge => edge.kind === "hidden").length,
+    cutFaces: cutFaces.length,
+    hatchSegments: hatchSegments.length,
+    labels,
+    geometryBoundsMm,
   };
 }

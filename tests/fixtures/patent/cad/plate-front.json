@@ -1,8 +1,12 @@
 {
-  "version": 1,
+  "version": 2,
   "view": "front",
   "units": "mm",
   "axes": {
+    "origin": [
+      0,
+      0
+    ],
     "x": [
       0,
       1

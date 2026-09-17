@@ -8,9 +8,10 @@
  *
  * 边界（诚实声明）：
  * - **不产几何**：只投影已有 STEP，不做建模；
- * - **不标注附图标记**：标记的图面位置需要坐标系统，属后续能力；本工具只保证投影图
- *   本身合规（黑白、可印、线条可辨），`spec.nodes` 为空骨架；
- * - **不做剖面线**：剖视图需切平面 + 确定性剖面线绘制（指南 4.3 要求不妨碍标记线）；
+ * - **剖切限于全剖视图**：剖切面垂直于视图方向（旋转剖/阶梯剖/局部剖不做）；剖面线为
+ *   45° 细实线，按纸面毫米间距确定性填充；
+ * - **附图标记只标注调用方给的锚点**：锚点用模型坐标（毫米），图面位置（引线方向）由
+ *   本工具按"向图外引"确定，可经 label_offset_mm 显式指定；
  * - 依赖本机 FreeCAD（`SATI_FREECAD_CMD` 或探测安装路径）：缺失即 fail-closed，
  * 不静默回退内置渲染器。
  */
@@ -22,10 +23,12 @@ import {
   buildFigureSidecar,
   checkCadProjection,
   figureSidecarFileName,
+  isCadSectionView,
   isCadView,
   projectStep,
   renderCadSvg,
   resolveFreecadCmd,
+  type CadRefAnnotation,
   type CadRunner,
   type CadView,
   type DocumentKind,
@@ -36,18 +39,32 @@ import { caseOutputsDir } from "../../patent/paths.js";
 import { SatiToolRuntimeError } from "../protocol/errors.js";
 import type { SatiToolDefinition, SatiToolRuntimeContext } from "../protocol/types.js";
 
+/** 附图标记标注入参（模型坐标锚点 + 可选图面偏移）。 */
+export type PatentFigureProjectAnnotation = {
+  ref: number;
+  at_mm: number[];
+  label_offset_mm?: number[];
+};
+
 export type PatentFigureProjectInput = {
   step_path: string;
   output_name: string;
   view: string;
   figure_no?: number;
   hidden_lines?: boolean;
+  section_offset_mm?: number;
+  annotations?: PatentFigureProjectAnnotation[];
   case_id?: string;
   output_dir?: string;
   jurisdiction?: string;
   document_kind?: string;
   tolerance_mm?: number;
 };
+
+/** 标注数量上限（超出属调用方构造错误：图面容不下，且多为误传）。 */
+export const MAX_CAD_ANNOTATIONS = 24;
+/** 标号图面偏移的绝对值上限（毫米）：防离谱偏移把几何压到不可见。 */
+export const MAX_CAD_LABEL_OFFSET_MM = 50;
 
 export type CreatePatentFigureProjectToolOptions = {
   /** 注入的进程运行器（单测不真跑 FreeCAD）。 */
@@ -67,11 +84,17 @@ export function createPatentFigureProjectTool(
     description:
       "Project an existing STEP/3D model into a patent-style figure (deterministic black-and-white SVG, " +
       "hidden-line removal, millimetre-accurate orthographic projection) using a headless FreeCAD on this " +
-      "machine. Views: front/back/left/right/top/bottom/iso. The SVG is produced by this project's own " +
-      "drawing contract (fits the A4 printable area, carries the 图N caption) and a sidecar records the " +
-      "projection parameters. Boundaries: it does not create geometry, does not place reference numerals " +
-      "(the figure is an unannotated projection) and does not draw section hatching. Requires a local " +
-      "FreeCAD install (SATI_FREECAD_CMD or the standard app path); missing install fails closed.",
+      "machine. Views: front/back/left/right/top/bottom/iso. Pass `section_offset_mm` for a full section " +
+      "view: the cut plane is perpendicular to the view direction at that model coordinate, the material " +
+      "facing the viewer is removed and the cut faces get deterministic 45-degree hatching (front/back/" +
+      "left/right/top/bottom only — no rotated/stepped/local sections). Pass `annotations` to place " +
+      "reference numerals: each numeral is anchored at a model-space point (mm) and drawn as a leader line " +
+      "plus the numeral, with `label_offset_mm` to pin the numeral's sheet position. The SVG is produced by " +
+      "this project's own drawing contract (fits the A4 printable area, carries the 图N caption, numerals " +
+      "carry data-ref for readback) and a sidecar records the projection, section and numeral parameters. " +
+      "Boundaries: it does not create geometry and does not read dimension lines or centre lines from the " +
+      "model. Requires a local FreeCAD install (SATI_FREECAD_CMD or the standard app path); missing install " +
+      "fails closed.",
     kind: "custom",
     domain: "patent",
     inputSchema: {
@@ -86,6 +109,33 @@ export function createPatentFigureProjectTool(
         hidden_lines: {
           type: "boolean",
           description: "是否绘制隐藏线（默认 false：CNIPA 实务以剖视图表达内部结构，虚线易与标记线混淆）",
+        },
+        section_offset_mm: {
+          type: "number",
+          description:
+            "全剖视图：沿视图方向的剖切位置（模型坐标，毫米）——剖切面垂直于视图方向、保留远离观者的一侧，剖切面按 45° 细实线填充；仅 front/back/left/right/top/bottom 可剖切（iso 不可）",
+        },
+        annotations: {
+          type: "array",
+          description: "附图标记标注（缺省出未标注的投影图）：每项一个标记，锚点为模型坐标（毫米）",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["ref", "at_mm"],
+            properties: {
+              ref: { type: "integer", description: "附图标记（细则第 21 条：须与说明书文字部分一致）" },
+              at_mm: {
+                type: "array",
+                description: "标记锚点（模型坐标，毫米；[x, y, z]）：投影后作为引线起点",
+                items: { type: "number" },
+              },
+              label_offset_mm: {
+                type: "array",
+                description: "标号相对锚点的图面偏移（毫米，[dx, dy]；+x 向右、+y 向下）；缺省按远离图心方向自动引线",
+                items: { type: "number" },
+              },
+            },
+          },
         },
         case_id: { type: "string", description: "案卷 id；提供时落盘 data/cases/<caseId>/outputs/" },
         output_dir: { type: "string", description: "显式输出目录（覆盖默认 .sati/figures/ 与 case_id）" },
@@ -121,6 +171,77 @@ export function createPatentFigureProjectTool(
         input.document_kind === "utility" ? "utility" : input.document_kind === "invention" ? "invention" : undefined;
       const hiddenLines = input.hidden_lines === true;
 
+      // 剖切：仅轴对齐视图可剖（rotate/stepped/local section 不做）
+      const sectionOffset = input.section_offset_mm;
+      if (sectionOffset !== undefined && !isCadSectionView(view)) {
+        throw new SatiToolRuntimeError(
+          "invalid_tool_input",
+          `视图 ${view} 不能剖切：剖切要求轴对齐视图（front/back/left/right/top/bottom），轴测图无"剖切面"语义`,
+          { tool: "patent_figure_project" },
+        );
+      }
+      if (sectionOffset !== undefined && !Number.isFinite(sectionOffset)) {
+        throw new SatiToolRuntimeError("invalid_tool_input", `section_offset_mm 应为有限数字`, {
+          tool: "patent_figure_project",
+        });
+      }
+
+      // 附图标记标注：逐项校验（锚点须是三元有限数组，偏移须在可交付范围内）
+      const annotations: CadRefAnnotation[] = [];
+      const rawAnnotations = input.annotations ?? [];
+      if (rawAnnotations.length > MAX_CAD_ANNOTATIONS) {
+        throw new SatiToolRuntimeError(
+          "invalid_tool_input",
+          `annotations 至多 ${MAX_CAD_ANNOTATIONS} 项（收到 ${rawAnnotations.length} 项）`,
+          { tool: "patent_figure_project" },
+        );
+      }
+      for (const [index, annotation] of rawAnnotations.entries()) {
+        const position = `annotations[${index}]`;
+        if (!Number.isInteger(annotation.ref) || annotation.ref <= 0 || annotation.ref > 999) {
+          throw new SatiToolRuntimeError("invalid_tool_input", `${position}.ref 应为 1–999 的整数`, {
+            tool: "patent_figure_project",
+          });
+        }
+        if (
+          !Array.isArray(annotation.at_mm) ||
+          annotation.at_mm.length !== 3 ||
+          !annotation.at_mm.every(value => typeof value === "number" && Number.isFinite(value))
+        ) {
+          throw new SatiToolRuntimeError(
+            "invalid_tool_input",
+            `${position}.at_mm 应为三个有限数字（模型坐标 [x, y, z]，毫米）`,
+            { tool: "patent_figure_project" },
+          );
+        }
+        const offset = annotation.label_offset_mm;
+        if (offset !== undefined) {
+          if (
+            !Array.isArray(offset) ||
+            offset.length !== 2 ||
+            !offset.every(value => typeof value === "number" && Number.isFinite(value))
+          ) {
+            throw new SatiToolRuntimeError(
+              "invalid_tool_input",
+              `${position}.label_offset_mm 应为两个有限数字（图面偏移 [dx, dy]，毫米）`,
+              { tool: "patent_figure_project" },
+            );
+          }
+          if (Math.abs(offset[0]) > MAX_CAD_LABEL_OFFSET_MM || Math.abs(offset[1]) > MAX_CAD_LABEL_OFFSET_MM) {
+            throw new SatiToolRuntimeError(
+              "invalid_tool_input",
+              `${position}.label_offset_mm 绝对值不得超过 ${MAX_CAD_LABEL_OFFSET_MM}mm（收到 [${offset.join(", ")}]）`,
+              { tool: "patent_figure_project" },
+            );
+          }
+        }
+        annotations.push({
+          ref: annotation.ref,
+          atMm: [annotation.at_mm[0]!, annotation.at_mm[1]!, annotation.at_mm[2]!],
+          ...(offset === undefined ? {} : { labelOffsetMm: [offset[0]!, offset[1]!] as [number, number] }),
+        });
+      }
+
       const stepPath = isAbsolute(input.step_path) ? input.step_path : resolve(context.cwd, input.step_path);
       const outputDir =
         input.output_dir !== undefined
@@ -154,9 +275,11 @@ export function createPatentFigureProjectTool(
           stepPath,
           view,
           ...(input.tolerance_mm === undefined ? {} : { toleranceMm: input.tolerance_mm }),
+          ...(sectionOffset === undefined ? {} : { sectionOffsetMm: sectionOffset }),
           ...(options.runner === undefined ? {} : { runner: options.runner }),
         });
-        // 几何级检查分两步：C1（边数）先于出图 → fail-closed；C2/C3 依赖适配缩放 → 渲染后。
+        // 几何级检查分两步：C1（边数）与 C5（剖切有效性）先于出图 → fail-closed；
+        // C2/C3/C6–C9 依赖排版（缩放/剖面线/标注落位）→ 渲染后。
         const edgeFindings = checkCadProjection({ table, hiddenLines });
         const blocker = edgeFindings.find(finding => finding.severity === "fail");
         if (blocker !== undefined) {
@@ -169,18 +292,38 @@ export function createPatentFigureProjectTool(
           figureNo,
           jurisdiction,
           hiddenLines,
+          ...(annotations.length === 0 ? {} : { annotations }),
         });
         const findings = [
           ...edgeFindings,
-          ...checkCadProjection({ table, render, hiddenLines }).filter(finding => finding.rule !== "C1"),
+          ...checkCadProjection({ table, render, hiddenLines }).filter(
+            finding => finding.rule !== "C1" && finding.rule !== "C5",
+          ),
         ];
+        const layoutBlocker = findings.find(finding => finding.severity === "fail");
+        if (layoutBlocker !== undefined) {
+          throw new SatiToolRuntimeError("tool_execution_failed", `图幅不可交付：${layoutBlocker.message}`, {
+            tool: "patent_figure_project",
+            view,
+          });
+        }
 
         await mkdir(outputDir, { recursive: true });
         const svgPath = resolve(outputDir, `${input.output_name}-fig${figureNo}.svg`);
         await writeFile(svgPath, render.svg, "utf8");
 
-        // 图号 + 空骨架 spec（CAD 图的画幅由投影几何决定，不由本模块布局决定）
-        const skeleton: FigureSpec = { figure_no: figureNo, kind: "block", nodes: [], edges: [] };
+        // 图号 + 标记骨架 spec：CAD 图的画幅由投影几何决定（不由本模块布局决定），但**标记**
+        // 是真实存在的图面内容 ⇒ 落进 nodes（label=标号、ref=标记），使 V2/V4 在定稿期可用
+        const skeleton: FigureSpec = {
+          figure_no: figureNo,
+          kind: "block",
+          nodes: annotations.map(annotation => ({
+            id: `ref-${annotation.ref}`,
+            label: String(annotation.ref),
+            ref: annotation.ref,
+          })),
+          edges: [],
+        };
         const sidecarPath = resolve(outputDir, figureSidecarFileName(input.output_name));
         await writeFile(
           sidecarPath,
@@ -201,6 +344,20 @@ export function createPatentFigureProjectTool(
                     width_mm: render.widthMm,
                     height_mm: render.heightMm,
                     hidden_lines: hiddenLines,
+                    ...(table.section === undefined
+                      ? {}
+                      : {
+                          section: {
+                            offset_mm: table.section.offset_mm,
+                            cut_faces: render.cutFaces,
+                            hatch_segments: render.hatchSegments,
+                          },
+                        }),
+                    ...(annotations.length === 0
+                      ? {}
+                      : {
+                          ref_numerals: annotations.map(annotation => annotation.ref),
+                        }),
                     findings,
                   },
                 },
@@ -221,6 +378,16 @@ export function createPatentFigureProjectTool(
           `- 图${figureNo}: ${svgPath}`,
           `- 几何范围 ${table.edges.length} 条投影边（可见 ${render.visibleEdges} / 隐藏 ${render.hiddenEdges}）`,
           `- 纸面尺寸 ${render.widthMm.toFixed(1)}×${render.heightMm.toFixed(1)}mm（适配缩放 ${(render.scale * 100).toFixed(0)}%，A4 可印区 170×257mm 内）`,
+          ...(table.section === undefined
+            ? []
+            : [
+                `- 全剖视图：剖切面位于 ${table.section.offset_mm}mm，剖切面 ${render.cutFaces} 个、剖面线 ${render.hatchSegments} 段`,
+              ]),
+          ...(annotations.length === 0
+            ? []
+            : [
+                `- 附图标记 ${annotations.length} 个（模型坐标锚点 + 引线）：${annotations.map(a => a.ref).join("、")}`,
+              ]),
           `- 附图 sidecar: ${sidecarPath}`,
           "",
           "几何级检查：",
@@ -230,7 +397,8 @@ export function createPatentFigureProjectTool(
               (finding.evidence ? `\n  ${finding.evidence.join("\n  ")}` : ""),
           ),
           "",
-          "说明：本图为**未标注**的投影图（附图标记需人工/后续能力标注）；不产几何、不绘剖视图剖面线。",
+          "说明：本工具不产几何；剖面线为 45° 细实线（纸面等间距）；旋转剖/阶梯剖/局部剖未做。" +
+            "附图标记的锚点由调用方按模型坐标给出，图面标号位置可经 label_offset_mm 指定。",
         ];
 
         return {

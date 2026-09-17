@@ -1,12 +1,17 @@
 # 专利附图链路加固与 CAD 扩展实施方案
 
-> 状态：**P0 全部 + P1 全部 + P2 阶段一 + §6.2 评测扩展已落地**（P0 见 PR #418；P1 见 #419；
-> P2 见紧随其后的 CAD 投影 PR；§6.2 生成侧基准见其后的基准 PR）。实施中的三处对本计划的修正
+> 状态：**P0 全部 + P1 全部 + P2 阶段一 + §6.2 评测扩展 + CAD 剖视图/附图标记标注已落地**
+> （P0 见 PR #418；P1 见 #419；P2 见紧随其后的 CAD 投影 PR；§6.2 生成侧基准见其后的基准 PR；
+> 剖视图（剖面线）与附图标记标注见再其后的 CAD 结构图扩展 PR）。实施中的四处对本计划的修正
 > 已回写：① §7 重录手册补「录制必须用重放测试 pin 的 provider/model」；② §5.2 朝向对齐新增
 > 「参考体探测」实做（计划未涵盖 FreeCAD 投影坐标系朝向问题，实测 front 视图会出 90° 旋转图）；
 > ③ 计划外修复 `layout.ts` 的 LR 画幅缺陷（生成侧基准建设时发现：block 附图（默认 LR）落点溢出
-> viewBox 被裁掉，见 `docs/notes/implemented/2026-09-17-figure-lr-layout-frame.md`）。阶段二
-> （几何 DSL）按 D4 不做。
+> viewBox 被裁掉，见 `docs/notes/implemented/2026-09-17-figure-lr-layout-frame.md`）；
+> ④ §5.2 原列为"边界/不做"的**剖视图（剖面线）与附图标记标注**已补齐落地（见
+> `docs/notes/implemented/2026-09-17-figure-cad-section-and-numerals.md`）：边表升 v2 加
+> `axes.origin`（模型→图面仿射映射）、`section`/`cutFaces`（剖切面轮廓以模型坐标交回 Sati 侧投影），
+> 工具的 `section_offset_mm`/`annotations` 使 CAD 图首次带标记（V2/V4 在定稿期真正生效）。
+> 阶段二（几何 DSL）按 D4 不做。
 > 范围：`src/patent/figuregen/`、`src/patent/figure/`、`src/tool/builtin/patentFigure*.ts`、`src/patent/atoms/handlers/builtin/`（新增 gate）、`src/patent/workflow/manifests.ts`、新增 `src/patent/figuregen/cad/`
 > 依据：对 `patent_figuregen` 现状的逐行核对与 `dist/` 实测（见 §11）；对照外部同类技能（Python/Graphviz 路线、CAD 隔离、像素级门禁缺失）后的取舍见 §10
 
@@ -250,6 +255,8 @@ stripRefMark("处理模块20")   = "处理模块20"     ← 与上一行为不�
   - **阶段二（不做）**：无 3D 源时由模型产"几何 DSL"（棱柱/回转体 + 布尔 + 圆角）→ 确定性编译为 FreeCAD 脚本。理由：模型直接产三维几何的可靠性不足；若未来要做，仍须坚持"编译而非让模型写 Python"（不可校验 + 注入面）。
 - **门禁与留痕**：CAD 图同样进 `figure-gate`；新增几何级检查（边数>0、闭合性、最小可辨间距、视图方向白名单）；`figure-check.json` 记录 `renderer: "cad"` 与投影参数。
 - **边界声明**：CAD 投影图**不得**用作外观设计图片；虚线隐藏线**默认关**（CNIPA 实务以剖视图表达内部结构），开关留在环境层；剖视图 = 用切平面 `common()` 后投影，剖面线另行确定性绘制且不得妨碍标记线（指南 4.3 原文明示）。
+  - **（2026-09-17 补齐）剖视图与剖面线已落地**：`section_offset_mm` 走全剖视图（半空间 `common()`，只允许轴对齐视图），剖切面轮廓以**模型坐标**交回 Sati 侧投影（投影实现只有一份），剖面线 45°/纸面 2.5mm 间距/0.2mm 细实线走扫描线奇偶填充；边界为"只做全剖""间距不随面尺寸自适应"。
+  - **（2026-09-17 补齐）附图标记标注已落地**：边表升 v2 加 `axes.origin` 定出模型 → 图面的仿射映射，`annotations`（模型坐标锚点 + 可选图面偏移）使 CAD 图首次带标号，sidecar 的 `spec.nodes` 据此非空 ⇒ V2/V4 在定稿期真正生效；标号带 `data-ref` 分组，`patent_figure_check` 的 `svg_paths` 通道可直接复核。
 
 ### 5.3 测试与验收
 
@@ -341,8 +348,10 @@ node --test dist/tests/patent/figuregen/*.js dist/tests/patent/figure-gate.spec.
 | P1-3 | 经 `image_paths` 传入的灰度着色图、过细线、DPI 越界、物理尺寸超框各报一条对应 finding；`svg_paths` 行为不变（回归） |
 | P1-4 | 机械案多图一致性报告非空；`checkFigureConsistency` 有生产调用方 |
 | P2 | 无 FreeCAD 时 fail-closed 不静默回退；有 FreeCAD 时四视图出图并与 A4 判据一致 |
+| P2（剖视图/标注） | `section_offset_mm` 剖切有效即出剖面线（C5 在剖切面落于模型范围外时 fail、C6 在面过小时 warn）；剖面线全部落在剖切面内（属性断言）；`annotations` 的标号带 `data-ref` 且可回读；附图门在漏标号时报 V2 fail 并挂 HITL |
 | §6.2 | `pnpm tsx scripts/figure-benchmark/gen-compliance.ts` 与基线一致；`tests/scripts/figure-benchmark/gen-compliance.spec.ts` 绿（含语义锚点，不随 `--update` 放宽） |
 | D2/D4 | `pnpm record:replay tests/fixtures/llm-replay/deepseek-v4-flash-basic` 通过，`llm-replay-real.spec` 重放绿，且 `manifest.json` 的 `toolNames`/schema 变更与代码一致（§7） |
+| CAD fixture 可复现 | `npx tsx scripts/record-cad-fixtures.ts` 可重录三份边表；front 视图与既有记录逐点一致（试件定义随脚本入库） |
 
 ---
 
@@ -367,6 +376,8 @@ node --test dist/tests/patent/figuregen/*.js dist/tests/patent/figure-gate.spec.
 - **几何 DSL 自动建模**（P2 阶段二）：模型直接产 3D 几何的可靠性不足，先只支持"客户/己方已有 STEP"。
 - **栅格图 OCR 读图号**（P1-3）：不在本轮引入 OCR 依赖；改为"必须有声明，无声明诚实降级"。
 - **未核验的规则**：审查指南 4.3 是否含"横向布置时图顶朝左""图幅与页边距具体数值"等条款——本地 `knowledge.db` 无该节原文，**未核验即不写成规则**；如需补，先拉官方公布文本核对后再进 `cn-drawing-rules.md`。
+- **剖视图的其余形态**（2026-09-17 落地全剖视图后仍不做）：旋转剖、阶梯剖、局部剖；剖面线间距固定 2.5mm（不按剖切面尺寸自适应）；C8 只判"锚点是否落在图内几何范围"，不检测"锚点是否落在空材料处"（剖切缺口内的锚点仍会画）。
+- **CAD 图的参考标记智能放置**（按几何拓扑自动推荐标注位置）：标记锚点仍由调用方按模型坐标给出，自动推荐属启发式。
 
 ---
 

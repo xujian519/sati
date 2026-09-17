@@ -7,7 +7,7 @@
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1033 / 172681 |
+| src TS 文件 / 行数 | 1033 / 173485 |
 | src JS 文件 | 0 |
 | tests 文件 | 558 |
 | ui/src 文件 / 行数 | 472 / 83652 |
@@ -85,6 +85,7 @@
 | `ui/src/components/kanban/hooks/useBoardState.ts` | `useBoardState` | 368 | function |
 | `ui/src/components/chat/hooks/useFileMentions.tsx` | `useFileMentions` | 366 | function |
 | `ui/src/components/settings/view/agentRoute/components/RouterSection.tsx` | `RouterSection` | 357 | function |
+| `src/tool/builtin/patentFigureProject.ts` | `createPatentFigureProjectTool` | 356 | function |
 | `src/cli/projectRuntimeFactory.ts` | `createProjectRuntimeResolver` | 349 | function |
 | `ui/src/components/main-content/view/MainContent.tsx` | `MainContent` | 346 | function |
 | `src/gateway/server/GatewayWsConnection.ts` | `dispatchRequest` | 343 | method |

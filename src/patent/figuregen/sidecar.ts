@@ -43,6 +43,10 @@ export type FigureSidecarGeometry = {
   width_mm: number;
   height_mm: number;
   hidden_lines: boolean;
+  /** 全剖视图的剖切参数与剖面线统计（整视图时缺省）。 */
+  section?: { offset_mm: number; cut_faces: number; hatch_segments: number };
+  /** 图面已标注的附图标记（升序无关，按调用方顺序；未标注时缺省）。 */
+  ref_numerals?: number[];
   /** 投影期的几何级检查（几何判据不重跑：记录当时结论供审计）。 */
   findings?: CadFinding[];
 };
