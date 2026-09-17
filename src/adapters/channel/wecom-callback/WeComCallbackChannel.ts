@@ -9,11 +9,11 @@ import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
 import { ImPermissionHelper } from "../protocol/ImPermissionHelper.js";
 import { dispatchChannelMessage } from "../protocol/ImInboundDispatch.js";
 import { processChannelTurn } from "../protocol/ImTurnProcessor.js";
+import { CHANNEL_DEFAULT_PORTS } from "../protocol/channel-defaults.js";
 import { WeComCallbackSessionMapper } from "./WeComCallbackSessionMapper.js";
 import { renderWeComCallbackEvent } from "./wecom-callback-render.js";
 
 const QYAPI = "https://qyapi.weixin.qq.com/cgi-bin";
-const DEFAULT_PORT = 8780;
 const TOKEN_TTL_MS = 7000 * 1000;
 const MAX_MESSAGE_LENGTH = 2048;
 
@@ -104,8 +104,8 @@ export class WeComCallbackChannel implements ChannelAdapter {
     this.corpSecret = String(options.secret ?? process.env.WECOM_CB_SECRET ?? "").trim();
     this.callbackToken = String(options.token ?? process.env.WECOM_CB_TOKEN ?? "").trim();
     this.encodingAesKey = String(options.encodingAesKey ?? process.env.WECOM_ENCODING_AES_KEY ?? "").trim();
-    const p = Number(options.port ?? process.env.WECOM_CB_PORT ?? DEFAULT_PORT);
-    this.port = Number.isFinite(p) && p > 0 ? Math.floor(p) : DEFAULT_PORT;
+    const p = Number(options.port ?? process.env.WECOM_CB_PORT ?? CHANNEL_DEFAULT_PORTS.wecomCallback);
+    this.port = Number.isFinite(p) && p > 0 ? Math.floor(p) : CHANNEL_DEFAULT_PORTS.wecomCallback;
   }
 
   async start(deps: ChannelStartDeps): Promise<ChannelHandle> {

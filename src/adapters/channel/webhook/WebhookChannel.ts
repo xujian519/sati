@@ -12,10 +12,10 @@ import {
 } from "../../../status/agentStatus.js";
 import { readRequestBody } from "../protocol/httpBody.js";
 import { ChatSessionMapper } from "../protocol/ChatSessionMapper.js";
+import { CHANNEL_DEFAULT_PORTS } from "../protocol/channel-defaults.js";
 import { renderWebhookEvent } from "./webhook-render.js";
 
 const DEFAULT_HOST = "127.0.0.1";
-const DEFAULT_PORT = 8643;
 const DEFAULT_RATE_LIMIT = 30;
 const DEFAULT_MAX_BODY_BYTES = 1_048_576;
 const INSECURE_NO_AUTH = "__INSECURE_NO_AUTH__";
@@ -60,7 +60,7 @@ export class WebhookChannel implements ChannelAdapter {
   constructor(options: WebhookChannelOptions = {}) {
     this.mapper = options.mapper ?? new ChatSessionMapper("webhook");
     this.host = options.host ?? DEFAULT_HOST;
-    this.port = Number(options.port ?? DEFAULT_PORT);
+    this.port = Number(options.port ?? CHANNEL_DEFAULT_PORTS.webhook);
     this.globalSecret = options.secret ?? "";
     this.routes = options.routes ?? {};
     this.rateLimit = Number(options.rateLimit ?? DEFAULT_RATE_LIMIT);

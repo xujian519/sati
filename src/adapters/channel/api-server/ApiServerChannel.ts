@@ -3,12 +3,12 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { Gateway, GatewayChannelKey, GatewayEvent } from "../../../gateway/index.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
 import { readRequestBody } from "../protocol/httpBody.js";
+import { CHANNEL_DEFAULT_PORTS } from "../protocol/channel-defaults.js";
 import { createAgentStatusHttpErrorBody, isVisibleFailureStatusDetail } from "../../../status/agentStatus.js";
 import { ApiServerSessionMapper } from "./ApiServerSessionMapper.js";
 import { renderApiServerEvent } from "./api-server-render.js";
 
 const DEFAULT_HOST = "127.0.0.1";
-const DEFAULT_PORT = 8642;
 const MAX_REQUEST_BYTES = 1_000_000;
 const DEFAULT_MODEL_NAME = "sati-gateway";
 const REQUEST_TIMEOUT_MS = 300_000;
@@ -46,7 +46,7 @@ export class ApiServerChannel implements ChannelAdapter {
   constructor(options: ApiServerChannelOptions = {}) {
     this.mapper = options.mapper ?? new ApiServerSessionMapper();
     this.host = options.host ?? process.env.API_SERVER_HOST ?? DEFAULT_HOST;
-    this.port = Number(options.port ?? process.env.API_SERVER_PORT ?? DEFAULT_PORT);
+    this.port = Number(options.port ?? process.env.API_SERVER_PORT ?? CHANNEL_DEFAULT_PORTS.apiServer);
     this.apiKey = options.apiKey ?? process.env.API_SERVER_KEY ?? "";
     this.modelName = options.modelName ?? process.env.API_SERVER_MODEL_NAME ?? DEFAULT_MODEL_NAME;
     this.corsOrigins = parseCorsOrigins(options.corsOrigins ?? process.env.API_SERVER_CORS_ORIGINS ?? "");
