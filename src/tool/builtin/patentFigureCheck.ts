@@ -41,7 +41,11 @@ export function createPatentFigureCheckTool(): SatiToolDefinition<PatentFigureCh
       "Regulations 2023): continuous figure numbering (V1), every reference numeral in a figure must " +
       "appear in the specification text (V2, hard fail), bracket-form numerals in the text missing from " +
       "figures (V3, warn), one-numeral-one-component consistency (V4, hard fail), plus annotation-like " +
-      "labels (V5), canvas legibility (V7), abstract-figure designation (V8) and utility-model drawings " +
+      "labels (V5), unfiled bracket-less numerals in the claims face (V10, hard fail; Rule 22 requires " +
+      "reference numerals in claims to be parenthesised) and bracketed numerals in the description face " +
+      "(V11, warn; the description convention is name-then-numeral). V10/V11 need a successful heuristic " +
+      "split of the text into claims/description faces — when the split fails the report says so and both " +
+      "rules stay silent. Also: canvas legibility (V7), abstract-figure designation (V8) and utility-model drawings " +
       "requirement (V9). Input: structured `figures` and/or `svg_paths` (re-parses SVGs produced by " +
       "patent_figure_generate). Pass the full specification text (claims + description). Figures are not " +
       "final until this check reports ok. Registered by default; pass `patentFigure: false` to skip.",
@@ -129,6 +133,13 @@ export function createPatentFigureCheckTool(): SatiToolDefinition<PatentFigureCh
             `warn=${result.findings.filter(f => f.severity === "warn").length}）：`,
           `图内标记：${result.refsInFigures.join(", ") || "（无）"}`,
           `文内括号标记：${result.refsInText.join(", ") || "（无）"}`,
+          ...(result.specFaces === undefined
+            ? []
+            : [
+                `文字面分节：${result.specFaces.sectioned ? "已分节" : "未分节"}${
+                  result.specFaces.sectioned ? "" : "（V10/V11 未生效）"
+                }——${result.specFaces.reason}`,
+              ]),
         ];
         if (result.findings.length > 0) {
           lines.push("");
