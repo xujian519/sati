@@ -1,5 +1,12 @@
 # 跨平台浏览器自动化备选与级联降级方案（2026-08）
 
+> **验收状态（2026-09-18 补）**：本文件是历史快照，勾选状态曾长期停留在交付前（见 #359）。
+> 截至 2026-09-18 复核：未勾选 15 项中 **2 项已交付**（已回填勾选）、**9 项仍未交付**、**4 项无法核实**。§0（2026-08-27 策略修正）已把 §7.2/§7.3/§8 的跨平台收敛项整体暂缓，下列仍未交付项均属该暂缓范围。
+>
+> - 已交付：§8「实测 @playwright/mcp 下载拦截能力（L-D）并修正 4 章矩阵」—— 证据 `docs/windows-browser-automation-plan.md:815`（§10.7 L-D 定论）+ §10.9 实测表（矩阵已改标 ⚠️，见 `:365`）；§8「确认 BrowserOS neo 是否提供 endpoint 认证/token 机制」—— 已核为**无认证**（证据 `:788`，S4 风险未降级）。
+> - 仍未交付：§7.1 agent 自动级联（ego 不可用 → 自动切 BrowserOS neo → browser-use → Playwright）—— `BrowserBackend` 抽象与路由已合入（`src/browser/backend/index.ts:60`），但运行时只有 `sati browsers` 诊断命令消费（`src/cli/commands/browserBackends.ts:15`），agent 工具路径未接自动级联；§7.2 Track B 兼容层（ego-helper）—— 全仓无 `ego-helper` 实现；§7.2 技能层 backend 无关意图层 —— `skills/` 内无对应改动；§7.2 三平台 × 多 backend dry-run / CI matrix / 四 backend 录屏 —— `.github/workflows/ci.yml` 只有 ubuntu 与 windows 构建 job，无浏览器 dry-run matrix、无录屏产物；§7.3 三平台安装脚本统一增强 —— `install.sh`/`install.ps1` 无 `--install-browser-use` / `-IncludeBrowserAutomation` / 发行版识别（现有 Playwright 浏览器检查见 `install.sh:1140`）；§7.3 UI 提供 BrowserOS neo endpoint 粘贴 + health check —— `ui/src/` 内零引用；§7.3 google-patents 经验包跨 backend 脚本翻译器（覆盖率 90%）—— `src/browser/` 下无翻译器模块；§7.3 macOS M5 验收（router 优选 + 可回放视频 + 步骤时间线）—— 无产物；§7.3 `browser.preferredBackend` 在 `sati.yaml` + UI 设置生效 —— 仅路由 API 有 `prefer` 选项（`src/browser/backend/index.ts:23`），无配置读取与 UI 入口。
+> - 无法核实：§7.1 `@playwright/mcp` 三平台手动 dry-run —— 需 Windows/Linux 真实机器，仓库内无产物；§8 M1/M4 场景真实复现（测 macOS 降级路径触发频率）—— 需实机人工复现，无记录；§8 法务确认 AGPL 边界 —— 外部方结论，仓库内无从判定；§8 确认 browser-use `--cli-mcp` 在 Windows 的稳定性 —— 需 Windows 实机（§10.9 只有 macOS 侧受阻记录）。
+
 > 背景：当前项目的主力浏览器自动化方案 ego lite（ego-browser）仅支持 macOS，Windows/Linux 用户无法使用；
 > 即便是 macOS 用户，也可能遇到 ego lite 未安装、版本不兼容、CLI 进程挂死、企业安全策略限制闭源 App
 > 安装等实际问题，同样需要一条可用的降级路径。
@@ -831,9 +838,9 @@ Sprint 3（P2，不变）                → UI 配置 / 证据入库（含 L-C 
 ### 10.6 评审遗留待办
 
 - [ ] POC 前先做 1.5 节 M1/M4 场景的**真实复现**（新机不装 ego / kill ego app 后跑任务），确认 macOS 降级路径的真实触发频率
-- [ ] 实测 @playwright/mcp 的下载拦截能力（L-D），修正 4 章矩阵
+- [x] 实测 @playwright/mcp 的下载拦截能力（L-D），修正 4 章矩阵
 - [ ] 法务确认 AGPL 边界时附带 10.3-S4 旁注的「分发义务 vs 整体开源」精确区分
-- [ ] 确认 BrowserOS neo 是否提供 endpoint 认证/token 机制（若有，S4 风险降级）
+- [x] 确认 BrowserOS neo 是否提供 endpoint 认证/token 机制（若有，S4 风险降级）
 - [ ] 确认 browser-use `--cli-mcp` 在 Windows 上的稳定性（M-C 的 feature-detect 是否需要 fallback 到 CLI 命令链）
 
 ### 10.7 实施记录（Sprint 1 · 2026-08-12）

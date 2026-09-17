@@ -1645,10 +1645,11 @@
   - 影响：核实结论——`await previous.catch(() => undefined)` **不是**无注释静默吞错：`:16-18` 三行注释完整论证了「tail 链归纳证明永不 reject，`.catch` 仅作未来 reject 源的锁自愈兜底」。把它与 `TurnRunner.ts` 真静默点并列，会让修复者误改或误判该项无进展。**属已注释的刻意设计。**
   - 建议：从 TD-AGENT-104 位置清单移除 `lock.ts:19`；本模块真正的无注释吞错点是 N11。
 - **TD-TEAM-N25** · M2 计划文档「`isCaptainOnline` 未接线」与代码相反（历史快照残留）
-  - 类别：H · 严重级：P3 · 工作量：S · 状态：new
-  - 位置：`docs/superpowers/plans/2026-08-20-agent-teams-m2-taskpool-scheduler.md:1343,1354,1535`（对照 `src/cli/teamSubsystem.ts:148`）
+  - 类别：H · 严重级：P3 · 工作量：S · 状态：done（2026-09-18，PR #439）
+  - 位置：`docs/superpowers/plans/2026-08-20-agent-teams-m2-taskpool-scheduler.md:1343,1354,1535`（对照 `src/cli/teamSubsystem.ts:158`）
   - 影响：核实结论——**已接线**（`isCaptainOnline: captainSessionKey => deps.sessionPresence.isActive(captainSessionKey)`）。计划文档三处称「默认常在线/未接线/留 M3」，与代码状态错位。
   - 建议：计划文档属历史快照不必改内容，但**台账/入口文档不应继续把它当未决项**；在该行标注接线位置。
+  - **2026-09-18 处置**：✅ **done（#359 批量回收）**——该文档新增「验收状态」段，正文**不改**（历史快照），在段内单列更正：`isCaptainOnline` 已由提交 `d87bac0e` 接线（`src/cli/teamSubsystem.ts:158`），该提交同时删掉了旧注释「I3 标注：isCaptainOnline 未接线（默认常在线）」；同批「留待 M3」的另两项也已落地（`message_delivered` 批次 → `senders[]`，`events.ts:37-38`；`blockedByCount` 维护，`src/tool/builtin/team/teamTasks.ts:46-52`）。该文档未勾选 57 项经逐条核对：**51 项已交付**（已回填勾选 + 逐项证据），6 项「无法核实」（均为 TDD 红灯/跑测试类瞬时步骤，无持久产物）。
 - **TD-TEAM-N26** · `team_event` 下游计数文档 ×14 与实际 16 变体不符
   - 类别：H · 严重级：P3 · 工作量：S · 状态：new
   - 位置：`docs/event-producer-consumer.md:75`（对照 `src/agent/team/protocol/events.ts:10-59`）
@@ -1688,10 +1689,11 @@
   - 建议：`"??"`/`"?!"` 移入独立「弱信号」清单（或要求连续两个以上）；`STATE_MARKERS` 改词边界匹配。
   - 证据（实跑 `dist/` 编译产物）：`"Really?!"` → 命中 `?!`；`"为什么??"` → 命中 `??`；`"The plan is ready. phew"` → 命中 `PHEW`。
 - **TD-WORKSPACE-N04** · openspec 归档任务清单未勾选，但对应产物均已存在
-  - 类别：H · 严重级：P3 · 工作量：S · 状态：new
+  - 类别：H · 严重级：P3 · 工作量：S · 状态：done（2026-09-18，PR #439）
   - 位置：`openspec/changes/archive/2026-08-21-broadcast-hub/tasks.md:12`（3.1）、`:10`（2.2）、`:16`（4.1）
   - 影响：归档 change 的 tasks.md 停在 `[ ]`，持续误导后续审计者把「已交付」读成「未交付」。核实结论：`tests/agent/sub/workspace-core-inheritance.spec.ts` **确实存在**（3 个 test，覆盖 protocol note / 无 core 时 no-op），`renderWorkspaceCoreDirective` 亦已落地。**属归档文档漂移，非功能缺口。**
   - 建议：勾选 2.2/3.1/4.1 并注明归档核对日期；在 `README.md` §如何保持新鲜 加入「归档 change 的 tasks.md 随交付回填」。
+  - **2026-09-18 处置**：✅ **done（#359 批量回收 · PR #439）**——三份归档 `tasks.md`（broadcast-hub / bridge-reencode / metacognitive-control）共 16 处未勾选：**12 项已交付**（逐条给出产物出处，如 3.1 的测试文件实为 5 用例、2.1 的实现名是 `buildWorkspaceCoreDirective`/`renderWorkspaceCoreDirective`）、1 项仍未交付（metacognitive 1.1 的 `shouldRetryDiagnosis` 未同名落地，职责由 `buildMetacognitiveRetryPrompt` + `AgentLoop.ts:707` 承担）、3 项无法核实（三处 §4「Full verification」都是一次性运行，仓库不存结果）。同时新增两份防复发约定：`docs/issue-management.md` §6.1 与 `docs/technical-debt/README.md` §如何保持新鲜 第 5 条。
 
 > **存量条目状态（2026-09-15 更新）**：TD-SESSION-N01 与 TD-SESSION-N04 **已 done**（PR #378，账本读取路径专项）——`read()` 改为增量游标扫描，并补齐 Store/Reader 直测；N01 原文记的 `34-40` 行号随施工位移，勿按行号复排查。
 >
@@ -1726,6 +1728,7 @@
   - 位置：`docs/patent-inventiveness-optimization-plan.md:6`、`:270`（陈旧）↔ `src/cli/patentOutputGateFactory.ts:199-206`（生产接线点）、`src/patent/feedback/inventiveness-feedback.ts:76,86,98-102`、`src/patent/graph/README.md:103`
   - 影响（**核实结论：note 写的「已落地」属实，plan 文档未同步**）：`patentOutputGateFactory.ts:199` 已注册 `onDecisionFeedback`，`:206` 调 `findCaseIdBySession(casesRoot, sessionId)` 反查后追加 `inventiveness-feedback.jsonl`。plan 文档两处未回填，形成三份文档两种说法，后续读者会以 plan 为准重开已完成的接线工作。
   - 建议：更新该 plan 第 6/270 行为「已接线（2026-08-31 起）」，并链到 note 与 `graph/README.md:103`。
+  - **2026-09-18 处置**：✅ **done（#359 批量回收 · PR #439）**——该 plan 新增「验收状态」段（正文不改，历史快照），段内给出生产接线的**独立复核**证据链：宿主侧接线由提交 `e8ca780b`（2026-08-31，message 原文含 "complete the P2-4 inventiveness feedback loop"）补齐——`src/cli/patentOutputGateFactory.ts:199` 注册 `onDecisionFeedback`、`:206` 调 `findCaseIdBySession(casesRoot, sessionId)` 反查、`:208` 追加写 `caseInventivenessFeedbackPath`，用例见 `tests/patent/feedback/inventiveness-feedback.spec.ts:88,104,130`。该文档唯一未勾选项已回填；同批「不做」清单 5 条可检约束逐条核对未越界。
 - **TD-PATENT-N21** · 评测 runner 通过 `registerBuiltinAtoms()` 改写**进程级全局** handler 注册表
   - 类别：D · 严重级：P3 · 工作量：M · 状态：new
   - 位置：`src/patent/evaluate/runner.ts:29-32`、`:65`
@@ -2089,12 +2092,12 @@
 | 13 个 SessionMapper 空壳 | **#351** | 逐字相同的 10 行薄壳收敛为工厂；**已交付（PR #410）**——薄壳删除、渠道直接构造共享实现（未走工厂，理由见 note） |
 | TD-PATENT-N23 + N24 | **#352** | index-store 同构复制（85/179 行）+ 队列无淘汰 |
 | TD-CATCH-001 残留 + TD-TEAM-N11 + TD-SESSION-N12 | **#353** | 无注释无参 catch（创建时旧口径 37；#390 口径变更后为 124 → 114）。**已交付（PR #432 段一 + PR #434 段二）**——`ui/server` 72 → 0、`src` 36 + `ui/src` 6 → 0，全仓无注释 **114 → 0**；同 issue 的 `TD-TEAM-N11`（`.catch()` 链、不在本判据内）按「场景 B」补 `logger.error`（PR #434） |
-| 端口/超时散落 | **#354** | 5 个渠道端口 + 43 处内联 setTimeout |
+| 端口/超时散落 | **#354** | 5 个渠道端口 + 内联 setTimeout。**已交付（PR #437 端口半 + PR #438 超时半）**——4 个渠道端口集中到 `channel-defaults.ts`（5433 是 Postgres 端口，不入表、仅更名 `DEFAULT_PG_PORT`）；内联毫秒字面量**实测 76 处**（非登记的 43 处：原口径漏了"数字写在下一行"的多行调用，且其点名的热点 `ui/server/utils/globalChrome.js` 已随 PR #417 整文件删除）集中为三张注册表（`src/shared/timeouts.ts` 17 键 / `ui/src/constants/timeouts.ts` 35 键 / `ui/server/utils/timeouts.js` 9 键），取值守恒经多重集比对逐文件证明 |
 | TD-RULE-N01 | **#355** | rule_check(pack) 缓存失效键覆盖不全 |
 | `ui/server` P0 级候选（文档登记未跟踪） | **#356** | **已交付（PR #417）**——20 条登记逐条复核（19 条仍成立）+ 零消费死表面退役；仍成立的 6 条拆成 #411–#416，裁定表见 §26「处置追加」。**6 条载体已全部还清**：#412 / #413（PR #425）、#411 / #414 / #415 / #416（PR #426–#429） |
 | TD-RULE-N07 | **#357** | 规则资产语义增强 3 项（全角漏报 / 安防误伤 / 重复去重；已交付） |
 | TD-PATENT-N01（验证面） | **#358** | 双链路缺跨链路一致性 fixture |
-| TD-WORKSPACE-N04 + TD-TEAM-N25 + TD-PATENT-N20 | **#359** | 计划文档悬空勾选批量回收 |
+| TD-WORKSPACE-N04 + TD-TEAM-N25 + TD-PATENT-N20 | **#359** | 计划文档悬空勾选批量回收。**已交付（PR #439）**——21 份计划文档 / **559** 处悬空勾选逐条核对：**377 项已交付**（回填勾选 + 逐项证据）、**37 项仍未交付**（含 #359 之外新发现的 4 项：`patent-optimization-plan-v2` 的基线保存/SSL 字面 DoD/日志可追溯/兼容性报告，及 html 交付物的 A4 分页与纯白违规等）、**145 项无法核实**（一次性运行类步骤无持久产物，如实留白）；三份载体 `TD-WORKSPACE-N04`/`TD-TEAM-N25`/`TD-PATENT-N20` 全部置 done；并建立两份防复发约定（`docs/issue-management.md` §6.1、`docs/technical-debt/README.md` §如何保持新鲜 第 5 条） |
 | TD-AGENT-N01 | **#360** | request_header 对拍器恒真 |
 | TD-METHODOLOGY-N05 | **#361** | triz 数据 IO 无 fail-safe（会打断主轮） |
 | TD-GATEWAY-N01 | **#362** | 协议版本无门禁 |

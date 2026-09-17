@@ -1,5 +1,12 @@
 # deepseek-harness 优秀设计引入计划 —— 阶段一实施文档
 
+> **验收状态（2026-09-18 补）**：本文件是历史快照，勾选状态曾长期停留在交付前（见 #359）。
+> 截至 2026-09-18 复核：未勾选 17 项中 **10 项已交付**（已回填勾选）、**2 项仍未交付**、**5 项无法核实**。T1–T4 落地产物（见 §10.1/§10.2）本次逐项复核仍存在。
+>
+> - 已交付：§8.1 typecheck / lint / format:check 三项 —— 证据 `docs/deepseek-harness-phase1-plan.md:235`（§10.3 记录为 ✅）；§8.2 四个新增 spec —— 证据 `tests/context/token-accounting-fastpath.spec.ts:126`/`:144`（可复算性）+ `:168`（guardBand）、`tests/permission/tool-guard.spec.ts`（15 用例）、`tests/knowledge/db-version.spec.ts`（12 用例）、`tests/model/config/credential-ref.spec.ts`（8 用例）；§8.3 T2（guard deny 压过 session allow 且不发 permission_request）—— 证据 `tests/permission/tool-guard.spec.ts:67`/`:85`/`:100`；§8.3 T3（篡改 user_version：真源抛错 / 派生 needsRebuild）—— 证据 `tests/knowledge/db-version.spec.ts:105`/`:131`；§8.3 T4（轮换 env 下一次请求生效 / 输出无明文）—— 证据 `tests/model/config/credential-ref.spec.ts:96`/`:144`。
+> - 仍未交付：§8.2「全量后端测试全绿」—— §10.3（`:239`）记录该次运行为 2507 tests / 2503 pass / 1 fail（`tests/cli/proxy.spec.ts`，`ALL_PROXY` 环境所致），仓库内无「全绿」记录；§8.3 T1「运行审计脚本得到欠估报告」—— 脚本在（`scripts/token-estimate-audit.ts`）但报告未入库，且「70 工具 schema 用例」样本已被 C38 删除（证据 `docs/code-refinement-plan.md:631`），该条预期产物已不存在。
+> - 无法核实：§8.1 `pnpm build` —— 一次性构建命令，§10.3 未记录结果，无持久产物可判；§8.2 UI 测试 `pnpm --filter sati-ui test` —— 全文无该套件运行记录；§8.4 首次 onboarding 流程 / `sati server` 启动后 knowledge 自检 / 3 个代表性专利技能端到端 —— 均为手工行为验收，无产物或记录可判（自检代码路径在 `src/cli/projectRuntimeFactory.ts:453`）。
+
 - 创建日期：2026-08-14
 - 状态：**✅ 已实施（2026-08-14）**——四项任务全部落地，全量验证通过（详见 §10 实施结果）
 - 范围：阶段一（低风险工程强化），1–2 个迭代，约 6.5 个开发日
@@ -250,26 +257,26 @@
 
 ### 8.1 静态与构建
 
-- [ ] `pnpm typecheck` 0 错误（含 edgeclaw-memory-core）
-- [ ] `pnpm lint` 0 error / 0 warning
-- [ ] `pnpm format:check` 通过
+- [x] `pnpm typecheck` 0 错误（含 edgeclaw-memory-core）
+- [x] `pnpm lint` 0 error / 0 warning
+- [x] `pnpm format:check` 通过
 - [ ] `pnpm build` 成功（含 knowledge YAML/wiki 资源拷贝）
 
 ### 8.2 测试（新增 + 回归）
 
-- [ ] `tests/context/token-accounting-fastpath.spec.ts` + 新增可复算性用例通过
-- [ ] `tests/permission/tool-guard.spec.ts`（新）通过
-- [ ] `tests/knowledge/db-version.spec.ts`（新）通过
-- [ ] `tests/model/config/credential-ref.spec.ts`（新）通过
+- [x] `tests/context/token-accounting-fastpath.spec.ts` + 新增可复算性用例通过
+- [x] `tests/permission/tool-guard.spec.ts`（新）通过
+- [x] `tests/knowledge/db-version.spec.ts`（新）通过
+- [x] `tests/model/config/credential-ref.spec.ts`（新）通过
 - [ ] 全量后端测试 `pnpm test` 通过（注意：root 与 ui 测试需串行，技术债 P2 已记录竞态）
 - [ ] UI 测试 `pnpm --filter sati-ui test` 通过
 
 ### 8.3 行为验证（每个任务专项）
 
 - [ ] T1：运行审计脚本，得到「估算 vs 真实」欠估幅度报告；人工确认报告包含中文专利文本与 70 工具 schema 用例
-- [ ] T2：构造「guard deny + session allow」场景，确认最终为 deny 且 UI 无 permission_request 横幅（可用 `scripts/tui-e2e-permission.tsx` 或单测模拟）
-- [ ] T3：对测试用 knowledge.db 人为篡改 `user_version`，确认真源打开抛 `KnowledgeDbVersionError`；派生库返回 `needsRebuild`
-- [ ] T4：运行时改环境变量，下一次请求用新 key；`describe()` 输出无明文
+- [x] T2：构造「guard deny + session allow」场景，确认最终为 deny 且 UI 无 permission_request 横幅（可用 `scripts/tui-e2e-permission.tsx` 或单测模拟）
+- [x] T3：对测试用 knowledge.db 人为篡改 `user_version`，确认真源打开抛 `KnowledgeDbVersionError`；派生库返回 `needsRebuild`
+- [x] T4：运行时改环境变量，下一次请求用新 key；`describe()` 输出无明文
 
 ### 8.4 回归（确保不破坏现有行为）
 

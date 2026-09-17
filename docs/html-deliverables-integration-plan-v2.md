@@ -1,5 +1,12 @@
 # Sati HTML 交付物升级实施方案（V2）
 
+> **验收状态（2026-09-18 补）**：本文件是历史快照，勾选状态曾长期停留在交付前（见 #359）。本文件是 `docs/html-deliverables-integration-plan.md`（v1）的修订版：v1 的 T1.6（`PromptAssembler` 全局注入）已由本文 §3 T1.6 否决并记录为决策；v1 阶段 3 元数据在本文降为 §5 的 P2 可选；首批模板由 v1 的 6 个收敛为本文的 4 个 + 3 个 P2 可选。实际落地 7 个模板（4 个首批 + 3 个 P2 可选全部完成）；本文 §4.1–§4.3 与 v1 §4.1–§4.3 同源，§4.4 在 v1 的 6 项上新增 2 项（长页面 PNG 限制、`--help`），§4.5 的「check 脚本自身有单测」、§4.6 打包与分发、§4.7 三模式冒烟为 v1 中没有对应项的新增条目。
+> 截至 2026-09-18 复核：未勾选 58 项中 **46 项已交付**（已回填勾选）、**6 项仍未交付**、**6 项无法核实**。本特性全部产物随 PR #120（提交 `c9dbe6a7`）落地。
+>
+> - 已交付：§4.1 全部 13 项 —— 本节是共享契约的条款清单，逐条落在 `assets/prompts/html/shared-design-directives.md:8`–`:60`；§4.2 的 6 项（`SKILL.md` 与 `name`/`description`、五字段 frontmatter、`references/checklist.md`、`references/SOURCE.md` 署名、引用共享契约、示例数据为 Sati 场景）—— 7 个模板目录全数具备，证据 `skills/html-data-report/SKILL.md:1`–`:8`/`:17`（其余 6 个同构）；frontmatter「先写入、P2 再解析」的解析侧也已实装，证据 `src/extension/skills/SkillManager.ts:496` + `tests/extension/skills/skill-template-meta.spec.ts:8`/`:47`；§4.3 的 5 项（可双击打开、无外部图片依赖、图表容器固定高度、无占位文案、文件 ≤5MB）—— 证据 `docs/design-qa/html-templates/README.md:4` 与该目录 7 张截图、`scripts/check-html-templates.mjs:62`–`:97`（实测 `node scripts/check-html-templates.mjs` → `Checked 7 html templates` / exit 0）、`assets/prompts/html/shared-design-directives.md:53` + `skills/html-data-report/example.html:55`；§4.4 的 7 项（`wechat` 内联、`png` 固定尺寸 2×、长页面 PNG 限制标注、`zhihu` 替换 `mjx-container`、无 Chrome 优雅报错、拒绝路径穿越、各子命令 `--help`）—— 证据 `scripts/export-html.mjs:83`、`:99`、`:15`、`:138`、`:101`+`:121`、`:56`、`:154`–`:166`，用例 `tests/scripts/export-html.spec.ts:71`/`:46`/`:61`/`:34`；§4.5 全部 6 项 —— 证据 `scripts/check-html-templates.mjs:54`、`:98`–`:133`、`:143`–`:162`、`tests/scripts/check-html-templates.spec.ts:34`/`:40`/`:53`/`:78`、lint 挂载 `package.json:45`；§4.6 的 4 项（源码运行 / `pnpm build` 后 dist / 安装包含 `assets/prompts/html/` / skill 体积不超限）—— 证据 `skills/html-*/` 7 个目录（实测 `node scripts/validate-skills.mjs` → `All skills valid.` / exit 0）、`scripts/copy-build-assets.mjs:36`/`:38` + 实测 `dist/skills/html-*` 7 个目录齐备、`apps/desktop/electron-builder.yml:91-92`（`files: dist/**/*`）覆盖 `dist/assets/prompts/html`、实测 `skills/html-*` 合计 124 KB / 28 文件（上限见 `src/extension/skills/validation.ts:13`–`:15`）；§4.7 的 5 项（`pnpm typecheck`、`pnpm lint`、模板通过 check 脚本、3 个现有 skill 引用新契约、README/CLAUDE.md）—— 证据 `docs/design-qa/html-templates/README.md:23-24`、实测 check 脚本报 7 个模板通过（超出 4 个门槛）、`skills/frontend-design/SKILL.md:12` + `skills/frontend-slides/SKILL.md:185-186` + `skills/web-design-guidelines/SKILL.md:12`、`README.md:32`–`:52` + `README.zh.md:32`–`:52`（`CLAUDE.md` 按 `AGENTS.md:4` 属不入库的本地文件，仓库内无法核实该项）。
+> - 仍未交付：§4.2「`example.html` 存在且通过 4.1 检查」—— 7 个 `example.html` 都在，但有 4 个用了 §4.1 明令禁止的纯白（`skills/html-data-report/example.html:14`、`skills/html-finance-report/example.html:14`/`:49`、`skills/html-meeting-notes/example.html:13`、`skills/html-editorial-doc/example.html:51`）；§4.2「`SKILL.md` 中『硬性视觉签名』明确、可执行、可验证」—— 只有 `skills/html-editorial-doc/SKILL.md:21` 有此标题段，其余 6 个模板是 `## 布局`/`## 尺寸`/`## 硬性规则`；§4.3「1440×900 与 390×844 视口可读」—— 存档截图每模板仅 1 张、宽 1280px，无两个目标视口的记录；§4.3「A4 打印预览分页正常」—— 无分页检查记录，`docs/design-qa/html-templates/README.md:5-6` 记明该环境未做 PDF 导出验证；§4.4「`pdf` 子命令可生成 A4 PDF」—— 子命令在（`scripts/export-html.mjs:119`–`:136`），但未配置纸张（无 `@page`、无 page-size 参数），实测产物 MediaBox 为 612×792（Letter 而非 A4）；§4.7「至少 1 个模板完成真实数据端到端生成 + wechat/png/pdf 导出」—— 只有 7 个模板的 wechat 导出记录（`docs/design-qa/html-templates/README.md:26`），无「真实数据输入 → 生成 → png/pdf 导出」的记录。
+> - 无法核实：§4.3「标题层级、表格、徽章等组件符合模板规范」—— 视觉判断项，仓库只存渲染截图、无逐项核对记录；§4.6「Electron 桌面端可读取 `skills/html-*`」—— 需打包后的桌面端运行才能判定，仓库内只有 `apps/desktop/electron-builder.yml:92` 的 `dist/**/*` 打包口径，无桌面端冒烟记录；§4.7「`pnpm test` 通过」与「`pnpm format:check` 通过」—— 均为一次性命令，仓库内不存该次运行结果（`docs/design-qa/html-templates/README.md:20`–`:26` 只记录了 check 脚本 / lint / typecheck / build）；§4.7「现有 `render_patent_document` 回归通过」—— 回归用例齐备（`tests/patent/document/renderPatentDocument.spec.ts` 18 例，含 Chrome PDF 用例；`tests/tool/builtin/renderPatentDocumentTool.spec.ts` 3 例）但无该次运行记录；§4.7「源码/生产/Electron 三模式冒烟通过」—— 三模式属手工冒烟，仓库内无该次记录（§4.6 已就其中的源码/生产两项给出产物证据）。
+
 > 目标：吸收 `nexu-io/html-anything` 的可复用工程方法，使 Sati 生成的非正式文书类 HTML
 > 交付物更美观、更稳定、更符合交付标准，同时不破坏现有专利文书体系。
 >
@@ -510,82 +517,82 @@ export type SkillSummary = {
 
 ### 4.1 共享设计约束检查清单
 
-- [ ] 单文件 HTML：`<!DOCTYPE html>` 开头，`</html>` 结尾，CSS/JS 内联
-- [ ] 中文优先 `Noto Sans SC` / `Noto Serif SC`；英文 `Inter` / `Manrope`
-- [ ] 8px 基线网格；正文最大宽度约 65ch
-- [ ] 1 主色 + 2 中性色 + ≤1 强调色；无纯黑 `#000` / 纯白 `#fff`
-- [ ] 颜色对比度 ≥ 4.5
-- [ ] 圆角统一；阴影克制；无无意义渐变/霓虹
-- [ ] 动效克制；支持 `prefers-reduced-motion`
-- [ ] 语义化标签；交互元素有 focus 态；图片有 alt
-- [ ] 必须使用真实数据；无 `lorem ipsum` / “Your text here” / 中文占位符
-- [ ] 内容驱动数量；不压缩、不丢弃用户内容
-- [ ] 图表容器有固定高度（Chart.js/ECharts）
-- [ ] 中英文混排加盘古之白（半角空格）
-- [ ] 不引用本地/外部图片（CSS/SVG 内联绘制优先）
+- [x] 单文件 HTML：`<!DOCTYPE html>` 开头，`</html>` 结尾，CSS/JS 内联
+- [x] 中文优先 `Noto Sans SC` / `Noto Serif SC`；英文 `Inter` / `Manrope`
+- [x] 8px 基线网格；正文最大宽度约 65ch
+- [x] 1 主色 + 2 中性色 + ≤1 强调色；无纯黑 `#000` / 纯白 `#fff`
+- [x] 颜色对比度 ≥ 4.5
+- [x] 圆角统一；阴影克制；无无意义渐变/霓虹
+- [x] 动效克制；支持 `prefers-reduced-motion`
+- [x] 语义化标签；交互元素有 focus 态；图片有 alt
+- [x] 必须使用真实数据；无 `lorem ipsum` / “Your text here” / 中文占位符
+- [x] 内容驱动数量；不压缩、不丢弃用户内容
+- [x] 图表容器有固定高度（Chart.js/ECharts）
+- [x] 中英文混排加盘古之白（半角空格）
+- [x] 不引用本地/外部图片（CSS/SVG 内联绘制优先）
 
 ### 4.2 模板目录检查清单
 
-- [ ] `SKILL.md` 存在且 frontmatter 含 `name`、`description`
-- [ ] frontmatter 含 `mode/scenario/surface/preview/design_system`（先写入，P2 再解析）
+- [x] `SKILL.md` 存在且 frontmatter 含 `name`、`description`
+- [x] frontmatter 含 `mode/scenario/surface/preview/design_system`（先写入，P2 再解析）
 - [ ] `example.html` 存在且通过 4.1 检查
-- [ ] `references/checklist.md` 存在
-- [ ] 借鉴来源时 `references/SOURCE.md` 或 `LICENSE` 存在并署名
-- [ ] `SKILL.md` 引用 `assets/prompts/html/shared-design-directives.md`
+- [x] `references/checklist.md` 存在
+- [x] 借鉴来源时 `references/SOURCE.md` 或 `LICENSE` 存在并署名
+- [x] `SKILL.md` 引用 `assets/prompts/html/shared-design-directives.md`
 - [ ] `SKILL.md` 中「硬性视觉签名」明确、可执行、可验证
-- [ ] 模板示例数据为 Sati 自有专利/专业服务场景
+- [x] 模板示例数据为 Sati 自有专利/专业服务场景
 
 ### 4.3 example.html 检查清单
 
-- [ ] 可直接双击打开，无控制台错误
+- [x] 可直接双击打开，无控制台错误
 - [ ] 1440×900 与 390×844 视口可读（固定尺寸模板按目标尺寸检查）
 - [ ] A4 打印预览分页正常
-- [ ] 无外部图片依赖（字体/图表 CDN 除外）
-- [ ] 图表容器高度固定
-- [ ] 无 lorem ipsum / 占位文案
-- [ ] 文件大小 ≤ 5MB
+- [x] 无外部图片依赖（字体/图表 CDN 除外）
+- [x] 图表容器高度固定
+- [x] 无 lorem ipsum / 占位文案
+- [x] 文件大小 ≤ 5MB
 - [ ] 标题层级、表格、徽章等组件符合模板规范
 
 ### 4.4 导出能力检查清单
 
-- [ ] `wechat` 子命令可生成 CSS 内联版本
-- [ ] `png` 子命令可对固定尺寸模板生成 2× PNG，且无白屏/截断
-- [ ] 长页面模板不承诺 PNG 全页，默认用 PDF
+- [x] `wechat` 子命令可生成 CSS 内联版本
+- [x] `png` 子命令可对固定尺寸模板生成 2× PNG，且无白屏/截断
+- [x] 长页面模板不承诺 PNG 全页，默认用 PDF
 - [ ] `pdf` 子命令可生成 A4 PDF
-- [ ] `zhihu` 子命令可替换 `mjx-container` 为 `data-eeimg`
-- [ ] 无 Chrome 时优雅报错，不挂起
-- [ ] 输出文件名安全，拒绝路径穿越
-- [ ] 各子命令有 `--help`
+- [x] `zhihu` 子命令可替换 `mjx-container` 为 `data-eeimg`
+- [x] 无 Chrome 时优雅报错，不挂起
+- [x] 输出文件名安全，拒绝路径穿越
+- [x] 各子命令有 `--help`
 
 ### 4.5 自动化检查脚本检查清单
 
-- [ ] 扫描范围正确（`html-*` 或 `mode` 存在的 skill）
-- [ ] 文件存在性、共享约束引用、example.html 硬性检查全部覆盖
-- [ ] 单文件模式可用
-- [ ] check 脚本自身有单测
-- [ ] 挂入 `pnpm lint`
-- [ ] 注入违规示例后 exit 1
+- [x] 扫描范围正确（`html-*` 或 `mode` 存在的 skill）
+- [x] 文件存在性、共享约束引用、example.html 硬性检查全部覆盖
+- [x] 单文件模式可用
+- [x] check 脚本自身有单测
+- [x] 挂入 `pnpm lint`
+- [x] 注入违规示例后 exit 1
 
 ### 4.6 打包与分发检查清单
 
-- [ ] 源码运行可读取 `skills/html-*`
-- [ ] `pnpm build` 后 dist/生产模式可读取 `skills/html-*`
+- [x] 源码运行可读取 `skills/html-*`
+- [x] `pnpm build` 后 dist/生产模式可读取 `skills/html-*`
 - [ ] Electron 桌面端可读取 `skills/html-*`
-- [ ] 安装包包含 `assets/prompts/html/`（如需随包分发）
-- [ ] 新增 skill 总大小不超 SkillManager 限制
+- [x] 安装包包含 `assets/prompts/html/`（如需随包分发）
+- [x] 新增 skill 总大小不超 SkillManager 限制
 
 ### 4.7 最终验收清单
 
-- [ ] `pnpm typecheck` 通过
-- [ ] `pnpm lint` 通过（含新增 check 脚本）
+- [x] `pnpm typecheck` 通过
+- [x] `pnpm lint` 通过（含新增 check 脚本）
 - [ ] `pnpm test` 通过
 - [ ] `pnpm format:check` 通过
-- [ ] 4 个 `skills/html-*` 模板全部通过 `scripts/check-html-templates.mjs`
+- [x] 4 个 `skills/html-*` 模板全部通过 `scripts/check-html-templates.mjs`
 - [ ] 至少 1 个模板完成真实数据端到端生成 + wechat/png/pdf 导出
-- [ ] 现有 `frontend-slides` / `frontend-design` / `web-design-guidelines` 引用新契约
+- [x] 现有 `frontend-slides` / `frontend-design` / `web-design-guidelines` 引用新契约
 - [ ] 现有 `render_patent_document` 回归通过
 - [ ] 源码/生产/Electron 三模式冒烟通过
-- [ ] README / CLAUDE.md 文档更新完成
+- [x] README / CLAUDE.md 文档更新完成
 
 ---
 

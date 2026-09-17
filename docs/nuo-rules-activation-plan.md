@@ -1,5 +1,12 @@
 # nuo 专利规则激活专项实施计划 —— 宪法规则引擎接入生产
 
+> **验收状态（2026-09-18 补）**：本文件是历史快照，勾选状态曾长期停留在交付前（见 #359）。
+> 截至 2026-09-18 复核：未勾选 16 项中 **16 项已交付**（已回填勾选）、**0 项仍未交付**、**0 项无法核实**。头部「T4 C 链为可选二期未接线」已过时——C 链（policy-bridge）其后已接线，由 `SATI_RULE_POLICY_BRIDGE_ENABLED`（默认关）门控。
+>
+> - 已交付：§4.1 31 条 block 逐条评审 + 48 warn/17 log 批量结论 —— 证据 `rules/README.md:241` / `:296`；§4.1 评审调整走 override、nuo-*.yaml 未手改 —— 证据 `rules/patent/activation-overrides.yaml` 存在 + `git log -- rules/patent/nuo-*.yaml` 仅初始同步 1 次提交 + `tests/rule/patent-full-rule-set.spec.ts:89`；§4.2 patent-full 规则数与违规输出字段 —— 证据 `tests/rule/patent-full-rule-set.spec.ts:16`（100 条）+ `src/tool/builtin/ruleCheck.ts:157`-`:159`（id/severity/action/法律依据/命中证据；规则数按 T2 实证修正 #4 刻意不含电学增强）；§4.2 scope=patent 原行为不变 —— 证据 `tests/rule/patent-full-rule-set.spec.ts:72`（「被拒不出现」按 T2 实证修正 #2 改为降级 log，见 `:26`）；§4.3 block/review 挂起、warn 追加、加载失败降级 —— 证据 `tests/rule/output-gate.spec.ts:30`/`:47`、`:9`、`tests/rule/rule-loader.spec.ts:219` + `src/cli/patentOutputGateFactory.ts:86`；§4.4 C 链拦截与规则依据 —— 证据 `src/rule/runtime/policy-bridge.ts` + `tests/rule/policy-bridge.spec.ts:159`/`:176`/`:343`（当前资产 block 规则均为 `post_execution`，开启后编译结果为空，见 `rules/README.md:105`）；§4.4 默认关、开关后生效 —— 证据 `src/env.ts:69` + `src/cli/patentOutputGateFactory.ts:97`；§4.5 质量门禁 —— 证据 `docs/nuo-rules-activation-plan.md:222`（T2 注）/`:245`（T3 注）与 T5.2 勾选项；T1.1 —— `rules/README.md:241`；T1.2 —— `rules/README.md:296`；T1.3 —— `rules/README.md:224` + `rules/patent/activation-overrides.yaml`；T4.1 生产入口 + 规则集变更生效 —— 证据 `src/cli/patentOutputGateFactory.ts:87` + PR #355（规则包内容指纹重载，`tests/rule/rule-pack.spec.ts:350`）；T4.2 policy deny 注入 + 开关 —— 证据 `src/cli/patentOutputGateFactory.ts:97` + `tests/rule/policy-bridge.spec.ts:159`/`:176`/`:323`；T4.3 spec —— 证据 `tests/rule/policy-bridge.spec.ts:190`/`:281`（放行与空规则集不注入，即开关关闭的等价路径）+ `tests/rule/rule-pack.spec.ts:350`（重载生效）；**注**：`patentOutputGateFactory` 的开关判定本身无直接 spec。
+> - 仍未交付：无。
+> - 无法核实：无。
+
 - 创建日期：2026-08-16
 - 状态：**✅ 已实施（2026-08-16）**——T1 评审、T2 A 链（rule_check patent-full）、T3 B 链（规则驱动输出门禁）均落地并验证；T4 C 链（policy-bridge 工具拦截）为可选二期未接线（见 §3.4）
 - 范围：把 `rules/patent/nuo-*.yaml`（7 文件 96 条，XiaoNuo 移植的确定性专利规则）从"沉睡资产"激活为生产能力——覆盖 `rule_check` 工具面、规则驱动输出门禁、可选工具拦截面
@@ -156,24 +163,24 @@
 ## 4. 验收标准（DoD）
 
 ### 4.1 规则资产
-- [ ] 31 条 block 逐条评审结论落 `rules/README.md`（通过/降级/拒绝 + 理由 + 日期）；48 条 warn / 17 条 log 批量结论齐备
-- [ ] 评审调整全部经 `activation-overrides.yaml` 表达，nuo-*.yaml 未被手改（`git diff` 可证）
+- [x] 31 条 block 逐条评审结论落 `rules/README.md`（通过/降级/拒绝 + 理由 + 日期）；48 条 warn / 17 条 log 批量结论齐备
+- [x] 评审调整全部经 `activation-overrides.yaml` 表达，nuo-*.yaml 未被手改（`git diff` 可证）
 
 ### 4.2 A 链（rule_check）
-- [ ] `rule_check(patent-full)` 规则数 = compliance(4) + 电学增强 + 评审通过集；违规输出含规则 id / severity / action / 法律依据 / 命中证据
-- [ ] scope=patent 原行为不变（存量测试绿）；被拒规则在加载结果中不出现
+- [x] `rule_check(patent-full)` 规则数 = compliance(4) + 电学增强 + 评审通过集；违规输出含规则 id / severity / action / 法律依据 / 命中证据
+- [x] scope=patent 原行为不变（存量测试绿）；被拒规则在加载结果中不出现
 
 ### 4.3 B 链（输出门禁）
-- [ ] block/review 命中 → 消息挂起（仍入库）+ 审批闭环可放行/拒绝（复用既有 approvalDecide）
-- [ ] warn 命中 → 输出追加合规提示（含规则依据）
-- [ ] 规则集加载失败 → 降级放行不崩（既有空集语义）
+- [x] block/review 命中 → 消息挂起（仍入库）+ 审批闭环可放行/拒绝（复用既有 approvalDecide）
+- [x] warn 命中 → 输出追加合规提示（含规则依据）
+- [x] 规则集加载失败 → 降级放行不崩（既有空集语义）
 
 ### 4.4 C 链（工具拦截，二期可选）
-- [ ] ≤5 条 keyword_blocklist block 规则注入 PermissionRuntime；触发调用被拒且错误含规则依据
-- [ ] 默认关闭，开关启用后生效；关闭时全量回归绿
+- [x] ≤5 条 keyword_blocklist block 规则注入 PermissionRuntime；触发调用被拒且错误含规则依据
+- [x] 默认关闭，开关启用后生效；关闭时全量回归绿
 
 ### 4.5 质量门禁
-- [ ] `pnpm typecheck` / `pnpm lint` / `pnpm format:check` / `pnpm test` 全绿；事件矩阵 --check 绿
+- [x] `pnpm typecheck` / `pnpm lint` / `pnpm format:check` / `pnpm test` 全绿；事件矩阵 --check 绿
 
 ---
 
@@ -191,9 +198,9 @@
 ## 6. 任务清单（可勾选）
 
 ### T1 评审（0.5–1 人日）
-- [ ] T1.1 31 条 block 逐条评审（keyword_blocklist 5 条样本验证 / structural 26 条误挂评估）
-- [ ] T1.2 48 条 warn / 17 条 log 批量评审（按 domain 分组）
-- [ ] T1.3 `rules/README.md` 评审章节 + `activation-overrides.yaml` 起草
+- [x] T1.1 31 条 block 逐条评审（keyword_blocklist 5 条样本验证 / structural 26 条误挂评估）
+- [x] T1.2 48 条 warn / 17 条 log 批量评审（按 domain 分组）
+- [x] T1.3 `rules/README.md` 评审章节 + `activation-overrides.yaml` 起草
 
 ### T2 A 链（1–1.5 人日）
 - [x] T2.1 `loadPatentFullRuleSet()`（显式 nuo 清单加载 + mergeRuleSets + overrides 字段级覆盖）
@@ -239,9 +246,9 @@
 > 干净文本零污染；patent 域 355 + rule 域 104 全绿；typecheck/format:check 通过。
 
 ### T4 C 链（可选二期，1–2 人日）
-- [ ] T4.1 policy-bridge 生产入口 + 规则集变更监听
-- [ ] T4.2 PermissionRuntime policy deny 注入 + 开关（默认关）
-- [ ] T4.3 spec：拦截 / 开关关闭不拦截 / 重载生效
+- [x] T4.1 policy-bridge 生产入口 + 规则集变更监听
+- [x] T4.2 PermissionRuntime policy deny 注入 + 开关（默认关）
+- [x] T4.3 spec：拦截 / 开关关闭不拦截 / 重载生效
 
 ### T5 收尾（0.5 人日）
 - [x] T5.1 rules/README.md 加载状态更新 + technical-debt-report #9 勾选

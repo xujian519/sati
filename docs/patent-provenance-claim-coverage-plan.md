@@ -1,5 +1,26 @@
 # Sati 知识库增强设计（修订版 v2.1）：决策溯源层 + 权利要求-实施例覆盖校验
 
+> **验收状态（2026-09-18 补）**：本文件是历史快照，勾选状态曾长期停留在交付前（见 #359）。
+> 截至 2026-09-18 复核：未勾选 15 项中 **14 项已交付**（已回填勾选）、**0 项仍未交付**、**1 项无法核实**。
+> 全案（设计 1 双库 + 审批/Worker/图节点溯源 + 设计 2 覆盖矩阵）由 PR #132（merge `999b62bb`，分支 `feat/patent-provenance-claim-coverage`）落地。
+> 另注：头部「实施状态：**未开始**」是 2026-08-20 编制时快照，已过期；为保留历史叙述未改动该行。
+>
+> - 已交付：
+>   - §4.5① 矩阵与权项逐条对齐、每特征有 `embodimentRefs`、`coverage: "full"` —— `tests/patent/claim-coverage-mapper.spec.ts:23`（`coverage === "full"` 断言在 `:45`）。该用例交底书为 2 个实施例（计划写的是 3 个），断言内核一致。
+>   - §4.5② / §七·设计2② 无实施例的特征进 `uncoveredFeatures`，并以 warning 出现在 draft-spec 校验 —— `src/patent/atoms/handlers/builtin/draft.ts:181,202`（`rule: "claim_embodiment_coverage"`，severity `warning`）、`tests/patent/draft-spec-coverage.spec.ts:80,94`
+>   - §4.5③ / §七·设计2③ LLM 异常/重试耗尽后降级且管线不中断 —— `tests/patent/claim-coverage-mapper.spec.ts:92,102`、`tests/patent/drafting-sop-fullrun.spec.ts:92`（manifest 全链路含该阶段）。实现形态与计划有差异：降级以原子 `_error` 表达（`src/patent/atoms/handlers/builtin/mapper.ts:86`），矩阵内 `degraded` 字段恒为 `false`（`mapper.ts:117,168`），未真的产出 `degraded: true`。
+>   - §4.5④ `badClaimIds` / `duplicateFeatures` 纯函数单测 —— `tests/patent/claim-coverage/claim-coverage-check.spec.ts:50,64`
+>   - §4.5⑤ / §七·设计2③「静态专利 KG、claim-chart、`figure/index-store.ts` 零改动」—— PR #132 diff 未触及 `src/patent/claim-chart/**`、`src/patent/figure/**`、`src/knowledge/**kg-store*`（`git diff --name-only 999b62bb^1 999b62bb`）
+>   - §七·设计1 场景 A（manifest 路径：approval_gate + worker 两类 activity；新 runId 不覆盖；resume 不重复 id）—— 接线 `src/tool/builtin/patent-workflow-run/manifestRun.ts:116,127-132,162-176`、`src/patent/paths.ts:44`；单测 `tests/patent/provenance-tool-hooks.spec.ts:104`（worker 落盘）、`:146`（approval_gate 幂等）、`:77`（resume 复用 runId）。未见「单次 `patent_workflow_run` 端到端」的集成用例，证据为接线 + 单测。
+>   - §七·设计1 场景 B（图路径落 approval_gate；`enableProvenance=false` → 零写入）—— `src/tool/builtin/patent-workflow-run/graphRun.ts:194,232`、`tests/patent/provenance-disable.spec.ts:34`
+>   - §七·设计1 场景 C（输出门禁落全局 `approval-audit.db`，重启后仍在）—— 注入 `src/cli/patentOutputGateFactory.ts:123,130`、`tests/patent/provenance-approval-store.spec.ts:41`、重开读回 `tests/patent/provenance-tool-hooks.spec.ts:64`
+>   - §七·设计1 `exportProvenance(caseId,"csv")` 时间线列与 `exportProvenance(null,"csv")` 全局库 —— `tests/patent/provenance-export.spec.ts:26,106,124`
+>   - §七·设计1 Phase 2 结论树沿 `derivedFrom` 回溯 —— 声明表 `src/patent/graph/domains/index.ts:63`；`tests/patent/provenance-graph-collector.spec.ts:17`（wrapNode 写派生边）、`:108`（conclude 声明含 closest/diff/hint）。断言粒度落在声明表 + 派生边，未做 conclusion→三节点的整链遍历。
+>   - §七·设计1「ClawXMemory / KgStore / claim-chart / workflow-runs 既有记录零改动」—— PR #132 diff 未触及上述路径（`git diff --name-only 999b62bb^1 999b62bb`）
+>   - §七·设计2① `patent_drafting_v1` 含 `claim_coverage` 阶段且 `outputs/claim-embodiment-coverage.json` 落盘 —— `src/patent/workflow/manifests.ts:446`（`atom: "claim-embodiment-mapper"`）、`assets/workflows/patent/generated/patent_drafting_v1.yaml`、`tests/patent/claim-coverage-mapper.spec.ts:48`
+> - 仍未交付：无。
+> - 无法核实：§七·设计2④「`check:patent-workflow-docs` / `pnpm lint` / `pnpm test` 全绿（含既有测试更新）」—— **为什么无法判定**：这是里程碑门禁项，需实际运行门禁与全量测试（本次作业约束不重跑 `pnpm test`/`pnpm check`）；可核的只是产物侧前提（生成的 workflow YAML 已含 `claim_coverage` 阶段），「全绿」本身不可判定。
+
 > 方案版本：v2.1（v2.0 经 2026-08-20 三轮对抗性评审后修订）
 > 编制日期：2026-08-20
 > 实施状态：**未开始**（评审已完成，阻断项已消解，可进入实施排期）
@@ -281,11 +302,11 @@ export type CoverageCheckResult = {
 
 ### 4.5 验收（修订）
 
-- [ ] 输入含 3 个实施例的交底书 + `claims_draft` → 矩阵与权利要求逐条对齐，每特征有 `embodimentRefs`，`coverage: "full"`。
-- [ ] 某特征无实施例 → `uncoveredFeatures` 列出，gap 出现在 draft-spec 校验提示（warning）。
-- [ ] LLM 重试耗尽 → `degraded: true`，管线不中断（`completed=false` 仅影响完成状态字样）。
-- [ ] `badClaimIds` / `duplicateFeatures` 纯函数单测覆盖（评审 C4）。
-- [ ] 静态专利 KG、claim-chart、`figure/index-store.ts` 零改动。
+- [x] 输入含 3 个实施例的交底书 + `claims_draft` → 矩阵与权利要求逐条对齐，每特征有 `embodimentRefs`，`coverage: "full"`。
+- [x] 某特征无实施例 → `uncoveredFeatures` 列出，gap 出现在 draft-spec 校验提示（warning）。
+- [x] LLM 重试耗尽 → `degraded: true`，管线不中断（`completed=false` 仅影响完成状态字样）。
+- [x] `badClaimIds` / `duplicateFeatures` 纯函数单测覆盖（评审 C4）。
+- [x] 静态专利 KG、claim-chart、`figure/index-store.ts` 零改动。
 
 ### 4.6 可选扩展（不在本期）
 
@@ -330,18 +351,18 @@ export type CoverageCheckResult = {
 
 ### 设计 1
 
-- [ ] **场景 A（manifest 路径）**：一次 `patent_workflow_run`（manifestId=patent_drafting_v1，含审批门）后，`data/cases/<caseId>/provenance.db` 含 approval_gate + worker 两类 activity；重跑（新 runId）不覆盖前一次记录；resume 续跑不产生重复 id。
-- [ ] **场景 B（图路径）**：一次 `patent_workflow_run`（graph=inventiveness，含 HITL 审批）后，per-case 库含 approval_gate activity；`enableProvenance=false` 时库文件不存在（零写入，`provenance-disable.spec.ts`）。
-- [ ] **场景 C（输出门禁）**：一次 agent 输出审批（approve/reject）后，全局库 `approval-audit.db` 含 output_gate 记录（含 verdict/feedback/triggerKeyword）；重启后记录仍在。
-- [ ] `exportProvenance(caseId, "csv")` 时间线含：时间、来源、活动、执行者、输入、产出、审批结论（场景 A/B）；`exportProvenance(null, "csv")` 导出全局库（场景 C）。
-- [ ] Phase 2：inventiveness 图 `inventiveness_conclusion` entity 沿 `derivedFrom` 回溯到 closest/diff/hint 三节点产出（D1 + 区别特征 + 技术启示）。
-- [ ] ClawXMemory / KgStore / claim-chart / workflow-runs 既有记录零改动（回归）。
+- [x] **场景 A（manifest 路径）**：一次 `patent_workflow_run`（manifestId=patent_drafting_v1，含审批门）后，`data/cases/<caseId>/provenance.db` 含 approval_gate + worker 两类 activity；重跑（新 runId）不覆盖前一次记录；resume 续跑不产生重复 id。
+- [x] **场景 B（图路径）**：一次 `patent_workflow_run`（graph=inventiveness，含 HITL 审批）后，per-case 库含 approval_gate activity；`enableProvenance=false` 时库文件不存在（零写入，`provenance-disable.spec.ts`）。
+- [x] **场景 C（输出门禁）**：一次 agent 输出审批（approve/reject）后，全局库 `approval-audit.db` 含 output_gate 记录（含 verdict/feedback/triggerKeyword）；重启后记录仍在。
+- [x] `exportProvenance(caseId, "csv")` 时间线含：时间、来源、活动、执行者、输入、产出、审批结论（场景 A/B）；`exportProvenance(null, "csv")` 导出全局库（场景 C）。
+- [x] Phase 2：inventiveness 图 `inventiveness_conclusion` entity 沿 `derivedFrom` 回溯到 closest/diff/hint 三节点产出（D1 + 区别特征 + 技术启示）。
+- [x] ClawXMemory / KgStore / claim-chart / workflow-runs 既有记录零改动（回归）。
 
 ### 设计 2
 
-- [ ] `patent_drafting_v1` 跑通含 `claim_coverage` 阶段全链路，`outputs/claim-embodiment-coverage.json` 落盘（有 caseId 时）。
-- [ ] 缺实施例支撑特征出现在 draft-spec 校验提示（warning）。
-- [ ] LLM 重试耗尽降级不中断；静态专利 KG / claim-chart / figure 索引零改动。
+- [x] `patent_drafting_v1` 跑通含 `claim_coverage` 阶段全链路，`outputs/claim-embodiment-coverage.json` 落盘（有 caseId 时）。
+- [x] 缺实施例支撑特征出现在 draft-spec 校验提示（warning）。
+- [x] LLM 重试耗尽降级不中断；静态专利 KG / claim-chart / figure 索引零改动。
 - [ ] `check:patent-workflow-docs` / `pnpm lint` / `pnpm test` 全绿（含既有测试更新）。
 
 ---
