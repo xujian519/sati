@@ -109,6 +109,7 @@ export function validateWorkflowManifest(
       try {
         new RegExp(stage.retry.whenOutputMatches, "i");
       } catch {
+        // whenOutputMatches 不是合法正则（RegExp 构造抛 SyntaxError）→ 转译为带阶段 id 的 WorkflowError：在 manifest 校验期就 fail-fast，由 patent_workflow 工具作为"manifest 校验失败"文本回给模型，而不是等运行时做重试匹配才崩。
         throw new WorkflowError(`阶段 ${stage.id} 的 retry.whenOutputMatches 非法正则`);
       }
       if (stage.retry.rewindTo !== undefined && !ids.has(stage.retry.rewindTo)) {

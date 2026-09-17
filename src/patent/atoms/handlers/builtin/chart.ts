@@ -134,6 +134,7 @@ function parseTargets(raw: string): TargetsParseResult {
     }
     return { targets, error: null };
   } catch {
+    // 输入 chart_targets 文本不是合法 JSON（上游/LLM 产出畸形）→ 返回空目标 + 可操作 error，调用方 execute 据此走 degraded 降级退出，而不是静默当"无目标"继续。
     return { targets: [], error: "输入 chart_targets JSON 解析失败" };
   }
 }

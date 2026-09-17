@@ -78,12 +78,14 @@ export class SqliteApprovalStore implements ApprovalStore {
           try {
             return JSON.parse(e.value) as ApprovalRecord;
           } catch {
+            // 实体 value 不是合法 JSON（审计记录被写坏/截断）→ 返回 null，由紧随的 filter 剔除该条坏记录，其余审批记录照常返回，不因一条坏记录丢掉整个审计列表。
             return null;
           }
         })
         .filter((r): r is ApprovalRecord => r !== null)
         .sort((a, b) => Date.parse(a.decidedAt) - Date.parse(b.decidedAt));
     } catch {
+      // 审计库读取失败（SQLite 文件损坏/打不开/查询异常）→ 返回空数组：列表降级为空而不向上抛，只读查询不阻断审批链路（fail-open）。
       return [];
     }
   }

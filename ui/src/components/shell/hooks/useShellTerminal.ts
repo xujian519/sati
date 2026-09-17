@@ -100,6 +100,7 @@ export function useShellTerminal({
     try {
       nextTerminal.loadAddon(new WebglAddon());
     } catch {
+      // WebglAddon 构造/激活抛错（WebGL2 不可用：Safari<16 或 GPU 被禁用）→ 仅告警，xterm 保持默认 DOM 渲染器，终端功能不变、只是渲染性能降级。
       logWarn("[Shell] WebGL renderer unavailable, using Canvas fallback");
     }
 

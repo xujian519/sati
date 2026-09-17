@@ -99,6 +99,7 @@ export function createIndexStore<TVersion extends number, TEntry extends IndexEn
       const dropped = parsed.entries.length - entries.length;
       return dropped > 0 ? { entries, warning: `${label}中存在 ${dropped} 条无效条目，已忽略` } : { entries };
     } catch {
+      // 索引文件内容不是合法 JSON（写坏/被截断）→ 返回空索引 + warning，不做抛出：warning 由调用方透出（如 searchPatentFigure 转成输出 hint），检索侧按"无可用索引"继续。
       return { entries: [], warning: `${label}文件损坏，已按空索引处理` };
     }
   };

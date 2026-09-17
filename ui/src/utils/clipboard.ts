@@ -69,6 +69,7 @@ export async function copyTextToClipboard(text: string): Promise<boolean> {
       copied = true;
     }
   } catch {
+    // navigator.clipboard.writeText 被拒（权限拒绝/文档失焦/非安全上下文）→ copied=false，落到下方 execCommand 降级再试；两级都失败则返回 false，调用方不会给出复制成功反馈。
     copied = false;
   }
 

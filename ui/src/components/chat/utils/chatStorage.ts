@@ -75,6 +75,7 @@ export function getSatiSettings(): SatiSettings {
       projectSortOrder: parsed.projectSortOrder || "name",
     };
   } catch {
+    // 缓存的 sati-settings 不是合法 JSON（旧格式残留/被改坏）→ 返回保守默认值（工具列表为空、skipPermissions=false），权威值仍在磁盘 permissions.json，避免解析失败时静默放开权限。
     return {
       allowedTools: [],
       disallowedTools: [],

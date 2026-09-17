@@ -128,6 +128,7 @@ export async function detectFigureDrift(inputs: LocatedInputs): Promise<string[]
     try {
       svg = await readFile(path, "utf8");
     } catch {
+      // sidecar 声明的附图文件读不到（已被删除/移动或不可读）→ 记一条 drift 并跳到下一张；汇总之 drifts 非空会让调用方抛 InterruptStageError（high guardrail，人工决策放行/重生成/退回）。
       drifts.push(`图${figure.figure_no}: sidecar 声明的附图文件不存在（${figure.file}）`);
       continue;
     }

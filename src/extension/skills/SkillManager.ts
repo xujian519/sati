@@ -295,6 +295,7 @@ export class SkillManager {
     try {
       await fs.access(join(resolvedSource, "SKILL.md"));
     } catch {
+      // SKILL.md 缺失或不可访问（ENOENT / EACCES）→ 抛 SkillManagerError("no_skill_md")，宿主转 4xx / 错误帧告知用户导入源非法。
       throw new SkillManagerError(
         "no_skill_md",
         `Source folder does not contain a SKILL.md at the root: ${resolvedSource}`,
@@ -455,6 +456,7 @@ async function statIsDirectory(path: string): Promise<boolean> {
   try {
     return (await fs.stat(path)).isDirectory();
   } catch {
+    // stat 失败（断链 symlink / 已被删除 / EACCES）→ 返回 false：该条目按「非目录」跳过，不进技能列表或扫描结果。
     return false;
   }
 }

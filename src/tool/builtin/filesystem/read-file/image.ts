@@ -38,6 +38,7 @@ async function validateAndRepairImage(buffer: Buffer, mimeType: string): Promise
     const repaired = await sharp(buffer).jpeg({ quality: 90 }).toBuffer();
     return { buffer: repaired, mimeType: "image/jpeg" };
   } catch {
+    // sharp 加载失败或解码/重编码抛错（图片截断损坏到无法解码）→ 抛 invalid_tool_input，上层 prepareImageForModel 转成 { ok:false }，read_file 于是只回文本诊断、不把该图作为可见图像内容附给模型。
     throw new SatiToolRuntimeError(
       "invalid_tool_input",
       `Image file appears truncated or corrupted (${buffer.length} bytes). Cannot decode.`,

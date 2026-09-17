@@ -341,6 +341,7 @@ async function readFirstBytes(path: string): Promise<Buffer | undefined> {
       await handle.close();
     }
   } catch {
+    // open / read 失败（stat 后被删除、EACCES 或读取竞态）→ 返回 undefined：本轮不判定替换、续用缓存条目，下个校验周期重试。
     return undefined;
   }
 }
@@ -423,6 +424,7 @@ function isJsonLine(line: string): boolean {
     JSON.parse(line);
     return true;
   } catch {
+    // 末段 JSON 解析失败（写入中的半行 / 崩溃残留的截断行）→ 判为非完整行，extractTrailingTail 保留其原始字节待下轮拼接。
     return false;
   }
 }

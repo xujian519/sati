@@ -38,7 +38,9 @@
   - 工作量：L · 严重级：P2 · 状态：done（2026-09-11，C41）
   - **2026-09-11 终审（含口径更正）**：✅ **done（C41）**。**本条原始定义有误**——「体仅注释/空白」把**已在函数 JSDoc 说明意图的防御式**与**真无任何说明的静默回退**混计（这也是「151 处」的来源）。按修正后口径（**无注释的无参 catch**；判定「有注释」认 catch 行内 / catch 上一行 / 体内独立注释行或行尾注释三种形态），`src + ui/src` 产品代码 = 总计 **518** / 无注释 **37** / 已注释 **481**。C41 为 107 处真静默吞错补体内意图注释（统一「失败模式 → 回退语义」形态）、18 处登记不重复（已由函数级 JSDoc 或体内自述式告警承载），**隐患类 125 → 37**；零行为变化以编译级证明（`transpileModule({removeComments:true})` 79/79 逐字节相同）。口径定义见 `docs/technical-debt/README.md` §指标口径说明，决策见 `docs/notes/implemented/2026-09-11-c41-catch-todo-governance.md`。
   - **2026-09-16 口径变更（#390 · TD-METRIC-003）**：catch 口径纳入 `ui/server`，同时 vendored 子包整体移出文件级指标 ⇒ 同一形态的计数变为 总计 **684** / 无注释 **124** / 已注释 **560**（`ui/server` 持 175 / 84 / 91；vendored 移出 8 处，均已带注释）。C41 的结论（37）在 `src + ui/src` 口径下仍成立，只是**不再是全仓数字**；新口径下的残留治理见 #353。
-  - **2026-09-18 第一段交付（#353 · PR #432）**：`ui/server` 段 **72 → 0**（全仓无注释 114 → **42**）。72 处/28 文件各补一行「失败模式 → 回退语义」注释，**只增注释、零代码改动**（+74/−1 行，唯一非注释新增是 `utils/plugin-loader.js` 空体 `} catch {}` 的展开括号）。同 PR 用 AST 复核了度量判据的准确度：正则判「有注释」547 vs AST 判 545 ⇒ **假阳性 2 处**（`src/context/budget/ToolResultBudget.ts:203` 上一行注释属 try 体；`src/tool/builtin/executeCode.ts:700` 嵌套 catch 的注释被记到外层）、**假阴性 0 处**——后者说明「无注释」集合是准确的。114 处形态：静默 89 / 错误转译 21 / 已落日志 3 / 空体 1。指标副作用已披露：`空 catch {}` 1 → 0 系正则形态效应（补注释后不再匹配空体正则），非删除。**第二段 `src` 36 处 + `ui/src` 6 处待做**。决策见 `docs/notes/implemented/2026-09-18-catch-intent-comments.md`。
+  - **2026-09-18 第一段交付（#353 · PR #432）**：`ui/server` 段 **72 → 0**（全仓无注释 114 → **42**）。72 处/28 文件各补一行「失败模式 → 回退语义」注释，**只增注释、零代码改动**（+74/−1 行，唯一非注释新增是 `utils/plugin-loader.js` 空体 `} catch {}` 的展开括号）。同 PR 用 AST 复核了度量判据的准确度：正则判「有注释」547 vs AST 判 545 ⇒ **假阳性 2 处**（`src/context/budget/ToolResultBudget.ts:203` 上一行注释属 try 体；`src/tool/builtin/executeCode.ts:700` 嵌套 catch 的注释被记到外层）、**假阴性 0 处**——后者说明「无注释」集合是准确的。114 处形态：静默 89 / 错误转译 21 / 已落日志 3 / 空体 1。指标副作用已披露：`空 catch {}` 1 → 0 系正则形态效应（补注释后不再匹配空体正则），非删除。决策见 `docs/notes/implemented/2026-09-18-catch-intent-comments.md`。
+  - **2026-09-18 第二段交付（#353 · PR #433）**：`src` 36 处 + `ui/src` 6 处 = **42 处 / 30 文件**补齐，**只增注释、零代码改动**（+42/−0 行，无单行 catch 需展开）。至此全仓「无注释的无参 catch」**114 → 0**（`metrics.md`：无注释 114 → **0**、已注释 547 → **661**、总计 661 不变，+114/−114 闭合）。两道独立证明同段一：AST 叶子 token 比对 30/30 一致、`transpileModule({removeComments:true})` 编译产物 30/30 逐字节相同；`pnpm check:event-matrix` 为 fresh（段二文件中唯一在事件矩阵带 `file:line` 的 `src/model/providers/openai-responses/stream.ts` 矩阵记 `:131`，注释插在 `:209/:214`，不影响条目）。
+  - **2026-09-18 载体收口**：`TD-SESSION-N12`（`TranscriptReader.ts` 两处）由段二注释直接还清；**`TD-TEAM-N11` 不属于本判据**——`src/cli/teamSubsystem.ts` 的 `runMemberScan` 外层是 **promise 链上的 `.catch()`** 而非 `catch {}` 子句，既不被「无注释的无参 catch」口径统计，补注释也修不了「整次启动扫描失败被静默吞掉 ⇒ 冷恢复失效而队长侧零信号」，故按 #353 的「场景 B：失败应被观测」单独补 `logger.error` 处置（PR #434），不混进纯注释变更。
 
 ### Arch/分层
 - **TD-BOUND-001** · `ui/server → src` 深层导入 14 处
@@ -1874,10 +1876,11 @@
   - 影响：同一文件内两份「按 turnId 跟随、遇 `turn_result` 清空候选」的游标逻辑，差异只在活动条目集合与返回粒度。`retry_schedule` 新增条目类型时这类「活动集合」语义一旦需要调整，必须同步改两处，漏改即出现 turn 级与 request 级判定不一致。
   - 建议：抽 `scanOpenTurn(entries, isActivityEntry)` 共享遍历，两级各自做投影。
 - **TD-SESSION-N12** · 2 处无注释裸 `catch`（`session/transcript` 内唯一未收束项）
-  - 类别：C · 严重级：P3 · 工作量：S · 状态：new
+  - 类别：C · 严重级：P3 · 工作量：S · 状态：done（2026-09-18，PR #434）
   - 位置：`src/session/transcript/TranscriptReader.ts:343`、`:425`
   - 影响：按 `README.md:57` 判定口径，这 2 处属「无注释隐患类」。危害有限（两函数 JSDoc 已述回退语义，且回退方向保守），但与本组其余代码的纪律形成可见落差。对照 `src/agent/loop/` 的 7 处裸 catch **全部**带意图注释。
   - 建议：补「失败模式 → 回退语义」单行注释。
+  - **2026-09-18 处置**：✅ 由 #353 第二段（PR #434）补注释还清——`:344`（`readFirstBytes` 的 open/read 失败 → 返回 undefined，本轮不判定替换、续用缓存条目）与 `:427`（末段 JSON 解析失败 → 判为非完整行，`extractTrailingTail` 保留原始字节待下轮拼接）。附带发现：`:332` 的函数 doc 写「失败返回 undefined → 调用方保守全量」，而唯一调用方（`:166-172`）实际只刷新 `lastVerifyAt` 并续用缓存条目、**不**触发全量重读——陈旧 doc 或调用方既存缺陷，属另一件事，本轮未改代码，登记待查。
 - **TD-SESSION-N13** · `synthesizeInterruptedTurn` 返回的内存条目与落盘条目 `entryId` 不同（注释宣称「一致」只对 sequence 成立）
   - 类别：C · 严重级：P3 · 工作量：S · 状态：new
   - 位置：`src/session/transcript/interruptedTurn.ts:124-133`（`:130` 自生成 `entryId`）对照 `JsonlTranscriptWriter.ts:535`（`baseEntry()` 再生成一个）
@@ -2081,7 +2084,7 @@
 | TD-TEAM-N01/N02/N03 + TD-AGENT-N02 + TD-SESSION-N08/N09 | **#350** | **`CLAUDE.md` 五处陈述与代码实际不符**（一条汇总） |
 | 13 个 SessionMapper 空壳 | **#351** | 逐字相同的 10 行薄壳收敛为工厂；**已交付（PR #410）**——薄壳删除、渠道直接构造共享实现（未走工厂，理由见 note） |
 | TD-PATENT-N23 + N24 | **#352** | index-store 同构复制（85/179 行）+ 队列无淘汰 |
-| TD-CATCH-001 残留 + TD-TEAM-N11 + TD-SESSION-N12 | **#353** | 无注释无参 catch（创建时旧口径 37；#390 口径变更后为 124）。**第一段已交付（PR #432）**——`ui/server` 72 → 0（全仓 114 → 42）；第二段 `src` 36 处 + `ui/src` 6 处待做 |
+| TD-CATCH-001 残留 + TD-TEAM-N11 + TD-SESSION-N12 | **#353** | 无注释无参 catch（创建时旧口径 37；#390 口径变更后为 124 → 114）。**已交付（PR #432 段一 + PR #434 段二）**——`ui/server` 72 → 0、`src` 36 + `ui/src` 6 → 0，全仓无注释 **114 → 0**；同 issue 的 `TD-TEAM-N11`（`.catch()` 链、不在本判据内）按「场景 B」补 `logger.error`（PR #434） |
 | 端口/超时散落 | **#354** | 5 个渠道端口 + 43 处内联 setTimeout |
 | TD-RULE-N01 | **#355** | rule_check(pack) 缓存失效键覆盖不全 |
 | `ui/server` P0 级候选（文档登记未跟踪） | **#356** | **已交付（PR #417）**——20 条登记逐条复核（19 条仍成立）+ 零消费死表面退役；仍成立的 6 条拆成 #411–#416，裁定表见 §26「处置追加」。**6 条载体已全部还清**：#412 / #413（PR #425）、#411 / #414 / #415 / #416（PR #426–#429） |

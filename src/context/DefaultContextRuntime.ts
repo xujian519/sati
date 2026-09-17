@@ -281,6 +281,7 @@ export class DefaultContextRuntime implements ContextRuntime {
           injections.push({ source: "project_instructions", text: instructionText });
         }
       } catch {
+        // 指令发现抛错（内层 tryAdd 已吞掉 ENOENT/EACCES 等常规失败，此处为兜底）→ 记 warning 诊断并整段跳过 <project-instructions>，本轮装配照常发出。
         diagnostics.push({
           code: "instruction_discovery_failed",
           severity: "warning",
@@ -830,6 +831,7 @@ function logAutoCompactEvent(
     }
     logger.warn(`${stage} ${JSON.stringify(payload)}`);
   } catch {
+    // payload 不可 JSON 序列化（循环引用 / BigInt）→ 丢弃字段只记 stage，诊断日志不得反过来打断 auto-compact。
     if (level === "debug") {
       debugLog(`[context:auto-compact] ${stage}`);
       return;

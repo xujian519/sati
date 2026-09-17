@@ -438,6 +438,7 @@ function assertValidUrl(value: string, providerId: string): void {
   try {
     new URL(value);
   } catch {
+    // url 不是绝对合法 URL（new URL 抛 TypeError）→ 抛 ModelConfigError("invalid_url")（带 providerId/url），loadPilotConfig 记为 fatal 并中止配置加载。
     throw new ModelConfigError("invalid_url", `Provider ${providerId} url is invalid.`, {
       providerId,
       url: value,

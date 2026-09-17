@@ -70,6 +70,7 @@ function validateRegexPatterns(patterns: string[], ruleId: string, issues: RuleS
     try {
       new RegExp(pattern, "i");
     } catch {
+      // 正则语法非法（new RegExp 抛 SyntaxError）→ 记 rule 级 issue 并整条规则作废：文件不作废，同文件其余规则照常加载。
       issues.push({ ruleId, message: `rule ${ruleId}: 非法正则 "${pattern}"` });
       return false;
     }
@@ -359,6 +360,7 @@ export function loadRuleSetDir(dir: string): {
   try {
     entries = readdirSync(dir);
   } catch {
+    // 目录读不到（不存在 / 非目录 / EACCES）→ 告警「规则目录不存在」并返回空规则集，上层按「该层无规则」继续加载。
     warnings.push({ source: dir, message: `规则目录不存在: ${dir}` });
     return { ruleSets, sources, warnings };
   }

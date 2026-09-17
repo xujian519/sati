@@ -270,6 +270,7 @@ function mtimeOf(path: string): string {
   try {
     return String(statSync(path).mtimeMs);
   } catch {
+    // stat 失败（枚举后被删除 / 断链 / 权限不足）→ 记 "?" 占位：指纹不同于任何真实 mtime，使 pack 缓存失效而非沿用旧规则。
     return "?";
   }
 }
@@ -281,6 +282,7 @@ function ruleFileDigest(dir: string | null): string {
   try {
     entries = readdirSync(dir).sort();
   } catch {
+    // 规则层目录读不到（不存在 / 非目录 / EACCES）→ 记 "unreadable" 状态词：指纹仍随目录状态变化，调用方据新指纹失效 pack 缓存。
     return "unreadable";
   }
   const parts: string[] = [];
@@ -324,6 +326,7 @@ export function computeRulePackFingerprint(options: { manifestPath?: string } = 
       // checkout 等价内容）不该空转重载；内容变则必须失效，与 mtime 是否变动无关。
       manifestState = JSON.stringify(manifest);
     } catch {
+      // 清单读不到或 YAML 非法 → 记 "unparsable"（区别于 "absent"）且层集合退回默认 base，指纹变化使 pack 缓存失效。
       manifestState = "unparsable";
     }
   }

@@ -21,6 +21,7 @@ export async function fileSizeMatches(path: string, expectedSize: number): Promi
     const st = await stat(path);
     return st.size === expectedSize;
   } catch {
+    // stat 失败（文件已被删除/路径不可读）→ 返回 false 视为未命中续传，该专利回到待下载队列重下（宁可重下也不误判为"已下载"而跳过）。
     return false;
   }
 }

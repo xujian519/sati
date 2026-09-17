@@ -224,6 +224,7 @@ export function createExitPlanModeTool(): SatiToolDefinition<ExitPlanModeInput, 
       try {
         plan = (await readFile(resolvedPlanFilePath, "utf8")).trim();
       } catch {
+        // 计划文件不存在 / 不可读（ENOENT、EISDIR、EACCES）→ 抛 invalid_tool_input 以工具错误回给模型：先写计划文件再退出 plan mode。
         throw new SatiToolRuntimeError(
           "invalid_tool_input",
           `Plan file does not exist or could not be read: ${resolvedPlanFilePath}`,
