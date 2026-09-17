@@ -8,6 +8,7 @@ import crypto from "crypto";
 import { userDb, apiKeysDb, githubTokensDb } from "../database/db.js";
 import { addProjectManually } from "../projects.js";
 import { runChatViaGateway } from "../sati-bridge.js";
+import { resolvePilotHome, resolveProjectStorageId, sanitizeSessionIdForPath } from "../utils/pilotPaths.js";
 import { Octokit } from "@octokit/rest";
 import { IS_PLATFORM } from "../constants/config.js";
 
@@ -301,27 +302,36 @@ async function cloneGitHubRepo(githubUrl, githubToken = null, projectPath) {
 
   const cloneDir = path.resolve(projectPath);
 
-  // Check if directory already exists
+  // Check if directory already exists (if it doesn't, fall through to clone)
+  let directoryExists = true;
   try {
     await fs.access(cloneDir);
-    // Directory exists - check if it's a git repo with the same URL
-    try {
-      const existingUrl = await getGitRemoteUrl(cloneDir);
-      const normalizedExisting = normalizeGitHubUrl(existingUrl);
-      const normalizedRequested = normalizeGitHubUrl(githubUrl);
-
-      if (normalizedExisting === normalizedRequested) {
-        logger.info("✅ Repository already exists at path with correct URL");
-        return cloneDir;
-      }
-      throw new Error(
-        `Directory ${cloneDir} already exists with a different repository (${existingUrl}). Expected: ${githubUrl}`,
-      );
-    } catch {
-      throw new Error(`Directory ${cloneDir} already exists but is not a valid git repository or git command failed`);
-    }
   } catch {
-    // Directory doesn't exist - proceed with clone
+    // 路径不可访问 → 视为不存在，交给下面的 git clone 报出真实原因
+    directoryExists = false;
+  }
+
+  if (directoryExists) {
+    // The `try` covers ONLY reading the existing remote. The
+    // "different repository" verdict below is deliberate: it must reach
+    // the caller verbatim, so it can never be swallowed by this catch
+    // (it used to be — the generic message hid the real reason).
+    let existingUrl;
+    try {
+      existingUrl = await getGitRemoteUrl(cloneDir);
+    } catch (error) {
+      throw new Error(
+        `Directory ${cloneDir} already exists but is not a valid git repository or git command failed: ${error.message}`,
+      );
+    }
+
+    if (normalizeGitHubUrl(existingUrl) === normalizeGitHubUrl(githubUrl)) {
+      logger.info("✅ Repository already exists at path with correct URL");
+      return cloneDir;
+    }
+    throw new Error(
+      `Directory ${cloneDir} already exists with a different repository (${existingUrl}). Expected: ${githubUrl}`,
+    );
   }
 
   // Ensure parent directory exists
@@ -352,10 +362,37 @@ async function cloneGitHubRepo(githubUrl, githubToken = null, projectPath) {
 }
 
 /**
+ * Resolve the on-disk artifacts owned by one session of one workspace.
+ *
+ * Sessions live under `<pilotHome>/projects/<projectId>/chats/`: the
+ * transcript is `<chatDir>/<safeId>.jsonl` and the session's sidecar
+ * directory (`file-history/`, `subagents/`) sits next to it under
+ * `<chatDir>/<safeId>/`.
+ *
+ * The legacy rebrand-era path `<pilotHome>/sessions/<sessionId>` is NOT
+ * used: nothing in this repo (or in the gateway) writes it, so cleaning
+ * it up was a no-op that left the real transcript behind.
+ *
+ * @param {string} projectPath - Workspace the session ran in.
+ * @param {string} sessionId - Session key as the gateway stores it.
+ * @param {string} [pilotHome] - Active Sati home (`SATI_HOME` aware).
+ * @returns {string[]} Transcript file and per-session sidecar directory.
+ */
+export function resolveSessionArtifacts(projectPath, sessionId, pilotHome = resolvePilotHome()) {
+  const chatDir = path.join(pilotHome, "projects", resolveProjectStorageId(projectPath, pilotHome), "chats");
+  const safeId = sanitizeSessionIdForPath(sessionId);
+  return [path.join(chatDir, `${safeId}.jsonl`), path.join(chatDir, safeId)];
+}
+
+/**
  * @param {string} projectPath - Path to the project directory
  * @param {string} sessionId - Session ID to clean up
+ * @param {{removeSession?: boolean}} [options] `removeSession` gates session
+ *   cleanup: only a session **this request created** may be removed, so a
+ *   caller-supplied id that names a pre-existing session never loses its
+ *   transcript.
  */
-async function cleanupProject(projectPath, sessionId = null) {
+export async function cleanupProject(projectPath, sessionId = null, options = {}) {
   try {
     // Only clean up projects that are direct children of the external-projects
     // directory. A plain substring check would let a path like
@@ -375,19 +412,101 @@ async function cleanupProject(projectPath, sessionId = null) {
     await fs.rm(projectPath, { recursive: true, force: true });
     logger.info("✅ Project cleaned up");
 
-    if (sessionId) {
-      try {
-        const sessionPath = path.join(os.homedir(), ".sati", "sessions", sessionId);
-        logger.info("🧹 Cleaning up session directory:", sessionPath);
-        await fs.rm(sessionPath, { recursive: true, force: true });
-        logger.info("✅ Session directory cleaned up");
-      } catch (error) {
-        logger.error("⚠️ Failed to clean up session directory:", error.message);
+    if (sessionId && options.removeSession === true) {
+      for (const artifactPath of resolveSessionArtifacts(projectPath, sessionId)) {
+        try {
+          logger.info("🧹 Cleaning up session artifact:", artifactPath);
+          await fs.rm(artifactPath, { recursive: true, force: true });
+          logger.info("✅ Session artifact cleaned up");
+        } catch (error) {
+          logger.error("⚠️ Failed to clean up session artifact:", error.message);
+        }
       }
     }
   } catch (error) {
     logger.error("❌ Failed to clean up project:", error);
   }
+}
+
+/**
+ * Parse one frame the writers collected.
+ *
+ * Gateway frames reach the writers as objects (`kind`-based, see
+ * `runChatViaGateway`); the JSON-string form is the legacy framing and is
+ * still accepted so old collectors/tests keep working.
+ *
+ * @param {unknown} data - Raw frame handed to a writer.
+ * @returns {object|null} Frame object, or null when it isn't a protocol frame.
+ */
+function normalizeWriterFrame(data) {
+  if (typeof data === "string") {
+    try {
+      const parsed = JSON.parse(data);
+      return parsed && typeof parsed === "object" ? parsed : null;
+    } catch {
+      // 非 JSON 字符串不是协议帧（日志行等）→ 跳过该条
+      return null;
+    }
+  }
+  return data && typeof data === "object" ? data : null;
+}
+
+/**
+ * Read the session id a frame is tagged with (every gateway frame carries it).
+ *
+ * @param {unknown} data - Raw frame handed to a writer.
+ * @returns {string|null} Session id, or null when the frame carries none.
+ */
+function extractSessionId(data) {
+  const frame = normalizeWriterFrame(data);
+  return typeof frame?.sessionId === "string" && frame.sessionId ? frame.sessionId : null;
+}
+
+/** @param {unknown} data - Raw frame; true when it announces a freshly minted session. */
+function isSessionCreatedFrame(data) {
+  return normalizeWriterFrame(data)?.kind === "session_created";
+}
+
+/**
+ * Merge collected frames into assistant-only messages.
+ *
+ * Gateway frames are `kind`-based: `stream_delta` frames carry assistant
+ * text in `content` (consecutive deltas are merged), and `complete` frames
+ * carry token usage. Legacy `type`-based frames are still handled for
+ * robustness, but are no longer produced.
+ *
+ * @param {unknown[]} frames - Frames collected by a writer.
+ * @returns {Array<{role: string, content: string}>} Assistant messages.
+ */
+export function collectAssistantMessages(frames) {
+  const assistantMessages = [];
+
+  for (const raw of frames) {
+    const msg = normalizeWriterFrame(raw);
+    if (!msg) continue;
+
+    // Skip initial status message
+    if (msg.type === "status") {
+      continue;
+    }
+
+    if (msg.kind === "stream_delta" && typeof msg.content === "string") {
+      const last = assistantMessages[assistantMessages.length - 1];
+      if (last && last.role === "assistant") {
+        last.content += msg.content;
+      } else {
+        assistantMessages.push({ role: "assistant", content: msg.content });
+      }
+    } else if (
+      (msg.type === "claude-response" || msg.type === "sati-response") &&
+      msg.data &&
+      msg.data.type === "assistant"
+    ) {
+      assistantMessages.push(msg.data);
+    }
+  }
+
+  return assistantMessages;
 }
 
 /**
@@ -397,10 +516,22 @@ class SSEStreamWriter {
   constructor(res, userId = null) {
     this.res = res;
     this.sessionId = null;
+    this.sessionCreated = false;
     this.userId = userId;
   }
 
   send(data) {
+    // Track the session this stream belongs to. Without it `getSessionId()`
+    // stayed null for the whole streaming path, so `cleanup:true` could never
+    // find the session it was supposed to remove.
+    const sessionId = extractSessionId(data);
+    if (sessionId) {
+      this.sessionId = sessionId;
+    }
+    if (isSessionCreatedFrame(data)) {
+      this.sessionCreated = true;
+    }
+
     if (this.res.writableEnded) {
       return;
     }
@@ -433,6 +564,7 @@ class ResponseCollector {
   constructor(userId = null) {
     this.messages = [];
     this.sessionId = null;
+    this.sessionCreated = false;
     this.userId = userId;
   }
 
@@ -441,17 +573,12 @@ class ResponseCollector {
     this.messages.push(data);
 
     // Extract sessionId if present
-    if (typeof data === "string") {
-      try {
-        const parsed = JSON.parse(data);
-        if (parsed.sessionId) {
-          this.sessionId = parsed.sessionId;
-        }
-      } catch {
-        // Not JSON, ignore
-      }
-    } else if (data && data.sessionId) {
-      this.sessionId = data.sessionId;
+    const sessionId = extractSessionId(data);
+    if (sessionId) {
+      this.sessionId = sessionId;
+    }
+    if (isSessionCreatedFrame(data)) {
+      this.sessionCreated = true;
     }
   }
 
@@ -470,45 +597,10 @@ class ResponseCollector {
   /**
    * Get filtered assistant messages only.
    *
-   * Gateway frames are `kind`-based: `stream_delta` frames carry assistant
-   * text in `content` (consecutive deltas are merged), and `complete` frames
-   * carry token usage. Legacy `type`-based frames are still handled for
-   * robustness, but are no longer produced.
+   * @returns {Array<{role: string, content: string}>} Assistant messages.
    */
   getAssistantMessages() {
-    const assistantMessages = [];
-
-    for (const msg of this.messages) {
-      // Skip initial status message
-      if (msg && msg.type === "status") {
-        continue;
-      }
-
-      // Handle JSON strings
-      if (typeof msg === "string") {
-        try {
-          const parsed = JSON.parse(msg);
-          if (parsed.kind === "stream_delta" && typeof parsed.content === "string") {
-            const last = assistantMessages[assistantMessages.length - 1];
-            if (last && last.role === "assistant") {
-              last.content += parsed.content;
-            } else {
-              assistantMessages.push({ role: "assistant", content: parsed.content });
-            }
-          } else if (
-            (parsed.type === "claude-response" || parsed.type === "sati-response") &&
-            parsed.data &&
-            parsed.data.type === "assistant"
-          ) {
-            assistantMessages.push(parsed.data);
-          }
-        } catch {
-          // Not JSON, skip
-        }
-      }
-    }
-
-    return assistantMessages;
+    return collectAssistantMessages(this.messages);
   }
 
   /**
@@ -521,17 +613,9 @@ class ResponseCollector {
     let totalCacheCreation = 0;
 
     for (const msg of this.messages) {
-      let data = msg;
-
-      // Parse if string
-      if (typeof msg === "string") {
-        try {
-          data = JSON.parse(msg);
-        } catch {
-          // 非 JSON 字符串帧不计入 token 统计，跳过该条
-          continue;
-        }
-      }
+      // Legacy JSON-string frames and object frames are both accepted
+      // (non-JSON strings are not protocol frames → skipped)
+      const data = normalizeWriterFrame(msg);
 
       // Gateway `complete` frames carry camelCase usage; legacy frames used
       // snake_case inside `data.message.usage`.
@@ -976,7 +1060,7 @@ router.post("/", validateExternalApiKey, async (req, res) => {
             logger.info(`ℹ️ Branch '${finalBranchName}' already exists locally, checking out...`);
             const existingCheckout = await runGit(["checkout", finalBranchName], { cwd: finalProjectPath });
             if (existingCheckout.code !== 0) {
-              throw new Error(`Failed to checkout existing branch: ${checkout.stderr}`);
+              throw new Error(`Failed to checkout existing branch: ${existingCheckout.stderr}`);
             }
             logger.info(`✅ Checked out existing branch '${finalBranchName}'`);
           } else {
@@ -1091,8 +1175,12 @@ router.post("/", validateExternalApiKey, async (req, res) => {
     if (cleanup && githubUrl) {
       // Only cleanup if we cloned a repo (not for existing project paths)
       const sessionIdForCleanup = writer.getSessionId();
+      // A caller-supplied sessionId may name a session that already existed
+      // before this request — deleting its transcript would destroy the
+      // caller's own history. Only sessions minted by this request qualify.
+      const removeSession = writer.sessionCreated === true;
       setTimeout(() => {
-        cleanupProject(finalProjectPath, sessionIdForCleanup);
+        cleanupProject(finalProjectPath, sessionIdForCleanup, { removeSession });
       }, 5000);
     }
   } catch (error) {
@@ -1101,7 +1189,8 @@ router.post("/", validateExternalApiKey, async (req, res) => {
     // Clean up on error
     if (finalProjectPath && cleanup && githubUrl) {
       const sessionIdForCleanup = writer ? writer.getSessionId() : null;
-      cleanupProject(finalProjectPath, sessionIdForCleanup);
+      const removeSession = writer?.sessionCreated === true;
+      cleanupProject(finalProjectPath, sessionIdForCleanup, { removeSession });
     }
 
     if (stream) {
