@@ -11,7 +11,7 @@
 | src JS 文件 | 0 |
 | tests 文件 | 559 |
 | ui/src 文件 / 行数 | 472 / 83652 |
-| ui/server 文件 / 行数 | 104 / 30514 |
+| ui/server 文件 / 行数 | 104 / 30602 |
 
 ## 指标口径
 
@@ -106,7 +106,7 @@
 | 文件 | 行 |
 |---|---|
 | `ui/src/components/main-content-v2/SkillsV2.tsx` | 2525 |
-| `ui/server/sati-bridge.js` | 2289 |
+| `ui/server/sati-bridge.js` | 2356 |
 | `ui/src/components/code-editor/view/subcomponents/PdfDocumentPreview.tsx` | 1885 |
 | `ui/src/components/chat/hooks/useChatComposerState.ts` | 1837 |
 | `src/adapters/channel/wecom/WeComChannel.ts` | 1764 |
