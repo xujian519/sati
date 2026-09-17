@@ -18,6 +18,8 @@ import {
   type FigureSpec,
   type Jurisdiction,
 } from "../../patent/figuregen/index.js";
+import { figureSpecsToAnalysis } from "../../patent/figure/bridge.js";
+import { checkFigureConsistency } from "../../patent/figure/multi-figure-consistency.js";
 import { SatiToolRuntimeError } from "../protocol/errors.js";
 import type { SatiToolDefinition, SatiToolRuntimeContext } from "../protocol/types.js";
 import { FIGURE_INPUT_SCHEMA_REF } from "./patentFigureSchema.js";
@@ -150,6 +152,17 @@ export function createPatentFigureCheckTool(): SatiToolDefinition<PatentFigureCh
             );
           }
         }
+        // 多图一致性（≥2 幅时自动跑，复用既有纯函数）：跨图标记/名称冲突 +
+        // 图文对齐（电学档 R1/C2 与机械档 壳体(10) 分别对齐，见 figure/bridge.ts）。
+        // 单图无"跨图"可言，不跑（避免制造噪音）。
+        if (figures.length >= 2) {
+          const consistency = checkFigureConsistency(figureSpecsToAnalysis(figures), input.spec_text);
+          lines.push("", "多图一致性检查：", `- ${consistency.summary}`);
+          for (const warning of consistency.warnings) {
+            lines.push(`- ${warning}`);
+          }
+        }
+
         lines.push(
           "",
           jurisdiction === "us"

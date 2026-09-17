@@ -51,6 +51,13 @@ export type FigureCheckRuleId = "V1" | "V2" | "V3" | "V4" | "V5" | "V7" | "V8" |
 export type FigureCheckOptions = {
   /** 生成期无说明书文本可核时跳过 V2/V3（V1/V4/V5/V7/V8/V9 照常）。 */
   skipTextRules?: boolean;
+  /**
+   * 跳过画幅规则 V7（纸面尺寸 + 打印字高）。
+   *
+   * 用于**非本模块渲染器产出**的附图骨架（如栅格图/扫描图的分析结果）：那类图的画幅
+   * 与字号由原图决定，用本模块布局结果判 V7 属错误归因（必然误报）。
+   */
+  skipLayoutRules?: boolean;
   /** 发明/实用新型（V9 仅对 utility 生效；US 辖区无此规则）。 */
   documentKind?: DocumentKind;
   /** 辖区（默认 cn）：us 跳过 V8 摘要附图/V9 实用新型规则，违规信息引用 37 CFR 1.84。 */
@@ -326,16 +333,19 @@ export function checkFigures(
     }
   }
 
-  // V7 缩小三分之二可辨（介质锚定：A4 可印区 + 打印字高毫米）
+  // V7 缩小三分之二可辨（介质锚定：A4 可印区 + 打印字高毫米）；skipLayoutRules 时跳过
+  // （骨架类输入的画幅不由本模块决定，见 FigureCheckOptions.skipLayoutRules）。
   //
   // 判据来自交付形态（A4 打印），不是画幅像素：px 代理与纸面脱钩，12 步流程图画幅
   // 355mm 高仍"通过"却会被分页切断（实测，见 docs/patent-figure-hardening-plan.md §3）。
   // 统一缩放系数（uniformFigureZoom，与 html.ts 同源）保证同文档字高一致，
   // 故字高判定用统一系数而非单图系数（后者会高估实际打印字高）。
-  const paperSizes = figures.map(figure => {
-    const { width, height } = layoutFigure(figure);
-    return { figure_no: figure.figure_no, widthMm: pxToMm(width), heightMm: pxToMm(height) };
-  });
+  const paperSizes = options.skipLayoutRules
+    ? []
+    : figures.map(figure => {
+        const { width, height } = layoutFigure(figure);
+        return { figure_no: figure.figure_no, widthMm: pxToMm(width), heightMm: pxToMm(height) };
+      });
   const zoom = uniformFigureZoom(paperSizes);
   for (const size of paperSizes) {
     const oversize = size.widthMm > PRINTABLE_WIDTH_MM || size.heightMm > PRINTABLE_HEIGHT_MM;

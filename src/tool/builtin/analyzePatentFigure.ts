@@ -15,6 +15,9 @@
 
 import { supportsInputModality } from "../../model/protocol/multimodal.js";
 import { analyzePatentFigure, DEFAULT_FIGURE_MODEL, DEFAULT_FIGURE_PROVIDER } from "../../patent/figure/analyze.js";
+import { analysisToFigureSpec } from "../../patent/figure/bridge.js";
+import { checkFigures } from "../../patent/figuregen/check.js";
+import type { FigureCheckRuleId } from "../../patent/figuregen/check.js";
 import { DEFAULT_FIGURE_INDEX_RELATIVE_PATH, upsertFigureIndex } from "../../patent/figure/index-store.js";
 import { loadFigureImage } from "../../patent/figure/preprocess.js";
 import type { FigureAnalysisResult } from "../../patent/figure/types.js";
@@ -34,6 +37,39 @@ export type AnalyzePatentFigureInput = {
 };
 
 export type AnalyzePatentFigureOutput = FigureAnalysisResult;
+
+/** 文字面核验只会用到这些规则（其余规则对"单图分析结果"无意义或不可归因，见下）。 */
+const TEXT_FACE_RULES: readonly FigureCheckRuleId[] = ["V2", "V3", "V4", "V5"];
+
+/**
+ * 分析结果 → 无几何 FigureSpec 骨架 → 文字面确定性核验（细则第 21 条）。
+ *
+ * 价值：栅格图（客户扫描件 / CAD 导出 / 他人绘制的图）此前只能得到模型判断，
+ * 进不了规则核验轨；经骨架转换后可与 `claim_context` 做确定性的图文标记对齐。
+ *
+ * 只用文字面规则、且**只作提示**：`skipLayoutRules` 跳过 V7（画幅与字号由原图决定，
+ * 用本模块布局结果判属错误归因）；V1 图号连续性/摘要附图属图集级判定，单图分析下
+ * 无意义；核验发现不改变结构化输出（`data`），仅追加一段文本供调用方决策。
+ */
+function buildTextFaceAdvisory(result: FigureAnalysisResult, claimContext?: string): string[] {
+  if (claimContext === undefined || claimContext.trim().length === 0) return [];
+  const skeleton = analysisToFigureSpec(result);
+  if (skeleton === undefined) return [];
+  const findings = checkFigures([skeleton], claimContext, { skipLayoutRules: true }).findings.filter(finding =>
+    TEXT_FACE_RULES.includes(finding.rule),
+  );
+  const header =
+    `图文标记核验（分析结果 ↔ claim_context；仅文字面规则，图幅/图集级规则不适用）：` +
+    (findings.length === 0 ? "无发现" : `${findings.length} 条待确认`);
+  return [
+    header,
+    ...findings.map(
+      finding =>
+        `- [${finding.severity.toUpperCase()}] ${finding.rule}: ${finding.message}` +
+        (finding.evidence ? `\n  ${finding.evidence.join("\n  ")}` : ""),
+    ),
+  ];
+}
 
 export type CreateAnalyzePatentFigureToolOptions = {
   /** 模型 provider（默认 moonshot）。 */
@@ -174,8 +210,12 @@ export function createAnalyzePatentFigureTool(
         indexed = false;
       }
 
+      const advisory = buildTextFaceAdvisory(result, input.claim_context);
       return {
-        content: [{ type: "json", value: result }],
+        content: [
+          { type: "json", value: result },
+          ...(advisory.length === 0 ? [] : [{ type: "text" as const, text: advisory.join("\n") }]),
+        ],
         data: result,
         metadata: {
           domain: "patent",

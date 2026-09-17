@@ -157,4 +157,57 @@ test("patent_figure_check：ok=true 与 fail 两态文本", async () => {
   assert.ok(failText.includes("核验未通过"));
   assert.ok(failText.includes("[FAIL] V2"));
   assert.ok(failText.includes("细则第 21 条"));
+  // 单图无"跨图"可言：不产出多图一致性小节（避免噪音）
+  assert.ok(!failText.includes("多图一致性检查"));
+});
+
+test("patent_figure_check：≥2 幅自动跑多图一致性（机械件号对齐与缺漏）", async () => {
+  const tool = createPatentFigureCheckTool();
+  const figures: FigureSpec[] = [
+    { figure_no: 1, kind: "block", nodes: [{ id: "a", label: "壳体(10)", ref: 10 }], edges: [] },
+    { figure_no: 2, kind: "block", nodes: [{ id: "b", label: "盖板(20)", ref: 20 }], edges: [] },
+  ];
+  const ok = await tool.execute(
+    { figures, spec_text: "壳体(10)与盖板(20)连接。", document_kind: "utility" },
+    makeContext(process.cwd()),
+  );
+  const okText = ok.content[0].type === "text" ? ok.content[0].text : "";
+  assert.ok(okText.includes("多图一致性检查"), "多图应附一致性小节");
+  assert.ok(okText.includes("附图 2 张"));
+
+  // 文字引用 30 但附图未识别 → missingRefs（机械数字档对齐）
+  const missing = await tool.execute(
+    { figures, spec_text: "壳体(10)与盖板(20)通过螺栓(30)连接。", document_kind: "utility" },
+    makeContext(process.cwd()),
+  );
+  const missingText = missing.content[0].type === "text" ? missing.content[0].text : "";
+  assert.ok(missingText.includes("30"), "应报未在附图中识别的标记 30");
+  assert.ok(/未在附图中识别/u.test(missingText));
+});
+
+test("patent_figure_check：文字面分节结论随报告输出（未分节则注明 V10/V11 未生效）", async () => {
+  const tool = createPatentFigureCheckTool();
+  const unsectioned = await tool.execute(
+    { figures: [FIG], spec_text: "一段无小节标题的文字，提及处理模块(20)。" },
+    makeContext(process.cwd()),
+  );
+  const text = unsectioned.content[0].type === "text" ? unsectioned.content[0].text : "";
+  assert.ok(text.includes("文字面分节：未分节"));
+  assert.ok(text.includes("V10/V11 未生效"));
+
+  const sectioned = await tool.execute(
+    {
+      figures: [FIG],
+      spec_text: [
+        "## 权利要求书",
+        "1. 一种装置，包括处理模块(20)。",
+        "## 说明书",
+        "## 具体实施方式",
+        "处理模块20执行处理。",
+      ].join("\n"),
+    },
+    makeContext(process.cwd()),
+  );
+  const sectionedText = sectioned.content[0].type === "text" ? sectioned.content[0].text : "";
+  assert.ok(sectionedText.includes("文字面分节：已分节"));
 });
