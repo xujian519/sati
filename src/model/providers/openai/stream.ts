@@ -279,12 +279,14 @@ function finishToolCalls(
     try {
       input = JSON.parse(rawArguments);
     } catch {
+      // 流式累积的 arguments buffer 不是合法 JSON（增量拼接错位或被截断）→ 先 jsonrepair 修复重解析并置 wasRepaired=true 上报：下游据此把该轮工具调用当"可能被截断"（工具上下文 outputTruncated，finishReason=length 时整条弃用转输出恢复），修不好才由内层抛错。
       try {
         const repaired = jsonrepair(rawArguments);
         input = JSON.parse(repaired);
         wasRepaired = true;
         logger.warn(`repaired invalid JSON for tool "${toolCall.name ?? "?"}" (buf_len=${rawArguments.length})`);
       } catch {
+        // jsonrepair 也修不好 → 先 error 日志打出参数预览（超 500 字符时只留首尾各 250，便于定位截断点），再按 finishReason=length 分类抛错：截断→max_output_reached（上游 recoverFromMaxOutputLimit 提 token/续写恢复），否则→invalid_tool_arguments（模型自纠重试或回退链）。
         const preview =
           rawArguments.length > 500
             ? rawArguments.slice(0, 250) + "\n…[truncated]…\n" + rawArguments.slice(-250)

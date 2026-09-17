@@ -541,6 +541,7 @@ async function setupWeixin(rl: ReturnType<typeof createInterface>): Promise<void
     const mod = await import("weixin-ilink");
     loginWithQR = mod.loginWithQR;
   } catch {
+    // 动态 import 失败（weixin-ilink 未安装 / 模块初始化抛错）→ 打印安装指引后返回，不写任何半成品凭据。
     console.log("\n❌ weixin-ilink 模块加载失败");
     console.log("   请运行: npm install weixin-ilink\n");
     return;

@@ -1,4 +1,4 @@
-# Agent Note: 无注释无参 catch 的意图注释治理（#353 · `ui/server` 段）
+# Agent Note: 无注释无参 catch 的意图注释治理（#353）
 
 Status: implemented
 
@@ -10,7 +10,10 @@ Status: implemented
 
 ## Decision
 
-**对全部无注释的无参 catch 逐处补一行「失败模式 → 回退语义」中文意图注释**（形态沿用 C41 定的口径），只增注释、零代码改动。本段落在 `ui/server`：72 处 / 28 文件，新增 74 行、删除 1 行（那 1 行是 `ui/server/utils/plugin-loader.js:299` 的空体 `} catch {}` 被展开为多行以容纳注释，同时新增了 `} catch {` 与 `}` 两行）。
+**对全部无注释的无参 catch 逐处补一行「失败模式 → 回退语义」中文意图注释**（形态沿用 C41 定的口径），只增注释、零代码改动。两段合计 114 处 / 58 文件：
+
+- **第一段 `ui/server`**（PR #432）：72 处 / 28 文件，新增 74 行、删除 1 行——那 1 行是 `ui/server/utils/plugin-loader.js:299` 的空体 `} catch {}` 被展开为多行以容纳注释（同时新增 `} catch {` 与 `}` 两行）；
+- **第二段 `src` + `ui/src`**：36 + 6 = **42 处 / 30 文件**，新增 42 行、**删除 0 行**（无单行 catch 需要展开）。
 
 判定「有注释」沿用度量脚本的口径（文本正则），但先用 AST 复核了它的准确度——用 TypeScript 的 `getLeadingCommentRanges` / `getTrailingCommentRanges` 逐字符复刻同一判定，与正则读数比对：
 
@@ -22,14 +25,14 @@ Status: implemented
 | **假阳性**（正则说「有」，其实无） | **2** |
 | **假阴性**（正则说「无」，其实有） | **0** |
 
-两处假阳性都是「注释不在它该在的位置」，且都在 `src` 段（本段未触及）：
+两处假阳性都是「注释不在它该在的位置」，且都在 `src` 段（两处都**不在** 114 处待注释之列——它们被判为「已有注释」，所以本轮没有碰它们）：
 
 - `src/context/budget/ToolResultBudget.ts:203` —— `} catch {` 上一行的注释其实属于 **try 体**（`// already exists — do not overwrite…`），正则按「上一行」记为 catch 的说明；
 - `src/tool/builtin/executeCode.ts:700` —— 外层 catch 体内含**嵌套** `catch { /* noop */ }`，正则的「体内出现 `/*`」把内层注释记到外层账上。
 
 假阴性为 0 说明：**「无注释」这个集合是准确的**（这 114 处既无行内注释、无上一行注释，体内也无任何注释），因此「把它补到 0」是一件可验证的事，而不是口径游戏。
 
-114 处的形态分布（AST 判定）：**静默回退 89 · 错误转译（体内 `throw`）21 · 体内已落日志 3 · 空体 1**。本段处理的 72 处中含 4 处错误转译、1 处体内已落日志、1 处空体——这些**不静默**的 catch 也补了注释，理由见 Alternatives 第一条。
+114 处的形态分布（AST 判定）：**静默回退 89 · 错误转译（体内 `throw`）21 · 体内已落日志 3 · 空体 1**。按段拆分（在基线 `ebdf731e` 上核算）：`ui/server` 为 静默 65 / 错误转译 5 / 已落日志 1 / 空体 1（= 72），`src` + `ui/src` 为 静默 24 / 错误转译 16 / 已落日志 2 / 空体 0（= 42）。这些**不静默**的 25 处也补了注释，理由见 Alternatives 第一条。
 
 ## Alternatives considered
 
@@ -41,11 +44,12 @@ Status: implemented
 
 ## Consequences
 
-- **换来**：`ui/server` 的无注释无参 catch **72 → 0**（全仓 114 → 42）；`docs/technical-debt/metrics.md` 同步刷新后，「无注释」114 → **42**、「已带意图注释」547 → **619**、总计 661 **不变**——三个数彼此闭合（+72 / −72），可作为「无遗漏、无重复计数」的算术自证。
+- **换来**：全仓「无注释的无参 catch」**114 → 0**（第一段 `ui/server` 72 → 0，第二段 `src` 36 + `ui/src` 6 → 0）；`docs/technical-debt/metrics.md` 同步刷新后，「无注释」114 → **0**、「已带意图注释」547 → **661**、总计 661 **不变**——三个数闭合（+114 / −114），可作为「无遗漏、无重复计数」的算术自证。661 处无参 catch 至此**每一处都写明了自己为什么可以这样收场**。
 - **指标副作用（显式披露）**：`空 catch {}` 由 **1 → 0**。这不是删掉了一处空 catch，而是 `ui/server/utils/plugin-loader.js:299` 那处空体补上注释后不再匹配 `catch\s*(\([^)]*\))?\s*\{\s*\}` 的文本形态；该处本身确实从「静默空体」变成了有说明的 catch（真实改善），但计数变化本身是正则形态效应，读者不应把它读成「删了一处空 catch」。
-- **付出**：28 个文件的行号位移，连带 `metrics.md` 里按行统计的表格一起变化（`ui/server` 行数 31,525 → 31,598；`Top 大文件` 中 `taskmaster.js` 1171 → 1179 等），已同 PR `pnpm measure:update` 刷新，基线不背离 HEAD。
+- **付出**：58 个文件的行号位移，连带 `metrics.md` 里按行统计的表格一起变化（`ui/server` 行数 31,525 → 31,598；`src` 173,485 → 173,521；`ui/src` 83,652 → 83,658），已同 PR `pnpm measure:update` 刷新，基线不背离 HEAD。第二段另经 `pnpm check:event-matrix` 核验为 fresh——唯一在事件矩阵里带 `file:line` 的段二文件是 `src/model/providers/openai-responses/stream.ts`（矩阵记 `:131`），而该文件的注释插在 `:209/:214`，不影响矩阵条目。
 - **零行为变化的证据（两道，各自带控制组）**：
-  1. **AST 叶子 token 比对**：`createSourceFile` 走真 parser（模板、正则、JSX 由 parser 切分），对 `getChildren()` DFS 只取叶子 token 比 kind + 文本（注释与空白是 trivia，永不成为 child）。28/28 文件一致。控制组：仅插入一个空行 → 绿；插入一条 `void 0;` 语句 → 红；模板字面量内改 1 字符 → 红。
-  2. **编译器口径**（C41 的同一方法）：`transpileModule({ removeComments: true })` 比对基线版与工作区版。**27 个文件编译产物逐字节相同**；`ui/server/utils/plugin-loader.js` 因上述空体展开而仅**空白**不同（15,891 → 15,903 字节，token 级完全一致，零 token 差异）。
+  1. **AST 叶子 token 比对**：`createSourceFile` 走真 parser（模板、正则、JSX 由 parser 切分），对 `getChildren()` DFS 只取叶子 token 比 kind + 文本（注释与空白是 trivia，永不成为 child）。第一段 28/28、第二段 30/30 文件一致。控制组：仅插入一个空行 → 绿；插入一条 `void 0;` 语句 → 红；模板字面量内改 1 字符 → 红。
+  2. **编译器口径**（C41 的同一方法）：`transpileModule({ removeComments: true })` 比对基线版与工作区版。**第一段 27/28 逐字节相同**（`ui/server/utils/plugin-loader.js` 因空体展开而仅空白不同：15,891 → 15,903 字节，token 级零差异）；**第二段 30/30 逐字节相同**。
 - **一条流程教训（值得留在案上）**：本轮最初的守卫脚本用裸 `ts.createScanner(...).scan()` 做 token 比对，**在含模板字面量的文件上系统性误报**——scanner 离开模板需要调用方在 `${…}` 收尾的 `}` 处 `reScanTemplateToken()`，裸 driver 不做，于是把「模板闭合反引号 → 文件里下一个反引号」之间的整段源码并成一个模板 chunk token，其 `getTokenText()` 返回原始源码文本（含注释与空白）。实测它对 28 个文件中的 **19 个**报「代码差异」，而 4 个作业组各自独立复现了同一根因。修法是换 parser 驱动的判据（上表第 1 道），并**给裁判脚本本身做控制组**——否则会出现大量「假代码改动」引发无意义返工。错误判据比没有判据更贵。
-- **仍未处理**：`src` 段 36 处 + `ui/src` 段 6 处（全仓尚余 42），由 #353 第二段收尾并更新本 note；两处判据假阳性（`ToolResultBudget.ts:203`、`executeCode.ts:700`）登记在案但未改工具。
+- **仍未处理**：两处判据假阳性（`src/context/budget/ToolResultBudget.ts:203` 的注释属 try 体、`src/tool/builtin/executeCode.ts:700` 的注释属嵌套 catch）登记在案但未改工具——改判据是度量工具变更，与 #353 的范围不同源。
+- **同 issue 的第三个载体不在本判据内**：`TD-TEAM-N11`（`src/cli/teamSubsystem.ts` 的 `runMemberScan` 外层 `.catch()`）是**promise 链上的 `.catch()` 而非 `catch {}` 子句**，既不被「无注释的无参 catch」口径统计，补注释也修不了它要治的问题（整次启动扫描失败被静默吞掉 ⇒ 冷恢复失效而队长侧零信号）。它按 #353 的「场景 B：失败应被观测」单独处置（补 `logger.error`），不混进本轮纯注释变更，以免「零行为变化」的证明被稀释。

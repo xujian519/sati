@@ -15,6 +15,7 @@ export function displayText(value: unknown): string {
   try {
     return JSON.stringify(value, null, 2);
   } catch {
+    // JSON.stringify 抛错（循环引用/BigInt 等不可序列化值）→ 退回 String(value)（普通对象得到 "[object Object]"），保证仍返回 string 而不把异常抛给渲染方。
     return String(value);
   }
 }
@@ -24,6 +25,7 @@ export function objectValue(value: unknown): Record<string, unknown> {
     try {
       return objectValue(JSON.parse(value));
     } catch {
+      // JSON.parse 抛错（字符串不是合法 JSON）→ 返回空对象 {}，调用方 structuredShellData 据此跳过该候选、回退到信封文本解析。
       return {};
     }
   }

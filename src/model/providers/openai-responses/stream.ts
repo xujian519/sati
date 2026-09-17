@@ -207,11 +207,13 @@ function finishToolCall(toolCall: ToolCallState, raw: unknown): CanonicalModelEv
   try {
     input = JSON.parse(rawArguments || "{}");
   } catch {
+    // 流式累积的 arguments buffer 不是合法 JSON（增量拼接错位或被截断）→ 先 jsonrepair 修复重解析并置 wasRepaired 随 tool_call_end 上报，下游据此视该轮工具调用"可能被截断"（outputTruncated / 转输出恢复），修不好才由内层抛错。
     try {
       input = JSON.parse(jsonrepair(rawArguments));
       wasRepaired = true;
       logger.warn(`repaired invalid JSON for tool "${toolCall.name ?? "?"}" ` + `(buf_len=${rawArguments.length})`);
     } catch {
+      // jsonrepair 也修不好（含被截断的半截参数）→ 一律抛 invalid_tool_arguments（retryable，附 raw）：该 provider 的截断另由 response.incomplete→finishReason=length 表达，故此处只按"模型输出畸形"交给自纠重试或回退链。
       throw new ModelProviderError({
         provider: "openai-responses",
         protocol: "openai-responses",

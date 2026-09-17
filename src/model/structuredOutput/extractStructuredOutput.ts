@@ -70,6 +70,7 @@ export function extractStructuredOutput(
   try {
     parsed = JSON.parse(joined);
   } catch {
+    // assistant 文本不是合法 JSON（模型未遵守 response_format 或文本被截断）→ 不抛错，返回 invalid_json，由调用方决定重试 / 提示 / 落盘。
     return { ok: false, reason: "invalid_json" };
   }
 

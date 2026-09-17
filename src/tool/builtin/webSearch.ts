@@ -502,6 +502,7 @@ async function performCustomSearch(args: PerformCustomSearchInput): Promise<Sati
   try {
     url = new URL(endpoint);
   } catch {
+    // 自定义 provider endpoint 不是合法 URL（new URL 抛 TypeError）→ 抛 invalid_tool_input 暴露配置错误，不静默改用默认端点。
     throw new SatiToolRuntimeError(
       "invalid_tool_input",
       `web_search custom provider endpoint is not a valid URL: ${endpoint}`,

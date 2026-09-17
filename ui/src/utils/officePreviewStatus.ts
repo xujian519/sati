@@ -47,6 +47,7 @@ async function readJsonBody(response: Response): Promise<ConfigResponseBody | nu
   try {
     return JSON.parse(text) as ConfigResponseBody;
   } catch {
+    // 响应体不是合法 JSON（后端错误页/代理 5xx 正文/截断响应）→ 此处不静默兜底：抛 Error 携带正文片段（ok 时用固定文案），交由 readOfficePreviewStatus 的 catch 降级读 config，或逃到设置页 .catch 显示为 statusError。
     throw new Error(response.ok ? "Expected JSON response for Office preview status." : text.slice(0, 160));
   }
 }

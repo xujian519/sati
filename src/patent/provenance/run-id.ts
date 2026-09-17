@@ -29,6 +29,7 @@ function readPersistedRunId(file: string): string | undefined {
     const data = JSON.parse(readFileSync(file, "utf8")) as { runId?: unknown };
     return typeof data.runId === "string" && data.runId.length > 0 ? data.runId : undefined;
   } catch {
+    // run.json 缺失（ENOENT）或内容损坏（JSON.parse 抛）→ 返回 undefined 当"无既有 runId"，resume 调用据此转为新建 runId 并覆盖落盘（该次续跑的 provenance 记录不再与先前运行归并）。
     return undefined;
   }
 }

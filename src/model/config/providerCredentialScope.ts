@@ -33,6 +33,7 @@ function canonicalProviderUrl(value: string): string {
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return "";
     return parsed.toString().replace(/\/+$/, "");
   } catch {
+    // URL 解析失败（缺 scheme，如只写 host:port）→ 归一为空串，与 catalog 默认端点必不相等，凭据作用域判定失败关闭。
     return "";
   }
 }

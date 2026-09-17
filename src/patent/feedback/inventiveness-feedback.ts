@@ -104,6 +104,7 @@ export async function findCaseIdBySession(casesRoot: string, sessionId: string):
   try {
     entries = await readdir(casesRoot, { withFileTypes: true });
   } catch {
+    // cases 根不存在或不可读（readdir 抛 ENOENT/EACCES，如会话 cwd 覆盖下从无 case）→ 视为该会话无绑定，返回 undefined；调用方据此直接放弃本次反馈回流（fail-open），审批闭环不受影响。
     return undefined;
   }
   let best: { caseId: string; boundAt: string } | undefined;

@@ -70,6 +70,7 @@ function assertValidTimezone(timezone: string): void {
   try {
     new Intl.DateTimeFormat("en-US", { timeZone: timezone }).format();
   } catch {
+    // 时区名不被 ICU 识别（Intl 构造抛 RangeError）→ 抛 tool_execution_failed 回给模型，而非静默退回 UTC 报一个错的本地时间。
     throw new SatiToolRuntimeError("tool_execution_failed", `Invalid timezone: ${timezone}`);
   }
 }

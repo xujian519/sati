@@ -92,11 +92,13 @@ function toCanonicalToolCall(
   try {
     input = JSON.parse(rawArguments);
   } catch {
+    // 非流式 tool_call 的 function.arguments 不是合法 JSON（模型少引号/尾逗号等）→ 先试 jsonrepair 修复并告警，修好即照常产出 tool_call。
     try {
       const repaired = jsonrepair(rawArguments);
       input = JSON.parse(repaired);
       logger.warn(`repaired invalid JSON for tool call (len=${rawArguments.length})`);
     } catch {
+      // jsonrepair 也修不出合法 JSON → 转译为 invalid_tool_arguments（retryable，附原文）：该码语义是"模型输出畸形"而非传输故障，上游据此走同模型 JSON 自纠重试或回退链换模型，而非 HTTP 原样重发。
       throw new ModelProviderError({
         provider,
         protocol: "openai",
