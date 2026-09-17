@@ -16,6 +16,7 @@ async function readProjectEvents(projectDir) {
   try {
     raw = await readFile(eventsFile, "utf-8");
   } catch {
+    // 该项目还没写过 events.jsonl（readFile 抛 ENOENT）→ 返回空数组，聚合时跳过该项目，面板不因此报错。
     return [];
   }
   const events = [];
@@ -81,6 +82,7 @@ export async function getAlwaysOnDashboardEvents(opts = {}) {
   try {
     projectDirs = await readdir(projectsDir, { withFileTypes: true });
   } catch {
+    // ~/.sati/always-on/projects 不存在（从未启用 Always-On）→ 返回空事件列表，路由回 200 空面板而非 500。
     return { events: [] };
   }
 

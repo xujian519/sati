@@ -35,6 +35,7 @@ function isRegularFile(candidate) {
   try {
     return statSync(candidate).isFile();
   } catch {
+    // 候选 stat 失败（不存在 ENOENT / 无权限 EACCES）→ 视为不是可执行文件，probeDirectory 跳过它继续探下一个目录。
     return false;
   }
 }
@@ -127,6 +128,7 @@ export async function resolveClawhubPath({
       try {
         versions = await listDir(root);
       } catch {
+        // 该版本管理器没装（readdir 抛 ENOENT）→ 跳过它试下一种；全部未命中时 resolveClawhubPath 返回 null，路由提示安装 clawhub。
         continue;
       }
       for (const version of versions.sort((a, b) => compareNodeVersions(b, a))) {

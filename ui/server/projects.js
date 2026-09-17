@@ -46,10 +46,12 @@ async function detectTaskMaster(projectPath) {
       await fs.access(path.join(taskMasterDir, "tasks/tasks.json"));
       tasksJson = true;
     } catch {
+      // tasks/tasks.json 缺失或不可读（fs.access 抛 ENOENT/EACCES）→ 视为无任务清单，项目仍以 hasTaskmaster: true 返回。
       tasksJson = false;
     }
     return { hasTaskmaster: true, hasTasksJson: tasksJson };
   } catch {
+    // .taskmaster 目录不存在或非目录（fs.stat 抛 ENOENT/ENOTDIR）→ 视为该项目未启用 TaskMaster，项目照常列出，前端的 taskMasterConfigured 为 false。
     return { hasTaskmaster: false };
   }
 }
@@ -111,6 +113,7 @@ async function readMarkedProjectPaths() {
   try {
     entries = await fs.readdir(projectsDir, { withFileTypes: true });
   } catch {
+    // ~/.sati/projects 不存在或不可读（全新安装、SATI_HOME 指向别处）→ 返回空 Map，调用方失去 .cwd 校正，退回按项目 id / 编码推断路径。
     return result;
   }
   for (const entry of entries) {
@@ -263,6 +266,7 @@ async function getProjects(progressCallback = null) {
       typeof generalSummary?.sessionCount === "number" ? generalSummary.sessionCount : generalSessions.length;
     generalLastActivity = generalSummary?.lastActivity;
   } catch {
+    // 网关不可用（getSatiGateway 抛错）或会话映射失败 → General 仍以空会话列表插入结果，侧边栏保留 General 分区但不列出任何会话。
     generalSessions = [];
     generalTotal = 0;
     generalLastActivity = undefined;

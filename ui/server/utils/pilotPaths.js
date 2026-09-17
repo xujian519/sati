@@ -115,16 +115,19 @@ function findStoredProjectId(projectRoot, pilotHome) {
       try {
         marker = readFileSync(markerPath, "utf8").trim();
       } catch {
+        // 该项目目录缺 .cwd 标记或标记读不出来（ENOENT）→ 跳过它，继续比对下一个项目目录。
         continue;
       }
       if (!marker || normalizeProjectPathForMarkerComparison(marker) !== target) continue;
       try {
         if (statSync(marker).isDirectory()) return entry.name;
       } catch {
+        // .cwd 记录的项目路径已不存在（项目被移走/删除，statSync 抛 ENOENT）→ 视为失效标记，跳过继续找。
         continue;
       }
     }
   } catch {
+    // projects 目录整体读取失败（existsSync 之后被删或 EACCES）→ 返回 null，调用方 resolveProjectStorageId 回退到 legacy 项目 ID。
     return null;
   }
   return null;

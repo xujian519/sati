@@ -60,6 +60,7 @@ export function normalizeRepository(value) {
         return `${parts[0]}/${parts[1]}`;
       }
     } catch {
+      // 形如 http(s):// 但结构不合法（new URL 抛 TypeError）→ 退回 DEFAULT_REPOSITORY（openbmb/Sati），更新检查改查默认仓库。
       return DEFAULT_REPOSITORY;
     }
   }
@@ -568,6 +569,7 @@ function readPackageVersion(projectRoot) {
     const parsed = JSON.parse(readFileSync(path.join(projectRoot, "package.json"), "utf8"));
     return parsed.version || null;
   } catch {
+    // package.json 缺失或非合法 JSON（readFileSync/JSON.parse 抛错）→ 返回 null，调用方在环境变量均未提供时把版本号落到 "0.0.0"。
     return null;
   }
 }
@@ -580,6 +582,7 @@ async function getCurrentCommit(projectRoot, env) {
     const { stdout } = await execFileAsync("git", ["rev-parse", "HEAD"], { cwd: projectRoot });
     return stdout.trim() || null;
   } catch {
+    // 非 git 工作区或未装 git（execFileAsync 抛 ENOENT/非零退出码）→ commit 为 null，更新状态该项留空，不阻塞版本检查。
     return null;
   }
 }
@@ -597,6 +600,7 @@ async function getBuildTime(projectRoot, env) {
     const { stdout } = await execFileAsync("git", ["log", "-1", "--format=%cI", "HEAD"], { cwd: projectRoot });
     return stdout.trim() || null;
   } catch {
+    // 无提交历史或非 git 工作区（git log 非零退出）→ buildTime 为 null，更新状态携带 null，不阻塞版本检查。
     return null;
   }
 }

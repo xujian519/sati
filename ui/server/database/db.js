@@ -489,6 +489,7 @@ const notificationPreferencesDb = {
       try {
         parsed = JSON.parse(row.preferences_json);
       } catch {
+        // preferences_json 非合法 JSON（历史脏数据/手写行）→ 退回 DEFAULT_NOTIFICATION_PREFERENCES 再归一化，设置接口照常返回默认偏好而非 500。
         parsed = DEFAULT_NOTIFICATION_PREFERENCES;
       }
       return normalizeNotificationPreferences(parsed);
@@ -620,6 +621,7 @@ const appConfigDb = {
       const row = db.prepare("SELECT value FROM app_config WHERE key = ?").get(key);
       return row?.value || null;
     } catch {
+      // app_config 表缺失或句柄不可用（prepare 抛错）→ 返回 null，调用方（getOrCreateJwtSecret）按「未持久化」重新生成密钥并回写。
       return null;
     }
   },

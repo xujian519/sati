@@ -33,6 +33,7 @@ function extractDashboardRefererToken(req) {
     }
     return refererUrl.searchParams.get("token");
   } catch {
+    // Referer 头畸形、无法解析成 URL（new URL 抛 TypeError）→ 视为取不到内嵌 token，authenticateToken 继续按「无 token」回 401 而非 500。
     return null;
   }
 }

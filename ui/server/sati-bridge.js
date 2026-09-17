@@ -1288,6 +1288,7 @@ function _buildSessionProjectIndex() {
       try {
         files = fs.readdirSync(chatsDir);
       } catch {
+        // 该项目没有 chats/ 目录（建过项目但从未产生会话）→ 跳过它，无 sessionId 索引的旧 router 统计记录会归到 GENERAL_HOME。
         continue;
       }
       for (const f of files) {

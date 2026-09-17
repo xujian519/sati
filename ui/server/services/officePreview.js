@@ -60,6 +60,7 @@ function readDirectoryNames(directoryPath) {
       .filter(entry => entry.isDirectory())
       .map(entry => entry.name);
   } catch {
+    // 目录不存在或没读权限（如 macOS 上未创建的 ~/Applications、精简容器里没有 /opt）→ 返回空数组，这组候选被跳过，自动探测继续试其他路径。
     return [];
   }
 }

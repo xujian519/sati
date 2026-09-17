@@ -68,6 +68,7 @@ router.get("/api/browse-filesystem", authenticateToken, async (req, res) => {
         return res.status(400).json({ error: "Path is not a directory" });
       }
     } catch {
+      // 目标目录不存在或不可读（access/stat 抛 ENOENT/EACCES/ENOTDIR）→ 回 404「Directory not accessible」；存在但不是目录的情况上面已先回 400。
       return res.status(404).json({ error: "Directory not accessible" });
     }
 
@@ -135,6 +136,7 @@ router.post("/api/create-folder", authenticateToken, async (req, res) => {
     try {
       await fsPromises.access(parentDir);
     } catch {
+      // 父目录不存在或不可读（access 抛 ENOENT/EACCES）→ 回 404 + 该文案，前端 createFolderInFilesystem 抛出该 error 展示，不会继续 mkdir。
       return res.status(404).json({ error: "Parent directory does not exist" });
     }
     try {
@@ -373,6 +375,7 @@ router.get("/api/projects/:projectName/files", authenticateToken, async (req, re
     try {
       await fsPromises.access(actualPath);
     } catch {
+      // 项目真实目录不存在（access 抛 ENOENT，也可能是目录提取失败后按短横线拼出的路径）→ 回 404 + 路径；文件树请求方据此把列表置空并记日志，不会落到 500。
       return res.status(404).json({ error: `Project path not found: ${actualPath}` });
     }
 
