@@ -77,6 +77,15 @@ export {
   clarityGateAtom,
   ClarityGateHandler,
   renderClarityReport,
+  figureGateAtom,
+  FigureGateHandler,
+  buildFigureCheckReport,
+  detectFigureDrift,
+  figureDirCandidates,
+  figureInputsHash,
+  FIGURE_CHECK_REPORT_VERSION,
+  type FigureCheckReport,
+  type FigureDirCandidate,
   claimChartAtom,
   ClaimChartHandler,
   claimEmbodimentMapperAtom,
@@ -106,6 +115,7 @@ export function registerBuiltinAtoms(): void {
   globalAtomRegistry.register(builtin.qualityGateAtom);
   globalAtomRegistry.register(builtin.slopGateAtom);
   globalAtomRegistry.register(builtin.clarityGateAtom);
+  globalAtomRegistry.register(builtin.figureGateAtom);
   globalAtomRegistry.register(builtin.claimChartAtom);
   globalAtomRegistry.register(builtin.claimEmbodimentMapperAtom);
 
@@ -123,6 +133,7 @@ export function registerBuiltinAtoms(): void {
   globalStageHandlerRegistry.register(new builtin.QualityGateHandler());
   globalStageHandlerRegistry.register(new builtin.SlopGateHandler());
   globalStageHandlerRegistry.register(new builtin.ClarityGateHandler());
+  globalStageHandlerRegistry.register(new builtin.FigureGateHandler());
   globalStageHandlerRegistry.register(new builtin.ClaimChartHandler());
   globalStageHandlerRegistry.register(new builtin.ClaimEmbodimentMapperHandler());
 }

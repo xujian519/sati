@@ -286,18 +286,20 @@ export const patentInfringementManifest: WorkflowManifest = {
  * 逐特征对比（novelty，区别特征输出）→ HITL 确认区别特征 → 充分公开审查
  * （reasoning）→ HITL 审核 → draft-claims → draft-spec（含确定性校验）→
  * slop-gate（反套话评分，未通过带证据提示回退 draft_spec）→ figure_generate
- * （主代理经 patent_figure_generate/patent_figure_check 生成附图并核验标记
- * 一致性，无原子透传）→ HITL 定稿。
+ * （主代理经 patent_figure_generate 生成附图与 sidecar，阶段挂 figure-gate 原子
+ * 做确定性核验；fail 级挂 HITL）→ HITL 定稿。
  *
  * 前置准入：preprocess 后先过 clarity_gate（交底书清晰度准入门：四维
  * 机械信号 + 语义评分融合，不足挂 HITL 决策：1=强制继续/2=补充/3=退回）——
  * 对齐"输入不清不进入解构"的纪律，PFE 提取之前执行。
  *
  * 说明：
- * - figure / chemistry / figure_generate 阶段无原子：StageProvider 契约无图片/文件
- *   通道，由主代理先行调用 analyze_patent_figure / recognize_chemical_structure /
- *   patent_figure_generate + patent_figure_check（opt-in 注册）并写入阶段文本
+ * - figure / chemistry 阶段无原子：StageProvider 契约无图片/文件通道，由主代理
+ *   先行调用 analyze_patent_figure / recognize_chemical_structure 并写入阶段文本
  *   （无原子阶段在 patent_workflow_run 下透传输入，不降级）。
+ * - figure_generate 阶段的附图**生成**同样在主代理侧（patent_figure_generate，
+ *   默认注册，`createBuiltinRegistry({ patentFigure: false })` 可排除）；阶段内的
+ *   figure-gate 原子只做核验，不触网、不调模型。
  * - 规则门（rule-gate）不设阶段：消费方 patent_workflow / patent_workflow_run
  *   在收尾时按 checkDomains 自动运行确定性规则门（dual-track checker）。
  * - 一致性检查用 reasoning 原子，输出命中"不一致/矛盾/缺少/孤立"信号时
@@ -469,13 +471,15 @@ export const patentDraftingManifest: WorkflowManifest = {
     {
       id: "figure_generate",
       strategy: "chain",
-      // 无原子透传阶段：附图由主代理先行调用 patent_figure_generate /
-      // patent_figure_check 完成（结构化 FigureSpec → 确定性黑白 SVG →
-      // 细则第 21 条双向标记核验），把附图文件路径与核验结论写入阶段文本。
-      // 两工具 opt-in 注册（createBuiltinRegistry patentFigure 选项）；
-      // 未启用时在阶段文本说明"附图工具未启用"，不阻断工作流。
+      // 附图**生成**仍由主代理经 patent_figure_generate 完成（结构化 FigureSpec →
+      // 确定性黑白 SVG + sidecar）；本阶段挂 figure-gate 原子做**确定性核验**：
+      // 从 sidecar 取回完整 FigureSpec，与 claims_draft/spec_draft 一起跑
+      // V1/V2/V3/V4/V5/V7/V8/V9，结论落盘 figure-check.json；fail 级挂 HITL
+      // 决策（编号选择：1=确认放行/2=重新生成/3=退回），warn 级透传不阻断。
+      // 描述语义契约：不含阈值数字（阈值是核验器内部实现，HITL 报告面保留）。
       description:
-        "附图生成与核验（主代理经 patent_figure_generate/patent_figure_check 完成后透传；基于定稿说明书生成流程图/框图并做附图标记一致性核验）",
+        "附图生成与确定性核验（主代理经 patent_figure_generate 产出附图与 sidecar；核验图号连续、图文标记双向一致与画幅可印性）",
+      atom: "figure-gate",
     },
     {
       id: "final_approval",

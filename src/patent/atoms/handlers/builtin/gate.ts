@@ -62,10 +62,15 @@ export const APPROVAL_GRANTED_OUTPUT = "APPROVED";
  * 判断 handler 是否为"人工放行型门"（按 name 契约）——两侧据此注入放行标记
  * （manifest 路径）与补占位输出（两条链路，见 `workflow/stage-primitives.ts`）。
  * 放行语义 = 人已批准"继续"（approval-gate：确认产出；clarity-gate：强制跨过
- * 清晰度门槛——语义同构，均走 approveStageIds / grantApproval 契约）。
+ * 清晰度门槛；figure-gate：强制跨过附图合规门槛——三者语义同构，均走
+ * approveStageIds / grantApproval 契约）。
+ *
+ * ⚠️ 扩容本函数即扩容"可被人工强制放行"的门集合：新增门必须自己读取
+ * `APPROVAL_GRANTED_KEY`（handler 局部执行态）并在报告中标注"人工强制放行"，
+ * 否则放行会静默变成"门不存在"。
  */
 export function isApprovalGateHandler(handler: StageHandler): boolean {
-  return handler.name === "approval-gate" || handler.name === "clarity-gate";
+  return handler.name === "approval-gate" || handler.name === "clarity-gate" || handler.name === "figure-gate";
 }
 
 export const approvalGateAtom: Atom = {

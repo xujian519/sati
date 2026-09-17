@@ -7,6 +7,7 @@
  * - reason.ts：reasoning（自由推理）/ groundedness（原文依据过滤）
  * - draft.ts：draft-claims（权利要求草稿）/ draft-spec（说明书草稿+校验）
  * - gate.ts：approval-gate（人机审批门）/ quality-gate（检索质量门槛）/ slop-gate（反套话评分门）
+ * - figure.ts：figure-gate（附图确定性门槛：图号/图文标记/画幅可印性，fail 挂 HITL）
  * - chart.ts：claim-chart（要素级证据网格）
  */
 
@@ -59,5 +60,16 @@ export {
   SlopGateHandler,
 } from "./gate.js";
 export { clarityGateAtom, ClarityGateHandler, renderClarityReport } from "./clarity.js";
+export {
+  FIGURE_CHECK_REPORT_VERSION,
+  FigureGateHandler,
+  buildFigureCheckReport,
+  detectFigureDrift,
+  figureDirCandidates,
+  figureGateAtom,
+  figureInputsHash,
+  type FigureCheckReport,
+  type FigureDirCandidate,
+} from "./figure.js";
 export { claimChartAtom, ClaimChartHandler } from "./chart.js";
 export { claimEmbodimentMapperAtom, ClaimEmbodimentMapperHandler } from "./mapper.js";
