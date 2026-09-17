@@ -7,10 +7,15 @@
  * - V3 附图中未出现的附图标记不得在说明书文字部分中提及（细则第 21 条）。
  *   文本侧数字未必是附图标记（如"步骤S20""三步法"），故仅提取括号形式标记
  *   且降级为 WARN，证据供人工确认，避免硬 FAIL 打断撰写流程。
- * - V4 表示同一组成部分的附图标记应当一致（细则第 21 条）
+ * - V4 表示同一组成部分的附图标记应当一致（细则第 21 条）；名称比较经
+ *   normalizeRefLabel 归一化——「处理模块(20)」与「处理模块20」属同一组成部分，
+ *   标注书写形态差异不构成违规
  * - V5 附图中除必需的词语外不应当含有其他注释（细则第 21 条第 3 款，官方全文已核验）：
  *   label 疑似注释性长文（超长单行/多行段落）→ WARN
- * - V7 附图缩小到三分之二时仍应能清晰分辨细节（指南一部一章 4.3，官方已核验）：画幅超限 → WARN
+ * - V7 附图缩小到三分之二时仍应能清晰分辨细节（指南一部一章 4.3，官方已核验）：
+ *   **介质锚定**（A4 可印区 + 毫米，常量与 html.ts 同源）——画幅超出可印区会被
+ *   分页切断 ⇒ FAIL（metric=page_fit）；打印字高低于最小可辨字高 ⇒ WARN
+ *   （metric=font_size，证据给出实际 mm 与再缩 2/3 后的 mm）
  * - V8 说明书有附图的应指定一幅摘要附图（指南一部一章 4.5.2）：多图未指定/
  *   指定多幅 → WARN
  * - V9 实用新型附图是说明书组成部分，应当有附图（指南一部二章 7.3 + 细则 20.5）
@@ -19,13 +24,20 @@
  */
 
 import { layoutFigure } from "./layout.js";
+import { FIGURE_FONT_SIZE } from "./metrics.js";
+import {
+  LEGIBILITY_SHRINK_FACTOR,
+  MIN_PRINTED_FONT_MM,
+  PRINTABLE_HEIGHT_MM,
+  PRINTABLE_WIDTH_MM,
+  pxToMm,
+  uniformFigureZoom,
+} from "./page-contract.js";
 import type { DocumentKind, FigureSpec, Jurisdiction } from "./types.js";
 
 /** V5 阈值：单行 label 最大字符数 / 最大行数（超出视为疑似注释性文字）。 */
 export const COMMENT_LABEL_LINE_MAX = 40;
 export const COMMENT_LABEL_LINES_MAX = 3;
-/** V7 阈值：画幅最大边长（px）。超出则缩小到 2/3 后小于可辨字号。 */
-export const FIGURE_CANVAS_MAX_PX = 1600;
 
 export type FigureCheckSeverity = "fail" | "warn" | "info";
 
@@ -46,6 +58,8 @@ export type FigureCheckFinding = {
   message: string;
   figure_nos?: number[];
   evidence?: string[];
+  /** V7 判定维度：page_fit=可印区/分页切断；font_size=打印字高可辨性。 */
+  metric?: "page_fit" | "font_size";
 };
 
 export type FigureCheckResult = {
@@ -63,6 +77,20 @@ export function stripRefMark(label: string): string {
   return label
     .replace(/[（(]\s*\d{1,3}\s*[)）]/gu, "")
     .split("\n")[0]
+    .trim();
+}
+
+/**
+ * 附图标记名称归一化（**仅用于比较**，不改变呈现形态）。
+ *
+ * 同一组件在图上可能写作「处理模块(20)」（附图惯例）或「处理模块20」（说明书正文
+ * 惯例：名称+数字、不加括号）——两者指同一组成部分，V4 不得判为名称不一致。
+ * 归一化 = 剥括号标记 + 剥尾部裸数字 + trim；`stripRefMark` 保持对外呈现形态
+ * （brief.ts 依赖其输出格式）。
+ */
+export function normalizeRefLabel(label: string): string {
+  return stripRefMark(label)
+    .replace(/\s*\d{1,3}\s*$/u, "")
     .trim();
 }
 
@@ -163,7 +191,7 @@ export function checkFigures(
     for (const node of figure.nodes) {
       if (node.ref !== undefined) {
         const names = refToNames.get(node.ref) ?? new Set<string>();
-        names.add(stripRefMark(node.label));
+        names.add(normalizeRefLabel(node.label));
         refToNames.set(node.ref, names);
 
         const ids = refToNodeIds.get(node.ref) ?? new Set<string>();
@@ -231,17 +259,44 @@ export function checkFigures(
     });
   }
 
-  // V7 缩小三分之二可辨（画幅代理检查）
-  for (const figure of figures) {
+  // V7 缩小三分之二可辨（介质锚定：A4 可印区 + 打印字高毫米）
+  //
+  // 判据来自交付形态（A4 打印），不是画幅像素：px 代理与纸面脱钩，12 步流程图画幅
+  // 355mm 高仍"通过"却会被分页切断（实测，见 docs/patent-figure-hardening-plan.md §3）。
+  // 统一缩放系数（uniformFigureZoom，与 html.ts 同源）保证同文档字高一致，
+  // 故字高判定用统一系数而非单图系数（后者会高估实际打印字高）。
+  const paperSizes = figures.map(figure => {
     const { width, height } = layoutFigure(figure);
-    if (Math.max(width, height) > FIGURE_CANVAS_MAX_PX) {
+    return { figure_no: figure.figure_no, widthMm: pxToMm(width), heightMm: pxToMm(height) };
+  });
+  const zoom = uniformFigureZoom(paperSizes);
+  for (const size of paperSizes) {
+    const oversize = size.widthMm > PRINTABLE_WIDTH_MM || size.heightMm > PRINTABLE_HEIGHT_MM;
+    if (oversize) {
+      findings.push({
+        rule: "V7",
+        severity: "fail",
+        metric: "page_fit",
+        message:
+          `图${size.figure_no} 纸面尺寸 ${size.widthMm.toFixed(1)}×${size.heightMm.toFixed(1)}mm 超出 A4 可印区` +
+          ` ${PRINTABLE_WIDTH_MM}×${PRINTABLE_HEIGHT_MM}mm（V7，指南一部一章 4.3：缩小到三分之二时仍应能清晰分辨` +
+          `图中各个细节）——超出部分会被分页切断，应拆分为多幅附图或减小画幅（当前需缩至 ${(zoom * 100).toFixed(0)}%）`,
+        figure_nos: [size.figure_no],
+      });
+    }
+    const printed = pxToMm(FIGURE_FONT_SIZE) * zoom;
+    if (printed < MIN_PRINTED_FONT_MM) {
       findings.push({
         rule: "V7",
         severity: "warn",
+        metric: "font_size",
         message:
-          `图${figure.figure_no} 画幅 ${Math.round(width)}×${Math.round(height)}px 超过 ${FIGURE_CANVAS_MAX_PX}px` +
-          `（V7，指南一部一章 4.3：缩小到三分之二时仍应能清晰分辨图中各个细节），建议拆分为多幅附图`,
-        figure_nos: [figure.figure_no],
+          `图${size.figure_no} 图内文字打印字高约 ${printed.toFixed(2)}mm 低于最小可辨字高 ${MIN_PRINTED_FONT_MM}mm` +
+          `（V7，指南一部一章 4.3：缩小到三分之二仍应清晰可辨），建议减少节点文字或拆分附图`,
+        figure_nos: [size.figure_no],
+        evidence: [
+          `纸面缩放系数 ${zoom.toFixed(2)}，再缩 2/3 后字高约 ${(printed * LEGIBILITY_SHRINK_FACTOR).toFixed(2)}mm`,
+        ],
       });
     }
   }

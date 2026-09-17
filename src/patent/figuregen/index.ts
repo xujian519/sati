@@ -18,10 +18,10 @@ export type {
 
 export {
   checkFigures,
+  normalizeRefLabel,
   stripRefMark,
   COMMENT_LABEL_LINE_MAX,
   COMMENT_LABEL_LINES_MAX,
-  FIGURE_CANVAS_MAX_PX,
   type FigureCheckFinding,
   type FigureCheckOptions,
   type FigureCheckResult,
@@ -37,6 +37,25 @@ export {
   type RoutedEdge,
 } from "./layout.js";
 export { figureCaption, renderFigureSvg } from "./render-svg.js";
+export { FIGURE_FONT_SIZE, isWideChar, measureTextWidth } from "./metrics.js";
+export {
+  A4_HEIGHT_MM,
+  A4_WIDTH_MM,
+  CSS_PX_PER_INCH,
+  LEGIBILITY_SHRINK_FACTOR,
+  MIN_PRINTED_FONT_MM,
+  MM_PER_INCH,
+  PAGE_MARGIN_BOTTOM_MM,
+  PAGE_MARGIN_LEFT_MM,
+  PAGE_MARGIN_RIGHT_MM,
+  PAGE_MARGIN_TOP_MM,
+  PRINTABLE_HEIGHT_MM,
+  PRINTABLE_WIDTH_MM,
+  printedFontMm,
+  pxToMm,
+  uniformFigureZoom,
+  type FigurePaperSize,
+} from "./page-contract.js";
 export {
   buildFigureDot,
   dotEscape,
@@ -50,5 +69,16 @@ export {
   resolveDotBinary,
 } from "./render-graphviz.js";
 export { parseFigureSvg, type ParsedFigureSvg } from "./readback.js";
+export {
+  FIGURE_SIDECAR_VERSION,
+  buildFigureSidecar,
+  figureSidecarFileName,
+  findFigureSidecar,
+  parseFigureSidecar,
+  readFigureSidecar,
+  type FigureSidecar,
+  type FigureSidecarCheck,
+  type FigureSidecarFigure,
+} from "./sidecar.js";
 export { renderFiguresHtml, type FiguresHtmlOptions } from "./html.js";
 export { buildFigureBriefDraft, type FigureBriefOptions } from "./brief.js";

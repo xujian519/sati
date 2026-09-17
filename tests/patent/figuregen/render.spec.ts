@@ -8,6 +8,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { layoutFigure } from "../../../src/patent/figuregen/layout.js";
+import { FIGURE_FONT_SIZE, measureTextWidth } from "../../../src/patent/figuregen/metrics.js";
 import { renderFigureSvg } from "../../../src/patent/figuregen/render-svg.js";
 import type { FigureSpec } from "../../../src/patent/figuregen/types.js";
 
@@ -80,6 +81,26 @@ test("布局：判断分支的子节点同层且横向错开", () => {
 
   const labeledEdge = layout.edges.find(e => e.edge.label === "是");
   assert.ok(labeledEdge?.labelAt, "判断分支边标签应有落点坐标");
+});
+
+test("字宽度量：CJK 按 1em、Latin 按 0.5em——同字符数盒宽比 ≈ 2", () => {
+  assert.equal(measureTextWidth("处理器"), 3 * FIGURE_FONT_SIZE);
+  const latin = measureTextWidth("Data processing module");
+  assert.equal(latin, "Data processing module".length * (FIGURE_FONT_SIZE / 2));
+
+  // 同字符数下 CJK 文本宽度恰为 Latin 的 2 倍（1em vs 0.5em）
+  assert.equal(measureTextWidth("处理模块外壳"), measureTextWidth("abcdef") * 2);
+
+  const boxWidth = (label: string) => {
+    const layout = layoutFigure({ figure_no: 1, kind: "flowchart", nodes: [{ id: "n", label }], edges: [] });
+    return layout.nodes[0].width;
+  };
+  assert.equal(boxWidth("处理模块外壳"), 6 * FIGURE_FONT_SIZE + 16 * 2);
+  assert.equal(boxWidth("abcdef"), 6 * (FIGURE_FONT_SIZE / 2) + 16 * 2);
+  // 防回退：旧实现按单字宽 15 估宽，Latin 22 字符得 362px；现按字符类别得 186px
+  // （虚胖画布会连带推高 V7 的纸面尺寸判定）。
+  assert.equal(boxWidth("Data processing module"), 22 * (FIGURE_FONT_SIZE / 2) + 16 * 2);
+  assert.ok(boxWidth("Data processing module") < 362);
 });
 
 test("布局：多行标签节点更高；无环图外环回边被断开不致死循环", () => {

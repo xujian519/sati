@@ -1,10 +1,17 @@
 import assert from "node:assert/strict";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
+import { createPatentFigureGenerateTool } from "../../src/tool/builtin/patentFigureGenerate.js";
+import type { SatiToolRuntimeContext } from "../../src/tool/protocol/types.js";
+import type { FigureSpec } from "../../src/patent/figuregen/types.js";
 import {
   builtinPatentManifests,
   checkSearchQuality,
   clarityGateAtom,
   draftSpecAtom,
+  figureGateAtom,
   patentDraftingManifest,
   qualityGateAtom,
   registerBuiltinAtoms,
@@ -465,6 +472,9 @@ test("builtinPatentManifests 目录含 patent_drafting_v1 且规则门域映射�
 /** 评分断言正则：数字 / ≥ ≤ / 通过线等。描述文本命中即违规。 */
 const NUMERIC_ASSERTION = /[0-9]|≥|≤|通过线/;
 
+/** figure_generate 阶段（附图门接线断言用）。 */
+const figureGenerateStage = patentDraftingManifest.stages.find(s => s.id === "figure_generate");
+
 test("隐藏清单：评分原子与 manifest 阶段描述不含数字断言", () => {
   // 原子描述（经工具 schema/文档可见）只声明"审什么"，不公开评分线/数量门槛。
   assert.doesNotMatch(qualityGateAtom.description, NUMERIC_ASSERTION);
@@ -477,6 +487,199 @@ test("隐藏清单：评分原子与 manifest 阶段描述不含数字断言", (
   assert.doesNotMatch(searchQuality!.description, NUMERIC_ASSERTION);
   assert.doesNotMatch(slopClean!.description, NUMERIC_ASSERTION);
   assert.doesNotMatch(clarityGate!.description, NUMERIC_ASSERTION);
+  // 附图门同样只声明"审什么"（阈值是核验器内部实现）
+  assert.doesNotMatch(figureGateAtom.description, NUMERIC_ASSERTION);
+  assert.doesNotMatch(figureGenerateStage!.description, NUMERIC_ASSERTION);
+});
+
+// ---------------------------------------------------------------------------
+// T6: figure_generate 阶段的附图门接线（P0-3）——核验自动执行 + HITL
+// ---------------------------------------------------------------------------
+
+test("figure_generate 阶段声明 figure-gate 原子（核验不再取决于主代理是否记得调工具）", () => {
+  assert.ok(figureGenerateStage, "manifest 应含 figure_generate 阶段");
+  assert.equal(figureGenerateStage!.atom, "figure-gate");
+  // 无 retry：本阶段的修复发生在主代理的附图生成侧，回退透传阶段不会改变产出
+  assert.equal(figureGenerateStage!.retry, undefined);
+});
+
+function figureContext(cwd: string): SatiToolRuntimeContext {
+  return {
+    sessionId: "sess-sop",
+    turnId: "turn-sop",
+    cwd,
+    permissionMode: "bypassPermissions",
+    permissionContext: {
+      mode: "bypassPermissions",
+      rules: { allow: [], deny: [], ask: [] },
+      cwd,
+      additionalWorkingDirectories: [],
+      canPrompt: false,
+      bypassAvailable: true,
+    },
+  };
+}
+
+/** 附图：含标记 20（用于构造 V2 通过/违规两态）。 */
+const SOP_FIGURE: FigureSpec = {
+  figure_no: 1,
+  kind: "flowchart",
+  nodes: [
+    { id: "a", label: "开始", shape: "ellipse" },
+    { id: "b", label: "处理模块(20)", ref: 20 },
+  ],
+  edges: [{ from: "a", to: "b" }],
+};
+
+/**
+ * 撰写全链路 mock provider：`markRef` 决定权利要求/说明书是否提及附图标记 20
+ * （true = 提及 → 附图门通过；false = 未提及 → V2 fail 挂 HITL）。
+ */
+function draftingProvider(markRef: boolean): StageProvider {
+  const ref = markRef ? "(20)" : "";
+  return {
+    callLLM: async prompt => {
+      if (prompt.includes("交底书质量评估专家")) return CLARITY_HIGH_SCORE;
+      if (prompt.includes("提取技术问题")) return JSON.stringify({ problems: ["保温时间短"] });
+      if (prompt.includes("提取技术特征")) return JSON.stringify({ features: ["双层真空结构"] });
+      if (prompt.includes("提取技术效果")) return JSON.stringify({ effects: ["保温 8 小时"] });
+      if (prompt.includes("打分规则")) {
+        return JSON.stringify({
+          scores: [{ feature: "双层真空结构", score: 0.95, reason: "交底书记载" }],
+          feedback: "充分",
+        });
+      }
+      if (prompt.includes("一致性检查")) return JSON.stringify({ consistent: true, issues: [] });
+      if (prompt.includes("检索关键词")) return JSON.stringify({ keywords: ["真空", "保温容器"] });
+      if (prompt.includes("逐特征对比")) {
+        return JSON.stringify({
+          assessments: [{ feature: "双层真空结构", prior_art: "D1", disclosed: false, reasoning: "D1 未公开" }],
+          conclusion: "区别特征为双层真空结构",
+        });
+      }
+      if (prompt.includes("充分公开审查专家")) return "充分公开审查报告：交底书清楚完整。";
+      if (prompt.includes("权利要求撰写专家")) {
+        return JSON.stringify({
+          claims: [`1. 一种双层真空保温容器，其特征在于，包括处理模块${ref}。`],
+          notes: "独权含必要特征",
+        });
+      }
+      if (prompt.includes("说明书撰写专家")) {
+        return JSON.stringify({
+          title: "一种双层真空保温容器",
+          sections: [
+            { name: "技术领域", content: "本发明涉及保温容器技术领域。" },
+            { name: "背景技术", content: "D1（CN1234567A）保温时间短。" },
+            {
+              name: "发明内容",
+              content:
+                "要解决的技术问题是保温时间短；技术方案为双层真空结构；有益效果：保温时间由 2 小时提升至 8 小时。",
+            },
+            { name: "附图说明", content: "图1为整体结构示意图。" },
+            {
+              name: "具体实施方式",
+              content: markRef
+                ? "实施例1：处理模块(20)采用双层真空结构，保温 8 小时。"
+                : "实施例1：采用双层真空结构，保温 8 小时。",
+            },
+            { name: "摘要", content: "本发明提供一种双层真空保温容器。" },
+          ],
+        });
+      }
+      return "推理结论";
+    },
+    search: async () => [
+      { title: "CN1234567A 保温容器", snippet: "相关度 X，全文已获取", url: "https://e/1" },
+      { title: "US20240012345A1 真空结构", snippet: "相关度 Y，全文已获取", url: "https://e/2" },
+      { title: "EP1234567B1 隔热层", snippet: "相关度 A，全文已获取", url: "https://e/3" },
+    ],
+  };
+}
+
+/** 需要人工放行才能走到附图阶段的前置审批门。 */
+const PRIOR_GATE_GRANTS = ["deconstruct_approval", "search_approval", "compare_approval", "disclosure_approval"];
+
+/** 在临时目录用真实工具产出附图（含 sidecar）。 */
+async function generateSopFigures(dir: string): Promise<void> {
+  const tool = createPatentFigureGenerateTool();
+  await tool.execute(
+    { figures: [SOP_FIGURE], output_name: "sop", output_dir: dir, document_kind: "utility" },
+    figureContext(dir),
+  );
+}
+
+test("patent_drafting_v1：跑到附图阶段自动核验通过（无需人工提示即产 figure-check.json）", async () => {
+  registerBuiltinAtoms();
+  const dir = mkdtempSync(join(tmpdir(), "sati-sop-gate-"));
+  try {
+    await generateSopFigures(dir);
+    const result = await runWorkflow(
+      patentDraftingManifest,
+      { text: FULL_DISCLOSURE, source_text: FULL_DISCLOSURE, figure_dir: dir },
+      async () => "（透传输入）",
+      { provider: draftingProvider(true), approvalGrants: PRIOR_GATE_GRANTS },
+    );
+    // 前置门全部放行后推进到定稿门（附图门已自动核验通过，不再需要人工确认附图）
+    assert.equal(result.interrupted?.stageId, "final_approval", result.summary);
+    const gate = result.stages.find(s => s.stageId === "figure_generate");
+    assert.ok(gate, "figure_generate 应执行");
+    assert.equal(gate!.degraded, false);
+    assert.match(gate!.output, /附图门: ✅ 通过/u);
+    assert.ok(existsSync(join(dir, "figure-check.json")), "核验结论应留痕");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("patent_drafting_v1：附图标记未在说明书出现 → 附图阶段挂 HITL 且不推进到定稿", async () => {
+  registerBuiltinAtoms();
+  const dir = mkdtempSync(join(tmpdir(), "sati-sop-gate-fail-"));
+  try {
+    await generateSopFigures(dir);
+    const result = await runWorkflow(
+      patentDraftingManifest,
+      { text: FULL_DISCLOSURE, source_text: FULL_DISCLOSURE, figure_dir: dir },
+      async () => "（透传输入）",
+      { provider: draftingProvider(false), approvalGrants: PRIOR_GATE_GRANTS },
+    );
+    assert.equal(result.completed, false);
+    assert.equal(result.interrupted?.stageId, "figure_generate", result.summary);
+    assert.match(String(result.interrupted?.data.figure_report), /\[FAIL\] V2/u);
+    // 放行契约与其他门同构：可经 approvalGrants 强制放行并推进
+    const forced = await runWorkflow(
+      patentDraftingManifest,
+      { text: FULL_DISCLOSURE, source_text: FULL_DISCLOSURE, figure_dir: dir },
+      async () => "（透传输入）",
+      { provider: draftingProvider(false), approvalGrants: [...PRIOR_GATE_GRANTS, "figure_generate"] },
+    );
+    assert.equal(forced.interrupted?.stageId, "final_approval", "强制放行后应推进到定稿门");
+    assert.match(forced.stages.find(s => s.stageId === "figure_generate")!.output, /人工强制放行/u);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("patent_drafting_v1：附图目录缺 sidecar → 阶段降级（不伪装已核验）", async () => {
+  registerBuiltinAtoms();
+  const dir = mkdtempSync(join(tmpdir(), "sati-sop-gate-none-"));
+  try {
+    const result = await runWorkflow(
+      patentDraftingManifest,
+      { text: FULL_DISCLOSURE, source_text: FULL_DISCLOSURE, figure_dir: dir },
+      async () => "（透传输入）",
+      { provider: draftingProvider(true), approvalGrants: PRIOR_GATE_GRANTS },
+    );
+    assert.equal(result.interrupted?.stageId, "final_approval", result.summary);
+    const gate = result.stages.find(s => s.stageId === "figure_generate");
+    assert.ok(gate!.degraded, "无可核验附图时应标记降级（不伪装已核验）");
+    assert.equal(gate!.output, "");
+    assert.ok(
+      result.degradedSteps.includes("figure_generate"),
+      `degradedSteps 应含 figure_generate：${result.degradedSteps.join(", ")}`,
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test("clarity_gate 准入语义：未达门槛中断挂 HITL，批准后强制放行继续", async () => {

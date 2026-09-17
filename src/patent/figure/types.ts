@@ -132,8 +132,9 @@ export type ElectricalAnalysis = {
  *
  * `figureDescription` 为可直接落入说明书「附图说明」章节的文字（专利格式：
  * "图N是本发明实施例提供的…的结构示意图；图中：1-…；2-…；"）。
- * `usable` 表示结果是否达到可直接用于撰写/校验的置信门槛（组件数 > 0 且
- * 置信度 ≥ 0.6），供上层决定是否需要人工确认。
+ * `usable` 表示结果是否可进入撰写/校验（**仅组件提取成功**，与分类置信度解耦——
+ * 见 analyze.ts 的收尾逻辑：分类失败时 confidence 取 0.5 中性值，不参与 usable 判定），
+ * 供上层决定是否需要人工确认。
  */
 export type FigureAnalysisResult = {
   /** 分析图片路径（工作区相对路径）。 */
@@ -154,7 +155,7 @@ export type FigureAnalysisResult = {
   confidence: number;
   /** 警告（标号不连续、无法识别区域、降级原因等）。 */
   warnings: string[];
-  /** 是否可直接用于撰写/校验（组件数 > 0 且置信度 ≥ 0.6）。 */
+  /** 是否可进入撰写/校验（仅组件提取成功：`components.length > 0`；与置信度解耦）。 */
   usable: boolean;
   /** 实际使用的模型标识（provider/model）。 */
   modelUsed: string;

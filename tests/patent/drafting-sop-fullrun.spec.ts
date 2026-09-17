@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 import {
   patentDraftingManifest,
@@ -6,6 +9,9 @@ import {
   runWorkflow,
   type StageProvider,
 } from "../../src/patent/index.js";
+import { createPatentFigureGenerateTool } from "../../src/tool/builtin/patentFigureGenerate.js";
+import type { SatiToolRuntimeContext } from "../../src/tool/protocol/types.js";
+import type { FigureSpec } from "../../src/patent/figuregen/types.js";
 
 /**
  * T12 确定性全链路验收（docs/patent-drafting-sop-plan.md 迭代四）：
@@ -113,21 +119,68 @@ function fullRunProvider(): StageProvider {
   };
 }
 
+/** 附图（无附图标记——mock 说明书未提及标记，避免 V2 假失败）。 */
+const FULLRUN_FIGURE: FigureSpec = {
+  figure_no: 1,
+  kind: "flowchart",
+  nodes: [
+    { id: "a", label: "开始", shape: "ellipse" },
+    { id: "b", label: "抽真空并封口" },
+    { id: "c", label: "结束", shape: "ellipse" },
+  ],
+  edges: [
+    { from: "a", to: "b" },
+    { from: "b", to: "c" },
+  ],
+};
+
+/** 用真实工具在临时目录产出附图 + sidecar（附图门 figure_generate 的输入）。 */
+async function generateFullRunFigures(dir: string): Promise<void> {
+  const context: SatiToolRuntimeContext = {
+    sessionId: "sess-fullrun",
+    turnId: "turn-fullrun",
+    cwd: dir,
+    permissionMode: "bypassPermissions",
+    permissionContext: {
+      mode: "bypassPermissions",
+      rules: { allow: [], deny: [], ask: [] },
+      cwd: dir,
+      additionalWorkingDirectories: [],
+      canPrompt: false,
+      bypassAvailable: true,
+    },
+  };
+  const tool = createPatentFigureGenerateTool();
+  await tool.execute(
+    { figures: [FULLRUN_FIGURE], output_name: "fullrun", output_dir: dir, document_kind: "invention" },
+    context,
+  );
+}
+
 test("T12: patent_drafting_v1 全链路（批准全部审批门）完整跑通", async () => {
   registerBuiltinAtoms();
   const provider = fullRunProvider();
-  const executor = async (): Promise<string> => "（透传：figure/chemistry 由主代理工具完成）";
+  const executor = async (): Promise<string> => "（透传：chemistry 由主代理工具完成）";
+  const figureDir = mkdtempSync(join(tmpdir(), "sati-sop-fullrun-"));
+  try {
+    await generateFullRunFigures(figureDir);
+    const result = await runWorkflow(
+      patentDraftingManifest,
+      {
+        text: FULL_DISCLOSURE,
+        source_text: FULL_DISCLOSURE,
+        figure_dir: figureDir,
+      },
+      executor,
+      { provider, approvalGrants: ALL_GATES },
+    );
+    await assertFullRun(result, figureDir);
+  } finally {
+    rmSync(figureDir, { recursive: true, force: true });
+  }
+});
 
-  const result = await runWorkflow(
-    patentDraftingManifest,
-    {
-      text: FULL_DISCLOSURE,
-      source_text: FULL_DISCLOSURE,
-    },
-    executor,
-    { provider, approvalGrants: ALL_GATES },
-  );
-
+async function assertFullRun(result: Awaited<ReturnType<typeof runWorkflow>>, figureDir: string): Promise<void> {
   // 全部阶段执行完成，无中断、无降级
   assert.equal(result.completed, true, `应完成（summary: ${result.summary}）`);
   assert.equal(result.interrupted, undefined, "批准全部审批门后不应中断");
@@ -153,11 +206,15 @@ test("T12: patent_drafting_v1 全链路（批准全部审批门）完整跑通",
   assert.match(output("slop_clean"), /反套话评分门/, "反套话评分门报告");
   assert.equal(output("final_approval"), "APPROVED");
 
+  // 附图门：跑到该阶段即自动核验通过并留痕（无需人工提示）
+  assert.match(output("figure_generate"), /附图门: ✅ 通过/, "附图门报告");
+  assert.ok(existsSync(join(figureDir, "figure-check.json")), "附图核验结论应留痕");
+
   // worker 契约校验：search 阶段命中 patent-search-commander（提示性，不降级）
   const search = result.stages.find(s => s.stageId === "search")!;
   assert.equal(search.workerValidation?.workerName, "patent-search-commander");
   assert.equal(search.degraded, false, "worker 契约缺失不改变 degraded");
-});
+}
 
 test("T12: 全链路含确定性质量门产出（slop 评分可解析）", async () => {
   registerBuiltinAtoms();

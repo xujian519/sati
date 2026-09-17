@@ -6,6 +6,7 @@
  * 全程无随机/时钟输入：同一 FigureSpec 永远产出同一布局（快照测试的前提）。
  */
 
+import { measureTextWidth } from "./metrics.js";
 import type { FigureDirection, FigureEdge, FigureKind, FigureNode, FigureSpec } from "./types.js";
 
 export type Point = { x: number; y: number };
@@ -32,8 +33,7 @@ export type FigureLayout = {
   height: number;
 };
 
-/** 尺寸度量：fontsize 14 的 CJK 近似字宽、行高，内边距与最小盒尺寸。 */
-const CHAR_W = 15;
+/** 尺寸度量：行高、内边距与最小盒尺寸（字宽见 metrics.ts——按字符类别计）。 */
 const LINE_H = 21;
 const PAD_X = 16;
 const PAD_Y = 12;
@@ -50,9 +50,10 @@ export function defaultDirection(kind: FigureKind): FigureDirection {
 
 function nodeSize(node: FigureNode): { width: number; height: number } {
   const lines = node.label.split("\n");
-  const longest = Math.max(...lines.map(line => line.length));
+  // 最宽行按字符类别累计（CJK 1em / Latin 0.5em）：单字宽常数会把英文标签估宽约 2 倍。
+  const longest = Math.max(...lines.map(line => measureTextWidth(line)));
   return {
-    width: Math.max(MIN_W, longest * CHAR_W + PAD_X * 2),
+    width: Math.max(MIN_W, longest + PAD_X * 2),
     height: Math.max(MIN_H, lines.length * LINE_H + PAD_Y * 2),
   };
 }

@@ -9,7 +9,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { FigureSpec } from "../../../src/patent/figuregen/types.js";
-import { checkFigures } from "../../../src/patent/figuregen/check.js";
+import { checkFigures, normalizeRefLabel } from "../../../src/patent/figuregen/check.js";
 
 function flowchart(figureNo: number, refs: (number | undefined)[], labels?: string | string[]): FigureSpec {
   const labelList = labels === undefined ? undefined : Array.isArray(labels) ? labels : [labels];
@@ -143,6 +143,41 @@ test("V4 一致性：同图内重复标记指向不同节点 FAIL", () => {
   };
   const result = checkFigures([fig], "输入模块(10)；输出模块(10)。");
   assert.ok(result.findings.some(f => f.rule === "V4" && f.severity === "fail"));
+});
+
+test("normalizeRefLabel：括号形/裸数字形/全角括号/空白/多行 label 首行归一", () => {
+  const cases: [string, string][] = [
+    ["处理模块(20)", "处理模块"],
+    ["处理模块（20）", "处理模块"],
+    ["处理模块20", "处理模块"],
+    ["处理模块 20", "处理模块"],
+    [" 处理模块(20) ", "处理模块"],
+    ["处理模块\n（20）", "处理模块"],
+    ["处理模块", "处理模块"],
+  ];
+  for (const [input, expected] of cases) {
+    assert.equal(normalizeRefLabel(input), expected, `normalizeRefLabel(${JSON.stringify(input)})`);
+  }
+});
+
+test("V4 防回退：标注书写形态差异（括号形 vs 裸数字）不得判名称不一致", () => {
+  // 「处理模块(20)」（附图惯例）与「处理模块20」（说明书正文惯例）指同一组成部分。
+  const fig1 = flowchart(1, [20], "处理模块(20)");
+  const fig2 = flowchart(2, [20], "处理模块20");
+  const result = checkFigures([fig1, fig2], "处理模块(20)与处理模块20为同一部件。");
+  assert.deepEqual(
+    result.findings.filter(f => f.rule === "V4"),
+    [],
+    "同一组成部分的两种书写形态不应触发 V4",
+  );
+  assert.equal(result.ok, true);
+
+  // 全角括号形同理
+  const fullWidth = checkFigures([flowchart(1, [20], "处理模块（20）"), flowchart(2, [20], "处理模块20")], "");
+  assert.deepEqual(
+    fullWidth.findings.filter(f => f.rule === "V4"),
+    [],
+  );
 });
 
 test("汇总：refsInFigures / refsInText 正确回流", () => {

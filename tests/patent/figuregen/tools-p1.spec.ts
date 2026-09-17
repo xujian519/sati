@@ -54,7 +54,7 @@ test("patent_figure_generate：format=both 额外产出 A4 打印 HTML", async (
     assert.ok(html.includes("一种处理装置"));
     assert.ok(html.includes('data-ref="20"'));
     const fileBlocks = result.content.filter(block => block.type === "file");
-    assert.equal(fileBlocks.length, 2, "1 个 SVG + 1 个 HTML");
+    assert.equal(fileBlocks.length, 3, "1 个 SVG + 1 个 HTML + 1 个 sidecar");
   } finally {
     rmSync(cwd, { recursive: true, force: true });
   }
