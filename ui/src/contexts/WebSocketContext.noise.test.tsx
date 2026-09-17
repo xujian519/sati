@@ -25,7 +25,7 @@ describe("isStreamingNoise", () => {
     expect(isStreamingNoise({ type: "loading_progress", progress: 0.5 })).toBe(false);
     expect(isStreamingNoise({ type: "projects_updated" })).toBe(false);
     expect(isStreamingNoise({ type: "taskmaster-tasks-updated" })).toBe(false);
-    expect(isStreamingNoise({ type: "taskmaster-mcp-status-changed" })).toBe(false);
+    expect(isStreamingNoise({ type: "taskmaster-project-updated" })).toBe(false);
   });
 
   it("lets low-frequency `kind` frames through (status/complete/error/permission etc.)", () => {

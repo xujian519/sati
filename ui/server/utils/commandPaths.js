@@ -10,12 +10,15 @@
  * parameter through `resolveCommandPath()` so the boundary can only be
  * relaxed in one place — and relaxing it is then a visible, reviewable edit.
  *
+ * `/api/commands/load` has since been retired (zero consumers, see #356), so
+ * `resolveCommandPath()` now serves `/api/commands/execute` only.
+ *
  * See `docs/notes/implemented/2026-09-14-command-path-whitelist.md`.
  */
 import path from "node:path";
 import { resolvePilotHome } from "./pilotPaths.js";
 
-/** Message shared by both routes so operators see one wording for one policy. */
+/** Message used by the commands routes so operators see one wording for one policy. */
 export const COMMAND_PATH_DENIED_MESSAGE = "Command must be in a .sati/commands or .sati/skills directory";
 
 /**

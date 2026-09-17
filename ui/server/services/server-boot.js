@@ -211,14 +211,10 @@ async function startServer(server) {
           closeMemoryServices();
           stopSatiConfigWatcher();
           await stopAllPlugins();
-          // helpers were retired with the four-provider runtime.
-          try {
-            const { shutdownGlobalChrome, stopChromeHealthCheck } = await import("./utils/globalChrome.js");
-            stopChromeHealthCheck();
-            shutdownGlobalChrome();
-          } catch {
-            /* Chrome may not have been started */
-          }
+          // Global Chrome helpers were retired with the four-provider runtime
+          // and the module itself was removed in #356 (no launch path was left
+          // in ui/server, so the shutdown hook could only ever tidy a lock file
+          // written by an older build).
           // Sati cron is owned by `sati server` and shuts
           // down with it; ui/server never spawns its own daemon.
         } finally {

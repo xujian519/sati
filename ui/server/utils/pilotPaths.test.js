@@ -8,7 +8,6 @@ import {
   resolveProjectStorageId as resolveCoreProjectStorageId,
 } from "../../../src/pilot/paths.js";
 import { createCollisionResistantProjectId, createProjectId, resolveProjectStorageId } from "./pilotPaths.js";
-import { getAlwaysOnRoot } from "../services/always-on-paths.js";
 
 describe("UI project storage ID resolution", () => {
   it("matches the core resolver for colliding non-ASCII workspaces", () => {
@@ -54,29 +53,6 @@ describe("UI project storage ID resolution", () => {
       expect(resolveProjectStorageId(projectRoot, pilotHome)).toBe(createProjectId(projectRoot));
       expect(resolveProjectStorageId(projectRoot, pilotHome)).toBe(resolveCoreProjectStorageId(projectRoot, pilotHome));
     } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
-  });
-
-  it("uses the resolved storage ID for the UI Always-On root", () => {
-    const root = mkdtempSync(join(tmpdir(), "sati-ui-always-on-root-"));
-    const previousSatiHome = process.env.SATI_HOME;
-    try {
-      const pilotHome = join(root, "pilot-home");
-      const projectRoot = join(root, "home", "会议纪要");
-      const projectId = createCollisionResistantProjectId(projectRoot);
-      mkdirSync(projectRoot, { recursive: true });
-      mkdirSync(join(pilotHome, "projects", projectId), { recursive: true });
-      writeFileSync(join(pilotHome, "projects", projectId, ".cwd"), projectRoot, "utf8");
-      process.env.SATI_HOME = pilotHome;
-
-      expect(getAlwaysOnRoot(projectRoot)).toBe(join(pilotHome, "always-on", "projects", projectId));
-    } finally {
-      if (previousSatiHome === undefined) {
-        delete process.env.SATI_HOME;
-      } else {
-        process.env.SATI_HOME = previousSatiHome;
-      }
       rmSync(root, { recursive: true, force: true });
     }
   });
