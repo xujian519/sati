@@ -1574,10 +1574,12 @@
   - 影响：(a) 性能：先 `listTeams()`+`listMembers()`，再对**每个团队**在两份全量数组上 `filter`；`toMemberView` 内 `db.isRetired(sessionKey)` 是每成员一次同步 SQL 往返。UI 每 10s 轮询，多客户端线性叠加。(b) 暴露面：`sessionKey` 入参被 `_input` 丢弃，任何持 token 的浏览器可见全部团队——已在 `gatewayRuntimeOptions.ts:150-155` 登记为信任边界，随多会话使用应复核。
   - 建议：快照按 `teamId` 预分组一次；批量取 retired 集合替代每成员 SQL；`sessionKey` 传入时按归属过滤。
 - **TD-TEAM-N11** · `runMemberScan` 外层 `.catch` 静默吞掉整次启动扫描失败
-  - 类别：C · 严重级：P2 · 工作量：S · 状态：new
-  - 位置：`src/cli/teamSubsystem.ts:118-121`
-  - 影响：本模块**唯一一处无注释、无日志的吞错点**。`scanTeamMembers` 契约「单成员失败不抛错」只覆盖成员级；若因 db 关闭/枚举异常**整体**抛出，此处静默返回 `{scanned:0, resumed:0}`——冷恢复静默失效，队长侧毫无信号。同文件 `:249` 的 `startStartupScan` catch **有** logger，同一失败域两种待遇。
+  - 类别：C · 严重级：P2 · 工作量：S · 状态：done（2026-09-18，PR #434）
+  - 位置：`src/cli/teamSubsystem.ts:121-124`（原登记写 `:118-121`）
+  - 影响：本模块**唯一一处无注释、无日志的吞错点**。`scanTeamMembers` 契约「单成员失败不抛错」只覆盖成员级；若因 db 关闭/枚举异常**整体**抛出，此处静默返回 `{scanned:0, resumed:0}`——冷恢复静默失效，队长侧毫无信号。同文件 `:255` 的 `startStartupScan` catch **有** logger，同一失败域两种待遇。
   - 建议：补 `logger.error` 后返回。
+  - **2026-09-18 处置**：✅ **done（PR #434）**——按建议补 `logger.error("Team member scan failed:", error)` 后返回零值（只附加日志，不改控制流）。测试 `tests/cli/team-subsystem-scan-failure.spec.ts` 用**一对判据**钉住不变量：① db 关闭使 `listMembers()` 抛错 ⇒ 返回零值**且**恰好一条 error 日志；② 无成员的正常空扫描 ⇒ 同样返回零值但**不**记 error。只测 ① 无法排除「每次都打」，只测 ② 无法证明失败被观测。负控制已验：撤掉该行后 ① 变红（`整体失败必须记恰好一条 error`）、② 仍绿。
+  - **口径注记（为何没混进 #353 的注释 PR）**：该处是 **promise 链上的 `.catch()`**，不是 `catch {}` 子句，因此既不被 `measure-techdebt.mjs` 的「无注释的无参 catch」统计（#353 的 114 处里**不含**它），也不是补一行注释能治的——危害是「失败与『确实没有可恢复成员』的返回值同为 `{scanned:0, resumed:0}`」，只能靠日志区分。故 #353 的注释治理（PR #432/#433）与它分开交付，避免「零行为变化」的编译级证明被这一行日志稀释。
 - **TD-TEAM-N12** · 派发类 fire-and-forget `.catch(() => undefined)` 静默吞错 ×4
   - 类别：C · 严重级：P3 · 工作量：S · 状态：new
   - 位置：`src/tool/builtin/team/teamMailbox.ts:114`；`src/tool/builtin/team/teamTasks.ts:228,396,498`
