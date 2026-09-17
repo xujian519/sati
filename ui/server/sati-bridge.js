@@ -88,6 +88,20 @@ const subagentActivityStarts = new Map();
 const pendingAgentToolCalls = new Map();
 
 /**
+ * Upper bound for `sessionState` map size. When exceeded, inactive sessions
+ * are evicted (oldest first) to prevent unbounded growth from interrupted
+ * turns that never reach terminal events.
+ */
+const MAX_ACTIVE_SESSIONS = 500;
+
+/**
+ * Always-On session keys observed during the current turn.
+ * Module-scoped so `cleanupSessionBookkeeping` can evict entries for
+ * interrupted turns that never reach `turn_completed`.
+ */
+const knownAlwaysOnSessions = new Set();
+
+/**
  * Default permission mode for sessions started from the Web UI. We use
  * `default` so Sati's `Permission.decide()` fully evaluates rules
  * + tool semantics — read-only tools allow, side-effecting tools either
@@ -243,6 +257,27 @@ export async function getSatiGatewayWithReset() {
  * the transcript and the agent state machine.
  */
 const sessionState = new Map();
+
+/**
+ * Clear sub-agent bookkeeping for a session.
+ *
+ * Called when a turn reaches a terminal state (turn_completed / error)
+ * or when the session/project is deleted. Removes orphaned entries from
+ * `pendingAgentToolCalls`, `subagentActivityStarts`, and
+ * `knownAlwaysOnSessions` that would otherwise accumulate when turns
+ * are interrupted or the gateway restarts mid-stream.
+ */
+function cleanupSessionBookkeeping(sessionKey) {
+  pendingAgentToolCalls.delete(sessionKey);
+  const prefix = `${sessionKey}:`;
+  for (const key of subagentActivityStarts.keys()) {
+    if (key === sessionKey || key.startsWith(prefix)) {
+      subagentActivityStarts.delete(key);
+    }
+  }
+  knownAlwaysOnSessions.delete(sessionKey);
+}
+
 // 删除窗口（上游 #568）：项目/会话删除期间封锁新状态创建与新回合启动，
 // 否则迟到的提交会在删除后重建状态、把已删会话复活。
 const deletingProjects = new Set();
@@ -297,6 +332,7 @@ function beginDeletion(projectKey, sessionKey) {
       if (deleted) {
         state.deleted = true;
         sessionState.delete(state.sessionKey);
+        cleanupSessionBookkeeping(state.sessionKey);
       }
     }
     blocked.delete(scope);
@@ -320,6 +356,18 @@ function ensureSessionState(sessionKey, projectKey, channelKey) {
       hasVisibleFailureStatus: false,
     };
     sessionState.set(sessionKey, state);
+    // Cap sessionState size: evict oldest inactive sessions to prevent
+    // unbounded growth from interrupted turns.
+    if (sessionState.size > MAX_ACTIVE_SESSIONS) {
+      const inactive = [...sessionState.values()]
+        .filter(s => !s.active)
+        .sort((a, b) => (a.lastActivityAt || 0) - (b.lastActivityAt || 0));
+      for (const s of inactive) {
+        if (sessionState.size <= MAX_ACTIVE_SESSIONS) break;
+        sessionState.delete(s.sessionKey);
+        cleanupSessionBookkeeping(s.sessionKey);
+      }
+    }
   } else {
     state.projectKey = projectKey;
     state.channelKey = channelKey;
@@ -955,6 +1003,12 @@ export async function runChatViaGateway(command, options = {}, writer, provider 
     sendBridgeStatusEvent(writer, statusEvent, sessionKey, provider);
   } finally {
     clearActiveRunIfCurrent(state, runId);
+    // Reclaim sub-agent bookkeeping for interrupted / completed turns so
+    // pendingAgentToolCalls and subagentActivityStarts don't grow without
+    // bound when the gateway stream ends before terminal events arrive.
+    if (!state.active) {
+      cleanupSessionBookkeeping(sessionKey);
+    }
   }
 }
 
@@ -2115,7 +2169,8 @@ export function getRouterStatsSummary() {
  * @param {Set<import('ws').WebSocket>} clients
  */
 export function registerAlwaysOnNotificationForwarding(clients, forwardToSessionWatchers) {
-  const knownSessions = new Set();
+  // Module-scoped so cleanupSessionBookkeeping can evict entries for
+  // interrupted turns that never reach turn_completed.
 
   const forwardFrame = (sessionId, frame) => {
     if (typeof forwardToSessionWatchers === "function") {
@@ -2140,8 +2195,8 @@ export function registerAlwaysOnNotificationForwarding(clients, forwardToSession
 
         const provider = "sati";
 
-        if (!knownSessions.has(sessionKey)) {
-          knownSessions.add(sessionKey);
+        if (!knownAlwaysOnSessions.has(sessionKey)) {
+          knownAlwaysOnSessions.add(sessionKey);
           const createdFrame = createNormalizedMessage({
             provider,
             sessionId: sessionKey,
@@ -2188,7 +2243,7 @@ export function registerAlwaysOnNotificationForwarding(clients, forwardToSession
         }
 
         if (event.type === "turn_completed") {
-          knownSessions.delete(sessionKey);
+          knownAlwaysOnSessions.delete(sessionKey);
         }
       });
     })

@@ -309,7 +309,13 @@ function handleShellConnection(ws) {
 
           logger.info("🟢 Shell process started with PTY, PID:", shellProcess.pid);
 
-          ptySessionsMap.set(ptySessionKey, {
+          // Capture instance identity so callbacks always reference
+          // *this* PTY and *this* session key, even after a subsequent
+          // init on the same ws rewrites the closure variables.
+          const myProcess = shellProcess;
+          const mySessionKey = ptySessionKey;
+
+          ptySessionsMap.set(mySessionKey, {
             pty: shellProcess,
             ws: ws,
             buffer: [],
@@ -320,8 +326,8 @@ function handleShellConnection(ws) {
 
           // Handle data output
           shellProcess.onData(data => {
-            const session = ptySessionsMap.get(ptySessionKey);
-            if (!session) return;
+            const session = ptySessionsMap.get(mySessionKey);
+            if (!session || session.pty !== myProcess) return;
 
             if (session.buffer.length < 5000) {
               session.buffer.push(data);
@@ -389,20 +395,23 @@ function handleShellConnection(ws) {
           // Handle process exit
           shellProcess.onExit(exitCode => {
             logger.info("🔚 Shell process exited with code:", exitCode.exitCode, "signal:", exitCode.signal);
-            const session = ptySessionsMap.get(ptySessionKey);
-            if (session && session.ws && session.ws.readyState === WebSocket.OPEN) {
-              session.ws.send(
-                JSON.stringify({
-                  type: "output",
-                  data: `\r\n\x1b[33mProcess exited with code ${exitCode.exitCode}${exitCode.signal ? ` (${exitCode.signal})` : ""}\x1b[0m\r\n`,
-                }),
-              );
+            const session = ptySessionsMap.get(mySessionKey);
+            // Only act on the map entry if *this* PTY still owns it.
+            // A re-init may have replaced the entry with a new PTY.
+            if (session && session.pty === myProcess) {
+              if (session.ws && session.ws.readyState === WebSocket.OPEN) {
+                session.ws.send(
+                  JSON.stringify({
+                    type: "output",
+                    data: `\r\n\x1b[33mProcess exited with code ${exitCode.exitCode}${exitCode.signal ? ` (${exitCode.signal})` : ""}\x1b[0m\r\n`,
+                  }),
+                );
+              }
+              if (session.timeoutId) {
+                clearTimeout(session.timeoutId);
+              }
+              ptySessionsMap.delete(mySessionKey);
             }
-            if (session && session.timeoutId) {
-              clearTimeout(session.timeoutId);
-            }
-            ptySessionsMap.delete(ptySessionKey);
-            shellProcess = null;
           });
         } catch (spawnError) {
           logger.error("[ERROR] Error spawning process:", spawnError);
@@ -444,21 +453,33 @@ function handleShellConnection(ws) {
     }
   });
 
+  // Capture the ws instance for the close handler. The message handler
+  // may later reassign `ptySessionKey` / `shellProcess` on re-init, but
+  // this const stays bound to the connection that opened the socket.
+  const myWs = ws;
+
   ws.on("close", () => {
     logger.info("🔌 Shell client disconnected");
 
     if (ptySessionKey) {
       const session = ptySessionsMap.get(ptySessionKey);
-      if (session) {
+      // Only act if this ws still owns the session — a new ws may have
+      // reconnected and replaced session.ws. Guarding with both the ws
+      // reference and the PTY instance prevents stale close handlers
+      // from nulling the new connection's ws or killing its PTY.
+      if (session && session.ws === myWs && session.pty === shellProcess) {
         logger.info("⏳ PTY session kept alive, will timeout in 30 minutes:", ptySessionKey);
         session.ws = null;
 
         session.timeoutId = setTimeout(() => {
           logger.info("⏰ PTY session timeout, killing process:", ptySessionKey);
-          if (session.pty && session.pty.kill) {
-            session.pty.kill();
+          const current = ptySessionsMap.get(ptySessionKey);
+          if (current && current.pty === shellProcess) {
+            if (current.pty && current.pty.kill) {
+              current.pty.kill();
+            }
+            ptySessionsMap.delete(ptySessionKey);
           }
-          ptySessionsMap.delete(ptySessionKey);
         }, PTY_SESSION_TIMEOUT);
       }
     }
