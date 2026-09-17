@@ -39,6 +39,7 @@ export async function getSystemGitConfig() {
       git_email: emailResult.stdout.trim() || null,
     };
   } catch {
+    // 单条 git 命令的失败已被内层 .catch 兜成空 stdout；这里只兜其余意外 → 一并返回 {null,null}，/git-config 视作系统未配置、不写库。
     return { git_name: null, git_email: null };
   }
 }

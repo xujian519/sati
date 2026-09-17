@@ -55,6 +55,7 @@ export function readPermissionSettings(env = process.env) {
     const raw = fs.readFileSync(getPermissionSettingsPath(env), "utf8");
     return normalizePermissionSettings(JSON.parse(raw));
   } catch {
+    // 权限文件缺失（首次运行）或 JSON 损坏 → 回退 DEFAULT_SETTINGS（skipPermissions: true），消费方按 bypassPermissions 生效而不报错。
     return { ...DEFAULT_SETTINGS };
   }
 }

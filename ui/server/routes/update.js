@@ -97,6 +97,7 @@ router.post("/check", async (req, res) => {
       const { stdout } = await execGit(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"]);
       upstream = parseUpstreamRef(stdout);
     } catch {
+      // 当前分支没有上游（rev-parse @{u} 非零退出）→ 置 null，改用 origin/<当前分支> 的默认约定继续比对；推不出上游时才回 checkUnavailable。
       upstream = null;
     }
 

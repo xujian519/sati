@@ -946,6 +946,7 @@ router.post("/", validateExternalApiKey, async (req, res) => {
       try {
         await fs.access(finalProjectPath);
       } catch {
+        // 目标目录不存在或不可访问（fs.access 抛 ENOENT/EACCES）→ 转译为带绝对路径的 Error，由本路由外层 catch 以 SSE error 帧或 500 回给调用方。
         throw new Error(`Project path does not exist: ${finalProjectPath}`);
       }
     }

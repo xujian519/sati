@@ -28,6 +28,7 @@ async function whereExecutables(name, execFileAsync) {
       .map(line => line.trim())
       .filter(Boolean);
   } catch {
+    // where 未命中或不可用（非 0 退出码 / ENOENT）→ 返回空数组跳过该途径；候选全落空时上层抛 ENOENT，由 normalizeUpdateRuntimeError 提示装 Git Bash。
     return [];
   }
 }

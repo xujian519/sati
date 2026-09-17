@@ -55,6 +55,7 @@ async function moveUploadedAttachment(file, attachmentDir, index) {
       destination = path.join(attachmentDir, candidate);
       suffix += 1;
     } catch {
+      // access 抛错（候选名未被占用，通常是 ENOENT）→ 判定该名称可用，跳出试探循环并以当前路径落盘。
       break;
     }
   }
@@ -117,6 +118,7 @@ const uploadFilesHandler = async (req, res) => {
         try {
           filePaths = JSON.parse(relativePaths);
         } catch {
+          // relativePaths 不是合法 JSON（客户端被截断/伪造）→ 仅记一条日志，filePaths 保持空数组，后续每个文件回退用 originalname 落盘。
           logger.info("[DEBUG] Failed to parse relativePaths:", relativePaths);
         }
       }
@@ -166,6 +168,7 @@ const uploadFilesHandler = async (req, res) => {
       try {
         await fsPromises.access(resolvedTargetDir);
       } catch {
+        // 目标目录尚不存在（access 抛 ENOENT）→ 递归补建它，后面的 copyFile 才有落点；补建失败会冒泡给路由的错误处理。
         await fsPromises.mkdir(resolvedTargetDir, { recursive: true });
       }
 
@@ -196,6 +199,7 @@ const uploadFilesHandler = async (req, res) => {
         try {
           await fsPromises.access(parentDir);
         } catch {
+          // 嵌套文件的父目录不存在（folder 上传时的子目录）→ 递归补建它，该文件的 copyFile 才落得下去。
           await fsPromises.mkdir(parentDir, { recursive: true });
         }
 

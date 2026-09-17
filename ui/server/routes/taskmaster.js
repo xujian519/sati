@@ -188,6 +188,7 @@ router.get("/tasks/:projectName", async (req, res) => {
     try {
       projectPath = await extractProjectDirectory(projectName);
     } catch {
+      // 项目名无法解析成目录（extractProjectDirectory 抛异常）→ 回 404「Project not found」，前端 refreshTasks 报错并把任务面板置空。
       return res.status(404).json({
         error: "Project not found",
         message: `Project "${projectName}" does not exist`,
@@ -201,6 +202,7 @@ router.get("/tasks/:projectName", async (req, res) => {
     try {
       await fsPromises.access(tasksFilePath);
     } catch {
+      // tasks.json 缺失或不可读（access 抛 ENOENT/EACCES）→ 回 200 空任务数组，前端按「无任务」渲染空列表而不报错。
       return res.json({
         projectName,
         tasks: [],
@@ -301,6 +303,7 @@ router.post("/init/:projectName", async (req, res) => {
     try {
       projectPath = await extractProjectDirectory(projectName);
     } catch {
+      // 项目名无法解析成目录（extractProjectDirectory 抛异常）→ 回 404「Project not found」，前端提示项目不存在并跳过 TaskMaster 初始化。
       return res.status(404).json({
         error: "Project not found",
         message: `Project "${projectName}" does not exist`,
@@ -380,6 +383,7 @@ router.post("/add-task/:projectName", async (req, res) => {
     try {
       projectPath = await extractProjectDirectory(projectName);
     } catch {
+      // 项目名无法解析成目录（extractProjectDirectory 抛异常）→ 回 404「Project not found」，前端提示项目不存在、不下发 add-task。
       return res.status(404).json({
         error: "Project not found",
         message: `Project "${projectName}" does not exist`,
@@ -458,6 +462,7 @@ router.put("/update-task/:projectName/:taskId", async (req, res) => {
     try {
       projectPath = await extractProjectDirectory(projectName);
     } catch {
+      // 项目名无法解析成目录（extractProjectDirectory 抛异常）→ 回 404「Project not found」，前端提示项目不存在、不更新该任务。
       return res.status(404).json({
         error: "Project not found",
         message: `Project "${projectName}" does not exist`,
@@ -562,6 +567,7 @@ router.post("/parse-prd/:projectName", async (req, res) => {
     try {
       projectPath = await extractProjectDirectory(projectName);
     } catch {
+      // 项目名无法解析成目录（extractProjectDirectory 抛异常）→ 回 404「Project not found」，前端提示项目不存在、不执行 parse-prd。
       return res.status(404).json({
         error: "Project not found",
         message: `Project "${projectName}" does not exist`,
@@ -574,6 +580,7 @@ router.post("/parse-prd/:projectName", async (req, res) => {
     try {
       await fsPromises.access(prdPath, fs.constants.F_OK);
     } catch {
+      // PRD 文件不存在或不可读（access F_OK 抛 ENOENT/EACCES）→ 回 404「PRD file not found」，前端提示 .taskmaster/docs 下无此文件。
       return res.status(404).json({
         error: "PRD file not found",
         message: `File "${fileName}" does not exist in .taskmaster/docs/`,
@@ -673,6 +680,7 @@ router.post("/apply-template/:projectName", async (req, res) => {
     try {
       projectPath = await extractProjectDirectory(projectName);
     } catch {
+      // 项目名无法解析成目录（extractProjectDirectory 抛异常）→ 回 404「Project not found」，前端提示项目不存在、不写模板 PRD。
       return res.status(404).json({
         error: "Project not found",
         message: `Project "${projectName}" does not exist`,

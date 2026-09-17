@@ -201,6 +201,7 @@ function handleShellConnection(ws) {
               throw new Error("Not a directory");
             }
           } catch {
+            // projectPath 不存在（statSync 抛 ENOENT）或指向文件而非目录 → 回一帧 error 后 return，不建 PTY（客户端不渲染该帧，终端停在欢迎行）。
             ws.send(JSON.stringify({ type: "error", message: "Invalid project path" }));
             return;
           }

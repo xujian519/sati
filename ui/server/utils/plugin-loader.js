@@ -163,6 +163,7 @@ export function scanPlugins() {
   try {
     entries = fs.readdirSync(pluginsDir, { withFileTypes: true });
   } catch {
+    // 插件目录不可读（EACCES，或路径被同名文件占住时 mkdir 也没建成）→ 返回空数组，GET /plugins 回 {plugins: []}，前端显示无插件而不是 500。
     return plugins;
   }
 
@@ -296,7 +297,9 @@ export function installPluginFromGit(url) {
     const cleanupTemp = () => {
       try {
         fs.rmSync(tempDir, { recursive: true, force: true });
-      } catch {}
+      } catch {
+        // 临时目录已被 rename 走或句柄未释放（ENOENT/EBUSY）→ 静默忽略：清理是尽力而为，残留的 .tmp-* 目录会被 scanPlugins 跳过。
+      }
     };
 
     const finalize = manifest => {
@@ -336,6 +339,7 @@ export function installPluginFromGit(url) {
       try {
         manifest = JSON.parse(fs.readFileSync(manifestPath, "utf-8"));
       } catch {
+        // 克隆下来的 manifest.json 缺失或不是合法 JSON → 先删临时目录再 reject，安装接口把这条错误原文回给前端。
         cleanupTemp();
         return reject(new Error("manifest.json is not valid JSON"));
       }
@@ -426,6 +430,7 @@ export function updatePluginFromGit(name) {
       try {
         manifest = JSON.parse(fs.readFileSync(manifestPath, "utf-8"));
       } catch {
+        // 更新后 manifest.json 不是合法 JSON 或读不出来 → 直接 reject（此处无临时目录可清），更新接口把原因回给前端。
         return reject(new Error("manifest.json is not valid JSON after update"));
       }
 

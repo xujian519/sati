@@ -215,6 +215,7 @@ function buildWorkspaceSnapshot(repository, { query = "", limit = 100, offset = 
         try {
           return fs.readFileSync(manifestPath, "utf-8");
         } catch {
+          // MEMORY.md 缺失或不可读（readFileSync 抛 ENOENT/EACCES）→ 视为空清单，manifestContent 回空串，快照的条目与分页字段照常返回。
           return "";
         }
       })(),
@@ -262,6 +263,7 @@ function buildWorkspaceSnapshot(repository, { query = "", limit = 100, offset = 
       try {
         return fs.readFileSync(manifestPath, "utf-8");
       } catch {
+        // MEMORY.md 缺失或不可读（readFileSync 抛 ENOENT/EACCES）→ 视为空清单，manifestContent 回空串，快照的条目与分页字段照常返回。
         return "";
       }
     })(),

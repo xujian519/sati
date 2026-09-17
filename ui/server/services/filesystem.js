@@ -63,6 +63,7 @@ const getWindowsDriveSuggestions = async () => {
         type: "directory",
       };
     } catch {
+      // 盘符不存在或不可访问（stat 抛 ENOENT/EPERM，如空读卡器）→ 返回 null 交给 filter(Boolean) 剔除，盘符浏览器只列可用盘。
       return null;
     }
   });

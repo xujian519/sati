@@ -44,6 +44,7 @@ function loadYaml() {
     if (!existsSync(SATI_YAML)) return {};
     return parseYaml(readFileSync(SATI_YAML, "utf-8")) ?? {};
   } catch {
+    // sati.yaml 损坏或不可读（YAML 解析 / 读取抛异常）→ 返回 {}，/status 与各通道按「未配置」默认视图继续。
     return {};
   }
 }
@@ -54,6 +55,7 @@ function loadChannelRuntimeStatus() {
     const parsed = JSON.parse(readFileSync(CHANNEL_RUNTIME_STATUS, "utf-8"));
     return parsed?.channels && typeof parsed.channels === "object" ? parsed.channels : {};
   } catch {
+    // runtime-status.json 损坏或不可读（JSON.parse 抛错）→ 返回 {}，/weixin/qr 视为无二维码、qr-poll 按未连接继续轮询。
     return {};
   }
 }
@@ -64,6 +66,7 @@ function loadWeixinCredentials() {
     const raw = JSON.parse(readFileSync(WEIXIN_CREDS, "utf-8"));
     return raw.accountId ? { accountId: raw.accountId } : null;
   } catch {
+    // weixin-credentials.json 缺失或损坏（读取 / JSON.parse 抛错）→ 视为未登录：/status 报 hasCredentials:false，qr-poll 走 pending 继续扫码。
     return null;
   }
 }
@@ -139,6 +142,7 @@ async function fetchJson(url) {
   try {
     return JSON.parse(text);
   } catch {
+    // 上游返回非 JSON（网关拦截页 / HTML 错误页）→ 转译为带 URL 与响应片段的 Error，由 /wecom/qr-begin 回给 UI 报错、qr-poll 降级为 pending。
     throw new Error(`Non-JSON response from ${url}: ${text.slice(0, 200)}`);
   }
 }
@@ -238,6 +242,7 @@ async function postRegistration(domain, body) {
   try {
     return JSON.parse(text);
   } catch {
+    // 飞书注册接口返回非 JSON（HTML 错误页）→ 转译为带 URL 与响应片段的 Error，由 feishu/qr-begin 回 ok:false、qr-poll 降级为 pending。
     throw new Error(`Non-JSON response from ${url}: ${text.slice(0, 200)}`);
   }
 }
@@ -357,6 +362,7 @@ router.get("/feishu/qr-poll", async (req, res) => {
     // Still pending
     res.json({ pending: true });
   } catch {
+    // 轮询上游失败（10s 超时 / 非 JSON 响应 / 配置落盘异常）→ 一律回 pending 让前端继续轮询（若已命中凭据并清空会话，下轮会回「No QR session active」）。
     res.json({ pending: true });
   }
 });
@@ -603,6 +609,7 @@ router.get("/wecom/qr-poll", async (req, res) => {
 
     res.json({ ok: true, botId: maskValue(botId) });
   } catch {
+    // 上游查询或落盘失败（HTTP 非 2xx / 非 JSON / 写配置抛错）→ 当「仍在等待扫码」回 pending；但 try 内已清空会话，下轮轮询会回「No WeCom QR session active」。
     res.json({ pending: true });
   }
 });

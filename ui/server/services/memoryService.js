@@ -70,6 +70,7 @@ function buildServiceForDataDir(dataDir, workspaceDir = dataDir) {
   try {
     memoryDefaults = buildMemoryDefaults(readSatiConfigFile().config);
   } catch {
+    // sati.yaml 读不出（权限/路径异常）或配置结构异常 → 不注入 memory 默认值、也不落默认索引设置，服务用 edgeclaw-memory-core 内置默认构造。
     memoryDefaults = {};
   }
   const service = new EdgeClawMemoryService({
@@ -101,6 +102,7 @@ function readWorkspaceDirFromDataDir(dataDir) {
       db.close();
     }
   } catch {
+    // control.sqlite 缺失/损坏、pipeline_state 表不存在或 state_json 非法 → 返回 null，调用方退回传入的 workspaceDir（导出时即 dataDir）。
     return null;
   }
 }
@@ -170,6 +172,7 @@ async function pathExists(targetPath) {
     await fs.access(targetPath);
     return true;
   } catch {
+    // 路径不存在或不可访问（fs.access 抛 ENOENT/EACCES）→ 返回 false，调用方按「不存在」处理：快照目录视为空、workspace 目录不算已初始化。
     return false;
   }
 }
@@ -353,6 +356,7 @@ async function listWorkspaceDataDirs() {
     }
     return dirs.sort((left, right) => left.localeCompare(right));
   } catch {
+    // memory/workspaces 目录不存在（从未用过 Memory）→ 返回空数组，调度周期空转、全量导出得 projects: []，路由不报错。
     return [];
   }
 }

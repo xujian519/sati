@@ -174,6 +174,7 @@ export async function getAllMCPServers() {
         configPath = filepath;
         break;
       } catch {
+        // 该配置文件不存在（ENOENT）或内容不是合法 JSON → 跳过它继续试下一个候选路径；全都不成时返回 hasConfig: false + 空 servers。
         continue;
       }
     }

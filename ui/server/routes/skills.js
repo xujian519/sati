@@ -356,6 +356,7 @@ router.post("/import-upload", upload.array("files", 500), async (req, res) => {
     try {
       paths = JSON.parse(pathsJson || "[]");
     } catch {
+      // 表单 paths 字段不是合法 JSON（JSON.parse 抛错）→ 回 400 要求「与文件顺序对齐的 JSON 数组」，前端把该技能标记为导入失败。
       return res.status(400).json({ error: "`paths` must be a JSON array of relative paths matching the file order." });
     }
     const filesIn = Array.isArray(req.files) ? req.files : [];

@@ -78,6 +78,7 @@ router.get("/:name/assets/{*splat}", (req, res) => {
       return res.status(404).json({ error: "Asset not found" });
     }
   } catch {
+    // 资产在解析后被删除或替换（statSync 抛 ENOENT，插件重装竞态）→ 与上面「不是普通文件」同路回 404，不让浏览器拿到 500。
     return res.status(404).json({ error: "Asset not found" });
   }
 

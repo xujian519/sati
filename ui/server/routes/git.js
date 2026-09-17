@@ -151,6 +151,7 @@ async function validateGitRepository(projectPath) {
     // Check if directory exists
     await fs.access(projectPath);
   } catch {
+    // 项目目录不存在或不可读（fs.access 抛 ENOENT/EACCES）→ 转译为带路径的 Error，由各 git 路由的 catch 作为 error/details 回给调用方。
     throw new Error(`Project path not found: ${projectPath}`);
   }
 
@@ -167,6 +168,7 @@ async function validateGitRepository(projectPath) {
     // Ensure git can resolve the repository root for this directory.
     await spawnAsync("git", ["rev-parse", "--show-toplevel"], { cwd: projectPath });
   } catch {
+    // 目录不在任何工作树内，或 git 无法解析仓库根（rev-parse 非零退出/显式 throw）→ 统一转译为带 git init 指引的 Error，路由据此回可读文案而非原始 stderr。
     throw new Error(
       'Not a git repository. This directory does not contain a .git folder. Initialize a git repository with "git init" to use source control features.',
     );
@@ -636,6 +638,7 @@ router.post("/revert-local-commit", async (req, res) => {
     try {
       await spawnAsync("git", ["rev-parse", "--verify", "HEAD"], { cwd: projectPath });
     } catch {
+      // 仓库尚无任何提交（rev-parse --verify HEAD 非零退出）→ 回 400 + error/details 说明「没有可撤销的提交」，与真正的 git 失败（500）区分开。
       return res.status(400).json({
         error: "No local commit to revert",
         details: "This repository has no commit yet.",
@@ -825,6 +828,7 @@ router.get("/commits", async (req, res) => {
         });
         commit.stats = stats.trim().split("\n").pop(); // Get the summary line
       } catch {
+        // 该提交的对象取不到（git show 非零退出，如浅克隆缺对象）→ 只把 stats 置空串，/commits 仍返回整份列表，前端不会因缺摘要而整块置空。
         commit.stats = "";
       }
     }
@@ -1117,6 +1121,7 @@ router.get("/remote-status", async (req, res) => {
       trackingBranch = stdout.trim();
       remoteName = trackingBranch.split("/")[0]; // Extract remote name (e.g., "origin/main" -> "origin")
     } catch {
+      // 本地分支没有配置上游（rev-parse <branch>@{upstream} 非零退出）→ 以 hasUpstream: false 正常返回，前端 remoteStatus 只在响应带 error 字段时才被清空。
       return res.json({
         hasRemote,
         hasUpstream: false,
@@ -1377,6 +1382,7 @@ router.post("/publish", async (req, res) => {
       }
       remoteName = remotes.includes("origin") ? "origin" : remotes[0];
     } catch {
+      // git remote 执行失败（git 不可用或项目目录在其间被删）→ 与「仓库确实没有远程」合并为同一条 400 指引（git remote add origin <url>），前端 publish 走失败分支。
       return res.status(400).json({
         error: "No remote repository configured. Add a remote with: git remote add origin <url>",
       });

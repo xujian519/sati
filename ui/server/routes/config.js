@@ -725,6 +725,7 @@ router.post("/models", async (req, res) => {
     try {
       body = responseText ? JSON.parse(responseText) : {};
     } catch {
+      // 候选端点的响应体都不是 JSON（或只有一个候选时未做形状预筛，拿到 HTML/纯文本）→ 回 502 + ok:false，前端只保留同步兜底模型选项，不阻塞 UI。
       return res.status(502).json({ ok: false, error: `Expected JSON from ${url}, but received non-JSON content.` });
     }
 
@@ -870,6 +871,7 @@ router.post("/test-connection", async (req, res) => {
       try {
         body = JSON.parse(responseText);
       } catch {
+        // HTTP 200 但响应体不是 JSON（反代/网关返回 HTML 错误页，或端点是流式接口）→ 以 ok:false 回带 base URL 提示，调用方（引导页/设置页）把该文案显示在测试结果行。
         return res.json({
           ok: false,
           error: `Expected a JSON ${expectedShape} but received non-JSON content from ${url}. ${baseUrlHint}`,
@@ -1040,6 +1042,7 @@ router.post("/test-web-search", async (req, res) => {
       };
     }
   } catch {
+    // 端点地址无法解析为合法 URL（new URL 抛 TypeError，如自定义地址缺 http(s):// 或缺 host）→ 回 400 + 原样地址，设置页测试结果提示补全地址。
     return res.status(400).json({ ok: false, error: `Invalid endpoint URL: ${effectiveEndpoint}` });
   }
 
@@ -1120,6 +1123,7 @@ router.post("/open", async (_req, res) => {
     try {
       await fsPromises.access(configPath);
     } catch {
+      // 配置文件尚未创建（access 抛 ENOENT）→ 先落盘一份默认配置再打开，前端 openFile 照常显示配置文件路径而非报错。
       await fsPromises.writeFile(configPath, configToYaml(buildDefaultSatiConfig()), "utf8");
     }
 
