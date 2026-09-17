@@ -1,5 +1,6 @@
 import { useCallback, useRef } from "react";
 import type { MouseEvent, TouchEvent } from "react";
+import { UI_TIMEOUTS } from "../../../constants/timeouts";
 
 type MenuEvent = MouseEvent<HTMLButtonElement> | TouchEvent<HTMLButtonElement>;
 
@@ -25,7 +26,7 @@ export function useMobileMenuHandlers(onMenuClick: () => void) {
 
       window.setTimeout(() => {
         suppressNextMenuClickRef.current = false;
-      }, 350);
+      }, UI_TIMEOUTS.TOUCH_TAP_CLICK_SUPPRESSION_MS);
     },
     [openMobileMenu],
   );

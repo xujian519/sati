@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { authenticatedFetch } from "../utils/api";
+import { UI_TIMEOUTS } from "../constants/timeouts";
 
 export type DesktopVersionInfo = {
   currentVersion: string;
@@ -110,7 +111,7 @@ export function useDesktopVersion() {
         } catch {
           // polling failure is non-fatal
         }
-      }, 1000);
+      }, UI_TIMEOUTS.UPDATE_DOWNLOAD_POLL_INTERVAL_MS);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       setDownload({

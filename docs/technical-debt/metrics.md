@@ -7,11 +7,11 @@
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1034 / 173558 |
+| src TS 文件 / 行数 | 1035 / 173681 |
 | src JS 文件 | 0 |
 | tests 文件 | 561 |
-| ui/src 文件 / 行数 | 472 / 83658 |
-| ui/server 文件 / 行数 | 107 / 31598 |
+| ui/src 文件 / 行数 | 473 / 83935 |
+| ui/server 文件 / 行数 | 108 / 31668 |
 
 ## 指标口径
 
@@ -49,7 +49,7 @@
 | `ui/src/components/code-editor/view/subcomponents/PdfDocumentPreview.tsx` | `PdfDocumentPreview` | 1130 | function |
 | `ui/src/components/chat-v2/MessagesPaneV2.tsx` | `MessagesPaneV2` | 1031 | function |
 | `ui/src/components/app-shell/SidebarV2.tsx` | `SidebarV2` | 1008 | function |
-| `ui/src/components/chat/hooks/useChatSessionState.ts` | `useChatSessionState` | 934 | function |
+| `ui/src/components/chat/hooks/useChatSessionState.ts` | `useChatSessionState` | 940 | function |
 | `ui/src/components/main-content-v2/FilesV2.tsx` | `FilesV2` | 853 | function |
 | `ui/src/components/main-content-v2/SkillsV2.tsx` | `ImportFromFolder` | 852 | function |
 | `ui/src/components/chat-v2/MessagesPaneV2.render.test.tsx` | `(anonymous)` | 842 | arrow |
@@ -105,13 +105,13 @@
 
 | 文件 | 行 |
 |---|---|
-| `ui/src/components/main-content-v2/SkillsV2.tsx` | 2525 |
+| `ui/src/components/main-content-v2/SkillsV2.tsx` | 2526 |
 | `ui/server/sati-bridge.js` | 2345 |
-| `ui/src/components/code-editor/view/subcomponents/PdfDocumentPreview.tsx` | 1885 |
-| `ui/src/components/chat/hooks/useChatComposerState.ts` | 1837 |
+| `ui/src/components/code-editor/view/subcomponents/PdfDocumentPreview.tsx` | 1886 |
+| `ui/src/components/chat/hooks/useChatComposerState.ts` | 1838 |
 | `src/adapters/channel/wecom/WeComChannel.ts` | 1764 |
 | `src/model/catalog/providers.ts` | 1593 |
-| `ui/src/components/chat-v2/MessagesPaneV2.tsx` | 1556 |
+| `ui/src/components/chat-v2/MessagesPaneV2.tsx` | 1557 |
 | `ui/server/routes/git.js` | 1529 |
 | `ui/src/components/code-editor/view/subcomponents/CodeEditorBinaryFile.tsx` | 1511 |
 | `src/adapters/channel/weixin/WeixinChannel.ts` | 1497 |
@@ -121,10 +121,10 @@
 | `src/adapters/channel/feishu/FeishuChannel.ts` | 1337 |
 | `ui/src/components/app-shell/SidebarV2.tsx` | 1310 |
 | `ui/src/components/chat-v2/processGrouping.ts` | 1294 |
-| `ui/server/routes/agent.js` | 1223 |
-| `ui/src/components/chat/hooks/useChatSessionState.ts` | 1179 |
+| `ui/server/routes/agent.js` | 1224 |
+| `ui/src/components/chat/hooks/useChatSessionState.ts` | 1186 |
 | `ui/server/routes/taskmaster.js` | 1179 |
-| `ui/server/routes/config.js` | 1146 |
+| `ui/server/routes/config.js` | 1147 |
 | `src/agent/loop/AgentLoop.ts` | 1143 |
 | `ui/src/components/main-content-v2/CronV2.tsx` | 1130 |
 | `ui/src/components/main-content/view/MainContent.tsx` | 1111 |

@@ -47,6 +47,7 @@ import type { PilotConfigDiagnostic, PilotConfigSnapshot } from "../pilot/config
 import { createRouterRuntime, type RouterRuntime } from "../router/index.js";
 import type { RouterEvent, RouterEventBus } from "../router/protocol/events.js";
 import type { AgentTranscriptWriter } from "../session/index.js";
+import { NEXT_TASK_MS } from "../shared/timeouts.js";
 import { BackgroundTaskRuntime, type BackgroundTaskCompletionEvent } from "../task/runtime/BackgroundTaskRuntime.js";
 import { logger, type TelemetryClient } from "../telemetry/index.js";
 import { applyReplayEnvHooks } from "../test-support/llm-replay/index.js";
@@ -416,7 +417,7 @@ export function createProjectRuntimeResolver(deps: ProjectRuntimeFactoryDeps): P
         // （case-law searchSemantic 未 ready 跳过语义路）。
         setTimeout(() => {
           void caseEmbeddings.loadAsync();
-        }, 0);
+        }, NEXT_TASK_MS);
       } catch (error) {
         logger.warn("knowledge: 判例语义召回源注入失败，patent_case_search 语义路关闭:", error);
       }

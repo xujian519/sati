@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { TextDecoder } from "node:util";
 import { getSatiCommandShell, type CommandShell } from "../../../runtime/index.js";
+import { SHELL_KILL_ESCALATION_GRACE_MS, WINDOWS_CLOSE_FALLBACK_MS } from "../../../shared/timeouts.js";
 
 export type SatiCommandOptions = {
   cwd: string;
@@ -78,7 +79,7 @@ export class NodeShellCommandRunner implements SatiCommandRunner {
             } catch {
               // SIGTERM 后进程组已退出：SIGKILL 兜底无需再发（best-effort 已完成使命）。
             }
-          }, 3000).unref();
+          }, SHELL_KILL_ESCALATION_GRACE_MS).unref();
         }
       }
 
@@ -183,7 +184,7 @@ export class NodeShellCommandRunner implements SatiCommandRunner {
         closeFallback = setTimeout(() => {
           if (settled) return;
           finish(exitCode);
-        }, 250);
+        }, WINDOWS_CLOSE_FALLBACK_MS);
         closeFallback.unref();
       });
       child.on("close", exitCode => {

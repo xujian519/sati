@@ -1,6 +1,7 @@
 import { copyFile, mkdir, open, readFile, readdir, rename, rm, stat, unlink, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import type { CronRuntimeLogger } from "../runtime/CronRuntime.js";
+import { CRON_MIGRATION_LOCK_RETRY_MS } from "../../shared/timeouts.js";
 import { cronRunEventsPath, resolveCronPaths } from "./CronPaths.js";
 
 type JsonRecord = Record<string, unknown>;
@@ -408,7 +409,7 @@ async function acquireMigrationLock(rootDir: string, logger?: CronRuntimeLogger)
         await rm(lockPath, { force: true });
         continue;
       }
-      await new Promise(resolveDelay => setTimeout(resolveDelay, 100));
+      await new Promise(resolveDelay => setTimeout(resolveDelay, CRON_MIGRATION_LOCK_RETRY_MS));
     }
   }
   throw new Error(`Timed out waiting for Cron store migration lock: ${lockPath}`);

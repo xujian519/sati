@@ -3,6 +3,7 @@ import { AlertTriangle, Shield } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { logError } from "../../../../utils/logging";
 import { useSatiConfig } from "../../../../hooks/useSatiConfig";
+import { UI_TIMEOUTS } from "../../../../constants/timeouts";
 import {
   SATI_SETTINGS_KEY,
   fetchSatiPermissionSettings,
@@ -120,7 +121,7 @@ export default function PrivacySections({ title }: PrivacySectionsProps) {
 
   useEffect(() => {
     if (!banner) return;
-    const timer = window.setTimeout(() => setBanner(null), 4_000);
+    const timer = window.setTimeout(() => setBanner(null), UI_TIMEOUTS.PRIVACY_BANNER_AUTO_DISMISS_MS);
     return () => window.clearTimeout(timer);
   }, [banner]);
 

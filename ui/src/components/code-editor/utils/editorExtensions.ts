@@ -9,6 +9,7 @@ import { getChunks } from "@codemirror/merge";
 import { EditorView, ViewPlugin } from "@codemirror/view";
 import { showMinimap } from "@replit/codemirror-minimap";
 import type { CodeEditorFile } from "../types/types";
+import { UI_TIMEOUTS } from "../../../constants/timeouts";
 
 // Lightweight lexer for `.env` files (including `.env.*` variants).
 const envLanguage = StreamLanguage.define({
@@ -124,7 +125,7 @@ export const createScrollToFirstChunkExtension = ({ file, showDiff }: { file: Co
                 effects: EditorView.scrollIntoView(firstChunk.fromB, { y: "center" }),
               });
             }
-          }, 100);
+          }, UI_TIMEOUTS.DIFF_CHUNK_SCROLL_SETTLE_MS);
         }
 
         update() {}

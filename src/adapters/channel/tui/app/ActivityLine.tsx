@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Box, Text } from "ink";
+import { TUI_SPINNER_TICK_MS } from "../../../../shared/timeouts.js";
 import type { TuiAppState } from "./types.js";
 import { satiDarkBlueTheme } from "./theme.js";
 
@@ -16,7 +17,7 @@ export function ActivityLine({ state }: { state: TuiAppState }): React.ReactNode
       return;
     }
     setStartedAt(Date.now());
-    const interval = setInterval(() => setTick(value => value + 1), 100);
+    const interval = setInterval(() => setTick(value => value + 1), TUI_SPINNER_TICK_MS);
     return () => clearInterval(interval);
   }, [state.isRunning]);
 

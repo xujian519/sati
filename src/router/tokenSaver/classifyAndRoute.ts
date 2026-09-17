@@ -1,5 +1,6 @@
 import { debugLog } from "../../shared/debug.js";
 import { sanitizeOutgoingText } from "../../shared/credentialRedaction.js";
+import { JUDGE_RETRY_BACKOFF_MS } from "../../shared/timeouts.js";
 import type { CanonicalMessage, CanonicalModelRequest, ModelRuntime } from "../../model/index.js";
 import { ModelProviderError, ModelRequestError } from "../../model/index.js";
 import type { TelemetryClient } from "../../telemetry/index.js";
@@ -102,7 +103,7 @@ export async function classifyAndRoute(input: ClassifyAndRouteInput): Promise<To
   });
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     if (attempt > 1) {
-      await new Promise(r => setTimeout(r, 1_000));
+      await new Promise(r => setTimeout(r, JUDGE_RETRY_BACKOFF_MS));
     }
     let timeout: NodeJS.Timeout | undefined;
     let timedOut = false;

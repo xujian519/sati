@@ -3,6 +3,7 @@ import { AlertTriangle, Check, Loader2, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { authenticatedFetch } from "../../../../utils/api";
 import { cn } from "../../../../lib/utils";
+import { UI_TIMEOUTS } from "../../../../constants/timeouts";
 import type { DesktopVersionCheckResult } from "../../Settings";
 import { SettingsCard } from "../../shared/view";
 import { launchDesktopInstaller, readWebUpdateTerminalStatus } from "./updateActions";
@@ -94,7 +95,7 @@ export default function AboutSections({ title, versionInfo, checkingVersion }: A
           setDownloading(false);
           return;
         }
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise(resolve => setTimeout(resolve, UI_TIMEOUTS.UPDATE_DOWNLOAD_POLL_INTERVAL_MS));
       }
 
       setLocalUpdateResult("failed");

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { RefObject } from "react";
+import { UI_TIMEOUTS } from "../../constants/timeouts";
 import {
   buildSearchableMessages,
   clearSearchHighlights,
@@ -64,7 +65,7 @@ export function useChatHistorySearch({
   const ensureAllMessagesLoaded = useCallback(async () => {
     if (!hasMoreMessages || allMessagesLoaded) return;
     loadAllMessages();
-    await new Promise(resolve => setTimeout(resolve, 350));
+    await new Promise(resolve => setTimeout(resolve, UI_TIMEOUTS.HISTORY_SEARCH_FULL_LOAD_WAIT_MS));
   }, [allMessagesLoaded, hasMoreMessages, loadAllMessages]);
 
   const applySearchHighlights = useCallback(

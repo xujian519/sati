@@ -12,6 +12,7 @@ import {
 } from "../constants/constants";
 import { useShellRuntime } from "../hooks/useShellRuntime";
 import { sendSocketMessage } from "../utils/socket";
+import { UI_TIMEOUTS } from "../../../constants/timeouts";
 import { getSessionDisplayName } from "../utils/auth";
 import ShellConnectionOverlay from "./subcomponents/ShellConnectionOverlay";
 import ShellEmptyState from "./subcomponents/ShellEmptyState";
@@ -164,7 +165,7 @@ export default function Shell({
     };
 
     const animationFrameId = window.requestAnimationFrame(focusTerminal);
-    const timeoutId = window.setTimeout(focusTerminal, 0);
+    const timeoutId = window.setTimeout(focusTerminal, UI_TIMEOUTS.NEXT_TASK_MS);
 
     return () => {
       window.cancelAnimationFrame(animationFrameId);

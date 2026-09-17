@@ -5,6 +5,7 @@ import { Button } from "../../../../../../shared/view/ui";
 import { appendAuthToken, authenticatedFetch } from "../../../../../../utils/api";
 import { SettingsCard, SettingsSection } from "../../../../shared/view";
 import { cn } from "../../../../../../lib/utils";
+import { UI_TIMEOUTS } from "../../../../../../constants/timeouts";
 import type { GatewayStatus, TestResult, WeComAccessPolicy } from "../types";
 
 type WeComSetupMode = "choose" | "qr" | "manual";
@@ -89,7 +90,7 @@ export default function WeComChannelSection({ status, onSaved }: WeComChannelSec
         } catch {
           // ignore network errors while polling
         }
-      }, 3000);
+      }, UI_TIMEOUTS.IM_QR_POLL_INTERVAL_MS);
     } catch (err) {
       setQrPhase("error");
       setQrError(err instanceof Error ? err.message : String(err));

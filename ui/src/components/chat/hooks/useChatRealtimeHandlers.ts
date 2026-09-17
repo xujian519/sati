@@ -13,6 +13,7 @@ import type { Project, ProjectSession, SessionProvider } from "../../../types/ap
 import type { SessionStore, NormalizedMessage } from "../../../stores/useSessionStore";
 import { useWebSocket } from "../../../contexts/WebSocketContext";
 import { asRecord } from "../../../utils/unknown";
+import { UI_TIMEOUTS } from "../../../constants/timeouts";
 
 type PendingViewSession = {
   sessionId: string | null;
@@ -329,7 +330,7 @@ export function useChatRealtimeHandlers({
       const timer = window.setTimeout(() => {
         sessionStatusRetryTimersRef.current.delete(sessionId);
         sendMessage?.({ type: "check-session-status", sessionId, provider, includeActiveTurnMessages: true });
-      }, 1200);
+      }, UI_TIMEOUTS.SESSION_STATUS_UNKNOWN_RETRY_MS);
       sessionStatusRetryTimersRef.current.set(sessionId, timer);
     },
     [provider, sendMessage],
@@ -821,7 +822,7 @@ export function useChatRealtimeHandlers({
             }
             sessionStorage.removeItem("pendingSessionId");
             if (window.refreshProjects) {
-              setTimeout(() => window.refreshProjects?.(), 500);
+              setTimeout(() => window.refreshProjects?.(), UI_TIMEOUTS.SESSION_EXIT_PROJECT_REFRESH_MS);
             }
           }
           break;

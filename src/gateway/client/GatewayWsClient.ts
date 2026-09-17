@@ -10,6 +10,7 @@ import type {
 } from "../protocol/frames.js";
 import { SATI_GATEWAY_PROTOCOL_VERSION } from "../protocol/version.js";
 import { APP_VERSION } from "../../version.js";
+import { GATEWAY_HELLO_POLL_INTERVAL_MS, GATEWAY_HELLO_TIMEOUT_MS } from "../../shared/timeouts.js";
 
 export type GatewayWsNotificationHandler = (name: string, payload: unknown) => void;
 
@@ -103,7 +104,7 @@ export class GatewayWsClient {
           settled = true;
           reject(new Error("Gateway hello timed out."));
         }
-      }, 10_000);
+      }, GATEWAY_HELLO_TIMEOUT_MS);
 
       const onClose = (event: CloseEvent) => {
         if (!settled) {
@@ -123,7 +124,7 @@ export class GatewayWsClient {
           ws.removeEventListener("close", onClose);
           resolve(this.hello);
         } else {
-          setTimeout(onHello, 50);
+          setTimeout(onHello, GATEWAY_HELLO_POLL_INTERVAL_MS);
         }
       };
       onHello();

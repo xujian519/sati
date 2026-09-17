@@ -3,6 +3,7 @@ import fsPromises from "fs/promises";
 import path from "path";
 import { spawn } from "child_process";
 import { prepareBackgroundSpawnOptions } from "../utils/processSpawn.js";
+import { SERVER_TIMEOUTS } from "../utils/timeouts.js";
 import { parse as parseYaml } from "yaml";
 import {
   buildDefaultSatiConfig,
@@ -688,7 +689,7 @@ router.post("/models", async (req, res) => {
   const controller = new AbortController();
   const timer = setTimeout(
     () => controller.abort(new NetworkFetchError("network_timeout", "Model list request timed out after 10s.")),
-    10_000,
+    SERVER_TIMEOUTS.PROVIDER_MODEL_LIST_PROBE_TIMEOUT_MS,
   );
 
   try {

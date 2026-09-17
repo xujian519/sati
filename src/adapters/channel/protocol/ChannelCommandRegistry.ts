@@ -14,6 +14,7 @@
 import type { Gateway } from "../../../gateway/index.js";
 import { resolvePilotHome } from "../../../pilot/index.js";
 import { runChatSearchFormatted } from "../../../cli/commands/chatSearch.js";
+import { UPDATE_RESTART_REPLY_DELAY_MS } from "../../../shared/timeouts.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -214,7 +215,7 @@ const commands: ChannelCommand[] = [
         // 渠道层不再直接 process.exit。
         if (updateRestartHandler) {
           await ctx.reply("服务即将重启...");
-          setTimeout(() => updateRestartHandler?.(), 2_000);
+          setTimeout(() => updateRestartHandler?.(), UPDATE_RESTART_REPLY_DELAY_MS);
         } else {
           await ctx.reply("请手动重启服务以应用更新。");
         }

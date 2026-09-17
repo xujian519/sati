@@ -1,5 +1,6 @@
 import type { Gateway, GatewayChannelKey } from "../../../gateway/index.js";
 import type { CronResultDelivery } from "../../../cron/index.js";
+import { HA_WS_AUTH_TIMEOUT_MS, HA_WS_RECONNECT_DELAY_MS } from "../../../shared/timeouts.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
 import { deliverChatCronResult } from "../protocol/ImCronDelivery.js";
 import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
@@ -81,7 +82,7 @@ export class HomeAssistantChannel implements ChannelAdapter {
         settled = true;
         resolve(ok);
       };
-      const t = setTimeout(() => finish(false), 20_000);
+      const t = setTimeout(() => finish(false), HA_WS_AUTH_TIMEOUT_MS);
       this.authSettle = ok => {
         clearTimeout(t);
         finish(ok);
@@ -125,7 +126,7 @@ export class HomeAssistantChannel implements ChannelAdapter {
         this.ws = null;
         this.authSettle?.(false);
         if (this.wsSessionReady && !this.closed) {
-          this.reconnectTimer = setTimeout(() => this.openSocket(), 5000);
+          this.reconnectTimer = setTimeout(() => this.openSocket(), HA_WS_RECONNECT_DELAY_MS);
         }
       };
       const onError = (e: unknown) => this.logger?.error?.(`homeassistant: ws error: ${e}`);

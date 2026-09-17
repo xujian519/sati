@@ -1,4 +1,5 @@
 import { logger } from "../utils/consoleLogger.js";
+import { SERVER_TIMEOUTS } from "../utils/timeouts.js";
 import fs from "fs";
 import fsPromises from "fs/promises";
 import path from "path";
@@ -37,7 +38,7 @@ export function suppressNextWatchEvent() {
   suppressCount += 1;
   setTimeout(() => {
     suppressCount = Math.max(0, suppressCount - 1);
-  }, 1500);
+  }, SERVER_TIMEOUTS.CONFIG_WATCH_SUPPRESS_WINDOW_MS);
 }
 
 async function handleChange(configPath) {
@@ -155,7 +156,7 @@ export async function startSatiConfigWatcher({ onEvent } = {}) {
       debounceTimer = setTimeout(() => {
         debounceTimer = null;
         void handleChange(configPath);
-      }, 250);
+      }, SERVER_TIMEOUTS.CONFIG_WATCH_DEBOUNCE_MS);
     });
     watcher.on("error", error => {
       logger.warn("[sati-config-watcher] watch error:", error?.message || error);

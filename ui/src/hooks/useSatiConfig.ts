@@ -10,6 +10,7 @@ import {
 } from "react";
 import { authenticatedFetch } from "../utils/api";
 import { useWebSocket, type WsMessage } from "../contexts/WebSocketContext";
+import { UI_TIMEOUTS } from "../constants/timeouts";
 
 type ConfigValidation = {
   valid: boolean;
@@ -153,7 +154,7 @@ function useSatiConfigState() {
           // Validation is advisory for the editor — save still goes to PUT.
         }
       })();
-    }, 400);
+    }, UI_TIMEOUTS.CONFIG_VALIDATION_DEBOUNCE_MS);
   }, []);
 
   const updateRaw = useCallback(
