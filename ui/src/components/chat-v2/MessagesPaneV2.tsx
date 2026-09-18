@@ -1,7 +1,7 @@
 import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Dispatch, RefObject, SetStateAction } from "react";
 import { useTranslation } from "react-i18next";
-import { XCircle, GitBranch } from "lucide-react";
+import { GitBranch } from "lucide-react";
 import { recordUiDiagnostic, reloadUi } from "../../lib/uiDiagnostics";
 import { UI_TIMEOUTS } from "../../constants/timeouts";
 import type {
@@ -22,6 +22,7 @@ import {
 } from "../../types/app";
 import { getIntrinsicMessageKey } from "../chat/utils/messageKeys";
 import { estimateMessageItemHeight, MeasuredMessageItem, useMessageVirtualization } from "./messageVirtualization";
+import { MessagesPanePlaceholder, resolveMessagesPanePlaceholder } from "./MessagesPanePlaceholder";
 import MessageRowV2 from "./MessageRowV2";
 import SubagentDetailModal from "./SubagentDetailModal";
 import ChatHistorySearchBar from "./ChatHistorySearchBar";
@@ -253,12 +254,21 @@ function MessagesPaneV2({
     t("emptyChat.prompts.summary", { defaultValue: "Summarize recent changes" }),
     t("emptyChat.prompts.review", { defaultValue: "Review the most recent file I touched" }),
   ];
-
   const isEmpty = !isLoadingSessionMessages && chatMessages.length === 0;
   const hasSessionLoadError = Boolean(!isLoadingSessionMessages && sessionLoadError && chatMessages.length === 0);
   const isNewConversationEmpty = isEmpty && !selectedSession;
   const isExistingConversationEmpty = isEmpty && Boolean(selectedSession) && !hasSessionLoadError;
   const sessionIsReadOnly = isReadOnlySession(selectedSession);
+
+  const panePlaceholderKind = resolveMessagesPanePlaceholder({
+    hasSessionLoadError,
+    isLoadingSessionMessages,
+    messageCount: chatMessages.length,
+    isNewConversationEmpty,
+    isExistingConversationEmpty,
+    isForkedSession: isForkedChatSession(selectedSession),
+  });
+
   const liveActivities = useMemo(() => activityMessages.filter(message => message.isAgentActivity), [activityMessages]);
   const subagentActivities = useMemo(() => liveActivities.filter(isSubagentActivity), [liveActivities]);
   const nonSubagentLiveActivities = useMemo(
@@ -844,92 +854,18 @@ function MessagesPaneV2({
         onTouchMove={onTouchMove}
         className="h-full overflow-x-hidden overflow-y-auto bg-white dark:bg-neutral-950"
       >
-        {hasSessionLoadError ? (
-          <div className="mx-auto flex h-full max-w-[720px] flex-col items-center justify-center gap-3 px-6 py-10 text-center">
-            <XCircle className="h-5 w-5 text-amber-600 dark:text-amber-400" strokeWidth={1.75} />
-            <div className="text-[15px] font-medium text-neutral-900 dark:text-neutral-100">
-              {t("session.loadFailedTitle", { defaultValue: "Could not load this conversation" })}
-            </div>
-            <div className="max-w-[520px] text-[13px] leading-5 text-neutral-500 dark:text-neutral-400">
-              {sessionLoadError}
-            </div>
-            {onRetrySessionLoad ? (
-              <button
-                type="button"
-                onClick={onRetrySessionLoad}
-                className="inline-flex h-8 items-center rounded-md border border-neutral-200 px-3 text-[13px] font-medium text-neutral-700 transition hover:bg-neutral-50 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
-              >
-                {t("session.retryLoad", { defaultValue: "Retry" })}
-              </button>
-            ) : null}
-          </div>
-        ) : isLoadingSessionMessages && chatMessages.length === 0 ? (
-          <div className="mx-auto flex h-full max-w-[720px] items-center justify-center px-6 py-10 text-[13px] text-neutral-500 dark:text-neutral-400">
-            <div className="flex items-center gap-2">
-              <div className="h-3.5 w-3.5 animate-spin rounded-full border-b-2 border-neutral-400" />
-              <span>{t("loading", { defaultValue: "Loading..." })}</span>
-            </div>
-          </div>
-        ) : isNewConversationEmpty ? (
-          <div className="mx-auto flex h-full max-w-[720px] flex-col items-center justify-center gap-4 px-6 py-10 text-center">
-            <div className="text-[15px] font-medium text-neutral-900 dark:text-neutral-100">
-              {selectedProject
-                ? t("emptyChat.title", { defaultValue: "Start a new conversation" })
-                : t("emptyChat.noProject", { defaultValue: "Pick a project from the sidebar" })}
-            </div>
-            {selectedProject ? (
-              <div className="flex flex-col gap-1.5">
-                {suggestedPrompts.map(prompt => (
-                  <button
-                    key={prompt}
-                    type="button"
-                    onClick={() => setInput(prompt)}
-                    className="rounded-lg border border-neutral-200 px-3 py-1.5 text-left text-[13px] text-neutral-700 transition hover:bg-neutral-50 dark:border-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-900"
-                  >
-                    {prompt}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-          </div>
-        ) : isExistingConversationEmpty && isForkedChatSession(selectedSession) ? (
-          <div className="mx-auto flex h-full max-w-[720px] flex-col items-center justify-center gap-3 px-6 py-10 text-center">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-neutral-100 dark:bg-neutral-800">
-              <GitBranch className="h-5 w-5 text-neutral-500 dark:text-neutral-400" strokeWidth={2} />
-            </div>
-            <div className="text-[15px] font-medium text-neutral-900 dark:text-neutral-100">
-              {t("fork.emptyTitle", { defaultValue: "New branch ready" })}
-            </div>
-            <div className="max-w-[520px] text-[13px] leading-5 text-neutral-500 dark:text-neutral-400">
-              {t("fork.emptyDescription", {
-                parent: forkParentSessionTitle || selectedSession?.parentSessionId || "",
-                defaultValue:
-                  "This branch starts from the beginning of the original conversation. The forked prompt is waiting in the composer — edit it and send to continue here.",
-              })}
-            </div>
-          </div>
-        ) : isExistingConversationEmpty ? (
-          <div className="mx-auto flex h-full max-w-[720px] flex-col items-center justify-center gap-2 px-6 py-10 text-center">
-            <div className="text-[15px] font-medium text-neutral-900 dark:text-neutral-100">
-              {sessionIsReadOnly
-                ? t("emptyChat.readonlyTranscriptTitle", {
-                    defaultValue: "No displayable messages in this read-only transcript",
-                  })
-                : t("emptyChat.emptySessionTitle", {
-                    defaultValue: "No displayable messages in this conversation",
-                  })}
-            </div>
-            <div className="max-w-[520px] text-[13px] leading-5 text-neutral-500 dark:text-neutral-400">
-              {sessionIsReadOnly
-                ? t("emptyChat.readonlyTranscriptDescription", {
-                    defaultValue: "This read-only transcript only contains records the chat view cannot display.",
-                  })
-                : t("emptyChat.emptySessionDescription", {
-                    defaultValue:
-                      "This conversation exists, but it does not contain messages that can be rendered here.",
-                  })}
-            </div>
-          </div>
+        {panePlaceholderKind ? (
+          <MessagesPanePlaceholder
+            kind={panePlaceholderKind}
+            sessionLoadError={sessionLoadError}
+            onRetrySessionLoad={onRetrySessionLoad}
+            selectedProject={selectedProject}
+            suggestedPrompts={suggestedPrompts}
+            setInput={setInput}
+            selectedSession={selectedSession}
+            forkParentSessionTitle={forkParentSessionTitle}
+            sessionIsReadOnly={sessionIsReadOnly}
+          />
         ) : (
           <div
             className="mx-auto max-w-[860px] px-6 py-10"
