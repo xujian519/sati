@@ -18,6 +18,7 @@ import { Field } from "../shared/Field";
 import { ScopeSelector } from "../shared/ScopeSelector";
 import { formatBytes } from "../shared/format";
 import type { NewModalCreated, Skill } from "../shared/types";
+import { BatchImportPanel } from "./BatchImportPanel";
 import { parseFrontmatterFields, stripRootPrefix } from "./frontmatter";
 
 /**
@@ -107,7 +108,6 @@ export function ImportFromFolder({
   useEffect(() => {
     if (!projectAvailable && scope === "project") setScope("user");
   }, [projectAvailable, scope]);
-  const skillCandidates = batchCandidates?.filter(c => c.hasSkillMd) ?? [];
   const selectedCount = selectedFolders.size;
 
   // Slug auto-fill: from picked-folder name OR typed-path basename.
@@ -583,186 +583,23 @@ export function ImportFromFolder({
 
         {/* ---- Batch mode: candidate list ---- */}
         {batchMode ? (
-          <div className="mt-3 rounded-md border border-neutral-200 dark:border-neutral-800">
-            {/* Header */}
-            <div className="flex items-center gap-2 border-b border-neutral-200 px-3 py-2 dark:border-neutral-800">
-              <Folder className="h-3.5 w-3.5 shrink-0 text-amber-500" strokeWidth={1.75} />
-              <span className="min-w-0 flex-1 truncate text-[12px] font-medium">{batchParentName}</span>
-              <span className="text-[11px] text-neutral-500 dark:text-neutral-400">
-                {t("skillsTab.foundSkills", {
-                  defaultValue: "Found {{count}} skills in {{total}} subfolders",
-                  count: skillCandidates.length,
-                  total: batchCandidates!.length,
-                })}
-              </span>
-              <button
-                type="button"
-                onClick={clearBatch}
-                disabled={batchImporting}
-                className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-neutral-500 hover:bg-neutral-200 disabled:opacity-40 dark:text-neutral-400 dark:hover:bg-neutral-800"
-              >
-                <X className="h-3 w-3" strokeWidth={1.75} />
-              </button>
-            </div>
-
-            {skillCandidates.length === 0 ? (
-              <div className="px-3 py-4 text-center text-[12px] text-neutral-500 dark:text-neutral-400">
-                {t("skillsTab.noSkillsFound", { defaultValue: "No skills found in this folder." })}
-              </div>
-            ) : (
-              <>
-                {/* Select all */}
-                {!batchDone && (
-                  <div className="border-b border-neutral-100 px-3 py-1.5 dark:border-neutral-900">
-                    <label className="flex cursor-pointer items-center gap-2 text-[12px]">
-                      <input
-                        type="checkbox"
-                        checked={skillCandidates.every(c => selectedFolders.has(c.folderName))}
-                        onChange={handleToggleAll}
-                        disabled={batchImporting}
-                      />
-                      <span className="font-medium">
-                        {t("skillsTab.selectAll", {
-                          defaultValue: "Select All ({{count}})",
-                          count: skillCandidates.length,
-                        })}
-                      </span>
-                    </label>
-                  </div>
-                )}
-
-                {/* Progress header */}
-                {batchImporting && (
-                  <div className="border-b border-neutral-100 px-3 py-1.5 text-[11px] text-neutral-500 dark:border-neutral-900 dark:text-neutral-400">
-                    {t("skillsTab.batchProgress", {
-                      defaultValue: "Importing {{current}}/{{total}}…",
-                      current: Array.from(batchResults.values()).filter(
-                        r => r.status === "success" || r.status === "error",
-                      ).length,
-                      total: selectedCount,
-                    })}
-                  </div>
-                )}
-                {batchDone && (
-                  <div className="border-b border-neutral-100 px-3 py-1.5 text-[11px] font-medium dark:border-neutral-900">
-                    {t("skillsTab.batchComplete", {
-                      defaultValue: "Batch import complete: {{success}} succeeded, {{failed}} failed",
-                      success: Array.from(batchResults.values()).filter(r => r.status === "success").length,
-                      failed: Array.from(batchResults.values()).filter(r => r.status === "error").length,
-                    })}
-                  </div>
-                )}
-
-                {/* Candidate list */}
-                <div className="max-h-[240px] overflow-y-auto">
-                  {batchCandidates!.map(candidate => {
-                    const result = batchResults.get(candidate.folderName);
-                    const isSkill = candidate.hasSkillMd;
-                    const isSelected = selectedFolders.has(candidate.folderName);
-
-                    return (
-                      <div
-                        key={candidate.folderName}
-                        className={cn(
-                          "flex items-start gap-2 border-b border-neutral-50 px-3 py-2 last:border-b-0 dark:border-neutral-900/50",
-                          !isSkill && "opacity-40",
-                        )}
-                      >
-                        {isSkill && !batchDone ? (
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => handleToggleFolder(candidate.folderName)}
-                            disabled={batchImporting}
-                            className="mt-0.5 shrink-0"
-                          />
-                        ) : result ? (
-                          <span className="mt-0.5 shrink-0">
-                            {result.status === "success" && (
-                              <CheckCircle2
-                                className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-500"
-                                strokeWidth={1.75}
-                              />
-                            )}
-                            {result.status === "error" && (
-                              <XCircle className="h-3.5 w-3.5 text-red-600 dark:text-red-500" strokeWidth={1.75} />
-                            )}
-                            {result.status === "importing" && (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin text-neutral-400" strokeWidth={1.75} />
-                            )}
-                            {result.status === "pending" && <div className="h-3.5 w-3.5" />}
-                          </span>
-                        ) : !isSkill ? (
-                          <div className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                        ) : null}
-
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-1.5">
-                            <Folder
-                              className={cn(
-                                "h-3 w-3 shrink-0",
-                                isSkill ? "text-amber-500" : "text-neutral-300 dark:text-neutral-700",
-                              )}
-                              strokeWidth={1.75}
-                            />
-                            <span
-                              className={cn(
-                                "truncate text-[12px]",
-                                isSkill ? "font-medium" : "text-neutral-400 dark:text-neutral-600",
-                              )}
-                            >
-                              {candidate.folderName}
-                            </span>
-                            {!isSkill && (
-                              <span className="shrink-0 text-[11px] text-neutral-400 dark:text-neutral-600">
-                                ({t("skillsTab.noSkillMd", { defaultValue: "No SKILL.md" })})
-                              </span>
-                            )}
-                          </div>
-                          {isSkill && (candidate.name || candidate.description) && (
-                            <div className="mt-0.5 truncate text-[11px] text-neutral-500 dark:text-neutral-400">
-                              {candidate.name && <span className="font-medium">{candidate.name}</span>}
-                              {candidate.name && candidate.description && <span> — </span>}
-                              {candidate.description && <span>{candidate.description}</span>}
-                            </div>
-                          )}
-                          {isSkill && (
-                            <div className="mt-0.5 text-[11px] text-neutral-400 dark:text-neutral-500">
-                              {candidate.fileCount} {t("skillsTab.files", { defaultValue: "files" })} ·{" "}
-                              {formatBytes(candidate.totalSize)}
-                            </div>
-                          )}
-                          {result?.status === "error" && result.error && (
-                            <div className="mt-0.5 truncate text-[11px] text-red-600 dark:text-red-400">
-                              {result.error}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </>
-            )}
-
-            {/* Batch controls */}
-            {skillCandidates.length > 0 && !batchDone && (
-              <div className="border-t border-neutral-200 px-3 py-2 dark:border-neutral-800">
-                <div className="flex items-center justify-between gap-3">
-                  <ScopeSelector scope={scope} onChange={setScope} projectAvailable={projectAvailable} t={t} />
-                  <label className="flex cursor-pointer items-center gap-2 text-[12px]">
-                    <input
-                      type="checkbox"
-                      checked={force}
-                      onChange={e => setForce(e.target.checked)}
-                      disabled={batchImporting}
-                    />
-                    <span>{t("skillsTab.importForce", { defaultValue: "Overwrite if exists" })}</span>
-                  </label>
-                </div>
-              </div>
-            )}
-          </div>
+          <BatchImportPanel
+            candidates={batchCandidates}
+            parentName={batchParentName}
+            selectedFolders={selectedFolders}
+            importing={batchImporting}
+            results={batchResults}
+            done={batchDone}
+            scope={scope}
+            onScopeChange={setScope}
+            projectAvailable={projectAvailable}
+            force={force}
+            onForceChange={setForce}
+            onToggleFolder={handleToggleFolder}
+            onToggleAll={handleToggleAll}
+            onClear={clearBatch}
+            t={t}
+          />
         ) : (
           <>
             {/* ---- Single import mode (existing UI) ---- */}
