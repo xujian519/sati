@@ -18,6 +18,7 @@ import { Field } from "../shared/Field";
 import { ScopeSelector } from "../shared/ScopeSelector";
 import { formatBytes } from "../shared/format";
 import type { NewModalCreated, Skill } from "../shared/types";
+import { parseFrontmatterFields, stripRootPrefix } from "./frontmatter";
 
 /**
  * 从文件夹导入技能：两（三）种输入模式——picked（浏览器给的 File 对象，走 multipart）、
@@ -59,18 +60,6 @@ export type BatchCandidate = {
 export type BatchResultStatus = "pending" | "importing" | "success" | "error";
 
 export type BatchResult = { folderName: string; status: BatchResultStatus; error?: string };
-
-function parseFrontmatterFields(content: string): { name: string | null; description: string | null } {
-  const fmMatch = content.match(/^---\s*\n([\s\S]*?)\n---/);
-  if (!fmMatch) return { name: null, description: null };
-  const fm = fmMatch[1];
-  const nameMatch = fm.match(/^name:\s*(.+)$/m);
-  const descMatch = fm.match(/^description:\s*(.+)$/m);
-  return {
-    name: nameMatch ? nameMatch[1].trim().replace(/^["']|["']$/g, "") : null,
-    description: descMatch ? descMatch[1].trim().replace(/^["']|["']$/g, "") : null,
-  };
-}
 
 export function ImportFromFolder({
   projectAvailable,
@@ -995,8 +984,4 @@ function ValidationPanel({
       </div>
     </div>
   );
-}
-
-function stripRootPrefix(relPath: string, rootName: string): string {
-  return rootName && relPath.startsWith(rootName + "/") ? relPath.slice(rootName.length + 1) : relPath;
 }
