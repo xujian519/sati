@@ -12,13 +12,36 @@ import sys
 import time
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 from urllib.parse import quote
 
 from playwright.sync_api import sync_playwright
 
 
+# 代理取值链：--proxy > PATENT_SEARCH_PROXY > SATI_PROXY > https_proxy/HTTPS_PROXY > http_proxy/HTTP_PROXY。
+# 链上都没有时不显式指定代理，交由浏览器决定（Chromium 默认跟随系统代理设置）。
+PROXY_ENV_KEYS = (
+    "PATENT_SEARCH_PROXY",
+    "SATI_PROXY",
+    "https_proxy",
+    "HTTPS_PROXY",
+    "http_proxy",
+    "HTTP_PROXY",
+)
+
+
+def resolve_proxy(explicit: Optional[str] = None) -> Optional[str]:
+    """Resolve the proxy URL: an explicit --proxy wins, then the env chain, else None."""
+    if explicit:
+        return explicit
+    for key in PROXY_ENV_KEYS:
+        value = os.environ.get(key)
+        if value and value.strip():
+            return value.strip()
+    return None
+
+
 # 默认配置
-DEFAULT_PROXY = "http://127.0.0.1:9981"
 DEFAULT_OUTPUT_DIR = Path(os.getenv('PATENT_SEARCH_OUTPUT', str(Path.home() / 'Documents' / 'Patent-Search')))
 GOOGLE_PATENTS_SEARCH_URL = "https://patents.google.com/?q={query}"
 GOOGLE_PATENTS_DETAIL_URL = "https://patents.google.com/patent/{patent_id}/en"
@@ -27,7 +50,7 @@ GOOGLE_PATENTS_DETAIL_URL = "https://patents.google.com/patent/{patent_id}/en"
 class PatentSearcher:
     """Google Patents 检索器"""
     
-    def __init__(self, proxy: str = DEFAULT_PROXY, headless: bool = True):
+    def __init__(self, proxy: Optional[str] = None, headless: bool = True):
         self.proxy = proxy
         self.headless = headless
         self.browser = None
@@ -318,13 +341,13 @@ def main():
     )
     parser.add_argument(
         '--proxy',
-        default=DEFAULT_PROXY,
-        help=f'代理地址（默认: {DEFAULT_PROXY}）'
+        default=None,
+        help='代理地址（默认: 依次取 PATENT_SEARCH_PROXY / SATI_PROXY / HTTPS_PROXY 等环境变量）'
     )
     parser.add_argument(
         '--no-proxy',
         action='store_true',
-        help='不使用代理'
+        help='不指定代理（忽略环境变量，交由浏览器/系统决定）'
     )
     parser.add_argument(
         '--no-details',
@@ -339,7 +362,7 @@ def main():
     
     args = parser.parse_args()
     
-    proxy = None if args.no_proxy else args.proxy
+    proxy = None if args.no_proxy else resolve_proxy(args.proxy)
     
     # 创建搜索器
     searcher = PatentSearcher(proxy=proxy)
