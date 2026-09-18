@@ -1,59 +1,31 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type {
-  ChangeEvent,
-  ClipboardEvent,
-  Dispatch,
-  FormEvent,
-  KeyboardEvent,
-  MouseEvent,
-  SetStateAction,
-  TouchEvent,
-} from "react";
+import type { Dispatch, FormEvent, KeyboardEvent, MouseEvent, SetStateAction, TouchEvent } from "react";
 import { useDropzone } from "react-dropzone";
-import { logError, logWarn } from "../../../utils/logging";
-import { authenticatedFetch } from "../../../utils/api";
-import { UI_TIMEOUTS } from "../../../constants/timeouts";
-import { isThinkingModeId, thinkingModeToConfig, type ThinkingModeId } from "../constants/thinkingModes";
-import { getEffectiveThinkingMode, type ThinkingModeAvailability } from "../constants/thinkingModeAvailability";
-import { grantSatiToolPermission } from "../utils/chatPermissions";
+import { isThinkingModeId, type ThinkingModeId } from "../constants/thinkingModes";
+import { type ThinkingModeAvailability } from "../constants/thinkingModeAvailability";
 import { getDraftInputStorageKey, safeLocalStorage } from "../utils/chatStorage";
-import {
-  createTemporarySessionId,
-  getNotificationSessionSummary,
-  isTemporarySessionId,
-  startSessionCommand,
-} from "../utils/sessionLauncher";
-import {
-  CONTENT_REFERENCE_ATTACHMENT_KIND,
-  contentReferenceImage,
-  formatContentReferencePromptBlock,
-  normalizeContentReference,
-  type ContentReference,
-} from "../../../types/contentReference";
-import type {
-  ChatAttachment,
-  ChatImage,
-  ChatMessage,
-  PendingApproval,
-  PendingPermissionRequest,
-  PermissionGrantResult,
-  PermissionMode,
-} from "../types/types";
+import { isTemporarySessionId } from "../utils/sessionLauncher";
+import { normalizeContentReference, type ContentReference } from "../../../types/contentReference";
+import type { ChatMessage, PendingApproval, PendingPermissionRequest, PermissionMode } from "../types/types";
 import type { Project, ProjectSession } from "../../../types/app";
 import type { WsMessage } from "../../../contexts/WebSocketContext";
-import { isImeEnterEvent } from "../../../utils/ime";
+import { MAX_ATTACHMENT_SIZE_BYTES, useAttachmentUpload } from "./useAttachmentUpload";
+import { useComposerInput } from "./useComposerInput";
+import { useComposerDraft } from "./useComposerDraft";
+import { useSessionSubmit } from "./useSessionSubmit";
+import { useSessionPermissions } from "./useSessionPermissions";
 import { useFileMentions } from "./useFileMentions";
-import { type SlashCommand, useSlashCommands } from "./useSlashCommands";
+import { useSlashCommands } from "./useSlashCommands";
+import { useSlashCommandExecute } from "./useSlashCommandExecute";
 
 /** 草稿落盘防抖窗口（ms）：击键停止 500ms 后才写 localStorage。 */
-const DRAFT_SAVE_DEBOUNCE_MS = 500;
 
 type PendingViewSession = {
   sessionId: string | null;
   startedAt: number;
 };
 
-interface UseChatComposerStateArgs {
+export interface UseChatComposerStateArgs {
   selectedProject: Project | null;
   selectedSession: ProjectSession | null;
   currentSessionId: string | null;
@@ -97,49 +69,7 @@ interface MentionableFile {
   path: string;
 }
 
-interface CommandExecutionResult {
-  type: "builtin" | "custom";
-  action?: string;
-  /**
-   * SAFETY: 内置命令负载为按 action 分派的异构契约（help/content、model/current+available、
-   * cost/tokenUsage+cost、status/version+uptime、memory/path、rewind/steps、
-   * skillInstall/slug+skillMeta+installPath… 各 action 形状互不相同），且消费处为
-   * handleBuiltInCommand 的真值判断+模板拼接（约 30 处字段读取）。
-   * 收敛为逐 action 判别联合需同时决定各字段缺失时的兜底值，属行为面变更，
-   * 故本卡（C40 保守档）保留 any 并登记，另卡按「action → payload 接口」建模。
-   */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- 见上方 SAFETY 说明：异构 action 负载，另卡建判别联合。
-  data?: any;
-  content?: string;
-  hasBashCommands?: boolean;
-  hasFileIncludes?: boolean;
-  // Set by /api/commands/execute for bundled-skill stubs and on-disk
-  // SKILL.md commands. When passthrough=true, the frontend re-submits the
-  // raw `/<name> <args>` text as user input so the agent's SkillTool runs it.
-  metadata?: {
-    type?: string;
-    passthrough?: boolean;
-    [key: string]: unknown;
-  };
-  command?: string;
-}
-
-const createFakeSubmitEvent = () => {
-  return { preventDefault: () => undefined } as unknown as FormEvent<HTMLFormElement>;
-};
-
-const MAX_ATTACHMENT_SIZE_BYTES = 20 * 1024 * 1024;
-const MAX_ATTACHMENTS = 10;
-export const MAX_ATTACHMENTS_ERROR_KEY = "__max_attachments__";
-
-type UploadedAttachmentFile = {
-  name: string;
-  path: string;
-  size?: number;
-  mimeType?: string;
-};
-
-type QueuedBusySendSnapshot = {
+export type QueuedBusySendSnapshot = {
   input: string;
   attachedImages: File[];
   documentReferences: ContentReference[];
@@ -157,55 +87,6 @@ export function shouldCycleRunModeOnKeyDown(
   },
 ): boolean {
   return event.key === "Tab" && event.shiftKey && !showFileDropdown && !showCommandMenu;
-}
-
-function buildAttachmentPathNote(files: UploadedAttachmentFile[]): string {
-  if (!files.length) {
-    return "";
-  }
-
-  const lines = files.map(file => `- ${file.name}: ${file.path}`);
-  return `\n\n[Files attached by user and available for reading in the project:]\n${lines.join("\n")}`;
-}
-
-/**
- * 读取工具授权设置（`sati-settings`）；损坏时告警并回退全保守默认值。
- * 注意 fallback 有意不含 `projectSortOrder`（存量行为，消费方按缺省容错），
- * 故不标注 `SatiSettings` 返回类型。
- */
-function readToolsSettings() {
-  try {
-    const savedSettings = safeLocalStorage.getItem("sati-settings");
-    if (savedSettings) {
-      return JSON.parse(savedSettings);
-    }
-  } catch (error) {
-    logError("Error loading tools settings:", error);
-  }
-
-  return {
-    allowedTools: [],
-    disallowedTools: [],
-    skipPermissions: false,
-  };
-}
-
-export type AttachmentAddResult = {
-  files: File[];
-  droppedCount: number;
-};
-
-export function addAttachmentFiles(
-  currentFiles: File[],
-  incomingFiles: File[],
-  maxAttachments = MAX_ATTACHMENTS,
-): AttachmentAddResult {
-  const mergedFiles = [...currentFiles, ...incomingFiles];
-
-  return {
-    files: mergedFiles.slice(0, maxAttachments),
-    droppedCount: Math.max(0, mergedFiles.length - maxAttachments),
-  };
 }
 
 export function useChatComposerState({
@@ -253,10 +134,30 @@ export function useChatComposerState({
     }
     return "";
   });
-  const [attachedImages, setAttachedImages] = useState<File[]>([]);
-  const [documentReferences, setDocumentReferences] = useState<ContentReference[]>([]);
-  const [uploadingImages, setUploadingImages] = useState<Map<string, number>>(new Map());
-  const [imageErrors, setImageErrors] = useState<Map<string, string>>(new Map());
+  // 附件层要通知的"忙碌队列快照"同步器定义在附件状态**之后**（它要读附件状态），
+  // 故用 ref 后绑定；转发函数身份稳定，`handleImageFiles` 的依赖因此不再每次附件变化而变。
+  const syncQueuedBusySendSnapshotRef = useRef<((updates?: Partial<QueuedBusySendSnapshot>) => void) | null>(null);
+  const forwardBusySendSnapshot = useCallback(
+    (updates: { attachedImages?: File[]; documentReferences?: ContentReference[] }) => {
+      syncQueuedBusySendSnapshotRef.current?.(updates);
+    },
+    [],
+  );
+
+  const {
+    attachedImages,
+    setAttachedImages,
+    documentReferences,
+    setDocumentReferences,
+    uploadingImages,
+    setUploadingImages,
+    imageErrors,
+    setImageErrors,
+    resetAttachmentState,
+    handleImageFiles,
+    handlePaste,
+  } = useAttachmentUpload({ syncQueuedBusySendSnapshot: forwardBusySendSnapshot });
+  // 展开态留在父级：两条 autosize effect 在输入层 hook 调用**之前**，其依赖数组会在渲染期求值。
   const [isTextareaExpanded, setIsTextareaExpanded] = useState(false);
   const [isBusySendQueued, setIsBusySendQueued] = useState(false);
   const [isBusySendConfirmed, setIsBusySendConfirmed] = useState(false);
@@ -279,7 +180,6 @@ export function useChatComposerState({
   // 协议 1.7：编辑最后一条 user 消息模式——armed 后下一次 submit 改发
   // edit-last-turn 帧（服务端遮蔽旧 turn 后重发新文本），一次性消费。
   const editLastTurnTargetRef = useRef<{ sessionId: string } | null>(null);
-  const pendingSessionGrantResolversRef = useRef(new Map<string, (result: PermissionGrantResult) => void>());
 
   const cancelBusySendQueue = useCallback(() => {
     queuedBusySendRef.current = false;
@@ -296,13 +196,6 @@ export function useChatComposerState({
   }, []);
 
   // 附件/引用状态清理四件套（提交、slash 命令、清空输入共用）。
-  const resetAttachmentState = useCallback(() => {
-    setAttachedImages([]);
-    setDocumentReferences([]);
-    setUploadingImages(new Map());
-    setImageErrors(new Map());
-  }, []);
-
   // 从四个候选来源解析首个「真实」（非临时）会话 id；无则返回 null。
   const resolveConcreteSessionId = useCallback((): string | null => {
     const pendingSessionId = typeof window !== "undefined" ? sessionStorage.getItem("pendingSessionId") : null;
@@ -315,113 +208,9 @@ export function useChatComposerState({
     return candidateSessionIds.find(sessionId => Boolean(sessionId) && !isTemporarySessionId(sessionId)) ?? null;
   }, [currentSessionId, pendingViewSessionRef, selectedSession?.id]);
 
-  // Mid-turn steering（协议 1.6）：把排队中的纯文本改为插话投递——不中断
-  // 当前 turn，引擎在下一次模型调用边界注入。带附件/引用时不提供该动作。
-  const steerBusySendQueue = useCallback(() => {
-    const snapshot = queuedBusySendSnapshotRef.current;
-    const text = snapshot?.input?.trim() ?? "";
-    const hasAttachments =
-      (snapshot?.attachedImages?.length ?? 0) > 0 || (snapshot?.documentReferences?.length ?? 0) > 0;
-    if (!text || hasAttachments) return;
-    const targetSessionId = resolveConcreteSessionId();
-    if (!targetSessionId) return;
-    sendMessage({
-      type: "steer-session",
-      sessionId: targetSessionId,
-      text,
-    });
-    cancelBusySendQueue();
-    applyInputValue("");
-    resetAttachmentState();
-    if (textareaRef.current) {
-      textareaRef.current.style.height = "auto";
-    }
-  }, [applyInputValue, cancelBusySendQueue, resetAttachmentState, resolveConcreteSessionId, sendMessage]);
-
-  // 插话仅支持纯文本：排队快照带附件/引用或输入为空时不显示插话按钮。
-  const canSteerBusySend =
-    isBusySendQueued && input.trim().length > 0 && attachedImages.length === 0 && documentReferences.length === 0;
-
-  // 协议 1.7：进入「编辑最后一条消息」模式——预填 composer，下一次 submit
-  // 由 handleSubmit 拦截改发 edit-last-turn 帧。会话切换时丢弃未提交的编辑模式。
-  const beginEditLastTurn = useCallback(
-    (sessionId: string, content: string) => {
-      if (!sessionId) return;
-      editLastTurnTargetRef.current = { sessionId };
-      applyInputValue(content);
-      setIsUserScrolledUp(false);
-      setTimeout(() => scrollToBottom(), UI_TIMEOUTS.CHAT_SEND_SCROLL_SETTLE_MS);
-      requestAnimationFrame(() => {
-        textareaRef.current?.focus();
-      });
-    },
-    [applyInputValue, scrollToBottom, setIsUserScrolledUp, textareaRef],
-  );
-
   useEffect(() => {
     editLastTurnTargetRef.current = null;
   }, [currentSessionId, selectedSession?.id]);
-
-  // 协议 1.7：重新生成最后一轮——服务端取最后一条 accepted_input 原文，
-  // 遮蔽旧 turn 后续跑新 turn。乐观插入 user 气泡（原文）+ Processing 状态，
-  // 与正常提交的即时反馈保持一致。
-  const regenerateLastTurn = useCallback(
-    (sessionId: string, originalText: string) => {
-      if (!selectedProject || isLoading || !sessionId || !originalText.trim()) return;
-      const projectPath = selectedProject.fullPath || selectedProject.path || "";
-      const toolsSettings = readToolsSettings();
-      const effectiveThinkingMode = getEffectiveThinkingMode(thinkingMode, thinkingModeAvailability);
-      sendMessage({
-        type: "regenerate-last-turn",
-        sessionId,
-        options: {
-          sessionId,
-          projectPath,
-          cwd: projectPath,
-          toolsSettings,
-          runMode,
-          permissionMode,
-          ...(basePermissionMode ? { basePermissionMode } : {}),
-          ...(model ? { model } : {}),
-          thinking: thinkingModeToConfig(effectiveThinkingMode),
-        },
-      });
-      addMessage(
-        {
-          type: "user",
-          content: originalText,
-          timestamp: new Date(),
-        },
-        sessionId,
-      );
-      setIsLoading(true);
-      setCanAbortSession(true);
-      setClaudeStatus({ text: "Processing", tokens: 0, can_interrupt: true });
-      setIsUserScrolledUp(false);
-      setTimeout(() => scrollToBottom(), UI_TIMEOUTS.CHAT_SEND_SCROLL_SETTLE_MS);
-      onSessionActive?.(sessionId);
-      onSessionProcessing?.(sessionId);
-    },
-    [
-      addMessage,
-      basePermissionMode,
-      isLoading,
-      model,
-      onSessionActive,
-      onSessionProcessing,
-      permissionMode,
-      runMode,
-      scrollToBottom,
-      selectedProject,
-      sendMessage,
-      setCanAbortSession,
-      setClaudeStatus,
-      setIsLoading,
-      setIsUserScrolledUp,
-      thinkingMode,
-      thinkingModeAvailability,
-    ],
-  );
 
   const syncQueuedBusySendSnapshot = useCallback(
     (updates: Partial<QueuedBusySendSnapshot> = {}) => {
@@ -437,6 +226,11 @@ export function useChatComposerState({
     },
     [attachedImages, documentReferences],
   );
+
+  // 附件层通过上面的 ref 后绑定到这里（见 useAttachmentUpload 的文件头说明）。
+  useEffect(() => {
+    syncQueuedBusySendSnapshotRef.current = syncQueuedBusySendSnapshot;
+  }, [syncQueuedBusySendSnapshot]);
 
   useEffect(() => {
     const handleAddDocumentReference = (event: Event) => {
@@ -458,38 +252,31 @@ export function useChatComposerState({
     return () => {
       window.removeEventListener("sati:add-chat-reference", handleAddDocumentReference);
     };
-  }, [syncQueuedBusySendSnapshot]);
+    // `setDocumentReferences` 来自附件层 hook（`useState` setter，身份稳定）；列入只为满足 exhaustive-deps。
+  }, [setDocumentReferences, syncQueuedBusySendSnapshot]);
 
-  useEffect(() => {
-    if (!subscribe) {
-      return undefined;
-    }
-    return subscribe(message => {
-      if (message?.type !== "session-permission-grant-result") {
-        return;
-      }
-      const requestId = typeof message.requestId === "string" ? message.requestId : "";
-      if (!requestId) {
-        return;
-      }
-      const resolve = pendingSessionGrantResolversRef.current.get(requestId);
-      if (!resolve) {
-        return;
-      }
-      pendingSessionGrantResolversRef.current.delete(requestId);
-      resolve({ success: message.granted === true });
-    });
-  }, [subscribe]);
-
-  useEffect(() => {
-    // 拷贝 ref 对象（而非当前值），cleanup 始终读取最新 Map，避免未来
-    // ref 被重新赋值时清理到旧实例。
-    const pendingResolversRef = pendingSessionGrantResolversRef;
-    return () => {
-      pendingResolversRef.current.forEach(resolve => resolve({ success: false }));
-      pendingResolversRef.current.clear();
-    };
-  }, []);
+  const {
+    handleAbortSession,
+    handleGrantToolPermission,
+    handleGrantSessionToolPermission,
+    handlePermissionDecision,
+    handleApprovalDecision,
+  } = useSessionPermissions({
+    currentSessionId,
+    selectedSession,
+    canAbortSession,
+    sendMessage,
+    subscribe,
+    pendingViewSessionRef,
+    pendingPermissionRequests,
+    setPendingPermissionRequests,
+    setPendingApprovals,
+    setCanAbortSession,
+    setIsAborting,
+    setClaudeStatus,
+    setSatiStatus,
+    cancelBusySendQueue,
+  });
 
   const activeThinkingSessionId = selectedSession?.id || currentSessionId || null;
   const setThinkingMode = useCallback(
@@ -523,318 +310,20 @@ export function useChatComposerState({
     setThinkingModeState("default");
   }, [activeThinkingSessionId]);
 
-  // One-shot flag set by `handleCustomCommand` when re-submitting passthrough
-  // slash content (e.g. `/projects` for bundled stubs, `/canvas` for skills).
-  // Without this, handleSubmit would see the leading `/`, match the command
-  // again, call executeCommand, get the same passthrough back, and loop —
-  // user-visibly: the input keeps deleting/refilling.
-  const skipSlashDetectionOnceRef = useRef(false);
-
-  const handleBuiltInCommand = useCallback(
-    async (result: CommandExecutionResult) => {
-      const { action, data } = result;
-      switch (action) {
-        case "clear":
-          clearMessages();
-          break;
-
-        case "help":
-          addMessage({
-            type: "assistant",
-            content: data.content,
-            timestamp: Date.now(),
-          });
-          break;
-
-        case "model": {
-          const modelLines = [`**Current Model**: ${data.current.model}`, "", "**Available Models**:"];
-          if (data.available && typeof data.available === "object") {
-            for (const [provider, models] of Object.entries(data.available)) {
-              if (Array.isArray(models) && models.length) {
-                modelLines.push("", `${provider}: ${models.join(", ")}`);
-              }
-            }
-          }
-          addMessage({
-            type: "assistant",
-            content: modelLines.join("\n"),
-            timestamp: Date.now(),
-          });
-          break;
-        }
-
-        case "cost": {
-          const costMessage = `**Token Usage**: ${data.tokenUsage.used.toLocaleString()} / ${data.tokenUsage.total.toLocaleString()} (${data.tokenUsage.percentage}%)\n\n**Estimated Cost**:\n- Input: $${data.cost.input}\n- Output: $${data.cost.output}\n- **Total**: $${data.cost.total}\n\n**Model**: ${data.model}`;
-          addMessage({ type: "assistant", content: costMessage, timestamp: Date.now() });
-          break;
-        }
-
-        case "status": {
-          const statusMessage = `**System Status**\n\n- Version: ${data.version}\n- Uptime: ${data.uptime}\n- Model: ${data.model}\n- Provider: ${data.provider}\n- Node.js: ${data.nodeVersion}\n- Platform: ${data.platform}`;
-          addMessage({ type: "assistant", content: statusMessage, timestamp: Date.now() });
-          break;
-        }
-
-        case "memory":
-          if (data.error) {
-            addMessage({
-              type: "assistant",
-              content: `Warning: ${data.message}`,
-              timestamp: Date.now(),
-            });
-          } else {
-            addMessage({
-              type: "assistant",
-              content: `${data.message}\n\nPath: \`${data.path}\``,
-              timestamp: Date.now(),
-            });
-            if (data.exists && onFileOpen) {
-              onFileOpen(data.path);
-            }
-          }
-          break;
-
-        case "config":
-          onShowSettings?.();
-          break;
-
-        case "rewind":
-          if (data.error) {
-            addMessage({
-              type: "assistant",
-              content: `Warning: ${data.message}`,
-              timestamp: Date.now(),
-            });
-          } else {
-            rewindMessages(data.steps * 2);
-            addMessage({
-              type: "assistant",
-              content: `Rewound ${data.steps} step(s). ${data.message}`,
-              timestamp: Date.now(),
-            });
-          }
-          break;
-
-        case "skillInstall": {
-          if (data.error) {
-            addMessage({
-              type: "assistant",
-              content: `**Skill install failed**\n\n${data.message || data.errorMessage || "Unknown error"}${
-                data.stderr ? `\n\n\`\`\`\n${data.stderr}\n\`\`\`` : ""
-              }`,
-              timestamp: Date.now(),
-            });
-            break;
-          }
-          const lines: string[] = [];
-
-          if (data.needsForce) {
-            lines.push(
-              `⚠️ **\`${data.slug}\` is flagged as suspicious by VirusTotal.** clawhub refused to install without explicit consent.`,
-            );
-            lines.push("");
-            lines.push("Review the skill before retrying. If you trust the source, rerun:");
-            lines.push("");
-            lines.push("```");
-            lines.push(data.retryCommand || `/skill_install ${data.slug} --force`);
-            lines.push("```");
-          } else if (data.installed) {
-            const versionTag = data.skillMeta?.version ? ` v${data.skillMeta.version}` : "";
-            const displayName = data.skillMeta?.name || data.slug;
-            lines.push(
-              `✅ **Installed** \`${displayName}\`${versionTag} (${data.scope === "project" ? "project" : "user"} scope)`,
-            );
-            lines.push(`Path: \`${data.installPath}\``);
-            if (data.skillMeta?.description) {
-              lines.push("");
-              lines.push(data.skillMeta.description);
-            }
-          } else {
-            lines.push(`⚠️ clawhub finished but \`SKILL.md\` was not found at \`${data.installPath}\`.`);
-          }
-
-          if (data.stdout) {
-            lines.push("");
-            lines.push("```");
-            lines.push(data.stdout);
-            lines.push("```");
-          }
-          if (data.stderr) {
-            lines.push("");
-            lines.push("**stderr**");
-            lines.push("```");
-            lines.push(data.stderr);
-            lines.push("```");
-          }
-          if (data.exitCode && data.exitCode !== 0 && !data.needsForce) {
-            lines.push("");
-            lines.push(`Exit code: \`${data.exitCode}\`. ${data.errorMessage || ""}`);
-          }
-          if (data.installed) {
-            lines.push("");
-            lines.push(
-              "_New skill is on disk — open a fresh chat (or `/clear-caches`) to make Sati see it. The UI slash menu picks it up next time you open `/`._",
-            );
-          }
-          addMessage({
-            type: "assistant",
-            content: lines.join("\n"),
-            timestamp: Date.now(),
-          });
-          break;
-        }
-
-        case "switchProject": {
-          // The server validates that an arg was supplied; project lookup
-          // happens here because the client already holds the projects list.
-          // window.switchProject is registered by AppShellV2 and returns
-          // false when no project matches, letting us surface a helpful
-          // "not found" message in chat without leaving the page.
-          if (data.error) {
-            addMessage({
-              type: "assistant",
-              content: data.message,
-              timestamp: Date.now(),
-            });
-            break;
-          }
-          const targetName = String(data.projectName ?? "").trim();
-          const switched =
-            typeof window !== "undefined" && typeof window.switchProject === "function"
-              ? window.switchProject(targetName)
-              : false;
-          addMessage({
-            type: "assistant",
-            content: switched
-              ? `Switched to project: \`${targetName}\``
-              : `No project matched \`${targetName}\`. Try the project's directory name (sidebar tooltip).`,
-            timestamp: Date.now(),
-          });
-          break;
-        }
-
-        default:
-          logWarn("Unknown built-in command action:", action);
-      }
-    },
-    [onFileOpen, onShowSettings, addMessage, clearMessages, rewindMessages],
-  );
-
-  const handleCustomCommand = useCallback(
-    async (result: CommandExecutionResult) => {
-      const { content, hasBashCommands, metadata } = result;
-
-      if (hasBashCommands) {
-        const confirmed = window.confirm(
-          "This command contains bash commands that will be executed. Do you want to proceed?",
-        );
-        if (!confirmed) {
-          addMessage({
-            type: "assistant",
-            content: "Command execution cancelled",
-            timestamp: Date.now(),
-          });
-          return;
-        }
-      }
-
-      const commandContent = content || "";
-      applyInputValue(commandContent);
-
-      // Passthrough commands (bundled-skill stubs, on-disk skills) return their
-      // own slash text as `content`. Suppress the next handleSubmit's slash
-      // re-detection, otherwise it loops: detect /, executeCommand, passthrough,
-      // setInput, submit, detect /, ... See skipSlashDetectionOnceRef.
-      if (metadata && (metadata as { passthrough?: unknown }).passthrough) {
-        skipSlashDetectionOnceRef.current = true;
-      }
-
-      // Defer submit to next tick so the command text is reflected in UI before dispatching.
-      setTimeout(() => {
-        if (handleSubmitRef.current) {
-          handleSubmitRef.current(createFakeSubmitEvent());
-        }
-      }, UI_TIMEOUTS.NEXT_TASK_MS);
-    },
-    [addMessage, applyInputValue],
-  );
-
-  const executeCommand = useCallback(
-    async (command: SlashCommand, rawInput?: string) => {
-      if (!command || !selectedProject) {
-        return;
-      }
-
-      try {
-        const effectiveInput = rawInput ?? input;
-        const rawArgs = effectiveInput.startsWith(command.name)
-          ? effectiveInput.slice(command.name.length).trimStart()
-          : "";
-        const args = rawArgs.trim() ? rawArgs.trim().split(/\s+/) : [];
-
-        const context = {
-          projectPath: selectedProject.fullPath || selectedProject.path,
-          projectName: selectedProject.name,
-          sessionId: currentSessionId,
-          model,
-          tokenUsage: tokenBudget,
-        };
-
-        const response = await authenticatedFetch("/api/commands/execute", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            commandName: command.name,
-            commandPath: command.path,
-            args,
-            rawArgs,
-            rawInput: effectiveInput,
-            context,
-          }),
-        });
-
-        if (!response.ok) {
-          let errorMessage = `Failed to execute command (${response.status})`;
-          try {
-            const errorData = await response.json();
-            errorMessage = errorData?.message || errorData?.error || errorMessage;
-          } catch {
-            // Ignore JSON parse failures and use fallback message.
-          }
-          throw new Error(errorMessage);
-        }
-
-        const result = (await response.json()) as CommandExecutionResult;
-        if (result.type === "builtin") {
-          await handleBuiltInCommand(result);
-          applyInputValue("");
-        } else if (result.type === "custom") {
-          await handleCustomCommand(result);
-        }
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Unknown error";
-        logError("Error executing command:", error);
-        addMessage({
-          type: "assistant",
-          content: `Error executing command: ${message}`,
-          timestamp: Date.now(),
-        });
-      }
-    },
-    [
-      applyInputValue,
-      model,
-      currentSessionId,
-      handleBuiltInCommand,
-      handleCustomCommand,
-      input,
-      selectedProject,
-      addMessage,
-      tokenBudget,
-    ],
-  );
+  const { executeCommand, skipSlashDetectionOnceRef } = useSlashCommandExecute({
+    selectedProject,
+    currentSessionId,
+    model,
+    tokenBudget,
+    input,
+    addMessage,
+    clearMessages,
+    rewindMessages,
+    onFileOpen,
+    onShowSettings,
+    applyInputValue,
+    handleSubmitRef,
+  });
 
   const {
     slashCommands,
@@ -874,98 +363,56 @@ export function useChatComposerState({
     textareaRef,
   });
 
-  const syncInputOverlayScroll = useCallback((target: HTMLTextAreaElement) => {
-    if (!inputHighlightRef.current || !target) {
-      return;
-    }
-    inputHighlightRef.current.scrollTop = target.scrollTop;
-    inputHighlightRef.current.scrollLeft = target.scrollLeft;
-  }, []);
-
-  const handleImageFiles = useCallback(
-    (files: File[]) => {
-      const validFiles = files.filter(file => {
-        try {
-          if (!file || typeof file !== "object") {
-            logWarn("Invalid file object:", file);
-            return false;
-          }
-
-          if (typeof file.size !== "number" || file.size > MAX_ATTACHMENT_SIZE_BYTES) {
-            const fileName = file.name || "Unknown file";
-            setImageErrors(previous => {
-              const next = new Map(previous);
-              next.set(fileName, "File too large (max 20MB)");
-              return next;
-            });
-            return false;
-          }
-
-          return true;
-        } catch (error) {
-          logError("Error validating file:", error, file);
-          return false;
-        }
-      });
-
-      setImageErrors(previous => {
-        if (!previous.has(MAX_ATTACHMENTS_ERROR_KEY)) return previous;
-        const next = new Map(previous);
-        next.delete(MAX_ATTACHMENTS_ERROR_KEY);
-        return next;
-      });
-
-      if (validFiles.length > 0) {
-        setAttachedImages(previous => {
-          const result = addAttachmentFiles(previous, validFiles);
-          if (result.droppedCount > 0) {
-            setImageErrors(previousErrors => {
-              const next = new Map(previousErrors);
-              next.set(
-                MAX_ATTACHMENTS_ERROR_KEY,
-                `Only the first ${MAX_ATTACHMENTS} attachments were added; ${result.droppedCount} file${result.droppedCount === 1 ? "" : "s"} skipped.`,
-              );
-              return next;
-            });
-          }
-          syncQueuedBusySendSnapshot({ attachedImages: result.files });
-          return result.files;
-        });
-      }
-    },
-    [syncQueuedBusySendSnapshot],
-  );
-
-  const handlePaste = useCallback(
-    (event: ClipboardEvent<HTMLTextAreaElement>) => {
-      const items = Array.from(event.clipboardData.items);
-
-      const pastedFiles: File[] = [];
-
-      items.forEach(item => {
-        if (item.kind !== "file") return;
-        const file = item.getAsFile();
-        if (file) {
-          pastedFiles.push(file);
-        }
-      });
-
-      if (pastedFiles.length > 0) {
-        handleImageFiles(pastedFiles);
-        event.preventDefault();
-        return;
-      }
-
-      if (items.length === 0 && event.clipboardData.files.length > 0) {
-        const files = Array.from(event.clipboardData.files);
-        if (files.length > 0) {
-          handleImageFiles(files);
-          event.preventDefault();
-        }
-      }
-    },
-    [handleImageFiles],
-  );
+  const { handleSubmit, steerBusySendQueue, canSteerBusySend, beginEditLastTurn, regenerateLastTurn } =
+    useSessionSubmit({
+      selectedProject,
+      selectedSession,
+      currentSessionId,
+      isLoading,
+      canAbortSession,
+      thinkingMode,
+      pendingNewSessionThinkingModeRef,
+      activeDraftStorageKeyRef,
+      runMode,
+      permissionMode,
+      basePermissionMode,
+      model,
+      thinkingModeAvailability,
+      sendMessage,
+      addMessage,
+      setIsLoading,
+      setCanAbortSession,
+      setIsAborting,
+      setClaudeStatus,
+      setIsUserScrolledUp,
+      onSessionActive,
+      onSessionProcessing,
+      onSessionActivityBump,
+      pendingViewSessionRef,
+      referenceOnlyPrompt,
+      scrollToBottom,
+      executeCommand,
+      skipSlashDetectionOnceRef,
+      commandMenu: { slashCommands, resetCommandMenuState },
+      setIsTextareaExpanded,
+      input,
+      inputValueRef,
+      attachedImages,
+      documentReferences,
+      resetAttachmentState,
+      applyInputValue,
+      resolveConcreteSessionId,
+      cancelBusySendQueue,
+      editLastTurnTargetRef,
+      textareaRef,
+      queuedBusySendRef,
+      queuedBusySendConfirmedRef,
+      queuedBusySendSnapshotRef,
+      isBusySendQueued,
+      setIsBusySendQueued,
+      setIsBusySendConfirmed,
+      handleSubmitRef,
+    });
 
   const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
     maxSize: MAX_ATTACHMENT_SIZE_BYTES,
@@ -975,425 +422,21 @@ export function useChatComposerState({
     noKeyboard: true,
   });
 
-  const handleSubmit = useCallback(
-    async (event: FormEvent<HTMLFormElement> | MouseEvent | TouchEvent | KeyboardEvent<HTMLTextAreaElement>) => {
-      event.preventDefault();
-      const queuedSnapshot = queuedBusySendSnapshotRef.current;
-      const currentInput = queuedSnapshot?.input ?? inputValueRef.current;
-      const submitAttachedImages = queuedSnapshot?.attachedImages ?? attachedImages;
-      const submitDocumentReferences = queuedSnapshot?.documentReferences ?? documentReferences;
-      const hasDocumentReferences = submitDocumentReferences.length > 0;
-      const hasAttachments = submitAttachedImages.length > 0 || hasDocumentReferences;
-      if ((!currentInput.trim() && !hasAttachments) || !selectedProject) {
-        return;
-      }
-
-      if (isLoading && !isBusySendQueued) {
-        queuedBusySendRef.current = true;
-        queuedBusySendConfirmedRef.current = false;
-        queuedBusySendSnapshotRef.current = {
-          input: currentInput,
-          attachedImages: [...attachedImages],
-          documentReferences: [...documentReferences],
-        };
-        setIsBusySendQueued(true);
-        setIsBusySendConfirmed(false);
-        return;
-      }
-
-      if (isLoading && isBusySendQueued) {
-        queuedBusySendSnapshotRef.current = {
-          input: currentInput,
-          attachedImages: submitAttachedImages,
-          documentReferences: submitDocumentReferences,
-        };
-
-        const targetSessionId = resolveConcreteSessionId();
-
-        if (!canAbortSession || !targetSessionId) {
-          return;
-        }
-
-        queuedBusySendSnapshotRef.current = {
-          ...queuedBusySendSnapshotRef.current,
-          forceStart: true,
-        };
-        queuedBusySendConfirmedRef.current = true;
-        setIsBusySendConfirmed(true);
-        sendMessage({
-          type: "abort-session",
-          sessionId: targetSessionId,
-          provider: "sati",
-        });
-        setCanAbortSession(false);
-        setIsAborting(true);
-        return;
-      }
-
-      queuedBusySendRef.current = false;
-      queuedBusySendConfirmedRef.current = false;
-      queuedBusySendSnapshotRef.current = null;
-      setIsBusySendQueued(false);
-      setIsBusySendConfirmed(false);
-
-      // 协议 1.7：编辑模式拦截——改发 edit-last-turn 帧（服务端遮蔽旧 turn
-      // 后同帧续跑新文本），不做 slash 拦截（编辑文本允许以 / 开头按原文发送）。
-      const editLastTurnTarget = editLastTurnTargetRef.current;
-      if (editLastTurnTarget) {
-        const editText = currentInput.trim();
-        if (!editText || !selectedProject) {
-          editLastTurnTargetRef.current = null;
-          return;
-        }
-        const projectPath = selectedProject.fullPath || selectedProject.path || "";
-        const toolsSettings = readToolsSettings();
-        const effectiveThinkingMode = getEffectiveThinkingMode(thinkingMode, thinkingModeAvailability);
-        sendMessage({
-          type: "edit-last-turn",
-          sessionId: editLastTurnTarget.sessionId,
-          text: editText,
-          options: {
-            sessionId: editLastTurnTarget.sessionId,
-            projectPath,
-            cwd: projectPath,
-            toolsSettings,
-            runMode,
-            permissionMode,
-            ...(basePermissionMode ? { basePermissionMode } : {}),
-            ...(model ? { model } : {}),
-            thinking: thinkingModeToConfig(effectiveThinkingMode),
-          },
-        });
-        editLastTurnTargetRef.current = null;
-        addMessage(
-          {
-            type: "user",
-            content: editText,
-            timestamp: new Date(),
-          },
-          editLastTurnTarget.sessionId,
-        );
-        setIsLoading(true);
-        setCanAbortSession(true);
-        setClaudeStatus({ text: "Processing", tokens: 0, can_interrupt: true });
-        setIsUserScrolledUp(false);
-        setTimeout(() => scrollToBottom(), UI_TIMEOUTS.CHAT_SEND_SCROLL_SETTLE_MS);
-        onSessionActive?.(editLastTurnTarget.sessionId);
-        onSessionProcessing?.(editLastTurnTarget.sessionId);
-        applyInputValue("");
-        resetAttachmentState();
-        resetCommandMenuState();
-        setIsTextareaExpanded(false);
-        if (textareaRef.current) {
-          textareaRef.current.style.height = "auto";
-        }
-        return;
-      }
-
-      // Intercept slash commands: if input starts with /commandName, execute as command with args.
-      // Skip when handleCustomCommand just pushed a passthrough back into the
-      // input box — we already executed it once and want this submit to flow
-      // through as a normal user message.
-      const trimmedInput = currentInput.trim();
-      if (skipSlashDetectionOnceRef.current) {
-        skipSlashDetectionOnceRef.current = false;
-      } else if (trimmedInput.startsWith("/")) {
-        const commandName = trimmedInput.match(/^(\S+)/)?.[1] ?? trimmedInput;
-        const matchedCommand = slashCommands.find((cmd: SlashCommand) => cmd.name === commandName);
-        if (matchedCommand) {
-          executeCommand(matchedCommand, trimmedInput);
-          applyInputValue("");
-          resetAttachmentState();
-          resetCommandMenuState();
-          setIsTextareaExpanded(false);
-          if (textareaRef.current) {
-            textareaRef.current.style.height = "auto";
-          }
-          return;
-        }
-      }
-
-      const userVisibleInput =
-        currentInput.trim() || (hasDocumentReferences ? referenceOnlyPrompt : "Please review the attached file(s).");
-      let messageContent = userVisibleInput;
-
-      // Pin the target session before any await so attachment upload cannot
-      // race with a sidebar session switch and leak the optimistic bubble.
-      const pendingSessionIdAtSubmit = pendingViewSessionRef.current?.sessionId ?? null;
-      const canResumeCurrentSession =
-        Boolean(currentSessionId) && (Boolean(selectedSession?.id) || pendingSessionIdAtSubmit === currentSessionId);
-      const submitTargetSessionId = selectedSession?.id || (canResumeCurrentSession ? currentSessionId : null);
-      const submitSelectedSession = selectedSession;
-      if (!submitTargetSessionId || isTemporarySessionId(submitTargetSessionId)) {
-        pendingNewSessionThinkingModeRef.current = thinkingMode;
-      }
-
-      // Optimistic sidebar refresh — fire BEFORE the attachment upload so
-      // the sidebar reorders/spawns the row the instant the user clicks
-      // send, not after the network round-trip. We resolve a stable
-      // session id here (real id when resuming; otherwise a temporary
-      // `new-session-*` placeholder that will be replaced by
-      // `preserveLoadedSessions` once the server's `projects_updated`
-      // arrives with the real id).
-      const optimisticSessionId = submitTargetSessionId || createTemporarySessionId();
-      if (selectedProject?.name) {
-        onSessionActivityBump?.(selectedProject.name, optimisticSessionId, userVisibleInput);
-      }
-
-      let uploadedImages: unknown[] = [];
-      let uploadedFiles: UploadedAttachmentFile[] = [];
-      if (submitAttachedImages.length > 0) {
-        const formData = new FormData();
-        submitAttachedImages.forEach(file => {
-          formData.append("attachments", file);
-        });
-
-        try {
-          const response = await authenticatedFetch(
-            `/api/projects/${encodeURIComponent(selectedProject.name)}/upload-attachments`,
-            {
-              method: "POST",
-              headers: {},
-              body: formData,
-            },
-          );
-
-          if (!response.ok) {
-            throw new Error("Failed to upload attachments");
-          }
-
-          const result = await response.json();
-          uploadedImages = Array.isArray(result.images) ? result.images : [];
-          uploadedFiles = Array.isArray(result.files) ? result.files : [];
-        } catch (error) {
-          const message = error instanceof Error ? error.message : "Unknown error";
-          logError("Attachment upload failed:", error);
-          addMessage(
-            {
-              type: "error",
-              content: `Failed to upload attachments: ${message}`,
-              timestamp: new Date(),
-            },
-            submitTargetSessionId,
-          );
-          return;
-        }
-      }
-
-      const referenceImages = submitDocumentReferences
-        .map(contentReferenceImage)
-        .filter((image): image is NonNullable<typeof image> => Boolean(image));
-      uploadedImages = [...uploadedImages, ...referenceImages];
-      const documentReferenceAttachments = submitDocumentReferences.map(contentReferenceToAttachment);
-      messageContent = `${messageContent}${buildAttachmentPathNote(uploadedFiles)}${formatContentReferencePromptBlock(submitDocumentReferences)}`;
-
-      const effectiveSessionId = submitTargetSessionId;
-      const sessionToActivate = effectiveSessionId || optimisticSessionId;
-
-      const userMessage: ChatMessage = {
-        type: "user",
-        content: userVisibleInput,
-        images: uploadedImages as ChatImage[],
-        attachments: [...uploadedFiles, ...documentReferenceAttachments],
-        timestamp: new Date(),
-      };
-
-      addMessage(userMessage, submitTargetSessionId);
-      setIsLoading(true); // Processing banner starts
-      setCanAbortSession(true);
-      setClaudeStatus({
-        text: "Processing",
-        tokens: 0,
-        can_interrupt: true,
-      });
-
-      setIsUserScrolledUp(false);
-      setTimeout(() => scrollToBottom(), UI_TIMEOUTS.CHAT_SEND_SCROLL_SETTLE_MS);
-
-      if (!effectiveSessionId && !submitSelectedSession?.id) {
-        if (typeof window !== "undefined") {
-          // Reset stale pending IDs from previous interrupted runs before creating a new one.
-          sessionStorage.removeItem("pendingSessionId");
-        }
-        pendingViewSessionRef.current = { sessionId: null, startedAt: Date.now() };
-      }
-      onSessionActive?.(sessionToActivate);
-      if (effectiveSessionId && !isTemporarySessionId(effectiveSessionId)) {
-        onSessionProcessing?.(effectiveSessionId);
-      }
-
-      // Sati-only: a single localStorage entry (`sati-settings`)
-      // tracks tool consent + skip-permissions for every chat. The legacy
-      // per-provider keys (`cursor-tools-settings`, `codex-settings`,
-      // `gemini-settings`) are no longer read or written.
-      const toolsSettings = readToolsSettings();
-      const sessionSummary = getNotificationSessionSummary(submitSelectedSession, userVisibleInput);
-      const effectiveThinkingMode = getEffectiveThinkingMode(thinkingMode, thinkingModeAvailability);
-
-      startSessionCommand({
-        sendMessage,
-        selectedProject,
-        command: messageContent,
-        userVisibleInput,
-        sessionId: effectiveSessionId,
-        temporarySessionId: sessionToActivate,
-        toolsSettings,
-        runMode,
-        permissionMode,
-        basePermissionMode,
-        model,
-        thinking: thinkingModeToConfig(effectiveThinkingMode),
-        sessionSummary,
-        images: uploadedImages,
-        attachments: [...uploadedFiles, ...documentReferenceAttachments],
-        forceStart: queuedSnapshot?.forceStart === true,
-      });
-
-      applyInputValue("");
-      resetCommandMenuState();
-      resetAttachmentState();
-      setIsTextareaExpanded(false);
-
-      if (textareaRef.current) {
-        textareaRef.current.style.height = "auto";
-      }
-
-      if (activeDraftStorageKeyRef.current) {
-        safeLocalStorage.removeItem(activeDraftStorageKeyRef.current);
-      }
-    },
-    [
-      applyInputValue,
-      resetAttachmentState,
-      resolveConcreteSessionId,
-      selectedSession,
-      attachedImages,
-      documentReferences,
-      model,
-      currentSessionId,
-      executeCommand,
-      isLoading,
-      isBusySendQueued,
-      canAbortSession,
-      onSessionActive,
-      onSessionActivityBump,
-      onSessionProcessing,
-      pendingViewSessionRef,
-      runMode,
-      permissionMode,
-      basePermissionMode,
-      resetCommandMenuState,
-      scrollToBottom,
-      selectedProject,
-      sendMessage,
-      setCanAbortSession,
-      setIsAborting,
-      addMessage,
-      setClaudeStatus,
-      setIsLoading,
-      setIsUserScrolledUp,
-      slashCommands,
-      thinkingMode,
-      thinkingModeAvailability,
-      referenceOnlyPrompt,
-    ],
-  );
-
-  useEffect(() => {
-    handleSubmitRef.current = handleSubmit;
-  }, [handleSubmit]);
-
   useEffect(() => {
     inputValueRef.current = input;
   }, [input]);
 
-  // 未落盘的草稿（防抖窗口内）：卸载/页面卸载前同步 flush。
-  const pendingDraftRef = useRef<{ key: string; value: string } | null>(null);
-  const flushPendingDraft = () => {
-    const pending = pendingDraftRef.current;
-    if (!pending) return;
-    pendingDraftRef.current = null;
-    safeLocalStorage.setItem(pending.key, pending.value);
-  };
-
-  useEffect(() => {
-    if (!isLoading) {
-      if (queuedBusySendRef.current && handleSubmitRef.current) {
-        handleSubmitRef.current(createFakeSubmitEvent());
-      } else {
-        queuedBusySendRef.current = false;
-        queuedBusySendConfirmedRef.current = false;
-        queuedBusySendSnapshotRef.current = null;
-        setIsBusySendQueued(false);
-        setIsBusySendConfirmed(false);
-      }
-    }
-  }, [isLoading]);
-
-  // 草稿防抖保存：连续击键不落盘（localStorage.setItem 是同步主线程 I/O），
-  // 停顿 DRAFT_SAVE_DEBOUNCE_MS 后写一次。cleanup 只清 timer 不 flush——每次
-  // input 变化（防抖重置）都会跑 cleanup，flush 会把上一版击键立即落盘、
-  // 击穿防抖（回到每击键同步写盘）；flush 只保留给防抖届满（timer 回调）、
-  // 真实卸载与页面卸载（下方两个 effect）。空输入同步删除（低频路径）。
-  useEffect(() => {
-    const key = activeDraftStorageKeyRef.current;
-    if (!key) return;
-    if (input === "") {
-      pendingDraftRef.current = null;
-      safeLocalStorage.removeItem(key);
-      return;
-    }
-    pendingDraftRef.current = { key, value: input };
-    const timer = setTimeout(() => {
-      pendingDraftRef.current = null;
-      safeLocalStorage.setItem(key, input);
-    }, DRAFT_SAVE_DEBOUNCE_MS);
-    return () => clearTimeout(timer);
-  }, [input]);
-
-  // 组件真实卸载（路由切换/关闭）时 flush 未落盘草稿——empty-deps effect 的
-  // cleanup 只在卸载执行，防抖 effect 的依赖重跑不会触发它。
-  useEffect(() => flushPendingDraft, []);
-
-  // 页面卸载（刷新/关闭）前 flush 未落盘草稿——整页关闭不触发组件卸载 cleanup，
-  // 需 beforeunload 兜底。移动端与 bfcache 走 pagehide/visibilitychange（上游 #568）；
-  // sati:flush-drafts 供「重新加载界面」按钮在 reload 前主动落盘（见 lib/uiDiagnostics）。
-  useEffect(() => {
-    const onHidden = () => {
-      if (document.visibilityState === "hidden") flushPendingDraft();
-    };
-    window.addEventListener("beforeunload", flushPendingDraft);
-    window.addEventListener("pagehide", flushPendingDraft);
-    window.addEventListener("sati:flush-drafts", flushPendingDraft);
-    document.addEventListener("visibilitychange", onHidden);
-    return () => {
-      window.removeEventListener("beforeunload", flushPendingDraft);
-      window.removeEventListener("pagehide", flushPendingDraft);
-      window.removeEventListener("sati:flush-drafts", flushPendingDraft);
-      document.removeEventListener("visibilitychange", onHidden);
-    };
-  }, []);
-
-  useEffect(() => {
-    const previousKey = activeDraftStorageKeyRef.current;
-    const previousInput = inputValueRef.current;
-    if (previousKey && previousKey !== draftStorageKey) {
-      if (previousInput !== "") safeLocalStorage.setItem(previousKey, previousInput);
-      else safeLocalStorage.removeItem(previousKey);
-    }
-
-    activeDraftStorageKeyRef.current = draftStorageKey;
-    const savedInput = draftStorageKey ? safeLocalStorage.getItem(draftStorageKey) || "" : "";
-    setDocumentReferences([]);
-    setAttachedImages([]);
-    setUploadingImages(new Map());
-    setImageErrors(new Map());
-    setInput(previous => {
-      const next = previous === savedInput ? previous : savedInput;
-      inputValueRef.current = next;
-      return next;
-    });
-  }, [draftStorageKey]);
+  useComposerDraft({
+    draftStorageKey,
+    activeDraftStorageKeyRef,
+    input,
+    inputValueRef,
+    setInput,
+    setAttachedImages,
+    setDocumentReferences,
+    setUploadingImages,
+    setImageErrors,
+  });
 
   useEffect(() => {
     if (!textareaRef.current) {
@@ -1415,336 +458,33 @@ export function useChatComposerState({
     setIsTextareaExpanded(false);
   }, [input]);
 
-  const handleInputChange = useCallback(
-    (event: ChangeEvent<HTMLTextAreaElement>) => {
-      const newValue = event.target.value;
-      const cursorPos = event.target.selectionStart;
-
-      applyInputValue(newValue);
-      syncQueuedBusySendSnapshot({ input: newValue });
-      setCursorPosition(cursorPos);
-
-      if (!newValue.trim()) {
-        event.target.style.height = "auto";
-        setIsTextareaExpanded(false);
-        resetCommandMenuState();
-        return;
-      }
-
-      handleCommandInputChange(newValue, cursorPos);
-    },
-    [applyInputValue, handleCommandInputChange, resetCommandMenuState, setCursorPosition, syncQueuedBusySendSnapshot],
-  );
-
-  const insertAtCursor = useCallback(
-    (char: string) => {
-      const textarea = textareaRef.current;
-      const current = inputValueRef.current ?? input;
-      const selectionStart = textarea?.selectionStart ?? current.length;
-      const selectionEnd = textarea?.selectionEnd ?? selectionStart;
-      const nextValue = `${current.slice(0, selectionStart)}${char}${current.slice(selectionEnd)}`;
-      const nextCursor = selectionStart + char.length;
-
-      applyInputValue(nextValue);
-      syncQueuedBusySendSnapshot({ input: nextValue });
-      setCursorPosition(nextCursor);
-
-      if (char === "/") {
-        handleCommandInputChange(nextValue, nextCursor);
-      }
-
-      requestAnimationFrame(() => {
-        const node = textareaRef.current;
-        if (!node) return;
-        if (!node.matches(":focus")) {
-          node.focus();
-        }
-        try {
-          node.setSelectionRange(nextCursor, nextCursor);
-        } catch {
-          // ignore: textarea may have been unmounted between frames
-        }
-      });
-    },
-    [applyInputValue, handleCommandInputChange, input, setCursorPosition, syncQueuedBusySendSnapshot, textareaRef],
-  );
-
-  const handleKeyDown = useCallback(
-    (event: KeyboardEvent<HTMLTextAreaElement>) => {
-      if (isImeEnterEvent(event)) {
-        return;
-      }
-
-      if (handleCommandMenuKeyDown(event)) {
-        return;
-      }
-
-      if (handleFileMentionsKeyDown(event)) {
-        return;
-      }
-
-      if (shouldCycleRunModeOnKeyDown(event, { showFileDropdown, showCommandMenu })) {
-        event.preventDefault();
-        cycleRunMode();
-        return;
-      }
-
-      if (event.key === "Enter") {
-        if ((event.ctrlKey || event.metaKey) && !event.shiftKey) {
-          event.preventDefault();
-          handleSubmit(event);
-        } else if (!event.shiftKey && !event.ctrlKey && !event.metaKey && !sendByCtrlEnter) {
-          event.preventDefault();
-          handleSubmit(event);
-        }
-      }
-    },
-    [
-      cycleRunMode,
-      handleCommandMenuKeyDown,
-      handleFileMentionsKeyDown,
-      handleSubmit,
-      sendByCtrlEnter,
-      showCommandMenu,
-      showFileDropdown,
-    ],
-  );
-
-  const handleTextareaClick = useCallback(
-    (event: MouseEvent<HTMLTextAreaElement>) => {
-      setCursorPosition(event.currentTarget.selectionStart);
-    },
-    [setCursorPosition],
-  );
-
-  const handleTextareaInput = useCallback(
-    (event: FormEvent<HTMLTextAreaElement>) => {
-      const target = event.currentTarget;
-      target.style.height = "auto";
-      target.style.height = `${target.scrollHeight}px`;
-      setCursorPosition(target.selectionStart);
-      syncInputOverlayScroll(target);
-
-      const lineHeight = parseInt(window.getComputedStyle(target).lineHeight);
-      setIsTextareaExpanded(target.scrollHeight > lineHeight * 2);
-    },
-    [setCursorPosition, syncInputOverlayScroll],
-  );
-
-  const handleClearInput = useCallback(() => {
-    applyInputValue("");
-    setDocumentReferences([]);
-    cancelBusySendQueue();
-    resetCommandMenuState();
-    if (textareaRef.current) {
-      textareaRef.current.style.height = "auto";
-      textareaRef.current.focus();
-    }
-    setIsTextareaExpanded(false);
-  }, [applyInputValue, cancelBusySendQueue, resetCommandMenuState]);
-
-  const handleAbortSession = useCallback(() => {
-    if (!canAbortSession) {
-      return;
-    }
-
-    const pendingSessionId = typeof window !== "undefined" ? sessionStorage.getItem("pendingSessionId") : null;
-
-    const candidateSessionIds = [
-      currentSessionId,
-      pendingViewSessionRef.current?.sessionId || null,
-      pendingSessionId,
-      selectedSession?.id || null,
-    ];
-
-    const targetSessionId =
-      candidateSessionIds.find(sessionId => Boolean(sessionId) && !isTemporarySessionId(sessionId)) || null;
-
-    if (!targetSessionId) {
-      logWarn("Abort requested but no concrete session ID is available yet.");
-      return;
-    }
-
-    cancelBusySendQueue();
-
-    sendMessage({
-      type: "abort-session",
-      sessionId: targetSessionId,
-      provider: "sati",
-    });
-
-    setCanAbortSession(false);
-    setIsAborting(true);
-    setSatiStatus({
-      text: "Stopping",
-      tokens: 0,
-      can_interrupt: false,
-    });
-  }, [
-    canAbortSession,
+  const {
+    isInputFocused,
+    handleInputFocusChange,
+    syncInputOverlayScroll,
+    handleInputChange,
+    insertAtCursor,
+    handleKeyDown,
+    handleTextareaClick,
+    handleTextareaInput,
+    handleClearInput,
+  } = useComposerInput({
+    input,
+    inputValueRef,
+    textareaRef,
+    inputHighlightRef,
+    setIsTextareaExpanded,
+    applyInputValue,
+    syncQueuedBusySendSnapshot,
     cancelBusySendQueue,
-    currentSessionId,
-    pendingViewSessionRef,
-    selectedSession?.id,
-    sendMessage,
-    setCanAbortSession,
-    setIsAborting,
-    setSatiStatus,
-  ]);
-
-  const handleGrantToolPermission = useCallback((suggestion: { entry: string; toolName: string }) => {
-    if (!suggestion) {
-      return { success: false };
-    }
-    // adapter. After the PolitDeck-only migration every provider
-    // routes through the same gateway PermissionContext, so we let
-    // every provider persist its grants to localStorage and have the
-    // sati server pick them up via the gateway PermissionRuntime
-    // on the next turn.
-    return grantSatiToolPermission(suggestion.entry);
-  }, []);
-
-  const handleGrantSessionToolPermission = useCallback(
-    (suggestion: { entry: string; toolName: string }) => {
-      if (!suggestion?.entry) {
-        return { success: false };
-      }
-
-      const sessionId = [selectedSession?.id, currentSessionId, pendingViewSessionRef.current?.sessionId].find(
-        candidate => candidate && !isTemporarySessionId(candidate),
-      );
-
-      if (!sessionId) {
-        return { success: false };
-      }
-
-      const requestId = `session-permission-grant-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      let settled = false;
-      const completion = new Promise<PermissionGrantResult>(resolve => {
-        pendingSessionGrantResolversRef.current.set(requestId, result => {
-          settled = true;
-          resolve(result);
-        });
-        window.setTimeout(() => {
-          if (settled) {
-            return;
-          }
-          pendingSessionGrantResolversRef.current.delete(requestId);
-          resolve({ success: false });
-        }, UI_TIMEOUTS.PERMISSION_GRANT_TIMEOUT_MS);
-      });
-
-      sendMessage({
-        type: "session-permission-grant",
-        requestId,
-        sessionId,
-        entry: suggestion.entry,
-        toolName: suggestion.toolName,
-      });
-      completion.catch(() => undefined);
-      return { success: true, pending: true, completion };
-    },
-    [currentSessionId, pendingViewSessionRef, selectedSession?.id, sendMessage],
-  );
-
-  const handlePermissionDecision = useCallback(
-    (
-      requestIds: string | string[],
-      decision: { allow?: boolean; message?: string; rememberEntry?: string | null; updatedInput?: unknown },
-    ) => {
-      const ids = Array.isArray(requestIds) ? requestIds : [requestIds];
-      const validIds = ids.filter(Boolean);
-      if (validIds.length === 0) {
-        return;
-      }
-
-      validIds.forEach(requestId => {
-        const pending = pendingPermissionRequests.find(r => r.requestId === requestId);
-        if (pending?.isElicitation) {
-          // Elicitation flow (e.g. `ask_user_question`): submit selections
-          // through GatewayElicitationBus, not GatewayPermissionBus.
-          const submitted =
-            (decision?.updatedInput as
-              | {
-                  answers?: Record<string, string | string[]>;
-                  annotations?: Record<string, { preview?: string; notes?: string }>;
-                }
-              | undefined) ?? {};
-          const submittedAnswers = submitted.answers ?? {};
-          const hasAnswers = Object.keys(submittedAnswers).length > 0;
-          const answer =
-            decision?.allow && hasAnswers
-              ? {
-                  type: "answered" as const,
-                  answers: submittedAnswers,
-                  ...(submitted.annotations ? { annotations: submitted.annotations } : {}),
-                }
-              : {
-                  type: "cancelled" as const,
-                  reason: decision?.message ?? (decision?.allow ? "skipped" : "declined"),
-                };
-          sendMessage({
-            type: "elicitation-response",
-            requestId,
-            sessionId: pending?.sessionId,
-            answer,
-          });
-          return;
-        }
-
-        sendMessage({
-          type: "permission-response",
-          requestId,
-          sessionId: pending?.sessionId,
-          allow: Boolean(decision?.allow),
-          updatedInput: decision?.updatedInput,
-          message: decision?.message,
-          rememberEntry: decision?.rememberEntry,
-        });
-      });
-
-      setPendingPermissionRequests(previous => {
-        const next = previous.filter(request => !validIds.includes(request.requestId));
-        if (next.length === 0) {
-          setClaudeStatus(null);
-          setSatiStatus(null);
-        }
-        return next;
-      });
-    },
-    [pendingPermissionRequests, sendMessage, setClaudeStatus, setSatiStatus, setPendingPermissionRequests],
-  );
-
-  /**
-   * 输出门禁 HITL 审批决策：通过（adopted）/ 拒绝（rejected，可带理由）。
-   * 经 /ws 桥 approval-response 转发 gateway.approvalDecide；乐观移除卡片，
-   * 服务端 approval_resolved 广播为兜底。
-   */
-  const handleApprovalDecision = useCallback(
-    (approval: PendingApproval, verdict: "adopted" | "rejected", feedback?: string) => {
-      const sessionId = currentSessionId || selectedSession?.id;
-      if (!sessionId) return;
-      sendMessage({
-        type: "approval-response",
-        sessionId,
-        pendingIndex: approval.pendingIndex,
-        verdict,
-        ...(verdict === "rejected" && feedback ? { feedback } : {}),
-      });
-      setPendingApprovals(prev => prev.filter(a => a.pendingIndex !== approval.pendingIndex));
-    },
-    [currentSessionId, selectedSession?.id, sendMessage, setPendingApprovals],
-  );
-
-  const [isInputFocused, setIsInputFocused] = useState(false);
-
-  const handleInputFocusChange = useCallback(
-    (focused: boolean) => {
-      setIsInputFocused(focused);
-      onInputFocusChange?.(focused);
-    },
-    [onInputFocusChange],
-  );
+    setDocumentReferences,
+    onInputFocusChange,
+    cycleRunMode,
+    handleSubmit,
+    sendByCtrlEnter,
+    commandMenu: { showCommandMenu, resetCommandMenuState, handleCommandInputChange, handleCommandMenuKeyDown },
+    fileMentions: { showFileDropdown, setCursorPosition, handleFileMentionsKeyDown },
+  });
 
   return {
     input,
@@ -1814,24 +554,5 @@ export function useChatComposerState({
     canSteerBusySend,
     beginEditLastTurn,
     regenerateLastTurn,
-  };
-}
-
-function contentReferenceToAttachment(reference: ContentReference): ChatAttachment {
-  return {
-    kind: CONTENT_REFERENCE_ATTACHMENT_KIND,
-    name: reference.source.fileName,
-    path: reference.source.relativePath,
-    fileName: reference.source.fileName,
-    filePath: reference.source.relativePath,
-    contentReference:
-      reference.selectionMode === "region"
-        ? {
-            ...reference,
-            image: { ...reference.image, dataUrl: undefined },
-          }
-        : reference,
-    createdAt: reference.createdAt,
-    mimeType: "application/vnd.sati.content-reference+json",
   };
 }

@@ -10,7 +10,7 @@
 | src TS 文件 / 行数 | 1035 / 173882 |
 | src JS 文件 | 0 |
 | tests 文件 | 564 |
-| ui/src 文件 / 行数 | 482 / 84393 |
+| ui/src 文件 / 行数 | 489 / 85167 |
 | ui/server 文件 / 行数 | 108 / 31670 |
 
 ## 指标口径
@@ -29,7 +29,7 @@
 | 指标 | 总量 | 热点模块 |
 |---|---|---|
 | `any`/`@ts-expect-error`/`@ts-ignore` | 3 | ui/src(3) |
-| `as unknown as`（双重断言） | 28 | ui/src(21) · adapters(2) · tool(2) |
+| `as unknown as`（双重断言） | 29 | ui/src(22) · adapters(2) · tool(2) |
 | 裸 `console.*` | 158 | cli(137) · telemetry(8) · ui/server(5) |
 | 空 `catch {}` | 0 | — |
 | 无参 `catch {`（总计） | 658 | ui/server(151) · ui/src(114) · adapters(70) |
@@ -45,7 +45,6 @@
 
 | 文件 | 函数 | 行 | 类型 |
 |---|---|---|---|
-| `ui/src/components/chat/hooks/useChatComposerState.ts` | `useChatComposerState` | 1608 | function |
 | `ui/src/components/code-editor/view/subcomponents/PdfDocumentPreview.tsx` | `PdfDocumentPreview` | 1064 | function |
 | `ui/src/components/chat-v2/MessagesPaneV2.tsx` | `MessagesPaneV2` | 1023 | function |
 | `ui/src/components/app-shell/SidebarV2.tsx` | `SidebarV2` | 1008 | function |
@@ -65,7 +64,9 @@
 | `ui/src/components/onboarding/view/subcomponents/LlmConfigurationStep.tsx` | `LlmConfigurationStep` | 630 | function |
 | `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` | `(anonymous)` | 622 | arrow |
 | `ui/src/components/main-content/view/MainContent.tsx` | `SplitBody` | 573 | function |
+| `ui/src/components/chat/hooks/useSessionSubmit.ts` | `useSessionSubmit` | 528 | function |
 | `ui/src/components/main-content-v2/CronV2.tsx` | `CronFormView` | 476 | function |
+| `ui/src/components/chat/hooks/useChatComposerState.ts` | `useChatComposerState` | 467 | function |
 | `src/router/execution/executeRouterDecision.ts` | `executeRouterDecision` | 449 | function |
 | `ui/src/components/settings/view/modelPool/components/ProviderCard.tsx` | `ProviderCard` | 447 | function |
 | `ui/src/components/chat-v2/MessageRowV2.tsx` | `MessageRowV2` | 429 | function |
@@ -95,6 +96,7 @@
 | `src/gateway/client/telemetry.ts` | `emitSessionTelemetry` | 333 | function |
 | `ui/src/components/main-content-v2/DashboardV2.tsx` | `DashboardV2` | 332 | function |
 | `ui/src/hooks/useSatiConfig.ts` | `useSatiConfigState` | 332 | function |
+| `ui/src/components/chat/hooks/useSlashCommandExecute.ts` | `useSlashCommandExecute` | 331 | function |
 | `ui/src/components/code-editor/view/CodeEditor.tsx` | `CodeEditor` | 310 | function |
 | `ui/src/components/chat-v2/SubagentDetailMessageFlow.tsx` | `SubagentDetailMessageFlow` | 309 | function |
 | `src/patent/figuregen/check.ts` | `checkFigures` | 306 | function |
@@ -107,7 +109,6 @@
 |---|---|
 | `ui/src/components/main-content-v2/SkillsV2.tsx` | 2526 |
 | `ui/server/sati-bridge.js` | 2347 |
-| `ui/src/components/chat/hooks/useChatComposerState.ts` | 1838 |
 | `src/adapters/channel/wecom/WeComChannel.ts` | 1764 |
 | `ui/src/components/code-editor/view/subcomponents/PdfDocumentPreview.tsx` | 1724 |
 | `src/model/catalog/providers.ts` | 1593 |
@@ -135,6 +136,7 @@
 | `src/always-on/runtime/DiscoveryFire.ts` | 1079 |
 | `src/cli/sati.ts` | 1028 |
 | `src/adapters/channel/protocol/ImLiveReplyController.ts` | 1017 |
+| `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` | 1005 |
 
 ## vendored 子包（单列，不计入上述规模与排名）
 

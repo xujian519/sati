@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, renderHook } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ThinkingModeAvailability } from "../constants/thinkingModeAvailability";
 import { useChatComposerState } from "./useChatComposerState";
@@ -123,6 +123,44 @@ describe("useChatComposerState 草稿防抖", () => {
     act(() => unmount());
     expect(setItemSpy).toHaveBeenCalledTimes(1);
     expect(setItemSpy).toHaveBeenCalledWith("draft_input_p1:s1", "未停顿即切走");
+  });
+
+  it("切会话时把旧草稿落盘、恢复新会话的草稿（#159 N01 缝 4c）", async () => {
+    const props = baseProps();
+    const { result, rerender } = renderHook((p: UseChatComposerStateArgs) => useChatComposerState(p), {
+      initialProps: props,
+    });
+
+    act(() => result.current.setInput("旧会话草稿"));
+    await sleep(DRAFT_SAVE_DEBOUNCE_MS + 200);
+    expect(setItemSpy).toHaveBeenCalledWith("draft_input_p1:s1", "旧会话草稿");
+
+    // 新会话已有一份草稿：切换后应当被恢复
+    localStorage.setItem("draft_input_p1:s2", "新会话草稿");
+    rerender({ ...props, selectedSession: { id: "s2" } as UseChatComposerStateArgs["selectedSession"] });
+
+    await waitFor(() => expect(result.current.input).toBe("新会话草稿"));
+    expect(localStorage.getItem("draft_input_p1:s1")).toBe("旧会话草稿");
+  });
+
+  it("切会话时清空附件与文档引用（#159 N01 缝 4c）", async () => {
+    const props = baseProps();
+    const { result, rerender } = renderHook((p: UseChatComposerStateArgs) => useChatComposerState(p), {
+      initialProps: props,
+    });
+
+    const file = new File([new Uint8Array(1)], "shot.png", { type: "image/png" });
+    const pasteEvent = {
+      clipboardData: { items: [{ kind: "file", getAsFile: () => file }], files: [] },
+      preventDefault: vi.fn(),
+    } as unknown as Parameters<typeof result.current.handlePaste>[0];
+    act(() => result.current.handlePaste(pasteEvent));
+    expect(result.current.attachedImages).toHaveLength(1);
+
+    rerender({ ...props, selectedSession: { id: "s2" } as UseChatComposerStateArgs["selectedSession"] });
+
+    await waitFor(() => expect(result.current.attachedImages).toHaveLength(0));
+    expect(result.current.documentReferences).toHaveLength(0);
   });
 
   it("beforeunload（整页关闭）flush 未落盘草稿", () => {
