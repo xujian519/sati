@@ -284,6 +284,9 @@ export function createBudgetEvaluator(
       reservedOutputTokens: options.reservedOutputTokens,
       usageTokens,
       budgetTokens: snapshot.budgetTokens,
+      // 供应商计数的 input 同样含 system prompt 与工具 schema，固定开销照传，
+      // 展示层才不会因为换了计数口径而丢掉拆分。
+      fixedOverheadTokens: snapshot.fixedOverheadTokens,
       source: snapshot.source,
       exact: snapshot.exact,
       estimatorError: snapshot.estimatorError,

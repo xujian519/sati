@@ -316,6 +316,7 @@ function mapAgentEventForTurn(event: AgentEvent, runId: string): GatewayEvent[] 
           used: event.snapshot.tokens,
           displayUsed: event.snapshot.displayTokens,
           budgetUsed: event.snapshot.budgetTokens,
+          fixedOverheadTokens: event.snapshot.fixedOverheadTokens,
           total: totalContextTokens,
           effectiveTotal: event.snapshot.effectiveContextTokens ?? event.snapshot.maxContextTokens,
           reservedOutputTokens,

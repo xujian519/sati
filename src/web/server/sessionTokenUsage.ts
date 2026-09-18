@@ -103,6 +103,9 @@ function latestContextBudget(entries: AgentTranscriptEntry[]): IndexedTokenUsage
           ? { displayUsed: positiveNumber(detail.displayUsed) }
           : {}),
         ...(positiveNumber(detail.budgetUsed) !== undefined ? { budgetUsed: positiveNumber(detail.budgetUsed) } : {}),
+        ...(positiveNumber(detail.fixedOverheadTokens) !== undefined
+          ? { fixedOverheadTokens: positiveNumber(detail.fixedOverheadTokens) }
+          : {}),
         total,
         effectiveTotal,
         reservedOutputTokens: positiveNumber(detail.reservedOutputTokens) ?? 0,

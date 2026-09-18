@@ -334,6 +334,7 @@ export function mapGatewayEventToFrames(
             used: event.used,
             displayUsed: event.displayUsed,
             budgetUsed: event.budgetUsed,
+            fixedOverheadTokens: event.fixedOverheadTokens,
             total: event.total,
             effectiveTotal: event.effectiveTotal,
             reservedOutputTokens: event.reservedOutputTokens,

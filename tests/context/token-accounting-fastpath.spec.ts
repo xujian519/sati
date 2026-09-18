@@ -200,3 +200,55 @@ test("guardBand：估算落在 ratio 与 ratio-guardBand 之间时走精确计�
   });
   assert.equal(noBandCalls.length, 0, "无 guardBand 时同一窗口走快速通道");
 });
+
+/**
+ * 固定开销拆分（#450 第 5 条）：快照要能回答「已用里有多少是 system prompt +
+ * 工具 schema」。UI 据此把固定开销与对话用量分开显示，避免首轮固定开销被误读成
+ * 对话已用。
+ */
+function requestWithTools(): CanonicalModelRequest {
+  return {
+    provider: "anthropic",
+    model: "claude-test",
+    messages: [{ role: "user", content: [{ type: "text", text: "介绍一下专利侵权赔偿标准。" }] }],
+    systemPrompt: "你是 Sati 专利智能体，回答须引用法条。",
+    tools: [
+      {
+        name: "patent_search",
+        description: "检索专利文献。",
+        inputSchema: { type: "object", properties: { query: { type: "string" } } },
+      },
+    ],
+    stream: false,
+  } as CanonicalModelRequest;
+}
+
+test("快速通道快照带固定开销：system prompt + 工具 schema，且与消息用量相加等于展示用量", async () => {
+  const runtime = new TokenAccountingRuntime(makeOptions({ fetch: makeFetchSpy().fetchImpl }));
+  const request = requestWithTools();
+  const snapshot = await runtime.evaluateRequestBudget(request, {
+    maxContextTokens: 200_000,
+    reservedOutputTokens: 8_192,
+    usePadding: true,
+  });
+
+  // 固定开销 = 同一请求去掉消息后的估算（即 system prompt + 工具 schema）。
+  const overhead = runtime.estimateRequestInput({ ...request, messages: [] }, { usePadding: true });
+  const messages = runtime.estimateMessages(request.messages);
+  assert.ok(overhead > 0);
+  assert.equal(snapshot.fixedOverheadTokens, overhead);
+  assert.equal(snapshot.displayTokens, overhead + messages, "展示用量必须等于固定开销 + 消息用量");
+});
+
+test("provider 精确计数路径同样带固定开销（换计数口径不丢拆分）", async () => {
+  const runtime = new TokenAccountingRuntime(makeOptions({ fetch: makeFetchSpy().fetchImpl }));
+  const snapshot = await runtime.evaluateRequestBudget(requestWithTools(), {
+    maxContextTokens: 10,
+    reservedOutputTokens: 0,
+    usePadding: true,
+  });
+
+  assert.equal(snapshot.source, "provider");
+  assert.equal(snapshot.displayTokens, undefined, "精确计数时展示数字退回 tokens");
+  assert.ok((snapshot.fixedOverheadTokens ?? 0) > 0, "精确计数路径仍须给出固定开销");
+});
