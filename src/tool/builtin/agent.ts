@@ -225,22 +225,12 @@ function buildAgentToolDescription(): string {
   return [
     "Launch a new subagent to handle a focused multi-step task.",
     "",
-    "Use this tool when a bounded piece of work would benefit from an autonomous helper instead of keeping every intermediate step in the parent agent's context.",
-    "",
-    "Provide:",
-    "- `description`: a short 3-5 word label for the task.",
-    "- `prompt`: the full directive for the subagent. Write it like a complete briefing: include the goal, relevant context, constraints, and what good output looks like.",
-    "- `subagent_type` (optional): choose a built-in preset. If omitted, `general-purpose` is used.",
+    "Use this tool when a bounded piece of work would benefit from an autonomous helper instead of keeping every intermediate step in the parent agent's context. Multiple independent agent calls in one assistant message may run concurrently; batch sibling investigations when their scopes do not depend on each other.",
     "",
     "Available built-in subagent types:",
     publicTypes,
     "",
     "The subagent returns one structured report with these sections: `Scope`, `Result`, `Key files`, `Files changed`, and `Issues`.",
-    "",
-    "Runtime behavior:",
-    "- Multiple independent agent calls in one assistant message may run concurrently; batch sibling investigations when their scopes do not depend on each other.",
-    "- Inside the AgentLoop, this runs a real forked subagent with its own scoped tool loop.",
-    "- In stand-alone runtimes and some tests, it falls back to a single model call that preserves the same high-level subagent intent.",
   ].join("\n");
 }
 
