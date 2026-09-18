@@ -46,7 +46,28 @@ import {
 } from "../../../../types/contentReference";
 import type { PdfNavigationMode } from "../../utils/documentPreview";
 import { resolvePdfOutline, type PdfOutlineItem } from "../../utils/pdfOutline";
-import { findPdfSearchMatches, renderPdfSearchHighlights, type PdfSearchMatch } from "../../utils/pdfSearch";
+import { renderPdfSearchHighlights, type PdfSearchMatch } from "../../utils/pdfSearch";
+import {
+  MAX_SCALE,
+  MIN_SCALE,
+  ZOOM_STEP,
+  clamp,
+  getRotatedPageSize,
+  parsePageInput,
+  parsePercentInput,
+  resolveActiveScale,
+  type PageSize,
+  type Rotation,
+  type ZoomMode,
+} from "../../utils/pdfViewport";
+import {
+  buildSurroundingText,
+  getClosestElement,
+  getOccurrenceIndex,
+  getSelectedPageNumbers,
+  getTextLayerText,
+} from "../../utils/pdfTextSelection";
+import { usePdfSearch } from "../../hooks/usePdfSearch";
 import * as pdfjs from "./pdfjs";
 import ContentReferenceMenu from "./ContentReferenceMenu";
 import RegionSelectionOverlay, { type CapturedRegion } from "./RegionSelectionOverlay";
@@ -78,18 +99,12 @@ type PdfSelectionAction = {
   reference: ContentReference;
 };
 
-type PageSize = {
-  width: number;
-  height: number;
-};
-
 type ViewerSize = {
   width: number;
   height: number;
 };
 
-type ZoomMode = "fitPage" | "fitWidth" | "custom";
-type Rotation = 0 | 90 | 180 | 270;
+// `PageSize` / `ZoomMode` / `Rotation` 与缩放、页码解析等纯函数同住 `utils/pdfViewport.ts`。
 type NavigationView = "thumbnails" | "outline";
 
 type PdfViewState = {
@@ -140,10 +155,6 @@ type PdfOutlineTreeProps = {
 
 const PAGE_HORIZONTAL_PADDING = 32;
 const PAGE_VERTICAL_PADDING = 40;
-const MIN_SCALE = 0.1;
-const MAX_SCALE = 4;
-const ZOOM_STEP = 0.25;
-const CONTEXT_RADIUS = 500;
 const PDF_RANGE_CHUNK_SIZE = 256 * 1024;
 const PAGE_RENDER_ROOT_MARGIN = "1200px 0px";
 const THUMBNAIL_RENDER_ROOT_MARGIN = "600px 0px";
@@ -192,113 +203,6 @@ function setupPageCanvasRender(
     viewport,
     transform: outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : undefined,
   });
-}
-
-function normalizeText(value: string): string {
-  return value.replace(/\s+/g, " ").trim();
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
-
-function isQuarterTurn(rotation: Rotation): boolean {
-  return rotation === 90 || rotation === 270;
-}
-
-function resolveActiveScale(
-  zoomMode: ZoomMode,
-  fitScales: { fitWidth: number; fitPage: number },
-  customScale: number,
-): number {
-  if (zoomMode === "fitWidth") return fitScales.fitWidth;
-  if (zoomMode === "fitPage") return fitScales.fitPage;
-  return customScale;
-}
-
-function resolveSearchStatus(
-  t: ReturnType<typeof useTranslation>["t"],
-  searching: boolean,
-  searchCompleted: boolean,
-  results: PdfSearchMatch[],
-  resultIndex: number,
-): string {
-  if (searching) return t("pdfToolbar.searching");
-  if (!searchCompleted) return "";
-  return results.length > 0
-    ? t("pdfToolbar.resultOf", { current: resultIndex + 1, total: results.length })
-    : t("pdfToolbar.noResults");
-}
-
-function getRotatedPageSize(size: PageSize, rotation: Rotation): PageSize {
-  return isQuarterTurn(rotation) ? { width: size.height, height: size.width } : size;
-}
-
-function parsePercentInput(value: string): number | null {
-  const normalized = value.replace("%", "").trim();
-  if (!normalized) return null;
-  const parsed = Number.parseFloat(normalized);
-  if (!Number.isFinite(parsed)) return null;
-  return clamp(parsed / 100, MIN_SCALE, MAX_SCALE);
-}
-
-function parsePageInput(value: string, totalPages: number): number | null {
-  const parsed = Number.parseInt(value.trim(), 10);
-  if (!Number.isFinite(parsed)) return null;
-  return Math.round(clamp(parsed, 1, Math.max(1, totalPages)));
-}
-
-function buildSurroundingText(documentText: string, selectedText: string): string {
-  const normalizedDocument = normalizeText(documentText);
-  const normalizedSelected = normalizeText(selectedText);
-  if (!normalizedDocument || !normalizedSelected) return "";
-
-  const index = normalizedDocument.indexOf(normalizedSelected);
-  if (index < 0) return normalizedSelected;
-
-  const start = Math.max(0, index - CONTEXT_RADIUS);
-  const end = Math.min(normalizedDocument.length, index + normalizedSelected.length + CONTEXT_RADIUS);
-  return normalizedDocument.slice(start, end).trim();
-}
-
-function getOccurrenceIndex(documentText: string, selectedText: string): number | null {
-  const normalizedDocument = normalizeText(documentText);
-  const normalizedSelected = normalizeText(selectedText);
-  if (!normalizedDocument || !normalizedSelected) return null;
-  return normalizedDocument.includes(normalizedSelected) ? 1 : null;
-}
-
-function getSelectedPageNumbers(root: HTMLElement, range: Range): number[] {
-  const pages = Array.from(root.querySelectorAll<HTMLElement>("[data-pdf-page-number]"));
-  return pages
-    .filter(page => {
-      try {
-        return range.intersectsNode(page);
-      } catch {
-        // intersectsNode can throw on detached/odd nodes — treat the page as not selected.
-        return false;
-      }
-    })
-    .map(page => Number.parseInt(page.dataset.pdfPageNumber || "", 10))
-    .filter(pageNumber => Number.isFinite(pageNumber) && pageNumber > 0);
-}
-
-function getTextLayerText(root: HTMLElement, pageNumbers: number[]): string {
-  const pages =
-    pageNumbers.length > 0
-      ? pageNumbers
-          .map(pageNumber => root.querySelector<HTMLElement>(`[data-pdf-page-number="${pageNumber}"]`))
-          .filter((page): page is HTMLElement => Boolean(page))
-      : Array.from(root.querySelectorAll<HTMLElement>("[data-pdf-page-number]"));
-
-  return pages
-    .map(page => page.querySelector<HTMLElement>(".textLayer")?.textContent || "")
-    .filter(Boolean)
-    .join("\n");
-}
-
-function getClosestElement(node: Node): Element | null {
-  return node.nodeType === Node.ELEMENT_NODE ? (node as Element) : node.parentElement;
 }
 
 function renderToolbarIcon(Icon: unknown): ReactNode {
@@ -781,7 +685,6 @@ export default function PdfDocumentPreview({
   const scrollRafRef = useRef<number | null>(null);
   const renderFallbackRafRef = useRef<number | null>(null);
   const selectionActionTimerRef = useRef<number | null>(null);
-  const searchRequestIdRef = useRef(0);
   const viewStateRef = useRef<PdfViewState>({ ...DEFAULT_VIEW_STATE });
   const fileKeyRef = useRef<string | null>(null);
   const pendingRestoreRef = useRef<PdfViewState | null>(null);
@@ -803,14 +706,49 @@ export default function PdfDocumentPreview({
   const [navigationOpen, setNavigationOpen] = useState(navigationMode !== "none");
   const [navigationView, setNavigationView] = useState<NavigationView>("thumbnails");
   const [outlineItems, setOutlineItems] = useState<PdfOutlineItem[]>([]);
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<PdfSearchMatch[]>([]);
-  const [searchResultIndex, setSearchResultIndex] = useState(-1);
-  const [searching, setSearching] = useState(false);
-  const [searchCompleted, setSearchCompleted] = useState(false);
   const navigationRef = useRef<HTMLDivElement | null>(null);
   const fileKey = `${source}:${projectName || ""}:${filePath}:${viewKey}`;
+
+  /** 把某页纳入强制渲染集合——命中搜索或大纲跳页时，目标页可能还没渲染。 */
+  const forceRenderPage = useCallback((pageNumber: number) => {
+    forcedRenderPageNumbersRef.current.add(pageNumber);
+    setForcedRenderPageNumbers(new Set(forcedRenderPageNumbersRef.current));
+  }, []);
+
+  const jumpToPage = useCallback((pageNumber: number) => {
+    const viewer = viewerRef.current;
+    if (!viewer) return;
+    const target = viewer.querySelector<HTMLElement>(`[data-pdf-page-number="${pageNumber}"]`);
+    if (target) {
+      const viewerRect = viewer.getBoundingClientRect();
+      const targetRect = target.getBoundingClientRect();
+      viewer.scrollTo({
+        top: viewer.scrollTop + targetRect.top - viewerRect.top - 12,
+      });
+    }
+    setCurrentPage(pageNumber);
+  }, []);
+
+  // 搜索状态机整体外置（#159 N07）；下面加载 effect 的复位走它的 `reset`。
+  const {
+    isOpen: searchOpen,
+    query: searchQuery,
+    results: searchResults,
+    resultIndex: searchResultIndex,
+    status: searchStatus,
+    open: openSearch,
+    close: closeSearch,
+    updateQuery: updateSearchQuery,
+    run: runSearch,
+    goTo: goToSearchResult,
+    reset: resetSearch,
+  } = usePdfSearch({
+    pdfDocument,
+    pageTextRef,
+    pageTextItemsRef,
+    jumpToPage,
+    forceRenderPage,
+  });
 
   useEffect(() => {
     viewStateRef.current.currentPage = currentPage;
@@ -874,13 +812,7 @@ export default function PdfDocumentPreview({
     setNavigationOpen(navigationMode !== "none");
     setNavigationView("thumbnails");
     setOutlineItems([]);
-    setSearchOpen(false);
-    setSearchQuery("");
-    setSearchResults([]);
-    setSearchResultIndex(-1);
-    setSearching(false);
-    setSearchCompleted(false);
-    searchRequestIdRef.current += 1;
+    resetSearch();
 
     const loadPdf = async () => {
       try {
@@ -948,7 +880,7 @@ export default function PdfDocumentPreview({
       cancelled = true;
       ignorePdfCleanupError(() => loadingTask?.destroy?.());
     };
-  }, [blob, fileKey, navigationMode, url]);
+  }, [blob, fileKey, navigationMode, resetSearch, url]);
 
   const fitScales = useMemo(() => {
     if (!firstPageSize || viewerSize.width <= 0 || viewerSize.height <= 0) {
@@ -1104,93 +1036,6 @@ export default function PdfDocumentPreview({
   const handlePageText = useCallback((pageNumber: number, text: string, textItems: string[]) => {
     pageTextRef.current.set(pageNumber, text);
     pageTextItemsRef.current.set(pageNumber, textItems);
-  }, []);
-
-  const jumpToPage = useCallback((pageNumber: number) => {
-    const viewer = viewerRef.current;
-    if (!viewer) return;
-    const target = viewer.querySelector<HTMLElement>(`[data-pdf-page-number="${pageNumber}"]`);
-    if (target) {
-      const viewerRect = viewer.getBoundingClientRect();
-      const targetRect = target.getBoundingClientRect();
-      viewer.scrollTo({
-        top: viewer.scrollTop + targetRect.top - viewerRect.top - 12,
-      });
-    }
-    setCurrentPage(pageNumber);
-  }, []);
-
-  const goToSearchResult = useCallback(
-    (index: number, results = searchResults) => {
-      if (results.length === 0) {
-        setSearchResultIndex(-1);
-        return;
-      }
-      const nextIndex = (index + results.length) % results.length;
-      const pageNumber = results[nextIndex].pageNumber;
-      forcedRenderPageNumbersRef.current.add(pageNumber);
-      setForcedRenderPageNumbers(new Set(forcedRenderPageNumbersRef.current));
-      setSearchResultIndex(nextIndex);
-      jumpToPage(pageNumber);
-    },
-    [jumpToPage, searchResults],
-  );
-
-  const runSearch = useCallback(async () => {
-    const document = pdfDocument;
-    const query = normalizeText(searchQuery);
-    const requestId = searchRequestIdRef.current + 1;
-    searchRequestIdRef.current = requestId;
-    setSearchCompleted(false);
-
-    if (!document || !query) {
-      setSearchResults([]);
-      setSearchResultIndex(-1);
-      setSearching(false);
-      return;
-    }
-
-    setSearching(true);
-    const nextResults: PdfSearchMatch[] = [];
-
-    try {
-      for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
-        if (searchRequestIdRef.current !== requestId) return;
-        let textItems = pageTextItemsRef.current.get(pageNumber);
-        if (textItems === undefined) {
-          const page = await document.getPage(pageNumber);
-          const textContent = await page.getTextContent();
-          textItems = textContent.items.map(item => ("str" in item ? item.str : "")).filter(Boolean);
-          pageTextItemsRef.current.set(pageNumber, textItems);
-          pageTextRef.current.set(pageNumber, textItems.join(" "));
-        }
-        nextResults.push(...findPdfSearchMatches(textItems, query, pageNumber));
-      }
-    } catch {
-      // A failed page-text fetch drops partial results; the finally block still finalizes the search state.
-      nextResults.length = 0;
-    } finally {
-      if (searchRequestIdRef.current === requestId) {
-        setSearching(false);
-        setSearchCompleted(true);
-        setSearchResults(nextResults);
-        if (nextResults.length > 0) {
-          goToSearchResult(0, nextResults);
-        } else {
-          setSearchResultIndex(-1);
-        }
-      }
-    }
-  }, [goToSearchResult, pdfDocument, searchQuery]);
-
-  const closeSearch = useCallback(() => {
-    searchRequestIdRef.current += 1;
-    setSearchOpen(false);
-    setSearchQuery("");
-    setSearchResults([]);
-    setSearchResultIndex(-1);
-    setSearching(false);
-    setSearchCompleted(false);
   }, []);
 
   const commitPageInput = useCallback(() => {
@@ -1493,7 +1338,6 @@ export default function PdfDocumentPreview({
     navigationMode === "slides"
       ? t("pdfToolbar.slideOf", { total: totalPages || "-" })
       : t("pdfToolbar.pageOf", { total: totalPages || "-" });
-  const searchStatus = resolveSearchStatus(t, searching, searchCompleted, searchResults, searchResultIndex);
   return (
     <div className="flex h-full w-full flex-col bg-neutral-100 dark:bg-neutral-900">
       <div className="scrollbar-hide flex min-h-11 shrink-0 items-center gap-1.5 overflow-x-auto border-b border-neutral-200 bg-white px-3 py-1.5 dark:border-neutral-800 dark:bg-neutral-950">
@@ -1634,7 +1478,7 @@ export default function PdfDocumentPreview({
             if (searchOpen) {
               closeSearch();
             } else {
-              setSearchOpen(true);
+              openSearch();
               window.requestAnimationFrame(() => {
                 document.getElementById(searchInputId)?.focus();
               });
@@ -1656,15 +1500,9 @@ export default function PdfDocumentPreview({
               value={searchQuery}
               placeholder={t("pdfToolbar.searchPlaceholder")}
               onChange={event => {
-                // Changing the query invalidates any in-flight search immediately.
-                // Otherwise a slow search for the previous query can repopulate
-                // stale results before the user submits the new value.
-                searchRequestIdRef.current += 1;
-                setSearchQuery(event.target.value);
-                setSearchResults([]);
-                setSearchResultIndex(-1);
-                setSearching(false);
-                setSearchCompleted(false);
+                // 查询词变更时立刻作废在途搜索——原注释随该逻辑一并移入
+                // `usePdfSearch.updateQuery`：否则上一条慢查询会在用户提交新值后回填过期结果。
+                updateSearchQuery(event.target.value);
               }}
               onKeyDown={event => {
                 if (event.key === "Enter") {

@@ -10,7 +10,7 @@
 | src TS 文件 / 行数 | 1035 / 173681 |
 | src JS 文件 | 0 |
 | tests 文件 | 561 |
-| ui/src 文件 / 行数 | 472 / 83706 |
+| ui/src 文件 / 行数 | 477 / 84090 |
 | ui/server 文件 / 行数 | 108 / 31668 |
 
 ## 指标口径
@@ -29,7 +29,7 @@
 | 指标 | 总量 | 热点模块 |
 |---|---|---|
 | `any`/`@ts-expect-error`/`@ts-ignore` | 3 | ui/src(3) |
-| `as unknown as`（双重断言） | 26 | ui/src(19) · adapters(2) · tool(2) |
+| `as unknown as`（双重断言） | 27 | ui/src(20) · adapters(2) · tool(2) |
 | 裸 `console.*` | 158 | cli(137) · telemetry(8) · ui/server(5) |
 | 空 `catch {}` | 0 | — |
 | 无参 `catch {`（总计） | 658 | ui/server(151) · ui/src(114) · adapters(70) |
@@ -46,7 +46,7 @@
 | 文件 | 函数 | 行 | 类型 |
 |---|---|---|---|
 | `ui/src/components/chat/hooks/useChatComposerState.ts` | `useChatComposerState` | 1608 | function |
-| `ui/src/components/code-editor/view/subcomponents/PdfDocumentPreview.tsx` | `PdfDocumentPreview` | 1130 | function |
+| `ui/src/components/code-editor/view/subcomponents/PdfDocumentPreview.tsx` | `PdfDocumentPreview` | 1064 | function |
 | `ui/src/components/chat-v2/MessagesPaneV2.tsx` | `MessagesPaneV2` | 1023 | function |
 | `ui/src/components/app-shell/SidebarV2.tsx` | `SidebarV2` | 1008 | function |
 | `ui/src/components/chat/hooks/useChatSessionState.ts` | `useChatSessionState` | 914 | function |
@@ -107,9 +107,9 @@
 |---|---|
 | `ui/src/components/main-content-v2/SkillsV2.tsx` | 2526 |
 | `ui/server/sati-bridge.js` | 2345 |
-| `ui/src/components/code-editor/view/subcomponents/PdfDocumentPreview.tsx` | 1886 |
 | `ui/src/components/chat/hooks/useChatComposerState.ts` | 1838 |
 | `src/adapters/channel/wecom/WeComChannel.ts` | 1764 |
+| `ui/src/components/code-editor/view/subcomponents/PdfDocumentPreview.tsx` | 1724 |
 | `src/model/catalog/providers.ts` | 1593 |
 | `ui/src/components/chat-v2/MessagesPaneV2.tsx` | 1547 |
 | `ui/server/routes/git.js` | 1529 |

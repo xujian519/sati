@@ -1,3 +1,5 @@
+import type { TFunction } from "i18next";
+
 export type PdfSearchPosition = {
   divIndex: number;
   offset: number;
@@ -155,4 +157,24 @@ export function renderPdfSearchHighlights(
   });
 
   return selectedElement;
+}
+
+/**
+ * 搜索状态 → 工具条上的状态文案（空串表示"还没搜过"）。
+ *
+ * 原先内联在 `view/subcomponents/PdfDocumentPreview.tsx`（#159 N07 抽出），
+ * 与 `findPdfSearchMatches` 同址以便直接单测三个分支。
+ */
+export function resolveSearchStatus(
+  t: TFunction<"codeEditor">,
+  searching: boolean,
+  searchCompleted: boolean,
+  results: PdfSearchMatch[],
+  resultIndex: number,
+): string {
+  if (searching) return t("pdfToolbar.searching");
+  if (!searchCompleted) return "";
+  return results.length > 0
+    ? t("pdfToolbar.resultOf", { current: resultIndex + 1, total: results.length })
+    : t("pdfToolbar.noResults");
 }
