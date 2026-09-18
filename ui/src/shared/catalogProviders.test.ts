@@ -8,7 +8,7 @@ describe("catalogProviders maxOutputTokens", () => {
 
     expect(deepseek?.models.find(model => model.id === "deepseek-v4-flash")?.maxOutputTokens).toBe(384 * 1024);
     expect(deepseek?.models.find(model => model.id === "deepseek-chat")?.maxOutputTokens).toBe(384 * 1024);
-    expect(openai?.models.find(model => model.id === "gpt-4.1-mini")?.maxOutputTokens).toBe(32_768);
+    expect(openai?.models.find(model => model.id === "gpt-4.1-mini")?.maxOutputTokens).toBe(131_072);
     expect(openai?.models.find(model => model.id === "o3-mini")?.maxOutputTokens).toBe(100_000);
   });
 
