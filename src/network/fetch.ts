@@ -1,4 +1,5 @@
 import { computeBackoffDelay } from "../shared/retry/index.js";
+import { withDirectProxyFallback } from "./proxyFallback.js";
 
 export type NetworkErrorCode =
   | "network_timeout"
@@ -179,10 +180,20 @@ async function performFetch(
   // owned by src/cli/proxy.ts and ui/server/utils/proxy.js via undici's global
   // dispatcher. Do not pass a per-request dispatcher here, or config hot-reload
   // of proxy.url/proxy.noProxy would be bypassed.
-  return undiciFetch(
-    input as Parameters<typeof undiciFetch>[0],
-    init as Parameters<typeof undiciFetch>[1],
-  ) as Promise<Response>;
+  //
+  // 唯一例外是代理**连不上**时的一次直连重试（`withDirectProxyFallback`）：那条
+  // 路径由代理层经 `registerProxyConnectionFallback` 显式注册后才生效，且只在连接
+  // 建立阶段失败时触发。
+  return withDirectProxyFallback(
+    dispatcher =>
+      undiciFetch(
+        input as Parameters<typeof undiciFetch>[0],
+        {
+          ...(init as Parameters<typeof undiciFetch>[1]),
+          ...(dispatcher ? { dispatcher } : {}),
+        } as Parameters<typeof undiciFetch>[1],
+      ) as Promise<Response>,
+  );
 }
 
 function shouldRetryStatus(status: number, configured?: readonly number[]): boolean {
