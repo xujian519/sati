@@ -2,6 +2,7 @@ import { isRecord } from "../../model/config/schema.js";
 import type {
   PilotConfigDiagnostic,
   PilotPaperSearchConfig,
+  PilotToolGroupConfig,
   PilotToolsConfig,
   PilotWebSearchConfig,
   PilotWebSearchCustomAuth,
@@ -18,6 +19,11 @@ import type {
  *       provider: glm                    # glm | tavily | custom
  *       apiKey: "..."
  *       endpoint: https://api.z.ai/api/paas/v4/web_search
+ *     visibleDomains: [filesystem, shell] # 只保留这些域的工具（省略 = 不限）
+ *     hiddenDomains: [patent]             # 隐藏这些域（优先于 visibleDomains）
+ *     documentStyle: { enabled: false }   # 内置工具组，段缺失 = 保持注册
+ *     kanban: { enabled: false }
+ *     team: { enabled: false }
  *
  * Unknown fields produce non-fatal warnings so future additions don't break
  * older deployments. Returns `undefined` when no webSearch / paperSearch block
@@ -44,9 +50,29 @@ export function parseToolsConfig(
 
   const webSearch = parseWebSearch(rawTools.webSearch, diagnostics);
   const paperSearch = parsePaperSearch(rawTools.paperSearch, diagnostics);
+  const visibleDomains = parseDomainList(
+    rawTools.visibleDomains,
+    "tools.visibleDomains",
+    "TOOLS_VISIBLE_DOMAINS_INVALID",
+    diagnostics,
+  );
+  const hiddenDomains = parseDomainList(
+    rawTools.hiddenDomains,
+    "tools.hiddenDomains",
+    "TOOLS_HIDDEN_DOMAINS_INVALID",
+    diagnostics,
+  );
+  const documentStyle = parseToolGroup(
+    rawTools.documentStyle,
+    "tools.documentStyle",
+    "TOOLS_DOCUMENT_STYLE_INVALID",
+    diagnostics,
+  );
+  const kanban = parseToolGroup(rawTools.kanban, "tools.kanban", "TOOLS_KANBAN_INVALID", diagnostics);
+  const team = parseToolGroup(rawTools.team, "tools.team", "TOOLS_TEAM_INVALID", diagnostics);
 
   for (const key of Object.keys(rawTools)) {
-    if (key !== "webSearch" && key !== "paperSearch") {
+    if (!TOOLS_KNOWN_FIELDS.includes(key as (typeof TOOLS_KNOWN_FIELDS)[number])) {
       diagnostics.push({
         code: "TOOLS_UNKNOWN_FIELD",
         severity: "warning",
@@ -60,7 +86,98 @@ export function parseToolsConfig(
   const result: PilotToolsConfig = {};
   if (webSearch) result.webSearch = webSearch;
   if (paperSearch) result.paperSearch = paperSearch;
+  if (visibleDomains) result.visibleDomains = visibleDomains;
+  if (hiddenDomains) result.hiddenDomains = hiddenDomains;
+  if (documentStyle) result.documentStyle = documentStyle;
+  if (kanban) result.kanban = kanban;
+  if (team) result.team = team;
   return Object.keys(result).length > 0 ? result : undefined;
+}
+
+const TOOLS_KNOWN_FIELDS = [
+  "webSearch",
+  "paperSearch",
+  "visibleDomains",
+  "hiddenDomains",
+  "documentStyle",
+  "kanban",
+  "team",
+] as const;
+
+/**
+ * 域清单解析（`tools.visibleDomains` / `tools.hiddenDomains`）。
+ * 空数组等同未配置（不裁剪），非字符串元素按 fatal 处理并整项丢弃。
+ */
+function parseDomainList(
+  raw: unknown,
+  path: string,
+  code: string,
+  diagnostics: PilotConfigDiagnostic[],
+): string[] | undefined {
+  if (raw === undefined) return undefined;
+  if (!Array.isArray(raw)) {
+    diagnostics.push({
+      code,
+      severity: "fatal",
+      message: `${path} must be an array of domain names.`,
+      path,
+      recoverable: false,
+    });
+    return undefined;
+  }
+  const values: string[] = [];
+  for (const entry of raw) {
+    if (typeof entry !== "string" || entry.trim().length === 0) {
+      diagnostics.push({
+        code,
+        severity: "fatal",
+        message: `${path} entries must be non-empty strings.`,
+        path,
+        recoverable: false,
+      });
+      return undefined;
+    }
+    values.push(entry.trim());
+  }
+  return values.length > 0 ? values : undefined;
+}
+
+/**
+ * 内置工具组开关解析。段在场即保留（空块 = 默认开），只有显式 `enabled: false`
+ * 表达关闭——与 `isBuiltinToolGroupEnabled` 的判据配套。
+ */
+function parseToolGroup(
+  raw: unknown,
+  path: string,
+  code: string,
+  diagnostics: PilotConfigDiagnostic[],
+): PilotToolGroupConfig | undefined {
+  if (raw === undefined) return undefined;
+  if (!isRecord(raw)) {
+    diagnostics.push({
+      code,
+      severity: "fatal",
+      message: `${path} must be an object.`,
+      path,
+      recoverable: false,
+    });
+    return undefined;
+  }
+  const result: PilotToolGroupConfig = {};
+  const enabled = parseEnabledFlag(raw, `${code}_ENABLED`, `${path}.enabled`, diagnostics);
+  if (enabled !== undefined) result.enabled = enabled;
+  for (const key of Object.keys(raw)) {
+    if (key !== "enabled") {
+      diagnostics.push({
+        code: `${code}_UNKNOWN_FIELD`,
+        severity: "warning",
+        message: `Unknown ${path} field ${key}.`,
+        path: `${path}.${key}`,
+        recoverable: true,
+      });
+    }
+  }
+  return result;
 }
 
 /** Shared `enabled` boolean parser; emits a fatal diagnostic on non-boolean values. */
