@@ -239,9 +239,31 @@ export type PilotPaperSearchConfig = {
   semanticScholarApiKey?: string;
 };
 
+/**
+ * 内置工具组的显式开关。与 `webSearch` / `paperSearch` 的三态语义相反：
+ * 段缺失 = 保留历史默认（注册），只有显式 `enabled: false` 才不注册。
+ * 这三组是无外部依赖的内置能力，段缺失即关闭会让既有用户升级后静默失去功能。
+ */
+export type PilotToolGroupConfig = {
+  enabled?: boolean;
+};
+
 export type PilotToolsConfig = {
   webSearch?: PilotWebSearchConfig;
   paperSearch?: PilotPaperSearchConfig;
+  /**
+   * 工具域白名单：项目注册表只保留这些 domain 的工具。未设 = 不限。
+   * 未标注 domain 的工具不受白名单约束（与 `scopeToolsForDefinition` 同语义）。
+   */
+  visibleDomains?: string[];
+  /** 工具域黑名单，优先于 `visibleDomains`。 */
+  hiddenDomains?: string[];
+  /** 文书排版调参面板工具组（`document_style_preset` / `document_style_panel`）。 */
+  documentStyle?: PilotToolGroupConfig;
+  /** 看板工具组（`kanban_*`）。 */
+  kanban?: PilotToolGroupConfig;
+  /** 团队编排工具组（`team_*`）。 */
+  team?: PilotToolGroupConfig;
 };
 
 export type PilotProxyConfig = {

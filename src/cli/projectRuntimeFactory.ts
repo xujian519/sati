@@ -42,7 +42,7 @@ import { createModelRuntime, type ModelRuntime } from "../model/index.js";
 import { resolveEmbeddingClient, resolveRerankClient } from "../model/embedding/index.js";
 import { createPolicyKey, normalizeRetryReason } from "../model/streaming/retryState.js";
 import { loadPilotConfig } from "../pilot/index.js";
-import { isOptionalFeatureEnabled } from "../pilot/config/optionalFeature.js";
+import { isBuiltinToolGroupEnabled, isOptionalFeatureEnabled } from "../pilot/config/optionalFeature.js";
 import type { PilotConfigDiagnostic, PilotConfigSnapshot } from "../pilot/config/types.js";
 import { createRouterRuntime, type RouterRuntime } from "../router/index.js";
 import type { RouterEvent, RouterEventBus } from "../router/protocol/events.js";
@@ -282,8 +282,9 @@ export function createProjectRuntimeResolver(deps: ProjectRuntimeFactoryDeps): P
       now: deps.now,
       onCompletion: event => emitBackgroundTaskCompletion(event),
     });
-    const webSearchConfig = snapshot.config.tools?.webSearch;
-    const paperSearchConfig = snapshot.config.tools?.paperSearch;
+    const toolsConfig = snapshot.config.tools;
+    const webSearchConfig = toolsConfig?.webSearch;
+    const paperSearchConfig = toolsConfig?.paperSearch;
 
     // 语义检索（可选）：embedding 端点配置解析一次，分发给记忆、知识库与附图检索。
     const knowledgePaths = resolveKnowledgeDbPaths();
@@ -318,13 +319,18 @@ export function createProjectRuntimeResolver(deps: ProjectRuntimeFactoryDeps): P
       embeddingDir,
     });
 
+    // 内置工具组按需注册（tools.team / tools.kanban / tools.documentStyle）：
+    // 段缺失 = 保持历史默认（注册），显式 enabled: false 才不注册——这三组是既有
+    // 内置能力，默认翻转会让升级用户静默失去功能（与搜索工具的三态语义相反）。
+    const teamTools = isBuiltinToolGroupEnabled(toolsConfig?.team) ? deps.getTeamTools() : undefined;
+    const kanbanManager = isBuiltinToolGroupEnabled(toolsConfig?.kanban) ? deps.getKanbanBoardManager() : undefined;
     const tools = createBuiltinRegistry({
-      ...(deps.getTeamTools() ? { team: deps.getTeamTools() } : {}),
-      ...(deps.getKanbanBoardManager() ? { kanban: deps.getKanbanBoardManager() } : {}),
+      ...(teamTools ? { team: teamTools } : {}),
+      ...(kanbanManager ? { kanban: kanbanManager } : {}),
       backgroundTasks: { runtime: backgroundTasks },
       searchPatentFigure: { embeddingClient },
       // 文书排版调参面板工具（opt-in：无参注册会破坏 llm-replay fixture 工具集匹配）
-      documentStyle: {},
+      ...(isBuiltinToolGroupEnabled(toolsConfig?.documentStyle) ? { documentStyle: {} } : {}),
       // J-Space 工作区工具（opt-in：与工作区账本开关联动，避免破坏 fixture 工具集匹配）
       workspaceLedgerTools: brandEnv(deps.env, ENV_KEY.WORKSPACE_LEDGER_ENABLED) === "1",
       ...(memory?.service ? { memory: { service: memory.service } } : {}),
@@ -377,6 +383,44 @@ export function createProjectRuntimeResolver(deps: ProjectRuntimeFactoryDeps): P
     });
     for (const tool of deps.getExtraTools()) {
       tools.register(tool);
+    }
+
+    // 项目级工具域裁剪（tools.visibleDomains / tools.hiddenDomains）：注册表构建完成后
+    // 统一收窄——主会话、子代理与团队成员会话都从这份注册表派生，配置对三者一致生效。
+    // 域语义复用 `ToolRegistry.listByDomains`（hidden 优先；未标注 domain 的工具不受约束）。
+    const visibleDomains = toolsConfig?.visibleDomains;
+    const hiddenDomains = toolsConfig?.hiddenDomains;
+    if (visibleDomains?.length || hiddenDomains?.length) {
+      const knownDomains = new Set<string>(
+        tools
+          .list()
+          .map(tool => tool.domain)
+          .filter(domain => domain !== undefined),
+      );
+      const kept = new Set(
+        tools
+          .listByDomains({
+            visible: new Set(visibleDomains ?? []),
+            hidden: new Set(hiddenDomains ?? []),
+          })
+          .map(tool => tool.name),
+      );
+      const removed = tools.list().filter(tool => !kept.has(tool.name));
+      for (const tool of removed) {
+        tools.unregister(tool.name);
+      }
+      if (removed.length > 0) {
+        logger.info(
+          `tools domain filter removed ${removed.length} tool(s): ${removed.map(tool => tool.name).join(", ")}`,
+        );
+      }
+      // 配置的域没有任何工具命中：通常是拼写错误，或该域工具已被上游开关关闭。
+      const unmatched = [...new Set([...(visibleDomains ?? []), ...(hiddenDomains ?? [])])].filter(
+        domain => !knownDomains.has(domain),
+      );
+      if (unmatched.length > 0) {
+        logger.warn(`tools domain filter matched no tool for domain(s): ${unmatched.join(", ")}`);
+      }
     }
 
     // 知识库 MemoryResolver 组装：EdgeClaw 会话记忆 + 专利知识库 + 法律知识库。
