@@ -1142,9 +1142,13 @@
   - 位置：`chat/tools/configs/toolConfigs.ts:1,19-55,646-783`；`chat/tools/ToolRenderer.tsx:108-109`
   - 影响：工具协议契约以 `any` 表达，改 inputSchema/结果结构无编译期守护。建议：引入结构化联合类型，逐步以 `unknown`+收窄替换 `any`。
 - **TD-UI-CHAT-N07** · `PdfDocumentPreview` 巨型组件（1138 行）
-  - 类别：A · 严重级：P2 · 工作量：L · 状态：new
+  - 类别：A · 严重级：P2 · 工作量：L（**逻辑半边已完成**）· 状态：**in_progress（逻辑半边 done，剩余需 L 级窗口）**
   - 位置：`code-editor/view/subcomponents/PdfDocumentPreview.tsx:723`
   - 影响：约 20 个 useState + 12 useRef，承担 PDF 加载/缩放/旋转/导航/搜索/区域选择/大纲/缩略图。建议：抽 `usePdfViewerState`，缩略图/大纲/搜索拆独立组件。
+  - **口径更正**：1138 是**主组件的函数跨度**，文件本身 **1885 行**（metrics 记主组件 1130）。模块级已经分过一轮（7 个小组件 ~450 行），真正堆在主函数里的是：加载/视口持久化 ~150、滚动跟踪 ~120、搜索 ~75、选区→引用 ~235、JSX ~380（工具条 230 / 侧栏 87 / 视口 67）。
+  - **2026-09-18 处置（逻辑半边 · PR #443）**：① 纯函数 → `utils/pdfViewport.ts`（视口数学 + `PageSize`/`ZoomMode`/`Rotation` 类型）；② 文本选区取文 → `utils/pdfTextSelection.ts`；③ `resolveSearchStatus` 移入既有 `utils/pdfSearch.ts`；④ 搜索状态机 → `hooks/usePdfSearch.ts`（6 state + 请求序号 + 竞态）。两个新模块**此前零测试**，本轮补 22 条直接单测（+ `resolveSearchStatus` 4 条分支）。文件 1886 → 1724（metrics 口径），主组件 1130 → **1064**。
+  - **等价性证明**：parser 驱动逐 token 比对 **21 段搬迁**（`/tmp/n07-move-proof.mjs`）——19 段逐字相同；唯一预期改写是 `goToSearchResult` 的两行写操作 → 一次 `forceRenderPage(pageNumber)` 调用，脚本把两条语句摘除并插入调用后要求逐 token 相等，另断言组件里 `forceRenderPage` 的函数体与被摘掉的语句逐字相同；其余任何 token 差异即判失败。负控制两处（`parsePageInput` 夹取上限 `+1`、`runSearch` 的 `!==`→`===`）⇒ 守卫报红，且分别由 `pdfViewport.spec.ts`（2 条）与既有搜索竞态用例报红。
+  - **剩余（需 L 级窗口）**：选区→引用块（~235 行，唯一必须浏览器验证的一块）、工具条/侧栏 JSX 拆分（~317 行，需先收窄 props 面）、按粘连度切分的 `usePdfViewerState`（加载/视口持久化、滚动跟踪各成一块）。**注意**：本轮只降了 66 行 god function——被搬走的 110 行纯函数本来就在模块级、不计入函数长度，故剩余三块才是压 1064 的主力。决策见 `docs/notes/implemented/2026-09-18-pdf-viewer-extraction.md`。
 - **TD-UI-CHAT-N08** · `CodeEditorBinaryFile` 巨型文件（1523 行）+ 内联 8 hooks 分派器
   - 类别：A · 严重级：P3 · 工作量：M · 状态：new
   - 位置：`code-editor/view/subcomponents/CodeEditorBinaryFile.tsx:1386`
@@ -1461,7 +1465,7 @@
 
 **短期（P2，1-2 天/项）**
 4. 前端巨无霸：拆分 `useChatComposerState`(UI-CHAT-N01)、`MessagesPaneV2`(N03)、`SkillsV2/ImportFromFolder`(UI-APP-N01)、`PdfDocumentPreview`(N07)；删除 `useChatSessionState` 死状态 `isLoadingMoreMessages`(N02)。UI 改动须浏览器验证。
-   - **2026-09-18 分档复核**：N02 的**死状态半**已完成（PR #440，S 级、零行为变化）；**其余全部未做**。当初「短期（P2，1-2 天/项）」低估了三个 L 级项——它们共享同一成本项（双视口浏览器验证）且都在聊天主链路（提交/虚拟化/滚动定位），改为分三档：小件（N02 死状态，已完）→ 中件（N04/N07/N05，有同址测试兜底）→ L 级专项窗口（N01/N03/UI-APP-N01）。同批复核发现台账另有两条同族载体未列入 #159：`TD-UI-CHAT-N08`（`CodeEditorBinaryFile` 1523 行）、`TD-UI-APP-N02`（`useSessionStore` ~1440 行），已在 #159 评论中补登。另更正口径：该批 issue/台账引用的行数多为**函数/组件跨度**而非文件大小（`Pdf 1138≈函数 1130`、`ImportFromFolder 854≈852`、`MessageComponent 812≈798`），唯独 `MessagesPaneV2`「文件 1252 行」与实测不符（立案日已 1375，现 1556）。
+   - **2026-09-18 分档复核**：N02 的**死状态半**已完成（PR #440，S 级、零行为变化）；N05 已完成（PR #442：删掉不可达的 legacy 子代理渲染器，条目"两套重复实现"的事实前提更正为"一个活体 + 一个够不着的"）；N07 的**逻辑半边**已完成（PR #443：纯函数 + 搜索状态机外置，补 26 条单测，21 段搬迁逐 token 可证）；**N04 未做**。当初「短期（P2，1-2 天/项）」低估了三个 L 级项——它们共享同一成本项（双视口浏览器验证）且都在聊天主链路（提交/虚拟化/滚动定位），改为分三档：小件（N02 死状态，已完）→ 中件（N04/N07/N05，有同址测试兜底）→ L 级专项窗口（N01/N03/UI-APP-N01）。**另注**：N07 剩余部分（选区→引用 ~235 行、工具条/侧栏 JSX ~317 行）同样落在"需浏览器验证"这一成本项上，压 1064 行 god function 的主力在那里——本轮只降了 66 行（被搬走的 110 行纯函数本来在模块级、不计入函数长度）。同批复核发现台账另有两条同族载体未列入 #159：`TD-UI-CHAT-N08`（`CodeEditorBinaryFile` 1523 行）、`TD-UI-APP-N02`（`useSessionStore` ~1440 行），已在 #159 评论中补登。另更正口径：该批 issue/台账引用的行数多为**函数/组件跨度**而非文件大小（`Pdf 1138≈函数 1130`、`ImportFromFolder 854≈852`、`MessageComponent 812≈798`），唯独 `MessagesPaneV2`「文件 1252 行」与实测不符（立案日已 1375，现 1556）。
 5. i18n：AppShellV2 弹窗（UI-APP-N03）、LlmConfigurationStep（N04）提取到 locales。✅ N03 完成；N04 的 i18n 已完成（YAML cast / 重复拉取保留为 in_progress）。
 6. 未接线实现：policy-bridge（RULE-N02）、workflow 引擎接线或降级（WORKFLOW-N01）、always-on execution.*（ALWAYSON-N03）。
 7. 可观测性：收束裸 console（TD-CONSOLE-001，先 `cli`）、静默吞错逐条补注释/结构化（TD-CATCH-001）。

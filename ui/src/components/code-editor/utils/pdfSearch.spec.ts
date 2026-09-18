@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { findPdfSearchMatches, renderPdfSearchHighlights } from "./pdfSearch";
+import type { TFunction } from "i18next";
+import { findPdfSearchMatches, renderPdfSearchHighlights, resolveSearchStatus } from "./pdfSearch";
+
+// 只解析 key（并把插值参数带上），这样状态文案的三个分支都能被直接断言。
+const fakeT = ((key: string, options?: Record<string, unknown>) =>
+  options ? `${key}:${JSON.stringify(options)}` : key) as unknown as TFunction<"codeEditor">;
 
 describe("findPdfSearchMatches", () => {
   it("finds every occurrence and maps matches across text spans", () => {
@@ -68,5 +73,30 @@ describe("renderPdfSearchHighlights", () => {
 
     expect(textDiv.textContent).toBe("searchable");
     expect(textDiv.querySelector(".highlight")).toBeNull();
+  });
+});
+
+describe("resolveSearchStatus", () => {
+  const match = {
+    id: "page-1-match-0",
+    pageNumber: 1,
+    begin: { divIndex: 0, offset: 0 },
+    end: { divIndex: 0, offset: 3 },
+  };
+
+  it("搜索中优先显示 searching（即便已有旧结果）", () => {
+    expect(resolveSearchStatus(fakeT, true, true, [match], 0)).toBe("pdfToolbar.searching");
+  });
+
+  it("尚未搜过 → 空串，工具条不显示状态", () => {
+    expect(resolveSearchStatus(fakeT, false, false, [], -1)).toBe("");
+  });
+
+  it("有结果 → resultOf 用 1-based 序号", () => {
+    expect(resolveSearchStatus(fakeT, false, true, [match], 0)).toBe('pdfToolbar.resultOf:{"current":1,"total":1}');
+  });
+
+  it("无结果 → noResults", () => {
+    expect(resolveSearchStatus(fakeT, false, true, [], -1)).toBe("pdfToolbar.noResults");
   });
 });
