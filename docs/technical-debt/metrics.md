@@ -1,7 +1,7 @@
 # Sati 技术债务指标基线与趋势
 
 > 由 `node scripts/measure-techdebt.mjs --update` 自动生成，谨防手工编辑。
-> 最近一次快照：**2026-09-17**
+> 最近一次快照：**2026-09-18**
 
 ## 规模
 
@@ -10,7 +10,7 @@
 | src TS 文件 / 行数 | 1035 / 173681 |
 | src JS 文件 | 0 |
 | tests 文件 | 561 |
-| ui/src 文件 / 行数 | 473 / 83935 |
+| ui/src 文件 / 行数 | 473 / 83920 |
 | ui/server 文件 / 行数 | 108 / 31668 |
 
 ## 指标口径
@@ -47,18 +47,18 @@
 |---|---|---|---|
 | `ui/src/components/chat/hooks/useChatComposerState.ts` | `useChatComposerState` | 1608 | function |
 | `ui/src/components/code-editor/view/subcomponents/PdfDocumentPreview.tsx` | `PdfDocumentPreview` | 1130 | function |
-| `ui/src/components/chat-v2/MessagesPaneV2.tsx` | `MessagesPaneV2` | 1031 | function |
+| `ui/src/components/chat-v2/MessagesPaneV2.tsx` | `MessagesPaneV2` | 1023 | function |
 | `ui/src/components/app-shell/SidebarV2.tsx` | `SidebarV2` | 1008 | function |
-| `ui/src/components/chat/hooks/useChatSessionState.ts` | `useChatSessionState` | 940 | function |
+| `ui/src/components/chat/hooks/useChatSessionState.ts` | `useChatSessionState` | 914 | function |
+| `ui/src/components/chat-v2/MessagesPaneV2.render.test.tsx` | `(anonymous)` | 862 | arrow |
 | `ui/src/components/main-content-v2/FilesV2.tsx` | `FilesV2` | 853 | function |
 | `ui/src/components/main-content-v2/SkillsV2.tsx` | `ImportFromFolder` | 852 | function |
-| `ui/src/components/chat-v2/MessagesPaneV2.render.test.tsx` | `(anonymous)` | 842 | arrow |
 | `ui/src/components/chat/view/subcomponents/MessageComponent.tsx` | `(anonymous)` | 798 | arrow |
 | `ui/src/components/chat-v2/ComposerV2.tsx` | `ComposerV2` | 780 | function |
 | `ui/src/stores/useSessionStore.ts` | `useSessionStore` | 727 | function |
 | `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` | `useChatRealtimeHandlers` | 719 | function |
 | `ui/src/components/git-panel/hooks/useGitPanelController.ts` | `useGitPanelController` | 704 | function |
-| `ui/src/components/chat-v2/ChatInterfaceV2.tsx` | `ChatInterfaceV2` | 672 | function |
+| `ui/src/components/chat-v2/ChatInterfaceV2.tsx` | `ChatInterfaceV2` | 668 | function |
 | `ui/src/hooks/useProjectsState.ts` | `useProjectsState` | 647 | function |
 | `src/adapters/channel/tui/app/TuiApp.tsx` | `TuiApp` | 643 | function |
 | `src/cli/sati.ts` | `main` | 636 | function |
@@ -111,7 +111,7 @@
 | `ui/src/components/chat/hooks/useChatComposerState.ts` | 1838 |
 | `src/adapters/channel/wecom/WeComChannel.ts` | 1764 |
 | `src/model/catalog/providers.ts` | 1593 |
-| `ui/src/components/chat-v2/MessagesPaneV2.tsx` | 1557 |
+| `ui/src/components/chat-v2/MessagesPaneV2.tsx` | 1547 |
 | `ui/server/routes/git.js` | 1529 |
 | `ui/src/components/code-editor/view/subcomponents/CodeEditorBinaryFile.tsx` | 1511 |
 | `src/adapters/channel/weixin/WeixinChannel.ts` | 1497 |
@@ -122,8 +122,8 @@
 | `ui/src/components/app-shell/SidebarV2.tsx` | 1310 |
 | `ui/src/components/chat-v2/processGrouping.ts` | 1294 |
 | `ui/server/routes/agent.js` | 1224 |
-| `ui/src/components/chat/hooks/useChatSessionState.ts` | 1186 |
 | `ui/server/routes/taskmaster.js` | 1179 |
+| `ui/src/components/chat/hooks/useChatSessionState.ts` | 1160 |
 | `ui/server/routes/config.js` | 1147 |
 | `src/agent/loop/AgentLoop.ts` | 1143 |
 | `ui/src/components/main-content-v2/CronV2.tsx` | 1130 |
@@ -132,7 +132,7 @@
 | `src/model/streaming/streamModel.ts` | 1085 |
 | `ui/server/routes/commands.js` | 1082 |
 | `src/always-on/runtime/DiscoveryFire.ts` | 1079 |
-| `ui/src/components/chat-v2/MessagesPaneV2.render.test.tsx` | 1042 |
+| `ui/src/components/chat-v2/MessagesPaneV2.render.test.tsx` | 1069 |
 | `src/cli/sati.ts` | 1028 |
 | `src/adapters/channel/protocol/ImLiveReplyController.ts` | 1017 |
 

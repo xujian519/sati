@@ -59,13 +59,11 @@ type MessagesPaneV2Props = {
   activityMessages?: ChatMessage[];
   visibleMessages: ChatMessage[];
   visibleMessageCount: number;
-  isLoadingMoreMessages: boolean;
   hasMoreMessages: boolean;
   totalMessages: number;
   loadEarlierMessages: () => void;
   loadAllMessages: () => void;
   allMessagesLoaded: boolean;
-  isLoadingAllMessages: boolean;
   provider: SessionProvider;
   selectedProject: Project | null;
   selectedSession: ProjectSession | null;
@@ -326,13 +324,11 @@ function MessagesPaneV2({
   activityMessages = [],
   visibleMessages,
   visibleMessageCount,
-  isLoadingMoreMessages,
   hasMoreMessages,
   totalMessages,
   loadEarlierMessages,
   loadAllMessages,
   allMessagesLoaded,
-  isLoadingAllMessages,
   provider,
   selectedProject,
   selectedSession,
@@ -1240,13 +1236,7 @@ function MessagesPaneV2({
             data-rendered-message-count={windowedMessageItems.length}
             data-total-message-count={keyedMessageItems.length}
           >
-            {isLoadingMoreMessages && !isLoadingAllMessages && !allMessagesLoaded ? (
-              <div className="pb-3 text-center text-[12px] text-neutral-500 dark:text-neutral-400">
-                {t("session.loading.olderMessages", { defaultValue: "Loading older messages..." })}
-              </div>
-            ) : null}
-
-            {hasMoreMessages && !isLoadingMoreMessages && !allMessagesLoaded ? (
+            {hasMoreMessages && !allMessagesLoaded ? (
               <div className="mb-8 flex items-center justify-between border-b border-neutral-200 pb-3 text-[12px] text-neutral-500 dark:border-neutral-800 dark:text-neutral-400">
                 <span>
                   {t("session.messages.showingOf", {

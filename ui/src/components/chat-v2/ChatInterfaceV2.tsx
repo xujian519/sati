@@ -165,7 +165,6 @@ function ChatInterfaceV2({
     setCurrentSessionId,
     isLoadingSessionMessages,
     sessionLoadError,
-    isLoadingMoreMessages,
     hasMoreMessages,
     totalMessages,
     canAbortSession,
@@ -180,7 +179,6 @@ function ChatInterfaceV2({
     loadEarlierMessages,
     loadAllMessages,
     allMessagesLoaded,
-    isLoadingAllMessages,
     claudeStatus,
     satiStatus,
     setClaudeStatus,
@@ -691,13 +689,11 @@ function ChatInterfaceV2({
         activityMessages={activityMessages}
         visibleMessages={visibleMessages}
         visibleMessageCount={visibleMessageCount}
-        isLoadingMoreMessages={isLoadingMoreMessages}
         hasMoreMessages={hasMoreMessages}
         totalMessages={totalMessages}
         loadEarlierMessages={loadEarlierMessages}
         loadAllMessages={loadAllMessages}
         allMessagesLoaded={allMessagesLoaded}
-        isLoadingAllMessages={isLoadingAllMessages}
         provider={"sati" as Provider}
         selectedProject={selectedProject}
         selectedSession={selectedSession}
