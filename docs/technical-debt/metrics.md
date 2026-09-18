@@ -10,7 +10,7 @@
 | src TS 文件 / 行数 | 1035 / 173681 |
 | src JS 文件 | 0 |
 | tests 文件 | 561 |
-| ui/src 文件 / 行数 | 477 / 84090 |
+| ui/src 文件 / 行数 | 479 / 84140 |
 | ui/server 文件 / 行数 | 108 / 31668 |
 
 ## 指标口径
@@ -53,7 +53,6 @@
 | `ui/src/components/chat-v2/MessagesPaneV2.render.test.tsx` | `(anonymous)` | 897 | arrow |
 | `ui/src/components/main-content-v2/FilesV2.tsx` | `FilesV2` | 853 | function |
 | `ui/src/components/main-content-v2/SkillsV2.tsx` | `ImportFromFolder` | 852 | function |
-| `ui/src/components/chat/view/subcomponents/MessageComponent.tsx` | `(anonymous)` | 794 | arrow |
 | `ui/src/components/chat-v2/ComposerV2.tsx` | `ComposerV2` | 780 | function |
 | `ui/src/stores/useSessionStore.ts` | `useSessionStore` | 727 | function |
 | `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` | `useChatRealtimeHandlers` | 719 | function |
@@ -66,6 +65,7 @@
 | `ui/src/components/onboarding/view/subcomponents/LlmConfigurationStep.tsx` | `LlmConfigurationStep` | 630 | function |
 | `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` | `(anonymous)` | 622 | arrow |
 | `ui/src/components/main-content/view/MainContent.tsx` | `SplitBody` | 573 | function |
+| `ui/src/components/chat/view/subcomponents/MessageComponent.tsx` | `(anonymous)` | 528 | arrow |
 | `ui/src/components/main-content-v2/CronV2.tsx` | `CronFormView` | 476 | function |
 | `src/router/execution/executeRouterDecision.ts` | `executeRouterDecision` | 449 | function |
 | `ui/src/components/settings/view/modelPool/components/ProviderCard.tsx` | `ProviderCard` | 447 | function |

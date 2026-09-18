@@ -1128,9 +1128,18 @@
   - 位置：`ui/src/components/chat-v2/MessagesPaneV2.tsx:314`（文件 1252 行）
   - 影响：同时承担虚拟滚动/进程分组/子代理详情/fork/搜索/可展开行渲染；虚拟化全手写（估算高度 + ResizeObserver + 多条 RAF/前缀和缓存）。建议：窗口计算/高度测量抽独立 hook，拆 LiveProcess/Subagent/Fork 子组件。
 - **TD-UI-CHAT-N04** · `MessageComponent` 巨型单消息渲染器（812 行）
-  - 类别：A · 严重级：P2 · 工作量：L · 状态：new
+  - 类别：A · 严重级：P2 · 工作量：L（**工具结果块已完成**）· 状态：**in_progress（最大一块已拆出）**
   - 位置：`ui/src/components/chat/view/subcomponents/MessageComponent.tsx:158`
   - 影响：同时渲染 user/assistant/tool/error/thinking/interactive/system 及工具结果/权限/审批/图片/markdown 多形态，props 达 13 个。建议：按消息类型拆 `MessageBubble`/`ToolResultBlock`/`PermissionBlock`。
+  - **口径更正**：812 是**组件函数跨度**不是文件大小（立案时文件已 969 行）。真正的"多形态"集中在**工具结果块**（原 `:478-751`，约 270 行，占全文件 28%）：网页搜索未配置 / 通用 `setup_required` / 无权限建议的普通错误 / 权限错误（含"为本会话授予"+ 设置入口 + 待确认态）/ 非错误态交给 `ToolRenderer`。
+  - **2026-09-18 处置（工具结果块 · PR #444）**：抽出 `view/subcomponents/ToolResultBlock.tsx`（含它专用的 `permissionGrantState` 状态与复位 effect、三个错误判定 helper），`stringifyMessageContent` 上移到 `chat/utils/messageContent.ts` 供父子共用。文件 **969 → 662 行**（−307），god function 794 → **528**（−266）。
+  - **等价性证明**：parser 驱动逐 token 比对 9 项（`/tmp/n04-move-proof.mjs`）——三个 helper（36/86/36 tokens）、`stringifyMessageContent`（67）、权限复位 effect（11）、**工具结果三元两整支 JSX（1203 tokens）**、两条声明；外加"旧位置已消失 + 新位置已出现"的双向反证。JSX 的 `JsxText`（缩进/换行）按 JSX 语义当 trivia，其余 token 逐字符。负控制：① 只改一处 `className` ⇒ 守卫报 `DIFF` 而 6 条既有用例**全绿**（正是守卫存在的理由：视觉级改动测试抓不到）；② 翻转 `if (!permissionSuggestion)` ⇒ 守卫报 `DIFF` 且 6 条用例中 **5 条**变红（另一条属网页搜索分支）。
+  - **剩余**：`MessageBubble`（user 气泡 ~70 行）与 `InteractivePromptBlock`（交互提示 ~82 行）两块 JSX；`thinking`/`interrupted`/`compactBoundary` 小块；以及 13 个 props 的收窄。均无需浏览器验证，可继续按同法推进。
+- **TD-UI-CHAT-N15** · `DiffLine` 在聊天栈里有 7 份本地副本，而 `chat/utils/messageTransforms.ts` 已有权威定义
+  - 类别：F · 严重级：P3 · 工作量：S · 状态：new · 意图：[accidental]
+  - 位置：`chat/view/subcomponents/MessageComponent.tsx:32`、`chat/tools/ToolRenderer.tsx:21`、`chat/tools/components/ToolDiffViewer.tsx:3`、`chat-v2/MessagesPaneV2.tsx:49`、`chat-v2/MessageRowV2.tsx:33`、`chat-v2/SubagentDetailModal.tsx:9`、`chat-v2/SubagentDetailMessageFlow.tsx:22`
+  - 影响：7 份副本的形状都是 `{ type: string; content: string; lineNum: number }`，而权威版（`messageTransforms.ts:1`）把 `type` 收窄为 `"added" | "removed"`。于是"同一份 diff 数据结构"在链路上有两种类型，谁都不敢先收紧——`createDiff` 的契约因此长期停留在 `string`。
+  - 建议：先把权威版的 `type` 放宽为 `string`（或引入 `DiffLineType` 别名）以消除冲突，再逐文件删副本改 import；纯类型改动、零运行时风险。**发现于 #159 N04**（`ToolResultBlock` 当时特意没有复用权威类型，正是因为这次收窄会外溢）。
 - **TD-UI-CHAT-N05** · chat 与 chat-v2 子代理渲染重复实现
   - 类别：F · 严重级：P2 · 工作量：S · 状态：**done（2026-09-18，PR #442）**
   - 位置：`chat-v2/SubagentCard.tsx:27` vs `chat/tools/components/SubagentContainer.tsx:63`（后者已删）
@@ -1465,7 +1474,7 @@
 
 **短期（P2，1-2 天/项）**
 4. 前端巨无霸：拆分 `useChatComposerState`(UI-CHAT-N01)、`MessagesPaneV2`(N03)、`SkillsV2/ImportFromFolder`(UI-APP-N01)、`PdfDocumentPreview`(N07)；删除 `useChatSessionState` 死状态 `isLoadingMoreMessages`(N02)。UI 改动须浏览器验证。
-   - **2026-09-18 分档复核**：N02 的**死状态半**已完成（PR #440，S 级、零行为变化）；N05 已完成（PR #442：删掉不可达的 legacy 子代理渲染器，条目"两套重复实现"的事实前提更正为"一个活体 + 一个够不着的"）；N07 的**逻辑半边**已完成（PR #443：纯函数 + 搜索状态机外置，补 26 条单测，21 段搬迁逐 token 可证）；**N04 未做**。当初「短期（P2，1-2 天/项）」低估了三个 L 级项——它们共享同一成本项（双视口浏览器验证）且都在聊天主链路（提交/虚拟化/滚动定位），改为分三档：小件（N02 死状态，已完）→ 中件（N04/N07/N05，有同址测试兜底）→ L 级专项窗口（N01/N03/UI-APP-N01）。**另注**：N07 剩余部分（选区→引用 ~235 行、工具条/侧栏 JSX ~317 行）同样落在"需浏览器验证"这一成本项上，压 1064 行 god function 的主力在那里——本轮只降了 66 行（被搬走的 110 行纯函数本来在模块级、不计入函数长度）。同批复核发现台账另有两条同族载体未列入 #159：`TD-UI-CHAT-N08`（`CodeEditorBinaryFile` 1523 行）、`TD-UI-APP-N02`（`useSessionStore` ~1440 行），已在 #159 评论中补登。另更正口径：该批 issue/台账引用的行数多为**函数/组件跨度**而非文件大小（`Pdf 1138≈函数 1130`、`ImportFromFolder 854≈852`、`MessageComponent 812≈798`），唯独 `MessagesPaneV2`「文件 1252 行」与实测不符（立案日已 1375，现 1556）。
+   - **2026-09-18 分档复核**：N02 的**死状态半**已完成（PR #440，S 级、零行为变化）；N05 已完成（PR #442：删掉不可达的 legacy 子代理渲染器，条目"两套重复实现"的事实前提更正为"一个活体 + 一个够不着的"）；N07 的**逻辑半边**已完成（PR #443：纯函数 + 搜索状态机外置，补 26 条单测，21 段搬迁逐 token 可证）；N04 的**最大一块已完成**（PR #444：工具结果块 ~270 行拆出 `ToolResultBlock`，文件 969 → 662、god function 794 → 528，9 项 token 比对 + 双向反证）。**中件三项至此全部落地**（N04/N05/N07；N04 与 N07 各余若干小块，均无需浏览器验证）。当初「短期（P2，1-2 天/项）」低估了三个 L 级项——它们共享同一成本项（双视口浏览器验证）且都在聊天主链路（提交/虚拟化/滚动定位），改为分三档：小件（N02 死状态，已完）→ 中件（N04/N07/N05，有同址测试兜底）→ L 级专项窗口（N01/N03/UI-APP-N01）。**另注**：N07 剩余部分（选区→引用 ~235 行、工具条/侧栏 JSX ~317 行）同样落在"需浏览器验证"这一成本项上，压 1064 行 god function 的主力在那里——本轮只降了 66 行（被搬走的 110 行纯函数本来在模块级、不计入函数长度）。同批复核发现台账另有两条同族载体未列入 #159：`TD-UI-CHAT-N08`（`CodeEditorBinaryFile` 1523 行）、`TD-UI-APP-N02`（`useSessionStore` ~1440 行），已在 #159 评论中补登。另更正口径：该批 issue/台账引用的行数多为**函数/组件跨度**而非文件大小（`Pdf 1138≈函数 1130`、`ImportFromFolder 854≈852`、`MessageComponent 812≈798`），唯独 `MessagesPaneV2`「文件 1252 行」与实测不符（立案日已 1375，现 1556）。
 5. i18n：AppShellV2 弹窗（UI-APP-N03）、LlmConfigurationStep（N04）提取到 locales。✅ N03 完成；N04 的 i18n 已完成（YAML cast / 重复拉取保留为 in_progress）。
 6. 未接线实现：policy-bridge（RULE-N02）、workflow 引擎接线或降级（WORKFLOW-N01）、always-on execution.*（ALWAYSON-N03）。
 7. 可观测性：收束裸 console（TD-CONSOLE-001，先 `cli`）、静默吞错逐条补注释/结构化（TD-CATCH-001）。
