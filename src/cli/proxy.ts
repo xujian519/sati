@@ -4,6 +4,7 @@ import {
   LITELLM_HTTP_CONNECTOR_LIMIT,
   LITELLM_HTTP_KEEPALIVE_TIMEOUT_MS,
 } from "../model/streaming/constants.js";
+import { registerProxyConnectionFallback } from "../network/proxyFallback.js";
 import { createLogger } from "../telemetry/index.js";
 
 const logger = createLogger("proxy");
@@ -58,6 +59,8 @@ let fetchFallbackInstalled = false;
 
 export async function installGlobalProxy(explicitUrl?: string, extraNoProxy?: string): Promise<string | undefined> {
   if (pendingInstall) return pendingInstall;
+
+  registerNetworkProxyFallback();
 
   const proxyUrl = explicitUrl ?? getProxyUrl();
   if (!proxyUrl) {
@@ -145,14 +148,40 @@ function installFetchProxyFallback(): void {
     } catch (error) {
       if (!isProxyConnectionError(error)) throw error;
       logger.warn(`Proxy unreachable, retrying direct (${describeFetchInput(input)})`);
-      const { Agent, fetch: undiciFetch } = await import("undici");
-      directFallbackAgent ??= new Agent(createLongTimeoutOptions());
+      const { fetch: undiciFetch } = await import("undici");
       return undiciFetch(
         input as Parameters<typeof undiciFetch>[0],
-        { ...(init ?? {}), dispatcher: directFallbackAgent } as Parameters<typeof undiciFetch>[1],
+        {
+          ...(init ?? {}),
+          dispatcher: await getDirectDispatcher(),
+        } as Parameters<typeof undiciFetch>[1],
       );
     }
   }) as typeof nativeFetch;
+}
+
+/**
+ * 直连 dispatcher（无代理），按需创建并复用。
+ *
+ * 同时供全局 fetch 的回退和 `networkFetch` 的回退使用——后者走裸 undici，拿不到
+ * 全局 dispatcher，只能经 `registerNetworkProxyFallback` 显式取用。
+ */
+export async function getDirectDispatcher(): Promise<import("undici").Agent> {
+  const { Agent } = await import("undici");
+  directFallbackAgent ??= new Agent(createLongTimeoutOptions());
+  return directFallbackAgent;
+}
+
+/**
+ * 把代理状态与直连 dispatcher 暴露给网络层（`src/network/proxyFallback.ts`），
+ * 使 `networkFetch` 在代理连不上时也能回退直连。反向依赖由网络层持有，这里只做注册。
+ */
+function registerNetworkProxyFallback(): void {
+  registerProxyConnectionFallback({
+    isProxyActive: () => dispatcherState?.mode === "proxy",
+    isProxyConnectionError,
+    directDispatcher: getDirectDispatcher,
+  });
 }
 
 async function applyDirectDispatcher(logRemoval = false): Promise<string | undefined> {
