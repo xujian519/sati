@@ -10,7 +10,7 @@
 | src TS 文件 / 行数 | 1036 / 173981 |
 | src JS 文件 | 0 |
 | tests 文件 | 565 |
-| ui/src 文件 / 行数 | 493 / 85709 |
+| ui/src 文件 / 行数 | 499 / 85762 |
 | ui/server 文件 / 行数 | 108 / 31670 |
 
 ## 指标口径
@@ -50,7 +50,7 @@
 | `ui/src/components/chat-v2/MessagesPaneV2.render.test.tsx` | `(anonymous)` | 943 | arrow |
 | `ui/src/components/chat/hooks/useChatSessionState.ts` | `useChatSessionState` | 914 | function |
 | `ui/src/components/main-content-v2/FilesV2.tsx` | `FilesV2` | 853 | function |
-| `ui/src/components/main-content-v2/SkillsV2.tsx` | `ImportFromFolder` | 852 | function |
+| `ui/src/components/main-content-v2/skills/import/ImportFromFolder.tsx` | `ImportFromFolder` | 852 | function |
 | `ui/src/components/chat-v2/MessagesPaneV2.tsx` | `MessagesPaneV2` | 824 | function |
 | `ui/src/components/chat-v2/ComposerV2.tsx` | `ComposerV2` | 741 | function |
 | `ui/src/stores/useSessionStore.ts` | `useSessionStore` | 727 | function |
@@ -107,7 +107,6 @@
 
 | 文件 | 行 |
 |---|---|
-| `ui/src/components/main-content-v2/SkillsV2.tsx` | 2526 |
 | `ui/server/sati-bridge.js` | 2347 |
 | `src/adapters/channel/wecom/WeComChannel.ts` | 1764 |
 | `ui/src/components/code-editor/view/subcomponents/PdfDocumentPreview.tsx` | 1724 |
@@ -116,6 +115,7 @@
 | `ui/src/components/code-editor/view/subcomponents/CodeEditorBinaryFile.tsx` | 1511 |
 | `src/adapters/channel/weixin/WeixinChannel.ts` | 1497 |
 | `src/gateway/client/InProcessGateway.ts` | 1489 |
+| `ui/src/components/main-content-v2/SkillsV2.tsx` | 1441 |
 | `ui/src/stores/useSessionStore.ts` | 1406 |
 | `ui/src/components/main-content-v2/DashboardV2.tsx` | 1345 |
 | `src/adapters/channel/feishu/FeishuChannel.ts` | 1337 |
