@@ -7,6 +7,7 @@ import {
   isProxyConnectionError,
   reinstallGlobalProxy,
 } from "../../src/cli/proxy.js";
+import { getProxyConnectionFallback, registerProxyConnectionFallback } from "../../src/network/proxyFallback.js";
 
 test("getProxyUrl follows the priority chain", () => {
   assert.equal(getProxyUrl({}), undefined);
@@ -71,4 +72,27 @@ test("isProxyConnectionError rejects DNS and non-network errors", () => {
   assert.equal(isProxyConnectionError(dnsError), false);
   assert.equal(isProxyConnectionError(new Error("boom")), false);
   assert.equal(isProxyConnectionError(undefined), false);
+});
+
+test("installGlobalProxy exposes the proxy state to the network fallback seam", async t => {
+  t.after(async () => {
+    await reinstallGlobalProxy(undefined);
+    registerProxyConnectionFallback(undefined);
+  });
+
+  // 端口是否真的可达与本用例无关：注册只依赖装配结果。
+  assert.equal(await installGlobalProxy("http://127.0.0.1:1"), "http://127.0.0.1:1");
+
+  const fallback = getProxyConnectionFallback();
+  assert.ok(fallback, "installGlobalProxy 应先向网络层注册回退缝");
+  assert.equal(fallback.isProxyActive(), true);
+  assert.equal(
+    fallback.isProxyConnectionError(
+      new TypeError("fetch failed", {
+        cause: Object.assign(new Error("connect ECONNREFUSED 127.0.0.1:1"), { code: "ECONNREFUSED" }),
+      }),
+    ),
+    true,
+  );
+  assert.equal(fallback.isProxyConnectionError(new Error("boom")), false);
 });

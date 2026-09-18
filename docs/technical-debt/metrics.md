@@ -7,9 +7,9 @@
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1035 / 173882 |
+| src TS 文件 / 行数 | 1036 / 173981 |
 | src JS 文件 | 0 |
-| tests 文件 | 564 |
+| tests 文件 | 565 |
 | ui/src 文件 / 行数 | 493 / 85709 |
 | ui/server 文件 / 行数 | 108 / 31670 |
 
@@ -32,8 +32,8 @@
 | `as unknown as`（双重断言） | 29 | ui/src(22) · adapters(2) · tool(2) |
 | 裸 `console.*` | 158 | cli(137) · telemetry(8) · ui/server(5) |
 | 空 `catch {}` | 0 | — |
-| 无参 `catch {`（总计） | 658 | ui/server(151) · ui/src(114) · adapters(70) |
-| ↳ **无注释**（隐患类，目标） | **0** | — |
+| 无参 `catch {`（总计） | 659 | ui/server(151) · ui/src(114) · adapters(70) |
+| ↳ **无注释**（隐患类，目标） | **1** | — |
 | ↳ 已带意图注释 | 658 | — |
 | `TODO/HACK/FIXME/XXX` | 11 | always-on(4) · tests(4) · ui/src(2) |
 | 分层违规 `ui/server→src` | 14 | — |
@@ -184,16 +184,16 @@
 | telemetry | 3 |
 | board | 2 |
 | methodology | 2 |
+| network | 2 |
 | shared | 2 |
 | task | 2 |
 | browser | 1 |
 | fs | 1 |
 | lifecycle | 1 |
-| network | 1 |
 | runtime | 1 |
 | status | 1 |
 
-| **合计** | **542** |
+| **合计** | **543** |
 
 ## i18n en/zh-CN 对齐
 
