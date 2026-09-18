@@ -1,7 +1,6 @@
 import React, { memo, useMemo, useCallback } from "react";
 import { logWarn } from "../../../utils/logging";
 import type { Project } from "../../../types/app";
-import type { SubagentChildTool, ToolResult } from "../types/types";
 import { asRecord } from "../../../utils/unknown";
 import { getCanonicalToolName, getToolConfig, type ToolDisplaySection } from "./configs/toolConfigs";
 import {
@@ -14,7 +13,6 @@ import {
   TaskListContent,
   TextContent,
   QuestionAnswerContent,
-  SubagentContainer,
   PlanApprovedCard,
 } from "./components";
 
@@ -36,12 +34,6 @@ interface ToolRendererProps {
   autoExpandTools?: boolean;
   showRawParameters?: boolean;
   rawToolInput?: string;
-  isSubagentContainer?: boolean;
-  subagentState?: {
-    childTools: SubagentChildTool[];
-    currentToolIndex: number;
-    isComplete: boolean;
-  };
 }
 
 type ToolRendererErrorBoundaryState = {
@@ -141,8 +133,6 @@ const ToolRendererInner: React.FC<ToolRendererProps> = ({
   autoExpandTools = false,
   showRawParameters = false,
   rawToolInput,
-  isSubagentContainer,
-  subagentState,
 }) => {
   const canonicalToolName = getCanonicalToolName(toolName);
   const config = getToolConfig(toolName);
@@ -164,20 +154,6 @@ const ToolRendererInner: React.FC<ToolRendererProps> = ({
       onFileOpen(value);
     }
   }, [displayConfig, parsedData, onFileOpen, toolName]);
-
-  // Route subagent containers to dedicated component (after hooks to satisfy Rules of Hooks)
-  if (isSubagentContainer && subagentState) {
-    if (mode === "result") {
-      return null;
-    }
-    return (
-      <SubagentContainer
-        toolInput={toolInput}
-        toolResult={toolResult as ToolResult | null | undefined}
-        subagentState={subagentState}
-      />
-    );
-  }
 
   if (!displayConfig) return null;
 

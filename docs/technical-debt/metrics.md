@@ -10,7 +10,7 @@
 | src TS 文件 / 行数 | 1035 / 173681 |
 | src JS 文件 | 0 |
 | tests 文件 | 561 |
-| ui/src 文件 / 行数 | 473 / 83920 |
+| ui/src 文件 / 行数 | 472 / 83706 |
 | ui/server 文件 / 行数 | 108 / 31668 |
 
 ## 指标口径
@@ -32,9 +32,9 @@
 | `as unknown as`（双重断言） | 26 | ui/src(19) · adapters(2) · tool(2) |
 | 裸 `console.*` | 158 | cli(137) · telemetry(8) · ui/server(5) |
 | 空 `catch {}` | 0 | — |
-| 无参 `catch {`（总计） | 661 | ui/server(151) · ui/src(117) · adapters(70) |
+| 无参 `catch {`（总计） | 658 | ui/server(151) · ui/src(114) · adapters(70) |
 | ↳ **无注释**（隐患类，目标） | **0** | — |
-| ↳ 已带意图注释 | 661 | — |
+| ↳ 已带意图注释 | 658 | — |
 | `TODO/HACK/FIXME/XXX` | 11 | always-on(4) · tests(4) · ui/src(2) |
 | 分层违规 `ui/server→src` | 14 | — |
 | 分层违规 `src→ui` | 0 | — |
@@ -50,10 +50,10 @@
 | `ui/src/components/chat-v2/MessagesPaneV2.tsx` | `MessagesPaneV2` | 1023 | function |
 | `ui/src/components/app-shell/SidebarV2.tsx` | `SidebarV2` | 1008 | function |
 | `ui/src/components/chat/hooks/useChatSessionState.ts` | `useChatSessionState` | 914 | function |
-| `ui/src/components/chat-v2/MessagesPaneV2.render.test.tsx` | `(anonymous)` | 862 | arrow |
+| `ui/src/components/chat-v2/MessagesPaneV2.render.test.tsx` | `(anonymous)` | 897 | arrow |
 | `ui/src/components/main-content-v2/FilesV2.tsx` | `FilesV2` | 853 | function |
 | `ui/src/components/main-content-v2/SkillsV2.tsx` | `ImportFromFolder` | 852 | function |
-| `ui/src/components/chat/view/subcomponents/MessageComponent.tsx` | `(anonymous)` | 798 | arrow |
+| `ui/src/components/chat/view/subcomponents/MessageComponent.tsx` | `(anonymous)` | 794 | arrow |
 | `ui/src/components/chat-v2/ComposerV2.tsx` | `ComposerV2` | 780 | function |
 | `ui/src/stores/useSessionStore.ts` | `useSessionStore` | 727 | function |
 | `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` | `useChatRealtimeHandlers` | 719 | function |
@@ -129,10 +129,10 @@
 | `ui/src/components/main-content-v2/CronV2.tsx` | 1130 |
 | `ui/src/components/main-content/view/MainContent.tsx` | 1111 |
 | `ui/src/components/chat-v2/ComposerV2.tsx` | 1109 |
+| `ui/src/components/chat-v2/MessagesPaneV2.render.test.tsx` | 1104 |
 | `src/model/streaming/streamModel.ts` | 1085 |
 | `ui/server/routes/commands.js` | 1082 |
 | `src/always-on/runtime/DiscoveryFire.ts` | 1079 |
-| `ui/src/components/chat-v2/MessagesPaneV2.render.test.tsx` | 1069 |
 | `src/cli/sati.ts` | 1028 |
 | `src/adapters/channel/protocol/ImLiveReplyController.ts` | 1017 |
 

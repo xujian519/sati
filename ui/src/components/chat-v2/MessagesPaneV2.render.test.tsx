@@ -188,6 +188,41 @@ describe("MessagesPaneV2 render behavior", () => {
     expect(screen.queryByText(/Showing 3 of 10/)).toBeNull();
   });
 
+  it("子代理容器消息只走 SubagentCard，不再流经 legacy 子代理渲染器（#159 N05）", () => {
+    // 背景：`chat/tools/components/SubagentContainer.tsx` 是 chat-v2 之前的子代理渲染器，
+    // 与 `SubagentCard` 重复。三道门保证容器消息到不了它：MessageRowV2 的容器早退、
+    // `shouldDelegate` 里 `isSubagentContainer → false`、SubagentDetailMessageFlow 主动清标志。
+    // 删掉它之后（#442），这条用例钉住存活实现，并断言被删实现的独有文案不出现。
+    const now = new Date().toISOString();
+    const messages: ChatMessage[] = [
+      { id: "u-1", type: "user", content: "查一下仓库", timestamp: now },
+      {
+        id: "sub-1",
+        type: "assistant",
+        content: "",
+        timestamp: now,
+        isToolUse: true,
+        toolName: "Task",
+        toolId: "sub-1",
+        toolInput: JSON.stringify({ subagent_type: "explore", description: "扫描仓库结构" }),
+        isSubagentContainer: true,
+        subagentId: "agent-1",
+        subagentState: { childTools: [], currentToolIndex: -1, isComplete: true },
+      },
+    ];
+
+    renderPane({ messages });
+
+    expect(screen.getByText("扫描仓库结构")).toBeTruthy();
+    expect(screen.getByText("explore")).toBeTruthy();
+    // 本文件不初始化 "chat" 命名空间，`t()` 原样返回 key —— 恰好钉住「完成态走 card 的
+    // completed 分支」这一步（状态的文案本身由 locales 覆盖）。
+    expect(screen.getByText("subagent.status.completed")).toBeTruthy();
+    for (const containerOnlyText of ["View tool history", "Running subagent", "Currently:"]) {
+      expect(screen.queryByText(containerOnlyText, { exact: false })).toBeNull();
+    }
+  });
+
   it("renders live processing time above the active assistant turn with activity status", () => {
     const messages = [
       {
