@@ -21,7 +21,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { ChatRunMode, PendingApproval, PendingPermissionRequest, PermissionMode } from "../chat/types/types";
-import { MAX_ATTACHMENTS_ERROR_KEY } from "../chat/hooks/useChatComposerState";
+import { MAX_ATTACHMENTS_ERROR_KEY } from "../chat/hooks/useAttachmentUpload";
 import { thinkingModes, type ThinkingModeId } from "../chat/constants/thinkingModes";
 import { getEffectiveThinkingMode, type ThinkingModeAvailability } from "../chat/constants/thinkingModeAvailability";
 import PermissionRequestsBanner from "../chat/view/subcomponents/PermissionRequestsBanner";
