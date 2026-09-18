@@ -2,6 +2,43 @@
 
 本文件按版本记录 Sati 的重要变更。桌面端版本号（`release(desktop)`）与根 `package.json` 由 `scripts/bump-version.mjs` 同步维护。
 
+## v0.2.2 - 2026-09-18
+
+> **版本目标（2026-09-18）**：专利附图链路加固与 CAD 扩展（FreeCAD 无头投影、栅格像素级门禁、附图标记括号按面判定、V4/V7 判据修正）、#159 巨型组件拆解专项（MessageComponent / PdfDocumentPreview）、ui-server 死面清退（#356）与对外 API 缺陷集中修复（#411/#414/#415/#416/#425），以及技术债清算（#338/#353/#354/#359/#406）。
+
+### Feat
+- feat(patent): CAD 结构图投影（`patent_figure_project`，FreeCAD 无头，阶段一）与剖视图/附图标记标注（边表 v2）
+- feat(patent): 栅格附图像素级门禁——`patent_figure_check` 新增 `image_paths`；`figure_generate` 阶段接入 figure-gate 原子，附图核验不再可选
+- feat(patent): 分析轨↔核验轨桥接（数字型标记词法 + 多图一致性生产接线）；附图产物 sidecar（FigureSpec 留痕，供定稿期重跑全量规则）
+- feat(patent): 附图标记括号规则按面判定（V10 权利要求漏括号 / V11 正文多括号）
+- feat(issue): 「严重级」勾选节与 priority 半自动化（#406）；tech_debt 模板补「影响 scope」与「契约影响」节；status/priority 取值枚举门禁
+
+### Fix
+- fix(ui): POST /api/agent 四项对外 API 缺陷（#414）；edit/regenerate-last-turn 回答流改走会话广播（#411）
+- fix(ui): git `/status` 不再丢弃 rename/copy 条目（#415）；`/test-connection` 识别掩码 API key 并回落到已存密钥（#416）
+- fix(ui/server): PTY 会话竞态、stale 高优先级豁免与 bridge 记账清退（#425）
+- fix(patent): V4 名称归一化消除括号形/裸数字形假阳性；V7 判据由画幅像素改为纸面毫米（A4 可印区锚定）；附图盒宽按字符类别度量（CJK 1em / Latin 0.5em）；LR 布局画幅与副轴步进按方向取轴
+- fix(cli): 团队成员扫描整体失败不再静默（TD-TEAM-N11 / #353）
+
+### Refactor
+- refactor(chat): MessageComponent 拆出工具结果块（#159 N04）；删除不可达的 legacy 子代理渲染器（#159 N05）
+- refactor(editor): PdfDocumentPreview 抽出纯逻辑与搜索状态机（#159 N07 逻辑半边）
+- refactor(ui): 删除聊天页恒 false 的死状态与它养着的孤儿（#159 N02）
+- refactor(ui-server): 清退零消费路由、模块与死帧监听（#356）
+- refactor(adapters): 删除 13 个渠道 SessionMapper 薄壳并补接线判据（#351）
+- refactor(timeouts): 内联毫秒字面量集中为三张注册表（#354 超时半）；渠道端口默认值集中到 channel-defaults（#354 端口半）
+- refactor(catch): 无注释无参 catch 补意图注释（#353 · ui/server 72 处 + src 36 + ui/src 6）
+
+### Test
+- test(patent): 附图生成侧合规基准（入库基线 + 语义锚点的回归护栏）
+- test(scripts): 附图打印校准页（档位取自源码常量的标定仪器）
+- test(ui-server): 活路由表快照与 express 路由清单固定
+
+### Chore
+- chore(docs): 附图链路加固与 CAD 扩展实施方案（P0/P1/P2）、ui-server #356 triage 记录、计划文档悬空勾选回收与防复发约定（#359）、memory-core 拆分验收状态（#148）
+- chore(docs): 议题治理规范漂移修正与 documentation 模板（#338）
+- chore(techdebt): 指标基线多次重算与台账销项/状态修正
+
 ## v0.2.1 - 2026-09-16
 
 > **版本目标（2026-09-16）**：网关协议 1.9 活跃 turn 绝对投影（长回答刷新不再丢开头）、可选功能「未配置 = 关闭」判据收敛、PilotDeck 2026-09 上游切片分批移植（#574/#587/#588/#590/#593）、issue #147 AgentLoop 拆解第二批六模块收尾，以及技术债集中清算（#334/#339/#340/#341/#343/#346/#348/#352/#355/#357/#358/#362/#363/#365/#366/#376）。
