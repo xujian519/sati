@@ -3,7 +3,8 @@ import React from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { ChatMessage, ChatRunMode, SatiWorkStatus } from "../chat/types/types";
-import MessagesPaneV2, { buildPrefixOffsets, getVirtualMessageWindow } from "./MessagesPaneV2";
+import MessagesPaneV2 from "./MessagesPaneV2";
+import { buildPrefixOffsets, getVirtualMessageWindow } from "./messageVirtualization";
 import { ContextStatusPopover, getContextStatus } from "./ComposerV2";
 
 beforeAll(() => {
