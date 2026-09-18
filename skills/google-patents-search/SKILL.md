@@ -105,15 +105,23 @@ Google Patents 支持以下检索语法：
 
 ## 代理配置
 
-Google Patents 需科学上网。脚本默认使用 `http://127.0.0.1:9981` 代理。
+Google Patents 需科学上网。脚本按下列顺序取代理地址，全都没有时不显式指定代理（Chromium 默认跟随系统代理设置）：
 
-- `--proxy http://host:port` 指定其他代理
-- `--no-proxy` 不使用代理
+1. `--proxy http://host:port`（显式指定，优先级最高）
+2. `PATENT_SEARCH_PROXY`
+3. `SATI_PROXY`（与 Sati 核心进程同一取值口径）
+4. `https_proxy` / `HTTPS_PROXY` / `http_proxy` / `HTTP_PROXY`
 
-也可通过环境变量配置：
+- `--no-proxy` 不指定代理（忽略以上环境变量，交由浏览器/系统决定）
+
+示例：
 ```bash
-# 默认代理
-export PATENT_SEARCH_PROXY="http://127.0.0.1:9981"
+# 显式指定代理
+python3 scripts/patent-search.py "phase change material" --proxy http://127.0.0.1:7890
+
+# 或通过环境变量（本 skill 专用 / 全局 HTTPS 代理均可）
+export PATENT_SEARCH_PROXY="http://127.0.0.1:7890"
+export HTTPS_PROXY="http://127.0.0.1:7890"
 
 # 输出目录
 export PATENT_SEARCH_OUTPUT="$HOME/Documents/patent-search"
