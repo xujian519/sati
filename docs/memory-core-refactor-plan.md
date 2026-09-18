@@ -5,6 +5,14 @@
 - 前置：`docs/technical-debt-report.md` 待决事项 #1（子包 5 个 >1000 行文件零测试）；方法论先例 `docs/god-function-refactor-plan.md`
 - 目标：对 5 个大文件先补行为基线测试（characterization），再按职责聚类拆分；子包测试从 0 起步覆盖核心路径
 
+> **验收状态（2026-09-18 补，issue #148 处置）**：本专项**没有勾选清单**（进度以批次 ✅ 标注），故此处按 `docs/issue-management.md` §6.1 的口径记一次状态复核。
+>
+> - **§4 批次 0–6 全部落地属实**：5 个大文件已拆解、22 个新模块、子包测试 222 例全绿（PR #88）；`llm-extraction` 3745 → 1669 行。
+> - **但 §5 的验收标准未达标，这层差异此前没有记录**：§5 写「5 个大文件拆后：单文件 ≤ ~600 行」，而拆后实测 `sqlite` 1728 / `llm-extraction` 1669 / `file-memory` 1161 / `dream-review` 1072 / `heartbeat` 690 —— **五个全部 > 600**。§4 末行把剩余两个 500 行级编排方法标注为「与 G8 同档风险/收益权衡…**延期接受**」，但 §4 开头仍写「全部完成 ✅」；两句并存会让读者误以为专项已达 DoD。
+> - **截至 2026-09-18 的残留**（`metrics.md`「vendored 子包」节）：≥300 行函数 **3** 个 —— `DreamRewriteRunner.run` 524（`src/core/review/dream-review.ts`）、`ReasoningRetriever.retrieve` 484（`src/core/retrieval/reasoning-loop.ts`）、`HeartbeatIndexer.runHeartbeat` 477（`src/core/pipeline/heartbeat.ts`）。注意 §4 的「剩余深化候选」只列了前两个，**`retrieve` 未在名单内**。
+> - **本仓对它的排期口径已变**：2026-09-16（#341）把该子包**整体移出**规模 / Top 大文件 / God function 三处文件级指标（理由：外部搬入、不随本仓演进），改在 `metrics.md` 单列；`docs/god-function-refactor-plan.md` §范围边界亦声明「**不含** `edgeclaw-memory-core` 子包内的大文件…单独排期」。⇒ 它的现状**不再进入债务排期表**。
+> - **因此 issue #148 按「不再适用」关闭（2026-09-18）**：它引用的 1710 / 1623 / 1138 正是**拆分后**的尺寸（与今天实测逐字一致），正文却读起来像从未拆过；而其触发条件「随下个记忆相关里程碑（M1/M2 增强时）一并拆分」在仓库里**不存在对应里程碑**，属不可证伪的阻塞。**若本仓今后开始实质修改该内核，重启条件**：按上面 3 个 ≥300 行函数立项，验收判据为「`metrics.md` 的 vendored 节 ≥300 行函数 **3 → 0**」。
+
 ## 1. 背景与范围
 
 edgeclaw-memory-core 是 Sati 记忆核心的独立 workspace 子包（17 个 TS 文件、约 14.5k 行，8 个 src 消费点经包名 `edgeclaw-memory-core` import）。债务：
