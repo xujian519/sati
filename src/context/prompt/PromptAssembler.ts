@@ -1,3 +1,4 @@
+import { dirname } from "node:path";
 import type { CanonicalToolSchema } from "../../model/index.js";
 import type {
   ContributedCommand,
@@ -174,7 +175,7 @@ export class PromptAssembler {
         (s): s is ContributedSkill & { role: NonNullable<ContributedSkill["role"]> } => s.role !== undefined,
       );
       if (plainSkills.length > 0) {
-        sections.push(formatSkills(plainSkills));
+        sections.push(formatSkills(plainSkills, { includePaths: !hasTool(input.tools, "read_skill") }));
       }
       if (roles.length > 0) {
         sections.push(formatRoles(roles));
@@ -246,19 +247,46 @@ function formatCommands(commands: ContributedCommand[]): string {
   return lines.join("\n");
 }
 
-function formatSkills(skills: ContributedSkill[]): string {
-  const lines = [
-    "<available-skills>",
-    "Use the read_skill tool to load the full content of any skill listed below. Each entry includes the exact SKILL.md selected by the runtime.",
-    "Resolve relative references, scripts, and assets against the directory containing that SKILL.md.",
-    "Do not search the user's home directory to rediscover a skill or infer runtime/cache paths; use the listed file and paths or commands returned by the skill.",
-  ];
+/**
+ * 技能清单渲染。
+ *
+ * `read_skill` 在场时省略逐条绝对路径，只声明技能根目录——路径是清单里最大的
+ * 可去重开销（每条十余 tokens × 数十条），而 `read_skill` 按名字取全文，不依赖路径。
+ * 无 `read_skill` 时保留逐条路径：那是模型读取技能的唯一线索（fixture 录制路径即此形态）。
+ */
+function formatSkills(skills: ContributedSkill[], options: { includePaths: boolean }): string {
+  const lines = ["<available-skills>", "Use the read_skill tool to load the full content of any skill listed below."];
+  if (options.includePaths) {
+    lines.push("Each entry includes the exact SKILL.md selected by the runtime.");
+    lines.push("Resolve relative references, scripts, and assets against the directory containing that SKILL.md.");
+  } else {
+    lines.push(
+      `Skills live under these directories, one folder per skill (<directory>/<name>/SKILL.md): ${skillRoots(skills).join(", ")}.`,
+    );
+  }
+  lines.push(
+    "Do not search the user's home directory to rediscover a skill or infer runtime/cache paths; use the listed name with read_skill.",
+  );
   for (const skill of skills) {
     const description = skill.description ? ` — ${skill.description}` : "";
-    lines.push(`- ${skill.name}${description} (file: ${skill.path})`);
+    const file = options.includePaths ? ` (file: ${skill.path})` : "";
+    lines.push(`- ${skill.name}${description}${file}`);
   }
   lines.push("</available-skills>");
   return lines.join("\n");
+}
+
+/** 技能根目录去重集合（`<root>/<name>/SKILL.md` 的 root 部分）。 */
+function skillRoots(skills: ContributedSkill[]): string[] {
+  const roots = new Set<string>();
+  for (const skill of skills) {
+    roots.add(dirname(dirname(skill.path)));
+  }
+  return [...roots].sort();
+}
+
+function hasTool(tools: CanonicalToolSchema[], name: string): boolean {
+  return tools.some(tool => tool.name === name);
 }
 
 function formatRoles(roles: ContributedSkill[]): string {

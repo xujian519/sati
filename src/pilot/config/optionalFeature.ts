@@ -20,3 +20,14 @@
 export function isOptionalFeatureEnabled<T extends { enabled?: boolean }>(config: T | null | undefined): config is T {
   return config != null && config.enabled !== false;
 }
+
+/**
+ * 内置工具组的「是否注册」判定（`tools.documentStyle` / `tools.kanban` / `tools.team`）。
+ *
+ * 与 `isOptionalFeatureEnabled` 的三态相反：**段缺失 → 开**。这三组是无外部依赖的
+ * 内置能力（文书排版面板 / 看板 / 团队编排），段缺失即关闭会让既有用户升级后静默
+ * 失去功能；关闭必须是显式 `enabled: false`（省工具 schema 体积的开关）。
+ */
+export function isBuiltinToolGroupEnabled(config: { enabled?: boolean } | null | undefined): boolean {
+  return config === null || config === undefined || config.enabled !== false;
+}
