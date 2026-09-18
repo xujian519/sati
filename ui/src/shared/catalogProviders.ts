@@ -96,10 +96,10 @@ export const CATALOG_PROVIDERS: CatalogProvider[] = [
     protocol: "openai",
     defaultUrl: "https://api.z.ai/api/paas/v4",
     models: [
-      { id: "glm-5.2", displayName: "GLM-5.2", maxContextTokens: 131072, maxOutputTokens: 131072 },
-      { id: "glm-5.1", displayName: "GLM-5.1", maxContextTokens: 131072, maxOutputTokens: 131072 },
-      { id: "glm-5-turbo", displayName: "GLM-5 Turbo", maxContextTokens: 131072, maxOutputTokens: 131072 },
-      { id: "glm-4.6", displayName: "GLM-4.6", maxContextTokens: 131072, maxOutputTokens: 131072 },
+      { id: "glm-5.2", displayName: "GLM-5.2", maxContextTokens: 1048576, maxOutputTokens: 131072 },
+      { id: "glm-5.1", displayName: "GLM-5.1", maxContextTokens: 1048576, maxOutputTokens: 131072 },
+      { id: "glm-5-turbo", displayName: "GLM-5 Turbo", maxContextTokens: 131072, maxOutputTokens: 65536 },
+      { id: "glm-4.6", displayName: "GLM-4.6", maxContextTokens: 131072, maxOutputTokens: 65536 },
       { id: "glm-4.7", displayName: "GLM-4.7", maxContextTokens: 200000, maxOutputTokens: 131072 },
       { id: "glm-4.7-flashx", displayName: "GLM-4.7 FlashX", maxContextTokens: 200000, maxOutputTokens: 131072 },
       { id: "glm-4.7-flash", displayName: "GLM-4.7 Flash", maxContextTokens: 200000, maxOutputTokens: 131072 },
@@ -226,21 +226,21 @@ export const CATALOG_PROVIDERS: CatalogProvider[] = [
         id: "claude-sonnet-4.6",
         displayName: "Claude Sonnet 4.6",
         supportsImage: true,
-        maxContextTokens: 200000,
+        maxContextTokens: 1000000,
         maxOutputTokens: 128000,
       },
       {
         id: "claude-opus-4-20250514",
         displayName: "Claude Opus 4",
         supportsImage: true,
-        maxContextTokens: 200000,
-        maxOutputTokens: 32768,
+        maxContextTokens: 1000000,
+        maxOutputTokens: 128000,
       },
       {
         id: "claude-sonnet-4-20250514",
         displayName: "Claude Sonnet 4",
         supportsImage: true,
-        maxContextTokens: 200000,
+        maxContextTokens: 1000000,
         maxOutputTokens: 16384,
       },
       {
@@ -248,7 +248,7 @@ export const CATALOG_PROVIDERS: CatalogProvider[] = [
         displayName: "Claude Sonnet 4.5",
         supportsImage: true,
         maxContextTokens: 200000,
-        maxOutputTokens: 8192,
+        maxOutputTokens: 65536,
       },
       {
         id: "claude-haiku-3-5-20241022",
@@ -265,13 +265,19 @@ export const CATALOG_PROVIDERS: CatalogProvider[] = [
     protocol: "openai",
     defaultUrl: "https://api.openai.com/v1",
     models: [
-      { id: "gpt-4.1", displayName: "GPT-4.1", supportsImage: true, maxContextTokens: 1047576, maxOutputTokens: 32768 },
+      {
+        id: "gpt-4.1",
+        displayName: "GPT-4.1",
+        supportsImage: true,
+        maxContextTokens: 1050000,
+        maxOutputTokens: 131072,
+      },
       {
         id: "gpt-4.1-mini",
         displayName: "GPT-4.1 Mini",
         supportsImage: true,
-        maxContextTokens: 1047576,
-        maxOutputTokens: 32768,
+        maxContextTokens: 1050000,
+        maxOutputTokens: 131072,
       },
       { id: "gpt-4o", displayName: "GPT-4o", supportsImage: true, maxContextTokens: 128000, maxOutputTokens: 16384 },
       {
@@ -291,13 +297,19 @@ export const CATALOG_PROVIDERS: CatalogProvider[] = [
     protocol: "openai-responses",
     defaultUrl: "https://api.openai.com/v1",
     models: [
-      { id: "gpt-4.1", displayName: "GPT-4.1", supportsImage: true, maxContextTokens: 1047576, maxOutputTokens: 32768 },
+      {
+        id: "gpt-4.1",
+        displayName: "GPT-4.1",
+        supportsImage: true,
+        maxContextTokens: 1050000,
+        maxOutputTokens: 131072,
+      },
       {
         id: "gpt-4.1-mini",
         displayName: "GPT-4.1 Mini",
         supportsImage: true,
-        maxContextTokens: 1047576,
-        maxOutputTokens: 32768,
+        maxContextTokens: 1050000,
+        maxOutputTokens: 131072,
       },
       { id: "gpt-4o", displayName: "GPT-4o", supportsImage: true, maxContextTokens: 128000, maxOutputTokens: 16384 },
       {
@@ -343,7 +355,7 @@ export const CATALOG_PROVIDERS: CatalogProvider[] = [
         displayName: "Gemini 2.0 Flash",
         supportsImage: true,
         maxContextTokens: 1048576,
-        maxOutputTokens: 8192,
+        maxOutputTokens: 65536,
       },
     ],
   },
@@ -353,15 +365,17 @@ export const CATALOG_PROVIDERS: CatalogProvider[] = [
     protocol: "openai",
     defaultUrl: "https://openrouter.ai/api/v1",
     models: [
+      // 引擎目录的 openrouter 与 ollama 一样不写死模型（留给运行时探测），因此这里只列
+      // 可选项、**不声明能力值**：后端对这些模型取协议默认，声明窗口会让设置页显示一个
+      // 不会生效的数字。tests/model/catalog-mirror-parity.spec.ts 守着这条规则。
       {
         id: "anthropic/claude-sonnet-4.6",
         displayName: "Claude Sonnet 4.6",
         supportsImage: true,
-        maxContextTokens: 200000,
       },
-      { id: "google/gemini-2.5-pro", displayName: "Gemini 2.5 Pro", supportsImage: true, maxContextTokens: 1048576 },
-      { id: "deepseek/deepseek-v4-flash", displayName: "DeepSeek V4 Flash", maxContextTokens: 1048576 },
-      { id: "moonshotai/kimi-k2.6", displayName: "Kimi K2.6", supportsImage: true, maxContextTokens: 262144 },
+      { id: "google/gemini-2.5-pro", displayName: "Gemini 2.5 Pro", supportsImage: true },
+      { id: "deepseek/deepseek-v4-flash", displayName: "DeepSeek V4 Flash" },
+      { id: "moonshotai/kimi-k2.6", displayName: "Kimi K2.6", supportsImage: true },
     ],
   },
   {

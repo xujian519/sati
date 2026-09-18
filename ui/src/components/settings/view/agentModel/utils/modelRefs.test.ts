@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { CatalogProviderProtocol } from "../../../../../shared/catalogProviders";
+import { findCatalogProviderById, type CatalogProviderProtocol } from "../../../../../shared/catalogProviders";
 import type { SatiConfig } from "../../modelPool/types";
 import { activeModelCapabilities } from "./modelRefs";
 
@@ -30,9 +30,12 @@ describe("activeModelCapabilities effective limits", () => {
       model: { providers: { zhipu: { url: "https://api.z.ai/api/paas/v4", apiKey: "k" } } },
     });
 
+    // 目录数值本身由 check:catalog-mirror 对拍引擎；这里只验证「命中目录 → 取目录值」这一层。
+    const entry = findCatalogProviderById("zhipu")?.models.find(model => model.id === "glm-4.6");
+    expect(entry).toBeDefined();
     expect(caps?.protocol).toBe("openai");
-    expect(caps?.effectiveContext).toEqual({ tokens: 131_072, source: "catalog" });
-    expect(caps?.effectiveOutput).toEqual({ tokens: 131_072, source: "catalog" });
+    expect(caps?.effectiveContext).toEqual({ tokens: entry?.maxContextTokens, source: "catalog" });
+    expect(caps?.effectiveOutput).toEqual({ tokens: entry?.maxOutputTokens, source: "catalog" });
   });
 
   it("falls back to the declared protocol default when the model is not catalogued", () => {
