@@ -85,47 +85,9 @@ const DEFAULT_MAX_OUTPUT_BYTES = 200_000;
 const DEFAULT_DOCTOR_TIMEOUT_MS = 8_000;
 const MAX_SCRIPT_LENGTH = 50_000;
 
-const EGO_BROWSER_DESCRIPTION = `Drive the ego-browser (ego lite) real Chromium browser from inside Sati. Use this for pages that need JavaScript rendering, login state, or anti-bot handling — e.g. Google Patents, CNIPA, Baidu Patents, authenticated databases, or interactive web UIs. Prefer this over web_fetch/web_search when a site blocks plain HTTP requests or requires the user's logged-in session.
+const EGO_BROWSER_DESCRIPTION = `Drive the ego-browser (ego lite) real Chromium browser. Use it for pages that need JavaScript rendering, login state, or anti-bot handling — Google Patents, CNIPA, authenticated databases, interactive web UIs. Prefer it over web_fetch/web_search when a site blocks plain HTTP requests or requires the user's logged-in session.
 
-Input \`script\` is a Node.js program run by \`ego-browser nodejs\` (the body of a heredoc). All ego-browser helpers are preloaded; print the final result with \`cliLog(...)\` — only \`cliLog\` output is returned to you.
-
-Core helpers:
-- Task spaces: \`useOrCreateTaskSpace(name)\` (returns task), \`completeTaskSpace(id, { keep: false })\`, \`listTaskSpaces\`
-- Navigation: \`openOrReuseTab(url, { wait: true, timeout: 30 })\`, \`gotoAndWait\`, \`pageInfo()\`, \`snapshotText()\` (semantic tree with refs/locators)
-- Interaction: \`click('@N' | css | loc=...)\`, \`fillInput\`, \`typeText\`, \`pressKey\`, \`scrollBy\`, \`uploadFile\`
-- Evaluate: \`js('(() => {...})()')\` (runs in the page), \`cdp(...)\`, \`serverFetch\`, \`browserFetch\`
-- Output: \`cliLog(value)\` — the only way to return data; \`help(name)\` prints usage
-
-Playwright-style \`page\` facade (binds the current tab): \`page.goto(url)\`, \`page.url()\`, \`page.locator(css)\` / \`page.getByText(...)\`, \`page.waitForLoadState('load')\`, \`page.screenshot({ path })\`, \`page.waitForEvent('download')\` (returns { saveAs(path), url(), suggestedFilename() } — in-browser download interception, reuse it for PDF/file downloads instead of guessing CDN URLs), \`page.screencast.start({ path, size })\` / \`page.screencast.stop()\` (record the session for evidence), \`page.keyboard.press\`, \`page.mouse.click\`.
-
-Learned site skills: \`site.runTool(siteId, toolName, args)\` runs a packaged site tool (e.g. google-patents) — see \`site.skills(url)\` to list what applies to a URL.
-
-Parallel work: multiple task spaces run concurrently — create several spaces and \`await Promise.all([...])\` to scrape/search several sites at once; each space is isolated and inherits login state.
-
-Task spaces default to inheriting the user's ego lite login state, so authenticated sites work without re-entering credentials. Reuse the same task space name across calls for a continuous session; always finish with \`completeTaskSpace(id, { keep: false })\` unless the user needs the page left open. If the browser connection seems stale, restart the ego lite app (newer CLI builds also offer \`ego-browser --doctor\` / \`--reload\`).
-
-Example (Google Patents keyword search):
-\`\`\`js
-const task = await useOrCreateTaskSpace('patent search: pcm thermal');
-await openOrReuseTab('https://patents.google.com/?q=phase+change+material+thermal+management', { wait: true, timeout: 30 });
-await wait(5); // results render asynchronously
-const results = await js(String.raw\`(() => {
-  const seen = new Set(); const out = [];
-  for (const a of document.querySelectorAll('a')) {
-    const m = a.href && a.href.match(/patents\\.google\\.com\\/patent\\/([^/]+)/);
-    if (m && !seen.has(m[1])) { seen.add(m[1]); out.push(m[1]); }
-    if (out.length >= 10) break;
-  }
-  return out;
-})()\`);
-cliLog(JSON.stringify(results));
-await completeTaskSpace(task.id, { keep: false });
-\`\`\`
-
-Notes:
-- If the site needs a captcha or manual login, call \`handOffTaskSpace(id)\` and tell the user what to do, then resume with \`takeOverTaskSpace(id)\` after confirmation.
-- Default timeout is 90000ms (navigation + rendering on slow sites); pass \`timeoutMs\` only when the script genuinely needs more, up to 300000ms.
-- Keep scripts small and observable: navigate, wait for a visible signal, extract, report. Do not use browser automation as a general crawler.`;
+Input \`script\` is a Node.js program run as the body of an \`ego-browser nodejs\` heredoc; helpers are preloaded and only \`cliLog(...)\` output is returned to you. Read the \`ego-browser\` skill first for the helper API, task-space session rules and worked examples.`;
 
 export function createEgoBrowserTool(
   options: CreateEgoBrowserToolOptions = {},
