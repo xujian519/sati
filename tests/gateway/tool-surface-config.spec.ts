@@ -95,7 +95,9 @@ test("hiddenDomains 移除该域工具，其他域与未标域工具不受影响
   for (const removed of ["patent_search", "draft_claims", "render_patent_document", "document_style_panel"]) {
     assert.ok(!names.includes(removed), `${removed} 属于 patent 域，应被裁剪`);
   }
-  for (const kept of ["read_file", "bash", "law_search", "kanban_get", "team_status", "structured_output"]) {
+  // 保留项只选**无 checkAvailability** 的工具：带可用性检查的工具（如 `law_search` 依赖
+  // 本机法律知识库）在 CI 上会被剔除，拿它断言会让用例变成环境相关的假红。
+  for (const kept of ["read_file", "todo_write", "structured_output", "kanban_get", "team_status"]) {
     assert.ok(names.includes(kept), `${kept} 不属于 patent 域，应保留`);
   }
 });
@@ -124,7 +126,7 @@ test("内置工具组显式关闭后不再注册，其余工具不受影响", as
   ]) {
     assert.ok(!names.includes(removed), `${removed} 所在工具组已关闭，应缺席`);
   }
-  for (const kept of ["patent_search", "read_file", "bash", "task_create", "law_search"]) {
+  for (const kept of ["patent_search", "read_file", "todo_write", "structured_output"]) {
     assert.ok(names.includes(kept), `${kept} 不受工具组开关影响`);
   }
 });
