@@ -1,5 +1,5 @@
-import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { Dispatch, ReactNode, RefObject, SetStateAction } from "react";
+import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { Dispatch, RefObject, SetStateAction } from "react";
 import { useTranslation } from "react-i18next";
 import { XCircle, GitBranch } from "lucide-react";
 import { recordUiDiagnostic, reloadUi } from "../../lib/uiDiagnostics";
@@ -21,6 +21,7 @@ import {
   type SessionProvider,
 } from "../../types/app";
 import { getIntrinsicMessageKey } from "../chat/utils/messageKeys";
+import { estimateMessageItemHeight, MeasuredMessageItem, useMessageVirtualization } from "./messageVirtualization";
 import MessageRowV2 from "./MessageRowV2";
 import SubagentDetailModal from "./SubagentDetailModal";
 import ChatHistorySearchBar from "./ChatHistorySearchBar";
@@ -97,18 +98,6 @@ type KeyedRenderableMessageItem = RenderableMessageItem & {
   estimatedHeight: number;
 };
 
-export type VirtualMessageWindow = {
-  startIndex: number;
-  endIndex: number;
-  topPadding: number;
-  bottomPadding: number;
-  totalHeight: number;
-};
-
-const MESSAGE_VIRTUALIZATION_THRESHOLD = 60;
-const MESSAGE_WINDOW_OVERSCAN = 12;
-const MESSAGE_GAP_PX = 16;
-
 function isStreamingThinkingMessage(message: ChatMessage): boolean {
   return Boolean(message.isThinking && String(message.id || "").startsWith("__streaming_thinking_"));
 }
@@ -132,160 +121,6 @@ function isRenderableAssistantProse(message: ChatMessage): boolean {
 function isSubagentThinkingPlaceholder(message: ChatMessage): boolean {
   const id = String(message.id || "");
   return Boolean(message.isThinking && (id.startsWith("subagent_thinking_") || id.startsWith("__subagent_thinking_")));
-}
-
-function clampNumber(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
-
-function upperBound(values: number[], target: number): number {
-  let low = 0;
-  let high = values.length;
-  while (low < high) {
-    const mid = Math.floor((low + high) / 2);
-    if (values[mid] <= target) {
-      low = mid + 1;
-    } else {
-      high = mid;
-    }
-  }
-  return low;
-}
-
-function getMessageTextLength(message: ChatMessage): number {
-  const contentLength = typeof message.content === "string" ? message.content.length : 0;
-  const toolInputLength = typeof message.toolInput === "string" ? message.toolInput.length : 0;
-  const outputLength = typeof message.toolResult?.content === "string" ? message.toolResult.content.length : 0;
-  return contentLength + Math.min(toolInputLength + outputLength, 2400);
-}
-
-function estimateMessageItemHeight(item: RenderableMessageItem): number {
-  const textLength = getMessageTextLength(item.message);
-  const roughLines = Math.ceil(textLength / 92);
-  const baseHeight = item.message.type === "user" ? 64 : 92;
-  const processSummaryCount = item.beforeProcessAttachments.length + item.afterProcessAttachments.length;
-  const processSummaryHeight = processSummaryCount * 32;
-  const runHeaderHeight = (item.beforeRunAttachment ? 34 : 0) + (item.afterRunAttachment ? 34 : 0);
-  const attachmentHeight = Array.isArray(item.message.attachments) && item.message.attachments.length > 0 ? 56 : 0;
-  const artifactCount = Array.isArray(item.message.artifacts) ? item.message.artifacts.length : 0;
-  const artifactHeight = artifactCount > 0 ? Math.min(artifactCount, 3) * 64 + 34 : 0;
-  const imageHeight = Array.isArray(item.message.images) && item.message.images.length > 0 ? 180 : 0;
-  const toolHeight = item.message.isToolUse || item.message.toolName ? 140 : 0;
-
-  return clampNumber(
-    baseHeight +
-      roughLines * 20 +
-      runHeaderHeight +
-      processSummaryHeight +
-      attachmentHeight +
-      artifactHeight +
-      imageHeight +
-      toolHeight +
-      MESSAGE_GAP_PX,
-    72,
-    720,
-  );
-}
-
-// P3-5：前缀和（itemHeights → 每项起始偏移）拆为可复用纯函数。调用方 useMemo
-// 缓存（依赖 measuredItemHeights 引用，级联命中时稳定），避免每个滚动帧全量 O(N)
-// 重建——虚拟滚动滚动事件频率远高于内容变化频率。
-// eslint-disable-next-line react-refresh/only-export-components
-export function buildPrefixOffsets(itemHeights: number[]): number[] {
-  const prefixOffsets = [0];
-  for (const height of itemHeights) {
-    prefixOffsets.push(prefixOffsets[prefixOffsets.length - 1] + Math.max(1, height));
-  }
-  return prefixOffsets;
-}
-
-// eslint-disable-next-line react-refresh/only-export-components
-export function getVirtualMessageWindow(
-  itemHeights: number[],
-  scrollTop: number,
-  viewportHeight: number,
-  overscan = MESSAGE_WINDOW_OVERSCAN,
-  prefixOffsets = buildPrefixOffsets(itemHeights),
-): VirtualMessageWindow {
-  if (itemHeights.length === 0) {
-    return { startIndex: 0, endIndex: 0, topPadding: 0, bottomPadding: 0, totalHeight: 0 };
-  }
-
-  const totalHeight = prefixOffsets[prefixOffsets.length - 1];
-  const safeScrollTop = clampNumber(Number.isFinite(scrollTop) ? scrollTop : 0, 0, totalHeight);
-  const safeViewportHeight = Math.max(1, Number.isFinite(viewportHeight) && viewportHeight > 0 ? viewportHeight : 900);
-  const rawStart = Math.max(0, upperBound(prefixOffsets, safeScrollTop) - 1);
-  const rawEnd = Math.min(itemHeights.length, upperBound(prefixOffsets, safeScrollTop + safeViewportHeight));
-  const startIndex = Math.max(0, rawStart - overscan);
-  const endIndex = Math.min(itemHeights.length, Math.max(startIndex + 1, rawEnd + overscan));
-
-  return {
-    startIndex,
-    endIndex,
-    topPadding: prefixOffsets[startIndex],
-    bottomPadding: Math.max(0, totalHeight - prefixOffsets[endIndex]),
-    totalHeight,
-  };
-}
-
-function MeasuredMessageItem({
-  itemKey,
-  message,
-  isLast,
-  compactBottomSpacing = false,
-  onHeightChange,
-  children,
-}: {
-  itemKey: string;
-  message: ChatMessage;
-  isLast: boolean;
-  compactBottomSpacing?: boolean;
-  onHeightChange: (itemKey: string, height: number) => void;
-  children: ReactNode;
-}) {
-  const itemRef = useRef<HTMLDivElement | null>(null);
-
-  useLayoutEffect(() => {
-    const node = itemRef.current;
-    if (!node) return undefined;
-
-    const reportHeight = () => {
-      onHeightChange(itemKey, node.getBoundingClientRect().height);
-    };
-
-    reportHeight();
-    if (typeof ResizeObserver === "undefined") {
-      return undefined;
-    }
-
-    let rafId: number | null = null;
-    const throttledReport = () => {
-      if (rafId != null) return;
-      rafId = requestAnimationFrame(() => {
-        rafId = null;
-        reportHeight();
-      });
-    };
-
-    const observer = new ResizeObserver(throttledReport);
-    observer.observe(node);
-
-    return () => {
-      observer.disconnect();
-      if (rafId != null) cancelAnimationFrame(rafId);
-    };
-  }, [itemKey, onHeightChange]);
-
-  return (
-    <div
-      ref={itemRef}
-      className={`chat-message ${isLast ? "" : compactBottomSpacing ? "pb-2" : "pb-4"}`}
-      data-message-key={itemKey}
-      data-message-timestamp={message.timestamp ? String(message.timestamp) : undefined}
-    >
-      {children}
-    </div>
-  );
 }
 
 function countCarriedMessagesBefore(messages: ChatMessage[], originalIndex: number): number {
@@ -358,8 +193,6 @@ function MessagesPaneV2({
   const { t: tCommon } = useTranslation("common");
   const messageKeyMapRef = useRef<WeakMap<ChatMessage, string>>(new WeakMap());
   const generatedMessageKeyCounterRef = useRef(0);
-  const measuredHeightsRef = useRef<Map<string, number>>(new Map());
-  const heightVersionRafRef = useRef<number | null>(null);
   // P3-4 增量缓存：{消息前缀, isAssistantWorking, 构建结果}。命中时返回缓存引用，
   // 使 renderableMessageItems 引用在流式 process tick 间稳定（见下方 useMemo）。
   const renderableItemsCacheRef = useRef<{
@@ -367,8 +200,6 @@ function MessagesPaneV2({
     isAssistantWorking: boolean;
     result: RenderableMessageItem[];
   } | null>(null);
-  const [heightVersion, setHeightVersion] = useState(0);
-  const [scrollViewport, setScrollViewport] = useState({ scrollTop: 0, height: 0 });
   const [expandedProcessRows, setExpandedProcessRows] = useState<Map<string, boolean>>(() => new Map());
   const [openSubagentId, setOpenSubagentId] = useState<string | null>(null);
 
@@ -592,61 +423,14 @@ function MessagesPaneV2({
       })),
     [getMessageKey, renderableMessageItems],
   );
-  const measuredItemHeights = useMemo(() => {
-    void heightVersion;
-    return keyedMessageItems.map(item => measuredHeightsRef.current.get(item.itemKey) ?? item.estimatedHeight);
-  }, [heightVersion, keyedMessageItems]);
-  // 估算总高只算一次，供虚拟化判定与不虚拟化时的窗口高度共用（原先两处各扫一遍全表）。
-  const estimatedTotalHeight = useMemo(
-    () => keyedMessageItems.reduce((height, item) => height + item.estimatedHeight, 0),
-    [keyedMessageItems],
-  );
-  const shouldVirtualizeMessages = useMemo(
-    () =>
-      keyedMessageItems.length > MESSAGE_VIRTUALIZATION_THRESHOLD ||
-      // 少量超长回答可能比数百条短消息更重；40 条以上且估算总高超过 20000px 时提前启用
-      // 虚拟化，常规小会话保持完整渲染以保留文本选择能力（上游 #568）。
-      (keyedMessageItems.length > 40 && estimatedTotalHeight > 20_000),
-    [keyedMessageItems.length, estimatedTotalHeight],
-  );
-  // P3-5：前缀和 useMemo 缓存——依赖 measuredItemHeights 引用而非 scrollTop，
-  // 滚动 tick 不再每帧全量重算前缀和（级联命中：流式 process tick 引用稳定）。
-  const prefixOffsets = useMemo(
-    () => (shouldVirtualizeMessages ? buildPrefixOffsets(measuredItemHeights) : []),
-    [measuredItemHeights, shouldVirtualizeMessages],
-  );
-  const virtualWindow = useMemo(
-    () =>
-      shouldVirtualizeMessages
-        ? getVirtualMessageWindow(
-            measuredItemHeights,
-            scrollViewport.scrollTop,
-            scrollViewport.height,
-            MESSAGE_WINDOW_OVERSCAN,
-            prefixOffsets,
-          )
-        : {
-            startIndex: 0,
-            endIndex: keyedMessageItems.length,
-            topPadding: 0,
-            bottomPadding: 0,
-            // 全量渲染时组件不读 totalHeight（只有 padding/窗口索引参与渲染），
-            // 复用估算总高即可，省掉一次全表求和。
-            totalHeight: estimatedTotalHeight,
-          },
-    [
-      estimatedTotalHeight,
-      keyedMessageItems.length,
-      measuredItemHeights,
-      prefixOffsets,
-      scrollViewport.height,
-      scrollViewport.scrollTop,
-      shouldVirtualizeMessages,
-    ],
-  );
-  const windowedMessageItems = shouldVirtualizeMessages
-    ? keyedMessageItems.slice(virtualWindow.startIndex, virtualWindow.endIndex)
-    : keyedMessageItems;
+  const {
+    measuredItemHeights,
+    shouldVirtualizeMessages,
+    virtualWindow,
+    windowedMessageItems,
+    handleMeasuredItemHeight,
+  } = useMessageVirtualization({ keyedItems: keyedMessageItems, scrollContainerRef });
+
   const liveProcessHeaderIndex = useMemo(() => {
     if (!isAssistantWorking) return -1;
     for (let index = keyedMessageItems.length - 1; index >= 0; index -= 1) {
@@ -751,89 +535,6 @@ function MessagesPaneV2({
   ]);
   const hasOpenEndedLiveProcessGroup = liveProcessGroups.some(group => group.isRunning);
   const shouldRenderBottomLiveStatus = isAssistantWorking && !hasOpenEndedLiveProcessGroup;
-
-  const bumpHeightVersion = useCallback(() => {
-    if (heightVersionRafRef.current !== null) return;
-    heightVersionRafRef.current = requestAnimationFrame(() => {
-      heightVersionRafRef.current = null;
-      setHeightVersion(version => version + 1);
-    });
-  }, []);
-
-  const handleMeasuredItemHeight = useCallback(
-    (itemKey: string, height: number) => {
-      const normalizedHeight = Math.max(1, Math.ceil(height));
-      const currentHeight = measuredHeightsRef.current.get(itemKey);
-      if (currentHeight !== undefined && Math.abs(currentHeight - normalizedHeight) < 2) {
-        return;
-      }
-
-      measuredHeightsRef.current.set(itemKey, normalizedHeight);
-      bumpHeightVersion();
-    },
-    [bumpHeightVersion],
-  );
-
-  useEffect(
-    () => () => {
-      if (heightVersionRafRef.current !== null) {
-        cancelAnimationFrame(heightVersionRafRef.current);
-      }
-    },
-    [],
-  );
-
-  useEffect(() => {
-    const validKeys = new Set(keyedMessageItems.map(item => item.itemKey));
-    let changed = false;
-
-    for (const itemKey of measuredHeightsRef.current.keys()) {
-      if (!validKeys.has(itemKey)) {
-        measuredHeightsRef.current.delete(itemKey);
-        changed = true;
-      }
-    }
-
-    if (changed) {
-      bumpHeightVersion();
-    }
-  }, [bumpHeightVersion, keyedMessageItems]);
-
-  useLayoutEffect(() => {
-    const container = scrollContainerRef.current;
-    if (!container) return undefined;
-
-    let frame = 0;
-    const updateViewport = () => {
-      frame = 0;
-      setScrollViewport({
-        scrollTop: container.scrollTop,
-        height: container.clientHeight,
-      });
-    };
-    const scheduleViewportUpdate = () => {
-      if (frame) return;
-      frame = requestAnimationFrame(updateViewport);
-    };
-
-    updateViewport();
-    container.addEventListener("scroll", scheduleViewportUpdate, { passive: true });
-    if (typeof ResizeObserver === "undefined") {
-      return () => {
-        if (frame) cancelAnimationFrame(frame);
-        container.removeEventListener("scroll", scheduleViewportUpdate);
-      };
-    }
-
-    const resizeObserver = new ResizeObserver(scheduleViewportUpdate);
-    resizeObserver.observe(container);
-
-    return () => {
-      if (frame) cancelAnimationFrame(frame);
-      container.removeEventListener("scroll", scheduleViewportUpdate);
-      resizeObserver.disconnect();
-    };
-  }, [scrollContainerRef]);
 
   const renderLiveProcessDetailMessages = useCallback(
     (detailMessages: ChatMessage[], groupId: string) =>

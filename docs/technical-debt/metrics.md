@@ -10,7 +10,7 @@
 | src TS 文件 / 行数 | 1035 / 173882 |
 | src JS 文件 | 0 |
 | tests 文件 | 564 |
-| ui/src 文件 / 行数 | 489 / 85167 |
+| ui/src 文件 / 行数 | 491 / 85440 |
 | ui/server 文件 / 行数 | 108 / 31670 |
 
 ## 指标口径
@@ -46,10 +46,10 @@
 | 文件 | 函数 | 行 | 类型 |
 |---|---|---|---|
 | `ui/src/components/code-editor/view/subcomponents/PdfDocumentPreview.tsx` | `PdfDocumentPreview` | 1064 | function |
-| `ui/src/components/chat-v2/MessagesPaneV2.tsx` | `MessagesPaneV2` | 1023 | function |
 | `ui/src/components/app-shell/SidebarV2.tsx` | `SidebarV2` | 1008 | function |
 | `ui/src/components/chat-v2/MessagesPaneV2.render.test.tsx` | `(anonymous)` | 943 | arrow |
 | `ui/src/components/chat/hooks/useChatSessionState.ts` | `useChatSessionState` | 914 | function |
+| `ui/src/components/chat-v2/MessagesPaneV2.tsx` | `MessagesPaneV2` | 889 | function |
 | `ui/src/components/main-content-v2/FilesV2.tsx` | `FilesV2` | 853 | function |
 | `ui/src/components/main-content-v2/SkillsV2.tsx` | `ImportFromFolder` | 852 | function |
 | `ui/src/components/chat-v2/ComposerV2.tsx` | `ComposerV2` | 741 | function |
@@ -112,7 +112,6 @@
 | `src/adapters/channel/wecom/WeComChannel.ts` | 1764 |
 | `ui/src/components/code-editor/view/subcomponents/PdfDocumentPreview.tsx` | 1724 |
 | `src/model/catalog/providers.ts` | 1593 |
-| `ui/src/components/chat-v2/MessagesPaneV2.tsx` | 1547 |
 | `ui/server/routes/git.js` | 1529 |
 | `ui/src/components/code-editor/view/subcomponents/CodeEditorBinaryFile.tsx` | 1511 |
 | `src/adapters/channel/weixin/WeixinChannel.ts` | 1497 |
@@ -122,7 +121,8 @@
 | `src/adapters/channel/feishu/FeishuChannel.ts` | 1337 |
 | `ui/src/components/app-shell/SidebarV2.tsx` | 1310 |
 | `ui/src/components/chat-v2/processGrouping.ts` | 1294 |
-| `ui/src/components/chat-v2/MessagesPaneV2.render.test.tsx` | 1233 |
+| `ui/src/components/chat-v2/MessagesPaneV2.tsx` | 1248 |
+| `ui/src/components/chat-v2/MessagesPaneV2.render.test.tsx` | 1234 |
 | `ui/server/routes/agent.js` | 1224 |
 | `ui/src/components/chat-v2/ComposerV2.tsx` | 1188 |
 | `ui/server/routes/taskmaster.js` | 1179 |
