@@ -94,6 +94,13 @@ export const PROTOCOL_RELEASES = [
       "active_turn_snapshot 响应新增可选 projection：{ runId, blocks: [{ kind, epoch, text, inflight? }] }。旧客户端忽略该字段即退回旧行为——正文只有截断后的事件流可用。",
     ],
   },
+  {
+    version: "1.10",
+    note: "2026-09-18: 无新方法；context_budget 事件新增可选 fixedOverheadTokens（system prompt + 工具 schema 的本地估算，上游 #450 第 5 条：UI 把固定开销与对话用量分开显示，避免把首轮固定开销误读为对话已用）。",
+    changes: [
+      "context_budget 事件新增可选 fixedOverheadTokens：本地估算中不随对话增长的那部分（system prompt + 工具 schema）。旧客户端忽略该字段即退回单一用量显示；压缩重建的历史预算（source: compact）不带此字段，因为那一刻的 used 只含消息。",
+    ],
+  },
 ] as const satisfies readonly ProtocolReleaseEntry[];
 
 /** 台账条目类型（含 `note` / `changes`）。 */

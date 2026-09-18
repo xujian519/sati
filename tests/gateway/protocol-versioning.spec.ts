@@ -126,8 +126,8 @@ describe("协议版本台账（version.ts）", () => {
     );
   });
 
-  it("当前协议版本钉在 1.9（bump 须同时追加一条 PROTOCOL_RELEASES）", () => {
-    assert.equal(SATI_GATEWAY_PROTOCOL_VERSION, "1.9");
+  it("当前协议版本钉在 1.10（bump 须同时追加一条 PROTOCOL_RELEASES）", () => {
+    assert.equal(SATI_GATEWAY_PROTOCOL_VERSION, "1.10");
   });
 
   it("回归：两处长期漏登记的方法各自钉在真实引入版本（#362）", () => {

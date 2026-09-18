@@ -92,3 +92,50 @@ test("eventMapping: turn_failed 携带 providerError 映射", () => {
   assert.equal(err.providerError?.provider, "anthropic");
   assert.equal(err.providerError?.status, 500);
 });
+
+test("eventMapping: context_budget 透传固定开销（system prompt + 工具 schema）", () => {
+  const snapshot = {
+    tokens: 40_000,
+    displayTokens: 38_000,
+    fixedOverheadTokens: 34_000,
+    totalContextTokens: 131_072,
+    maxContextTokens: 98_304,
+    effectiveContextTokens: 98_304,
+    reservedOutputTokens: 32_768,
+    warningRatio: 0.8,
+    blockingRatio: 0.95,
+    state: "ok" as const,
+    ratio: 0.4,
+  };
+  const mapped = mapAgentEvent(
+    { type: "context_budget", sessionId: "s", turnId: "t", snapshot } as unknown as AgentEvent,
+    "run-1",
+  );
+
+  assert.equal(mapped[0]?.type, "context_budget");
+  assert.equal((mapped[0] as { fixedOverheadTokens?: number }).fixedOverheadTokens, 34_000);
+});
+
+test("eventMapping: 快照未带固定开销时不凭空编造该字段", () => {
+  const mapped = mapAgentEvent(
+    {
+      type: "context_budget",
+      sessionId: "s",
+      turnId: "t",
+      snapshot: {
+        tokens: 1_000,
+        totalContextTokens: 131_072,
+        maxContextTokens: 98_304,
+        warningRatio: 0.8,
+        blockingRatio: 0.95,
+        state: "ok" as const,
+        ratio: 0.01,
+      },
+    } as unknown as AgentEvent,
+    "run-1",
+  );
+
+  assert.equal(mapped[0]?.type, "context_budget");
+  // 归一化后为 undefined：帧序列化（JSON）会丢掉该键，旧客户端看到的形状与拆分前一致。
+  assert.equal((mapped[0] as { fixedOverheadTokens?: number }).fixedOverheadTokens, undefined);
+});

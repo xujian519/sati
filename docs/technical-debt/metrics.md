@@ -7,11 +7,11 @@
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1035 / 173681 |
+| src TS 文件 / 行数 | 1035 / 173723 |
 | src JS 文件 | 0 |
 | tests 文件 | 561 |
-| ui/src 文件 / 行数 | 480 / 84034 |
-| ui/server 文件 / 行数 | 108 / 31668 |
+| ui/src 文件 / 行数 | 480 / 84196 |
+| ui/server 文件 / 行数 | 108 / 31670 |
 
 ## 指标口径
 
@@ -29,7 +29,7 @@
 | 指标 | 总量 | 热点模块 |
 |---|---|---|
 | `any`/`@ts-expect-error`/`@ts-ignore` | 3 | ui/src(3) |
-| `as unknown as`（双重断言） | 27 | ui/src(20) · adapters(2) · tool(2) |
+| `as unknown as`（双重断言） | 28 | ui/src(21) · adapters(2) · tool(2) |
 | 裸 `console.*` | 158 | cli(137) · telemetry(8) · ui/server(5) |
 | 空 `catch {}` | 0 | — |
 | 无参 `catch {`（总计） | 658 | ui/server(151) · ui/src(114) · adapters(70) |
@@ -53,7 +53,7 @@
 | `ui/src/components/chat/hooks/useChatSessionState.ts` | `useChatSessionState` | 914 | function |
 | `ui/src/components/main-content-v2/FilesV2.tsx` | `FilesV2` | 853 | function |
 | `ui/src/components/main-content-v2/SkillsV2.tsx` | `ImportFromFolder` | 852 | function |
-| `ui/src/components/chat-v2/ComposerV2.tsx` | `ComposerV2` | 780 | function |
+| `ui/src/components/chat-v2/ComposerV2.tsx` | `ComposerV2` | 741 | function |
 | `ui/src/stores/useSessionStore.ts` | `useSessionStore` | 727 | function |
 | `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` | `useChatRealtimeHandlers` | 719 | function |
 | `ui/src/components/git-panel/hooks/useGitPanelController.ts` | `useGitPanelController` | 704 | function |
@@ -70,7 +70,7 @@
 | `ui/src/components/settings/view/modelPool/components/ProviderCard.tsx` | `ProviderCard` | 447 | function |
 | `ui/src/components/chat-v2/MessageRowV2.tsx` | `MessageRowV2` | 429 | function |
 | `ui/src/components/code-editor/view/subcomponents/DocxBuiltinPreview.tsx` | `DocxBuiltinPreview` | 421 | function |
-| `src/gateway/client/eventMapping.ts` | `mapAgentEventForTurn` | 416 | function |
+| `src/gateway/client/eventMapping.ts` | `mapAgentEventForTurn` | 417 | function |
 | `ui/src/components/chat-v2/processGrouping.test.ts` | `(anonymous)` | 409 | arrow |
 | `ui/src/components/code-editor/view/subcomponents/SpreadsheetInteractivePreview.tsx` | `SpreadsheetInteractivePreview` | 407 | function |
 | `ui/src/components/settings/view/integrations/im/components/WeComChannelSection.tsx` | `WeComChannelSection` | 398 | function |
@@ -106,7 +106,7 @@
 | 文件 | 行 |
 |---|---|
 | `ui/src/components/main-content-v2/SkillsV2.tsx` | 2526 |
-| `ui/server/sati-bridge.js` | 2345 |
+| `ui/server/sati-bridge.js` | 2347 |
 | `ui/src/components/chat/hooks/useChatComposerState.ts` | 1838 |
 | `src/adapters/channel/wecom/WeComChannel.ts` | 1764 |
 | `ui/src/components/code-editor/view/subcomponents/PdfDocumentPreview.tsx` | 1724 |
@@ -121,15 +121,15 @@
 | `src/adapters/channel/feishu/FeishuChannel.ts` | 1337 |
 | `ui/src/components/app-shell/SidebarV2.tsx` | 1310 |
 | `ui/src/components/chat-v2/processGrouping.ts` | 1294 |
+| `ui/src/components/chat-v2/MessagesPaneV2.render.test.tsx` | 1233 |
 | `ui/server/routes/agent.js` | 1224 |
+| `ui/src/components/chat-v2/ComposerV2.tsx` | 1188 |
 | `ui/server/routes/taskmaster.js` | 1179 |
 | `ui/src/components/chat/hooks/useChatSessionState.ts` | 1160 |
-| `ui/src/components/chat-v2/MessagesPaneV2.render.test.tsx` | 1150 |
 | `ui/server/routes/config.js` | 1147 |
 | `src/agent/loop/AgentLoop.ts` | 1143 |
 | `ui/src/components/main-content-v2/CronV2.tsx` | 1130 |
 | `ui/src/components/main-content/view/MainContent.tsx` | 1111 |
-| `ui/src/components/chat-v2/ComposerV2.tsx` | 1109 |
 | `src/model/streaming/streamModel.ts` | 1085 |
 | `ui/server/routes/commands.js` | 1082 |
 | `src/always-on/runtime/DiscoveryFire.ts` | 1079 |
@@ -199,7 +199,7 @@
 |---|---|---|---|---|
 | alwaysOn | 156 | 156 | 0 | 0 |
 | auth | 23 | 23 | 0 | 0 |
-| chat | 371 | 371 | 0 | 0 |
+| chat | 374 | 374 | 0 | 0 |
 | codeEditor | 143 | 143 | 0 | 0 |
 | common | 435 | 435 | 0 | 0 |
 | kanban | 44 | 44 | 0 | 0 |

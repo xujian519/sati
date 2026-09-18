@@ -324,6 +324,12 @@ export type GatewayEvent = GatewayTurnScopedEventMetadata &
         used: number;
         displayUsed?: number;
         budgetUsed?: number;
+        /**
+         * system prompt + 工具 schema 的本地估算（1.10）：展示层据此把「固定开销」
+         * 与「对话用量」拆开。旧客户端忽略该字段即退回单一用量。压缩重建的历史
+         * 预算不带此字段（那一刻的 `used` 只含消息）。
+         */
+        fixedOverheadTokens?: number;
         total: number;
         effectiveTotal?: number;
         reservedOutputTokens?: number;

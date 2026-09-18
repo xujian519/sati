@@ -117,6 +117,8 @@ export type WebGatewayEvent = WebGatewayEventMetadata &
         used: number;
         displayUsed?: number;
         budgetUsed?: number;
+        /** system prompt + 工具 schema 的本地估算（网关协议 1.10）；缺失即不拆分。 */
+        fixedOverheadTokens?: number;
         total: number;
         effectiveTotal?: number;
         reservedOutputTokens?: number;

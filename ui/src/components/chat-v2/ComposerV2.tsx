@@ -138,6 +138,13 @@ type ContextStatus = {
   percentLabel: string;
   usedLabel: string;
   totalLabel: string;
+  /**
+   * system prompt + 工具 schema 的固定开销，以及由它推出的对话用量。服务端未给
+   * 固定开销（压缩重建的历史预算、旧帧）时两者为 undefined——此时不展示拆分行，
+   * 只显示合计，行为与拆分前一致。
+   */
+  fixedOverhead?: { tokens: number; label: string; percent: number };
+  conversation?: { tokens: number; label: string; percent: number };
   state: "ok" | "warning" | "blocking" | "unknown";
   tone: "normal" | "amber" | "red" | "unknown";
 };
@@ -253,6 +260,83 @@ function resolveContextTone(snapshotState: string | null, percent: number): Cont
   return "normal";
 }
 
+/**
+ * 上下文用量气泡：合计 + 固定开销/对话用量拆分（服务端给出固定开销时）。
+ *
+ * 从 `ComposerV2` 抽出的独立组件——气泡文案自成一体，留在主组件里只会让
+ * 已超长的渲染函数继续变长。
+ */
+export function ContextStatusPopover({ status, title, t }: { status: ContextStatus; title: string; t: TFunction }) {
+  const usedText = t("input.contextStatusUsed", {
+    used: status.used.toLocaleString(),
+    total: status.displayTotal.toLocaleString(),
+    defaultValue: `${status.used.toLocaleString()} tokens used out of ${status.displayTotal.toLocaleString()}.`,
+  }) as string;
+  const sliceValue = (tokens: string, percent: number) =>
+    t("input.contextStatusSliceValue", {
+      tokens,
+      percent,
+      defaultValue: "{{tokens}} ({{percent}}%)",
+    }) as string;
+  return (
+    <div
+      role="status"
+      className="absolute right-0 bottom-full z-50 mb-2 w-64 max-w-[100vw] rounded-lg border border-neutral-200 bg-white p-3 text-left text-[12px] leading-5 text-neutral-700 shadow-lg dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-200"
+    >
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <span className="font-medium text-neutral-900 dark:text-neutral-100">{title}</span>
+        <span
+          className={cn(
+            "rounded-full px-2 py-0.5 text-[11px] font-medium tabular-nums",
+            CONTEXT_TONE_BADGE_STYLES[status.tone],
+          )}
+        >
+          {status.known ? status.percentLabel : "--"}
+        </span>
+      </div>
+      {status.known ? (
+        <>
+          <div className="text-neutral-500 dark:text-neutral-400">{usedText}</div>
+          {status.fixedOverhead && status.conversation ? (
+            <ul className="mt-2 space-y-1">
+              <li className="flex items-center justify-between gap-2 text-neutral-500 dark:text-neutral-400">
+                <span>{t("input.contextStatusFixed", { defaultValue: "Prompt & tools (fixed)" })}</span>
+                <span className="shrink-0 tabular-nums">
+                  {sliceValue(status.fixedOverhead.label, status.fixedOverhead.percent)}
+                </span>
+              </li>
+              <li className="flex items-center justify-between gap-2 text-neutral-500 dark:text-neutral-400">
+                <span>{t("input.contextStatusConversation", { defaultValue: "Conversation" })}</span>
+                <span className="shrink-0 tabular-nums">
+                  {sliceValue(status.conversation.label, status.conversation.percent)}
+                </span>
+              </li>
+            </ul>
+          ) : null}
+          <div className="mt-2 text-neutral-500 dark:text-neutral-400">
+            {t("input.contextStatusAutoCompact", {
+              defaultValue: "Auto compact runs when the conversation approaches the configured limit.",
+            })}
+          </div>
+          {status.state === "blocking" ? (
+            <div className="mt-2 text-red-600 dark:text-red-300">
+              {t("input.contextStatusBlockingBody", {
+                defaultValue: "Compaction ran, but the context is still over the limit.",
+              })}
+            </div>
+          ) : null}
+        </>
+      ) : (
+        <div className="text-neutral-500 dark:text-neutral-400">
+          {t("input.contextStatusUnknownBody", {
+            defaultValue: "No token budget has been reported yet. It will appear after the next model response.",
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function resolveSendTitle(args: {
   isSubmitPending: boolean;
   hasUploadingImages: boolean;
@@ -312,6 +396,11 @@ export function getContextStatus(tokenBudget?: Record<string, unknown> | null): 
   const policyPercent = Math.max(0, Math.round((used / policyTotal) * 100));
   const snapshotState = typeof tokenBudget?.state === "string" ? tokenBudget.state : null;
   const tone = resolveContextTone(snapshotState, policyPercent);
+  const { fixedOverhead, conversation } = splitFixedOverhead(
+    readNumber(tokenBudget?.fixedOverheadTokens),
+    used,
+    displayTotal,
+  );
   return {
     known: true,
     used,
@@ -321,9 +410,38 @@ export function getContextStatus(tokenBudget?: Record<string, unknown> | null): 
     percentLabel: formatContextPercentLabel(percent),
     usedLabel: formatTokenCount(used),
     totalLabel: formatTokenCount(displayTotal),
+    ...(fixedOverhead && conversation ? { fixedOverhead, conversation } : {}),
     state: snapshotState === "blocking" || snapshotState === "warning" ? snapshotState : "ok",
     tone,
   };
+}
+
+/**
+ * 把「已用」拆成固定开销（system prompt + 工具 schema）与对话用量。
+ *
+ * 服务端的固定开销是本地估算，而合计可能来自供应商计数——两者不同源时以合计为准，
+ * 固定开销会被夹到不超过合计，保证两行数字恒等于合计本身（不出现三行互相矛盾）。
+ * 缺失或非正值的固定开销视为「未拆分」，返回空对象，调用方退回只显示合计。
+ */
+function splitFixedOverhead(
+  fixedOverheadTokens: number | null,
+  used: number,
+  displayTotal: number,
+): {
+  fixedOverhead?: ContextStatus["fixedOverhead"];
+  conversation?: ContextStatus["conversation"];
+} {
+  if (fixedOverheadTokens === null || fixedOverheadTokens <= 0 || used <= 0) {
+    return {};
+  }
+  const overhead = Math.min(Math.round(fixedOverheadTokens), used);
+  const conversationTokens = used - overhead;
+  const slice = (tokens: number) => ({
+    tokens,
+    label: formatTokenCount(tokens),
+    percent: Math.max(0, Math.round((tokens / displayTotal) * 100)),
+  });
+  return { fixedOverhead: slice(overhead), conversation: slice(conversationTokens) };
 }
 
 export default function ComposerV2({
@@ -453,20 +571,6 @@ export default function ComposerV2({
         defaultValue: "Context usage unknown. It will appear after the next model response.",
       }) as string);
   const contextWindowTitle = t("input.contextStatusTitle", { defaultValue: "Context window" }) as string;
-  const contextStatusUsedText = t("input.contextStatusUsed", {
-    used: contextStatus.used.toLocaleString(),
-    total: contextStatus.displayTotal.toLocaleString(),
-    defaultValue: `${contextStatus.used.toLocaleString()} tokens used out of ${contextStatus.displayTotal.toLocaleString()}.`,
-  }) as string;
-  const contextStatusAutoCompactText = t("input.contextStatusAutoCompact", {
-    defaultValue: "Auto compact runs when the conversation approaches the configured limit.",
-  }) as string;
-  const contextStatusBlockingBodyText = t("input.contextStatusBlockingBody", {
-    defaultValue: "Compaction ran, but the context is still over the limit.",
-  }) as string;
-  const contextStatusUnknownBodyText = t("input.contextStatusUnknownBody", {
-    defaultValue: "No token budget has been reported yet. It will appear after the next model response.",
-  }) as string;
 
   return (
     <div
@@ -905,7 +1009,7 @@ export default function ComposerV2({
                   </div>
                 ) : null}
 
-                <div className="pd-composer-toolbar-right ml-auto flex shrink-0 items-center gap-1">
+                <div className="pd-composer-toolbar-right relative ml-auto flex shrink-0 items-center gap-1">
                   <div
                     className="relative"
                     onBlur={event => {
@@ -931,40 +1035,15 @@ export default function ComposerV2({
                         {contextStatus.known ? contextStatus.percentLabel : "--"}
                       </span>
                     </button>
-                    {isContextPopoverOpen ? (
-                      <div
-                        role="status"
-                        className="absolute right-0 bottom-full z-50 mb-2 w-64 rounded-lg border border-neutral-200 bg-white p-3 text-left text-[12px] leading-5 text-neutral-700 shadow-lg dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-200"
-                      >
-                        <div className="mb-1 flex items-center justify-between gap-2">
-                          <span className="font-medium text-neutral-900 dark:text-neutral-100">
-                            {contextWindowTitle}
-                          </span>
-                          <span
-                            className={cn(
-                              "rounded-full px-2 py-0.5 text-[11px] font-medium tabular-nums",
-                              CONTEXT_TONE_BADGE_STYLES[contextStatus.tone],
-                            )}
-                          >
-                            {contextStatus.known ? contextStatus.percentLabel : "--"}
-                          </span>
-                        </div>
-                        {contextStatus.known ? (
-                          <>
-                            <div className="text-neutral-500 dark:text-neutral-400">{contextStatusUsedText}</div>
-                            <div className="mt-2 text-neutral-500 dark:text-neutral-400">
-                              {contextStatusAutoCompactText}
-                            </div>
-                            {contextStatus.state === "blocking" ? (
-                              <div className="mt-2 text-red-600 dark:text-red-300">{contextStatusBlockingBodyText}</div>
-                            ) : null}
-                          </>
-                        ) : (
-                          <div className="text-neutral-500 dark:text-neutral-400">{contextStatusUnknownBodyText}</div>
-                        )}
-                      </div>
-                    ) : null}
                   </div>
+                  {/*
+                    气泡挂在整条工具条（`relative`）而非按钮上：按钮 44px 宽时 `right-0`
+                    会让 256px 的气泡左溢出被助手面板的 `overflow-hidden` 裁掉（窄面板下
+                    文本被切一半）。挂到工具条右缘后气泡落在面板可印区内。
+                  */}
+                  {isContextPopoverOpen ? (
+                    <ContextStatusPopover status={contextStatus} title={contextWindowTitle} t={t} />
+                  ) : null}
 
                   <div
                     className="relative"

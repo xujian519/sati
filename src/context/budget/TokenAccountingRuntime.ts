@@ -137,6 +137,7 @@ export class TokenAccountingRuntime {
         exact: false,
         displayTokens: usePadding ? estimate.raw : undefined,
         budgetTokens: usePadding ? localTokens : undefined,
+        fixedOverheadTokens: estimate.fixedOverhead,
       });
     }
 
@@ -148,6 +149,7 @@ export class TokenAccountingRuntime {
       estimatorError: counted.estimatorError,
       displayTokens: counted.exact ? undefined : estimate.raw,
       budgetTokens: usePadding ? estimate.padded : undefined,
+      fixedOverheadTokens: estimate.fixedOverhead,
     });
   }
 
@@ -162,6 +164,7 @@ export class TokenAccountingRuntime {
       usageTokens?: number;
       displayTokens?: number;
       budgetTokens?: number;
+      fixedOverheadTokens?: number;
     } = {},
   ): TokenBudgetSnapshot {
     return this.tokenBudget.snapshotFromTokens(tokens, maxContextTokens, metadata);
@@ -182,14 +185,22 @@ export class TokenAccountingRuntime {
    * 单次估算 raw（无 padding）与 padded（消息部分 4/3 上界）两个变体。
    * 消息只编码一遍，padding 由 raw 推导——供 `evaluateRequestBudget` 复用，
    * 避免同一请求的 displayTokens/budgetTokens 重复全量编码。
+   *
+   * `fixedOverhead` 是 system prompt + 工具 schema 的本地估算（不随对话增长），
+   * 供展示层拆分固定开销与对话用量。
    */
-  private estimateRequestInputOnce(request: CanonicalModelRequest): { raw: number; padded: number } {
+  private estimateRequestInputOnce(request: CanonicalModelRequest): {
+    raw: number;
+    padded: number;
+    fixedOverhead: number;
+  } {
     const rawMessages = this.tokenBudget.estimateMessagesTokens(request.messages);
     const system = request.systemPrompt ? this.tokenBudget.estimateTextTokens(request.systemPrompt) : 0;
     const tools = estimateToolSchemas(this.tokenBudget, request.tools ?? []);
     return {
       raw: rawMessages + system + tools,
       padded: paddedEstimate(rawMessages) + system + tools,
+      fixedOverhead: system + tools,
     };
   }
 

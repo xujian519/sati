@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { ChatMessage, ChatRunMode, SatiWorkStatus } from "../chat/types/types";
 import MessagesPaneV2, { buildPrefixOffsets, getVirtualMessageWindow } from "./MessagesPaneV2";
-import { getContextStatus } from "./ComposerV2";
+import { ContextStatusPopover, getContextStatus } from "./ComposerV2";
 
 beforeAll(() => {
   class ResizeObserverMock {
@@ -153,6 +153,89 @@ describe("getContextStatus", () => {
     expect(status.displayTotal).toBe(4_000);
     expect(status.totalLabel).toBe("4.0k");
     expect(status.percentLabel).toBe("25%");
+  });
+
+  it("把已用拆成固定开销与对话用量（#450 第 5 条）", () => {
+    const status = getContextStatus({
+      displayUsed: 35_000,
+      total: 131_072,
+      effectiveTotal: 98_304,
+      fixedOverheadTokens: 24_000,
+      state: "ok",
+    });
+
+    expect(status.fixedOverhead).toEqual({ tokens: 24_000, label: "24.0k", percent: 18 });
+    // 对话用量 = 已用 − 固定开销：两行数字恒等于合计，不出现第三个数。
+    expect(status.conversation).toEqual({ tokens: 11_000, label: "11.0k", percent: 8 });
+  });
+
+  it("固定开销缺失（压缩重建 / 旧帧）时不编造拆分行", () => {
+    expect(getContextStatus({ displayUsed: 35_000, total: 131_072 }).fixedOverhead).toBeUndefined();
+    expect(getContextStatus({ displayUsed: 35_000, total: 131_072 }).conversation).toBeUndefined();
+    // 0 与负数同样视为未拆分（无 system prompt / 无工具的请求）。
+    expect(
+      getContextStatus({ displayUsed: 35_000, total: 131_072, fixedOverheadTokens: 0 }).fixedOverhead,
+    ).toBeUndefined();
+  });
+
+  it("固定开销超过已用时夹到已用，对话用量归零而不是负数", () => {
+    const status = getContextStatus({
+      displayUsed: 10_000,
+      total: 131_072,
+      fixedOverheadTokens: 30_000,
+    });
+
+    expect(status.fixedOverhead?.tokens).toBe(10_000);
+    expect(status.conversation?.tokens).toBe(0);
+  });
+});
+
+describe("ContextStatusPopover", () => {
+  /** 最小 i18n 桩：按 defaultValue 插值，足以断言渲染文本与键解析。 */
+  const t = ((key: string, options?: Record<string, unknown>) => {
+    const template = String(options?.defaultValue ?? key);
+    return template.replace(/\{\{(\w+)\}\}/g, (_match, name: string) => String(options?.[name] ?? ""));
+  }) as unknown as Parameters<typeof ContextStatusPopover>[0]["t"];
+
+  it("固定开销在场时渲染两行拆分，数值与百分比按窗口口径", () => {
+    render(
+      <ContextStatusPopover
+        status={getContextStatus({
+          displayUsed: 35_000,
+          total: 131_072,
+          fixedOverheadTokens: 24_000,
+          state: "ok",
+        })}
+        title="Context window"
+        t={t}
+      />,
+    );
+
+    expect(screen.getByText("Prompt & tools (fixed)")).toBeTruthy();
+    expect(screen.getByText("24.0k (18%)")).toBeTruthy();
+    expect(screen.getByText("Conversation")).toBeTruthy();
+    expect(screen.getByText("11.0k (8%)")).toBeTruthy();
+  });
+
+  it("固定开销缺席时只显示合计，不渲染拆分行", () => {
+    render(
+      <ContextStatusPopover
+        status={getContextStatus({ displayUsed: 35_000, total: 131_072 })}
+        title="Context window"
+        t={t}
+      />,
+    );
+
+    expect(screen.queryByText("Prompt & tools (fixed)")).toBeNull();
+    expect(screen.getByText("35,000 tokens used out of 131,072.")).toBeTruthy();
+  });
+
+  it("尚无 token 用量时只显示未知提示", () => {
+    render(<ContextStatusPopover status={getContextStatus(null)} title="Context window" t={t} />);
+
+    expect(screen.getByText("--")).toBeTruthy();
+    expect(screen.getByText(/No token budget has been reported yet/)).toBeTruthy();
+    expect(screen.queryByText("Conversation")).toBeNull();
   });
 });
 

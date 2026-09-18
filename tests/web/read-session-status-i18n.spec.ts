@@ -141,6 +141,7 @@ test("history token usage prefers persisted context budget snapshot", async () =
         used: 80,
         displayUsed: 60,
         budgetUsed: 90,
+        fixedOverheadTokens: 50,
         total: 500,
         effectiveTotal: 450,
         reservedOutputTokens: 50,
@@ -154,6 +155,8 @@ test("history token usage prefers persisted context budget snapshot", async () =
     assert.equal(replay.tokenUsage?.used, 60);
     assert.equal(replay.tokenUsage?.displayUsed, 60);
     assert.equal(replay.tokenUsage?.budgetUsed, 90);
+    // 固定开销拆分要能跨会话重放存活（否则刷新页面后拆分行消失）。
+    assert.equal(replay.tokenUsage?.fixedOverheadTokens, 50);
     assert.equal(replay.tokenUsage?.total, 500);
     assert.equal(replay.tokenUsage?.effectiveTotal, 450);
   } finally {

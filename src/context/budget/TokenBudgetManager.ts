@@ -13,6 +13,12 @@ export type TokenBudgetSnapshot = {
   tokens: number;
   displayTokens?: number;
   budgetTokens?: number;
+  /**
+   * 本地估算里不随对话增长的那部分：system prompt + 工具 schema。展示层用它把
+   * 「固定开销」与「对话用量」拆开——`displayTokens ?? tokens` 减去它即对话消息
+   * 的用量。缺失表示该快照未拆分（压缩重建、历史 transcript）。
+   */
+  fixedOverheadTokens?: number;
   estimateSource?: "estimator" | "usage";
   usageTokens?: number;
   /** Original provider/model context window before subtracting output reserve. */
@@ -209,6 +215,7 @@ export class TokenBudgetManager {
       usageTokens?: number;
       displayTokens?: number;
       budgetTokens?: number;
+      fixedOverheadTokens?: number;
     } = {},
   ): TokenBudgetSnapshot {
     const budgetTokens = options.budgetTokens !== undefined ? Math.max(options.budgetTokens, tokens) : tokens;
@@ -227,6 +234,7 @@ export class TokenBudgetManager {
       ...(options.displayTokens !== undefined && options.displayTokens !== tokens
         ? { displayTokens: options.displayTokens }
         : {}),
+      ...(options.fixedOverheadTokens !== undefined ? { fixedOverheadTokens: options.fixedOverheadTokens } : {}),
       ...(budgetTokens !== tokens ? { budgetTokens } : {}),
       estimateSource: options.usageTokens !== undefined ? "usage" : "estimator",
       ...(options.usageTokens !== undefined ? { usageTokens: options.usageTokens } : {}),
