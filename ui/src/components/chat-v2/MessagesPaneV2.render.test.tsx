@@ -40,6 +40,9 @@ function createPaneElement({
   runMode = "agent",
   planModeActive = false,
   workingStatus = null,
+  hasMoreMessages = false,
+  allMessagesLoaded = true,
+  totalMessages = messages.length,
 }: {
   messages: ChatMessage[];
   activityMessages?: ChatMessage[];
@@ -47,6 +50,9 @@ function createPaneElement({
   runMode?: ChatRunMode;
   planModeActive?: boolean;
   workingStatus?: SatiWorkStatus | null;
+  hasMoreMessages?: boolean;
+  allMessagesLoaded?: boolean;
+  totalMessages?: number;
 }) {
   const scrollContainerRef = React.createRef<HTMLDivElement>();
 
@@ -60,13 +66,11 @@ function createPaneElement({
       activityMessages={activityMessages}
       visibleMessages={messages}
       visibleMessageCount={messages.length}
-      isLoadingMoreMessages={false}
-      hasMoreMessages={false}
-      totalMessages={messages.length}
+      hasMoreMessages={hasMoreMessages}
+      totalMessages={totalMessages}
       loadEarlierMessages={() => {}}
       loadAllMessages={() => {}}
-      allMessagesLoaded
-      isLoadingAllMessages={false}
+      allMessagesLoaded={allMessagesLoaded}
       provider="sati"
       selectedProject={null}
       selectedSession={null}
@@ -87,6 +91,9 @@ function renderPane(options: {
   runMode?: ChatRunMode;
   planModeActive?: boolean;
   workingStatus?: SatiWorkStatus | null;
+  hasMoreMessages?: boolean;
+  allMessagesLoaded?: boolean;
+  totalMessages?: number;
 }) {
   return render(createPaneElement(options));
 }
@@ -159,6 +166,26 @@ describe("MessagesPaneV2 render behavior", () => {
     expect(container?.getAttribute("data-virtualized-messages")).toBe("true");
     expect(container?.getAttribute("data-total-message-count")).toBe("220");
     expect(Number(container?.getAttribute("data-rendered-message-count"))).toBeLessThan(220);
+  });
+
+  it("还有更早消息且未全量加载时渲染分页提示行（#159 N02）", () => {
+    // 背景：该行原先的条件是 `hasMoreMessages && !isLoadingMoreMessages && !allMessagesLoaded`，
+    // 而 isLoadingMoreMessages 是 `useState(false)` 且无 setter（恒 false）、已随 #159 N02 删除。
+    // 这条用例钉住等价化简后的存活条件：只要 hasMoreMessages 为真且未全量加载，该行必须还在。
+    const messages = Array.from({ length: 3 }, (_, index) => makeMessage(index));
+
+    renderPane({ messages, hasMoreMessages: true, allMessagesLoaded: false, totalMessages: 10 });
+
+    expect(screen.getByText(/Showing 3 of 10/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Load earlier messages/i })).toBeTruthy();
+  });
+
+  it("已全量加载时不渲染「还有更早消息」提示行（负控制）", () => {
+    const messages = Array.from({ length: 3 }, (_, index) => makeMessage(index));
+
+    renderPane({ messages, hasMoreMessages: true, allMessagesLoaded: true, totalMessages: 10 });
+
+    expect(screen.queryByText(/Showing 3 of 10/)).toBeNull();
   });
 
   it("renders live processing time above the active assistant turn with activity status", () => {

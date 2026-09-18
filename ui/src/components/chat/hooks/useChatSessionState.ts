@@ -258,7 +258,6 @@ export function useChatSessionState({
   const [isLoading, setIsLoading] = useState(false);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(selectedSession?.id || null);
   const [isLoadingSessionMessages, setIsLoadingSessionMessages] = useState(false);
-  const [isLoadingMoreMessages] = useState(false);
   const [hasMoreMessages, setHasMoreMessages] = useState(false);
   const [totalMessages, setTotalMessages] = useState(0);
   const [canAbortSession, setCanAbortSession] = useState(false);
@@ -293,7 +292,6 @@ export function useChatSessionState({
     position: ConversationScrollPosition;
   } | null>(null);
   const loadAllFinishedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const loadAllOverlayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastLoadedSessionKeyRef = useRef<string | null>(null);
   const followScrollFrameRef = useRef<number | null>(null);
 
@@ -523,7 +521,7 @@ export function useChatSessionState({
 
   const loadOlderMessages = useCallback(
     async (container: HTMLDivElement) => {
-      if (!container || isLoadingMoreRef.current || isLoadingMoreMessages) return false;
+      if (!container || isLoadingMoreRef.current) return false;
       if (allMessagesLoadedRef.current) return false;
       if (!hasMoreMessages || !selectedSession || !selectedProject) return false;
 
@@ -547,7 +545,7 @@ export function useChatSessionState({
         isLoadingMoreRef.current = false;
       }
     },
-    [buildFetchParams, hasMoreMessages, isLoadingMoreMessages, selectedProject, selectedSession, sessionStore],
+    [buildFetchParams, hasMoreMessages, selectedProject, selectedSession, sessionStore],
   );
 
   const handleScroll = useCallback(async () => {
@@ -725,7 +723,6 @@ export function useChatSessionState({
     setLoadAllJustFinished(false);
     setShowLoadAllOverlay(false);
     setViewHiddenCount(0);
-    if (loadAllOverlayTimerRef.current) clearTimeout(loadAllOverlayTimerRef.current);
     if (loadAllFinishedTimerRef.current) clearTimeout(loadAllFinishedTimerRef.current);
 
     if (sessionChanged) {
@@ -983,7 +980,7 @@ export function useChatSessionState({
 
   useEffect(() => {
     if (!scrollContainerRef.current || chatMessages.length === 0) return;
-    if (isLoadingMoreRef.current || isLoadingMoreMessages || pendingScrollRestoreRef.current) return;
+    if (isLoadingMoreRef.current || pendingScrollRestoreRef.current) return;
     if (searchScrollActiveRef.current) return;
 
     if (autoScrollToBottom) {
@@ -997,14 +994,7 @@ export function useChatSessionState({
     const newHeight = container.scrollHeight;
     const heightDiff = newHeight - prevHeight;
     if (heightDiff > 0 && prevTop > 0) container.scrollTop = prevTop + heightDiff;
-  }, [
-    autoScrollToBottom,
-    chatMessages.length,
-    isLoadingMoreMessages,
-    isUserScrolledUp,
-    scheduleScrollToBottom,
-    streamContentKey,
-  ]);
+  }, [autoScrollToBottom, chatMessages.length, isUserScrolledUp, scheduleScrollToBottom, streamContentKey]);
 
   useEffect(() => {
     const container = scrollContainerRef.current;
@@ -1060,28 +1050,13 @@ export function useChatSessionState({
     ws,
   ]);
 
-  // "Load all" overlay
-  const prevLoadingRef = useRef(false);
+  // "Load all" overlay：没有更多消息时收起遮罩。
+  // 原先这里还有一条「上一轮在加载、这一轮加载结束、且还有更多」的分支，靠 isLoadingMoreMessages
+  // 的状态迁移触发；但那个状态是 `useState(false)` 且**没有 setter**（恒 false），该分支从未执行过，
+  // 已随死状态一并删除（#159 N02）。遮罩的置位仍由 loadAllMessages() 与下方的完成态 effect 负责。
   useEffect(() => {
-    const wasLoading = prevLoadingRef.current;
-    prevLoadingRef.current = isLoadingMoreMessages;
-
-    if (wasLoading && !isLoadingMoreMessages && hasMoreMessages) {
-      if (loadAllOverlayTimerRef.current) clearTimeout(loadAllOverlayTimerRef.current);
-      setShowLoadAllOverlay(true);
-      loadAllOverlayTimerRef.current = setTimeout(
-        () => setShowLoadAllOverlay(false),
-        UI_TIMEOUTS.LOAD_ALL_OVERLAY_AUTO_HIDE_MS,
-      );
-    }
-    if (!hasMoreMessages && !isLoadingMoreMessages) {
-      if (loadAllOverlayTimerRef.current) clearTimeout(loadAllOverlayTimerRef.current);
-      setShowLoadAllOverlay(false);
-    }
-    return () => {
-      if (loadAllOverlayTimerRef.current) clearTimeout(loadAllOverlayTimerRef.current);
-    };
-  }, [isLoadingMoreMessages, hasMoreMessages]);
+    if (!hasMoreMessages) setShowLoadAllOverlay(false);
+  }, [hasMoreMessages]);
 
   const loadAllMessages = useCallback(async () => {
     if (!selectedSession || !selectedProject) return;
@@ -1152,7 +1127,6 @@ export function useChatSessionState({
     setCurrentSessionId,
     isLoadingSessionMessages,
     sessionLoadError,
-    isLoadingMoreMessages,
     hasMoreMessages,
     totalMessages,
     canAbortSession,

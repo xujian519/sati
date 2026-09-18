@@ -1118,9 +1118,11 @@
   - 位置：`ui/src/components/chat/hooks/useChatComposerState.ts:179`
   - 影响：一个 hook 承担草稿持久化/斜杠命令/文件提及/附件上传/拖拽/忙碌队列/会话生命周期/思维模式编排。建议：拆 `useComposerInput`/`useAttachmentUpload`/`useSlashCommandExecute`/`useSessionSubmit`。证据：`:810-1107`（handleSubmit 单回调 ~300 行）、`:364-549`（handleBuiltInCommand 9+ 分支 switch）。
 - **TD-UI-CHAT-N02** · `useChatSessionState` God hook + 恒为 false 的死状态 `isLoadingMoreMessages`
-  - 类别：A/F · 严重级：P2 · 工作量：L · 状态：new
+  - 类别：A/F · 严重级：P2 · 工作量：L（**死状态半为 S，已完成**）· 状态：**in_progress（死状态半 done，拆分半留待 L 级窗口）**
   - 位置：`useChatSessionState.ts:236`（hook）、`:251`（死状态）
   - 影响：`isLoadingMoreMessages` 从未被 setter 赋值、恒 false，却被透传门控「加载更多」UI。建议：删除该死状态（`isLoadingMoreRef` 已是真实信号），分页/滚动定位抽出独立 hook。
+  - **2026-09-18 处置（死状态半 · PR #440）**：✅ 死状态已删，并顺带清掉它造成的两处**不可达**代码——① `MessagesPaneV2.tsx` 的「Loading older messages...」指示器（条件含该状态 ⇒ **从未渲染过**，该文案在 UI 里从未出现）；② `useChatSessionState.ts` 的「Load all」遮罩 effect 里 `if (wasLoading && !isLoadingMoreMessages && hasMoreMessages)` 分支（`wasLoading` 正取自这个恒 false 的值 ⇒ 从未执行；遮罩置位另有 `loadAllMessages()` 与完成态 effect 两条真实路径）。存活条件 `hasMoreMessages && !isLoadingMoreMessages && !allMessagesLoaded` 做等价化简（`X && !false ≡ X`）。改动面 4 文件 +10/−33，**零行为变化**且论证是**静态**的（该状态无 setter ⇒ 恒 false），配两条针对存活条件的回归用例，负控制已验（注入恒假 ⇒ 用例 1 红、用例 2 绿）。**再次核实口径**：该状态的实际触及面比本条原记的更大（4 处守卫 + 2 处 deps + 返回对象 + 1 处 effect 迁移判断）。决策见 `docs/notes/implemented/2026-09-18-ui-god-hook-unblock.md`。
+  - **剩余（拆分半）**：分页/滚动定位抽独立 hook；与 `TD-UI-CHAT-N03` 的虚拟化边界重叠，按 #159 的分档排期进 L 级窗口（需双视口浏览器验证）。
 - **TD-UI-CHAT-N03** · `MessagesPaneV2` 巨型组件 + 手写消息虚拟化
   - 类别：A/I · 严重级：P1 · 工作量：L · 状态：new
   - 位置：`ui/src/components/chat-v2/MessagesPaneV2.tsx:314`（文件 1252 行）
@@ -1457,6 +1459,7 @@
 
 **短期（P2，1-2 天/项）**
 4. 前端巨无霸：拆分 `useChatComposerState`(UI-CHAT-N01)、`MessagesPaneV2`(N03)、`SkillsV2/ImportFromFolder`(UI-APP-N01)、`PdfDocumentPreview`(N07)；删除 `useChatSessionState` 死状态 `isLoadingMoreMessages`(N02)。UI 改动须浏览器验证。
+   - **2026-09-18 分档复核**：N02 的**死状态半**已完成（PR #440，S 级、零行为变化）；**其余全部未做**。当初「短期（P2，1-2 天/项）」低估了三个 L 级项——它们共享同一成本项（双视口浏览器验证）且都在聊天主链路（提交/虚拟化/滚动定位），改为分三档：小件（N02 死状态，已完）→ 中件（N04/N07/N05，有同址测试兜底）→ L 级专项窗口（N01/N03/UI-APP-N01）。同批复核发现台账另有两条同族载体未列入 #159：`TD-UI-CHAT-N08`（`CodeEditorBinaryFile` 1523 行）、`TD-UI-APP-N02`（`useSessionStore` ~1440 行），已在 #159 评论中补登。另更正口径：该批 issue/台账引用的行数多为**函数/组件跨度**而非文件大小（`Pdf 1138≈函数 1130`、`ImportFromFolder 854≈852`、`MessageComponent 812≈798`），唯独 `MessagesPaneV2`「文件 1252 行」与实测不符（立案日已 1375，现 1556）。
 5. i18n：AppShellV2 弹窗（UI-APP-N03）、LlmConfigurationStep（N04）提取到 locales。✅ N03 完成；N04 的 i18n 已完成（YAML cast / 重复拉取保留为 in_progress）。
 6. 未接线实现：policy-bridge（RULE-N02）、workflow 引擎接线或降级（WORKFLOW-N01）、always-on execution.*（ALWAYSON-N03）。
 7. 可观测性：收束裸 console（TD-CONSOLE-001，先 `cli`）、静默吞错逐条补注释/结构化（TD-CATCH-001）。

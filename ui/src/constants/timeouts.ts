@@ -71,11 +71,9 @@ export const UI_TIMEOUTS = {
    */
   SEARCH_HIGHLIGHT_FLASH_MS: 4000,
 
-  /**
-   * 「加载全部」遮罩在加载结束后自动退场的延时（此时仍可能继续加载下一批）。
-   * 2000ms 让用户看清遮罩上的完成信息，再自行消失；调短会闪一下就没。
-   */
-  LOAD_ALL_OVERLAY_AUTO_HIDE_MS: 2000,
+  // 注：这里原有 LOAD_ALL_OVERLAY_AUTO_HIDE_MS(2000)，其唯一消费者是 useChatSessionState 里一条
+  // 恒不成立的分支（依赖无 setter 的 isLoadingMoreMessages），该分支随 #159 N02 删除后本键再无引用，
+  // 故一并移除。遮罩的实际退场走 LOAD_ALL_FINISHED_STATE_RESET_MS 与显式隐藏路径。
 
   /**
    * 全部消息加载完成后，「刚完成」状态与遮罩一起保留多久再复位。
