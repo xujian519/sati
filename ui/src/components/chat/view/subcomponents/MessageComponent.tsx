@@ -447,8 +447,6 @@ const MessageComponent = memo(
                       autoExpandTools={autoExpandTools}
                       showRawParameters={showRawParameters}
                       rawToolInput={typeof message.toolInput === "string" ? message.toolInput : undefined}
-                      isSubagentContainer={message.isSubagentContainer}
-                      subagentState={message.subagentState}
                     />
                   )}
 
@@ -748,8 +746,6 @@ const MessageComponent = memo(
                           createDiff={createDiff}
                           selectedProject={selectedProject}
                           autoExpandTools={autoExpandTools}
-                          isSubagentContainer={message.isSubagentContainer}
-                          subagentState={message.subagentState}
                         />
                       </div>
                     ))}

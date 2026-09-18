@@ -1132,9 +1132,11 @@
   - 位置：`ui/src/components/chat/view/subcomponents/MessageComponent.tsx:158`
   - 影响：同时渲染 user/assistant/tool/error/thinking/interactive/system 及工具结果/权限/审批/图片/markdown 多形态，props 达 13 个。建议：按消息类型拆 `MessageBubble`/`ToolResultBlock`/`PermissionBlock`。
 - **TD-UI-CHAT-N05** · chat 与 chat-v2 子代理渲染重复实现
-  - 类别：F · 严重级：P2 · 工作量：S · 状态：new
-  - 位置：`chat-v2/SubagentCard.tsx:27` vs `chat/tools/components/SubagentContainer.tsx:63`
-  - 建议：统一为单一 `SubagentRenderer`。
+  - 类别：F · 严重级：P2 · 工作量：S · 状态：**done（2026-09-18，PR #442）**
+  - 位置：`chat-v2/SubagentCard.tsx:27` vs `chat/tools/components/SubagentContainer.tsx:63`（后者已删）
+  - **口径更正**：不再是「两套都在跑的重复实现」，而是**一个活体 + 一个够不着的**。`SubagentContainer` 的唯一入口是 `ToolRenderer` 的 `if (isSubagentContainer && subagentState)` 分支，而容器消息到它之前已被四道机制截住：`MessageRowV2:247` 早退渲染 `SubagentCard`、`MessageRowV2:97`（`shouldDelegate` 里 `isSubagentContainer → false`）、`SubagentDetailMessageFlow:135` 主动清标志、`useSubagentMessages:33` 清无 `subagentId` 的容器。`ToolRenderer` 全仓只有 `MessageComponent` 两个调用点，`MessageComponent` 全仓只有 `MessageRowV2:265` 的 `delegate` 分支一个挂载点 ⇒ 该链第一环即被双重否定。这也解释了它为何零测试覆盖（全仓测试 grep 零命中）。
+  - **处置**：删掉不可达实现（219 行组件 + 其导出 + `ToolRenderer` 容器分支 + 两个透传 prop + 随之无用的两份类型导入），存活实现即 `SubagentCard`，「统一为单一实现」以「只剩一个」达成。改动 5 文件 +35/−248。决策与备选见 `docs/notes/implemented/2026-09-18-subagent-renderer-dedup.md`。
+  - **验证**：删除前先跑新用例——容器消息确实渲染卡片，`SubagentContainer` 三处独有文案（`View tool history`/`Running subagent`/`Currently:`）在 DOM 里一次不出现；负控制把门 1+门 2 注入成恒假 ⇒ 用例变红，还原后全绿。
 - **TD-UI-CHAT-N06** · 工具配置/渲染器大量 `any`，违反 strict/no-any 规范
   - 类别：B · 严重级：P2 · 工作量：M · 状态：new
   - 位置：`chat/tools/configs/toolConfigs.ts:1,19-55,646-783`；`chat/tools/ToolRenderer.tsx:108-109`
