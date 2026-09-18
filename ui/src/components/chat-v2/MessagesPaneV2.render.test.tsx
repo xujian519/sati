@@ -188,6 +188,52 @@ describe("MessagesPaneV2 render behavior", () => {
     expect(screen.queryByText(/Showing 3 of 10/)).toBeNull();
   });
 
+  it("user / thinking / interactive 三类消息的分流：前两类走 v2 原生，第三类走 legacy 渲染器（#159 N04）", () => {
+    // 背景：`MessageComponent` 只在 `MessageRowV2` 的 `delegate` 分支挂载，而 `shouldDelegate`
+    // 对「type ∈ {user, assistant, error} 且不带 isToolUse/isInteractivePrompt/isTaskNotification」
+    // 一律返回 false。生产端（`useChatMessages` 的 case "text"/"thinking"、composer 的三处乐观消息）
+    // 决定的正是：user 与 thinking 消息永远落在这个"不委托"集合里，interactive prompt 则带标志。
+    // 于是 `MessageComponent` 里的 user 气泡与 thinking 分支够不着（#159 N04 删除，不是拆分）。
+    // 这条用例钉住分流结果：被删两支的独有标记不出现，且 user 消息的附件/图片仍照常渲染。
+    const now = new Date().toISOString();
+    const messages: ChatMessage[] = [
+      {
+        id: "u-1",
+        type: "user",
+        content: "用户消息正文",
+        timestamp: now,
+        images: [{ data: "data:image/png;base64,AAA", name: "a.png" }],
+        attachments: [{ name: "doc.pdf", mimeType: "application/pdf" }],
+      } as ChatMessage,
+      { id: "t-1", type: "assistant", content: "思考正文", timestamp: now, isThinking: true } as ChatMessage,
+      {
+        id: "p-1",
+        type: "assistant",
+        content: "选一个?\n❯ 1. 是\n  2. 否",
+        timestamp: now,
+        isInteractivePrompt: true,
+      } as ChatMessage,
+    ];
+
+    const { container } = renderPane({ messages });
+
+    // user：正文 / 附件 / 图片都由 v2 原生路径渲染（这正是删掉死分支后仍然成立的行为）。
+    expect(screen.getByText("用户消息正文")).toBeTruthy();
+    expect(container.textContent).toContain("doc.pdf");
+    expect(container.querySelectorAll("img")).toHaveLength(1);
+    // 被删的 user 气泡独有class（`rounded-2xl rounded-br-md bg-brand-600`）不再出现。
+    expect(container.querySelector(".rounded-br-md")).toBeNull();
+
+    // thinking：它被 processGrouping 折进（默认折叠的）进程行，压根不在可见行里 —— 这也正是
+    // MessageComponent 的思考分支够不着的原因。`thinking.emoji` 不能当判据：存活的 assistant
+    // 分支里还有一处 reasoning 手风琴用同一个 key。
+    expect(screen.queryByText("思考正文")).toBeNull();
+
+    // interactive prompt：存活的那一支（已拆成 `InteractivePromptBlock`）仍渲染。
+    expect(container.textContent).toContain("interactive.title");
+    expect(container.textContent).toContain("是");
+  });
+
   it("子代理容器消息只走 SubagentCard，不再流经 legacy 子代理渲染器（#159 N05）", () => {
     // 背景：`chat/tools/components/SubagentContainer.tsx` 是 chat-v2 之前的子代理渲染器，
     // 与 `SubagentCard` 重复。三道门保证容器消息到不了它：MessageRowV2 的容器早退、

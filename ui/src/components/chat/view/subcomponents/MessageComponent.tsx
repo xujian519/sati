@@ -1,33 +1,17 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { FileText } from "lucide-react";
 import SessionProviderLogo from "../../../llm-logo-provider/SessionProviderLogo";
-import type {
-  ChatAttachment,
-  ChatMessage,
-  SatiPermissionSuggestion,
-  Provider,
-  SessionPermissionGrantResult,
-} from "../../types/types";
-import {
-  DOCUMENT_SELECTION_ATTACHMENT_KIND,
-  type DocumentSelectionReference,
-} from "../../../../types/documentSelection";
-import {
-  CONTENT_REFERENCE_ATTACHMENT_KIND,
-  normalizeContentReference,
-  type ContentReference,
-} from "../../../../types/contentReference";
+import type { ChatMessage, SatiPermissionSuggestion, Provider, SessionPermissionGrantResult } from "../../types/types";
 import { formatUsageLimitText } from "../../utils/chatFormatting";
 import type { Project } from "../../../../types/app";
 import { ToolRenderer, shouldHideToolResult } from "../../tools";
-import DocumentReferenceChip from "../../../chat-v2/DocumentReferenceChip";
 import { stringifyMessageContent } from "../../utils/messageContent";
 import { CompactBoundaryRow } from "./CompactBoundaryRow";
 import { Markdown } from "./Markdown";
 import MessageCopyControl from "./MessageCopyControl";
 import ImageLightbox, { type LightboxImage } from "./ImageLightbox";
 import ToolResultBlock from "./ToolResultBlock";
+import InteractivePromptBlock from "./InteractivePromptBlock";
 type DiffLine = {
   type: string;
   content: string;
@@ -49,12 +33,6 @@ type MessageComponentProps = {
   selectedProject?: Project | null;
   provider: Provider | string;
   hideHeader?: boolean;
-};
-
-type InteractiveOption = {
-  number: string;
-  text: string;
-  isSelected: boolean;
 };
 
 type I18nDescriptor = {
@@ -90,44 +68,6 @@ const TASK_STATUS_DOT_STYLES: Record<string, string> = {
   error: "bg-red-500",
 };
 
-function getAttachmentTypeLabel(name?: string, mimeType?: string): string {
-  const rawName = String(name || "");
-  const ext = rawName.split(".").pop()?.toUpperCase();
-  if (ext && ext !== rawName.toUpperCase()) return ext;
-  if (mimeType?.includes("/")) return mimeType.split("/").pop()?.toUpperCase() || "FILE";
-  return "FILE";
-}
-
-function getAttachmentAccent(name?: string, mimeType?: string): string {
-  const label = getAttachmentTypeLabel(name, mimeType).toLowerCase();
-  if (label === "pdf") return "bg-red-500 text-white";
-  if (label === "doc" || label === "docx") return "bg-blue-500 text-white";
-  if (label === "xls" || label === "xlsx" || label === "csv") return "bg-emerald-500 text-white";
-  if (label === "ppt" || label === "pptx") return "bg-orange-500 text-white";
-  return "bg-neutral-500 text-white";
-}
-
-function attachmentToDocumentReference(attachment: ChatAttachment): ContentReference | null {
-  const structured = normalizeContentReference(attachment.contentReference);
-  if (structured) return structured;
-  if (attachment.kind !== DOCUMENT_SELECTION_ATTACHMENT_KIND || !attachment.selectedText) return null;
-  const filePath = attachment.filePath || attachment.path || "";
-  if (!filePath) return null;
-  return normalizeContentReference({
-    kind: DOCUMENT_SELECTION_ATTACHMENT_KIND,
-    id: `${filePath}-${attachment.createdAt || ""}-${attachment.occurrenceIndex ?? ""}`,
-    fileName: attachment.fileName || attachment.name,
-    filePath,
-    source: attachment.source === "pdf" ? "pdf" : "office-pdf",
-    pageNumbers: Array.isArray(attachment.pageNumbers) ? attachment.pageNumbers : [],
-    selectedText: attachment.selectedText,
-    surroundingText: attachment.surroundingText,
-    occurrenceIndex: attachment.occurrenceIndex,
-    createdAt: attachment.createdAt || new Date(0).toISOString(),
-    truncated: attachment.truncated,
-  } satisfies DocumentSelectionReference);
-}
-
 const MessageComponent = memo(
   ({
     message,
@@ -157,24 +97,6 @@ const MessageComponent = memo(
     const rawMessageContent = stringifyMessageContent(message.content);
     const messageContent = translateDescriptor(t, message.contentI18n, rawMessageContent);
     const userHintContent = translateDescriptor(t, message.userHintI18n, stringifyMessageContent(message.userHint));
-    const messageAttachments = Array.isArray(message.attachments)
-      ? message.attachments.filter(attachment => attachment && typeof attachment.name === "string")
-      : [];
-    const documentReferenceAttachments = messageAttachments
-      .map(attachmentToDocumentReference)
-      .filter((reference): reference is ContentReference => Boolean(reference));
-    const referenceImageNames = new Set(
-      documentReferenceAttachments
-        .filter(reference => reference.selectionMode === "region")
-        .map(reference => reference.image.name),
-    );
-    const messageImages = Array.isArray(message.images)
-      ? message.images.filter(image => image && typeof image.data === "string" && !referenceImageNames.has(image.name))
-      : [];
-    const fileAttachments = messageAttachments.filter(
-      attachment =>
-        attachment.kind !== DOCUMENT_SELECTION_ATTACHMENT_KIND && attachment.kind !== CONTENT_REFERENCE_ATTACHMENT_KIND,
-    );
     const toolResultImages: LightboxImage[] = useMemo(() => {
       const list = (message.toolResult?.images ?? []) as Array<{ data?: unknown; name?: unknown; mimeType?: unknown }>;
       return list
@@ -188,12 +110,10 @@ const MessageComponent = memo(
     const [lightbox, setLightbox] = useState<{ images: LightboxImage[]; index: number } | null>(null);
     const openLightbox = (images: LightboxImage[], index: number) => setLightbox({ images, index });
     const closeLightbox = () => setLightbox(null);
-    const userCopyContent = messageContent;
     const formattedMessageContent = useMemo(() => formatUsageLimitText(messageContent), [messageContent]);
     const assistantCopyContent = message.isToolUse
       ? stringifyMessageContent(message.displayText || message.content)
       : formattedMessageContent;
-    const shouldShowUserCopyControl = message.type === "user" && userCopyContent.trim().length > 0;
     const shouldShowAssistantCopyControl =
       message.type === "assistant" && assistantCopyContent.trim().length > 0 && !message.isToolUse;
 
@@ -234,79 +154,11 @@ const MessageComponent = memo(
       <div
         ref={messageRef}
         data-message-timestamp={message.timestamp || undefined}
-        className={`chat-message ${message.type} ${isGrouped ? "grouped" : ""} ${message.type === "user" ? "flex justify-end px-3 sm:px-0" : "px-3 sm:px-0"}`}
+        // 委托路径下 type 恒非 "user"（user 消息走 v2 原生气泡，见 #159 N04 note），
+        // 故原三元只剩后半支，做等价化简。
+        className={`chat-message ${message.type} ${isGrouped ? "grouped" : ""} px-3 sm:px-0`}
       >
-        {message.type === "user" ? (
-          /* User message bubble on the right */
-          <div className="flex w-full items-end space-x-0 sm:w-auto sm:max-w-[85%] sm:space-x-3 md:max-w-md lg:max-w-lg xl:max-w-xl">
-            <div className="group flex-1 rounded-2xl rounded-br-md bg-brand-600 px-3 py-2 text-white shadow-xs sm:flex-initial sm:px-4">
-              {documentReferenceAttachments.length > 0 && (
-                <div className="mb-2 flex flex-wrap gap-2">
-                  {documentReferenceAttachments.map(reference => (
-                    <DocumentReferenceChip
-                      key={reference.id}
-                      reference={reference}
-                      summaryLength={100}
-                      className="bg-white/90 text-neutral-700"
-                      onOpen={onFileOpen ? () => onFileOpen(reference.source.relativePath) : undefined}
-                    />
-                  ))}
-                </div>
-              )}
-              {fileAttachments.length > 0 && (
-                <div className="mb-2 grid grid-cols-1 gap-2">
-                  {fileAttachments.map((attachment, idx) => (
-                    <div
-                      key={`${attachment.name || "attachment"}-${idx}`}
-                      className="flex min-w-0 items-center gap-3 rounded-2xl bg-white/90 p-2.5 pr-3 text-neutral-900"
-                    >
-                      <div
-                        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${getAttachmentAccent(attachment.name, attachment.mimeType)}`}
-                      >
-                        <FileText className="h-5 w-5" strokeWidth={2} />
-                      </div>
-                      <div className="min-w-0 text-left">
-                        <div className="truncate text-[13px] font-semibold">{attachment.name}</div>
-                        <div className="mt-0.5 text-[11px] font-medium text-neutral-500 uppercase">
-                          {getAttachmentTypeLabel(attachment.name, attachment.mimeType)}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-              <div className="text-sm break-words whitespace-pre-wrap">{messageContent}</div>
-              {messageImages.length > 0 && (
-                <div className="mt-2 grid grid-cols-2 gap-2">
-                  {messageImages.map((img, idx) => (
-                    <button
-                      type="button"
-                      key={img.name || idx}
-                      onClick={() => openLightbox(messageImages as LightboxImage[], idx)}
-                      className="block overflow-hidden rounded-lg focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:outline-hidden"
-                      aria-label={img.name ? `Preview ${img.name}` : "Preview image"}
-                    >
-                      <img
-                        src={img.data}
-                        alt={img.name}
-                        className="h-auto max-w-full cursor-zoom-in rounded-lg transition-opacity hover:opacity-90"
-                      />
-                    </button>
-                  ))}
-                </div>
-              )}
-              <div className="mt-1 flex items-center justify-end gap-1 text-xs text-brand-100">
-                {shouldShowUserCopyControl && <MessageCopyControl content={userCopyContent} messageType="user" />}
-                <span>{formattedTime}</span>
-              </div>
-            </div>
-            {!hideHeader && !isGrouped && (
-              <div className="hidden h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-brand-600 text-sm text-white sm:flex">
-                U
-              </div>
-            )}
-          </div>
-        ) : message.isCompactBoundary ? (
+        {message.isCompactBoundary ? (
           <CompactBoundaryRow
             message={message}
             formattedTime={formattedTime}
@@ -445,112 +297,7 @@ const MessageComponent = memo(
                 </>
               ) : message.isInteractivePrompt ? (
                 // Special handling for interactive prompts
-                <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-900/20">
-                  <div className="flex items-start gap-3">
-                    <div className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-amber-500">
-                      <svg className="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                        />
-                      </svg>
-                    </div>
-                    <div className="flex-1">
-                      <h4 className="mb-3 text-base font-semibold text-amber-900 dark:text-amber-100">
-                        {t("interactive.title")}
-                      </h4>
-                      {(() => {
-                        const lines = messageContent.split("\n").filter(line => line.trim());
-                        const questionLine = lines.find(line => line.includes("?")) || lines[0] || "";
-                        const options: InteractiveOption[] = [];
-
-                        // Parse the menu options
-                        lines.forEach(line => {
-                          // Match lines like "❯ 1. Yes" or "  2. No"
-                          const optionMatch = line.match(/[❯\s]*(\d+)\.\s+(.+)/);
-                          if (optionMatch) {
-                            const isSelected = line.includes("❯");
-                            options.push({
-                              number: optionMatch[1],
-                              text: optionMatch[2].trim(),
-                              isSelected,
-                            });
-                          }
-                        });
-
-                        return (
-                          <>
-                            <p className="mb-4 text-sm text-amber-800 dark:text-amber-200">{questionLine}</p>
-
-                            {/* Option buttons */}
-                            <div className="mb-4 space-y-2">
-                              {options.map(option => (
-                                <button
-                                  key={option.number}
-                                  className={`w-full rounded-lg border-2 px-4 py-3 text-left transition-all ${
-                                    option.isSelected
-                                      ? "border-amber-600 bg-amber-600 text-white shadow-md dark:border-amber-700 dark:bg-amber-700"
-                                      : "border-amber-300 bg-white text-amber-900 dark:border-amber-700 dark:bg-gray-800 dark:text-amber-100"
-                                  } cursor-not-allowed opacity-75`}
-                                  disabled
-                                >
-                                  <div className="flex items-center gap-3">
-                                    <span
-                                      className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-sm font-bold ${
-                                        option.isSelected ? "bg-white/20" : "bg-amber-100 dark:bg-amber-800/50"
-                                      }`}
-                                    >
-                                      {option.number}
-                                    </span>
-                                    <span className="flex-1 text-sm font-medium sm:text-base">{option.text}</span>
-                                    {option.isSelected && <span className="text-lg">❯</span>}
-                                  </div>
-                                </button>
-                              ))}
-                            </div>
-
-                            <div className="rounded-lg bg-amber-100 p-3 dark:bg-amber-800/30">
-                              <p className="mb-1 text-sm font-medium text-amber-900 dark:text-amber-100">
-                                {t("interactive.waiting")}
-                              </p>
-                              <p className="text-xs text-amber-800 dark:text-amber-200">
-                                {t("interactive.instruction")}
-                              </p>
-                            </div>
-                          </>
-                        );
-                      })()}
-                    </div>
-                  </div>
-                </div>
-              ) : message.isThinking ? (
-                /* Thinking messages - collapsible by default */
-                <div className="text-sm text-gray-700 dark:text-gray-300">
-                  <details className="group">
-                    <summary className="flex cursor-pointer items-center gap-2 font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
-                      <svg
-                        className="h-3 w-3 transition-transform group-open:rotate-90"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
-                      <span>{t("thinking.emoji")}</span>
-                    </summary>
-                    <div className="mt-2 border-l-2 border-gray-300 pl-4 text-sm text-gray-600 dark:border-gray-600 dark:text-gray-400">
-                      <Markdown
-                        className="prose prose-sm max-w-none prose-gray dark:prose-invert"
-                        projectName={selectedProject?.name}
-                        onFileOpen={onFileOpen}
-                      >
-                        {messageContent}
-                      </Markdown>
-                    </div>
-                  </details>
-                </div>
+                <InteractivePromptBlock messageContent={messageContent} />
               ) : (
                 <div className="text-sm text-gray-700 dark:text-gray-300">
                   {/* Thinking accordion for reasoning */}
