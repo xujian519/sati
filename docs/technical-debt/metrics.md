@@ -9,8 +9,8 @@
 |---|---|
 | src TS 文件 / 行数 | 1035 / 173882 |
 | src JS 文件 | 0 |
-| tests 文件 | 563 |
-| ui/src 文件 / 行数 | 480 / 84196 |
+| tests 文件 | 564 |
+| ui/src 文件 / 行数 | 482 / 84376 |
 | ui/server 文件 / 行数 | 108 / 31670 |
 
 ## 指标口径
@@ -164,7 +164,7 @@
 | knowledge | 38 |
 | gateway | 32 |
 | context | 30 |
-| model | 27 |
+| model | 28 |
 | session | 27 |
 | router | 18 |
 | always-on | 14 |
@@ -191,7 +191,7 @@
 | runtime | 1 |
 | status | 1 |
 
-| **合计** | **541** |
+| **合计** | **542** |
 
 ## i18n en/zh-CN 对齐
 
@@ -204,7 +204,7 @@
 | common | 435 | 435 | 0 | 0 |
 | kanban | 44 | 44 | 0 | 0 |
 | routing | 64 | 64 | 0 | 0 |
-| settings | 1046 | 1046 | 0 | 0 |
+| settings | 1051 | 1051 | 0 | 0 |
 | sidebar | 125 | 125 | 0 | 0 |
 | stylePanel | 56 | 56 | 0 | 0 |
 | tasks | 94 | 94 | 0 | 0 |
