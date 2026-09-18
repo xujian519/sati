@@ -367,7 +367,7 @@ export const CATALOG_PROVIDERS: CatalogProvider[] = [
     models: [
       // 引擎目录的 openrouter 与 ollama 一样不写死模型（留给运行时探测），因此这里只列
       // 可选项、**不声明能力值**：后端对这些模型取协议默认，声明窗口会让设置页显示一个
-      // 不会生效的数字。tests/model/catalog-mirror-parity.spec.ts 守着这条规则。
+      // 不会生效的数字。scripts/check-catalog-mirror.mjs 守着这条规则。
       {
         id: "anthropic/claude-sonnet-4.6",
         displayName: "Claude Sonnet 4.6",
