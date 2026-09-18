@@ -1,7 +1,12 @@
 import { findCatalogProviderById } from "../../../../../shared/catalogProviders";
+import {
+  FALLBACK_PROTOCOL,
+  PROTOCOL_MODEL_DEFAULTS,
+  type ProtocolModelDefaults,
+} from "../../../../../shared/modelProtocolDefaults";
 import { patch } from "../../modelPool/utils/patch";
 import type { SatiConfig } from "../../modelPool/types";
-import type { ActiveModelCapabilities } from "../types";
+import type { ActiveModelCapabilities, ResolvedLimit } from "../types";
 
 export function splitModelRef(ref: string | undefined): { providerId: string; modelId: string } | null {
   const value = ref?.trim() ?? "";
@@ -27,6 +32,26 @@ export function ensureModelRefsConfigured<T extends SatiConfig>(config: T, refs:
   return refs.reduce((next, ref) => ensureModelRefConfigured(next, ref), config);
 }
 
+function positiveInt(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.floor(value) : undefined;
+}
+
+function protocolDefaultsFor(protocol: string | undefined): ProtocolModelDefaults {
+  const known = protocol as keyof typeof PROTOCOL_MODEL_DEFAULTS | undefined;
+  return (known ? PROTOCOL_MODEL_DEFAULTS[known] : undefined) ?? PROTOCOL_MODEL_DEFAULTS[FALLBACK_PROTOCOL];
+}
+
+/** Model declaration > catalog entry > protocol default — the engine's own order. */
+function resolveLimit(
+  override: number | undefined,
+  catalogValue: number | undefined,
+  protocolValue: number,
+): ResolvedLimit {
+  if (override !== undefined) return { tokens: override, source: "config" };
+  if (catalogValue !== undefined) return { tokens: catalogValue, source: "catalog" };
+  return { tokens: protocolValue, source: "default" };
+}
+
 export function activeModelCapabilities(config: SatiConfig): ActiveModelCapabilities | null {
   const ref = config.agent?.model ?? "";
   if (!ref) return null;
@@ -48,22 +73,32 @@ export function activeModelCapabilities(config: SatiConfig): ActiveModelCapabili
   }
   const userCapabilities =
     userDef && typeof userDef === "object" ? (userDef as Record<string, unknown>).capabilities : null;
-  let maxOutputTokensOverride: number | undefined;
-  if (userCapabilities && typeof userCapabilities === "object") {
-    const v = (userCapabilities as Record<string, unknown>).maxOutputTokens;
-    if (typeof v === "number" && Number.isFinite(v) && v > 0) {
-      maxOutputTokensOverride = v;
-    }
-  }
+  const declared = userCapabilities && typeof userCapabilities === "object" ? userCapabilities : null;
+  const maxOutputTokensOverride = positiveInt((declared as Record<string, unknown> | null)?.maxOutputTokens);
+  const maxContextTokensOverride = positiveInt((declared as Record<string, unknown> | null)?.maxContextTokens);
   const catalogProvider = findCatalogProviderById(providerId);
   const catalogModel = catalogProvider?.models.find(m => m.id === modelId);
+  const protocol = provider.protocol ?? catalogProvider?.protocol ?? FALLBACK_PROTOCOL;
+  const protocolDefaults = protocolDefaultsFor(protocol);
   return {
     ref,
     providerId,
     modelId,
     catalogModel,
     catalogProvider,
+    protocol,
     multimodalInput,
     maxOutputTokensOverride,
+    maxContextTokensOverride,
+    effectiveContext: resolveLimit(
+      maxContextTokensOverride,
+      catalogModel?.maxContextTokens,
+      protocolDefaults.maxContextTokens,
+    ),
+    effectiveOutput: resolveLimit(
+      maxOutputTokensOverride,
+      catalogModel?.maxOutputTokens,
+      protocolDefaults.maxOutputTokens,
+    ),
   };
 }

@@ -881,7 +881,12 @@
           "maxOutputTokens": "最大输出 Token 数",
           "maxOutputDescription": "单次回复最多生成的 Token。留空使用默认值。",
           "maxContextTokens": "最大上下文 Token 数",
-          "maxContextDescription": "自动压缩参考的上下文窗口。留空使用模型默认值。"
+          "maxContextDescription": "自动压缩参考的上下文窗口。留空使用模型默认值。",
+          "effectiveContextTokens": "生效值：{{tokens}}（{{source}}）。",
+          "effectiveOutputTokens": "生效值：{{tokens}}（{{source}}）。",
+          "sourceConfig": "来自配置",
+          "sourceCatalog": "来自内置目录",
+          "sourceDefault": "来自协议默认"
         },
         "subagents": {
           "label": "子智能体默认模型",

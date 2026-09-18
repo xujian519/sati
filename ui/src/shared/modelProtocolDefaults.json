@@ -1,0 +1,6 @@
+{
+  "openai": { "maxContextTokens": 128000, "maxOutputTokens": 32768 },
+  "openai-responses": { "maxContextTokens": 128000, "maxOutputTokens": 32768 },
+  "anthropic": { "maxContextTokens": 200000, "maxOutputTokens": 32768 },
+  "google": { "maxContextTokens": 1048576, "maxOutputTokens": 32768 }
+}

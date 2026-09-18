@@ -7,7 +7,15 @@ import { FormRow, NumberInput, Select } from "../../../shared/components/Inputs"
 import { patch } from "../../modelPool/utils/patch";
 import type { SatiConfig } from "../../modelPool/types";
 import { activeModelCapabilities, ensureModelRefConfigured } from "../utils/modelRefs";
+import type { CapabilitySource } from "../types";
 import { useDynamicModelOptions } from "../../../../../shared/useDynamicModelOptions";
+
+/** Layer labels for the effective-limit hints below the token inputs. */
+const SOURCE_KEY: Record<CapabilitySource, string> = {
+  config: "satiConfig.panels.agents.capabilities.sourceConfig",
+  catalog: "satiConfig.panels.agents.capabilities.sourceCatalog",
+  default: "satiConfig.panels.agents.capabilities.sourceDefault",
+};
 
 type AgentsSectionProps = {
   config: SatiConfig;
@@ -25,6 +33,12 @@ export default function AgentsSection({ config, onChange }: AgentsSectionProps) 
   const subOptions = [{ value: "inherit", label: t("satiConfig.panels.agents.subagents.inherit") }, ...refOptions];
 
   const caps = activeModelCapabilities(config);
+  const agentMaxContextTokens = config.agent?.maxContextTokens;
+  const effectiveContext =
+    typeof agentMaxContextTokens === "number" && agentMaxContextTokens > 0
+      ? { tokens: agentMaxContextTokens, source: "config" as CapabilitySource }
+      : caps?.effectiveContext;
+  const sourceLabel = (source: CapabilitySource) => t(SOURCE_KEY[source]);
   const supportsImageEffective = caps
     ? caps.multimodalInput
       ? caps.multimodalInput.includes("image")
@@ -146,7 +160,7 @@ export default function AgentsSection({ config, onChange }: AgentsSectionProps) 
                   <div className="w-full max-w-[360px]">
                     <NumberInput
                       value={caps.maxOutputTokensOverride}
-                      placeholder={String(caps.catalogModel?.maxOutputTokens ?? 16384)}
+                      placeholder={String(caps.effectiveOutput.tokens)}
                       onChange={value =>
                         setMaxOutputTokens(typeof value === "number" && value > 0 ? Math.floor(value) : undefined)
                       }
@@ -154,7 +168,11 @@ export default function AgentsSection({ config, onChange }: AgentsSectionProps) 
                   </div>
                 </div>
                 <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
-                  {t("satiConfig.panels.agents.capabilities.maxOutputDescription")}
+                  {t("satiConfig.panels.agents.capabilities.maxOutputDescription")}{" "}
+                  {t("satiConfig.panels.agents.capabilities.effectiveOutputTokens", {
+                    tokens: caps.effectiveOutput.tokens.toLocaleString(),
+                    source: sourceLabel(caps.effectiveOutput.source),
+                  })}
                 </p>
               </div>
 
@@ -167,7 +185,7 @@ export default function AgentsSection({ config, onChange }: AgentsSectionProps) 
                   <div className="w-full max-w-[360px]">
                     <NumberInput
                       value={config.agent?.maxContextTokens}
-                      placeholder={String(caps.catalogModel?.maxContextTokens ?? 200000)}
+                      placeholder={String(caps.effectiveContext.tokens)}
                       onChange={value => {
                         if (value === undefined) {
                           const next = { ...(config.agent ?? {}) };
@@ -184,6 +202,12 @@ export default function AgentsSection({ config, onChange }: AgentsSectionProps) 
                 </div>
                 <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
                   {t("satiConfig.panels.agents.capabilities.maxContextDescription")}
+                  {effectiveContext
+                    ? ` ${t("satiConfig.panels.agents.capabilities.effectiveContextTokens", {
+                        tokens: effectiveContext.tokens.toLocaleString(),
+                        source: sourceLabel(effectiveContext.source),
+                      })}`
+                    : ""}
                 </p>
               </div>
             </div>

@@ -896,7 +896,12 @@
           "maxOutputTokens": "Max output tokens",
           "maxOutputDescription": "Maximum tokens generated in one response. Leave empty to use the default.",
           "maxContextTokens": "Max context tokens",
-          "maxContextDescription": "Context window used for auto-compaction. Leave empty to use the model default."
+          "maxContextDescription": "Context window used for auto-compaction. Leave empty to use the model default.",
+          "effectiveContextTokens": "Effective: {{tokens}} ({{source}}).",
+          "effectiveOutputTokens": "Effective: {{tokens}} ({{source}}).",
+          "sourceConfig": "configured",
+          "sourceCatalog": "built-in catalog",
+          "sourceDefault": "protocol default"
         },
         "subagents": {
           "label": "Subagents default",
