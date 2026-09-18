@@ -82,20 +82,17 @@ export function createPatentFigureCheckTool(): SatiToolDefinition<PatentFigureCh
     title: "Check Patent Figures",
     description:
       "Validate patent figures against the specification text (Rule 21 of the CNIPA Implementing " +
-      "Regulations 2023): continuous figure numbering (V1), every reference numeral in a figure must " +
-      "appear in the specification text (V2, hard fail), bracket-form numerals in the text missing from " +
-      "figures (V3, warn), one-numeral-one-component consistency (V4, hard fail), plus annotation-like " +
-      "labels (V5), unfiled bracket-less numerals in the claims face (V10, hard fail; Rule 22 requires " +
-      "reference numerals in claims to be parenthesised) and bracketed numerals in the description face " +
-      "(V11, warn; the description convention is name-then-numeral). V10/V11 need a successful heuristic " +
-      "split of the text into claims/description faces — when the split fails the report says so and both " +
-      "rules stay silent. Also: canvas legibility (V7), abstract-figure designation (V8) and utility-model drawings " +
-      "requirement (V9). Input: structured `figures`, `svg_paths` (re-parses SVGs produced by " +
-      "patent_figure_generate) and/or `image_paths` for raster drawings (customer scans, CAD exports, third-party " +
-      "images) which get a pixel-level check instead: black-and-white purity, minimum line width, DPI and printed " +
-      "size against the A4 printable area (no OCR — the figure number must be declared via the file name). " +
-      "Pass the full specification text (claims + description). Figures are not " +
-      "final until this check reports ok. Registered by default; pass `patentFigure: false` to skip.",
+      "Regulations 2023): figure numbering, figure-to-text and text-to-figure numeral consistency, " +
+      "one-numeral-one-component, annotation-like labels, claim/description numeral-bracket conventions, " +
+      "canvas legibility, abstract-figure designation and the utility-model drawings requirement. Every " +
+      "finding names its rule id and cites the governing provision, so the report is self-explanatory. " +
+      "Pass the full specification text (claims + description). Input: structured `figures`, `svg_paths` " +
+      "(re-parses SVGs produced by patent_figure_generate) and/or `image_paths` for raster drawings " +
+      "(customer scans, CAD exports, third-party images), which get a pixel-level check instead: " +
+      "black-and-white purity, minimum line width, DPI and printed size against the A4 printable area (no " +
+      "OCR — the figure number must be declared via the file name). Figures are not final until this check " +
+      "reports ok. Rules and their workflow are documented in the `patent-illustrator` skill. Registered by " +
+      "default; pass `patentFigure: false` to skip.",
     kind: "custom",
     domain: "patent",
     inputSchema: {

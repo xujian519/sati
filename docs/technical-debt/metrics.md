@@ -7,9 +7,9 @@
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1035 / 173723 |
+| src TS 文件 / 行数 | 1035 / 173882 |
 | src JS 文件 | 0 |
-| tests 文件 | 561 |
+| tests 文件 | 563 |
 | ui/src 文件 / 行数 | 480 / 84196 |
 | ui/server 文件 / 行数 | 108 / 31670 |
 
@@ -75,6 +75,7 @@
 | `ui/src/components/code-editor/view/subcomponents/SpreadsheetInteractivePreview.tsx` | `SpreadsheetInteractivePreview` | 407 | function |
 | `ui/src/components/settings/view/integrations/im/components/WeComChannelSection.tsx` | `WeComChannelSection` | 398 | function |
 | `ui/src/components/chat/hooks/useSlashCommands.ts` | `useSlashCommands` | 395 | function |
+| `src/cli/projectRuntimeFactory.ts` | `createProjectRuntimeResolver` | 393 | function |
 | `ui/src/components/main-content-v2/CronV2.test.tsx` | `(anonymous)` | 384 | arrow |
 | `src/web/client/webMessage.ts` | `applyWebGatewayEvent` | 383 | function |
 | `src/tool/execution/ToolRuntime.ts` | `execute` | 382 | method |
@@ -84,8 +85,7 @@
 | `ui/src/components/kanban/hooks/useBoardState.ts` | `useBoardState` | 368 | function |
 | `ui/src/components/chat/hooks/useFileMentions.tsx` | `useFileMentions` | 366 | function |
 | `ui/src/components/settings/view/agentRoute/components/RouterSection.tsx` | `RouterSection` | 357 | function |
-| `src/tool/builtin/patentFigureProject.ts` | `createPatentFigureProjectTool` | 356 | function |
-| `src/cli/projectRuntimeFactory.ts` | `createProjectRuntimeResolver` | 349 | function |
+| `src/tool/builtin/patentFigureProject.ts` | `createPatentFigureProjectTool` | 353 | function |
 | `ui/src/components/main-content/view/MainContent.tsx` | `MainContent` | 346 | function |
 | `src/gateway/server/GatewayWsConnection.ts` | `dispatchRequest` | 343 | method |
 | `ui/src/components/settings/view/agentSearch/components/ToolsSection.tsx` | `ToolsSection` | 343 | function |
@@ -159,10 +159,10 @@
 | 模块 | 测试文件 |
 |---|---|
 | patent | 121 |
-| tool | 61 |
+| tool | 62 |
 | agent | 57 |
 | knowledge | 38 |
-| gateway | 31 |
+| gateway | 32 |
 | context | 30 |
 | model | 27 |
 | session | 27 |
@@ -191,7 +191,7 @@
 | runtime | 1 |
 | status | 1 |
 
-| **合计** | **539** |
+| **合计** | **541** |
 
 ## i18n en/zh-CN 对齐
 

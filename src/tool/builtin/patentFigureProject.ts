@@ -84,17 +84,14 @@ export function createPatentFigureProjectTool(
     description:
       "Project an existing STEP/3D model into a patent-style figure (deterministic black-and-white SVG, " +
       "hidden-line removal, millimetre-accurate orthographic projection) using a headless FreeCAD on this " +
-      "machine. Views: front/back/left/right/top/bottom/iso. Pass `section_offset_mm` for a full section " +
-      "view: the cut plane is perpendicular to the view direction at that model coordinate, the material " +
-      "facing the viewer is removed and the cut faces get deterministic 45-degree hatching (front/back/" +
-      "left/right/top/bottom only — no rotated/stepped/local sections). Pass `annotations` to place " +
-      "reference numerals: each numeral is anchored at a model-space point (mm) and drawn as a leader line " +
-      "plus the numeral, with `label_offset_mm` to pin the numeral's sheet position. The SVG is produced by " +
-      "this project's own drawing contract (fits the A4 printable area, carries the 图N caption, numerals " +
-      "carry data-ref for readback) and a sidecar records the projection, section and numeral parameters. " +
-      "Boundaries: it does not create geometry and does not read dimension lines or centre lines from the " +
-      "model. Requires a local FreeCAD install (SATI_FREECAD_CMD or the standard app path); missing install " +
-      "fails closed.",
+      "machine. Views: front/back/left/right/top/bottom/iso. `section_offset_mm` produces a full section " +
+      "view (cut plane perpendicular to the view direction, facing material removed, cut faces hatched at " +
+      "45 degrees; full sections only — no rotated, stepped or local sections); `annotations` places " +
+      "reference numerals anchored at model-space points, each drawn as a leader line plus the numeral. " +
+      "The SVG follows this project's drawing contract (A4 printable area, 图N caption, numerals carry " +
+      "data-ref for readback) with a sidecar recording the projection, section and numeral parameters. It " +
+      "does not create geometry and does not read dimension or centre lines from the model. Requires a " +
+      "local FreeCAD install (SATI_FREECAD_CMD or the standard app path); missing install fails closed.",
     kind: "custom",
     domain: "patent",
     inputSchema: {

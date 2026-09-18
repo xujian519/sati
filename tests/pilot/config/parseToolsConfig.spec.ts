@@ -105,3 +105,81 @@ test("webSearch 与 paperSearch 的在场状态互不影响", () => {
   });
   assert.deepEqual(diagnostics, []);
 });
+
+test("域裁剪清单逐项 trim 后保留，空数组视为未配置", () => {
+  const diagnostics: PilotConfigDiagnostic[] = [];
+
+  assert.deepEqual(parseToolsConfig({ visibleDomains: [" patent ", "legal"] }, diagnostics), {
+    visibleDomains: ["patent", "legal"],
+  });
+  assert.deepEqual(parseToolsConfig({ hiddenDomains: ["literature"] }, diagnostics), {
+    hiddenDomains: ["literature"],
+  });
+  assert.equal(parseToolsConfig({ hiddenDomains: [] }, diagnostics), undefined);
+  assert.deepEqual(diagnostics, []);
+});
+
+test("域裁剪清单必须是字符串数组", () => {
+  const diagnostics: PilotConfigDiagnostic[] = [];
+
+  assert.equal(parseToolsConfig({ visibleDomains: "patent" }, diagnostics), undefined);
+  assert.equal(parseToolsConfig({ hiddenDomains: [""] }, diagnostics), undefined);
+
+  assert.deepEqual(
+    diagnostics.map(item => item.code),
+    ["TOOLS_VISIBLE_DOMAINS_INVALID", "TOOLS_HIDDEN_DOMAINS_INVALID"],
+  );
+  assert.ok(diagnostics.every(item => item.severity === "fatal"));
+});
+
+test("内置工具组开关：段缺失不写字段，空块与 enabled 原样保留", () => {
+  const diagnostics: PilotConfigDiagnostic[] = [];
+
+  // 段缺失 = 保持历史默认（注册），解析结果里不得出现该键。
+  assert.equal(parseToolsConfig({}, diagnostics), undefined);
+
+  assert.deepEqual(parseToolsConfig({ documentStyle: {} }, diagnostics), { documentStyle: {} });
+  assert.deepEqual(parseToolsConfig({ kanban: { enabled: false } }, diagnostics), { kanban: { enabled: false } });
+  assert.deepEqual(parseToolsConfig({ team: { enabled: true } }, diagnostics), { team: { enabled: true } });
+  assert.deepEqual(diagnostics, []);
+});
+
+test("内置工具组开关的非布尔 enabled 是 fatal 诊断", () => {
+  const diagnostics: PilotConfigDiagnostic[] = [];
+
+  parseToolsConfig({ kanban: { enabled: "false" } }, diagnostics);
+
+  assert.equal(diagnostics.length, 1);
+  assert.equal(diagnostics[0]?.code, "TOOLS_KANBAN_INVALID_ENABLED");
+  assert.equal(diagnostics[0]?.severity, "fatal");
+  // enabled 非法被丢弃后仍保留空块：段在场即默认开启，不能因单个字段非法而整段消失。
+  assert.deepEqual(parseToolsConfig({ team: { enabled: 1 } }, []), { team: {} });
+});
+
+test("tools 段的未知字段告警覆盖新增字段白名单", () => {
+  const diagnostics: PilotConfigDiagnostic[] = [];
+
+  const config = parseToolsConfig(
+    {
+      visibleDomains: ["patent"],
+      hiddenDomains: ["legal"],
+      documentStyle: { enabled: false },
+      kanban: {},
+      team: {},
+      unknownToolField: true,
+    },
+    diagnostics,
+  );
+
+  assert.deepEqual(config, {
+    visibleDomains: ["patent"],
+    hiddenDomains: ["legal"],
+    documentStyle: { enabled: false },
+    kanban: {},
+    team: {},
+  });
+  assert.deepEqual(
+    diagnostics.map(item => item.code),
+    ["TOOLS_UNKNOWN_FIELD"],
+  );
+});
