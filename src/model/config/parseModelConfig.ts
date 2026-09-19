@@ -14,6 +14,7 @@ import { ModelConfigError } from "../protocol/errors.js";
 import { DEFAULT_MULTIMODAL_CONSTRAINTS, isInputModality, type MultimodalConstraints } from "../protocol/multimodal.js";
 import { lookupCatalogModel, lookupCatalogProvider } from "../catalog/index.js";
 import { getCachedOllamaModels } from "../ollama/probe.js";
+import { modelWindowKey, type ModelWindowEntry } from "../window/types.js";
 import { canUseCatalogCredential, resolveDefaultProviderUrl } from "./providerCredentialScope.js";
 import { isEnvReference, resolveApiKey, type CredentialEnv } from "./resolveCredentials.js";
 import {
@@ -28,6 +29,12 @@ import {
 
 export type ParseModelConfigOptions = {
   env?: CredentialEnv;
+  /**
+   * 窗口覆盖层条目（`ModelWindowStore.read().entries`，键 `<provider>/<model>`）。
+   * 由调用方一次读入后按值传入——解析期保持同步且无 IO。
+   * 未提供（或为空）= 不启用该层，行为与改动前逐字相同。
+   */
+  windowOverrides?: Record<string, ModelWindowEntry>;
 };
 
 export function parseModelConfig(
@@ -43,8 +50,9 @@ export function parseModelConfig(
   }
 
   const providers: Record<string, ProviderConfig> = {};
+  const appliedWindowOverrides: Record<string, ModelWindowEntry> = {};
   for (const [providerId, rawProvider] of Object.entries(rawConfig.providers)) {
-    const parsed = parseProvider(providerId, rawProvider, options.env);
+    const parsed = parseProvider(providerId, rawProvider, options, appliedWindowOverrides);
     if (parsed) {
       providers[providerId] = parsed;
     }
@@ -52,6 +60,7 @@ export function parseModelConfig(
 
   return {
     providers,
+    ...(Object.keys(appliedWindowOverrides).length > 0 ? { windowOverrides: appliedWindowOverrides } : {}),
   };
 }
 
@@ -69,7 +78,13 @@ function isProviderStub(rawProvider: RawProviderConfig): boolean {
   return !isRecord(rawProvider.models) || Object.keys(rawProvider.models).length === 0;
 }
 
-function parseProvider(providerId: string, rawProvider: unknown, env?: CredentialEnv): ProviderConfig | null {
+function parseProvider(
+  providerId: string,
+  rawProvider: unknown,
+  options: ParseModelConfigOptions,
+  appliedWindowOverrides: Record<string, ModelWindowEntry>,
+): ProviderConfig | null {
+  const env = options.env;
   if (!isRecord(rawProvider)) {
     throw new ModelConfigError("invalid_provider", `Provider ${providerId} must be an object.`);
   }
@@ -118,7 +133,12 @@ function parseProvider(providerId: string, rawProvider: unknown, env?: Credentia
 
   const models: Record<string, ModelDefinition> = {};
   for (const [modelId, rawModel] of Object.entries(rawModels)) {
-    models[modelId] = parseModelDefinition(modelId, protocol, rawModel, providerId);
+    // 窗口覆盖层（探测/实测）：作为 catalog 之上、config 之下的一层参与解析。
+    const windowOverride = options.windowOverrides?.[modelWindowKey(providerId, modelId)];
+    if (windowOverride) {
+      appliedWindowOverrides[modelWindowKey(providerId, modelId)] = windowOverride;
+    }
+    models[modelId] = parseModelDefinition(modelId, protocol, rawModel, providerId, windowOverride);
   }
 
   // Catalog 凭证作用域：自定义 url/协议下不再自动读取 catalog 环境变量，
@@ -247,6 +267,7 @@ function parseModelDefinition(
   protocol: ModelProtocol,
   rawModel: unknown,
   providerId: string,
+  windowOverride?: ModelWindowEntry,
 ): ModelDefinition {
   const effectiveRaw = rawModel ?? {};
   if (!isRecord(effectiveRaw)) {
@@ -257,7 +278,7 @@ function parseModelDefinition(
   const catalogHit = lookupCatalogModel(providerId, modelId);
   const catalogModel = catalogHit.model;
 
-  const capabilities = parseCapabilities(protocol, model.capabilities, catalogModel?.capabilities);
+  const capabilities = parseCapabilities(protocol, model.capabilities, catalogModel?.capabilities, windowOverride);
   const multimodal = parseMultimodal(protocol, model.multimodal, catalogModel?.multimodal);
 
   return {
@@ -273,6 +294,7 @@ function parseCapabilities(
   protocol: ModelProtocol,
   rawCapabilities: unknown,
   catalogCapabilities?: ModelCapabilities,
+  windowOverride?: ModelWindowEntry,
 ): ModelCapabilities {
   const protocolDefaults =
     protocol === "anthropic"
@@ -280,7 +302,19 @@ function parseCapabilities(
       : protocol === "google"
         ? GOOGLE_DEFAULT_CAPABILITIES
         : OPENAI_DEFAULT_CAPABILITIES;
-  const defaults = catalogCapabilities ?? protocolDefaults;
+  const base = catalogCapabilities ?? protocolDefaults;
+  // 覆盖层高于 catalog（它是运行期实测/探测到的事实），但低于 config 显式声明
+  // —— 后者在本函数稍后以 overrides 合并到 defaults 之上。
+  const defaults: ModelCapabilities =
+    windowOverride === undefined
+      ? base
+      : {
+          ...base,
+          ...(windowOverride.maxContextTokens !== undefined
+            ? { maxContextTokens: windowOverride.maxContextTokens }
+            : {}),
+          ...(windowOverride.maxOutputTokens !== undefined ? { maxOutputTokens: windowOverride.maxOutputTokens } : {}),
+        };
 
   if (rawCapabilities === undefined) {
     return defaults;

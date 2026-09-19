@@ -7,11 +7,11 @@
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1037 / 174317 |
+| src TS 文件 / 行数 | 1042 / 175010 |
 | src JS 文件 | 0 |
-| tests 文件 | 568 |
-| ui/src 文件 / 行数 | 503 / 86224 |
-| ui/server 文件 / 行数 | 108 / 31741 |
+| tests 文件 | 573 |
+| ui/src 文件 / 行数 | 506 / 86530 |
+| ui/server 文件 / 行数 | 108 / 31827 |
 
 ## 指标口径
 
@@ -29,12 +29,12 @@
 | 指标 | 总量 | 热点模块 |
 |---|---|---|
 | `any`/`@ts-expect-error`/`@ts-ignore` | 3 | ui/src(3) |
-| `as unknown as`（双重断言） | 29 | ui/src(22) · adapters(2) · tool(2) |
+| `as unknown as`（双重断言） | 31 | ui/src(24) · adapters(2) · tool(2) |
 | 裸 `console.*` | 158 | cli(137) · telemetry(8) · ui/server(5) |
 | 空 `catch {}` | 0 | — |
-| 无参 `catch {`（总计） | 662 | ui/server(151) · ui/src(114) · adapters(70) |
-| ↳ **无注释**（隐患类，目标） | **4** | — |
-| ↳ 已带意图注释 | 658 | — |
+| 无参 `catch {`（总计） | 667 | ui/server(152) · ui/src(114) · adapters(70) |
+| ↳ **无注释**（隐患类，目标） | **8** | — |
+| ↳ 已带意图注释 | 659 | — |
 | `TODO/HACK/FIXME/XXX` | 11 | always-on(4) · tests(4) · ui/src(2) |
 | 分层违规 `ui/server→src` | 14 | — |
 | 分层违规 `src→ui` | 0 | — |
@@ -127,9 +127,9 @@
 | `ui/src/components/chat-v2/ComposerV2.tsx` | 1188 |
 | `ui/src/components/chat-v2/MessagesPaneV2.tsx` | 1184 |
 | `ui/server/routes/taskmaster.js` | 1179 |
+| `ui/server/routes/config.js` | 1173 |
 | `ui/src/components/chat/hooks/useChatSessionState.ts` | 1160 |
-| `ui/server/routes/config.js` | 1147 |
-| `src/agent/loop/AgentLoop.ts` | 1143 |
+| `src/agent/loop/AgentLoop.ts` | 1146 |
 | `ui/src/components/main-content-v2/CronV2.tsx` | 1130 |
 | `ui/src/components/main-content/view/MainContent.tsx` | 1111 |
 | `src/model/streaming/streamModel.ts` | 1085 |
@@ -167,7 +167,7 @@
 | knowledge | 38 |
 | context | 32 |
 | gateway | 32 |
-| model | 28 |
+| model | 32 |
 | session | 27 |
 | router | 18 |
 | always-on | 14 |
@@ -175,7 +175,7 @@
 | adapters | 11 |
 | cron | 11 |
 | extension | 11 |
-| pilot | 10 |
+| pilot | 11 |
 | rule | 10 |
 | cli | 9 |
 | literature | 8 |
@@ -194,7 +194,7 @@
 | runtime | 1 |
 | status | 1 |
 
-| **合计** | **546** |
+| **合计** | **551** |
 
 ## i18n en/zh-CN 对齐
 
@@ -207,7 +207,7 @@
 | common | 435 | 435 | 0 | 0 |
 | kanban | 44 | 44 | 0 | 0 |
 | routing | 64 | 64 | 0 | 0 |
-| settings | 1056 | 1056 | 0 | 0 |
+| settings | 1060 | 1060 | 0 | 0 |
 | sidebar | 125 | 125 | 0 | 0 |
 | stylePanel | 56 | 56 | 0 | 0 |
 | tasks | 94 | 94 | 0 | 0 |
