@@ -1,7 +1,7 @@
 # Sati 技术债务指标基线与趋势
 
 > 由 `node scripts/measure-techdebt.mjs --update` 自动生成，谨防手工编辑。
-> 最近一次快照：**2026-09-18**
+> 最近一次快照：**2026-09-19**
 
 ## 规模
 
@@ -10,7 +10,7 @@
 | src TS 文件 / 行数 | 1036 / 173981 |
 | src JS 文件 | 0 |
 | tests 文件 | 565 |
-| ui/src 文件 / 行数 | 503 / 86125 |
+| ui/src 文件 / 行数 | 519 / 87766 |
 | ui/server 文件 / 行数 | 108 / 31670 |
 
 ## 指标口径
@@ -45,14 +45,12 @@
 
 | 文件 | 函数 | 行 | 类型 |
 |---|---|---|---|
-| `ui/src/components/code-editor/view/subcomponents/PdfDocumentPreview.tsx` | `PdfDocumentPreview` | 1064 | function |
 | `ui/src/components/app-shell/SidebarV2.tsx` | `SidebarV2` | 1008 | function |
 | `ui/src/components/chat-v2/MessagesPaneV2.render.test.tsx` | `(anonymous)` | 943 | arrow |
 | `ui/src/components/chat/hooks/useChatSessionState.ts` | `useChatSessionState` | 914 | function |
 | `ui/src/components/main-content-v2/FilesV2.tsx` | `FilesV2` | 853 | function |
 | `ui/src/components/chat-v2/MessagesPaneV2.tsx` | `MessagesPaneV2` | 824 | function |
 | `ui/src/components/chat-v2/ComposerV2.tsx` | `ComposerV2` | 741 | function |
-| `ui/src/stores/useSessionStore.ts` | `useSessionStore` | 727 | function |
 | `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` | `useChatRealtimeHandlers` | 719 | function |
 | `ui/src/components/git-panel/hooks/useGitPanelController.ts` | `useGitPanelController` | 704 | function |
 | `ui/src/components/main-content-v2/skills/import/ImportFromFolder.tsx` | `ImportFromFolder` | 688 | function |
@@ -60,6 +58,7 @@
 | `ui/src/hooks/useProjectsState.ts` | `useProjectsState` | 647 | function |
 | `src/adapters/channel/tui/app/TuiApp.tsx` | `TuiApp` | 643 | function |
 | `src/cli/sati.ts` | `main` | 636 | function |
+| `ui/src/stores/useSessionStore.ts` | `createSessionActions` | 631 | function |
 | `ui/src/components/app-shell/AppShellV2.tsx` | `AppShellV2` | 630 | function |
 | `ui/src/components/onboarding/view/subcomponents/LlmConfigurationStep.tsx` | `LlmConfigurationStep` | 630 | function |
 | `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` | `(anonymous)` | 622 | arrow |
@@ -86,6 +85,7 @@
 | `ui/src/components/kanban/hooks/useBoardState.ts` | `useBoardState` | 368 | function |
 | `ui/src/components/chat/hooks/useFileMentions.tsx` | `useFileMentions` | 366 | function |
 | `ui/src/components/settings/view/agentRoute/components/RouterSection.tsx` | `RouterSection` | 357 | function |
+| `ui/src/stores/useSessionStore.actions.test.tsx` | `(anonymous)` | 354 | arrow |
 | `src/tool/builtin/patentFigureProject.ts` | `createPatentFigureProjectTool` | 353 | function |
 | `ui/src/components/main-content/view/MainContent.tsx` | `MainContent` | 346 | function |
 | `src/gateway/server/GatewayWsConnection.ts` | `dispatchRequest` | 343 | method |
@@ -109,14 +109,13 @@
 |---|---|
 | `ui/server/sati-bridge.js` | 2347 |
 | `src/adapters/channel/wecom/WeComChannel.ts` | 1764 |
-| `ui/src/components/code-editor/view/subcomponents/PdfDocumentPreview.tsx` | 1724 |
 | `src/model/catalog/providers.ts` | 1593 |
 | `ui/server/routes/git.js` | 1529 |
 | `ui/src/components/code-editor/view/subcomponents/CodeEditorBinaryFile.tsx` | 1511 |
 | `src/adapters/channel/weixin/WeixinChannel.ts` | 1497 |
 | `src/gateway/client/InProcessGateway.ts` | 1489 |
 | `ui/src/components/main-content-v2/SkillsV2.tsx` | 1441 |
-| `ui/src/stores/useSessionStore.ts` | 1406 |
+| `ui/src/stores/useSessionStore.ts` | 1347 |
 | `ui/src/components/main-content-v2/DashboardV2.tsx` | 1345 |
 | `src/adapters/channel/feishu/FeishuChannel.ts` | 1337 |
 | `ui/src/components/app-shell/SidebarV2.tsx` | 1310 |
@@ -137,6 +136,7 @@
 | `src/cli/sati.ts` | 1028 |
 | `src/adapters/channel/protocol/ImLiveReplyController.ts` | 1017 |
 | `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` | 1005 |
+| `ui/src/components/main-content-v2/FilesV2.tsx` | 964 |
 
 ## vendored 子包（单列，不计入上述规模与排名）
 

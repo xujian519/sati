@@ -1164,13 +1164,15 @@
   - 位置：`chat/tools/configs/toolConfigs.ts:1,19-55,646-783`；`chat/tools/ToolRenderer.tsx:108-109`
   - 影响：工具协议契约以 `any` 表达，改 inputSchema/结果结构无编译期守护。建议：引入结构化联合类型，逐步以 `unknown`+收窄替换 `any`。
 - **TD-UI-CHAT-N07** · `PdfDocumentPreview` 巨型组件（1138 行）
-  - 类别：A · 严重级：P2 · 工作量：L（**逻辑半边已完成**）· 状态：**in_progress（逻辑半边 done，剩余需 L 级窗口）**
+  - 类别：A · 严重级：P2 · 工作量：L · 状态：**done（2026-09-20，PR #465）**
   - 位置：`code-editor/view/subcomponents/PdfDocumentPreview.tsx:723`
   - 影响：约 20 个 useState + 12 useRef，承担 PDF 加载/缩放/旋转/导航/搜索/区域选择/大纲/缩略图。建议：抽 `usePdfViewerState`，缩略图/大纲/搜索拆独立组件。
   - **口径更正**：1138 是**主组件的函数跨度**，文件本身 **1885 行**（metrics 记主组件 1130）。模块级已经分过一轮（7 个小组件 ~450 行），真正堆在主函数里的是：加载/视口持久化 ~150、滚动跟踪 ~120、搜索 ~75、选区→引用 ~235、JSX ~380（工具条 230 / 侧栏 87 / 视口 67）。
   - **2026-09-18 处置（逻辑半边 · PR #443）**：① 纯函数 → `utils/pdfViewport.ts`（视口数学 + `PageSize`/`ZoomMode`/`Rotation` 类型）；② 文本选区取文 → `utils/pdfTextSelection.ts`；③ `resolveSearchStatus` 移入既有 `utils/pdfSearch.ts`；④ 搜索状态机 → `hooks/usePdfSearch.ts`（6 state + 请求序号 + 竞态）。两个新模块**此前零测试**，本轮补 22 条直接单测（+ `resolveSearchStatus` 4 条分支）。文件 1886 → 1724（metrics 口径），主组件 1130 → **1064**。
   - **等价性证明**：parser 驱动逐 token 比对 **21 段搬迁**（`/tmp/n07-move-proof.mjs`）——19 段逐字相同；唯一预期改写是 `goToSearchResult` 的两行写操作 → 一次 `forceRenderPage(pageNumber)` 调用，脚本把两条语句摘除并插入调用后要求逐 token 相等，另断言组件里 `forceRenderPage` 的函数体与被摘掉的语句逐字相同；其余任何 token 差异即判失败。负控制两处（`parsePageInput` 夹取上限 `+1`、`runSearch` 的 `!==`→`===`）⇒ 守卫报红，且分别由 `pdfViewport.spec.ts`（2 条）与既有搜索竞态用例报红。
-  - **剩余（需 L 级窗口）**：选区→引用块（~235 行，唯一必须浏览器验证的一块）、工具条/侧栏 JSX 拆分（~317 行，需先收窄 props 面）、按粘连度切分的 `usePdfViewerState`（加载/视口持久化、滚动跟踪各成一块）。**注意**：本轮只降了 66 行 god function——被搬走的 110 行纯函数本来就在模块级、不计入函数长度，故剩余三块才是压 1064 的主力。决策见 `docs/notes/implemented/2026-09-18-pdf-viewer-extraction.md`。
+  - **2026-09-20 收官（剩余三块 · PR #465）**：拆到 `code-editor/view/pdf/`（14 文件：`hooks/use-pdf-{viewport,scroll-tracking,selection-reference,toolbar-controller}.ts` + `components/{PdfPage,PdfThumbnail,PdfOutlineTree,PdfNavigationSidebar,PdfToolbar,ToolbarPrimitives,pdf-toolbar-icon}.tsx` + `pdf-{constants,types,render-support}.ts`），**主组件 1064 → 260 行**（文件 1723 → 305），未到计划估的 ≈200（差额是 hook 分组选项与侧栏 props 接线；再压会把状态搬进 hook 内部并与 `usePdfSearch` 成环，按纯搬迁优先停在 260）。
+    **顺序不变式**（本轮头号风险）：计划判断"jsdom 抓不到"，**实测可抓**——把 5 个同步 effect 与加载 effect 同住 `usePdfViewport` 内按原始顺序声明，另加两路证据：① 运行时顺序断言（effect 打点）；② 把"当前页变化 + 同文件重载"压进同一次 commit 后断言加载 effect 读到的快照值。负控制 NC1（把加载 effect 提到字段同步之前）⇒ 两路各自报红（`expected '1' to be '3'`＝晚一帧恢复出上一个页码）。
+    等价性：65 个区间逐 token 相同，源覆盖 9907/9981、未解释丢失 0；**脚本抓到真回归**——首轮漏搬 `pdfjs.GlobalWorkerOptions.workerSrc` 与 `pdf_viewer.css`（worker + textLayer 样式），已补回。新增 23 条测试（2 → 25）；5 处负控制，其中 NC5 诚实记负（侧栏 `navigationMode !== "none"` 守卫在当前实现下不可观测，属既有等价冗余，未假装抓住）。**依赖数组追加 49 处（22 标识符）**是唯一非逐字改动：起因 eslint `exhaustive-deps` 对 props 传入的 ref/setter 判缺失，已独立复核 22 个全部是 `useRef` 结果或 `useState` setter（恒等 ⇒ 重跑条件不变）。未做双视口浏览器验证（CDP 截图超时），无 A/B DOM 指纹。决策见 `docs/notes/implemented/2026-09-20-pdf-preview-remaining-extraction.md`。
 - **TD-UI-CHAT-N08** · `CodeEditorBinaryFile` 巨型文件（1523 行）+ 内联 8 hooks 分派器
   - 类别：A · 严重级：P3 · 工作量：M · 状态：new
   - 位置：`code-editor/view/subcomponents/CodeEditorBinaryFile.tsx:1386`
