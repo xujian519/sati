@@ -49,6 +49,11 @@ export const MODEL_WINDOW_MIN_TOKENS = 1024;
  */
 export const MODEL_WINDOW_MAX_TOKENS = 16_000_000;
 
+/** 覆盖层键：`<provider>/<model>`（与 `TokenCapManager` 的 key 惯例一致）。 */
+export function modelWindowKey(provider: string, model: string): string {
+  return `${provider}/${model}`;
+}
+
 /** 数值是否落在可信窗口区间内（纯函数，供探测与观测两条写入口共用）。 */
 export function isPlausibleWindowTokens(value: unknown): value is number {
   return (

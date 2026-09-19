@@ -17,14 +17,11 @@ import { dirname, join } from "node:path";
 import { atomicWriteJson } from "../../patent/persist-utils.js";
 import { resolvePilotHome } from "../../shared/paths/pilotPaths.js";
 import type { ModelWindowEntry, ModelWindowFile, ModelWindowSource } from "./types.js";
-import { isPlausibleWindowTokens, MODEL_WINDOW_STORE_VERSION } from "./types.js";
+import { isPlausibleWindowTokens, modelWindowKey, MODEL_WINDOW_STORE_VERSION } from "./types.js";
 
 export const MODEL_WINDOW_STORE_FILENAME = "model-windows.json";
 
-/** 覆盖层键：`<provider>/<model>`（与 `TokenCapManager` 的 key 惯例一致）。 */
-export function modelWindowKey(provider: string, model: string): string {
-  return `${provider}/${model}`;
-}
+export { modelWindowKey };
 
 /** 默认落盘路径：`<pilotHome>/model-windows.json`。 */
 export function defaultModelWindowStorePath(env: Record<string, string | undefined> = process.env): string {

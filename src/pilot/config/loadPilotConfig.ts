@@ -4,6 +4,8 @@ import { parseAlwaysOnConfig } from "../../always-on/config/parseAlwaysOnConfig.
 import { parseCronConfig } from "../../cron/config/parseCronConfig.js";
 import { parseModelConfig } from "../../model/config/parseModelConfig.js";
 import { warmOllamaModels } from "../../model/ollama/probe.js";
+import { defaultModelWindowStorePath, ModelWindowStore } from "../../model/window/store.js";
+import type { ModelWindowEntry } from "../../model/window/types.js";
 import { isRecord } from "../../model/config/schema.js";
 import { ModelConfigError } from "../../model/protocol/errors.js";
 import { getPilotConfigFilePath, getPilotMemoryRootDir, resolvePilotHome } from "../../shared/paths/index.js";
@@ -690,9 +692,20 @@ function parseSchemaVersion(value: unknown, diagnostics: PilotConfigDiagnostic[]
   return SUPPORTED_SCHEMA_VERSION;
 }
 
+/**
+ * 读窗口覆盖层（`~/.sati/model-windows.json`）并按值交给解析：解析期保持同步且无 IO。
+ * 文件缺失/损坏/空表 → undefined（等价于"未启用该层"，行为与改动前逐字相同）。
+ */
+function readModelWindowOverrides(
+  env: Record<string, string | undefined>,
+): Record<string, ModelWindowEntry> | undefined {
+  const entries = new ModelWindowStore(defaultModelWindowStorePath(env)).read().entries;
+  return Object.keys(entries).length > 0 ? entries : undefined;
+}
+
 function parseModel(rawModel: unknown, env: Record<string, string | undefined>, diagnostics: PilotConfigDiagnostic[]) {
   try {
-    return parseModelConfig(rawModel, { env });
+    return parseModelConfig(rawModel, { env, windowOverrides: readModelWindowOverrides(env) });
   } catch (error) {
     if (error instanceof ModelConfigError) {
       diagnostics.push({
