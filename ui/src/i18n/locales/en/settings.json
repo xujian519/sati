@@ -901,7 +901,11 @@
           "effectiveOutputTokens": "Effective: {{tokens}} ({{source}}).",
           "sourceConfig": "configured",
           "sourceCatalog": "built-in catalog",
-          "sourceDefault": "protocol default"
+          "sourceDefault": "protocol default",
+          "sourceProbe": "provider /models probe",
+          "sourceObserved": "observed limit",
+          "windowFact": "Detected window: {{tokens}} ({{source}}, field {{via}}).",
+          "windowAdopt": "Use as agent limit"
         },
         "subagents": {
           "label": "Subagents default",
