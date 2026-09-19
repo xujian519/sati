@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MutableRefObject } from "react";
 import { logError } from "../../../utils/logging";
 import { authenticatedFetch } from "../../../utils/api";
@@ -16,11 +16,19 @@ import type { SessionStore, NormalizedMessage } from "../../../stores/useSession
 import { parseUserAttachmentNote } from "../utils/attachmentNotes";
 import { createCachedDiffCalculator, type DiffCalculator } from "../utils/messageTransforms";
 import { normalizedToChatMessages } from "./useChatMessages";
+import { useChatPaginationScroll } from "./use-chat-pagination-scroll";
+import { useChatScrollAnchor } from "./use-chat-scroll-anchor";
 
-const MESSAGES_PER_PAGE = 20;
-const INITIAL_VISIBLE_MESSAGES = 100;
 const EMPTY_NORMALIZED_MESSAGES: NormalizedMessage[] = [];
-export const BOTTOM_FOLLOW_THRESHOLD_PX = 96;
+
+// 滚动定位数学（`isScrollNearBottom` / `resolveConversationScrollTop` /
+// `BOTTOM_FOLLOW_THRESHOLD_PX`）随分页/滚动一族搬到 ./use-chat-pagination-scroll，
+// 这里保留同一导出路径：既有测试与调用方按 `./useChatSessionState` 取用不受影响。
+export {
+  BOTTOM_FOLLOW_THRESHOLD_PX,
+  isScrollNearBottom,
+  resolveConversationScrollTop,
+} from "./use-chat-pagination-scroll";
 
 type PendingViewSession = {
   sessionId: string | null;
@@ -38,20 +46,6 @@ interface UseChatSessionStateArgs {
   resetStreamingState: () => void;
   pendingViewSessionRef: MutableRefObject<PendingViewSession | null>;
   sessionStore: SessionStore;
-}
-
-interface ScrollRestoreState {
-  height: number;
-  top: number;
-}
-
-export function isScrollNearBottom(
-  scrollTop: number,
-  scrollHeight: number,
-  clientHeight: number,
-  thresholdPx = BOTTOM_FOLLOW_THRESHOLD_PX,
-): boolean {
-  return scrollHeight - scrollTop - clientHeight < thresholdPx;
 }
 
 /**
@@ -220,25 +214,6 @@ export function hasEquivalentUserMessage(messages: ChatMessage[], pendingUserMes
   });
 }
 
-type ConversationScrollPosition = {
-  top: number;
-  distanceFromBottom: number;
-};
-
-const CONVERSATION_SCROLL_BOTTOM_THRESHOLD = 40;
-
-export function resolveConversationScrollTop(
-  position: ConversationScrollPosition,
-  scrollHeight: number,
-  clientHeight: number,
-): number {
-  const maximumScrollTop = Math.max(0, scrollHeight - clientHeight);
-  if (position.distanceFromBottom <= CONVERSATION_SCROLL_BOTTOM_THRESHOLD) {
-    return maximumScrollTop;
-  }
-  return Math.min(Math.max(0, position.top), maximumScrollTop);
-}
-
 /* ------------------------------------------------------------------ */
 /*  Hook                                                              */
 /* ------------------------------------------------------------------ */
@@ -258,54 +233,21 @@ export function useChatSessionState({
   const [isLoading, setIsLoading] = useState(false);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(selectedSession?.id || null);
   const [isLoadingSessionMessages, setIsLoadingSessionMessages] = useState(false);
-  const [hasMoreMessages, setHasMoreMessages] = useState(false);
-  const [totalMessages, setTotalMessages] = useState(0);
   const [canAbortSession, setCanAbortSession] = useState(false);
   const [isAborting, setIsAborting] = useState(false);
-  const [isUserScrolledUp, setIsUserScrolledUp] = useState(false);
   const [tokenBudget, setTokenBudget] = useState<Record<string, unknown> | null>(null);
-  const [visibleMessageCount, setVisibleMessageCount] = useState(INITIAL_VISIBLE_MESSAGES);
   const [claudeStatus, setClaudeStatus] = useState<ClaudeWorkStatus | null>(null);
   const [satiStatus, setSatiStatus] = useState<SatiWorkStatus | null>(null);
   const [sessionLoadError, setSessionLoadError] = useState<string | null>(null);
-  const [allMessagesLoaded, setAllMessagesLoaded] = useState(false);
-  const [isLoadingAllMessages, setIsLoadingAllMessages] = useState(false);
-  const [loadAllJustFinished, setLoadAllJustFinished] = useState(false);
-  const [showLoadAllOverlay, setShowLoadAllOverlay] = useState(false);
   const [viewHiddenCount, setViewHiddenCount] = useState(0);
 
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [searchTarget, setSearchTarget] = useState<{ timestamp?: string; uuid?: string; snippet?: string } | null>(
     null,
   );
   const searchScrollActiveRef = useRef(false);
-  const isLoadingMoreRef = useRef(false);
-  const allMessagesLoadedRef = useRef(false);
-  const topLoadLockRef = useRef(false);
-  const pendingScrollRestoreRef = useRef<ScrollRestoreState | null>(null);
-  const pendingInitialScrollRef = useRef(true);
-  const messagesOffsetRef = useRef(0);
-  const scrollPositionRef = useRef({ height: 0, top: 0 });
-  const conversationScrollPositionsRef = useRef(new Map<string, ConversationScrollPosition>());
-  const pendingConversationScrollRestoreRef = useRef<{
-    key: string;
-    position: ConversationScrollPosition;
-  } | null>(null);
-  const loadAllFinishedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastLoadedSessionKeyRef = useRef<string | null>(null);
-  const followScrollFrameRef = useRef<number | null>(null);
 
   const createDiff = useMemo<DiffCalculator>(() => createCachedDiffCalculator(), []);
-
-  useEffect(
-    () => () => {
-      if (followScrollFrameRef.current !== null) {
-        cancelAnimationFrame(followScrollFrameRef.current);
-        followScrollFrameRef.current = null;
-      }
-    },
-    [],
-  );
 
   /* ---------------------------------------------------------------- */
   /*  Derive chatMessages from the store                              */
@@ -487,155 +429,55 @@ export function useChatSessionState({
 
   const rewindMessages = useCallback((count: number) => setViewHiddenCount(count), []);
 
-  const scrollToBottom = useCallback(() => {
-    const container = scrollContainerRef.current;
-    if (!container) return;
-    container.scrollTop = container.scrollHeight;
-  }, []);
+  /* ---------------------------------------------------------------- */
+  /*  分页窗口 + 滚动定位（#159 N02 拆到 useChatPaginationScroll）        */
+  /* ---------------------------------------------------------------- */
 
-  const scheduleScrollToBottom = useCallback(() => {
-    if (followScrollFrameRef.current !== null) {
-      return;
-    }
-    followScrollFrameRef.current = requestAnimationFrame(() => {
-      followScrollFrameRef.current = null;
-      scrollToBottom();
-    });
-  }, [scrollToBottom]);
-
-  const scrollToBottomAndReset = useCallback(() => {
-    scrollToBottom();
-    if (allMessagesLoaded) {
-      setVisibleMessageCount(INITIAL_VISIBLE_MESSAGES);
-      setAllMessagesLoaded(false);
-      allMessagesLoadedRef.current = false;
-    }
-  }, [allMessagesLoaded, scrollToBottom]);
-
-  const isNearBottom = useCallback(() => {
-    const container = scrollContainerRef.current;
-    if (!container) return false;
-    const { scrollTop, scrollHeight, clientHeight } = container;
-    return isScrollNearBottom(scrollTop, scrollHeight, clientHeight);
-  }, []);
-
-  const loadOlderMessages = useCallback(
-    async (container: HTMLDivElement) => {
-      if (!container || isLoadingMoreRef.current) return false;
-      if (allMessagesLoadedRef.current) return false;
-      if (!hasMoreMessages || !selectedSession || !selectedProject) return false;
-
-      isLoadingMoreRef.current = true;
-      const previousScrollHeight = container.scrollHeight;
-      const previousScrollTop = container.scrollTop;
-
-      try {
-        const slot = await sessionStore.fetchMore(selectedSession.id, {
-          ...buildFetchParams(selectedProject),
-          limit: MESSAGES_PER_PAGE,
-        });
-        if (!slot || slot.serverMessages.length === 0) return false;
-
-        pendingScrollRestoreRef.current = { height: previousScrollHeight, top: previousScrollTop };
-        setHasMoreMessages(slot.hasMore);
-        setTotalMessages(slot.total);
-        setVisibleMessageCount(prev => prev + MESSAGES_PER_PAGE);
-        return true;
-      } finally {
-        isLoadingMoreRef.current = false;
-      }
-    },
-    [buildFetchParams, hasMoreMessages, selectedProject, selectedSession, sessionStore],
-  );
-
-  const handleScroll = useCallback(async () => {
-    const container = scrollContainerRef.current;
-    if (!container) return;
-
-    if (activeScrollKey) {
-      conversationScrollPositionsRef.current.set(activeScrollKey, {
-        top: container.scrollTop,
-        distanceFromBottom: Math.max(0, container.scrollHeight - container.scrollTop - container.clientHeight),
-      });
-    }
-
-    const nearBottom = isNearBottom();
-    setIsUserScrolledUp(!nearBottom);
-
-    if (!allMessagesLoadedRef.current) {
-      const scrolledNearTop = container.scrollTop < 100;
-      if (!scrolledNearTop) {
-        topLoadLockRef.current = false;
-        return;
-      }
-      if (topLoadLockRef.current) {
-        if (container.scrollTop > 20) topLoadLockRef.current = false;
-        return;
-      }
-      const didLoad = await loadOlderMessages(container);
-      if (didLoad) topLoadLockRef.current = true;
-    }
-  }, [activeScrollKey, isNearBottom, loadOlderMessages]);
-
-  useLayoutEffect(() => {
-    if (!pendingScrollRestoreRef.current || !scrollContainerRef.current) return;
-    const { height, top } = pendingScrollRestoreRef.current;
-    const container = scrollContainerRef.current;
-    const newScrollHeight = container.scrollHeight;
-    container.scrollTop = top + Math.max(newScrollHeight - height, 0);
-    pendingScrollRestoreRef.current = null;
-  }, [chatMessages.length]);
-
-  // Reset scroll/pagination state on session change
-  useLayoutEffect(() => {
-    const savedScrollPosition = activeScrollKey
-      ? (conversationScrollPositionsRef.current.get(activeScrollKey) ?? null)
-      : null;
-    pendingConversationScrollRestoreRef.current =
-      activeScrollKey && savedScrollPosition ? { key: activeScrollKey, position: savedScrollPosition } : null;
-    if (!searchScrollActiveRef.current) {
-      pendingInitialScrollRef.current = !savedScrollPosition;
-      setVisibleMessageCount(INITIAL_VISIBLE_MESSAGES);
-    }
-    topLoadLockRef.current = false;
-    pendingScrollRestoreRef.current = null;
-    setIsUserScrolledUp(
-      Boolean(savedScrollPosition && savedScrollPosition.distanceFromBottom > CONVERSATION_SCROLL_BOTTOM_THRESHOLD),
-    );
-  }, [activeScrollKey]);
-
-  useLayoutEffect(() => {
-    const pendingRestore = pendingConversationScrollRestoreRef.current;
-    const container = scrollContainerRef.current;
-    if (
-      !pendingRestore ||
-      pendingRestore.key !== activeScrollKey ||
-      !container ||
-      isLoadingSessionMessages ||
-      chatMessages.length === 0
-    ) {
-      return;
-    }
-
-    container.scrollTop = resolveConversationScrollTop(
-      pendingRestore.position,
-      container.scrollHeight,
-      container.clientHeight,
-    );
-    pendingConversationScrollRestoreRef.current = null;
-    pendingInitialScrollRef.current = false;
-  }, [activeScrollKey, chatMessages.length, isLoadingSessionMessages]);
-
-  // Initial scroll to bottom
-  useEffect(() => {
-    if (!pendingInitialScrollRef.current || !scrollContainerRef.current || isLoadingSessionMessages) return;
-    if (chatMessages.length === 0) {
-      pendingInitialScrollRef.current = false;
-      return;
-    }
-    pendingInitialScrollRef.current = false;
-    if (!searchScrollActiveRef.current) setTimeout(() => scrollToBottom(), UI_TIMEOUTS.CHAT_RELOAD_SCROLL_SETTLE_MS);
-  }, [chatMessages.length, isLoadingSessionMessages, scrollToBottom]);
+  // 调用点位置就是语义：本 hook 的 effect（加载后保持位置 / 会话切换复位 /
+  // 会话内位置恢复 / 首屏落底）在拆分前就排在下面的「会话加载 effect」与更下方的
+  // 「搜索定位 effect」之前——`pendingInitialScrollRef` 与 `searchScrollActiveRef`
+  // 的读写次序决定首屏是否落到底、搜索跳转时是否被抢滚动。不要把它挪到它们之后。
+  const {
+    hasMoreMessages,
+    setHasMoreMessages,
+    totalMessages,
+    setTotalMessages,
+    isUserScrolledUp,
+    setIsUserScrolledUp,
+    visibleMessageCount,
+    setVisibleMessageCount,
+    allMessagesLoaded,
+    setAllMessagesLoaded,
+    isLoadingAllMessages,
+    loadAllJustFinished,
+    showLoadAllOverlay,
+    setShowLoadAllOverlay,
+    messagesOffsetRef,
+    allMessagesLoadedRef,
+    pendingScrollRestoreRef,
+    scrollPositionRef,
+    isLoadingMoreRef,
+    scrollContainerRef,
+    scrollToBottom,
+    scheduleScrollToBottom,
+    scrollToBottomAndReset,
+    isNearBottom,
+    handleScroll,
+    loadAllMessages,
+    loadEarlierMessages,
+    visibleMessages,
+    resetPagination,
+  } = useChatPaginationScroll({
+    chatMessages,
+    activeScrollKey,
+    isLoadingSessionMessages,
+    selectedSession,
+    selectedProject,
+    currentSessionId,
+    buildFetchParams,
+    sessionStore,
+    searchScrollActiveRef,
+  });
 
   // Main session loading effect — store-based
   useEffect(() => {
@@ -713,17 +555,9 @@ export function useChatSessionState({
     }
 
     // Reset pagination/scroll state
-    messagesOffsetRef.current = 0;
-    setHasMoreMessages(false);
-    setTotalMessages(0);
-    setVisibleMessageCount(INITIAL_VISIBLE_MESSAGES);
-    setAllMessagesLoaded(false);
-    allMessagesLoadedRef.current = false;
-    setIsLoadingAllMessages(false);
-    setLoadAllJustFinished(false);
-    setShowLoadAllOverlay(false);
+    resetPagination();
+
     setViewHiddenCount(0);
-    if (loadAllFinishedTimerRef.current) clearTimeout(loadAllFinishedTimerRef.current);
 
     if (sessionChanged) {
       setTokenBudget(null);
@@ -789,6 +623,10 @@ export function useChatSessionState({
     sessionIsReadOnly,
     sessionRequestParams,
     sessionStore,
+    messagesOffsetRef,
+    resetPagination,
+    setHasMoreMessages,
+    setTotalMessages,
   ]);
 
   // External message update (e.g. WebSocket reconnect, background refresh)
@@ -937,6 +775,13 @@ export function useChatSessionState({
     selectedProject,
     selectedSession,
     sessionStore,
+    allMessagesLoadedRef,
+    messagesOffsetRef,
+    scrollContainerRef,
+    setAllMessagesLoaded,
+    setHasMoreMessages,
+    setTotalMessages,
+    setVisibleMessageCount,
   ]);
 
   useEffect(() => {
@@ -965,43 +810,24 @@ export function useChatSessionState({
     fetchInitialTokenUsage();
   }, [sessionIsReadOnly, selectedProject, selectedSession?.id]);
 
-  const visibleMessages = useMemo(() => {
-    if (chatMessages.length <= visibleMessageCount) return chatMessages;
-    return chatMessages.slice(-visibleMessageCount);
-  }, [chatMessages, visibleMessageCount]);
   const streamContentKey = useMemo(() => getStreamContentKey(visibleMessages), [visibleMessages]);
 
-  useEffect(() => {
-    if (!autoScrollToBottom && scrollContainerRef.current) {
-      const container = scrollContainerRef.current;
-      scrollPositionRef.current = { height: container.scrollHeight, top: container.scrollTop };
-    }
+  // 滚动锚定（跟随底部 / 增长时保住阅读位置 / 绑定 scroll 监听）。
+  // 同样地，调用点即语义：这三条 effect 必须排在「会话加载」与「搜索定位」之后，
+  // 它们会把 searchScrollActiveRef 置位、把 scrollTop 挪走，锚定快照取决于此。
+  useChatScrollAnchor({
+    autoScrollToBottom,
+    chatMessages,
+    streamContentKey,
+    isUserScrolledUp,
+    scrollContainerRef,
+    scrollPositionRef,
+    isLoadingMoreRef,
+    pendingScrollRestoreRef,
+    searchScrollActiveRef,
+    scheduleScrollToBottom,
+    handleScroll,
   });
-
-  useEffect(() => {
-    if (!scrollContainerRef.current || chatMessages.length === 0) return;
-    if (isLoadingMoreRef.current || pendingScrollRestoreRef.current) return;
-    if (searchScrollActiveRef.current) return;
-
-    if (autoScrollToBottom) {
-      if (!isUserScrolledUp) scheduleScrollToBottom();
-      return;
-    }
-
-    const container = scrollContainerRef.current;
-    const prevHeight = scrollPositionRef.current.height;
-    const prevTop = scrollPositionRef.current.top;
-    const newHeight = container.scrollHeight;
-    const heightDiff = newHeight - prevHeight;
-    if (heightDiff > 0 && prevTop > 0) container.scrollTop = prevTop + heightDiff;
-  }, [autoScrollToBottom, chatMessages.length, isUserScrolledUp, scheduleScrollToBottom, streamContentKey]);
-
-  useEffect(() => {
-    const container = scrollContainerRef.current;
-    if (!container) return;
-    container.addEventListener("scroll", handleScroll);
-    return () => container.removeEventListener("scroll", handleScroll);
-  }, [handleScroll]);
 
   useEffect(() => {
     const pendingSessionId = pendingViewSessionRef.current?.sessionId ?? null;
@@ -1056,64 +882,7 @@ export function useChatSessionState({
   // 已随死状态一并删除（#159 N02）。遮罩的置位仍由 loadAllMessages() 与下方的完成态 effect 负责。
   useEffect(() => {
     if (!hasMoreMessages) setShowLoadAllOverlay(false);
-  }, [hasMoreMessages]);
-
-  const loadAllMessages = useCallback(async () => {
-    if (!selectedSession || !selectedProject) return;
-    if (isLoadingAllMessages) return;
-    const requestSessionId = selectedSession.id;
-    allMessagesLoadedRef.current = true;
-    isLoadingMoreRef.current = true;
-    setIsLoadingAllMessages(true);
-    setShowLoadAllOverlay(true);
-
-    const container = scrollContainerRef.current;
-    const previousScrollHeight = container ? container.scrollHeight : 0;
-    const previousScrollTop = container ? container.scrollTop : 0;
-
-    try {
-      const slot = await sessionStore.fetchFromServer(requestSessionId, {
-        ...buildFetchParams(selectedProject),
-        limit: null,
-        offset: 0,
-      });
-
-      if (currentSessionId !== requestSessionId) return;
-
-      if (slot) {
-        if (container) {
-          pendingScrollRestoreRef.current = { height: previousScrollHeight, top: previousScrollTop };
-        }
-
-        setHasMoreMessages(false);
-        setTotalMessages(slot.total);
-        messagesOffsetRef.current = slot.total;
-        setVisibleMessageCount(Infinity);
-        setAllMessagesLoaded(true);
-
-        setLoadAllJustFinished(true);
-        if (loadAllFinishedTimerRef.current) clearTimeout(loadAllFinishedTimerRef.current);
-        loadAllFinishedTimerRef.current = setTimeout(() => {
-          setLoadAllJustFinished(false);
-          setShowLoadAllOverlay(false);
-        }, UI_TIMEOUTS.LOAD_ALL_FINISHED_STATE_RESET_MS);
-      } else {
-        allMessagesLoadedRef.current = false;
-        setShowLoadAllOverlay(false);
-      }
-    } catch (error) {
-      logError("Error loading all messages:", error);
-      allMessagesLoadedRef.current = false;
-      setShowLoadAllOverlay(false);
-    } finally {
-      isLoadingMoreRef.current = false;
-      setIsLoadingAllMessages(false);
-    }
-  }, [buildFetchParams, selectedSession, selectedProject, isLoadingAllMessages, currentSessionId, sessionStore]);
-
-  const loadEarlierMessages = useCallback(() => {
-    setVisibleMessageCount(prev => prev + 100);
-  }, []);
+  }, [hasMoreMessages, setShowLoadAllOverlay]);
 
   return {
     chatMessages,
