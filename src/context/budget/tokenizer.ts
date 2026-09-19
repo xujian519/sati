@@ -22,6 +22,9 @@ export function getTokenizer(): Tiktoken {
  *
  * 缓存保证相同内容全进程只编码一次；抽样兜底保证病态（高重复度）长文本
  * 首遇时按样本密度外推，避免一次性分钟级阻塞。
+ *
+ * ⚠️ 抽样判据必须由**已预热的**编码路径给出（见 `countTokensGuarded` 的二次取样）：
+ * 冷进程首次编码的初始化成本与输入重复度无关，拿它当判据会把自然语言判成病态。
  */
 const TOKEN_CACHE_MAX = 4096;
 const tokenCache = new Map<string, number>();
@@ -91,6 +94,12 @@ export function countTokensGuarded(text: string): { tokens: number; mode: "full"
   let mode: "full" | "sample" = "full";
   if (text.length > SAMPLE_CHARS) {
     const sample = text.slice(0, SAMPLE_CHARS);
+    // 取样两次、只计第二次（#450）。冷进程首次 `encode` 还要构造 Tiktoken（rank 表 +
+    // wasm 初始化）并预热编码路径，实测样本耗时可达 ~240ms，远高于 80ms 阈值 ⇒ 自然
+    // 语言样本被误判成"高重复度病态输入"，改走密度外推：本机实测 system prompt 精确
+    // 9,494 被报成 5,736（−39.6%），且低估结果进内容缓存**永不纠正**（缓存命中还标
+    // `mode: "full"`）。第二次取样只承担样本本身的编码成本，判据才反映输入的重复度。
+    countEncodedTokens(sample);
     const t0 = performance.now();
     const sampleTokens = countEncodedTokens(sample);
     if (performance.now() - t0 > PATHOLOGICAL_SAMPLE_THRESHOLD_MS) {
