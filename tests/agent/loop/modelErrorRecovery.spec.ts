@@ -605,7 +605,11 @@ test("recoverFromReactiveDecision：其余带 maxContextTokens 的 reason 不写
 test("recoverFromReactiveDecision：截头兜底路径不写回", async () => {
   const h = makeHarness({
     contextRuntime: contextRuntime({
-      recoverFromModelError: async () => ({ type: "truncate_head_and_retry", reason: "ptl-first-attempt" }),
+      recoverFromModelError: async () => ({
+        type: "truncate_head_and_retry",
+        keepRatio: 0.5,
+        reason: "ptl-first-attempt",
+      }),
     }),
   });
 

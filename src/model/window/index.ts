@@ -6,6 +6,14 @@
  */
 export { extractModelWindows, type ModelWindowProbeHit } from "./extract.js";
 export {
+  buildModelWindowProbeHeaders,
+  MODEL_WINDOW_PROBE_TIMEOUT_MS,
+  probeAndRecordProviderModelWindows,
+  probeProviderModelWindows,
+  type ModelWindowProbeInput,
+  type ProbeAndRecordResult,
+} from "./probe.js";
+export {
   defaultModelWindowStorePath,
   mergeModelWindowEntry,
   MODEL_WINDOW_STORE_FILENAME,
