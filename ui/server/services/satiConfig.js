@@ -553,6 +553,12 @@ export function buildMemoryDefaults(config) {
 
 // ─── File I/O ────────────────────────────────────────────────────────────────
 
+/** 引擎的窗口覆盖层文件（`~/.sati/model-windows.json`，见 src/model/window/）。 */
+export function getModelWindowStorePath() {
+  const homeDir = process.env.SATI_HOME || path.join(os.homedir(), ".sati");
+  return path.join(homeDir, "model-windows.json");
+}
+
 export function getSatiConfigPath() {
   if (process.env.SATI_CONFIG_PATH?.trim()) {
     return process.env.SATI_CONFIG_PATH.trim();

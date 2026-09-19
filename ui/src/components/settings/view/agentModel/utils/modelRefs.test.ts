@@ -77,3 +77,71 @@ describe("activeModelCapabilities effective limits", () => {
     expect(activeModelCapabilities({ agent: { model: "relay/x" } })).toBeNull();
   });
 });
+
+describe("窗口覆盖层（observed / probe）", () => {
+  it("无覆盖层时，未命中目录的模型仍按协议默认", () => {
+    const caps = activeModelCapabilities(relayConfig("openai"));
+    expect(caps?.effectiveContext).toEqual({ tokens: 128000, source: "default" });
+    expect(caps?.windowOverride).toBeUndefined();
+  });
+
+  it("probe 值覆盖协议默认，来源标注 probe，并保留条目供采纳", () => {
+    const caps = activeModelCapabilities(relayConfig("openai"), {
+      "relay/custom-model": {
+        maxContextTokens: 262144,
+        maxOutputTokens: 64000,
+        source: "probe",
+        via: "context_length",
+      },
+    });
+    expect(caps?.effectiveContext).toEqual({ tokens: 262144, source: "probe" });
+    expect(caps?.effectiveOutput).toEqual({ tokens: 64000, source: "probe" });
+    expect(caps?.windowOverride?.via).toBe("context_length");
+  });
+
+  it("observed（实测）同样参与解析并标注 observed", () => {
+    const caps = activeModelCapabilities(relayConfig("openai"), {
+      "relay/custom-model": { maxContextTokens: 131072, source: "observed", via: "provider-context-cap" },
+    });
+    expect(caps?.effectiveContext).toEqual({ tokens: 131072, source: "observed" });
+  });
+
+  it("覆盖层高于目录条目（引擎同序：config > 覆盖层 > catalog > 默认）", () => {
+    const withCatalog = activeModelCapabilities({
+      agent: { model: "zhipu/glm-4.6" },
+      model: { providers: { zhipu: { url: "https://api.z.ai/api/paas/v4", apiKey: "k" } } },
+    });
+    expect(withCatalog?.effectiveContext.source).toBe("catalog");
+
+    const withOverlay = activeModelCapabilities(
+      {
+        agent: { model: "zhipu/glm-4.6" },
+        model: { providers: { zhipu: { url: "https://api.z.ai/api/paas/v4", apiKey: "k" } } },
+      },
+      { "zhipu/glm-4.6": { maxContextTokens: 4096, source: "observed" } },
+    );
+    expect(withOverlay?.effectiveContext).toEqual({ tokens: 4096, source: "observed" });
+  });
+
+  it("模型显式声明优先于覆盖层", () => {
+    const caps = activeModelCapabilities(relayConfig("openai", { capabilities: { maxContextTokens: 96000 } }), {
+      "relay/custom-model": { maxContextTokens: 262144, source: "probe" },
+    });
+    expect(caps?.effectiveContext).toEqual({ tokens: 96000, source: "config" });
+  });
+
+  it("覆盖层只给输出上限时，上下文档不受影响", () => {
+    const caps = activeModelCapabilities(relayConfig("openai"), {
+      "relay/custom-model": { maxOutputTokens: 4096, source: "probe" },
+    });
+    expect(caps?.effectiveOutput).toEqual({ tokens: 4096, source: "probe" });
+    expect(caps?.effectiveContext).toEqual({ tokens: 128000, source: "default" });
+  });
+
+  it("其他 provider/model 的条目不影响当前模型", () => {
+    const caps = activeModelCapabilities(relayConfig("openai"), {
+      "other/model": { maxContextTokens: 262144, source: "probe" },
+    });
+    expect(caps?.effectiveContext).toEqual({ tokens: 128000, source: "default" });
+  });
+});

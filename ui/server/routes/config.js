@@ -9,6 +9,7 @@ import {
   buildDefaultSatiConfig,
   configRevision,
   configToYaml,
+  getModelWindowStorePath,
   getSatiConfigPath,
   hasUnresolvedMaskedSecrets,
   maskSecrets,
@@ -627,6 +628,31 @@ router.post("/reload", async (_req, res) => {
     res.json(response);
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+/**
+ * 窗口覆盖层（issue #449）：引擎探测（/models）与超限实测反推出的模型真实窗口。
+ * 只读——写入由引擎侧负责（探测执行器与 `provider-context-cap` 观测回写）。
+ * 文件缺失/损坏一律按"无事实"返回，设置页据此退回"未探测"状态而非报错。
+ */
+router.get("/model-windows", async (_req, res) => {
+  try {
+    const file = getModelWindowStorePath();
+    let raw;
+    try {
+      raw = await fsPromises.readFile(file, "utf8");
+    } catch {
+      return res.json({ exists: false, entries: {} });
+    }
+    const parsed = JSON.parse(raw);
+    const entries =
+      parsed && typeof parsed === "object" && parsed.entries && typeof parsed.entries === "object"
+        ? parsed.entries
+        : {};
+    return res.json({ exists: true, entries });
+  } catch (error) {
+    return res.json({ exists: false, entries: {}, error: error instanceof Error ? error.message : String(error) });
   }
 });
 

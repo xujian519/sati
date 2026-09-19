@@ -1,3 +1,4 @@
+import type { ModelWindowEntry } from "../window/types.js";
 import type { ModelCapabilities } from "./capabilities.js";
 import type { CanonicalModelError } from "./errors.js";
 import type { MultimodalConstraints } from "./multimodal.js";
@@ -344,4 +345,10 @@ export type ProviderConfig = {
 
 export type ModelConfig = {
   providers: Record<string, ProviderConfig>;
+  /**
+   * 命中窗口覆盖层（`/models` 探测或超限观测，见 `src/model/window/`）的条目，
+   * 键为 `<provider>/<model>`。仅在覆盖层确有事实时出现；供设置页标注
+   * 「生效窗口来自探测/实测」与诊断使用。
+   */
+  windowOverrides?: Record<string, ModelWindowEntry>;
 };
