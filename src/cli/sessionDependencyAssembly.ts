@@ -52,6 +52,8 @@ export type SessionDependenciesRuntimeView = {
   router: RouterRuntime;
   /** 未启用记忆时为 undefined（原闭包取 `runtime.memory`）。 */
   memory?: MemoryResolver;
+  /** 工作区专利判据结果（#450）：控制技能/角色清单里的专利条目。 */
+  patentDomainEnabled: boolean;
 };
 
 export type SessionDependenciesInput = {
@@ -180,6 +182,7 @@ export function buildSessionDependencies(deps: SessionDependenciesInput): Sessio
     const contextRuntime = new DefaultContextRuntime({
       extension,
       projectRoot,
+      patentDomainEnabled: runtime.patentDomainEnabled,
       memoryResolver,
       memoryRetrievalTimeoutMs: runtime.snapshot.config.memory?.retrievalTimeoutMs,
       // 项目知识偏好透传：knowledge provider 据此强制注入/加权审查标准

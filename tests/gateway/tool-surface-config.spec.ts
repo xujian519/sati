@@ -3,12 +3,16 @@
  * 内置工具组开关（`documentStyle` / `kanban` / `team`）。
  *
  * 走真实网关接线（`createLocalGateway` + 注入的假模型），因为要证明的正是接线本身：
- * 配置最终落在会话可见的模型工具清单上，且**默认（段缺失）行为与改动前逐字一致**
- * （默认路径一变就会破坏 llm-replay fixture 的 toolSchemaDigest）。
+ * 配置最终落在会话可见的模型工具清单上。
+ *
+ * `#450` 起「默认面」取决于**工作区专利判据**（`src/pilot/workspace/patentSignals.ts`）：
+ * 非专利工作区默认隐藏 patent 域，专利工作区（这里用 `.sati/rules.yaml` 引用专利规则包
+ * 造信号）默认面与翻转前逐字一致。llm-replay fixture 不受影响——它的工具表由
+ * `createBuiltinRegistry` 直接构造，不经网关（见 `docs/tri-issue-remediation-plan.md` §1.4）。
  */
 
 import assert from "node:assert/strict";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -49,10 +53,19 @@ function fakeModelRuntime(requests: CanonicalModelRequest[]): ModelRuntime {
   };
 }
 
+type SurfaceOptions = {
+  /** 造一个专利工作区信号：项目规则包清单引用专利规则。 */
+  patentProject?: boolean;
+};
+
 /** 用给定 `tools` 段跑一个真实回合，返回模型可见的工具名。 */
-async function toolNamesFor(toolsSection: string): Promise<string[]> {
+async function toolNamesFor(toolsSection: string, options: SurfaceOptions = {}): Promise<string[]> {
   const root = await mkdtemp(join(tmpdir(), "sati-tool-surface-"));
   await writeFile(join(root, "sati.yaml"), BASE + toolsSection, "utf8");
+  if (options.patentProject) {
+    await mkdir(join(root, ".sati"), { recursive: true });
+    await writeFile(join(root, ".sati", "rules.yaml"), "packs:\n  - patent/nuo-core\n", "utf8");
+  }
   const requests: CanonicalModelRequest[] = [];
   const local = createLocalGateway({
     projectRoot: root,
@@ -78,19 +91,40 @@ async function toolNamesFor(toolsSection: string): Promise<string[]> {
   }
 }
 
-test("默认与空 tools 段的工具面一致（新增字段不改变默认行为）", async () => {
+test("非专利工作区默认隐藏 patent 域，空 tools 段与默认一致", async () => {
   const baseline = await toolNamesFor("");
   const emptySection = await toolNamesFor("tools: {}\n");
 
   assert.deepEqual(emptySection, baseline);
-  // 默认面仍带着三组内置工具与专利域工具——默认路径必须与改动前一致。
-  for (const name of ["document_style_panel", "kanban_get", "team_status", "patent_search", "read_file"]) {
+  // 非专利工作区：三组内置能力与通用工具照常，专利域（含文书工具）不出现。
+  for (const name of ["kanban_get", "team_status", "read_file", "todo_write"]) {
     assert.ok(baseline.includes(name), `默认工具面应包含 ${name}`);
+  }
+  for (const hidden of ["patent_search", "draft_claims", "render_patent_document", "document_style_panel"]) {
+    assert.ok(!baseline.includes(hidden), `${hidden} 属于 patent 域，非专利工作区默认应隐藏`);
   }
 });
 
+test("专利工作区默认面不变（patent 域与文书工具照常）", async () => {
+  const names = await toolNamesFor("", { patentProject: true });
+  for (const name of ["patent_search", "draft_claims", "render_patent_document", "document_style_panel"]) {
+    assert.ok(names.includes(name), `专利工作区默认面应包含 ${name}`);
+  }
+  assert.deepEqual(names, await toolNamesFor("tools: {}\n", { patentProject: true }));
+});
+
+test("tools.patentDomain 显式声明优先于工作区判据（两个方向）", async () => {
+  const opened = await toolNamesFor("tools:\n  patentDomain: true\n");
+  assert.ok(opened.includes("patent_search"), "非专利工作区显式打开后应含 patent 域");
+
+  const closed = await toolNamesFor("tools:\n  patentDomain: false\n", { patentProject: true });
+  assert.ok(!closed.includes("patent_search"), "专利工作区显式关闭后不应含 patent 域");
+  assert.ok(closed.includes("kanban_get"), "显式关闭只影响 patent 域");
+});
+
 test("hiddenDomains 移除该域工具，其他域与未标域工具不受影响", async () => {
-  const names = await toolNamesFor("tools:\n  hiddenDomains:\n    - patent\n");
+  // 在专利工作区里跑：这样 patent 域的缺席只能来自用户写的 hiddenDomains，判据不参与。
+  const names = await toolNamesFor("tools:\n  hiddenDomains:\n    - patent\n", { patentProject: true });
 
   for (const removed of ["patent_search", "draft_claims", "render_patent_document", "document_style_panel"]) {
     assert.ok(!names.includes(removed), `${removed} 属于 patent 域，应被裁剪`);
@@ -114,6 +148,7 @@ test("内置工具组显式关闭后不再注册，其余工具不受影响", as
       "    enabled: false",
       "",
     ].join("\n"),
+    { patentProject: true },
   );
 
   for (const removed of [

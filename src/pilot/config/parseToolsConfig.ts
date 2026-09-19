@@ -21,6 +21,7 @@ import type {
  *       endpoint: https://api.z.ai/api/paas/v4/web_search
  *     visibleDomains: [filesystem, shell] # 只保留这些域的工具（省略 = 不限）
  *     hiddenDomains: [patent]             # 隐藏这些域（优先于 visibleDomains）
+ *     patentDomain: true                  # patent 域显式开关（缺省 = 按工作区自动判据）
  *     documentStyle: { enabled: false }   # 内置工具组，段缺失 = 保持注册
  *     kanban: { enabled: false }
  *     team: { enabled: false }
@@ -62,6 +63,12 @@ export function parseToolsConfig(
     "TOOLS_HIDDEN_DOMAINS_INVALID",
     diagnostics,
   );
+  const patentDomain = parseBooleanField(
+    rawTools.patentDomain,
+    "tools.patentDomain",
+    "TOOLS_PATENT_DOMAIN_INVALID",
+    diagnostics,
+  );
   const documentStyle = parseToolGroup(
     rawTools.documentStyle,
     "tools.documentStyle",
@@ -88,6 +95,7 @@ export function parseToolsConfig(
   if (paperSearch) result.paperSearch = paperSearch;
   if (visibleDomains) result.visibleDomains = visibleDomains;
   if (hiddenDomains) result.hiddenDomains = hiddenDomains;
+  if (patentDomain !== undefined) result.patentDomain = patentDomain;
   if (documentStyle) result.documentStyle = documentStyle;
   if (kanban) result.kanban = kanban;
   if (team) result.team = team;
@@ -99,6 +107,7 @@ const TOOLS_KNOWN_FIELDS = [
   "paperSearch",
   "visibleDomains",
   "hiddenDomains",
+  "patentDomain",
   "documentStyle",
   "kanban",
   "team",
@@ -178,6 +187,30 @@ function parseToolGroup(
     }
   }
   return result;
+}
+
+/**
+ * 三态布尔字段解析（缺省 = 未声明，与 `false` 严格区分）。
+ * `tools.patentDomain` 用它：`undefined` 表示"交给工作区判据"，不是"关"。
+ */
+function parseBooleanField(
+  raw: unknown,
+  path: string,
+  code: string,
+  diagnostics: PilotConfigDiagnostic[],
+): boolean | undefined {
+  if (raw === undefined) return undefined;
+  if (typeof raw !== "boolean") {
+    diagnostics.push({
+      code,
+      severity: "fatal",
+      message: `${path} must be a boolean.`,
+      path,
+      recoverable: false,
+    });
+    return undefined;
+  }
+  return raw;
 }
 
 /** Shared `enabled` boolean parser; emits a fatal diagnostic on non-boolean values. */

@@ -94,6 +94,11 @@ export type DefaultContextRuntimeOptions = {
   memoryRetrievalTimeoutMs?: number;
   /** 项目知识偏好（per-project knowledge profile），透传给 MemoryResolver.retrieve。 */
   knowledgeProfile?: KnowledgeProfile;
+  /**
+   * 工作区专利判据结果（#450）。`false` 时技能/角色清单不列专利条目；缺省 = `true`
+   * （保持既有行为，判据由 `projectRuntimeFactory` 装配时算出）。
+   */
+  patentDomainEnabled?: boolean;
   now?: () => Date;
 };
 
@@ -146,7 +151,9 @@ export class DefaultContextRuntime implements ContextRuntime {
 
   constructor(options: DefaultContextRuntimeOptions = {}) {
     this.extension = options.extension ?? new NullExtensionResolver();
-    this.promptAssembler = options.promptAssembler ?? new PromptAssembler(this.extension);
+    this.promptAssembler =
+      options.promptAssembler ??
+      new PromptAssembler(this.extension, { patentDomainEnabled: options.patentDomainEnabled });
     this.messageProjector = options.messageProjector ?? new MessageProjector();
     this.toolResultBudget = options.toolResultBudget;
     this.memoryResolver = options.memoryResolver;
