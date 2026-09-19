@@ -118,6 +118,12 @@ export type SatiConfig = {
       openalexMailto?: string;
       semanticScholarApiKey?: string;
     };
+    /**
+     * patent 域显式开关（三态）。`undefined` = 自动（按工作区专利判据，见
+     * `src/pilot/workspace/patentSignals.ts`）；`true` / `false` = 用户强制。
+     * 缺省态**不可**被面板物化，否则专利项目保存一次配置就永久失去专利工具。
+     */
+    patentDomain?: boolean;
   };
   gateway?: {
     enabled?: boolean;

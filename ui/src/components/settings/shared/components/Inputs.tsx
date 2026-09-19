@@ -340,11 +340,17 @@ export function Select({
   onChange,
   options,
   disabled = false,
+  ariaLabel,
 }: {
   value: string | undefined;
   onChange: (next: string) => void;
   options: Array<{ value: string; label: string; disabled?: boolean }>;
   disabled?: boolean;
+  /**
+   * 可访问名。缺省用当前选中项的文案——对"值即标签"的下拉（语言、模式）足够，但对
+   * 会随选择变化的字段名（如三态开关）会读成一个不断变动的名字，此时传固定字段名。
+   */
+  ariaLabel?: string;
 }) {
   const selectedOption = options.find(opt => opt.value === value);
   const selectedLabel = selectedOption?.label ?? "";
@@ -368,7 +374,7 @@ export function Select({
         onChange={e => onChange(e.target.value)}
         disabled={disabled}
         className={cn("absolute inset-0 h-full w-full opacity-0", disabled ? "cursor-default" : "cursor-pointer")}
-        aria-label={selectedLabel}
+        aria-label={ariaLabel ?? selectedLabel}
       >
         {options.map(opt => (
           <option key={opt.value} value={opt.value} disabled={opt.disabled}>

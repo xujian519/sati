@@ -1178,6 +1178,13 @@
             "description": "When disabled, the agent will not receive the paper_search tool and patent workflows lose the paper literature source."
           }
         },
+        "patentDomain": {
+          "label": "Patent capabilities",
+          "description": "Controls the patent-domain tools (search, drafting, invalidation) and the patent skills/roles list. Automatic follows the workspace: a patent project, patent rule packs, patent skills, or a history of patent tool calls keep them on. Changes apply after the agent restarts or reloads its config.",
+          "auto": "Automatic (follow workspace)",
+          "on": "Always on",
+          "off": "Always off"
+        },
         "provider": {
           "label": "Search provider",
           "description": "The active search service.",
