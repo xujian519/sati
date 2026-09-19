@@ -1220,10 +1220,13 @@
   - 位置：`main-content-v2/SkillsV2.tsx:120`（主组件）、`skills/import/ImportFromFolder.tsx`（原 `:1414-2268`）
   - 影响（立案时）：单文件 2503 行；`ImportFromFolder` 一个函数 ~40 state/effect + 两套几乎相同的模型/校验 fetch 逻辑。建议：按 `skills/import/` feature-folder 拆出（picked/typed/batch 三模式）。
   - 剩余（新开条目追踪）：`ImportFromFolder.tsx` 仍有 824 行（picked/typed 两模式 + 校验面板 + 提交逻辑），god function 688 行。
-- **TD-UI-APP-N02** · `useSessionStore.ts` ~1440 行，流式/子代理族高度重复
-  - 类别：A · 严重级：P2 · 工作量：M · 状态：new
-  - 位置：`stores/useSessionStore.ts:632`
-  - 影响：`updateStreaming`/`updateStreamingThinking`/`updateSubagentDetailStreaming` 及各自 finalize 共 8 个近同函数；`fetchFromServer`/`fetchMore`/`refreshFromServer` 三处重复拼接 `URLSearchParams`。建议：抽 `streamingPatch`/`finalizeStream`/`buildSessionQuery`。
+- **TD-UI-APP-N02** · `useSessionStore.ts` 主闭包 727 行且**零覆盖**；~~流式/子代理族高度重复~~
+  - 类别：A · 严重级：P2 · 工作量：M · 状态：**done（2026-09-20，PR #465）**
+  - 位置（立案时）：`stores/useSessionStore.ts:632` —— **指错**：`:632` 落在模块级 `createRafNotifyScheduler` 附近，条目真正要说的是 `:677-1403` 的 `export function useSessionStore()` 主闭包。
+  - **口径更正（2026-09-20）**：立案时的两条主张「`updateStreaming` 等 8 个近同函数」与「三处重复拼接 `URLSearchParams`」**已在 2026-09-02（PR #241）修掉**，条目从未回填。本波处理的真问题是**主闭包 727 行 + 零覆盖**（模块级纯函数区当时已有 24 条直测，主闭包一条没有）。
+  - **处置**：方案 B —— 33 个 `useCallback` 整体外化到模块级工厂 `createSessionActions(deps)`（634 行、**体内零 hook**），主闭包 **727 → 20 行**（3 × `useRef` + 1 × `useState` + 1 × `useMemo([setTick])`）。**未拆子 hook**：per-session store 是 `useRef(new Map())` 单例，拆子 hook 会各自新建一份 ⇒ 28 个方法静默失效（负控制：改成共享键 ⇒ 18/18 用例全红）。等价性论证见下，逐 token 证明 34/34。
+    为何"单次构造"等价：原 33 个 `useCallback` 的依赖数组全是彼此（`[getSlot, notify]` / `[notify]` / `[]`），链收敛到 `[]` ⇒ 原本就是永久稳定引用；`useMemo` 依赖的 `setTick` 是 `useState` setter（恒等）。两边都"永不重建"。
+  - **验证**：新增 18 条 `renderHook(useSessionStore)`（主闭包从零覆盖到有网，含 per-session 隔离、水位剪除、流式合并、仅活跃会话重渲染）；4 处负控制（含 `:1176-1179` 的 patch-before-mutate 顺序不变式，翻转后唯一 1 条红）；逐 token 等价性 34/34，hook 创建顺序与 return 键序不变；`as unknown as` 未增加。决策见 `docs/notes/implemented/2026-09-20-session-store-actions-extraction.md`。
 - **TD-UI-APP-N03** · `AppShellV2` 删除确认弹窗整段硬编码英文，未走 i18n
   - 类别：H · 严重级：P1 · 工作量：S · 状态：**done（已修复 2026-08-23）**
   - 修复：两个删除弹窗全部文案改为 `useTranslation("common")` 的 `t()`，新增 `deleteDialogs.*`（含复数 `_one/_other` 的 `projectSessionsRemovedCount` 与 `projectFilesOnDisk*` 三段拆分保留内联强调）。父组件错误文案（errorDeleteProject/errorDeleteSession）一并提取，`useCallback` 依赖补 `t`。新增 `app-shell/deleteDialogs.i18n.test.ts` 断言 en/zh-CN 的 key 解析与 `{{count}}`/`{{projectName}}` 插值。en/zh-CN common.json key 对齐（428/428）；ui typecheck/lint/biome/全量测试 578 通过。
