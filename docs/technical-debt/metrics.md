@@ -10,7 +10,7 @@
 | src TS 文件 / 行数 | 1041 / 174674 |
 | src JS 文件 | 0 |
 | tests 文件 | 570 |
-| ui/src 文件 / 行数 | 505 / 86372 |
+| ui/src 文件 / 行数 | 506 / 86431 |
 | ui/server 文件 / 行数 | 108 / 31756 |
 
 ## 指标口径
@@ -29,7 +29,7 @@
 | 指标 | 总量 | 热点模块 |
 |---|---|---|
 | `any`/`@ts-expect-error`/`@ts-ignore` | 3 | ui/src(3) |
-| `as unknown as`（双重断言） | 30 | ui/src(23) · adapters(2) · tool(2) |
+| `as unknown as`（双重断言） | 31 | ui/src(24) · adapters(2) · tool(2) |
 | 裸 `console.*` | 158 | cli(137) · telemetry(8) · ui/server(5) |
 | 空 `catch {}` | 0 | — |
 | 无参 `catch {`（总计） | 664 | ui/server(152) · ui/src(114) · adapters(70) |
