@@ -2,11 +2,10 @@ import { useEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { X, Loader2 } from "lucide-react";
+import type { DiffLine } from "../chat/utils/messageTransforms";
 import type { ChatMessage } from "../chat/types/types";
 import type { Project, SessionProvider } from "../../types/app";
 import SubagentDetailMessageFlow from "./SubagentDetailMessageFlow";
-
-type DiffLine = { type: string; content: string; lineNum: number };
 
 interface SubagentDetailModalProps {
   subagentId: string;

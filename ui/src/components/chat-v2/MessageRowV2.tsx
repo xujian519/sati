@@ -2,6 +2,7 @@ import { memo, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { AlertTriangle, Check, ChevronRight, Copy, GitBranch, Loader2, Pencil, RotateCcw } from "lucide-react";
+import type { DiffLine } from "../chat/utils/messageTransforms";
 import { copyTextToClipboard } from "../../utils/clipboard";
 import { UI_TIMEOUTS } from "../../constants/timeouts";
 import { cn } from "../../lib/utils.js";
@@ -29,8 +30,6 @@ import { useTypewriter } from "./useTypewriter";
 import DocumentReferenceChip from "./DocumentReferenceChip";
 import { linkifyFilePathsOutsideCode } from "./linkifyFilePathsOutsideCode";
 import { AgentFileArtifactGroup, UserAttachmentCards } from "./MessageFileCards";
-
-type DiffLine = { type: string; content: string; lineNum: number };
 
 function attachmentToDocumentReference(attachment: ChatAttachment): ContentReference | null {
   const structured = normalizeContentReference(attachment.contentReference);

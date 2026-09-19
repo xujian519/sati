@@ -1,5 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import type { DiffLine } from "../../utils/messageTransforms";
 import SessionProviderLogo from "../../../llm-logo-provider/SessionProviderLogo";
 import type { ChatMessage, SatiPermissionSuggestion, Provider, SessionPermissionGrantResult } from "../../types/types";
 import { formatUsageLimitText } from "../../utils/chatFormatting";
@@ -12,12 +13,6 @@ import MessageCopyControl from "./MessageCopyControl";
 import ImageLightbox, { type LightboxImage } from "./ImageLightbox";
 import ToolResultBlock from "./ToolResultBlock";
 import InteractivePromptBlock from "./InteractivePromptBlock";
-type DiffLine = {
-  type: string;
-  content: string;
-  lineNum: number;
-};
-
 type MessageComponentProps = {
   message: ChatMessage;
   prevMessage: ChatMessage | null;

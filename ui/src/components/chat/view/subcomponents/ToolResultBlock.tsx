@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Search, Settings } from "lucide-react";
+import type { DiffCalculator } from "../../utils/messageTransforms";
 import type { ChatMessage, Provider, SatiPermissionSuggestion, SessionPermissionGrantResult } from "../../types/types";
 import type { Project } from "../../../../types/app";
 import { getSatiPermissionSuggestion } from "../../utils/chatPermissions";
@@ -52,12 +53,11 @@ type ToolResultBlockProps = {
     suggestion: SatiPermissionSuggestion,
   ) => SessionPermissionGrantResult | null | undefined;
   /**
-   * 结构等价于 `MessageComponent` 的本地 `DiffLine[]`。**不**复用
-   * `chat/utils/messageTransforms.ts` 的 `DiffCalculator`：后者把 `type` 收窄成
-   * `"added" | "removed"`，而这条链路上各层都声明为 `type: string`，换类型会变成一次
-   * 跨文件的类型收紧（全仓 7 份本地 `DiffLine` 副本，已登记 TD-UI-CHAT-N15）。
+   * 与 `chat/utils/messageTransforms.ts` 的 `DiffCalculator` 同型。TD-UI-CHAT-N15 已收敛：
+   * 全仓 7 份本地 `DiffLine` 副本统一到权威窄类型（`type: "added" | "removed"`），唯一消费
+   * `.type` 的点是 `ToolDiffViewer`，而 `calculateDiff` 的三个产出点全是字面量。
    */
-  createDiff: (oldStr: string, newStr: string) => Array<{ type: string; content: string; lineNum: number }>;
+  createDiff: DiffCalculator;
   autoExpandTools?: boolean;
 };
 
