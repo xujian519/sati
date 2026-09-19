@@ -7,11 +7,15 @@
 export { extractModelWindows, type ModelWindowProbeHit } from "./extract.js";
 export {
   buildModelWindowProbeHeaders,
+  isModelWindowProbeEnabled,
+  MODEL_WINDOW_PROBE_ENV,
   MODEL_WINDOW_PROBE_TIMEOUT_MS,
   probeAndRecordProviderModelWindows,
   probeProviderModelWindows,
   type ModelWindowProbeInput,
   type ProbeAndRecordResult,
+  type WarmModelWindowProbesInput,
+  warmModelWindowProbes,
 } from "./probe.js";
 export {
   defaultModelWindowStorePath,

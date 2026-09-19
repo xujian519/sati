@@ -8,14 +8,33 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import type { ModelConfig } from "../../../src/model/protocol/canonical.js";
 import {
   buildModelWindowProbeHeaders,
+  isModelWindowProbeEnabled,
   probeAndRecordProviderModelWindows,
   probeProviderModelWindows,
+  warmModelWindowProbes,
 } from "../../../src/model/window/probe.js";
 import { ModelWindowStore } from "../../../src/model/window/store.js";
 
 const NOW = "2026-09-19T00:00:00.000Z";
+
+/** 最小 ModelConfig：只为预热入口服务（字段齐全即可，无 as unknown as）。 */
+function modelConfig(urls: Record<string, string>): ModelConfig {
+  const providers: ModelConfig["providers"] = {};
+  for (const [id, url] of Object.entries(urls)) {
+    providers[id] = {
+      id,
+      protocol: "openai",
+      url,
+      apiKey: "k",
+      headers: {},
+      models: {},
+    };
+  }
+  return { providers };
+}
 
 function jsonResponse(body: unknown, ok = true): Response {
   return {
@@ -139,6 +158,73 @@ test("响应无窗口事实时不写入任何条目", async () => {
     });
     assert.equal(result.recorded, 0);
     assert.deepEqual(store.read().entries, {});
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// 自动探测开关与预热入口
+// ---------------------------------------------------------------------------
+
+test("开关解析：1/true/yes/on 为开，其余为关", () => {
+  for (const on of ["1", "true", "TRUE", "yes", "on", " On "]) {
+    assert.equal(isModelWindowProbeEnabled({ SATI_MODEL_WINDOW_PROBE: on }), true, `${on} 应视为开`);
+  }
+  for (const off of [undefined, "", "0", "false", "no", "off", "maybe"]) {
+    assert.equal(
+      isModelWindowProbeEnabled(off === undefined ? {} : { SATI_MODEL_WINDOW_PROBE: off }),
+      false,
+      `${String(off)} 应视为关`,
+    );
+  }
+});
+
+test("默认关：预热不发任何请求（离线/测试环境零网络副作用）", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "sati-window-warm-"));
+  try {
+    let called = 0;
+    warmModelWindowProbes({
+      model: modelConfig({ relay: "https://relay.test/v1" }),
+      storePath: join(dir, "model-windows.json"),
+      env: {},
+      fetchImpl: (async () => {
+        called += 1;
+        return jsonResponse({ data: [{ id: "m", context_length: 131072 }] });
+      }) as unknown as typeof fetch,
+    });
+    await new Promise(resolve => setTimeout(resolve, 20));
+    assert.equal(called, 0);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("开启后：非 ollama provider 被探测并写入覆盖层，ollama 跳过", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "sati-window-warm-"));
+  try {
+    const storePath = join(dir, "model-windows.json");
+    const calls: string[] = [];
+    warmModelWindowProbes({
+      model: modelConfig({ relay: "https://relay.test/v1", ollama: "http://127.0.0.1:11434/v1" }),
+      storePath,
+      env: { SATI_MODEL_WINDOW_PROBE: "1" },
+      now: () => new Date("2026-09-19T00:00:00.000Z"),
+      fetchImpl: (async (url: string) => {
+        calls.push(String(url));
+        return jsonResponse({ data: [{ id: "m", context_length: 131072 }] });
+      }) as unknown as typeof fetch,
+    });
+
+    const store = new ModelWindowStore(storePath);
+    for (let i = 0; i < 100 && store.lookup("relay", "m") === undefined; i += 1) {
+      await new Promise(resolve => setTimeout(resolve, 5));
+    }
+
+    assert.equal(calls.length, 1, "只应探测一次（ollama 跳过）");
+    assert.equal(calls[0]?.startsWith("https://relay.test"), true);
+    assert.equal(store.lookup("relay", "m")?.maxContextTokens, 131072);
+    assert.equal(store.lookup("relay", "m")?.source, "probe");
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

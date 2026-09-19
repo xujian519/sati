@@ -11,8 +11,9 @@
  */
 import { networkFetch } from "../../network/fetch.js";
 import { buildProviderModelsEndpointCandidates, type ProviderEndpointProtocol } from "../providerEndpoint.js";
+import type { ModelConfig } from "../protocol/canonical.js";
 import { extractModelWindows, type ModelWindowProbeHit } from "./extract.js";
-import type { ModelWindowStore } from "./store.js";
+import { ModelWindowStore } from "./store.js";
 
 export const MODEL_WINDOW_PROBE_TIMEOUT_MS = 5_000;
 
@@ -104,4 +105,57 @@ export async function probeAndRecordProviderModelWindows(
     recorded += 1;
   }
   return { hits, recorded };
+}
+
+/**
+ * 自动探测开关。**默认关**：探测是外部网络副作用，不该在配置加载路径上默认发生
+ * ——本仓有过 ollama 预热的教训（config reload 摆动会让 runtime 每 turn 重建），
+ * 而"拿不到窗口"本就是常态（标准 OpenAI 形状、xAI、未扩展自建服务都不返回）。
+ *
+ * 打开后行为：每次配置加载对每个非 ollama provider 发起一次 `/models` 探测
+ * （fire-and-forget、超时 5s、失败静默），结果按取小合并写入覆盖层，
+ * 下一次 reload / 重启即生效。真正的"立即生效"路径是 observed（超限实测，
+ * 无需开关）与设置页采纳（写入 config 层）。
+ */
+export const MODEL_WINDOW_PROBE_ENV = "SATI_MODEL_WINDOW_PROBE";
+
+/** 开关解析：`1` / `true` / `yes` / `on` 为开（大小写不敏感），其余为关。 */
+export function isModelWindowProbeEnabled(env: Record<string, string | undefined> = process.env): boolean {
+  const raw = env[MODEL_WINDOW_PROBE_ENV]?.trim().toLowerCase();
+  return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
+}
+
+export type WarmModelWindowProbesInput = {
+  model: ModelConfig;
+  /** 覆盖层落盘路径（`defaultModelWindowStorePath(env)`）。 */
+  storePath: string;
+  env?: Record<string, string | undefined>;
+  fetchImpl?: typeof fetch;
+  now?: () => Date;
+};
+
+/**
+ * 对所有 provider 触发一次窗口探测（fire-and-forget，受开关门控）。
+ * ollama 跳过：它有专用探测（`/api/tags` 的 `details.context_length`，见
+ * `src/model/ollama/probe.ts`），走通用 `/models` 只会拿到兼容层的空壳。
+ */
+export function warmModelWindowProbes(input: WarmModelWindowProbesInput): void {
+  const env = input.env ?? process.env;
+  if (!isModelWindowProbeEnabled(env)) return;
+  const store = new ModelWindowStore(input.storePath);
+  for (const provider of Object.values(input.model.providers)) {
+    if (provider.id === "ollama") continue;
+    void probeAndRecordProviderModelWindows({
+      provider: provider.id,
+      protocol: provider.protocol,
+      baseUrl: provider.url,
+      ...(provider.apiKey ? { apiKey: provider.apiKey } : {}),
+      ...(provider.headers && Object.keys(provider.headers).length > 0 ? { headers: provider.headers } : {}),
+      store,
+      ...(input.fetchImpl ? { fetchImpl: input.fetchImpl } : {}),
+      ...(input.now ? { now: input.now } : {}),
+    }).catch(() => {
+      // best-effort：探测失败不影响配置加载。
+    });
+  }
 }

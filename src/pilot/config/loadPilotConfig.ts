@@ -4,6 +4,7 @@ import { parseAlwaysOnConfig } from "../../always-on/config/parseAlwaysOnConfig.
 import { parseCronConfig } from "../../cron/config/parseCronConfig.js";
 import { parseModelConfig } from "../../model/config/parseModelConfig.js";
 import { warmOllamaModels } from "../../model/ollama/probe.js";
+import { warmModelWindowProbes } from "../../model/window/probe.js";
 import { defaultModelWindowStorePath, ModelWindowStore } from "../../model/window/store.js";
 import type { ModelWindowEntry } from "../../model/window/types.js";
 import { isRecord } from "../../model/config/schema.js";
@@ -232,6 +233,11 @@ export function loadPilotConfig(options: PilotConfigLoadOptions = {}): PilotConf
   // 无法等待网络探测；缓存就绪后，下一次 reload / 重启即可让
   // parseModelConfig 自动补全用户已安装的模型（见 model/ollama/probe.ts）。
   warmOllamaProviders(model);
+
+  // 窗口探测预热（fire-and-forget，默认关，见 src/model/window/probe.ts）：
+  // 打开后未命中 catalog 的模型可从 provider /models 拿到真实窗口，
+  // 下一次 reload / 重启即作为覆盖层生效。
+  warmModelWindowProbes({ model, storePath: defaultModelWindowStorePath(env), env });
 
   const sections = parseConfigSectionsSafely(rawConfig, model, pilotHome, diagnostics);
   const { agent, extension, memory, gateway, adapters, router } = sections;
