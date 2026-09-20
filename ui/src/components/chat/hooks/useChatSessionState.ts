@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import type { MutableRefObject } from "react";
-import { UI_TIMEOUTS } from "../../../constants/timeouts";
 import type { WsMessage } from "../../../contexts/WebSocketContext";
 import type { ChatMessage, ClaudeWorkStatus, SatiWorkStatus } from "../types/types";
 import {
@@ -18,6 +17,7 @@ import { useChatPaginationScroll } from "./use-chat-pagination-scroll";
 import { useChatScrollAnchor } from "./use-chat-scroll-anchor";
 import { useChatSearchNavigation } from "./use-chat-search-navigation";
 import { useChatSessionLifecycle } from "./use-chat-session-lifecycle";
+import { useChatProcessingStatus } from "./use-chat-processing-status";
 import { useChatTokenUsage } from "./use-chat-token-usage";
 
 // `didLoadedSessionChange` 随会话加载一族搬到 ./use-chat-session-lifecycle（issue #467），
@@ -537,60 +537,22 @@ export function useChatSessionState({
     handleScroll,
   });
 
-  useEffect(() => {
-    const pendingSessionId = pendingViewSessionRef.current?.sessionId ?? null;
-    const activeViewSessionId =
-      selectedSession?.id || (pendingSessionId === currentSessionId ? currentSessionId : null);
-    if (sessionIsReadOnly) return;
-    if (!activeViewSessionId || !processingSessions) return;
-    const shouldBeProcessing = processingSessions.has(activeViewSessionId);
-    if (shouldBeProcessing && !isLoading) {
-      setIsLoading(true);
-      setCanAbortSession(true);
-    }
-  }, [currentSessionId, isLoading, pendingViewSessionRef, processingSessions, selectedSession?.id, sessionIsReadOnly]);
-
-  useEffect(() => {
-    const pendingSessionId = pendingViewSessionRef.current?.sessionId ?? null;
-    const activeViewSessionId =
-      selectedSession?.id || (pendingSessionId === currentSessionId ? currentSessionId : null);
-    if (sessionIsReadOnly) return;
-    if (!activeViewSessionId || !processingSessions) return;
-    if (!processingSessions.has(activeViewSessionId)) return;
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-
-    const requestStatus = () => {
-      sendMessage({
-        type: "check-session-status",
-        sessionId: activeViewSessionId,
-        provider: "sati",
-        includeActiveTurnMessages: false,
-      });
-    };
-
-    requestStatus();
-    // 兜底存活探测：turn 开始/结束已有 stream_end/complete 事件驱动，
-    // 5s 间隔足以维持中断按钮等状态的实时性，避免 1.2s 高频 session-status
-    // 帧触发消费方整树 re-render（长任务数十分钟累计请求量减半）。
-    const timer = setInterval(requestStatus, UI_TIMEOUTS.SESSION_STATUS_POLL_INTERVAL_MS);
-    return () => clearInterval(timer);
-  }, [
+  // 「处理中」状态与轮询外置到 ./use-chat-processing-status（issue #467）：这三条 effect
+  // 在拆分前就是紧接着滚动锚定的三条（M7–M9），调用点保持在锚定之后。
+  useChatProcessingStatus({
+    selectedSession,
     currentSessionId,
     pendingViewSessionRef,
-    processingSessions,
-    selectedSession?.id,
-    sendMessage,
     sessionIsReadOnly,
+    processingSessions,
+    isLoading,
+    setIsLoading,
+    setCanAbortSession,
     ws,
-  ]);
-
-  // "Load all" overlay：没有更多消息时收起遮罩。
-  // 原先这里还有一条「上一轮在加载、这一轮加载结束、且还有更多」的分支，靠 isLoadingMoreMessages
-  // 的状态迁移触发；但那个状态是 `useState(false)` 且**没有 setter**（恒 false），该分支从未执行过，
-  // 已随死状态一并删除（#159 N02）。遮罩的置位仍由 loadAllMessages() 与下方的完成态 effect 负责。
-  useEffect(() => {
-    if (!hasMoreMessages) setShowLoadAllOverlay(false);
-  }, [hasMoreMessages, setShowLoadAllOverlay]);
+    sendMessage,
+    hasMoreMessages,
+    setShowLoadAllOverlay,
+  });
 
   return {
     chatMessages,
