@@ -2,6 +2,7 @@ import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } fro
 import type { Dispatch, RefObject, SetStateAction } from "react";
 import { useTranslation } from "react-i18next";
 import { GitBranch } from "lucide-react";
+import type { DiffLine } from "../chat/utils/messageTransforms";
 import { recordUiDiagnostic, reloadUi } from "../../lib/uiDiagnostics";
 import { UI_TIMEOUTS } from "../../constants/timeouts";
 import type {
@@ -47,8 +48,6 @@ import {
   type LiveProcessGroup,
   type RenderableMessageItem,
 } from "./processGrouping";
-
-type DiffLine = { type: string; content: string; lineNum: number };
 
 type MessagesPaneV2Props = {
   scrollContainerRef: RefObject<HTMLDivElement | null>;

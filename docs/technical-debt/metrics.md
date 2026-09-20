@@ -1,7 +1,7 @@
 # Sati 技术债务指标基线与趋势
 
 > 由 `node scripts/measure-techdebt.mjs --update` 自动生成，谨防手工编辑。
-> 最近一次快照：**2026-09-19**
+> 最近一次快照：**2026-09-20**
 
 ## 规模
 
@@ -10,7 +10,7 @@
 | src TS 文件 / 行数 | 1042 / 175010 |
 | src JS 文件 | 0 |
 | tests 文件 | 573 |
-| ui/src 文件 / 行数 | 506 / 86530 |
+| ui/src 文件 / 行数 | 506 / 86511 |
 | ui/server 文件 / 行数 | 108 / 31827 |
 
 ## 指标口径
@@ -125,7 +125,7 @@
 | `ui/src/components/chat-v2/MessagesPaneV2.render.test.tsx` | 1234 |
 | `ui/server/routes/agent.js` | 1224 |
 | `ui/src/components/chat-v2/ComposerV2.tsx` | 1188 |
-| `ui/src/components/chat-v2/MessagesPaneV2.tsx` | 1184 |
+| `ui/src/components/chat-v2/MessagesPaneV2.tsx` | 1183 |
 | `ui/server/routes/taskmaster.js` | 1179 |
 | `ui/server/routes/config.js` | 1173 |
 | `ui/src/components/chat/hooks/useChatSessionState.ts` | 1160 |
