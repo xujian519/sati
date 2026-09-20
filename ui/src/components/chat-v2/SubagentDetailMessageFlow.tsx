@@ -1,5 +1,6 @@
 import { Fragment, useCallback, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import type { DiffLine } from "../chat/utils/messageTransforms";
 import type { ChatMessage, ChatRunMode } from "../chat/types/types";
 import type { Project, SessionProvider } from "../../types/app";
 import ChatHistorySearchBar from "./ChatHistorySearchBar";
@@ -18,8 +19,6 @@ import {
 } from "./processGrouping";
 import { useChatHistorySearch } from "./useChatHistorySearch";
 import type { SearchableChatMessageInput } from "./chatHistorySearchUtils";
-
-type DiffLine = { type: string; content: string; lineNum: number };
 
 interface SubagentDetailMessageFlowProps {
   messages: ChatMessage[];

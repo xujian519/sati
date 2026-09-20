@@ -116,6 +116,29 @@ export function buildDefaultSatiConfig() {
   };
 }
 
+/**
+ * `tools.patentDomain` 三态守卫（#450）。
+ *
+ * 该键的「未声明」是一等状态：运行期把它交给**工作区专利判据**
+ * （`src/pilot/workspace/patentSignals.ts`）——专利项目/专利规则包/专利技能/历史用过
+ * 专利工具都保留能力面。归一化会做默认值深合并，默认值里一旦出现这个键，
+ * 「读取 → 保存」往返就把"自动"冻成某个具体结论，用户的专利项目会在保存一次配置后
+ * 静默失去全部专利工具。守卫把该键钉成「配置文件写过什么就是什么」：不注入、不物化。
+ *
+ * 与 #588 那批守卫（段存在即物化开启）方向相反——那里要把遗留 opt-in 保住，
+ * 这里要保住的是"没写 = 交给判据"。导出以便单测直接覆盖。
+ */
+export function guardPatentDomainTriState(source, normalized) {
+  const sourceTools = isRecord(source?.tools) ? source.tools : {};
+  if (sourceTools.patentDomain !== undefined) {
+    return normalized;
+  }
+  if (isRecord(normalized?.tools)) {
+    delete normalized.tools.patentDomain;
+  }
+  return normalized;
+}
+
 // Fill in missing sections and migrate legacy Office preview settings into the
 // current schema. The migration is idempotent.
 function normalizeSatiConfig(input) {
@@ -134,6 +157,8 @@ function normalizeSatiConfig(input) {
   if (isRecord(source.tools?.paperSearch) && source.tools.paperSearch.enabled === undefined) {
     normalized.tools.paperSearch.enabled = true;
   }
+  // 工作区专利判据的三态守卫（#450）：见 guardPatentDomainTriState 的说明。
+  guardPatentDomainTriState(source, normalized);
   const sourceOfficePreview = isRecord(source.webui?.officePreview) ? source.webui.officePreview : {};
   const legacySpreadsheetMode = normalizeString(sourceOfficePreview.spreadsheetMode).toLowerCase();
   const configuredService = normalizeString(sourceOfficePreview.service).toLowerCase();
@@ -552,6 +577,12 @@ export function buildMemoryDefaults(config) {
 }
 
 // ─── File I/O ────────────────────────────────────────────────────────────────
+
+/** 引擎的窗口覆盖层文件（`~/.sati/model-windows.json`，见 src/model/window/）。 */
+export function getModelWindowStorePath() {
+  const homeDir = process.env.SATI_HOME || path.join(os.homedir(), ".sati");
+  return path.join(homeDir, "model-windows.json");
+}
 
 export function getSatiConfigPath() {
   if (process.env.SATI_CONFIG_PATH?.trim()) {

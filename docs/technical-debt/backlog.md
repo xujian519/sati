@@ -1149,10 +1149,13 @@
     验证：永久用例钉住三类消息的分流（并入 `MessagesPaneV2.render.test.tsx`），**负控制**把 `shouldDelegate` 的门放宽 ⇒ 用例立刻变红（legacy 路径不渲染附件）⇒ 还原全绿。决策见 `docs/notes/implemented/2026-09-18-message-type-branch-audit.md`。
   - **剩余（可选）**：13 个 props 的收窄。**两条本轮明确不做的观察**：① `shouldHideThinkingMessage`（`message.isThinking && !showThinking` 的早退）如今守卫的是"不可能输入"，但删守卫与删渲染分支风险不等价，留待后续；② `taskNotification` 支的正文同样不在可见行里（被 `processGrouping` 折叠）——"折叠"与"不委托"是两种不可达，需各自补证据，故未在本轮断言。
 - **TD-UI-CHAT-N15** · `DiffLine` 在聊天栈里有 7 份本地副本，而 `chat/utils/messageTransforms.ts` 已有权威定义
-  - 类别：F · 严重级：P3 · 工作量：S · 状态：new · 意图：[accidental]
-  - 位置：`chat/view/subcomponents/MessageComponent.tsx:32`、`chat/tools/ToolRenderer.tsx:21`、`chat/tools/components/ToolDiffViewer.tsx:3`、`chat-v2/MessagesPaneV2.tsx:49`、`chat-v2/MessageRowV2.tsx:33`、`chat-v2/SubagentDetailModal.tsx:9`、`chat-v2/SubagentDetailMessageFlow.tsx:22`
+  - 类别：F · 严重级：P3 · 工作量：S · 状态：**done（2026-09-20，PR #463）**
+  - 位置（立案时）：`chat/view/subcomponents/MessageComponent.tsx:32`、`chat/tools/ToolRenderer.tsx:21`、`chat/tools/components/ToolDiffViewer.tsx:3`、`chat-v2/MessagesPaneV2.tsx:49`、`chat-v2/MessageRowV2.tsx:33`、`chat-v2/SubagentDetailModal.tsx:9`、`chat-v2/SubagentDetailMessageFlow.tsx:22`
   - 影响：7 份副本的形状都是 `{ type: string; content: string; lineNum: number }`，而权威版（`messageTransforms.ts:1`）把 `type` 收窄为 `"added" | "removed"`。于是"同一份 diff 数据结构"在链路上有两种类型，谁都不敢先收紧——`createDiff` 的契约因此长期停留在 `string`。
-  - 建议：先把权威版的 `type` 放宽为 `string`（或引入 `DiffLineType` 别名）以消除冲突，再逐文件删副本改 import；纯类型改动、零运行时风险。**发现于 #159 N04**（`ToolResultBlock` 当时特意没有复用权威类型，正是因为这次收窄会外溢）。
+  - **处置（2026-09-20）**：**没有**按本条目的建议把权威类型放宽为 `string`——那个建议基于"收紧会外溢"的假设，实测该假设不成立。逐项验证后保留权威窄类型：① `calculateDiff` 的三个 `push` 点产出的 `type` 全是字面量（运行时值域本就等于窄类型）；② 全仓消费 `.type` 的只有 `ToolDiffViewer.tsx`（`added`/`removed` 两分支）；③ 真正的外溢面只有 `ToolResultBlock` 的 `createDiff` 内联匿名结构，随本波一并改为 `DiffCalculator`。
+    落地：7 处本地 `type DiffLine` 删除并改为 `import type { DiffLine } from "…/chat/utils/messageTransforms"`，`ToolResultBlock.tsx:60` 的内联 `Array<{ type: string; … }>` 改为 `DiffCalculator`（连同"不复用权威类型"的注释一并改写）。净删 7 份重复声明。
+  - **验证**：`ui` typecheck 通过（证明窄类型未破坏任何调用点——若真有 `type: string` 的构造点，这里会编译失败）；`cd ui && pnpm test` 127 文件 / 830 用例全绿（含 4 个传 `createDiff` 的测试文件）。改动仅类型面，无运行时 diff。
+  - **口径更正**：副本数是 **7 + 1**（7 处具名 `type DiffLine` + `ToolResultBlock.tsx:60` 的内联匿名结构，后者立案时未记）；刷新后各行号见上一行"位置（立案时）"已作废，实际位置随本波改动已删除。**发现于 #159 N04**（`ToolResultBlock` 当时特意没有复用权威类型，正是因为这次收窄会外溢——该判断在 2026-09-20 被证伪）。
 - **TD-UI-CHAT-N05** · chat 与 chat-v2 子代理渲染重复实现
   - 类别：F · 严重级：P2 · 工作量：S · 状态：**done（2026-09-18，PR #442）**
   - 位置：`chat-v2/SubagentCard.tsx:27` vs `chat/tools/components/SubagentContainer.tsx:63`（后者已删）

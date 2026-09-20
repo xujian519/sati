@@ -91,3 +91,49 @@ describe("可选功能开关四态", () => {
     );
   });
 });
+
+/**
+ * 专利能力三态（#450）：缺省 = 自动（运行期按工作区判据）。面板**不得**把这一态
+ * 物化成布尔——一旦保存出 `patentDomain: false`，专利项目就永久失去专利工具。
+ */
+describe("专利能力三态开关", () => {
+  function patentSelect(): HTMLSelectElement {
+    return screen.getByRole("combobox") as HTMLSelectElement;
+  }
+
+  it("缺省渲染为「自动」，选回自动时删除该键而不是写 false", () => {
+    const onChange = vi.fn();
+    render(<ToolsSection config={BASE} onChange={onChange} />);
+
+    expect(patentSelect().value).toBe("auto");
+
+    fireEvent.change(patentSelect(), { target: { value: "auto" } });
+
+    const next = onChange.mock.calls[0]?.[0] as SatiConfig;
+    expect(next.tools?.patentDomain).toBeUndefined();
+    expect("patentDomain" in (next.tools ?? {})).toBe(false);
+  });
+
+  it("显式 true / false 渲染为始终开启 / 始终关闭，切换写出对应布尔", () => {
+    const onChange = vi.fn();
+    const first = render(<ToolsSection config={{ ...BASE, tools: { patentDomain: true } }} onChange={onChange} />);
+    expect(patentSelect().value).toBe("on");
+    first.unmount();
+
+    render(<ToolsSection config={{ ...BASE, tools: { patentDomain: false } }} onChange={onChange} />);
+    expect(patentSelect().value).toBe("off");
+
+    fireEvent.change(patentSelect(), { target: { value: "on" } });
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ tools: { patentDomain: true } }));
+  });
+
+  it("没有 tools 段时切到始终关闭只造出该键，不带上其它默认", () => {
+    const onChange = vi.fn();
+    render(<ToolsSection config={BASE} onChange={onChange} />);
+
+    fireEvent.change(patentSelect(), { target: { value: "off" } });
+
+    const next = onChange.mock.calls[0]?.[0] as SatiConfig;
+    expect(next.tools).toEqual({ patentDomain: false });
+  });
+});
