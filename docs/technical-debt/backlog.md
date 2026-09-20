@@ -1127,7 +1127,12 @@
   - 位置：`useChatSessionState.ts:236`（hook）、`:251`（死状态）
   - 影响：`isLoadingMoreMessages` 从未被 setter 赋值、恒 false，却被透传门控「加载更多」UI。建议：删除该死状态（`isLoadingMoreRef` 已是真实信号），分页/滚动定位抽出独立 hook。
   - **2026-09-18 处置（死状态半 · PR #440）**：✅ 死状态已删，并顺带清掉它造成的两处**不可达**代码——① `MessagesPaneV2.tsx` 的「Loading older messages...」指示器（条件含该状态 ⇒ **从未渲染过**，该文案在 UI 里从未出现）；② `useChatSessionState.ts` 的「Load all」遮罩 effect 里 `if (wasLoading && !isLoadingMoreMessages && hasMoreMessages)` 分支（`wasLoading` 正取自这个恒 false 的值 ⇒ 从未执行；遮罩置位另有 `loadAllMessages()` 与完成态 effect 两条真实路径）。存活条件 `hasMoreMessages && !isLoadingMoreMessages && !allMessagesLoaded` 做等价化简（`X && !false ≡ X`）。改动面 4 文件 +10/−33，**零行为变化**且论证是**静态**的（该状态无 setter ⇒ 恒 false），配两条针对存活条件的回归用例，负控制已验（注入恒假 ⇒ 用例 1 红、用例 2 绿）。**再次核实口径**：该状态的实际触及面比本条原记的更大（4 处守卫 + 2 处 deps + 返回对象 + 1 处 effect 迁移判断）。决策见 `docs/notes/implemented/2026-09-18-ui-god-hook-unblock.md`。
-  - **剩余（拆分半）**：分页/滚动定位抽独立 hook；与 `TD-UI-CHAT-N03` 的虚拟化边界重叠，按 #159 的分档排期进 L 级窗口（需双视口浏览器验证）。
+  - **2026-09-20 收官（拆分半 · PR #466）**：分页与滚动定位外置为两个 hook —— `hooks/use-chat-pagination-scroll.ts`（392 行：分页 state + 12 个滚动 ref + 10 个回调 + E1–E5）与 `hooks/use-chat-scroll-anchor.ts`（87 行：E12–E14，零 state/ref）。**主 hook 914 → 708 行**（文件 1159 → 928）。
+    **为何是两个而非一个**：E5（首屏落底）须排在会话加载/搜索定位 effect **之前**（读 `searchScrollActiveRef`），E13（跟随/高度补偿）须排在**之后**（同一提交里那个 effect 先置位）——单 hook 的 effect 整体插入无法表达这种夹逼，故分两段、两个调用点。改前 17 条 effect 与改后展开顺序**索引一一对应**（实测）。
+    **单一真源**：消息数组/会话身份/`buildFetchParams`/`sessionStore`/`searchScrollActiveRef` 仍归主 hook，子 hook 不各自 `useState` 一份（那是 `useSessionStore` 那条"多份 store ⇒ 28 方法静默失效"教训的翻版）。
+    **对外 API 零变化**：返回对象 **39 键、键序逐项一致**（独立复核）；`MESSAGES_PER_PAGE`/`isScrollNearBottom`/`resolveConversationScrollTop`/`ScrollRestoreState` 迁出后主文件保留同路径 re-export，既有导入不动。
+    **验证**：新增 15 条黑盒用例（拆分前写、拆分后零改动仍全绿——含"加载更多后阅读位置不变"与"接近底部自动跟随"）；5 处负控制（高度补偿、阈值翻转、`hasMore` 条件、跟随忽略上滑态、加载锁提前 return）；逐 token 21 段 matched 1907/unmatched 0、原文件补集 21 段按序逐字节 0 missing；依赖数组追加 13 个标识符（10 `useRef` + 4 `useState` setter + 1 `useCallback([])`，逐个复核为恒稳定 ⇒ 重跑时机不变）。
+    **剩余（如实登记，不阻塞关闭）**：主 hook 708 行**仍是 god function**（阈值 300）；剩余可拆的是会话加载 / 搜索定位 / token 统计三族，均需双视口浏览器验证（本环境 CDP 截图超时），建议另立条目。另有两处**既有**行为疑点未动（E5 `pendingInitialScrollRef` 的消费时机；已排队的 rAF 跟随帧不因上滑取消），亦建议另开条目。决策见 `docs/notes/implemented/2026-09-20-chat-session-state-pagination-scroll.md`。
 - **TD-UI-CHAT-N03** · `MessagesPaneV2` 巨型组件 + 手写消息虚拟化
   - 类别：A/I · 严重级：P1 · 工作量：L · 状态：**done（2026-09-18，PR #458）**
   - 位置：`ui/src/components/chat-v2/MessagesPaneV2.tsx:314`（文件 1252 行）

@@ -10,7 +10,7 @@
 | src TS 文件 / 行数 | 1042 / 175010 |
 | src JS 文件 | 0 |
 | tests 文件 | 573 |
-| ui/src 文件 / 行数 | 552 / 88923 |
+| ui/src 文件 / 行数 | 555 / 89645 |
 | ui/server 文件 / 行数 | 108 / 31827 |
 
 ## 指标口径
@@ -47,11 +47,11 @@
 |---|---|---|---|
 | `ui/src/components/app-shell/SidebarV2.tsx` | `SidebarV2` | 1008 | function |
 | `ui/src/components/chat-v2/MessagesPaneV2.render.test.tsx` | `(anonymous)` | 943 | arrow |
-| `ui/src/components/chat/hooks/useChatSessionState.ts` | `useChatSessionState` | 914 | function |
 | `ui/src/components/main-content-v2/FilesV2.tsx` | `FilesV2` | 853 | function |
 | `ui/src/components/chat-v2/MessagesPaneV2.tsx` | `MessagesPaneV2` | 824 | function |
 | `ui/src/components/chat-v2/ComposerV2.tsx` | `ComposerV2` | 741 | function |
 | `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` | `useChatRealtimeHandlers` | 719 | function |
+| `ui/src/components/chat/hooks/useChatSessionState.ts` | `useChatSessionState` | 708 | function |
 | `ui/src/components/git-panel/hooks/useGitPanelController.ts` | `useGitPanelController` | 704 | function |
 | `ui/src/components/main-content-v2/skills/import/ImportFromFolder.tsx` | `ImportFromFolder` | 688 | function |
 | `ui/src/components/chat-v2/ChatInterfaceV2.tsx` | `ChatInterfaceV2` | 668 | function |
@@ -99,6 +99,7 @@
 | `ui/src/components/chat/hooks/useSlashCommandExecute.ts` | `useSlashCommandExecute` | 331 | function |
 | `ui/src/components/code-editor/view/CodeEditor.tsx` | `CodeEditor` | 310 | function |
 | `ui/src/components/chat-v2/SubagentDetailMessageFlow.tsx` | `SubagentDetailMessageFlow` | 309 | function |
+| `ui/src/components/chat/hooks/use-chat-pagination-scroll.ts` | `useChatPaginationScroll` | 308 | function |
 | `src/patent/figuregen/check.ts` | `checkFigures` | 306 | function |
 | `src/cli/projectRuntimeFactory.ts` | `resolve` | 303 | function |
 | `ui/src/components/settings/view/integrations/im/components/WeixinChannelSection.tsx` | `WeixinChannelSection` | 303 | function |
@@ -126,7 +127,6 @@
 | `ui/src/components/chat-v2/MessagesPaneV2.tsx` | 1183 |
 | `ui/server/routes/taskmaster.js` | 1179 |
 | `ui/server/routes/config.js` | 1173 |
-| `ui/src/components/chat/hooks/useChatSessionState.ts` | 1160 |
 | `src/agent/loop/AgentLoop.ts` | 1146 |
 | `ui/src/components/main-content-v2/CronV2.tsx` | 1130 |
 | `ui/src/components/main-content/view/MainContent.tsx` | 1111 |
@@ -138,6 +138,7 @@
 | `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` | 1005 |
 | `ui/src/components/main-content-v2/FilesV2.tsx` | 964 |
 | `ui/server/routes/config.test.js` | 934 |
+| `ui/src/components/chat/hooks/useChatSessionState.ts` | 929 |
 
 ## vendored 子包（单列，不计入上述规模与排名）
 
