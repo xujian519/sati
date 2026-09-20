@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MutableRefObject } from "react";
-import { logError } from "../../../utils/logging";
-import { authenticatedFetch } from "../../../utils/api";
 import { UI_TIMEOUTS } from "../../../constants/timeouts";
 import type { WsMessage } from "../../../contexts/WebSocketContext";
 import type { ChatMessage, ClaudeWorkStatus, SatiWorkStatus } from "../types/types";
@@ -19,6 +17,12 @@ import { normalizedToChatMessages } from "./useChatMessages";
 import { useChatPaginationScroll } from "./use-chat-pagination-scroll";
 import { useChatScrollAnchor } from "./use-chat-scroll-anchor";
 import { useChatSearchNavigation } from "./use-chat-search-navigation";
+import { useChatSessionLifecycle } from "./use-chat-session-lifecycle";
+import { useChatTokenUsage } from "./use-chat-token-usage";
+
+// `didLoadedSessionChange` 随会话加载一族搬到 ./use-chat-session-lifecycle（issue #467），
+// 这里保留同一导出路径，既有单元测试的导入不变。
+export { didLoadedSessionChange } from "./use-chat-session-lifecycle";
 
 const EMPTY_NORMALIZED_MESSAGES: NormalizedMessage[] = [];
 
@@ -49,34 +53,6 @@ interface UseChatSessionStateArgs {
   sessionStore: SessionStore;
 }
 
-/**
- * Whether the session-loading effect is entering a different session than
- * the one it last loaded for. Lives next to `lastLoadedSessionKeyRef` because
- * it must NOT consult `currentSessionId` — that piece of React state is
- * eagerly mirrored to `selectedSession.id` during render to keep the OLD
- * session's messages from bleeding into a freshly-cleared view, which means
- * by the time effects run it is already equal to `selectedSession.id`.
- * Using it for change-detection would always evaluate to false on a real
- * `tokenBudget` from the previous session into the new view.
- */
-export function didLoadedSessionChange(lastLoadedSessionKey: string | null, incomingSessionKey: string): boolean {
-  return lastLoadedSessionKey !== null && lastLoadedSessionKey !== incomingSessionKey;
-}
-
-/**
- * Whether the optimistic "pending user message" bubble should render in the
- * currently active view. The pending bubble is hook-wide singleton state on
- * `ChatInterfaceV2`; without this gate, switching sessions while it's queued
- * would prepend the optimistic text onto the WRONG session's transcript —
- * surfaced as "the latest query I just typed appears at the top of an
- * unrelated session I just opened".
- *
- * It belongs here iff:
- *   1. We are still on the welcome surface (no active session yet) — the
- *      pending bubble is the only thing the user can see.
- *   2. The active session id matches the session id `pendingViewSessionRef`
- *      was bound to at submit time (stamped by `session_created`).
- */
 export function shouldRenderPendingBubble(
   activeSessionId: string | null,
   pendingTargetSessionId: string | null,
@@ -243,7 +219,6 @@ export function useChatSessionState({
   const [viewHiddenCount, setViewHiddenCount] = useState(0);
 
   const searchScrollActiveRef = useRef(false);
-  const lastLoadedSessionKeyRef = useRef<string | null>(null);
 
   const createDiff = useMemo<DiffCalculator>(() => createCachedDiffCalculator(), []);
 
@@ -477,187 +452,41 @@ export function useChatSessionState({
     searchScrollActiveRef,
   });
 
-  // Main session loading effect — store-based
-  useEffect(() => {
-    if (!selectedSession || !selectedProject) {
-      // Guard: skip the full reset while a new-session handoff is in
-      // flight. Two distinct transient windows must be protected:
-      //
-      // 1. session_created already arrived → currentSessionId is set and
-      //    matches the pendingViewSession, but selectedSession hasn't
-      //    resolved yet (projects list refresh still in progress).
-      //
-      // 2. The user just submitted from the welcome surface and we're
-      //    still waiting for session_created. pendingViewSessionRef has
-      //    been allocated (with sessionId: null) but the backend hasn't
-      //    responded yet. A projects_updated WS message can change
-      //    selectedProject's reference and re-fire this effect — the
-      //    reset would wipe pendingUserMessage and flash back to welcome.
-      const isPendingSessionHandoff =
-        Boolean(currentSessionId) && pendingViewSessionRef.current?.sessionId === currentSessionId;
-      const isAwaitingSessionCreation =
-        pendingViewSessionRef.current !== null && !pendingViewSessionRef.current.sessionId;
-      if (!selectedSession && (isPendingSessionHandoff || isAwaitingSessionCreation)) {
-        return;
-      }
-      resetStreamingState();
-      pendingViewSessionRef.current = null;
-      setPendingUserMessage(null);
-      setClaudeStatus(null);
-      setSatiStatus(null);
-      setCanAbortSession(false);
-      setIsAborting(false);
-      setIsLoading(false);
-      setSessionLoadError(null);
-      setCurrentSessionId(null);
-      messagesOffsetRef.current = 0;
-      setHasMoreMessages(false);
-      setTotalMessages(0);
-      setTokenBudget(null);
-      lastLoadedSessionKeyRef.current = null;
-      return;
-    }
-
-    const provider = "sati";
-    const sessionKey = JSON.stringify([
-      selectedSession.id,
-      selectedProject.name,
-      provider,
-      sessionRequestParams.sessionKind ?? "",
-      sessionRequestParams.parentSessionId ?? "",
-      sessionRequestParams.relativeTranscriptPath ?? "",
-      sessionIsReadOnly ? "readonly" : "readwrite",
-    ]);
-
-    // Skip if already loaded and fresh, or if stale but has live realtime
-    // content (re-fetching while streaming would prune in-flight messages).
-    if (lastLoadedSessionKeyRef.current === sessionKey && sessionStore.has(selectedSession.id)) {
-      const hasRealtimeContent = (sessionStore.getSessionSlot?.(selectedSession.id)?.realtimeMessages?.length ?? 0) > 0;
-      if (!sessionStore.isStale(selectedSession.id) || hasRealtimeContent) {
-        return;
-      }
-    }
-
-    // See `didLoadedSessionChange` for why we don't compare `currentSessionId`
-    // against `selectedSession.id` here (the render-phase mirror nullifies
-    // that check on real session-to-session switches).
-    const sessionChanged = didLoadedSessionChange(lastLoadedSessionKeyRef.current, sessionKey);
-    if (sessionChanged) {
-      resetStreamingState();
-      pendingViewSessionRef.current = null;
-      setClaudeStatus(null);
-      setSatiStatus(null);
-      setSessionLoadError(null);
-      setCanAbortSession(false);
-      setIsAborting(false);
-    }
-
-    // Reset pagination/scroll state
-    resetPagination();
-
-    setViewHiddenCount(0);
-
-    if (sessionChanged) {
-      setTokenBudget(null);
-      setIsLoading(false);
-    }
-
-    setCurrentSessionId(selectedSession.id);
-    setSessionLoadError(null);
-
-    // Check session status
-    if (ws && !sessionIsReadOnly) {
-      sendMessage({
-        type: "check-session-status",
-        sessionId: selectedSession.id,
-        provider,
-        includeActiveTurnMessages: true,
-      });
-    }
-
-    lastLoadedSessionKeyRef.current = sessionKey;
-
-    // Fetch from server → store updates → chatMessages re-derives automatically
-    setIsLoadingSessionMessages(true);
-    // Intentionally fetch the WHOLE transcript on session entry: Sati's
-    // `readSessionMessages` slices in jsonl-forward order (`allMessages.slice(
-    // offset, offset+limit)`), but the ui-side `fetchMore` path that handles
-    // scroll-to-top assumes "more older messages" semantics and prepends the
-    // returned batch to serverMessages. The two are incompatible, so paging
-    // here produces a reordered transcript (the second-page batch — actually
-    // the *newer* tail messages — gets prepended in front of the older ones
-    // already on screen). Sessions are typically well under a few hundred
-    // messages, so fetching everything is fine.
-    sessionStore
-      .fetchFromServer(selectedSession.id, {
-        ...buildFetchParams(selectedProject),
-        limit: null,
-        offset: 0,
-      })
-      .then(slot => {
-        if (slot) {
-          setHasMoreMessages(slot.hasMore);
-          setTotalMessages(slot.total);
-          if (slot.tokenUsage) setTokenBudget(slot.tokenUsage as Record<string, unknown>);
-          setSessionLoadError(
-            slot.status === "error" ? slot.lastError || "Unable to load conversation messages." : null,
-          );
-        }
-        setIsLoadingSessionMessages(false);
-      })
-      .catch(error => {
-        setSessionLoadError(error instanceof Error ? error.message : "Unable to load conversation messages.");
-        setIsLoadingSessionMessages(false);
-      });
-  }, [
-    buildFetchParams,
+  // 会话生命周期（会话加载 + 外部消息刷新）外置到 ./use-chat-session-lifecycle（issue #467）。
+  // 调用点即语义：这两条 effect 在拆分前就紧跟分页 hook 的 5 条 effect。
+  useChatSessionLifecycle({
+    selectedProject,
+    selectedSession,
     currentSessionId,
     pendingViewSessionRef,
-    resetStreamingState,
-    selectedProject,
-    selectedSession,
-    sendMessage,
-    ws,
-    sessionIsReadOnly,
     sessionRequestParams,
+    sessionIsReadOnly,
     sessionStore,
+    buildFetchParams,
+    ws,
+    sendMessage,
     messagesOffsetRef,
+    resetStreamingState,
     resetPagination,
+    setIsLoadingSessionMessages,
     setHasMoreMessages,
     setTotalMessages,
-  ]);
-
-  // External message update (e.g. WebSocket reconnect, background refresh)
-  useEffect(() => {
-    if (!externalMessageUpdate || !selectedSession || !selectedProject) return;
-
-    const reloadExternalMessages = async () => {
-      try {
-        // Skip store refresh during active streaming
-        if (!isLoading) {
-          await sessionStore.refreshFromServer(selectedSession.id, buildFetchParams(selectedProject));
-
-          if (Boolean(autoScrollToBottom) && isNearBottom()) {
-            setTimeout(() => scrollToBottom(), UI_TIMEOUTS.CHAT_RELOAD_SCROLL_SETTLE_MS);
-          }
-        }
-      } catch (error) {
-        logError("Error reloading messages from external update:", error);
-      }
-    };
-
-    reloadExternalMessages();
-  }, [
-    autoScrollToBottom,
-    buildFetchParams,
+    setViewHiddenCount,
+    setTokenBudget,
+    setClaudeStatus,
+    setSatiStatus,
+    setCanAbortSession,
+    setIsAborting,
+    setIsLoading,
+    setSessionLoadError,
+    setCurrentSessionId,
+    setPendingUserMessage,
     externalMessageUpdate,
+    autoScrollToBottom,
+    isLoading,
     isNearBottom,
     scrollToBottom,
-    selectedProject,
-    selectedSession,
-    sessionStore,
-    isLoading,
-  ]);
+  });
 
   // 搜索定位（读取搜索目标 / 清交班标记 / 跳转与高亮）外置到 ./use-chat-search-navigation
   // （issue #467）。调用点即语义：这一段 effect 必须留在会话加载 effect 之后、滚动锚定之前
@@ -680,31 +509,14 @@ export function useChatSessionState({
     pendingViewSessionRef,
   });
 
-  useEffect(() => {
-    if (!selectedProject || !selectedSession?.id || selectedSession.id.startsWith("new-session-")) {
-      setTokenBudget(null);
-      return;
-    }
-    if (sessionIsReadOnly) {
-      setTokenBudget(null);
-      return;
-    }
-
-    const fetchInitialTokenUsage = async () => {
-      try {
-        const url = `/api/projects/${selectedProject.name}/sessions/${encodeURIComponent(selectedSession.id)}/token-usage?provider=sati`;
-        const response = await authenticatedFetch(url);
-        if (response.ok) {
-          setTokenBudget(await response.json());
-        } else {
-          setTokenBudget(null);
-        }
-      } catch (error) {
-        logError("Failed to fetch initial token usage:", error);
-      }
-    };
-    fetchInitialTokenUsage();
-  }, [sessionIsReadOnly, selectedProject, selectedSession?.id]);
+  // token 用量外置到 ./use-chat-token-usage（issue #467）：它单独一个调用点是为了让
+  // effect 展开顺序与拆分前逐条对应（原顺序里它排在搜索定位之后、锚定之前）。
+  useChatTokenUsage({
+    selectedProject,
+    selectedSession,
+    sessionIsReadOnly,
+    setTokenBudget,
+  });
 
   const streamContentKey = useMemo(() => getStreamContentKey(visibleMessages), [visibleMessages]);
 
