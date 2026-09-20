@@ -258,6 +258,12 @@ export type PilotToolsConfig = {
   visibleDomains?: string[];
   /** 工具域黑名单，优先于 `visibleDomains`。 */
   hiddenDomains?: string[];
+  /**
+   * patent 域显式开关（三态）：`true` 强制可见、`false` 强制隐藏、
+   * 缺省 = 按工作区判据自动判定（见 `src/pilot/workspace/patentSignals.ts`）。
+   * 与三个内置工具组开关语义不同：那三组缺省即开，这里缺省是"问工作区"。
+   */
+  patentDomain?: boolean;
   /** 文书排版调参面板工具组（`document_style_preset` / `document_style_panel`）。 */
   documentStyle?: PilotToolGroupConfig;
   /** 看板工具组（`kanban_*`）。 */

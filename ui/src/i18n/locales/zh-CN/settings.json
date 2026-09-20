@@ -886,7 +886,11 @@
           "effectiveOutputTokens": "生效值：{{tokens}}（{{source}}）。",
           "sourceConfig": "来自配置",
           "sourceCatalog": "来自内置目录",
-          "sourceDefault": "来自协议默认"
+          "sourceDefault": "来自协议默认",
+          "sourceProbe": "来自 /models 探测",
+          "sourceObserved": "来自超限实测",
+          "windowFact": "探测/实测到的窗口：{{tokens}}（{{source}}，字段 {{via}}）。",
+          "windowAdopt": "采纳为 agent 上限"
         },
         "subagents": {
           "label": "子智能体默认模型",
@@ -1132,6 +1136,13 @@
             "label": "启用文献检索",
             "description": "关闭后，智能体将不会获得 paper_search 工具，专利工作流的多源检索也会失去文献源。"
           }
+        },
+        "patentDomain": {
+          "label": "专利能力",
+          "description": "控制专利检索、撰写、无效等专利域工具，以及专利技能/角色清单。自动 = 按当前工作区是否有专利迹象判定（专利项目、专利规则包、专利技能，或历史上用过专利工具）。改动后需重启智能体或重新加载配置生效。",
+          "auto": "自动（按工作区判定）",
+          "on": "始终开启",
+          "off": "始终关闭"
         },
         "provider": {
           "label": "搜索提供商",

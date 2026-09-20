@@ -38,7 +38,11 @@ describe("ToolsSection 写侧", () => {
 
     render(<ToolsSection config={config} onChange={onChange} />);
 
-    fireEvent.change(screen.getByRole("combobox"), { target: { value: "tavily" } });
+    // 按可访问名定位 provider 下拉：面板里还有专利能力三态下拉（#450），
+    // 裸 getByRole("combobox") 会命中多个元素。
+    fireEvent.change(screen.getByRole("combobox", { name: "satiConfig.panels.tools.provider.glm" }), {
+      target: { value: "tavily" },
+    });
 
     const tools = lastTools(onChange);
     expect(tools.webSearch).toEqual({ enabled: true, provider: "tavily" });

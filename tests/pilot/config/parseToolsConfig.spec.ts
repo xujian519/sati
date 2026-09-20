@@ -183,3 +183,32 @@ test("tools 段的未知字段告警覆盖新增字段白名单", () => {
     ["TOOLS_UNKNOWN_FIELD"],
   );
 });
+
+test("patentDomain 三态：显式布尔保留，缺省不落键（缺省 = 交给工作区判据）", () => {
+  assert.deepEqual(parseToolsConfig({ patentDomain: true }, []), { patentDomain: true });
+  assert.deepEqual(parseToolsConfig({ patentDomain: false }, []), { patentDomain: false });
+  assert.equal(parseToolsConfig({ webSearch: { enabled: false } }, [])?.patentDomain, undefined);
+});
+
+test("patentDomain 非布尔是 fatal 诊断且整项丢弃（不静默取真）", () => {
+  const diagnostics: PilotConfigDiagnostic[] = [];
+
+  const config = parseToolsConfig({ patentDomain: "yes" }, diagnostics);
+
+  assert.equal(config, undefined);
+  assert.deepEqual(
+    diagnostics.map(item => [item.code, item.severity, item.recoverable]),
+    [["TOOLS_PATENT_DOMAIN_INVALID", "fatal", false]],
+  );
+});
+
+test("patentDomain 在已知字段白名单内（不产生未知字段告警）", () => {
+  const diagnostics: PilotConfigDiagnostic[] = [];
+
+  parseToolsConfig({ patentDomain: true, unknownToolField: 1 }, diagnostics);
+
+  assert.deepEqual(
+    diagnostics.map(item => item.code),
+    ["TOOLS_UNKNOWN_FIELD"],
+  );
+});
