@@ -23,4 +23,4 @@
 - 文档事实层（版本号/计数/`src/` 模块索引）唯一事实源是 `docs/code-facts.md`（生成物）：改这些事实后跑 `pnpm gen:doc-claims` 回填；`pnpm check:doc-claims` 挂 lint，会报出「哪个文件第几行的 claim 过期」。叙述性文档不要手写这些数字，用 claim 标记引用。
 - lint-staged 顺序 biome→eslint：eslint --fix 后需重新 biome 化。
 - 改动 `.github/labels.yml` 或 issue 模板的 scope 勾选项后，除门禁外还需手动跑一次 `node scripts/sync-labels.mjs` 把标签实体同步到仓库（CI 无仓库设置写权限）。
-- `.gitignore` 忽略 `*.test.ts`（本地草稿豁免）：后端 `*.spec.ts` 与 UI `*.test.tsx` 不受影响，但**新增 `*.test.ts` 必须 `git add -f`**，否则文件不入库、CI 也永远不跑（#449 曾因此漏掉一个 hook 测试）。入库数量与未入库草稿用 `node scripts/list-untracked-tests.mjs` 现查，勿在文档里写死数字。
+- `.gitignore` 忽略 `*.test.ts`（本地草稿豁免）：后端 `*.spec.ts` 与 UI `*.test.tsx` 不受影响，但**新增 `*.test.ts` 必须 `git add -f`**，否则文件不入库、CI 也永远不跑（#449 曾因此漏掉一个 hook 测试）。入库数量与未入库草稿用 `node scripts/list-untracked-tests.mjs` 现查，勿在文档里写死数字。⚠️ `metrics.md` 的文件数按 `git ls-files`（含未忽略的未跟踪文件、排除被忽略文件）统计，所以 **force-add 一个 `.test.ts` 会改变基线**——顺序是 `git add -f` → `pnpm measure:update` → 一起提交，否则 CI 的 `check:techdebt-metrics` 会红。
