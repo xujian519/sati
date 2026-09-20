@@ -203,6 +203,8 @@
 
 ## 四、进度表
 
+> **说明（2026-09-20 审计）**：本表是 **2026-08/09 排期快照**，`⬜` 项未随交付回填，不能当作「未做」的证据。已落地交付请以 `docs/notes/implemented/`（如 `2026-09-12-session-dependency-assembly.md`、`2026-09-13-project-runtime-factory.md`）与 `docs/technical-debt/` 为准。
+
 | 卡 | 内容 | 状态 |
 |---|---|---|
 | P1 | shared/paths + shared/env + shared/retry 收敛 | ✅ 2026-08-20（交付记录见下） |

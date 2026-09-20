@@ -3,6 +3,7 @@
 > 审计日期：2026-07（本次提交）
 > 方法：4 路并行静态扫描（数据层 / agent·工具·会话 / 网络·网关·后台 / 前端）→ 逐文件核实（文件:行号）→ 定向修复 → 构建与测试验证。
 > 范围：仅分析 + 修复低风险高收益卡点；涉及数据迁移或协议语义的改动仅记录路线图。
+> **历史口径（2026-09-20 审计补注）**：本文是 2026-07 的审计快照，行号与文件路径为当时状态。其中两处引用的源码文件**其后已被删除**：`src/workflow/runtime/WorkflowEngine.ts`（DAG 引擎于 2026-09-11 随 #150 删除，见 `docs/notes/implemented/2026-09-11-workflow-convergence-delete-dag-engine.md`）与 `src/web/client/GatewayBrowserClient.ts`（浏览器直连链路回退，见 `docs/design/gateway-chat-direct-connect.md`）。文中数字（如文件行数）不再代表现状。
 
 ## 总体结论
 
@@ -76,7 +77,7 @@
 ### 10. 第三批（高/中收益 B 类跟进）
 
 - **TokenAccounting 快速通道**（`src/context/budget/TokenAccountingRuntime.ts`）：预算评估先做本地 tiktoken 估算，≤ 可用窗口 × `nearLimitRatio`（默认 0.9）时直接返回 local 快照，**跳过每 turn 一次的 provider count_tokens 网络调用**（消息逐轮增长时每次全量序列化 + 网络往返）；逼近窗口才精确计数保证裁剪正确。新增 `tests/context/token-accounting-fastpath.spec.ts`（5 例）。
-- **WorkflowEngine 并行度上限**（`src/workflow/runtime/WorkflowEngine.ts`）：`runLoop` 就绪步骤由无上限 `Promise.allSettled` 改为信号量式 worker 池（`maxParallel` 默认 4，可配置），防止大量独立步骤同时拉起 N 个 LLM 会话（成本/令牌放大）；settled 结果顺序与 skip/fail 终态语义不变。
+- **WorkflowEngine 并行度上限**（`src/workflow/runtime/WorkflowEngine.ts`，**该文件已于 2026-09-11 删除**）：`runLoop` 就绪步骤由无上限 `Promise.allSettled` 改为信号量式 worker 池（`maxParallel` 默认 4，可配置），防止大量独立步骤同时拉起 N 个 LLM 会话（成本/令牌放大）；settled 结果顺序与 skip/fail 终态语义不变。
 - **patent 三路 extract 并行**（`src/patent/workflow.ts`）：`runWorkflow` 主循环重构（提取 `runStageOnce`/`pushResult`），连续无 retry 阶段进入并行窗口（上限 4）——披露管线 `extract_problem`/`extract_features`/`extract_effects`（不同 output_key 写 state 不同键）并行执行，理论 3 倍提速；回退边（`consistency→extract_problem`）重试语义保持（回退时重跑并行组）。
 - **首屏 markdown/katex 按需渲染**（`ui/src/components/chat/view/subcomponents/Markdown.tsx`、`ui/src/main.jsx`、`MarkdownPreview.tsx`）：聊天 Markdown 的 remark-math/rehype-katex/katex.min.css 改为动态 import（内容含 `$` 才加载）；main.jsx 移除全量 katex CSS（改随动态 chunk 注入）；编辑器预览保留静态 katex（已在 lazy chunk 内不伤首屏）。**主 JS 1,665.60 → 1,048.52 kB，主 CSS 428,997 → 167.37 kB**。
 - **网关发送合并**（`src/gateway/server/websocket.ts`、`GatewayWsConnection.ts`）：新增 `sendBatch`（多帧一次 `Buffer.concat`+`socket.write`，帧序列不变、客户端无感知、无需协议版本化）；`submit_turn` 事件流经 16ms 窗口缓冲合并，长轮次数千 text_delta 的 write/syscall 显著减少；循环结束立即冲刷保证 final 帧顺序。
@@ -128,7 +129,7 @@
 执行期间发现工作区存在**未提交的进行中改动**（Always-On discovery-plan 接线），导致全量 `tsc --noEmit` 与 `biome check` 无法全绿：
 
 - `src/gateway/protocol/types.ts` — `WebAlwaysOn*` 类型 re-export 目标缺失；
-- `src/web/client/GatewayBrowserClient.ts` — 重连 API 参数数不匹配；
+- `src/web/client/GatewayBrowserClient.ts` — 重连 API 参数数不匹配；**（该文件已随直连链路回退而删除，本行为历史记录）**
 - `src/web/client/eventMapping.ts` — 新增事件类型（`model_request_started`/`context_budget` 等）未适配；
 - `src/cli/sati.ts` — `Gateway.isSessionActive` 缺失；
 - `tests/gateway/browser-client-reconnect.spec.ts` — lint warning（未用参数）；

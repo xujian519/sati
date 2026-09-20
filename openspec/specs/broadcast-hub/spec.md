@@ -1,7 +1,8 @@
 # broadcast-hub Specification
 
 ## Purpose
-TBD - created by archiving change broadcast-hub. Update Purpose after archive.
+
+在子代理 fork 时把父级的 live Core（J-Space 账本的活跃核心条目）作为 directive 前缀下发，使分歧在共享的 hub 上解决而不是各写私有副本。实现见 `src/session/workspace/WorkspaceLedger.ts` 与 `src/agent/loop/toolContext.ts`（无 live Core 时为 no-op）。
 
 ## Requirements
 

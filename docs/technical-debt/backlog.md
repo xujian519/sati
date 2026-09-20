@@ -1,12 +1,14 @@
 # Sati 技术债务活账本（backlog）
 
 > 唯一事实源。审计/修复时在此登记与更新条目。清分级、条目 Schema、保持新鲜规则见 `README.md`。
-> 快速状态：`metrics.md`（最新基线 **2026-08-27**）作为数字事实源；本账本按模块给带 `file:line` 证据的条目。
+> 快速状态：`metrics.md`（2026-09-20 复核时的最新基线）作为数字事实源；本账本按模块给带 `file:line` 证据的条目（各节数字为时间点快照，见下方「数字口径」）。
 > 标注「**自动化扫描命中**」的条目来自脚本 `node scripts/measure-techdebt.mjs --json`。
 
 ---
 
 ## 0. 自动化扫描命中（Phase 1）与复核更正
+
+> **数字口径（2026-09-20，docs↔code 一致性审计）**：本账本各节的行数/计数是**逐节时间点快照**，不保证随代码更新；**机器校验的当前基线在 `docs/technical-debt/metrics.md`**（`pnpm check:techdebt-metrics` 保真、`pnpm measure:update` 刷新）。已实测确认过期的样例：`useChatComposerState` 1433 → **558**、`PdfDocumentPreview` 1138 → **306**（已迁 `ui/src/components/code-editor/view/pdf/`）、`SkillsV2.tsx` 2503 → 现路径已变、`sati-bridge.js` 2055 → **2346**、`InProcessGateway.ts` 1103/1350 → **1488**、`ProjectRuntimeRegistry.ts` 642 → **642** ✓。审计未逐条复算本账本全部数字（避免以未核数字替换未核数字）；引用数字前请先查 `metrics.md` 或现测。
 
 > ⚠️ **重要复核更正（2026-08-23 B1 批次）**：Phase 0 用 `\bany\b` grep 出的「any 103 处」**存在大量误报**——多数命中的是注释/字符串里的英文单词 "any"。经人工复核，`src/agent`、`src/router`、`src/tool`、`src/session` 真实类型位 `any` 均为 **0**；修正后的脚本（只匹配 `: any / as any / <any> / any[] / @ts-expect-error / @ts-ignore`）全源码剩 **1 处**。真正的类型债是**强转**：`as never`（gateway 43 处）、`as string[]`（router）、`as XResult`（RemoteGateway 30 处）、`!` 非空断言。
 

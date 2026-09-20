@@ -1,6 +1,7 @@
 # P0-2 Transcript 韧性加固（单次 write + torn-tail 自愈）设计方案
 
-> 对标 PenguinHarness `packages/core/src/trace/writer.ts`。只做设计，不实施。
+> 对标 PenguinHarness `packages/core/src/trace/writer.ts`。**已实施**（2026-08-26）：`docs/notes/implemented/2026-08-26-p0-2-transcript-integrity-hardening.md`；代码在 `src/session/transcript/JsonlTranscriptWriter.ts`（`SATI_TRANSCRIPT_SINGLE_WRITE`、`probeTornTail`、torn-tail 自愈）。
+> 更正说明（2026-09-20，docs↔code 一致性审计）：原写「只做设计，不实施」。
 
 ---
 

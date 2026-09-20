@@ -1,6 +1,6 @@
 # 第二步：多模态模型选择项（`fallback.media` 键）前后端完整方案
 
-> 状态：设计稿 | 目标：在桌面端/Web 智能体路由设置中增加显式「多模态模型」选择，语义上把媒体升级候选与故障降级链彻底分离
+> 状态：**已实施**（前端 `MultimodalModelEditor.tsx` 写 `router.fallback.media`，后端 `src/router/config/parseRouterConfig.ts` 解析该键）| 目标：在桌面端/Web 智能体路由设置中增加显式「多模态模型」选择，语义上把媒体升级候选与故障降级链彻底分离
 > 前置：第一步已交付（媒体重路由 `resolveMediaReroute` 纯函数 + `rerouteDecisionForMedia` 就绪 + bootstrap 注释）
 > 原则：向后兼容（未配置 `media` 时行为与现状一致）、`media` 键不进故障降级链、成本透明
 

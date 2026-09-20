@@ -18,6 +18,10 @@ docs/notes/{status}/{yyyy-mm-dd}-{topic}.md
 | `implemented/` | 已落地（代码移动/改名/改默认值时**同变更同步更新**） | 现在时描述现实 |
 | `rejected/` | 被拒（仅在理由能防一个有诱惑力的错误时保留） | 提案冻结，裁决只在 Status 行 |
 
+**税务实况（2026-09-20 审计核对）**：`implemented/` 148 篇、`proposed/` 0 篇、`rejected/` 0 篇。三值目录仍按上表保留（税则不因暂时为空而删）；但 `proposed/` 为空意味着**「评审中的提案」目前只存在于 `## Alternatives considered` 段与 plan 文档里**——提案已落地后请迁目录并把 `Status:` 改为 `implemented`（此前有一条 `2026-08-26-p0-model-deepseek-v4-thinking-default` 长期留在 `proposed/` 而代码早已落地，正是本行纪律要防的形态）。
+
+`Status:` 行允许在值后带一个括号注记（如 `implemented（2026-09-17）`），但**值本身必须是三值之一**——校验以值前缀为准，注记不进语义。
+
 ## 统一格式
 
 前三行固定：

@@ -1,6 +1,12 @@
 # 三议题彻底解决方案（#449 / #450 / #159）
 
-> **验收状态：方案定稿，待实施**（2026-09-19 制订；基线提交 `e9267d8ce`，`pnpm check` 绿）。
+> **验收状态：主要构件已落地**（2026-09-19 制订，基线提交 `e9267d8ce`；2026-09-20 复核后更正原「待实施」标注，见下方状态复核）。
+>
+> **状态复核（2026-09-20，docs↔code 一致性审计）**：
+> - §2（#449 真实窗口）：`src/model/window/{extract,probe,store,types,index}.ts` 存在，并被 `src/cli/sessionDependencyAssembly.ts`、`src/model/protocol/canonical.ts`、`src/pilot/config/loadPilotConfig.ts` 消费；决策记录 `docs/notes/implemented/2026-09-19-model-window-overlay.md`。
+> - §3（#450 工作区判据）：`detectPatentWorkspace` / `PATENT_DOMAIN`（`src/pilot/workspace/patentSignals.ts`）已接入 `src/cli/projectRuntimeFactory.ts`；决策记录 `docs/notes/implemented/2026-09-20-patent-domain-workspace-criterion.md`。
+> - §4（#159 拆解）：`docs/notes/implemented/2026-09-20-{code-editor-binary-file-split,session-store-actions-extraction,pdf-preview-remaining-extraction,diffline-type-convergence,chat-session-state-pagination-scroll}.md`。
+> - **本次未核**：§0 的「首个请求固定开销 ≤ 20k」数值断言（未跑 `pnpm measure:fixed-overhead`，不作结论）；§0 表内 ❌ 标记请以各批次勾选与 note 为准。
 > 本文件是实施方案，不是完成报告；每个批次落地后回来勾选并在末尾追加实测数字。
 > 用户已就四个关键分叉作出选择（见 §8）：运行时探测 + 观测回写 / 加判据 + 迁移守卫后翻转 / inputSchema 有限瘦身 / #159 全部做完并关闭。
 

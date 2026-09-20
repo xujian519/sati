@@ -1,6 +1,8 @@
 # Agent Note: 全局修复 DeepSeek v4 在 default 思考模式下长输出 content 为 0
 
-Status: proposed
+Status: implemented
+
+> **归档更正（2026-09-20，docs↔code 一致性审计）**：本 note 原置于 `proposed/`（状态 `proposed`），但其中的提案已落地——`src/model/thinking/registry.ts` 的 deepseek-v4 default 分支已返回 `thinkingType:"disabled"` + `useOpenAICompatibleThinking:true`。已迁入 `implemented/`；配套的实施记录见 `docs/notes/implemented/2026-08-26-p0-model-deepseek-v4-agent-loop-thinking.md`。
 
 ## Problem
 

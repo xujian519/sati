@@ -65,10 +65,10 @@
 | 提交信息 | `scripts/check-commit-msg.mjs`（commit-msg hook） | Conventional Commits（含 `release` 类型） |
 | 提交前 | `scripts/lint-staged.mjs`（pre-commit hook） | staged 文件 biome format + eslint --fix，按 ui/root 分流 |
 | 边界 | `scripts/check-ui-server-boundary.mjs`（挂 ui lint） | `ui/` 不 import `src/`（.js specifier 下 eslint 规则失效，用纯路径静态校验） |
-| 领域门禁 | `check:event-matrix` / `check:patent-sop` / `check:patent-workflow-docs` / `check:html-templates` / `check:skills` / `check:issue-labels`（均挂 `pnpm lint`） | 事件矩阵新鲜度、专利 SOP 引用、workflow 文档幂等、HTML 模板、skill frontmatter、标签清单与 issue 模板一致 |
-| 测试 | 后端 `node:test`（~2800 用例）+ UI `vitest`（~500）+ Playwright e2e + `llm-replay` 无 key 重放 seam | 单元/集成/回路级 |
+| 领域门禁 | `check:catalog-mirror` / `check:event-matrix` / `check:patent-sop` / `check:patent-workflow-docs` / `check:html-templates` / `check:skills` / `check:i18n-namespaces` / `check:issue-labels` / `check:techdebt-metrics` / `check:protocol-version` / `check:doc-claims`（均挂 `pnpm lint`，共 <!-- claim:lint_gate_count -->11<!-- /claim --> 个） | 模型目录镜像、事件矩阵新鲜度、专利 SOP 引用、workflow 文档幂等、HTML 模板、skill frontmatter、i18n namespace 注册一致、标签清单与 issue 模板一致、技术债指标基线、协议台账、文档事实层（版本/计数/模块索引） |
+| 测试 | 后端 `node:test` + UI `vitest` + Playwright e2e + `llm-replay` 无 key 重放 seam | 单元/集成/回路级；用例数与测试文件数**不写进文档**（每加一个测试就会变，跑一次 `pnpm test` 才准） |
 | 版本 | `scripts/bump-version.mjs` | 根 / ui / apps-desktop 三处 version lockstep |
-| CI | `.github/workflows/ci.yml`（2 job） | typecheck/lint/format/test（root+ui）+ Windows desktop build&lint |
+| CI | `.github/workflows/ci.yml`（<!-- claim:ci_job_count -->3<!-- /claim --> job） | typecheck/lint/format/test（root+ui）+ Windows desktop build&lint |
 | 议题标签 | `.github/labels.yml` + `scripts/sync-labels.mjs --check`（挂 `pnpm lint`）+ `scripts/classify-issue.mjs` + `.github/workflows/issue-triage.yml` / `stale.yml` | 标签清单与 issue 模板双向一致（模板引用未声明标签、scope 勾选项漂移即红）；新议题自动打 `scope:*` 并落 `status: triage`；过期议题自动治理 |
 
 ### 2.2 缺口（❌ / ⚠️，对应 §7 分阶段落地）
@@ -77,12 +77,12 @@
 |---|---|---|---|
 | G1 | tsconfig 缺 `noUncheckedIndexedAccess` / `exactOptionalPropertyTypes`（`noFallthroughCasesInSwitch` 已于 2026-08-22 开启） | 门禁 1 | 类型系统第一道防线不全：数组越界 / 可选属性语义模糊两类缺陷不报 |
 | G2 | lint 非类型感知：无 `no-floating-promises`、`no-unsafe-*` | 门禁 2 | "丢失的 promise"是 harness 全仓最高价值 lint 缺陷类；2026-08-23 已开 `no-floating-promises`/`no-misused-promises`(仅 src,存量清零)，`no-unsafe-*` 仍待分批 |
-| G3 | `no-explicit-any` 是 `warn` 非 `error`（存量 ~170 处） | 门禁 2 | 新代码可无感引入 `any` |
+| G3 | `no-explicit-any` 是 `warn` 非 `error`（存量数字以 `docs/technical-debt/metrics.md` 为准，由 `check:techdebt-metrics` 保真） | 门禁 2 | 新代码可无感引入 `any` |
 | G4 | 无覆盖率门禁（`test:coverage` / 阈值） | 门禁 3 | 没有"死代码探测器" |
-| G5 | 无负控制（门禁自测 / verify-config / lint-contract） | 负控制 | 门禁可能配置写错而悄悄失效；verify-config 已落地，lint-contract 已于 2026-08-23 落地 |
-| G6 | 无 pre-push typecheck；无 `check` 聚合脚本 | hooks | 推送前不校验类型；门禁无单一入口 |
-| G7 | 无决策记录系统（`docs/notes/`） | 决策层 | 决策被反复争论，放弃过的备选无据可查 |
-| G8 | 无入库的根级 standing orders（只有不入库的 `CLAUDE.md`） | 陈述层 | 跨工具（Claude Code / Cursor / Codex）没有共同的每会话规则家 |
+| G5 ✅ 已闭环 | 负控制（门禁自测 / verify-config / lint-contract） | 负控制 | `verify-config.spec.ts` 与 `lint-contract.spec.ts` 均已落地（2026-08-23），见 §4 |
+| G6 ✅ 已闭环 | pre-push typecheck；`check` 聚合脚本 | hooks | `package.json` 已配 `pre-push`（typecheck 根+ui）与 `check` 聚合脚本（check:config + typecheck + ui typecheck + lint + format:check） |
+| G7 ✅ 已闭环 | 决策记录系统（`docs/notes/`） | 决策层 | `docs/notes/{implemented,proposed,rejected}/` 已运行，规范见 `docs/notes/README.md` |
+| G8 ✅ 已闭环 | 根级 standing orders | 陈述层 | `AGENTS.md` 已入库（每会话必读）；本地细节指南 `CLAUDE.md` 不入库，其事实层指向 `docs/code-facts.md` |
 
 > 注意：G1/G2 一旦开启会一次性暴露大量存量类型/lint 错误，**不能盲翻**——必须走 §7 的分批收敛（先门禁后清存量，或先清存量后开门禁）。这是 harness §11 明言的"基础期拒绝兼容垫片"与"宁可门禁少而每道真执行"的折中。
 
@@ -109,7 +109,7 @@
 
 **目标（分档）**：
 
-- **保持**：`no-explicit-any` 暂为 `warn`（存量 ~170 处，治理中）。治理纪律：PR 评审把关**新引入**的 any，按模块分批收敛（优先 context/agent/router）。**不设** `--max-warnings 0`（存量 warning 会立即全红、阻断一切合入，反而无人清理——这是已在 eslint.config.mjs 注释中记录的显式决策）。
+- **保持**：`no-explicit-any` 暂为 `warn`（存量数字以 `docs/technical-debt/metrics.md` 为准，治理中）。治理纪律：PR 评审把关**新引入**的 any，按模块分批收敛（优先 context/agent/router）。**不设** `--max-warnings 0`（存量 warning 会立即全红、阻断一切合入，反而无人清理——这是已在 eslint.config.mjs 注释中记录的显式决策）。
 - **增开类型感知（G2，高价值）**：**已开（2026-08-23）**`no-floating-promises`（丢失的 promise 是最高价值缺陷类）+ `no-misused-promises`，对 `src/` 接入 `projectService`（type-aware），存量 10 处已清零并配负控制。仍待分批：`no-unsafe-assignment/member-access/return`、`no-non-null-assertion`，以及把 type-aware 扩到 tests/scripts。
 - **负控制（已落地 2026-08-23）**：`tests/development-standards/lint-contract.spec.ts` + `lint-contract.config.mjs`(test-only) + `lint-fixtures/{float-promise,danger-import,ok}.ts`，对违规 fixture 断言 exit 非零、对合规 fixture 断言零；fixtures 已入根 eslint ignore。
 
@@ -141,16 +141,21 @@
 
 ### 领域门禁（Sati 特有，✅ 已落地，维持）
 
-`pnpm lint` 末尾已挂接 6 个领域门禁，任何事件面/专利 SOP/模板/标签改动漏改即红。**这些是 Sati 相对模板的"超额资产"，保持并继续维护**：
+`pnpm lint` 末尾已挂接 <!-- claim:lint_gate_count -->11<!-- /claim --> 个领域门禁，任何事件面/专利 SOP/模板/标签/i18n/文档事实改动漏改即红。**这些是 Sati 相对模板的"超额资产"，保持并继续维护**（清单的生成源见 `docs/code-facts.md` §4）：
 
 | 门禁 | 生成器 | 保护什么 |
 |---|---|---|
+| `check:catalog-mirror` | `check-catalog-mirror.mjs` | 模型目录镜像（provider/模型表）与源码一致 |
 | `check:event-matrix` | `gen-event-matrix.ts --check` | `docs/event-producer-consumer.md` 与源码事件声明/emit/订阅一致（改事件漏订即红） |
 | `check:patent-sop` | `check-patent-sop-references.mjs` | 手册/YAML 五类引用存在性 |
 | `check:patent-workflow-docs` | `gen-patent-workflow-docs.ts --check` | `assets/workflows/patent/generated/*.yaml` 幂等 |
 | `check:html-templates` | `check-html-templates.mjs` | HTML 交付模板约束 |
 | `check:skills` | `validate-skills.mjs` | skill frontmatter 一致性 |
+| `check:i18n-namespaces` | `check-i18n-namespaces.ts` | `ui/src/i18n/config.js` 的资源注册表 ↔ `locales/{en,zh-CN}/*.json` ↔ `ns` 三方一致（漏注册即静默回落英文） |
 | `check:issue-labels` | `sync-labels.mjs --check` | 标签清单（`.github/labels.yml`）与 issue 模板双向一致：模板引用未声明标签、scope 勾选项与 `scope:*` 标签漂移即红；`status:` / `priority:` 取值超出 `docs/issue-management.md` §1 词表即红 |
+| `check:techdebt-metrics` | `measure-techdebt.mjs --check` | `docs/technical-debt/metrics.md` 指标基线新鲜度 |
+| `check:protocol-version` | `check-protocol-version.ts` | 协议台账 ↔ `frames.ts` union 两向集合相等 + 版本连续性 |
+| `check:doc-claims` | `gen-doc-claims.ts --check` | 文档事实层：`docs/code-facts.md` 与叙述文档里的行内 claim 标记必须与代码现算值一致（版本/计数/src 模块索引；标记语法见 `docs/code-facts.md` 开头） |
 
 > **`check:skills` 语义**：该门禁**警告即阻断**——`validate-skills.mjs` 对 `hard`(exit 1) 与 `warn`(exit 2) 均返回非零；因 lint 用 `&&` 链式，任意 skill 触发告警（如描述 <20 字符）都会让 `pnpm lint` 变红。这是有意的严格策略，改 skill 时需保证其 frontmatter 描述达标。
 
@@ -164,12 +169,12 @@
 
 三层负控制，映射到 Sati：
 
-**(a) 门禁自测**：每个门禁有 fixture 证明它会红（G5，待落地）。**会误报的门禁比没有更糟。**
+**(a) 门禁自测**：每个门禁有 fixture 证明它会红（**部分落地**：typecheck 底线 / lint 规则 / ui→src 边界 / i18n namespace / doc-claims 已有负控制；其余门禁待补）。**会误报的门禁比没有更糟。**
 
 | 门禁 | 负控制 |
 |---|---|
 | typecheck 底线 | `scripts/verify-ts-config.mjs`（`pnpm check:config`）在 `pnpm check` 断言开关为 true（✅ 已落地）；测试级 `verify-config.spec.ts` |
-| lint 规则 | `scripts/lint-contract.spec.ts` 对 fixture 跑 lint 断言非零 |
+| lint 规则 | `tests/development-standards/lint-contract.spec.ts` 对 fixture 跑 lint 断言非零 |
 | 边界门禁 | `check-ui-server-boundary.mjs` 已有（可加反向 fixture：伪造 ui→src import 断言非零） |
 
 **(b) 铁律必须有门禁或 lint，不能只是散文**。Sati 的既有铁律逐条给"可机械执行"方案：
@@ -192,7 +197,7 @@
 1. **每条规范三件套**：写一条规则时立刻回答——它的**家**在哪（哪个文件）？谁**机器验证**？**理由**（含放弃的备选）记在哪？三者缺一就不是规范。
 2. **例外必须显式**：每条规则的例外写在规则旁边，像规则一样可检索。系统性例外（如 "types.ts 允许 brand 函数"）必须写进规则，不许游离在外。
 3. **事实清单必须生成或可验证**：目录、分组表、默认值表——要么从源码生成、要么给它 verify 门禁（Sati 已有 event-matrix / patent-workflow-docs 两个生成器，沿用此原则）。
-4. **本地窄 / CI 全**：pre-commit 只做秒级（staged lint fix + 空白），pre-push 只 typecheck（G6，待加）；CI 跑全量。**不要因为全量检查瘫痪每次提交。**（pre-push 是本地兜底，可被 `--no-verify` 绕过——**真正的权威是 CI 的全量门禁**，见附录 A。）
+4. **本地窄 / CI 全**：pre-commit 只做秒级（staged lint fix + 空白），pre-push 只 typecheck（根 + ui，已配）；CI 跑全量。**不要因为全量检查瘫痪每次提交。**（pre-push 是本地兜底，可被 `--no-verify` 绕过——**真正的权威是 CI 的全量门禁**，见附录 A。）
 5. **覆盖率是死代码探测器，不是考核**：见 §3 门禁 4。
 6. **按变更面选最小证据**：提交前先看变更面，选能拦住该回归的最小检查；不重复跑已通过的检查；只有显式要求 / 诊断 CI / 全域变更才全量排练。
 7. **决策记录强制 Alternatives**：非平凡变更必须带 note，且必须写 `## Alternatives considered`（没记录打败过什么的决策会被重新争论）。
@@ -256,16 +261,18 @@
 ## 附录 A：命令速查
 
 ```sh
-pnpm check            # 聚合门禁：typecheck + ui typecheck + lint + format:check（不含 test）
+pnpm check            # 聚合门禁：check:config + typecheck + ui typecheck + lint + format:check（不含 test）
 pnpm typecheck        # tsc --noEmit（根）+ edgeclaw-memory-core typecheck；先 build 子包
-pnpm lint             # eslint src tests scripts apps/desktop + ui lint + 5 个领域门禁
+pnpm lint             # eslint src tests scripts apps/desktop + ui lint + <!-- claim:lint_gate_count -->11<!-- /claim --> 个领域门禁
 pnpm format:check     # biome check（格式）
 pnpm format           # biome format --write
-pnpm test             # build + node --test dist/tests（后端，~2800 用例）
-cd ui && pnpm test    # vitest（UI，~500 用例）
+pnpm test             # build + node --test dist/tests（后端）
+cd ui && pnpm test    # vitest（UI）
 pnpm gen:event-matrix / pnpm check:event-matrix   # 事件矩阵生成/校验
+pnpm gen:doc-claims / pnpm check:doc-claims       # 文档事实层生成/校验（挂 lint）
 pnpm check:issue-labels   # 标签清单与 issue 模板一致性（挂 lint）
 node scripts/sync-labels.mjs   # 把标签清单同步到仓库（人工触发，需 gh 凭据）
+node scripts/list-untracked-tests.mjs   # 列出未入库的测试草稿（报告型，非门禁）
 pnpm record:replay    # llm-replay fixture 校验/清单
 node scripts/bump-version.mjs patch|minor|major   # 版本 lockstep
 ```
@@ -291,6 +298,8 @@ node scripts/bump-version.mjs patch|minor|major   # 版本 lockstep
 | `scripts/lint-staged.mjs` | staged 文件 biome + eslint 分流（pre-commit hook） |
 | `scripts/check-ui-server-boundary.mjs` | ui→src 边界门禁（挂 ui lint） |
 | `scripts/gen-event-matrix.ts` | 事件矩阵生成器（--check 挂 lint） |
+| `scripts/gen-doc-claims.ts` + `scripts/doc-claims/resolvers.ts` | 文档事实层生成器与解析器（--check 挂 lint） |
+| `docs/code-facts.md` | 代码事实层（生成物）：版本矩阵 / 计数矩阵 / src 模块索引 / 门禁与 CI |
 | `scripts/bump-version.mjs` | 三处 package.json 版本 lockstep |
-| `.github/workflows/ci.yml` | CI（quality + desktop 两 job） |
+| `.github/workflows/ci.yml` | CI（<!-- claim:ci_job_count -->3<!-- /claim --> job） |
 | `.github/PULL_REQUEST_TEMPLATE.md` | PR 模板（含视觉验证强制节） |
