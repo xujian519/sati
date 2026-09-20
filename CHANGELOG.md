@@ -2,6 +2,36 @@
 
 本文件按版本记录 Sati 的重要变更。桌面端版本号（`release(desktop)`）与根 `package.json` 由 `scripts/bump-version.mjs` 同步维护。
 
+## v0.3.0 - 2026-09-20
+
+> **版本目标（2026-09-20）**：工具面按项目配置裁剪（#451/#452）、模型上下文窗口覆盖层与 UI 生效窗口显示（#449/#453/#454）、patent 域工作区判据（#450）、文档↔代码一致性审计与文档事实层门禁，以及 #159 聊天链路 hook 拆解续作（N01/N03/N08/N15/TD-UI-CHAT-N02）。
+
+### Feat
+- feat(tool): 工具面按项目配置裁剪（#451）；工具描述瘦身，操作细节交给技能（#452）
+- feat(model): 窗口覆盖层——探测/实测窗口参与解析与持久回写（#449 第 1 步）
+- feat(ui): 上下文用量分列显示固定开销与对话用量（#453）；设置页显示生效窗口与来源，去掉硬编码的 200k 提示（#454）
+- feat(pilot): patent 域工作区判据与默认裁剪（#450）
+- feat(tooling): 文档↔代码一致性审计、文档事实层门禁与 i18n/事件矩阵修复
+
+### Fix
+- fix(session): 压缩快照崩溃安全——边界与替换上下文单记录落盘（上游 PilotDeck 599）；压缩 legacy 边界重放改判双轨口径（旧记录沿用旧语义，#473）
+- fix(ui): 聊天滚动跟随的两处时序缺陷（首屏落底 flag / 已排队跟随帧，#468）；首屏落底的延时回调须重检用户意图（#468 回归加固）；在途取数返回时会话已切换则丢弃结果（#476）
+- fix(ui): UI 目录数值对齐引擎目录，并加门禁拦住漂移
+- fix(network): 代理连不上时 networkFetch 回退直连
+- fix(skills): 检索脚本默认代理改由环境变量链决定，去掉硬编码 9981
+
+### Refactor
+- refactor(ui): useChatComposerState 拆成六层 hook（#159 N01）；MessagesPaneV2 抽出虚拟化层与占位子组件（#159 N03）
+- refactor(ui): useChatSessionState 分页与滚动定位外置（#159 TD-UI-CHAT-N02）与全量分解（#467，主 hook 与子 hook 均降到 god 阈值以下）
+- refactor(ui): useSessionStore 与 PdfDocumentPreview 拆分（#159 UI-APP-N02 / TD-UI-CHAT-N07）；CodeEditorBinaryFile 拆成 binary-file feature-folder（#159 UI-CHAT-N08）；DiffLine 收敛到权威类型，8 处副本归零（#159 UI-CHAT-N15）
+- refactor(skills): ImportFromFolder 拆成 skills/ feature-folder（#159 UI-APP-N01）
+
+### Test
+- test(gateway): 工具面用例只断言无可用性检查的工具
+
+### Chore
+- chore(docs): 文档事实层门禁相关注释与指标口径修正；技术债台账 TD-UI-CHAT-N02 条目口径刷新与收官记录更正
+
 ## v0.2.2 - 2026-09-18
 
 > **版本目标（2026-09-18）**：专利附图链路加固与 CAD 扩展（FreeCAD 无头投影、栅格像素级门禁、附图标记括号按面判定、V4/V7 判据修正）、#159 巨型组件拆解专项（MessageComponent / PdfDocumentPreview）、ui-server 死面清退（#356）与对外 API 缺陷集中修复（#411/#414/#415/#416/#425），以及技术债清算（#338/#353/#354/#359/#406）。
