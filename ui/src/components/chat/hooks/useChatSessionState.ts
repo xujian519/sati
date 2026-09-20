@@ -110,9 +110,11 @@ export function useChatSessionState({
   const createDiff = useMemo<DiffCalculator>(() => createCachedDiffCalculator(), []);
 
   // 会话身份（`currentSessionId` 及其渲染期镜像）：必须在一切派生之前。
+  // `liveSessionIdRef` 是同一份身份的**实时**副本，交给分页 hook 作在途取数的丢弃判据（issue #476）。
   const {
     currentSessionId,
     setCurrentSessionId,
+    liveSessionIdRef,
     activeSessionId,
     activeScrollKey,
     sessionIsReadOnly,
@@ -185,7 +187,7 @@ export function useChatSessionState({
     isLoadingSessionMessages,
     selectedSession,
     selectedProject,
-    currentSessionId,
+    liveSessionIdRef,
     buildFetchParams,
     sessionStore,
     searchScrollActiveRef,

@@ -22,7 +22,10 @@ import {
  *   1. Mirror `selectedSession.id` into `currentSessionId` during render whenever the selection
  *      changes — drops any stale carryover.
  *   2. Expose an `effectiveCurrentSessionId` ref so the *current* render uses the cleared value,
- *      not the lagging React state.
+ *      not the lagging React state — the same ref doubles as the **live** session identity that
+ *      in-flight fetches read when they come back (issue #476): `loadAllMessages` /
+ *      `loadOlderMessages` are useCallbacks, so a session switch mid-flight cannot reach the
+ *      closure they were created with.
  *   3. While the selection is stable but `currentSessionId` advances (e.g. backend emits
  *      `session_created` for a from-welcome submit before the parent navigates), keep mirroring
  *      forward so the new id is visible immediately.
@@ -35,6 +38,17 @@ export interface UseChatSessionIdentityArgs {
   selectedSession: ProjectSession | null;
   /** 「待建会话」标记：为它保留交班窗口，别把已经交到手的会话号当成陈旧值清掉。 */
   pendingViewSessionRef: MutableRefObject<{ sessionId: string | null; startedAt: number } | null>;
+}
+
+/**
+ * 这批取数是不是**别的会话**的（issue #476）：发起时的会话身份必须仍是实时身份。
+ * 判据只此一处，分页与全量两条取数路径共用，避免各写一遍再漂移。
+ */
+export function isFetchForOtherSession(
+  liveSessionIdRef: MutableRefObject<string | null>,
+  requestSessionId: string,
+): boolean {
+  return liveSessionIdRef.current !== requestSessionId;
 }
 
 export function useChatSessionIdentity({
@@ -91,6 +105,8 @@ export function useChatSessionIdentity({
   return {
     currentSessionId,
     setCurrentSessionId,
+    /** 实时会话身份：在途取数返回时读它判「这批数据还算不算当前会话的」（issue #476）。 */
+    liveSessionIdRef: effectiveCurrentRef,
     activeSessionId,
     activeScrollKey,
     sessionIsReadOnly,

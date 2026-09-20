@@ -1143,6 +1143,7 @@
     **回归网**：新增 5 份用例 40 条（**搬迁前对未改动实现跑绿**：会话生命周期 17 / 搜索定位 6 / 处理中状态 6 / 全量加载 4 / 返回面契约与等价快照 2）+ 既有 18 条零回归，UI 全量 144 文件/971 用例绿；5 处负控制全红（其中搜索重试那处首轮未红 ⇒ 暴露用例没真正覆盖重试，已改并复验）。
     **浏览器验证（真实本地栈）**：加载全部消息 → 「显示最近 100 / 280」消失、切会话再切回后重新出现（分页复位生效）；会话内搜索命中高亮（消息投影响应）；上下文用量显示「已使用 26% / 421k / 1.6M tokens」（token 用量 effect）；桌面默认视口与移动 390×844 控制台均零 error / 零 unhandledrejection。**未覆盖**：搜索定位 seam（`selectedSession.__searchTargetSnippet`）当前 UI 无写入方 ⇒ 仅 jsdom 判据；本环境 `Page.captureScreenshot` 超时 ⇒ 无截图；有意未真实发消息（会跑本机真实 agent）。
     **登记未修（既有缺陷，另开 issue）**：`loadAllMessages` 的「请求在途时切换会话就丢弃结果」判据读的是调用时刻闭包，实测**不生效**（结果会写到新会话视图上），本波按实测固化成判据、不夹带行为变更（另立 issue #476）。决策见 `docs/notes/implemented/2026-09-20-chat-session-state-full-decomposition.md`。
+  - **2026-09-20 遗留处置（在途取数跨会话丢弃 · PR #478，issue #476）**：✅ 两条取数路径一起修——`loadAllMessages` 的判据改为读**实时**会话身份（分页 hook 里的 `liveSessionIdRef`，每次渲染镜像，两条路径共用一份），分页的 `loadOlderMessages` 补上同一判据（原先**根本没有**会话判据，旧会话那一页会写进新会话的 total / hasMore / 可见条数，还会排一次滚动补偿）；丢弃路径复归请求前自己置位的标记（`allMessagesLoadedRef` + 遮罩）。**实测口径**：真实栈浏览器 A/B（UI 页加 3s 网络延迟制造在途窗口）未修复时新会话的「显示最近 100 / 329 条消息」整行消失、修复后保留；用例 3 份 24 条（含新增 focused 用例专盯「标记复归」这半——集成面因 `resetPagination` 顺带复位而观察不到），负控制 5 处，UI 全量 145 文件 / 976 用例绿。**未覆盖**：分页判据在本机真实数据上不可达（无 `hasMore=true` 会话，仅 jsdom 判据）。决策见 `docs/notes/implemented/2026-09-20-chat-inflight-fetch-session-discard.md`。
 - **TD-UI-CHAT-N03** · `MessagesPaneV2` 巨型组件 + 手写消息虚拟化
   - 类别：A/I · 严重级：P1 · 工作量：L · 状态：**done（2026-09-18，PR #458）**
   - 位置：`ui/src/components/chat-v2/MessagesPaneV2.tsx:314`（文件 1252 行）

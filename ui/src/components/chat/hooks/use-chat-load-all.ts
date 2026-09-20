@@ -13,12 +13,14 @@ import type { Project, ProjectSession } from "../../../types/app";
 import type { SessionStore } from "../../../stores/useSessionStore";
 import { INITIAL_VISIBLE_MESSAGES } from "./chat-pagination-window";
 import type { ChatSessionFetchParams, ScrollRestoreState } from "./use-chat-pagination-scroll";
+import { isFetchForOtherSession } from "./use-chat-session-identity";
 
 /**
  * 「加载全部消息」一族 —— 从 `useChatPaginationScroll` 拆出的独立 hook（issue #467）。
  *
- * 这里只做**搬家**，语义与拆分前逐 token 等价：`loadAllMessages` 拉全量、`scrollToBottomAndReset`
- * 退出全量态、`resetLoadAll` 在会话切换时把这族状态收回初始值。
+ * 主体是**搬家**：`loadAllMessages` 拉全量、`scrollToBottomAndReset`
+ * 退出全量态、`resetLoadAll` 在会话切换时把这族状态收回初始值。issue #476 只改了一处：
+ * 在途请求返回时的丢弃判据改为读实时会话身份，并把请求前自己置位的标记在丢弃路径上复归。
  *
  * 依赖方向是单向的：调用方（`useChatPaginationScroll`）持有分页游标与滚动容器 ref，本 hook
  * **不复制**它们，只经参数读写；`allMessagesLoadedRef` 由本 hook 持有并被分页侧读（「已全量
@@ -41,7 +43,13 @@ export interface UseChatLoadAllArgs {
   buildFetchParams: (project: Project) => ChatSessionFetchParams;
   selectedSession: ProjectSession | null;
   selectedProject: Project | null;
-  currentSessionId: string | null;
+  /**
+   * 实时会话身份（`useChatSessionIdentity` 每次渲染镜像，经分页 hook 下传）。请求返回时要判
+   * 「这批全量还算不算当前会话的」，而 `loadAllMessages` 是 useCallback —— 依赖变化只让
+   * **后续调用**拿到新闭包，在途那次仍读旧值，直接比 `currentSessionId` 等于永远相等
+   * （issue #476）。判据读这个副本。
+   */
+  liveSessionIdRef: MutableRefObject<string | null>;
 }
 
 export function useChatLoadAll({
@@ -57,7 +65,7 @@ export function useChatLoadAll({
   buildFetchParams,
   selectedSession,
   selectedProject,
-  currentSessionId,
+  liveSessionIdRef,
 }: UseChatLoadAllArgs) {
   const [allMessagesLoaded, setAllMessagesLoaded] = useState(false);
   const [isLoadingAllMessages, setIsLoadingAllMessages] = useState(false);
@@ -96,7 +104,13 @@ export function useChatLoadAll({
         offset: 0,
       });
 
-      if (currentSessionId !== requestSessionId) return;
+      // 会话在请求在途时已被切走（切到别的会话或退回欢迎页）：这批结果属于旧会话，丢弃。
+      // 丢弃路径要把请求前自己置位的标记收回，否则新会话会停在「已全量加载」的假状态上。
+      if (isFetchForOtherSession(liveSessionIdRef, requestSessionId)) {
+        allMessagesLoadedRef.current = false;
+        setShowLoadAllOverlay(false);
+        return;
+      }
 
       if (slot) {
         if (container) {
@@ -132,7 +146,9 @@ export function useChatLoadAll({
     selectedSession,
     selectedProject,
     isLoadingAllMessages,
-    currentSessionId,
+    // `liveSessionIdRef` 由 ./use-chat-session-identity 持有、经分页 hook 下传：ref 对象
+    // 身份恒定，列入依赖只为满足 exhaustive-deps，重跑时机不变。
+    liveSessionIdRef,
     sessionStore,
     scrollContainerRef,
     pendingScrollRestoreRef,
