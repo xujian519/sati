@@ -224,4 +224,24 @@ describe("useChatSessionState — 首屏落底与跟随帧时序（issue #468）
 
     expect(harness.viewport.scrollTop()).toBe(100);
   });
+
+  it("③ 首屏落底的延时落底不覆盖用户随后的上滑", async () => {
+    const harness = renderHarness(EMPTY_SESSION);
+
+    // 消息还没到（容器已挂载、loading 已落定）：此刻用户先上滑。
+    await waitFor(() => expect(messageUrls.length).toBeGreaterThan(0));
+    await sleep(50);
+    expect(harness.result.current.state.chatMessages.length).toBe(0);
+
+    await dispatchScroll(harness.container);
+    await waitFor(() => expect(harness.result.current.state.isUserScrolledUp).toBe(true));
+
+    // 首条消息落下 ⇒ 首屏落底的延时回调排队（CHAT_RELOAD_SCROLL_SETTLE_MS）。
+    await addLiveMessage(harness, "first-message");
+    await waitFor(() => expect(harness.result.current.state.chatMessages.length).toBe(1));
+
+    // 越过延时：用户已经在上面了，这次落底必须不生效。
+    await sleep(300);
+    expect(harness.viewport.scrollTop()).toBe(0);
+  });
 });
