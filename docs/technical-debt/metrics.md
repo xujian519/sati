@@ -10,7 +10,7 @@
 | src TS 文件 / 行数 | 1042 / 175010 |
 | src JS 文件 | 0 |
 | tests 文件 | 573 |
-| ui/src 文件 / 行数 | 506 / 86511 |
+| ui/src 文件 / 行数 | 536 / 87282 |
 | ui/server 文件 / 行数 | 108 / 31827 |
 
 ## 指标口径
@@ -113,7 +113,6 @@
 | `ui/src/components/code-editor/view/subcomponents/PdfDocumentPreview.tsx` | 1724 |
 | `src/model/catalog/providers.ts` | 1593 |
 | `ui/server/routes/git.js` | 1529 |
-| `ui/src/components/code-editor/view/subcomponents/CodeEditorBinaryFile.tsx` | 1511 |
 | `src/adapters/channel/weixin/WeixinChannel.ts` | 1497 |
 | `src/gateway/client/InProcessGateway.ts` | 1489 |
 | `ui/src/components/main-content-v2/SkillsV2.tsx` | 1441 |
@@ -138,6 +137,7 @@
 | `src/cli/sati.ts` | 1028 |
 | `src/adapters/channel/protocol/ImLiveReplyController.ts` | 1017 |
 | `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` | 1005 |
+| `ui/src/components/main-content-v2/FilesV2.tsx` | 964 |
 
 ## vendored 子包（单列，不计入上述规模与排名）
 

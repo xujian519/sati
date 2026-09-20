@@ -1174,10 +1174,11 @@
   - **2026-09-18 处置（逻辑半边 · PR #443）**：① 纯函数 → `utils/pdfViewport.ts`（视口数学 + `PageSize`/`ZoomMode`/`Rotation` 类型）；② 文本选区取文 → `utils/pdfTextSelection.ts`；③ `resolveSearchStatus` 移入既有 `utils/pdfSearch.ts`；④ 搜索状态机 → `hooks/usePdfSearch.ts`（6 state + 请求序号 + 竞态）。两个新模块**此前零测试**，本轮补 22 条直接单测（+ `resolveSearchStatus` 4 条分支）。文件 1886 → 1724（metrics 口径），主组件 1130 → **1064**。
   - **等价性证明**：parser 驱动逐 token 比对 **21 段搬迁**（`/tmp/n07-move-proof.mjs`）——19 段逐字相同；唯一预期改写是 `goToSearchResult` 的两行写操作 → 一次 `forceRenderPage(pageNumber)` 调用，脚本把两条语句摘除并插入调用后要求逐 token 相等，另断言组件里 `forceRenderPage` 的函数体与被摘掉的语句逐字相同；其余任何 token 差异即判失败。负控制两处（`parsePageInput` 夹取上限 `+1`、`runSearch` 的 `!==`→`===`）⇒ 守卫报红，且分别由 `pdfViewport.spec.ts`（2 条）与既有搜索竞态用例报红。
   - **剩余（需 L 级窗口）**：选区→引用块（~235 行，唯一必须浏览器验证的一块）、工具条/侧栏 JSX 拆分（~317 行，需先收窄 props 面）、按粘连度切分的 `usePdfViewerState`（加载/视口持久化、滚动跟踪各成一块）。**注意**：本轮只降了 66 行 god function——被搬走的 110 行纯函数本来就在模块级、不计入函数长度，故剩余三块才是压 1064 的主力。决策见 `docs/notes/implemented/2026-09-18-pdf-viewer-extraction.md`。
-- **TD-UI-CHAT-N08** · `CodeEditorBinaryFile` 巨型文件（1523 行）+ 内联 8 hooks 分派器
-  - 类别：A · 严重级：P3 · 工作量：M · 状态：new
-  - 位置：`code-editor/view/subcomponents/CodeEditorBinaryFile.tsx:1386`
-  - 建议：按预览类型拆分文件，hook 移入独立模块。
+- **TD-UI-CHAT-N08** · `CodeEditorBinaryFile` 巨型文件（1510 行）；~~内联 8 hooks 分派器~~
+  - 类别：A · 严重级：P3 · 工作量：M · 状态：**done（2026-09-20，PR #464）**
+  - 位置（立案时）：`code-editor/view/subcomponents/CodeEditorBinaryFile.tsx:1386`（主组件起点；文件 1510 行）
+  - **口径更正（2026-09-20）**：标题里的「内联 8 hooks 分派器」**不成立**——9 个 hook 早已是具名顶层函数，真正的分派器 `OfficeFilePreviewRouter` 只有 89 行，文件里也没有 god function（最长函数 `SpreadsheetPreview` 225 行，god 阈值 300）。成本是纯**文件级**的：改任一预览形态都要读 1510 行。位置应以主组件起点 `:1374` 为准（立案写 `:1386` 指到了 `CodeEditorBinaryFile` 函数体内）。
+  - **处置**：按内聚拆到 `code-editor/view/binary-file/`（types / utils / hooks 9 个 / components 13 个），主文件 **1510 → 146 行**，路径与 `export default` 不变。硬约束：`lazy(() => import(...))` 保持动态导入（chunk 切分不变，体积不在门禁内故必须人工守住）。等价性：AST token 比对 35/35 逐 token 相同、0 凭空新增；5 处负控制各自只打红目标用例；新增 5 文件 22 条用例打三类取消语义盲区。决策见 `docs/notes/implemented/2026-09-20-code-editor-binary-file-split.md`。
 - **TD-UI-CHAT-N09** · 跨 hook 共享可变 ref（`pendingViewSessionRef`）协调会话时序
   - 类别：D · 严重级：P2 · 工作量：M · 状态：new
   - 位置：`chat-v2/ChatInterfaceV2.tsx:180,258` 透传三个 hook
