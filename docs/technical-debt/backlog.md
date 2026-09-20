@@ -1133,6 +1133,7 @@
     **对外 API 零变化**：返回对象 **39 键、键序逐项一致**（独立复核）；`MESSAGES_PER_PAGE`/`isScrollNearBottom`/`resolveConversationScrollTop`/`ScrollRestoreState` 迁出后主文件保留同路径 re-export，既有导入不动。
     **验证**：新增 15 条黑盒用例（拆分前写、拆分后零改动仍全绿——含"加载更多后阅读位置不变"与"接近底部自动跟随"）；5 处负控制（高度补偿、阈值翻转、`hasMore` 条件、跟随忽略上滑态、加载锁提前 return）；逐 token 21 段 matched 1907/unmatched 0、原文件补集 21 段按序逐字节 0 missing；依赖数组追加 13 个标识符（10 `useRef` + 4 `useState` setter + 1 `useCallback([])`，逐个复核为恒稳定 ⇒ 重跑时机不变）。
     **剩余（如实登记，不阻塞关闭）**：主 hook 708 行**仍是 god function**（阈值 300）；剩余可拆的是会话加载 / 搜索定位 / token 统计三族，均需双视口浏览器验证（本环境 CDP 截图超时），建议另立条目。另有两处**既有**行为疑点未动（E5 `pendingInitialScrollRef` 的消费时机；已排队的 rAF 跟随帧不因上滑取消），亦建议另开条目。决策见 `docs/notes/implemented/2026-09-20-chat-session-state-pagination-scroll.md`。
+  - **2026-09-20 遗留处置（两处时序疑点 · PR #469）**：✅ issue #468 登记的两处**既有**疑点均已修复并各带一条可自动化判据——① 首屏落底的 `pendingInitialScrollRef` 改为「无内容可滚时保留，消息到达再落一次」，不再在消息为空时被静默消费；② 已排队的 rAF 跟随帧在回调内重检上滑态**实时副本**（唯一写入口 `trackUserScrolledUp`，与 state 同源），用户上滑即撤销本次跟随。判据 `useChatSessionState.scroll-follow-timing.spec.ts` 两条用例（jsdom + 只接管 rAF 的 fake timers，不依赖真实浏览器），修复前分别红在「消息到达后视口必须到底」与 `expected 1000 to be 100`；既有 15 条黑盒用例零回归，UI 全量 138 文件/931 用例绿，`pnpm check` 绿（含指标基线刷新）。**仍未还**：主 hook 708 行、拆出的 `useChatPaginationScroll` 自身 319 行（god 阈值 300），三族拆分仍待 issue #467。决策见 `docs/notes/implemented/2026-09-20-chat-scroll-follow-timing.md`。
 - **TD-UI-CHAT-N03** · `MessagesPaneV2` 巨型组件 + 手写消息虚拟化
   - 类别：A/I · 严重级：P1 · 工作量：L · 状态：**done（2026-09-18，PR #458）**
   - 位置：`ui/src/components/chat-v2/MessagesPaneV2.tsx:314`（文件 1252 行）

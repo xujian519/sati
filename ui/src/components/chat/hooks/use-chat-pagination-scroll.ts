@@ -117,6 +117,9 @@ export function useChatPaginationScroll({
   } | null>(null);
   const loadAllFinishedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const followScrollFrameRef = useRef<number | null>(null);
+  // 用户上滑意图的**实时**副本：跟随帧要到下一帧才跑，而那正是「这一帧里用户有没有上滑」
+  // 要回答的时刻，读 state 只会拿到调度那一刻的旧值（issue #468 ②）。
+  const isUserScrolledUpRef = useRef(false);
 
   useEffect(
     () => () => {
@@ -140,6 +143,8 @@ export function useChatPaginationScroll({
     }
     followScrollFrameRef.current = requestAnimationFrame(() => {
       followScrollFrameRef.current = null;
+      // 帧已排队、但用户在这一帧里上滑了：撤销这次跟随，不把视口拽回底部（issue #468 ②）。
+      if (isUserScrolledUpRef.current) return;
       scrollToBottom();
     });
   }, [scrollToBottom]);
@@ -152,6 +157,13 @@ export function useChatPaginationScroll({
       allMessagesLoadedRef.current = false;
     }
   }, [allMessagesLoaded, scrollToBottom]);
+
+  // 上滑态的唯一写入口：state 给渲染用，ref 给「下一帧才跑」的回调读。外部（发送消息时
+  // 重置上滑态）也经返回对象调用它，所以两者不会分叉。
+  const trackUserScrolledUp = useCallback((isScrolledUp: boolean) => {
+    isUserScrolledUpRef.current = isScrolledUp;
+    setIsUserScrolledUp(isScrolledUp);
+  }, []);
 
   const isNearBottom = useCallback(() => {
     const container = scrollContainerRef.current;
@@ -201,7 +213,7 @@ export function useChatPaginationScroll({
     }
 
     const nearBottom = isNearBottom();
-    setIsUserScrolledUp(!nearBottom);
+    trackUserScrolledUp(!nearBottom);
 
     if (!allMessagesLoadedRef.current) {
       const scrolledNearTop = container.scrollTop < 100;
@@ -216,7 +228,7 @@ export function useChatPaginationScroll({
       const didLoad = await loadOlderMessages(container);
       if (didLoad) topLoadLockRef.current = true;
     }
-  }, [activeScrollKey, isNearBottom, loadOlderMessages]);
+  }, [activeScrollKey, isNearBottom, loadOlderMessages, trackUserScrolledUp]);
 
   useLayoutEffect(() => {
     if (!pendingScrollRestoreRef.current || !scrollContainerRef.current) return;
@@ -240,10 +252,10 @@ export function useChatPaginationScroll({
     }
     topLoadLockRef.current = false;
     pendingScrollRestoreRef.current = null;
-    setIsUserScrolledUp(
+    trackUserScrolledUp(
       Boolean(savedScrollPosition && savedScrollPosition.distanceFromBottom > CONVERSATION_SCROLL_BOTTOM_THRESHOLD),
     );
-  }, [activeScrollKey, searchScrollActiveRef]);
+  }, [activeScrollKey, searchScrollActiveRef, trackUserScrolledUp]);
 
   useLayoutEffect(() => {
     const pendingRestore = pendingConversationScrollRestoreRef.current;
@@ -270,10 +282,9 @@ export function useChatPaginationScroll({
   // Initial scroll to bottom
   useEffect(() => {
     if (!pendingInitialScrollRef.current || !scrollContainerRef.current || isLoadingSessionMessages) return;
-    if (chatMessages.length === 0) {
-      pendingInitialScrollRef.current = false;
-      return;
-    }
+    // 还没有内容可滚（容器在消息为空时就已挂载，占位符渲染在它内部）。这条待办是**一次性**的：
+    // 在这里消费掉就等于把「首屏落底」静默丢弃，消息真正到达时它已经不在了（issue #468 ①）。
+    if (chatMessages.length === 0) return;
     pendingInitialScrollRef.current = false;
     if (!searchScrollActiveRef.current) setTimeout(() => scrollToBottom(), UI_TIMEOUTS.CHAT_RELOAD_SCROLL_SETTLE_MS);
   }, [chatMessages.length, isLoadingSessionMessages, scrollToBottom, searchScrollActiveRef]);
@@ -364,7 +375,7 @@ export function useChatPaginationScroll({
     totalMessages,
     setTotalMessages,
     isUserScrolledUp,
-    setIsUserScrolledUp,
+    setIsUserScrolledUp: trackUserScrolledUp,
     visibleMessageCount,
     setVisibleMessageCount,
     allMessagesLoaded,
