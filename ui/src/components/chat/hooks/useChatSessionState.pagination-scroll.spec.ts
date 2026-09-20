@@ -48,12 +48,12 @@ const SESSION_B: ProjectSession = { id: SESSION_B_ID };
 
 type PageResponse = { messages: NormalizedMessage[]; total: number; hasMore: boolean };
 
-function transcript(count: number, startIndex = 1): NormalizedMessage[] {
+function transcript(count: number, startIndex = 1, sessionId = SESSION_ID): NormalizedMessage[] {
   return Array.from({ length: count }, (_, index) => {
     const n = startIndex + index;
     return {
       id: `msg-${n}`,
-      sessionId: SESSION_ID,
+      sessionId,
       timestamp: new Date(Date.UTC(2026, 0, 1, 0, 0, 0) + n * 1000).toISOString(),
       provider: "sati",
       kind: "text",
@@ -468,5 +468,68 @@ describe("useChatSessionState — 分页与滚动定位（黑盒回归）", () =
 
     expect(harness.result.current.state.visibleMessages.length).toBe(150);
     expect(harness.result.current.state.visibleMessages[0].id).toBe("msg-1");
+  });
+});
+
+/**
+ * 在途取数跨会话丢弃（issue #476）。
+ *
+ * 判据必须读**实时**会话身份：`loadOlderMessages` 是 useCallback，依赖变化只让后续调用拿到新闭包，
+ * 在途那次仍读调用时刻的 `selectedSession.id`；没有判据时这一页会照常写进新会话的分页状态
+ * （实测 total 65 / hasMore true / 可见条数 120），并顺手在新会话上排一次滚动补偿。
+ */
+describe("useChatSessionState — 在途取数跨会话丢弃（#476）", () => {
+  it("加载更早的一页在途时切换会话：结果被丢弃，新会话分页状态不被污染", async () => {
+    let resolveOlder: (() => void) | null = null;
+    mockAuthenticatedFetch.mockImplementation(async (url: string) => {
+      if (url.includes("/token-usage")) return jsonResponse({});
+      if (url.includes("/messages")) {
+        if (url.includes(SESSION_B_ID)) {
+          return jsonResponse({ messages: transcript(10, 1, SESSION_B_ID), total: 10, hasMore: false });
+        }
+        // 与 beforeEach 的默认 mock 一样记录取数 URL（`settleInitialLoad` 靠它等首屏）。
+        messageUrls.push(url);
+        if (url.includes("limit=")) {
+          // 更早的一页：由用例显式落定，好在「在途」这一刻切走会话。
+          return new Promise(resolve => {
+            resolveOlder = () => resolve(jsonResponse({ messages: transcript(20, 1), total: 65, hasMore: true }));
+          });
+        }
+        return jsonResponse(defaultPage());
+      }
+      return jsonResponse({});
+    });
+
+    const harness = renderHarness();
+    await settleInitialLoad(harness, 45);
+    expect(harness.result.current.state.hasMoreMessages).toBe(true);
+
+    harness.viewport.setScrollTop(60);
+    await dispatchScroll(harness.container);
+    await waitFor(() => expect(resolveOlder).not.toBe(null));
+
+    // 会话被切走：分页复位到初始值，随后 B 的加载落定。
+    act(() => {
+      harness.props.selectedSession = SESSION_B;
+      harness.rerender();
+    });
+    await waitFor(() => expect(harness.result.current.state.chatMessages.length).toBe(10));
+    expect(harness.result.current.state.totalMessages).toBe(10);
+    expect(harness.result.current.state.hasMoreMessages).toBe(false);
+
+    // 旧会话那一页这时才返回：判据命中实时身份，整体丢弃。
+    act(() => {
+      resolveOlder?.();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    await sleep(20);
+
+    expect(harness.result.current.state.totalMessages).toBe(10);
+    expect(harness.result.current.state.hasMoreMessages).toBe(false);
+    expect(harness.result.current.state.visibleMessageCount).toBe(100);
+    // 旧会话那一页写的是自己的 store slot，不碰新会话的消息。
+    expect(harness.result.current.state.chatMessages.length).toBe(10);
   });
 });

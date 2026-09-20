@@ -5,17 +5,18 @@ import { UI_TIMEOUTS } from "../../../constants/timeouts";
 import type { NormalizedMessage } from "../../../stores/useSessionStore";
 import { useSessionStore } from "../../../stores/useSessionStore";
 import type { Project, ProjectSession } from "../../../types/app";
+import { INITIAL_VISIBLE_MESSAGES } from "./chat-pagination-window";
 import { useChatSessionState } from "./useChatSessionState";
 
 /**
  * 「加载全部消息」状态机的**行为**回归测试（issue #467）。
  *
  * 已有 `useChatSessionState.pagination-scroll.spec.ts` 固化了成功路径（可见条数放开、
- * `allMessagesLoaded`、「全量后顶部不再分页」）。这里补三处它在拆分中必须守住的部分：
+ * `allMessagesLoaded`、「全量后顶部不再分页」）。这里补四处它在拆分中必须守住的部分：
  *
  * ① 请求在途时遮罩置位、返回 `hasMore=false` 后立即收起；
  * ② 取数抛错时回滚（`allMessagesLoadedRef` 复位 ⇒ 顶部仍能分页）；
- * ③ 请求期间切换会话 ⇒ 结果被丢弃，不污染新会话；
+ * ③ 请求期间切换会话 / 退回欢迎页 ⇒ 结果被丢弃，不污染新会话（issue #476 修的就是这条）；
  * ④ 完成后的 `loadAllJustFinished` 经 `LOAD_ALL_FINISHED_STATE_RESET_MS` 复位。
  *
  * 视口是模拟的（jsdom 不做布局）：`scrollHeight` / `clientHeight` / `scrollTop` 用
@@ -109,9 +110,11 @@ function makeProps(): HarnessProps {
 let messageUrls: string[] = [];
 let resolvePendingFetch: (() => void) | null = null;
 let pendingFetchResponse: PageResponse = { messages: transcript(65, SESSION_ID, 1), total: 65, hasMore: false };
+let sessionAFetches = 0;
 
 beforeEach(() => {
   messageUrls = [];
+  sessionAFetches = 0;
   resolvePendingFetch = null;
   pendingFetchResponse = { messages: transcript(65, SESSION_ID, 1), total: 65, hasMore: false };
   mockAuthenticatedFetch.mockReset();
@@ -122,13 +125,18 @@ beforeEach(() => {
         return jsonResponse({ messages: transcript(10, SESSION_B_ID, 1), total: 10, hasMore: false });
       }
       messageUrls.push(url);
-      if (messageUrls.length === 1) {
+      sessionAFetches += 1;
+      if (sessionAFetches === 1) {
         return jsonResponse({ messages: transcript(45, SESSION_ID, 21), total: 65, hasMore: true });
       }
-      // 第二次取数（全量）：由用例显式落定，便于观察「在途」这一段。
-      return new Promise(resolve => {
-        resolvePendingFetch = () => resolve(jsonResponse(pendingFetchResponse));
-      });
+      if (sessionAFetches === 2) {
+        // 第二次取数（全量）：由用例显式落定，便于观察「在途」这一段。
+        return new Promise(resolve => {
+          resolvePendingFetch = () => resolve(jsonResponse(pendingFetchResponse));
+        });
+      }
+      // 之后（切走又切回时的会话加载）立即返回，避免用例挂在未落定的请求上。
+      return jsonResponse({ messages: transcript(45, SESSION_ID, 21), total: 65, hasMore: true });
     }
     return jsonResponse({});
   });
@@ -214,14 +222,12 @@ describe("加载全部消息", () => {
   });
 
   /**
-   * ⚠️ 这里固化的是**既有语义**（既有缺陷，非搬迁引入，见 issue #468 的处置先例）：
-   * `loadAllMessages` 里的 `if (currentSessionId !== requestSessionId) return` 读的是**调用那一刻**
-   * 闭包里的 `currentSessionId`（useCallback 的依赖变化只会让后续调用拿到新闭包），所以「请求在途时
-   * 切换会话」这条丢弃判据**不会生效**：结果仍会写进切换后的会话视图（visibleMessageCount=Infinity、
-   * allMessagesLoaded=true、totalMessages 取旧会话值）。本波只做搬迁，不改语义，故按实测固化；
-   * 修它要单独决策（另立 issue）。
+   * ③ 请求在途时切走 ⇒ 结果被丢弃（issue #476）。
+   *
+   * 判据必须读**实时**会话身份：`loadAllMessages` 是 useCallback，依赖变化只让后续调用拿到新闭包，
+   * 在途那次仍读旧值——这就是 #476 的成因。丢弃路径还要把请求前自己置位的标记收回。
    */
-  it("请求期间切换会话：既有语义下结果**不会**被丢弃（丢弃判据读的是陈旧闭包）", async () => {
+  it("请求期间切换会话：结果被丢弃，新会话的窗口状态不被污染", async () => {
     const harness = renderHarness();
     await settleInitialLoad(harness, 45);
 
@@ -242,7 +248,69 @@ describe("加载全部消息", () => {
       await loadAll;
     });
 
-    // 实测（既有行为）：全量结果照常落到新会话视图上。
+    // 窗口/游标保持会话 B 的初始值：旧会话的 total 与「全量放开」都不许落上来。
+    expect(harness.result.current.state.allMessagesLoaded).toBe(false);
+    expect(harness.result.current.state.visibleMessageCount).toBe(INITIAL_VISIBLE_MESSAGES);
+    expect(harness.result.current.state.totalMessages).toBe(10);
+    expect(harness.result.current.state.hasMoreMessages).toBe(false);
+    // 在途遮罩与加载标记也要收回，否则新会话停在「正在/已经全量加载」的假状态上。
+    expect(harness.result.current.state.showLoadAllOverlay).toBe(false);
+    expect(harness.result.current.state.isLoadingAllMessages).toBe(false);
+  });
+
+  it("请求期间退回欢迎页（无选中会话）：结果同样被丢弃", async () => {
+    const harness = renderHarness();
+    await settleInitialLoad(harness, 45);
+
+    let loadAll: Promise<void> = Promise.resolve();
+    act(() => {
+      loadAll = harness.result.current.state.loadAllMessages();
+    });
+    await waitFor(() => expect(harness.result.current.state.showLoadAllOverlay).toBe(true));
+
+    harness.props.selectedSession = null;
+    harness.rerender();
+    await waitFor(() => expect(harness.result.current.state.currentSessionId).toBe(null));
+
+    act(() => {
+      resolvePendingFetch?.();
+    });
+    await act(async () => {
+      await loadAll;
+    });
+
+    expect(harness.result.current.state.allMessagesLoaded).toBe(false);
+    expect(harness.result.current.state.visibleMessageCount).toBe(INITIAL_VISIBLE_MESSAGES);
+    expect(harness.result.current.state.totalMessages).toBe(0);
+    expect(harness.result.current.state.showLoadAllOverlay).toBe(false);
+    expect(harness.result.current.state.isLoadingAllMessages).toBe(false);
+  });
+
+  it("切走又切回同一会话：结果照常应用（判据读实时身份，不误丢）", async () => {
+    const harness = renderHarness();
+    await settleInitialLoad(harness, 45);
+
+    let loadAll: Promise<void> = Promise.resolve();
+    act(() => {
+      loadAll = harness.result.current.state.loadAllMessages();
+    });
+    await waitFor(() => expect(harness.result.current.state.showLoadAllOverlay).toBe(true));
+
+    harness.props.selectedSession = SESSION_B;
+    harness.rerender();
+    await waitFor(() => expect(harness.result.current.state.currentSessionId).toBe(SESSION_B_ID));
+
+    harness.props.selectedSession = SESSION;
+    harness.rerender();
+    await waitFor(() => expect(harness.result.current.state.currentSessionId).toBe(SESSION_ID));
+
+    act(() => {
+      resolvePendingFetch?.();
+    });
+    await act(async () => {
+      await loadAll;
+    });
+
     expect(harness.result.current.state.allMessagesLoaded).toBe(true);
     expect(harness.result.current.state.visibleMessageCount).toBe(Infinity);
     expect(harness.result.current.state.totalMessages).toBe(pendingFetchResponse.total);

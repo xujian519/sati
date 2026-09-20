@@ -6,6 +6,7 @@ import type { SessionStore } from "../../../stores/useSessionStore";
 import type { ChatMessage } from "../types/types";
 import { INITIAL_VISIBLE_MESSAGES, MESSAGES_PER_PAGE } from "./chat-pagination-window";
 import { useChatLoadAll } from "./use-chat-load-all";
+import { isFetchForOtherSession } from "./use-chat-session-identity";
 
 /**
  * 消息窗口（分页）+ 滚动定位 —— 从 `useChatSessionState` 拆出的独立 hook（#159 TD-UI-CHAT-N02）。
@@ -78,7 +79,8 @@ export interface UseChatPaginationScrollArgs {
   isLoadingSessionMessages: boolean;
   selectedProject: Project | null;
   selectedSession: ProjectSession | null;
-  currentSessionId: string | null;
+  /** 实时会话身份（`useChatSessionIdentity` 的同一份 ref）：在途取数返回时判它是否还是当前会话。 */
+  liveSessionIdRef: MutableRefObject<string | null>;
   buildFetchParams: (project: Project) => ChatSessionFetchParams;
   sessionStore: SessionStore;
   /** 搜索定位正在进行中（由主 hook 的搜索逻辑置位）：置位期间不做任何自动滚动。 */
@@ -91,7 +93,7 @@ export function useChatPaginationScroll({
   isLoadingSessionMessages,
   selectedProject,
   selectedSession,
-  currentSessionId,
+  liveSessionIdRef,
   buildFetchParams,
   sessionStore,
   searchScrollActiveRef,
@@ -162,7 +164,7 @@ export function useChatPaginationScroll({
     buildFetchParams,
     selectedSession,
     selectedProject,
-    currentSessionId,
+    liveSessionIdRef,
   });
 
   const scheduleScrollToBottom = useCallback(() => {
@@ -197,6 +199,7 @@ export function useChatPaginationScroll({
       if (allMessagesLoadedRef.current) return false;
       if (!hasMoreMessages || !selectedSession || !selectedProject) return false;
 
+      const requestSessionId = selectedSession.id;
       isLoadingMoreRef.current = true;
       const previousScrollHeight = container.scrollHeight;
       const previousScrollTop = container.scrollTop;
@@ -206,6 +209,8 @@ export function useChatPaginationScroll({
           ...buildFetchParams(selectedProject),
           limit: MESSAGES_PER_PAGE,
         });
+        // 会话在取数在途时已被切走：这一页属于旧会话，丢弃；连滚动补偿也不许排。
+        if (isFetchForOtherSession(liveSessionIdRef, requestSessionId)) return false;
         if (!slot || slot.serverMessages.length === 0) return false;
 
         pendingScrollRestoreRef.current = { height: previousScrollHeight, top: previousScrollTop };
@@ -217,9 +222,17 @@ export function useChatPaginationScroll({
         isLoadingMoreRef.current = false;
       }
     },
-    // `allMessagesLoadedRef` 由 ./use-chat-load-all 持有、经参数传入（issue #467）：
-    // ref 对象身份恒定，列入依赖只为满足 exhaustive-deps，重跑时机不变。
-    [allMessagesLoadedRef, buildFetchParams, hasMoreMessages, selectedProject, selectedSession, sessionStore],
+    // `allMessagesLoadedRef` 由 ./use-chat-load-all 持有、经参数传入（issue #467）；
+    // `liveSessionIdRef` 身份恒定，两者列入依赖只为满足 exhaustive-deps，重跑时机不变。
+    [
+      allMessagesLoadedRef,
+      buildFetchParams,
+      hasMoreMessages,
+      liveSessionIdRef,
+      selectedProject,
+      selectedSession,
+      sessionStore,
+    ],
   );
 
   const handleScroll = useCallback(async () => {
