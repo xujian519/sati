@@ -17,18 +17,19 @@ god function 使 review 只能看 diff 局部，跨 effect 的时序不变式容
 
 ## Decision
 
-主 hook 708 → **245 行**，`useChatPaginationScroll` 326 → **288 行**，全部相关函数都在阈值以下。
+主 hook 708 → **251 行**，`useChatPaginationScroll` 326 → **288 行**，全部相关函数都在阈值以下
+（行数一律按 `scripts/measure-techdebt.mjs` 的函数体口径实测：`node.getStart()`–`node.getEnd()`）。
 切分落在「调用点即语义」的真实接缝上，共 7 个子 hook（新增 8 个文件，含 1 个共享常量模块）：
 
 | 文件 | 持有 | 调用点为什么在这里 |
 |---|---|---|
-| `use-chat-session-identity.ts`（101 行） | `currentSessionId` state + 渲染期镜像块 + `activeSessionId` / `activeScrollKey` / `sessionIsReadOnly` / `sessionRequestParams` | 一切派生都依赖它，必须最先 |
-| `use-chat-transcript-view.ts`（275 行文件，hook 约 90 行） | store → 渲染消息的投影、`viewHiddenCount`、`addMessage` / `clearMessages` / `rewindMessages`，以及配套纯函数（`chatMessageToNormalized` / `hasEquivalentUserMessage` / `shouldRenderPendingBubble`） | 在「乐观气泡 flush」之后读同一个 store，且分页 hook 需要它产出的 `chatMessages` |
+| `use-chat-session-identity.ts`（hook 60 行 / 文件 100 行） | `currentSessionId` state + 渲染期镜像块 + `activeSessionId` / `activeScrollKey` / `sessionIsReadOnly` / `sessionRequestParams` | 一切派生都依赖它，必须最先 |
+| `use-chat-transcript-view.ts`（hook 93 行 / 文件 264 行） | store → 渲染消息的投影、`viewHiddenCount`、`addMessage` / `clearMessages` / `rewindMessages`，以及配套纯函数（`chatMessageToNormalized` / `hasEquivalentUserMessage` / `shouldRenderPendingBubble`） | 在「乐观气泡 flush」之后读同一个 store，且分页 hook 需要它产出的 `chatMessages` |
 | `use-chat-load-all.ts`（hook 132 行） | `allMessagesLoaded`(+ref) / `isLoadingAllMessages` / `loadAllJustFinished` / `showLoadAllOverlay` / 定时器 / `loadAllMessages` / `scrollToBottomAndReset` / `resetLoadAll` | 在分页 hook **内部**调用：`allMessagesLoadedRef` 给 `handleScroll` 当「已全量就不再分页」判据，`resetPagination` 末尾调 `resetLoadAll()` —— 依赖方向单向，无参数环 |
 | `use-chat-session-lifecycle.ts`（hook 229 行） | 会话加载 effect（147 行）+ 外部消息刷新 effect + `lastLoadedSessionKeyRef` / `didLoadedSessionChange` | 紧跟分页 hook 的 5 条 effect |
 | `use-chat-search-navigation.ts`（hook 145 行） | 搜索目标读取 / 交班标记复位 / 跳转与高亮三条 effect | 夹在会话加载与 token 用量之间（原顺序如此） |
-| `use-chat-token-usage.ts`（hook 约 45 行） | token 用量 effect | 台账判它「不成族」；单列调用点只为保住 effect 顺序（原顺序里它在搜索定位之后、锚定之前） |
-| `use-chat-processing-status.ts`（hook 约 85 行） | `processingSessions` ⇒ `isLoading` / `canAbortSession`、`check-session-status` 兜底轮询、「没有更多消息收起遮罩」 | 三条紧接滚动锚定之后 |
+| `use-chat-token-usage.ts`（hook 34 行） | token 用量 effect | 台账判它「不成族」；单列调用点只为保住 effect 顺序（原顺序里它在搜索定位之后、锚定之前） |
+| `use-chat-processing-status.ts`（hook 78 行） | `processingSessions` ⇒ `isLoading` / `canAbortSession`、`check-session-status` 兜底轮询、「没有更多消息收起遮罩」 | 三条紧接滚动锚定之后 |
 
 父 hook 保留：`sessionStore` 绑定（`setActiveSession`）、`pendingUserMessage` 与其 flush 块、
 `buildFetchParams`、`searchScrollActiveRef`、`createDiff`、以及跨族共享的 setter 传递。
@@ -65,7 +66,8 @@ god function 使 review 只能看 diff 局部，跨 effect 的时序不变式容
 
 ## Consequences
 
-- 规模：`useChatSessionState` 708 → **245**；`useChatPaginationScroll` 326 → **288**；新增 7 个 hook 全部 < 300。
+- 规模（按函数体口径实测）：`useChatSessionState` 708 → **251**；`useChatPaginationScroll` 326 → **288**；
+  新增的 7 个 hook 分别为 60 / 93 / 132 / 229 / 145 / 34 / 78 行，全部 < 300。
   `docs/technical-debt/metrics.md` 的 god function 表里两条相关登记消失（`pnpm measure:update` 刷新）。
 - **对外 API 零变化**：返回对象 39 键、键序逐项一致（新增用例断言）；`ChatInterfaceV2` 未改动。
   纯函数 `didLoadedSessionChange` / `hasEquivalentUserMessage` / `shouldRenderPendingBubble` /
@@ -105,5 +107,9 @@ god function 使 review 只能看 diff 局部，跨 effect 的时序不变式容
      丢弃结果，旧会话的 `total` / `visibleMessageCount=Infinity` 会落到新会话视图上；用例按实测固化，
      修复另立 issue #476。
   2. 该丢弃分支若真被触发，`allMessagesLoadedRef` 已先置 true 且不回滚（同一处逻辑的另一半）。
+- **数字更正（2026-09-20，合并后复测）**：本 note 初稿写「主 hook 245 行」是**提交前**手工测量的值；
+  按函数体口径（`scripts/measure-techdebt.mjs`）在合并后的 `main` 上复测为 **251 行**，并顺带把
+  identity / transcript / token 用量 / 处理中状态四个 hook 的「约 N 行」改成实测值。所有函数仍 < 300，
+  god function 表里两条登记依然消失。
 - 决策记录同步：`docs/notes/implemented/2026-09-20-chat-session-state-pagination-scroll.md` 的「剩余」段
   改为指向本条；台账 `docs/technical-debt/backlog.md` 的 TD-UI-CHAT-N02 登记收官。
