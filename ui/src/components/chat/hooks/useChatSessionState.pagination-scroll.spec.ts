@@ -302,8 +302,9 @@ describe("useChatSessionState — 分页与滚动定位（黑盒回归）", () =
     const harness = renderHarness({ autoScrollToBottom: true });
     await settleInitialLoad(harness, 45);
 
-    // 先排空「消息到达」那一轮已排队的 rAF 跟随帧（已在飞的帧不因用户上滑而取消，
-    // 是既有语义），再模拟用户上滑——否则下面测到的是那条旧帧而不是新消息的行为。
+    // 先排空「消息到达」那一轮已排队的 rAF 跟随帧，再模拟用户上滑——否则下面测到的是
+    // 那条旧帧而不是新消息的行为。（已排队的帧如今会因上滑被撤销，见 #468；这里的 sleep
+    // 只是让基线干净，不再是绕开旧语义。）
     await sleep(40);
     harness.viewport.setScrollTop(100);
     await dispatchScroll(harness.container);
