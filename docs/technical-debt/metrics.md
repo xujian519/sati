@@ -10,7 +10,7 @@
 | src TS 文件 / 行数 | 1043 / 175238 |
 | src JS 文件 | 0 |
 | tests 文件 | 578 |
-| ui/src 文件 / 行数 | 557 / 89956 |
+| ui/src 文件 / 行数 | 570 / 92046 |
 | ui/server 文件 / 行数 | 108 / 31827 |
 
 ## 指标口径
@@ -51,7 +51,6 @@
 | `ui/src/components/chat-v2/MessagesPaneV2.tsx` | `MessagesPaneV2` | 824 | function |
 | `ui/src/components/chat-v2/ComposerV2.tsx` | `ComposerV2` | 741 | function |
 | `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` | `useChatRealtimeHandlers` | 719 | function |
-| `ui/src/components/chat/hooks/useChatSessionState.ts` | `useChatSessionState` | 708 | function |
 | `ui/src/components/git-panel/hooks/useGitPanelController.ts` | `useGitPanelController` | 704 | function |
 | `ui/src/components/main-content-v2/skills/import/ImportFromFolder.tsx` | `ImportFromFolder` | 688 | function |
 | `ui/src/components/chat-v2/ChatInterfaceV2.tsx` | `ChatInterfaceV2` | 668 | function |
@@ -97,7 +96,6 @@
 | `ui/src/components/main-content-v2/DashboardV2.tsx` | `DashboardV2` | 332 | function |
 | `ui/src/hooks/useSatiConfig.ts` | `useSatiConfigState` | 332 | function |
 | `ui/src/components/chat/hooks/useSlashCommandExecute.ts` | `useSlashCommandExecute` | 331 | function |
-| `ui/src/components/chat/hooks/use-chat-pagination-scroll.ts` | `useChatPaginationScroll` | 326 | function |
 | `ui/src/components/code-editor/view/CodeEditor.tsx` | `CodeEditor` | 310 | function |
 | `ui/src/components/chat-v2/SubagentDetailMessageFlow.tsx` | `SubagentDetailMessageFlow` | 309 | function |
 | `src/patent/figuregen/check.ts` | `checkFigures` | 306 | function |
@@ -138,7 +136,7 @@
 | `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` | 1005 |
 | `ui/src/components/main-content-v2/FilesV2.tsx` | 964 |
 | `ui/server/routes/config.test.js` | 934 |
-| `ui/src/components/chat/hooks/useChatSessionState.ts` | 929 |
+| `src/pilot/config/loadPilotConfig.ts` | 922 |
 
 ## vendored 子包（单列，不计入上述规模与排名）
 

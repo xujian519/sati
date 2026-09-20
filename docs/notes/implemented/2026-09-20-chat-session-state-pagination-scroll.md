@@ -70,6 +70,9 @@ effect 之前；锚定 hook 在 `streamContentKey` 之后、E15/E16/E17 之前�
   4 个 `useState` setter、1 个 `useCallback(…, [])` ⇒ 身份恒定 ⇒ **effect 重跑时机不变**。
 - **剩余（如实登记，不阻塞本波关闭）**：主 hook 708 行仍是 god function（阈值 300）。剩余可拆的
   是会话加载、搜索定位、token 统计三族，都需要双视口浏览器验证，建议另立条目。
+  **2026-09-20 后续**：该剩余已随 issue #467 / PR #475 **全部还清**（主 hook 708 → 245、本 hook
+  326 → 288，全部相关函数 < 300）——口径更正为「两族 + 一处不成族」，处置与判据见
+  `docs/notes/implemented/2026-09-20-chat-session-state-full-decomposition.md`。
 - 另有两处**既有**行为疑点（非本波引入，未在纯搬迁中改动）已登记为 issue #468 并完成判定：
   ① E5「首屏落底」的 `pendingInitialScrollRef` 会在"容器已挂载但消息仍为空"时被消费且不滚动；
   ② 已排队的 rAF 跟随帧不会因用户随后的上滑而取消。处置与判据见
