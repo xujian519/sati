@@ -18,6 +18,7 @@ import { createCachedDiffCalculator, type DiffCalculator } from "../utils/messag
 import { normalizedToChatMessages } from "./useChatMessages";
 import { useChatPaginationScroll } from "./use-chat-pagination-scroll";
 import { useChatScrollAnchor } from "./use-chat-scroll-anchor";
+import { useChatSearchNavigation } from "./use-chat-search-navigation";
 
 const EMPTY_NORMALIZED_MESSAGES: NormalizedMessage[] = [];
 
@@ -241,9 +242,6 @@ export function useChatSessionState({
   const [sessionLoadError, setSessionLoadError] = useState<string | null>(null);
   const [viewHiddenCount, setViewHiddenCount] = useState(0);
 
-  const [searchTarget, setSearchTarget] = useState<{ timestamp?: string; uuid?: string; snippet?: string } | null>(
-    null,
-  );
   const searchScrollActiveRef = useRef(false);
   const lastLoadedSessionKeyRef = useRef<string | null>(null);
 
@@ -661,120 +659,16 @@ export function useChatSessionState({
     isLoading,
   ]);
 
-  // Search navigation target
-  useEffect(() => {
-    const session = selectedSession as Record<string, unknown> | null;
-    const targetSnippet = session?.__searchTargetSnippet;
-    const targetTimestamp = session?.__searchTargetTimestamp;
-    if (typeof targetSnippet === "string" && targetSnippet) {
-      searchScrollActiveRef.current = true;
-      setSearchTarget({
-        snippet: targetSnippet,
-        timestamp: typeof targetTimestamp === "string" ? targetTimestamp : undefined,
-      });
-    }
-  }, [selectedSession]);
-
-  useEffect(() => {
-    if (selectedSession?.id) pendingViewSessionRef.current = null;
-  }, [pendingViewSessionRef, selectedSession?.id]);
-
-  // Scroll to search target
-  useEffect(() => {
-    if (!searchTarget || chatMessages.length === 0 || isLoadingSessionMessages) return;
-
-    const target = searchTarget;
-    setSearchTarget(null);
-
-    const scrollToTarget = async () => {
-      if (!allMessagesLoadedRef.current && selectedSession && selectedProject) {
-        try {
-          const slot = await sessionStore.fetchFromServer(selectedSession.id, {
-            ...buildFetchParams(selectedProject),
-            limit: null,
-            offset: 0,
-          });
-          if (slot) {
-            setHasMoreMessages(false);
-            setTotalMessages(slot.total);
-            messagesOffsetRef.current = slot.total;
-            setVisibleMessageCount(Infinity);
-            setAllMessagesLoaded(true);
-            allMessagesLoadedRef.current = true;
-            await new Promise(resolve => setTimeout(resolve, UI_TIMEOUTS.CHAT_FULL_LOAD_RENDER_SETTLE_MS));
-          }
-        } catch {
-          // Fall through and scroll in current messages
-        }
-      }
-      setVisibleMessageCount(Infinity);
-
-      const findAndScroll = (retriesLeft: number) => {
-        const container = scrollContainerRef.current;
-        if (!container) return;
-
-        let targetElement: Element | null = null;
-
-        if (target.snippet) {
-          const cleanSnippet = target.snippet
-            .replace(/^\.{3}/, "")
-            .replace(/\.{3}$/, "")
-            .trim();
-          const searchPhrase = cleanSnippet.slice(0, 80).toLowerCase().trim();
-          if (searchPhrase.length >= 10) {
-            const messageElements = container.querySelectorAll(".chat-message");
-            for (const el of messageElements) {
-              const text = (el.textContent || "").toLowerCase();
-              if (text.includes(searchPhrase)) {
-                targetElement = el;
-                break;
-              }
-            }
-          }
-        }
-
-        if (!targetElement && target.timestamp) {
-          const targetDate = new Date(target.timestamp).getTime();
-          const messageElements = container.querySelectorAll("[data-message-timestamp]");
-          let closestDiff = Infinity;
-          for (const el of messageElements) {
-            const ts = el.getAttribute("data-message-timestamp");
-            if (!ts) continue;
-            const diff = Math.abs(new Date(ts).getTime() - targetDate);
-            if (diff < closestDiff) {
-              closestDiff = diff;
-              targetElement = el;
-            }
-          }
-        }
-
-        if (targetElement) {
-          targetElement.scrollIntoView({ block: "center", behavior: "smooth" });
-          targetElement.classList.add("search-highlight-flash");
-          setTimeout(
-            () => targetElement?.classList.remove("search-highlight-flash"),
-            UI_TIMEOUTS.SEARCH_HIGHLIGHT_FLASH_MS,
-          );
-          searchScrollActiveRef.current = false;
-        } else if (retriesLeft > 0) {
-          setTimeout(() => findAndScroll(retriesLeft - 1), UI_TIMEOUTS.SEARCH_SCROLL_RETRY_INTERVAL_MS);
-        } else {
-          searchScrollActiveRef.current = false;
-        }
-      };
-
-      setTimeout(() => findAndScroll(15), UI_TIMEOUTS.SEARCH_SCROLL_INITIAL_DELAY_MS);
-    };
-
-    scrollToTarget();
-  }, [
-    buildFetchParams,
-    chatMessages.length,
-    isLoadingSessionMessages,
-    searchTarget,
-    selectedProject,
+  // 搜索定位（读取搜索目标 / 清交班标记 / 跳转与高亮）外置到 ./use-chat-search-navigation
+  // （issue #467）。调用点即语义：这一段 effect 必须留在会话加载 effect 之后、滚动锚定之前
+  // （`searchScrollActiveRef` 的置位次序决定首屏落底与锚定会不会抢搜索的滚动）。
+  useChatSearchNavigation({
     selectedSession,
+    selectedProject,
     sessionStore,
+    buildFetchParams,
+    chatMessages,
+    isLoadingSessionMessages,
     allMessagesLoadedRef,
     messagesOffsetRef,
     scrollContainerRef,
@@ -782,7 +676,9 @@ export function useChatSessionState({
     setHasMoreMessages,
     setTotalMessages,
     setVisibleMessageCount,
-  ]);
+    searchScrollActiveRef,
+    pendingViewSessionRef,
+  });
 
   useEffect(() => {
     if (!selectedProject || !selectedSession?.id || selectedSession.id.startsWith("new-session-")) {
