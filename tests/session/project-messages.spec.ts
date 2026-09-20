@@ -58,6 +58,11 @@ test("projectMessagesFromTranscript：压缩边界后切片（压缩产物 + 新
         kind: "compact",
         subtype: "compact_boundary",
         compactMetadata: { trigger: "auto", preTokens: 10 },
+        // 压缩产物内联在边界记录里（上游 #599 快照形态）。
+        snapshot: {
+          version: 1,
+          messages: [{ role: "user", content: [{ type: "text", text: "压缩摘要产物" }] }],
+        },
       },
     },
     {
@@ -65,14 +70,6 @@ test("projectMessagesFromTranscript：压缩边界后切片（压缩产物 + 新
       sessionId: "s",
       turnId: "t1",
       sequence: 4,
-      createdAt,
-      message: { role: "user", content: [{ type: "text", text: "压缩摘要产物" }] },
-    },
-    {
-      type: "durable_message",
-      sessionId: "s",
-      turnId: "t1",
-      sequence: 5,
       createdAt,
       message: { role: "assistant", content: [{ type: "text", text: "压缩后新增回复" }] },
     },

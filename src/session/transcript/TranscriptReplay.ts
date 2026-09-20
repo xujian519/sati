@@ -3,6 +3,7 @@ import type { AgentEvent } from "../../agent/protocol/events.js";
 import type { AgentPermissionDenial, AgentTurnResult } from "../../agent/protocol/result.js";
 import type { InjectionRecord } from "../../context/protocol/types.js";
 import { mergeMetadata } from "../metadata/SessionMetadataStore.js";
+import { readCompactSnapshot } from "./CompactSnapshot.js";
 import {
   isCompactBoundaryEntry,
   type AgentTranscriptDiagnostic,
@@ -27,12 +28,30 @@ export type AgentTranscriptReplayResult = {
 };
 
 /**
- * Find the index of the last compact boundary entry. Used by resume / replay
- * to slice messages after the boundary.
+ * Find the index of the last compact boundary entry（不论是否带快照）。
+ *
+ * 用于「最后一次压缩发生在哪」这类判定：编辑/重生成最后 turn 的前置校验
+ * （`editLastTurn`）与遮蔽原文展开（`replayShadowedMessages`）都要认识 legacy
+ * 边界。**授权重放丢弃历史**请用 `findLastCompactSnapshotIndex`。
  */
 export function findLastCompactBoundaryIndex(entries: AgentTranscriptEntry[]): number {
   for (let index = entries.length - 1; index >= 0; index -= 1) {
     if (isCompactBoundaryEntry(entries[index]!)) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+/**
+ * Find the index of the last compact boundary carrying a complete, valid snapshot.
+ *
+ * 只有它授权重放丢弃边界前历史：legacy 边界（边界与替换消息分两条记录写入）
+ * 无法证明替换内容完整，崩溃后可能只剩残缺替换内容。
+ */
+export function findLastCompactSnapshotIndex(entries: AgentTranscriptEntry[]): number {
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    if (readCompactSnapshot(entries[index]!) !== undefined) {
       return index;
     }
   }
@@ -242,7 +261,7 @@ function appendProjection(entries: AgentTranscriptEntry[], cache: ProjectionCach
 }
 
 function replayFull(entries: AgentTranscriptEntry[]): AgentTranscriptReplayResult {
-  const lastBoundaryIndex = findLastCompactBoundaryIndex(entries);
+  const lastBoundaryIndex = findLastCompactSnapshotIndex(entries);
   const messages: CanonicalMessage[] = [];
   const events: AgentEvent[] = [];
   const diagnostics: AgentTranscriptDiagnostic[] = [];
@@ -283,6 +302,11 @@ function replayFull(entries: AgentTranscriptEntry[]): AgentTranscriptReplayResul
         if (isShadowed) {
           break;
         }
+        // legacy 替换记录（无快照时代的「边界 + 逐条替换消息」形态）：无法
+        // 证明整份替换内容完整，其原文历史一并保留，不再重复进入上下文。
+        if (entry.message.metadata?.compactReplacement === true) {
+          break;
+        }
         if (!completedTurnIds.has(entry.turnId)) {
           diagnostics.push({
             code: "transcript_entry_invalid",
@@ -309,11 +333,25 @@ function replayFull(entries: AgentTranscriptEntry[]): AgentTranscriptReplayResul
           });
         }
         break;
-      case "control_boundary":
-        if (isCompactBoundaryEntry(entry)) {
+      case "control_boundary": {
+        const snapshot = readCompactSnapshot(entry);
+        if (index === lastBoundaryIndex && snapshot !== undefined) {
           lastCompactBoundary = entry;
+          // 快照整体即压缩后的模型可见上下文；生效不依赖该 turn 是否有
+          // turn_result——落盘时已是完整替换内容。
+          messages.push(...cloneMessages(snapshot));
+          for (const message of snapshot) {
+            events.push(projectMessageEvent(entry.sessionId, entry.turnId, message));
+          }
+        } else if (snapshot === undefined && isCompactBoundaryEntry(entry)) {
+          diagnostics.push({
+            code: "transcript_entry_invalid",
+            severity: "warning",
+            message: "Ignoring compact boundary without a valid complete snapshot; retaining prior context.",
+          });
         }
         break;
+      }
       case "session_metadata":
         metadata = mergeMetadata(metadata, entry.metadata);
         break;
@@ -382,6 +420,16 @@ function projectFullMessageSequence(entries: AgentTranscriptEntry[]): CanonicalM
       entry.type === "durable_message"
     ) {
       messages.push(cloneMessage(entry.message));
+      continue;
+    }
+    // 快照形态（上游 #599）：替换消息内联在边界记录里，而 legacy 形态下它们
+    // 紧跟边界逐条落盘——两者在此处必须落在同一位置，否则后一次压缩记录的
+    // shadowedRanges 索引会整体错位。
+    if (entry.type === "control_boundary") {
+      const snapshot = readCompactSnapshot(entry);
+      if (snapshot !== undefined) {
+        messages.push(...cloneMessages(snapshot));
+      }
     }
   }
   return messages;
@@ -447,7 +495,11 @@ export function replayShadowedMessagesAt(
       break;
     }
   }
-  const sequence = projectFullMessageSequence(entries.slice(previousBoundaryIndex + 1, boundaryIndex));
+  // 投影基础：该次压缩输入区间（上次压缩产物 + 其间新增消息）。切片含上次边界
+  // 自身——快照形态下上次压缩产物内联在那条记录里，排除它就整体缺一段。
+  const sequence = projectFullMessageSequence(
+    entries.slice(previousBoundaryIndex === -1 ? 0 : previousBoundaryIndex, boundaryIndex),
+  );
   const matchedIndexes: number[] = [];
   const messages: CanonicalMessage[] = [];
   let expectedCount = 0;

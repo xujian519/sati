@@ -4,6 +4,7 @@ import type { AgentTurnResult } from "../../agent/protocol/result.js";
 import type { InjectionRecord } from "../../context/protocol/types.js";
 import type { FileArtifact } from "../artifacts/FileArtifact.js";
 import type { WorkspaceLedgerState } from "../workspace/WorkspaceLedger.js";
+import type { CompactSnapshotPayload } from "./CompactSnapshot.js";
 
 export type AgentTranscriptEntryType =
   | "accepted_input"
@@ -108,6 +109,12 @@ export type AgentControlBoundaryTranscriptEntry = AgentTranscriptEntryBase & {
         kind: "compact";
         subtype: "compact_boundary";
         compactMetadata: CompactBoundaryMetadata;
+        /**
+         * 压缩替换上下文整份内联在同一条记录里（上游 #599）：边界与替换内容
+         * 一次落盘，「边界已落、替换未落」的崩溃窗口消失。缺此字段的边界
+         * （legacy 或快照损坏）不授权丢弃边界前历史。
+         */
+        snapshot?: CompactSnapshotPayload;
       }
     | {
         kind: "compact";
@@ -334,7 +341,12 @@ export function classifyDurableMessageEntry(message: CanonicalMessage): AgentMes
  */
 export function isCompactBoundaryEntry(entry: AgentTranscriptEntry): entry is AgentTranscriptEntry & {
   type: "control_boundary";
-  boundary: { kind: "compact"; subtype: "compact_boundary"; compactMetadata: CompactBoundaryMetadata };
+  boundary: {
+    kind: "compact";
+    subtype: "compact_boundary";
+    compactMetadata: CompactBoundaryMetadata;
+    snapshot?: CompactSnapshotPayload;
+  };
 } {
   return (
     entry.type === "control_boundary" &&

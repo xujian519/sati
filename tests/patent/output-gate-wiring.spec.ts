@@ -5,6 +5,7 @@ import type { AgentTurnResult } from "../../src/agent/protocol/result.js";
 import type { AgentLoop, AgentLoopInput, AgentLoopRunResult } from "../../src/agent/loop/AgentLoop.js";
 import { TurnRunner } from "../../src/agent/turn/TurnRunner.js";
 import { InMemoryTranscriptWriter } from "../../src/session/transcript/InMemoryTranscriptWriter.js";
+import { readCompactSnapshot } from "../../src/session/transcript/CompactSnapshot.js";
 import { PatentOutputGate } from "../../src/patent/output-gate.js";
 import { extractMessageText } from "../../src/patent/output-gate.js";
 
@@ -39,6 +40,12 @@ function makeLoop(messages: string[]): AgentLoop {
 
 function durableMessages(transcript: InMemoryTranscriptWriter) {
   return transcript.entries.filter(entry => entry.type === "durable_message");
+}
+
+/** 压缩产物现内联在 control_boundary 的快照里（上游 #599），不再是独立 durable 条目。 */
+function compactSnapshotMessages(transcript: InMemoryTranscriptWriter) {
+  const boundary = transcript.entries.find(entry => entry.type === "control_boundary");
+  return boundary === undefined ? [] : (readCompactSnapshot(boundary) ?? []);
 }
 
 test("approval-keyword messages are persisted immediately and held in pending for approval", async () => {
@@ -259,12 +266,10 @@ test("D5: compaction replays pass through the gate without re-hanging approval",
     /* consume */
   }
 
-  // 摘要入库且经过门禁（风险词 → 免责声明追加）
-  const persisted = durableMessages(transcript);
-  assert.equal(persisted.length, 1);
-  const entry = persisted[0]!;
-  if (entry.type !== "durable_message") assert.fail("expected durable_message");
-  assert.match(extractMessageText(entry.message), /不构成正式法律意见/);
+  // 摘要与边界同一记录入库且经过门禁（风险词 → 免责声明追加）
+  const replayed = compactSnapshotMessages(transcript);
+  assert.equal(replayed.length, 1);
+  assert.match(extractMessageText(replayed[0]!), /不构成正式法律意见/);
   // skipApproval：重放内容不重复挂起、不触发 onPending
   assert.equal(gate.pendingCount(), 0, "replayed content must not re-hang");
   assert.equal(pendingFired, 0);
@@ -314,11 +319,12 @@ test("D5: re-processing an already-gated message does not duplicate hints", asyn
   }
 
   const persisted = durableMessages(transcript);
-  assert.equal(persisted.length, 2);
+  assert.equal(persisted.length, 1, "首次入库走 onDurableMessage");
+  const replayed = compactSnapshotMessages(transcript);
+  assert.equal(replayed.length, 1, "压缩重放产物内联在边界快照里");
   const first = extractMessageText(persisted[0]!.message);
-  const second = extractMessageText(persisted[1]!.message);
   // 免责声明与绝对化提示在首次处理后的文本中只出现一次，重放不重复追加
   assert.equal((first.match(/不构成正式法律意见/g) ?? []).length, 1);
   assert.equal((first.match(/绝对化表述/g) ?? []).length, 1);
-  assert.equal(second, first, "replay of an already-gated message must be byte-identical");
+  assert.equal(extractMessageText(replayed[0]!), first, "replay of an already-gated message must be byte-identical");
 });

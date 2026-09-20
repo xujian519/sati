@@ -7,9 +7,9 @@
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1042 / 175010 |
+| src TS 文件 / 行数 | 1043 / 175210 |
 | src JS 文件 | 0 |
-| tests 文件 | 576 |
+| tests 文件 | 578 |
 | ui/src 文件 / 行数 | 557 / 89956 |
 | ui/server 文件 / 行数 | 108 / 31827 |
 
@@ -169,7 +169,7 @@
 | context | 32 |
 | gateway | 32 |
 | model | 32 |
-| session | 27 |
+| session | 28 |
 | router | 18 |
 | always-on | 14 |
 | mcp | 13 |
@@ -179,8 +179,8 @@
 | pilot | 11 |
 | rule | 10 |
 | cli | 9 |
+| web | 9 |
 | literature | 8 |
-| web | 8 |
 | permission | 4 |
 | test-support | 4 |
 | telemetry | 3 |
@@ -195,7 +195,7 @@
 | runtime | 1 |
 | status | 1 |
 
-| **合计** | **552** |
+| **合计** | **554** |
 
 ## i18n en/zh-CN 对齐
 
