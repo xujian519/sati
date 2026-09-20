@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { MutableRefObject } from "react";
-import { logError } from "../../../utils/logging";
 import { UI_TIMEOUTS } from "../../../constants/timeouts";
 import type { Project, ProjectSession, SessionProvider, SessionRequestParams } from "../../../types/app";
 import type { SessionStore } from "../../../stores/useSessionStore";
 import type { ChatMessage } from "../types/types";
+import { INITIAL_VISIBLE_MESSAGES, MESSAGES_PER_PAGE } from "./chat-pagination-window";
+import { useChatLoadAll } from "./use-chat-load-all";
 
 /**
  * 消息窗口（分页）+ 滚动定位 —— 从 `useChatSessionState` 拆出的独立 hook（#159 TD-UI-CHAT-N02）。
@@ -21,8 +22,10 @@ import type { ChatMessage } from "../types/types";
  * `searchScrollActiveRef` 的读写次序决定首屏是否落到底），详见主 hook 的调用点注释。
  */
 
-export const MESSAGES_PER_PAGE = 20;
-export const INITIAL_VISIBLE_MESSAGES = 100;
+// 窗口取值（`MESSAGES_PER_PAGE` / `INITIAL_VISIBLE_MESSAGES`）与全量加载 hook 共用，
+// 定义搬到 `./chat-pagination-window`（避免两个 hook 互相 import 成环，issue #467）；
+// 这里保留同一导出路径，既有测试与调用方的导入不变。
+export { INITIAL_VISIBLE_MESSAGES, MESSAGES_PER_PAGE } from "./chat-pagination-window";
 
 export const BOTTOM_FOLLOW_THRESHOLD_PX = 96;
 
@@ -97,14 +100,9 @@ export function useChatPaginationScroll({
   const [totalMessages, setTotalMessages] = useState(0);
   const [isUserScrolledUp, setIsUserScrolledUp] = useState(false);
   const [visibleMessageCount, setVisibleMessageCount] = useState(INITIAL_VISIBLE_MESSAGES);
-  const [allMessagesLoaded, setAllMessagesLoaded] = useState(false);
-  const [isLoadingAllMessages, setIsLoadingAllMessages] = useState(false);
-  const [loadAllJustFinished, setLoadAllJustFinished] = useState(false);
-  const [showLoadAllOverlay, setShowLoadAllOverlay] = useState(false);
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const isLoadingMoreRef = useRef(false);
-  const allMessagesLoadedRef = useRef(false);
   const topLoadLockRef = useRef(false);
   const pendingScrollRestoreRef = useRef<ScrollRestoreState | null>(null);
   const pendingInitialScrollRef = useRef(true);
@@ -115,7 +113,6 @@ export function useChatPaginationScroll({
     key: string;
     position: ConversationScrollPosition;
   } | null>(null);
-  const loadAllFinishedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const followScrollFrameRef = useRef<number | null>(null);
   // 用户上滑意图的**实时**副本：跟随帧要到下一帧才跑，而那正是「这一帧里用户有没有上滑」
   // 要回答的时刻，读 state 只会拿到调度那一刻的旧值（issue #468 ②）。
@@ -137,6 +134,37 @@ export function useChatPaginationScroll({
     container.scrollTop = container.scrollHeight;
   }, []);
 
+  // 「全量加载」一族（state / ref / 三个回调）外置到 ./use-chat-load-all（issue #467）。
+  // 本 hook 只保留它必须的两处接口：`allMessagesLoadedRef`（handleScroll 的「已全量就不再
+  // 分页」判据）与 `resetLoadAll()`（会话切换复位时调用）；`scrollToBottomAndReset` 与
+  // 全量态 state 仍经返回对象对外暴露。本 hook 的 effect 顺序不受影响（该 hook 无 effect）。
+  const {
+    allMessagesLoaded,
+    setAllMessagesLoaded,
+    allMessagesLoadedRef,
+    isLoadingAllMessages,
+    loadAllJustFinished,
+    showLoadAllOverlay,
+    setShowLoadAllOverlay,
+    loadAllMessages,
+    scrollToBottomAndReset,
+    resetLoadAll,
+  } = useChatLoadAll({
+    scrollToBottom,
+    scrollContainerRef,
+    pendingScrollRestoreRef,
+    isLoadingMoreRef,
+    messagesOffsetRef,
+    setHasMoreMessages,
+    setTotalMessages,
+    setVisibleMessageCount,
+    sessionStore,
+    buildFetchParams,
+    selectedSession,
+    selectedProject,
+    currentSessionId,
+  });
+
   const scheduleScrollToBottom = useCallback(() => {
     if (followScrollFrameRef.current !== null) {
       return;
@@ -148,15 +176,6 @@ export function useChatPaginationScroll({
       scrollToBottom();
     });
   }, [scrollToBottom]);
-
-  const scrollToBottomAndReset = useCallback(() => {
-    scrollToBottom();
-    if (allMessagesLoaded) {
-      setVisibleMessageCount(INITIAL_VISIBLE_MESSAGES);
-      setAllMessagesLoaded(false);
-      allMessagesLoadedRef.current = false;
-    }
-  }, [allMessagesLoaded, scrollToBottom]);
 
   // 上滑态的唯一写入口：state 给渲染用，ref 给「下一帧才跑」的回调读。外部（发送消息时
   // 重置上滑态）也经返回对象调用它，所以两者不会分叉。
@@ -198,7 +217,9 @@ export function useChatPaginationScroll({
         isLoadingMoreRef.current = false;
       }
     },
-    [buildFetchParams, hasMoreMessages, selectedProject, selectedSession, sessionStore],
+    // `allMessagesLoadedRef` 由 ./use-chat-load-all 持有、经参数传入（issue #467）：
+    // ref 对象身份恒定，列入依赖只为满足 exhaustive-deps，重跑时机不变。
+    [allMessagesLoadedRef, buildFetchParams, hasMoreMessages, selectedProject, selectedSession, sessionStore],
   );
 
   const handleScroll = useCallback(async () => {
@@ -228,7 +249,8 @@ export function useChatPaginationScroll({
       const didLoad = await loadOlderMessages(container);
       if (didLoad) topLoadLockRef.current = true;
     }
-  }, [activeScrollKey, isNearBottom, loadOlderMessages, trackUserScrolledUp]);
+    // 同上：`allMessagesLoadedRef` 身份恒定，仅为满足 exhaustive-deps。
+  }, [activeScrollKey, allMessagesLoadedRef, isNearBottom, loadOlderMessages, trackUserScrolledUp]);
 
   useLayoutEffect(() => {
     if (!pendingScrollRestoreRef.current || !scrollContainerRef.current) return;
@@ -296,59 +318,6 @@ export function useChatPaginationScroll({
     }
   }, [chatMessages.length, isLoadingSessionMessages, scrollToBottom, searchScrollActiveRef]);
 
-  const loadAllMessages = useCallback(async () => {
-    if (!selectedSession || !selectedProject) return;
-    if (isLoadingAllMessages) return;
-    const requestSessionId = selectedSession.id;
-    allMessagesLoadedRef.current = true;
-    isLoadingMoreRef.current = true;
-    setIsLoadingAllMessages(true);
-    setShowLoadAllOverlay(true);
-
-    const container = scrollContainerRef.current;
-    const previousScrollHeight = container ? container.scrollHeight : 0;
-    const previousScrollTop = container ? container.scrollTop : 0;
-
-    try {
-      const slot = await sessionStore.fetchFromServer(requestSessionId, {
-        ...buildFetchParams(selectedProject),
-        limit: null,
-        offset: 0,
-      });
-
-      if (currentSessionId !== requestSessionId) return;
-
-      if (slot) {
-        if (container) {
-          pendingScrollRestoreRef.current = { height: previousScrollHeight, top: previousScrollTop };
-        }
-
-        setHasMoreMessages(false);
-        setTotalMessages(slot.total);
-        messagesOffsetRef.current = slot.total;
-        setVisibleMessageCount(Infinity);
-        setAllMessagesLoaded(true);
-
-        setLoadAllJustFinished(true);
-        if (loadAllFinishedTimerRef.current) clearTimeout(loadAllFinishedTimerRef.current);
-        loadAllFinishedTimerRef.current = setTimeout(() => {
-          setLoadAllJustFinished(false);
-          setShowLoadAllOverlay(false);
-        }, UI_TIMEOUTS.LOAD_ALL_FINISHED_STATE_RESET_MS);
-      } else {
-        allMessagesLoadedRef.current = false;
-        setShowLoadAllOverlay(false);
-      }
-    } catch (error) {
-      logError("Error loading all messages:", error);
-      allMessagesLoadedRef.current = false;
-      setShowLoadAllOverlay(false);
-    } finally {
-      isLoadingMoreRef.current = false;
-      setIsLoadingAllMessages(false);
-    }
-  }, [buildFetchParams, selectedSession, selectedProject, isLoadingAllMessages, currentSessionId, sessionStore]);
-
   const loadEarlierMessages = useCallback(() => {
     setVisibleMessageCount(prev => prev + 100);
   }, []);
@@ -361,20 +330,16 @@ export function useChatPaginationScroll({
   /**
    * 会话切换 / 重新加载会话时的分页重置。
    * = 拆分前主 hook 会话加载 effect 里那一段连续赋值，原样搬来（逐 token 相同），
-   * 只把「调用点」从内联改成一次调用；`setViewHiddenCount(0)` 不属于分页，仍留在主 hook。
+   * 只把「调用点」从内联改成一次调用；`setViewHiddenCount(0)` 不属于分页，仍留在主 hook，
+   * 「全量加载」那半（issue #467）改为调用 `resetLoadAll()`，语句顺序不变。
    */
   const resetPagination = useCallback(() => {
     messagesOffsetRef.current = 0;
     setHasMoreMessages(false);
     setTotalMessages(0);
     setVisibleMessageCount(INITIAL_VISIBLE_MESSAGES);
-    setAllMessagesLoaded(false);
-    allMessagesLoadedRef.current = false;
-    setIsLoadingAllMessages(false);
-    setLoadAllJustFinished(false);
-    setShowLoadAllOverlay(false);
-    if (loadAllFinishedTimerRef.current) clearTimeout(loadAllFinishedTimerRef.current);
-  }, []);
+    resetLoadAll();
+  }, [messagesOffsetRef, resetLoadAll, setHasMoreMessages, setTotalMessages, setVisibleMessageCount]);
 
   return {
     hasMoreMessages,
