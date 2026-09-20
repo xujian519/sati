@@ -1,4 +1,5 @@
 import React, { memo, useMemo, useCallback } from "react";
+import type { DiffLine } from "../utils/messageTransforms";
 import { logWarn } from "../../../utils/logging";
 import type { Project } from "../../../types/app";
 import { asRecord } from "../../../utils/unknown";
@@ -15,12 +16,6 @@ import {
   QuestionAnswerContent,
   PlanApprovedCard,
 } from "./components";
-
-type DiffLine = {
-  type: string;
-  content: string;
-  lineNum: number;
-};
 
 interface ToolRendererProps {
   toolName: string;

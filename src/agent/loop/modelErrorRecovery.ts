@@ -75,6 +75,17 @@ export interface ModelErrorRecoveryDeps extends TurnExitDeps {
   readonly dispatchLifecycle: LifecycleDispatcher;
   /** 压缩执行器（本链只走 `model-error-recovery` 一路参数）。 */
   readonly runAutoCompact: AutoCompactRunner;
+  /**
+   * 窗口观测回写（issue #449）：模型错误恢复链从真实超限报错反推出上下文上限时
+   * 调用一次（仅 `provider-context-cap` 分支），由宿主持久化到窗口覆盖层，
+   * 使该事实跨会话/进程重启存活。未注入 = 保持既有瞬态行为。
+   */
+  readonly recordObservedContextWindow?: (input: {
+    provider: string;
+    model: string;
+    maxContextTokens: number;
+    reason: string;
+  }) => void;
 }
 
 /** 反应式恢复探针：context runtime 未接线或探针抛错时视为放弃恢复。 */
@@ -380,6 +391,19 @@ export async function* recoverFromReactiveDecision(
       deps.tokenCaps.setTransientTokenCap(target.provider, target.model, {
         maxContextTokens: reactive.maxContextTokens,
       });
+      // 持久回写（#449）：只有 `provider-context-cap` 是**真实窗口证据**
+      // （`ContextOverflowRecovery` 从 provider 超限报文里解析出的上限）。
+      // 判据写在这里而不是靠"maxContextTokens 存在"，是因为后者是数据形状、
+      // 前者才是语义：截头重试、输出上限钳制等分支的数值不是上下文窗口，
+      // 一旦被持久化会把压缩线永久钉在错值上。
+      if (reactive.reason === "provider-context-cap") {
+        deps.recordObservedContextWindow?.({
+          provider: target.provider,
+          model: target.model,
+          maxContextTokens: reactive.maxContextTokens,
+          reason: reactive.reason,
+        });
+      }
       yield {
         type: "token_cap_adjusted",
         sessionId: input.sessionId,

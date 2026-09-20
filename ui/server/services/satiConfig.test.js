@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   buildDefaultSatiConfig,
   configRevision,
+  guardPatentDomainTriState,
   readSatiConfigFile,
   resolveModel,
   sanitizeProviderCredentials,
@@ -133,6 +134,51 @@ describe("optional feature defaults（上游 #588）", () => {
     expect(config.router.enabled).toBe(true);
     expect(config.tools.webSearch.enabled).toBe(true);
     expect(config.tools.paperSearch.enabled).toBe(true);
+  });
+
+  it("三态守卫：默认值注入不得冻结 patentDomain（#450）", () => {
+    // 模拟"默认配置将来注入了一个值"：守卫必须把未声明的缺省态还原成缺省。
+    const normalized = { tools: { webSearch: { enabled: false }, patentDomain: false } };
+    guardPatentDomainTriState({ tools: { webSearch: {} } }, normalized);
+    expect("patentDomain" in normalized.tools).toBe(false);
+    // 用户显式写过的值原样保留（两个方向）。
+    const kept = { tools: { patentDomain: true } };
+    guardPatentDomainTriState({ tools: { patentDomain: true } }, kept);
+    expect(kept.tools.patentDomain).toBe(true);
+  });
+
+  it("三态守卫的关键后果：读取→保存往返不得冻结「自动」，读取后配置里也没有该键", async () => {
+    const configPath = useTempConfig(
+      [
+        "agent:",
+        "  model: openai/gpt-4o-mini",
+        "model:",
+        "  providers:",
+        "    openai:",
+        "      protocol: openai",
+        "      url: https://api.openai.com/v1",
+        "      apiKey: sk-test-tristate",
+        "      models:",
+        "        gpt-4o-mini: {}",
+        "tools:",
+        "  webSearch:",
+        "    enabled: true",
+        "",
+      ].join("\n"),
+    );
+
+    const { config } = readSatiConfigFile();
+    expect("patentDomain" in config.tools).toBe(false);
+
+    await writeSatiConfig(config);
+    const raw = readFileSync(configPath, "utf8");
+    expect(raw.includes("patentDomain")).toBe(false);
+
+    // 用户显式选择"始终开启"后，往返必须保住它。
+    config.tools.patentDomain = true;
+    await writeSatiConfig(config);
+    const reopened = readSatiConfigFile().config;
+    expect(reopened.tools.patentDomain).toBe(true);
   });
 
   it("遗留守卫的关键后果：读取→保存往返不得把既有功能静默关闭", async () => {

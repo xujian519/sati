@@ -82,6 +82,8 @@ interface Harness {
   durable: CanonicalMessage[];
   lifecycle: string[];
   autoCompactCalls: Array<Record<string, unknown>>;
+  /** 窗口观测回写（#449）的调用记录。 */
+  observedWindows: Array<{ provider: string; model: string; maxContextTokens: number; reason: string }>;
 }
 
 interface HarnessOptions {
@@ -95,6 +97,7 @@ function makeHarness(options: HarnessOptions = {}): Harness {
   const durable: CanonicalMessage[] = [];
   const lifecycle: string[] = [];
   const autoCompactCalls: Array<Record<string, unknown>> = [];
+  const observedWindows: Array<{ provider: string; model: string; maxContextTokens: number; reason: string }> = [];
   const input: AgentLoopInput = {
     sessionId: "s1",
     turnId: "t1",
@@ -120,8 +123,11 @@ function makeHarness(options: HarnessOptions = {}): Harness {
       yield* [] as AgentEvent[];
       return { compacted: false };
     },
+    recordObservedContextWindow: input => {
+      observedWindows.push(input);
+    },
   };
-  return { input, state, deps, tokenCaps, durable, lifecycle, autoCompactCalls };
+  return { input, state, deps, tokenCaps, durable, lifecycle, autoCompactCalls, observedWindows };
 }
 
 function contextRuntime(overrides: {
@@ -554,4 +560,62 @@ test("recoverFromModelError：reactive 探针在补齐工具结果之后被调�
     seen[0]!.some(message => message.content.some(block => block.type === "tool_result")),
     true,
   );
+});
+
+// ---------------------------------------------------------------------------
+// 窗口观测回写（#449）：只信 provider-context-cap
+// ---------------------------------------------------------------------------
+
+test("recoverFromReactiveDecision：provider-context-cap 触发窗口持久回写", async () => {
+  const h = makeHarness({
+    contextRuntime: contextRuntime({
+      recoverFromModelError: async () => ({
+        type: "compact_and_retry",
+        maxContextTokens: 131072,
+        reason: "provider-context-cap",
+      }),
+      tryAutoCompact: async () => ({ type: "skipped", snapshot: {} }) as unknown as AutoCompactResult,
+    }),
+  });
+
+  await drain(recoverFromReactiveDecision(h.deps, h.state, h.input, DECISION, error({ code: "prompt_too_long" })));
+
+  assert.deepEqual(h.observedWindows, [
+    { provider: "p1", model: "m1", maxContextTokens: 131072, reason: "provider-context-cap" },
+  ]);
+});
+
+test("recoverFromReactiveDecision：其余带 maxContextTokens 的 reason 不写回（数据形状≠语义）", async () => {
+  const h = makeHarness({
+    contextRuntime: contextRuntime({
+      recoverFromModelError: async () => ({
+        type: "compact_and_retry",
+        maxContextTokens: 200_000,
+        reason: "prompt_too_long",
+      }),
+      tryAutoCompact: async () => ({ type: "skipped", snapshot: {} }) as unknown as AutoCompactResult,
+    }),
+  });
+
+  await drain(recoverFromReactiveDecision(h.deps, h.state, h.input, DECISION, error({ code: "prompt_too_long" })));
+
+  assert.deepEqual(h.observedWindows, []);
+});
+
+test("recoverFromReactiveDecision：截头兜底路径不写回", async () => {
+  const h = makeHarness({
+    contextRuntime: contextRuntime({
+      recoverFromModelError: async () => ({
+        type: "truncate_head_and_retry",
+        keepRatio: 0.5,
+        reason: "ptl-first-attempt",
+      }),
+    }),
+  });
+
+  await drain(recoverFromReactiveDecision(h.deps, h.state, h.input, DECISION, error({ code: "prompt_too_long" })));
+
+  assert.deepEqual(h.observedWindows, []);
+  // 负控制对照：同一条路径确实执行了（hasAttemptedCompact 被置位）。
+  assert.equal(h.state.hasAttemptedCompact, true);
 });

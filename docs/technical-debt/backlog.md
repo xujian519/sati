@@ -1154,10 +1154,13 @@
     验证：永久用例钉住三类消息的分流（并入 `MessagesPaneV2.render.test.tsx`），**负控制**把 `shouldDelegate` 的门放宽 ⇒ 用例立刻变红（legacy 路径不渲染附件）⇒ 还原全绿。决策见 `docs/notes/implemented/2026-09-18-message-type-branch-audit.md`。
   - **剩余（可选）**：13 个 props 的收窄。**两条本轮明确不做的观察**：① `shouldHideThinkingMessage`（`message.isThinking && !showThinking` 的早退）如今守卫的是"不可能输入"，但删守卫与删渲染分支风险不等价，留待后续；② `taskNotification` 支的正文同样不在可见行里（被 `processGrouping` 折叠）——"折叠"与"不委托"是两种不可达，需各自补证据，故未在本轮断言。
 - **TD-UI-CHAT-N15** · `DiffLine` 在聊天栈里有 7 份本地副本，而 `chat/utils/messageTransforms.ts` 已有权威定义
-  - 类别：F · 严重级：P3 · 工作量：S · 状态：new · 意图：[accidental]
-  - 位置：`chat/view/subcomponents/MessageComponent.tsx:32`、`chat/tools/ToolRenderer.tsx:21`、`chat/tools/components/ToolDiffViewer.tsx:3`、`chat-v2/MessagesPaneV2.tsx:49`、`chat-v2/MessageRowV2.tsx:33`、`chat-v2/SubagentDetailModal.tsx:9`、`chat-v2/SubagentDetailMessageFlow.tsx:22`
+  - 类别：F · 严重级：P3 · 工作量：S · 状态：**done（2026-09-20，PR #463）**
+  - 位置（立案时）：`chat/view/subcomponents/MessageComponent.tsx:32`、`chat/tools/ToolRenderer.tsx:21`、`chat/tools/components/ToolDiffViewer.tsx:3`、`chat-v2/MessagesPaneV2.tsx:49`、`chat-v2/MessageRowV2.tsx:33`、`chat-v2/SubagentDetailModal.tsx:9`、`chat-v2/SubagentDetailMessageFlow.tsx:22`
   - 影响：7 份副本的形状都是 `{ type: string; content: string; lineNum: number }`，而权威版（`messageTransforms.ts:1`）把 `type` 收窄为 `"added" | "removed"`。于是"同一份 diff 数据结构"在链路上有两种类型，谁都不敢先收紧——`createDiff` 的契约因此长期停留在 `string`。
-  - 建议：先把权威版的 `type` 放宽为 `string`（或引入 `DiffLineType` 别名）以消除冲突，再逐文件删副本改 import；纯类型改动、零运行时风险。**发现于 #159 N04**（`ToolResultBlock` 当时特意没有复用权威类型，正是因为这次收窄会外溢）。
+  - **处置（2026-09-20）**：**没有**按本条目的建议把权威类型放宽为 `string`——那个建议基于"收紧会外溢"的假设，实测该假设不成立。逐项验证后保留权威窄类型：① `calculateDiff` 的三个 `push` 点产出的 `type` 全是字面量（运行时值域本就等于窄类型）；② 全仓消费 `.type` 的只有 `ToolDiffViewer.tsx`（`added`/`removed` 两分支）；③ 真正的外溢面只有 `ToolResultBlock` 的 `createDiff` 内联匿名结构，随本波一并改为 `DiffCalculator`。
+    落地：7 处本地 `type DiffLine` 删除并改为 `import type { DiffLine } from "…/chat/utils/messageTransforms"`，`ToolResultBlock.tsx:60` 的内联 `Array<{ type: string; … }>` 改为 `DiffCalculator`（连同"不复用权威类型"的注释一并改写）。净删 7 份重复声明。
+  - **验证**：`ui` typecheck 通过（证明窄类型未破坏任何调用点——若真有 `type: string` 的构造点，这里会编译失败）；`cd ui && pnpm test` 127 文件 / 830 用例全绿（含 4 个传 `createDiff` 的测试文件）。改动仅类型面，无运行时 diff。
+  - **口径更正**：副本数是 **7 + 1**（7 处具名 `type DiffLine` + `ToolResultBlock.tsx:60` 的内联匿名结构，后者立案时未记）；刷新后各行号见上一行"位置（立案时）"已作废，实际位置随本波改动已删除。**发现于 #159 N04**（`ToolResultBlock` 当时特意没有复用权威类型，正是因为这次收窄会外溢——该判断在 2026-09-20 被证伪）。
 - **TD-UI-CHAT-N05** · chat 与 chat-v2 子代理渲染重复实现
   - 类别：F · 严重级：P2 · 工作量：S · 状态：**done（2026-09-18，PR #442）**
   - 位置：`chat-v2/SubagentCard.tsx:27` vs `chat/tools/components/SubagentContainer.tsx:63`（后者已删）
@@ -1169,17 +1172,21 @@
   - 位置：`chat/tools/configs/toolConfigs.ts:1,19-55,646-783`；`chat/tools/ToolRenderer.tsx:108-109`
   - 影响：工具协议契约以 `any` 表达，改 inputSchema/结果结构无编译期守护。建议：引入结构化联合类型，逐步以 `unknown`+收窄替换 `any`。
 - **TD-UI-CHAT-N07** · `PdfDocumentPreview` 巨型组件（1138 行）
-  - 类别：A · 严重级：P2 · 工作量：L（**逻辑半边已完成**）· 状态：**in_progress（逻辑半边 done，剩余需 L 级窗口）**
+  - 类别：A · 严重级：P2 · 工作量：L · 状态：**done（2026-09-20，PR #465）**
   - 位置：`code-editor/view/subcomponents/PdfDocumentPreview.tsx:723`
   - 影响：约 20 个 useState + 12 useRef，承担 PDF 加载/缩放/旋转/导航/搜索/区域选择/大纲/缩略图。建议：抽 `usePdfViewerState`，缩略图/大纲/搜索拆独立组件。
   - **口径更正**：1138 是**主组件的函数跨度**，文件本身 **1885 行**（metrics 记主组件 1130）。模块级已经分过一轮（7 个小组件 ~450 行），真正堆在主函数里的是：加载/视口持久化 ~150、滚动跟踪 ~120、搜索 ~75、选区→引用 ~235、JSX ~380（工具条 230 / 侧栏 87 / 视口 67）。
   - **2026-09-18 处置（逻辑半边 · PR #443）**：① 纯函数 → `utils/pdfViewport.ts`（视口数学 + `PageSize`/`ZoomMode`/`Rotation` 类型）；② 文本选区取文 → `utils/pdfTextSelection.ts`；③ `resolveSearchStatus` 移入既有 `utils/pdfSearch.ts`；④ 搜索状态机 → `hooks/usePdfSearch.ts`（6 state + 请求序号 + 竞态）。两个新模块**此前零测试**，本轮补 22 条直接单测（+ `resolveSearchStatus` 4 条分支）。文件 1886 → 1724（metrics 口径），主组件 1130 → **1064**。
   - **等价性证明**：parser 驱动逐 token 比对 **21 段搬迁**（`/tmp/n07-move-proof.mjs`）——19 段逐字相同；唯一预期改写是 `goToSearchResult` 的两行写操作 → 一次 `forceRenderPage(pageNumber)` 调用，脚本把两条语句摘除并插入调用后要求逐 token 相等，另断言组件里 `forceRenderPage` 的函数体与被摘掉的语句逐字相同；其余任何 token 差异即判失败。负控制两处（`parsePageInput` 夹取上限 `+1`、`runSearch` 的 `!==`→`===`）⇒ 守卫报红，且分别由 `pdfViewport.spec.ts`（2 条）与既有搜索竞态用例报红。
   - **剩余（需 L 级窗口）**：选区→引用块（~235 行，唯一必须浏览器验证的一块）、工具条/侧栏 JSX 拆分（~317 行，需先收窄 props 面）、按粘连度切分的 `usePdfViewerState`（加载/视口持久化、滚动跟踪各成一块）。**注意**：本轮只降了 66 行 god function——被搬走的 110 行纯函数本来就在模块级、不计入函数长度，故剩余三块才是压 1064 的主力。决策见 `docs/notes/implemented/2026-09-18-pdf-viewer-extraction.md`。
-- **TD-UI-CHAT-N08** · `CodeEditorBinaryFile` 巨型文件（1523 行）+ 内联 8 hooks 分派器
-  - 类别：A · 严重级：P3 · 工作量：M · 状态：new
-  - 位置：`code-editor/view/subcomponents/CodeEditorBinaryFile.tsx:1386`
-  - 建议：按预览类型拆分文件，hook 移入独立模块。
+  - **2026-09-20 收官（剩余三块 · PR #465）**：拆到 `code-editor/view/pdf/`（14 文件：`hooks/use-pdf-{viewport,scroll-tracking,selection-reference,toolbar-controller}.ts` + `components/{PdfPage,PdfThumbnail,PdfOutlineTree,PdfNavigationSidebar,PdfToolbar,ToolbarPrimitives,pdf-toolbar-icon}.tsx` + `pdf-{constants,types,render-support}.ts`），**主组件 1064 → 260 行**（文件 1723 → 305），未到计划估的 ≈200（差额是 hook 分组选项与侧栏 props 接线；再压会把状态搬进 hook 内部并与 `usePdfSearch` 成环，按纯搬迁优先停在 260）。
+    **顺序不变式**（本轮头号风险）：计划判断"jsdom 抓不到"，**实测可抓**——把 5 个同步 effect 与加载 effect 同住 `usePdfViewport` 内按原始顺序声明，另加两路证据：① 运行时顺序断言（effect 打点）；② 把"当前页变化 + 同文件重载"压进同一次 commit 后断言加载 effect 读到的快照值。负控制 NC1（把加载 effect 提到字段同步之前）⇒ 两路各自报红（`expected '1' to be '3'`＝晚一帧恢复出上一个页码）。
+    等价性：65 个区间逐 token 相同，源覆盖 9907/9981、未解释丢失 0；**脚本抓到真回归**——首轮漏搬 `pdfjs.GlobalWorkerOptions.workerSrc` 与 `pdf_viewer.css`（worker + textLayer 样式），已补回。新增 23 条测试（2 → 25）；5 处负控制，其中 NC5 诚实记负（侧栏 `navigationMode !== "none"` 守卫在当前实现下不可观测，属既有等价冗余，未假装抓住）。**依赖数组追加 49 处（22 标识符）**是唯一非逐字改动：起因 eslint `exhaustive-deps` 对 props 传入的 ref/setter 判缺失，已独立复核 22 个全部是 `useRef` 结果或 `useState` setter（恒等 ⇒ 重跑条件不变）。未做双视口浏览器验证（CDP 截图超时），无 A/B DOM 指纹。决策见 `docs/notes/implemented/2026-09-20-pdf-preview-remaining-extraction.md`。
+- **TD-UI-CHAT-N08** · `CodeEditorBinaryFile` 巨型文件（1510 行）；~~内联 8 hooks 分派器~~
+  - 类别：A · 严重级：P3 · 工作量：M · 状态：**done（2026-09-20，PR #464）**
+  - 位置（立案时）：`code-editor/view/subcomponents/CodeEditorBinaryFile.tsx:1386`（主组件起点；文件 1510 行）
+  - **口径更正（2026-09-20）**：标题里的「内联 8 hooks 分派器」**不成立**——9 个 hook 早已是具名顶层函数，真正的分派器 `OfficeFilePreviewRouter` 只有 89 行，文件里也没有 god function（最长函数 `SpreadsheetPreview` 225 行，god 阈值 300）。成本是纯**文件级**的：改任一预览形态都要读 1510 行。位置应以主组件起点 `:1374` 为准（立案写 `:1386` 指到了 `CodeEditorBinaryFile` 函数体内）。
+  - **处置**：按内聚拆到 `code-editor/view/binary-file/`（types / utils / hooks 9 个 / components 13 个），主文件 **1510 → 146 行**，路径与 `export default` 不变。硬约束：`lazy(() => import(...))` 保持动态导入（chunk 切分不变，体积不在门禁内故必须人工守住）。等价性：AST token 比对 35/35 逐 token 相同、0 凭空新增；5 处负控制各自只打红目标用例；新增 5 文件 22 条用例打三类取消语义盲区。决策见 `docs/notes/implemented/2026-09-20-code-editor-binary-file-split.md`。
 - **TD-UI-CHAT-N09** · 跨 hook 共享可变 ref（`pendingViewSessionRef`）协调会话时序
   - 类别：D · 严重级：P2 · 工作量：M · 状态：new
   - 位置：`chat-v2/ChatInterfaceV2.tsx:180,258` 透传三个 hook
@@ -1225,10 +1232,13 @@
   - 位置：`main-content-v2/SkillsV2.tsx:120`（主组件）、`skills/import/ImportFromFolder.tsx`（原 `:1414-2268`）
   - 影响（立案时）：单文件 2503 行；`ImportFromFolder` 一个函数 ~40 state/effect + 两套几乎相同的模型/校验 fetch 逻辑。建议：按 `skills/import/` feature-folder 拆出（picked/typed/batch 三模式）。
   - 剩余（新开条目追踪）：`ImportFromFolder.tsx` 仍有 824 行（picked/typed 两模式 + 校验面板 + 提交逻辑），god function 688 行。
-- **TD-UI-APP-N02** · `useSessionStore.ts` ~1440 行，流式/子代理族高度重复
-  - 类别：A · 严重级：P2 · 工作量：M · 状态：new
-  - 位置：`stores/useSessionStore.ts:632`
-  - 影响：`updateStreaming`/`updateStreamingThinking`/`updateSubagentDetailStreaming` 及各自 finalize 共 8 个近同函数；`fetchFromServer`/`fetchMore`/`refreshFromServer` 三处重复拼接 `URLSearchParams`。建议：抽 `streamingPatch`/`finalizeStream`/`buildSessionQuery`。
+- **TD-UI-APP-N02** · `useSessionStore.ts` 主闭包 727 行且**零覆盖**；~~流式/子代理族高度重复~~
+  - 类别：A · 严重级：P2 · 工作量：M · 状态：**done（2026-09-20，PR #465）**
+  - 位置（立案时）：`stores/useSessionStore.ts:632` —— **指错**：`:632` 落在模块级 `createRafNotifyScheduler` 附近，条目真正要说的是 `:677-1403` 的 `export function useSessionStore()` 主闭包。
+  - **口径更正（2026-09-20）**：立案时的两条主张「`updateStreaming` 等 8 个近同函数」与「三处重复拼接 `URLSearchParams`」**已在 2026-09-02（PR #241）修掉**，条目从未回填。本波处理的真问题是**主闭包 727 行 + 零覆盖**（模块级纯函数区当时已有 24 条直测，主闭包一条没有）。
+  - **处置**：方案 B —— 33 个 `useCallback` 整体外化到模块级工厂 `createSessionActions(deps)`（634 行、**体内零 hook**），主闭包 **727 → 20 行**（3 × `useRef` + 1 × `useState` + 1 × `useMemo([setTick])`）。**未拆子 hook**：per-session store 是 `useRef(new Map())` 单例，拆子 hook 会各自新建一份 ⇒ 28 个方法静默失效（负控制：改成共享键 ⇒ 18/18 用例全红）。等价性论证见下，逐 token 证明 34/34。
+    为何"单次构造"等价：原 33 个 `useCallback` 的依赖数组全是彼此（`[getSlot, notify]` / `[notify]` / `[]`），链收敛到 `[]` ⇒ 原本就是永久稳定引用；`useMemo` 依赖的 `setTick` 是 `useState` setter（恒等）。两边都"永不重建"。
+  - **验证**：新增 18 条 `renderHook(useSessionStore)`（主闭包从零覆盖到有网，含 per-session 隔离、水位剪除、流式合并、仅活跃会话重渲染）；4 处负控制（含 `:1176-1179` 的 patch-before-mutate 顺序不变式，翻转后唯一 1 条红）；逐 token 等价性 34/34，hook 创建顺序与 return 键序不变；`as unknown as` 未增加。决策见 `docs/notes/implemented/2026-09-20-session-store-actions-extraction.md`。
 - **TD-UI-APP-N03** · `AppShellV2` 删除确认弹窗整段硬编码英文，未走 i18n
   - 类别：H · 严重级：P1 · 工作量：S · 状态：**done（已修复 2026-08-23）**
   - 修复：两个删除弹窗全部文案改为 `useTranslation("common")` 的 `t()`，新增 `deleteDialogs.*`（含复数 `_one/_other` 的 `projectSessionsRemovedCount` 与 `projectFilesOnDisk*` 三段拆分保留内联强调）。父组件错误文案（errorDeleteProject/errorDeleteSession）一并提取，`useCallback` 依赖补 `t`。新增 `app-shell/deleteDialogs.i18n.test.ts` 断言 en/zh-CN 的 key 解析与 `{{count}}`/`{{projectName}}` 插值。en/zh-CN common.json key 对齐（428/428）；ui typecheck/lint/biome/全量测试 578 通过。

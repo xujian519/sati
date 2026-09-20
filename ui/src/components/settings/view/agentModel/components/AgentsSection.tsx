@@ -7,12 +7,15 @@ import { FormRow, NumberInput, Select } from "../../../shared/components/Inputs"
 import { patch } from "../../modelPool/utils/patch";
 import type { SatiConfig } from "../../modelPool/types";
 import { activeModelCapabilities, ensureModelRefConfigured } from "../utils/modelRefs";
+import { useModelWindowOverrides } from "../hooks/useModelWindowOverrides";
 import type { CapabilitySource } from "../types";
 import { useDynamicModelOptions } from "../../../../../shared/useDynamicModelOptions";
 
 /** Layer labels for the effective-limit hints below the token inputs. */
 const SOURCE_KEY: Record<CapabilitySource, string> = {
   config: "satiConfig.panels.agents.capabilities.sourceConfig",
+  observed: "satiConfig.panels.agents.capabilities.sourceObserved",
+  probe: "satiConfig.panels.agents.capabilities.sourceProbe",
   catalog: "satiConfig.panels.agents.capabilities.sourceCatalog",
   default: "satiConfig.panels.agents.capabilities.sourceDefault",
 };
@@ -32,7 +35,8 @@ export default function AgentsSection({ config, onChange }: AgentsSectionProps) 
   const mainOptions = [{ value: "", label: "— pick a model —" }, ...refOptions];
   const subOptions = [{ value: "inherit", label: t("satiConfig.panels.agents.subagents.inherit") }, ...refOptions];
 
-  const caps = activeModelCapabilities(config);
+  const windowOverrides = useModelWindowOverrides();
+  const caps = activeModelCapabilities(config, windowOverrides);
   const agentMaxContextTokens = config.agent?.maxContextTokens;
   const effectiveContext =
     typeof agentMaxContextTokens === "number" && agentMaxContextTokens > 0
@@ -209,6 +213,28 @@ export default function AgentsSection({ config, onChange }: AgentsSectionProps) 
                       })}`
                     : ""}
                 </p>
+                {caps.windowOverride?.maxContextTokens !== undefined ? (
+                  <p className="mt-1 flex flex-wrap items-center gap-2 text-[10px] leading-relaxed text-muted-foreground">
+                    <span>
+                      {t("satiConfig.panels.agents.capabilities.windowFact", {
+                        tokens: caps.windowOverride.maxContextTokens.toLocaleString(),
+                        source: sourceLabel(caps.windowOverride.source),
+                        via: caps.windowOverride.via ?? "—",
+                      })}
+                    </span>
+                    <button
+                      type="button"
+                      className="rounded border border-border px-1.5 py-0.5 text-[10px] hover:bg-accent"
+                      onClick={() => {
+                        const tokens = caps.windowOverride?.maxContextTokens;
+                        if (tokens === undefined) return;
+                        onChange(patch(config, ["agent", "maxContextTokens"], Math.floor(tokens)));
+                      }}
+                    >
+                      {t("satiConfig.panels.agents.capabilities.windowAdopt")}
+                    </button>
+                  </p>
+                ) : null}
               </div>
             </div>
           </div>
