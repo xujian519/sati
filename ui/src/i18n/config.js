@@ -35,6 +35,7 @@ import zhSettings from "./locales/zh-CN/settings.json";
 import zhAuth from "./locales/zh-CN/auth.json";
 import zhSidebar from "./locales/zh-CN/sidebar.json";
 import zhChat from "./locales/zh-CN/chat.json";
+import zhTasks from "./locales/zh-CN/tasks.json";
 import zhAlwaysOn from "./locales/zh-CN/alwaysOn.json";
 import zhRouting from "./locales/zh-CN/routing.json";
 import zhCodeEditor from "./locales/zh-CN/codeEditor.json";
@@ -81,6 +82,7 @@ i18n
         sidebar: zhSidebar,
         chat: zhChat,
         codeEditor: zhCodeEditor,
+        tasks: zhTasks,
         alwaysOn: zhAlwaysOn,
         routing: zhRouting,
         teamPanel: zhTeamPanel,
