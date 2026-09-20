@@ -61,7 +61,7 @@ god function 使 review 只能看 diff 局部，跨 effect 的时序不变式容
 - **父 hook 继续解构分页返回面（42 行）** — 拆到第 7 步时父 hook 逼近阈值；改成 `pagination.xxx` 成员访问后
   省下这 42 行，返回对象的键与键序不受影响。
 - **顺手修 load-all 的「请求在途切会话不丢弃结果」缺陷（陈旧闭包）** — 只做搬迁的波次里混入行为变更，
-  等价性证明就失效了。按 #468 的先例**单独登记**（见 Consequences），本波只把它固化成判据。
+  等价性证明就失效了。按 #468 的先例**单独登记**（见 Consequences），本波只把它固化成判据（另立 issue #476）。
 
 ## Consequences
 
@@ -99,11 +99,11 @@ god function 使 review 只能看 diff 局部，跨 effect 的时序不变式容
 - **负控制**：拆分前抽检 4 处（关掉「同 key 新鲜则跳过重取」⇒ 2 红；搜索重试改 0 ⇒ 1 红；
   轮询帧语义翻转 ⇒ 1 红；去掉遮罩收起 ⇒ 1 红）。其中搜索一处首轮未变红，暴露原用例没真正覆盖重试
   （目标元素在首轮扫描前就已就位）——已改成「等首轮扫描跑过再补元素」，负控制随即变红。
-- **登记的两处既有问题（非本波引入，本波不改语义）**：
+- **登记的两处既有问题（非本波引入，本波不改语义；已立 issue #476）**：
   1. `loadAllMessages` 的 `if (currentSessionId !== requestSessionId) return` 读的是**调用时刻**闭包里的
      `currentSessionId`（useCallback 换新闭包只影响后续调用），因此「全量请求在途时切换会话」实际**不会**
      丢弃结果，旧会话的 `total` / `visibleMessageCount=Infinity` 会落到新会话视图上；用例按实测固化，
-     修复另立 issue。
+     修复另立 issue #476。
   2. 该丢弃分支若真被触发，`allMessagesLoadedRef` 已先置 true 且不回滚（同一处逻辑的另一半）。
 - 决策记录同步：`docs/notes/implemented/2026-09-20-chat-session-state-pagination-scroll.md` 的「剩余」段
   改为指向本条；台账 `docs/technical-debt/backlog.md` 的 TD-UI-CHAT-N02 登记收官。
