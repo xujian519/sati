@@ -286,7 +286,14 @@ export function useChatPaginationScroll({
     // 在这里消费掉就等于把「首屏落底」静默丢弃，消息真正到达时它已经不在了（issue #468 ①）。
     if (chatMessages.length === 0) return;
     pendingInitialScrollRef.current = false;
-    if (!searchScrollActiveRef.current) setTimeout(() => scrollToBottom(), UI_TIMEOUTS.CHAT_RELOAD_SCROLL_SETTLE_MS);
+    if (!searchScrollActiveRef.current) {
+      setTimeout(() => {
+        // 首屏落底是延时执行的，执行时刻的用户意图只能从实时副本读——用户在这段延时里上滑了，
+        // 这次落底必须让位（与跟随帧同一判据，issue #468）。
+        if (isUserScrolledUpRef.current) return;
+        scrollToBottom();
+      }, UI_TIMEOUTS.CHAT_RELOAD_SCROLL_SETTLE_MS);
+    }
   }, [chatMessages.length, isLoadingSessionMessages, scrollToBottom, searchScrollActiveRef]);
 
   const loadAllMessages = useCallback(async () => {

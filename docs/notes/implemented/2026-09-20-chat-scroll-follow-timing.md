@@ -19,6 +19,12 @@ Status: implemented
 
 两者都是**既有**行为（非 `#159` 拆分引入），由 `#159` CHAT-N02 的关闭结论转正登记为 issue #468。
 
+修好 ① 之后又暴露出第三面：首屏落底那记 `setTimeout(scrollToBottom, 200ms)` 此前**从未真正排上**
+（flag 在首次渲染就被消费了），① 让它第一次排上，于是它"不重检用户意图"这一点才开始起作用——
+进会话后在这 200ms 内上滑，视口仍会被拽回底部。这一步由合并后的 main CI 抓到：
+`useChatSessionState.pagination-scroll.spec.ts` 的「用户上滑后不再跟随」在慢环境里偶发红
+（`expected 1000 to be 100`），本地与 PR CI 都因跑得快而漏过。
+
 ## Decision
 
 1. 首屏落底改为**只在有内容可滚时消费**：`chatMessages.length === 0` 时提前 return、保留 flag，
@@ -27,11 +33,14 @@ Status: implemented
    （`handleScroll`、会话切换复位、外部发送消息时的重置）收敛到唯一写入口
    `trackUserScrolledUp`，使 state（渲染用）与 ref（下一帧才跑的回调用）永远同源；
    rAF 回调执行前读它，用户已上滑则跳过本次滚动。
-3. 判据不依赖真实浏览器：新增
+3. 首屏落底的**延时回调**同样重检该实时副本：落底是 200ms 后才执行的，执行时刻的用户意图只能从
+   ref 读，用户在这段延时里上滑了就让位。
+4. 判据不依赖真实浏览器：新增
    `ui/src/components/chat/hooks/useChatSessionState.scroll-follow-timing.spec.ts`，两条用例
    分别覆盖这两条路径——① 空会话等到 loading 落定，再让首条消息落地，断言视口到底；
    ② 用只接管 rAF 的 fake timers 把帧停在"已调度、未执行"，期间上滑，再放帧，断言视口留在
-   用户停的地方。
+   用户停的地方；
+   ③ 消息到达前先上滑，让首屏落底的延时回调到期，断言视口没被它挪走。
 
 对外返回面零变化（39 键、键序与签名逐项一致），既有 15 条分页/滚动黑盒用例零改动全绿。
 
@@ -60,7 +69,12 @@ Status: implemented
   调用方无需改动。
 - `useChatSessionState.pagination-scroll.spec.ts` 那条用例里"已在飞的帧不因用户上滑而取消，
   是既有语义"的注释随之作废并已改写；它的 `sleep` 仍保留，但只为让基线干净，不再是绕开旧语义。
-- 负控制：修复前两条新用例分别红在"消息到达后视口必须到底"与 `expected 1000 to be 100`。
+- 负控制：加固前三条用例分别红在"消息到达后视口必须到底"、`expected 1000 to be 100`（跟随帧）与
+  `expected 1000 to be 0`（首屏落底的延时回调）。
+- 首屏落底与跟随帧现在共用同一条判据（执行前读上滑态实时副本），"程序滚动不覆盖用户滚动意图"
+  成为一个可命名的规则，而不是两处各自的巧合。
+- `useChatSessionState.pagination-scroll.spec.ts` 的「用户上滑后不再跟随」不再依赖"200ms 定时器从未排上"
+  这个巧合：无论延时回调落在上滑之前还是之后，结果都是 100，慢环境下也稳定。
 - 仍未做真实浏览器双视口验证（本环境 CDP `Page.captureScreenshot` 超时）；本判据断言的是
   "谁在什么时候写了 `scrollTop`"，不是布局结果。
 - 台账 TD-UI-CHAT-N02、issue #467 登记的"跨 effect 时序不变式容易在无意中被改变"有了第一个

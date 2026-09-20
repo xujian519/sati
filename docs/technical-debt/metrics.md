@@ -10,7 +10,7 @@
 | src TS 文件 / 行数 | 1042 / 175010 |
 | src JS 文件 | 0 |
 | tests 文件 | 573 |
-| ui/src 文件 / 行数 | 556 / 89885 |
+| ui/src 文件 / 行数 | 556 / 89912 |
 | ui/server 文件 / 行数 | 108 / 31827 |
 
 ## 指标口径
@@ -97,7 +97,7 @@
 | `ui/src/components/main-content-v2/DashboardV2.tsx` | `DashboardV2` | 332 | function |
 | `ui/src/hooks/useSatiConfig.ts` | `useSatiConfigState` | 332 | function |
 | `ui/src/components/chat/hooks/useSlashCommandExecute.ts` | `useSlashCommandExecute` | 331 | function |
-| `ui/src/components/chat/hooks/use-chat-pagination-scroll.ts` | `useChatPaginationScroll` | 319 | function |
+| `ui/src/components/chat/hooks/use-chat-pagination-scroll.ts` | `useChatPaginationScroll` | 326 | function |
 | `ui/src/components/code-editor/view/CodeEditor.tsx` | `CodeEditor` | 310 | function |
 | `ui/src/components/chat-v2/SubagentDetailMessageFlow.tsx` | `SubagentDetailMessageFlow` | 309 | function |
 | `src/patent/figuregen/check.ts` | `checkFigures` | 306 | function |
