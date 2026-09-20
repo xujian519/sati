@@ -30,9 +30,13 @@ test("相同文本第二次计数不再调用 tokenizer encode（缓存命中）
   try {
     const text = "专利权利要求书技术方案实施例检索报告".repeat(50);
     const first = countTokens(text);
+    // 长文本首调会取样两次（预热 + 计时，见 `countTokensGuarded` 与冷启动判据），
+    // 因此这里断言的是"第二次计数不产生新的编码调用"，不是首调恰好编码一次。
+    const callsAfterFirst = encodeCalls;
     const second = countTokens(text);
     assert.equal(first, second, "同一文本两次计数结果一致");
-    assert.equal(encodeCalls, 1, "相同内容只应编码一次");
+    assert.ok(callsAfterFirst >= 1, "首调至少编码一次");
+    assert.equal(encodeCalls, callsAfterFirst, "缓存命中不应再编码");
   } finally {
     tok.encode = original;
     resetTokenCache();

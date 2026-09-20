@@ -24,6 +24,8 @@ type ToolsSectionProps = {
 type CustomProviderAuth = "bearer" | "bodyApiKey" | "queryApiKey" | "none";
 type CustomProviderMethod = "GET" | "POST";
 type TestStatus = "idle" | "testing" | "success" | "error";
+/** 专利能力开关的三态：auto = 交回工作区判据（删除该键）。 */
+type PatentDomainChoice = "auto" | "on" | "off";
 type WebSearchConfig = NonNullable<NonNullable<SatiConfig["tools"]>["webSearch"]>;
 type CustomProviderConfig = NonNullable<WebSearchConfig["customProvider"]>;
 
@@ -49,8 +51,26 @@ export default function ToolsSection({ config, onChange }: ToolsSectionProps) {
         ? "https://api.tavily.com/search"
         : glmDefaultEndpoint;
 
+  const patentDomainValue: PatentDomainChoice =
+    config.tools?.patentDomain === true ? "on" : config.tools?.patentDomain === false ? "off" : "auto";
+
   const [testStatus, setTestStatus] = useState<TestStatus>("idle");
   const [testMessage, setTestMessage] = useState("");
+
+  /**
+   * 三态写回：`auto` 是**删除键**而不是写 `false`。写入具体值会把"按工作区判定"
+   * 冻结成永久结论——专利项目在设置页保存一次后就再也拿不到专利工具，且没有任何
+   * 提示（工作区判据见 `src/pilot/workspace/patentSignals.ts`）。
+   */
+  const setPatentDomain = (value: PatentDomainChoice) => {
+    const nextTools = { ...(config.tools ?? {}) };
+    if (value === "auto") {
+      delete nextTools.patentDomain;
+    } else {
+      nextTools.patentDomain = value === "on";
+    }
+    onChange({ ...config, tools: Object.keys(nextTools).length > 0 ? nextTools : undefined });
+  };
 
   const resetTest = () => {
     setTestStatus("idle");
@@ -366,6 +386,23 @@ export default function ToolsSection({ config, onChange }: ToolsSectionProps) {
             onChange={value => onChange(patch(config, ["tools", "paperSearch", "enabled"], value))}
           />
         </SettingsRow>
+      </SettingsCard>
+      <SettingsCard divided>
+        <FormRow
+          label={t("satiConfig.panels.tools.patentDomain.label")}
+          description={t("satiConfig.panels.tools.patentDomain.description")}
+        >
+          <Select
+            value={patentDomainValue}
+            ariaLabel={t("satiConfig.panels.tools.patentDomain.label")}
+            options={[
+              { value: "auto", label: t("satiConfig.panels.tools.patentDomain.auto") },
+              { value: "on", label: t("satiConfig.panels.tools.patentDomain.on") },
+              { value: "off", label: t("satiConfig.panels.tools.patentDomain.off") },
+            ]}
+            onChange={value => setPatentDomain(value as PatentDomainChoice)}
+          />
+        </FormRow>
       </SettingsCard>
     </SettingsSection>
   );
