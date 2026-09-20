@@ -89,6 +89,7 @@ function compactBoundary(sequence: number): AgentTranscriptEntry {
       kind: "compact",
       subtype: "compact_boundary",
       compactMetadata: { trigger: "auto", preTokens: 10, postTokens: 5, messagesSummarized: 2, shadowedRanges: [] },
+      snapshot: { version: 1, messages: [{ role: "user", content: [{ type: "text", text: "压缩摘要" }] }] },
     },
   };
 }
@@ -161,10 +162,10 @@ test("P2-B: 新增 boundary 触发全量重投影（遮蔽历史消息）", () =
   const boundaryIndex = findLastCompactBoundaryIndex(extended);
   assert.equal(second.lastCompactBoundaryIndex, boundaryIndex);
   assert.equal(second.lastCompactBoundary?.entryId, boundary.entryId);
-  // boundary 之前的消息被遮蔽：messages 只含 boundary 之后
+  // boundary 之前的消息被遮蔽：messages 只含快照内容 + boundary 之后
   assert.deepEqual(
     second.messages.map(m => (m.content[0]?.type === "text" ? m.content[0].text : "")),
-    ["新问题", "新回复"],
+    ["压缩摘要", "新问题", "新回复"],
     "boundary 前消息应被遮蔽",
   );
 });

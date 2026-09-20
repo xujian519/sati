@@ -101,18 +101,16 @@ function makeCompactedTranscript(
           messagesSummarized: 2,
           ...(shadowedRanges !== undefined ? { shadowedRanges } : {}),
         },
-      },
-    },
-    {
-      type: "durable_message",
-      sessionId: "s",
-      turnId: "t3",
-      sequence: 8,
-      createdAt,
-      message: {
-        role: "user",
-        metadata: { compactReplacement: true },
-        content: [{ type: "text", text: "[CONTEXT COMPACTION - REFERENCE ONLY]\n摘要" }],
+        // 压缩产物内联在边界记录里（上游 #599 快照形态）。
+        snapshot: {
+          version: 1,
+          messages: [
+            {
+              role: "user",
+              content: [{ type: "text", text: "[CONTEXT COMPACTION - REFERENCE ONLY]\n摘要" }],
+            },
+          ],
+        },
       },
     },
     turnResult("t3", 9),
@@ -221,7 +219,7 @@ function makeMultiCompactedTranscript(): AgentTranscriptEntry[] {
       message: { role: "assistant", content: [{ type: "text", text: "msg-D 回复" }] },
     },
     turnResult("t2", 6),
-    // C1 边界：遮蔽 [A, B]（索引 0-1）。
+    // C1 边界：遮蔽 [A, B]（索引 0-1），产物（b1 摘要 + s1 保留 + C'/D' 原文重放）内联。
     {
       type: "control_boundary",
       sessionId: "s",
@@ -238,21 +236,16 @@ function makeMultiCompactedTranscript(): AgentTranscriptEntry[] {
           messagesSummarized: 2,
           shadowedRanges: [{ fromIndex: 0, toIndex: 1 }],
         },
+        snapshot: {
+          version: 1,
+          messages: ["msg-b1 摘要", "msg-s1 保留", "msg-C' 重放", "msg-D' 重放"].map(text => ({
+            role: "user" as const,
+            metadata: { compactReplacement: true },
+            content: [{ type: "text" as const, text }],
+          })),
+        },
       },
     },
-    // C1 产物落库（b1 摘要 + s1 保留 + C'/D' 原文重放）。
-    ...["msg-b1 摘要", "msg-s1 保留", "msg-C' 重放", "msg-D' 重放"].map((text, i) => ({
-      type: "durable_message" as const,
-      sessionId: "s",
-      turnId: "t3",
-      sequence: 8 + i,
-      createdAt,
-      message: {
-        role: "user" as const,
-        metadata: { compactReplacement: true },
-        content: [{ type: "text" as const, text }],
-      },
-    })),
     turnResult("t3", 12),
     {
       type: "accepted_input",
@@ -271,7 +264,7 @@ function makeMultiCompactedTranscript(): AgentTranscriptEntry[] {
       message: { role: "assistant", content: [{ type: "text", text: "msg-F 新回复" }] },
     },
     turnResult("t4", 15),
-    // C2 边界：输入 [b1, s1, C', D', E]，遮蔽 [0-3]。
+    // C2 边界：输入 [b1, s1, C', D', E]，遮蔽 [0-3]，产物内联。
     {
       type: "control_boundary",
       sessionId: "s",
@@ -288,19 +281,16 @@ function makeMultiCompactedTranscript(): AgentTranscriptEntry[] {
           messagesSummarized: 4,
           shadowedRanges: [{ fromIndex: 0, toIndex: 3 }],
         },
-      },
-    },
-    // C2 产物落库。
-    {
-      type: "durable_message",
-      sessionId: "s",
-      turnId: "t5",
-      sequence: 17,
-      createdAt,
-      message: {
-        role: "user",
-        metadata: { compactReplacement: true },
-        content: [{ type: "text", text: "msg-b2 二次摘要" }],
+        snapshot: {
+          version: 1,
+          messages: [
+            {
+              role: "user",
+              metadata: { compactReplacement: true },
+              content: [{ type: "text", text: "msg-b2 二次摘要" }],
+            },
+          ],
+        },
       },
     },
     turnResult("t5", 18),
@@ -341,8 +331,25 @@ test("replayShadowedMessages：投影区间缺消息时产出对齐诊断而非�
         }
       : entry,
   );
-  // 移除一条 C1 产物（模拟持久化失败被吞）→ 投影 5 条，期望 6 条。
-  const tampered = widened.filter(entry => !("message" in entry) || messageText(entry.message) !== "msg-s1 保留");
+  // 移除一条 C1 产物（快照里少一条，模拟持久化失败被吞）→ 投影 5 条，期望 6 条。
+  const tampered = widened.map(entry => {
+    if (
+      entry.type !== "control_boundary" ||
+      entry.boundary.kind !== "compact" ||
+      entry.boundary.subtype !== "compact_boundary"
+    ) {
+      return entry;
+    }
+    const snapshot = entry.boundary.snapshot;
+    if (snapshot === undefined) {
+      return entry;
+    }
+    const kept = snapshot.messages.filter(message => messageText(message) !== "msg-s1 保留");
+    if (kept.length === snapshot.messages.length) {
+      return entry;
+    }
+    return { ...entry, boundary: { ...entry.boundary, snapshot: { ...snapshot, messages: kept } } };
+  });
   const restored = replayShadowedMessages(tampered);
   assert.equal(restored.messages.length, 5);
   assert.equal(restored.diagnostics.length, 1, "还原数少于期望时提示");

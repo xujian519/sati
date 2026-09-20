@@ -108,17 +108,12 @@ export class TurnRunner {
    * onPending 在写入成功后触发（flushPending）；写入失败撤销挂起（cancelPending）——
    * 审批端感知到的挂起条目保证消息已在转录中（不出现悬空挂起）。
    */
-  private async persistDurableMessage(
-    sessionId: string,
-    turnId: string,
-    msg: CanonicalMessage,
-    options?: { skipApproval?: boolean },
-  ): Promise<void> {
+  private async persistDurableMessage(sessionId: string, turnId: string, msg: CanonicalMessage): Promise<void> {
     if (this.outputGate) {
       const { message, needsApproval, pendingIndex } = this.outputGate.processMessage(msg, {
         sessionId,
         turnId,
-        skipApproval: options?.skipApproval === true,
+        skipApproval: false,
       });
       try {
         await this.transcript.recordDurableMessage(sessionId, turnId, message);
@@ -331,12 +326,26 @@ export class TurnRunner {
           await this.transcript.recordAgentStatusMessage?.(options.sessionId, options.turnId, status);
         },
         onCompactPersisted: async ({ boundary, messages: compactMessages }) => {
-          await this.transcript.recordControlBoundary?.(options.sessionId, options.turnId, boundary);
-          for (const message of compactMessages) {
-            // 压缩重放的消息同样经过门禁（免责声明等质量处理，避免摘要绕过门禁）；
-            // skipApproval=true：这些消息首次入库时已走过审批流程，重放不重复挂起
-            await this.persistDurableMessage(options.sessionId, options.turnId, message, { skipApproval: true });
+          if (boundary.kind !== "compact" || boundary.subtype !== "compact_boundary") {
+            return;
           }
+          // 压缩重放的消息同样经过门禁（免责声明等质量处理，避免摘要绕过门禁）；
+          // skipApproval=true：这些消息首次入库时已走过审批流程，重放不重复挂起。
+          const gatedMessages = compactMessages.map(message =>
+            this.outputGate === undefined
+              ? message
+              : this.outputGate.processMessage(message, {
+                  sessionId: options.sessionId,
+                  turnId: options.turnId,
+                  skipApproval: true,
+                }).message,
+          );
+          // 边界与整份替换上下文写在同一条记录里（上游 #599）：两条记录之间
+          // 的崩溃窗口消失——记录不完整即不授权重放丢弃边界前历史。
+          await this.transcript.recordControlBoundary?.(options.sessionId, options.turnId, {
+            ...boundary,
+            snapshot: { version: 1, messages: gatedMessages },
+          });
         },
         onInjectedContext: async ({ injections }) => {
           for (const injection of injections) {
