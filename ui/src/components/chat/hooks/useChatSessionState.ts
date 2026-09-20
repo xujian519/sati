@@ -2,29 +2,22 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import type { MutableRefObject } from "react";
 import type { WsMessage } from "../../../contexts/WebSocketContext";
 import type { ChatMessage, ClaudeWorkStatus, SatiWorkStatus } from "../types/types";
-import {
-  getSessionRequestParams,
-  isReadOnlySession,
-  type Project,
-  type ProjectSession,
-  type SessionProvider,
-} from "../../../types/app";
-import type { SessionStore, NormalizedMessage } from "../../../stores/useSessionStore";
-import { parseUserAttachmentNote } from "../utils/attachmentNotes";
+import type { Project, ProjectSession, SessionProvider } from "../../../types/app";
+import type { SessionStore } from "../../../stores/useSessionStore";
 import { createCachedDiffCalculator, type DiffCalculator } from "../utils/messageTransforms";
-import { normalizedToChatMessages } from "./useChatMessages";
 import { useChatPaginationScroll } from "./use-chat-pagination-scroll";
+import { useChatProcessingStatus } from "./use-chat-processing-status";
 import { useChatScrollAnchor } from "./use-chat-scroll-anchor";
 import { useChatSearchNavigation } from "./use-chat-search-navigation";
+import { useChatSessionIdentity } from "./use-chat-session-identity";
 import { useChatSessionLifecycle } from "./use-chat-session-lifecycle";
-import { useChatProcessingStatus } from "./use-chat-processing-status";
 import { useChatTokenUsage } from "./use-chat-token-usage";
+import { chatMessageToNormalized, useChatTranscriptView } from "./use-chat-transcript-view";
 
-// `didLoadedSessionChange` 随会话加载一族搬到 ./use-chat-session-lifecycle（issue #467），
-// 这里保留同一导出路径，既有单元测试的导入不变。
+// 纯函数随各自的一族搬到子 hook（issue #467），这里保留同一导出路径：
+// 既有单元测试与调用方按 `./useChatSessionState` 取用不受影响。
 export { didLoadedSessionChange } from "./use-chat-session-lifecycle";
-
-const EMPTY_NORMALIZED_MESSAGES: NormalizedMessage[] = [];
+export { hasEquivalentUserMessage, shouldRenderPendingBubble } from "./use-chat-transcript-view";
 
 // 滚动定位数学（`isScrollNearBottom` / `resolveConversationScrollTop` /
 // `BOTTOM_FOLLOW_THRESHOLD_PX`）随分页/滚动一族搬到 ./use-chat-pagination-scroll，
@@ -53,14 +46,6 @@ interface UseChatSessionStateArgs {
   sessionStore: SessionStore;
 }
 
-export function shouldRenderPendingBubble(
-  activeSessionId: string | null,
-  pendingTargetSessionId: string | null,
-): boolean {
-  if (!activeSessionId) return true;
-  return pendingTargetSessionId !== null && pendingTargetSessionId === activeSessionId;
-}
-
 export function getStreamContentKey(messages: ChatMessage[]): string {
   const lastMessage = messages[messages.length - 1];
   if (!lastMessage) {
@@ -80,121 +65,25 @@ export function getStreamContentKey(messages: ChatMessage[]): string {
   ].join(":");
 }
 
-/* ------------------------------------------------------------------ */
-/*  Helper: Convert a ChatMessage to a NormalizedMessage for the store */
-/* ------------------------------------------------------------------ */
-
-function chatMessageToNormalized(
-  msg: ChatMessage,
-  sessionId: string,
-  provider: SessionProvider,
-): NormalizedMessage | null {
-  const id = `local_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-  const ts =
-    msg.timestamp instanceof Date
-      ? msg.timestamp.toISOString()
-      : typeof msg.timestamp === "number"
-        ? new Date(msg.timestamp).toISOString()
-        : String(msg.timestamp);
-  const base = { id, sessionId, timestamp: ts, provider };
-
-  if (msg.isToolUse) {
-    return {
-      ...base,
-      kind: "tool_use",
-      toolName: msg.toolName,
-      toolInput: msg.toolInput,
-      toolId: msg.toolId || id,
-    } as NormalizedMessage;
-  }
-  if (msg.isThinking) {
-    return { ...base, kind: "thinking", content: msg.content || "" } as NormalizedMessage;
-  }
-  if (msg.isInteractivePrompt) {
-    return { ...base, kind: "interactive_prompt", content: msg.content || "" } as NormalizedMessage;
-  }
-  if (msg.isTaskNotification) {
-    return {
-      ...base,
-      kind: "task_notification",
-      status: msg.taskStatus || "completed",
-      summary: msg.content || "",
-    } as NormalizedMessage;
-  }
-  if (msg.type === "error") {
-    return {
-      ...base,
-      kind: "error",
-      content: msg.content || "",
-      ...(typeof msg.userHint === "string" ? { userHint: msg.userHint } : {}),
-    } as NormalizedMessage;
-  }
-  // Carry user-attached image data URLs through the normalize round-trip
-  // so the optimistic message render and any re-derivation from the
-  // session store both show the thumbnails. NormalizedMessage.images is
-  // `string[]` of data URLs; we only attach it on user-side text frames.
-  const images =
-    msg.type === "user" && Array.isArray(msg.images)
-      ? msg.images.filter(img => img && typeof img.data === "string").map(img => img.data)
-      : undefined;
-  const attachments =
-    msg.type === "user" && Array.isArray(msg.attachments)
-      ? msg.attachments.filter(attachment => attachment && typeof attachment.name === "string")
-      : undefined;
-  return {
-    ...base,
-    kind: "text",
-    role: msg.type === "user" ? "user" : "assistant",
-    content: msg.content || "",
-    ...(images && images.length > 0 ? { images } : {}),
-    ...(attachments && attachments.length > 0 ? { attachments } : {}),
-  } as NormalizedMessage;
-}
-
-function normalizeUserMessageText(value: unknown): string {
-  const parsed = parseUserAttachmentNote(value);
-  return parsed.content.replace(/\s+/g, " ").trim();
-}
-
-function getUserAttachmentNames(message: ChatMessage): string[] {
-  const explicitNames = Array.isArray(message.attachments)
-    ? message.attachments.map(attachment => attachment.name || "").filter(Boolean)
-    : [];
-  const parsedNames = parseUserAttachmentNote(message.content)
-    .attachments.map(attachment => attachment.name || "")
-    .filter(Boolean);
-  return [...explicitNames, ...parsedNames].sort();
-}
-
-export function hasEquivalentUserMessage(messages: ChatMessage[], pendingUserMessage: ChatMessage): boolean {
-  const pendingText = normalizeUserMessageText(pendingUserMessage.content);
-  const pendingImageCount = Array.isArray(pendingUserMessage.images) ? pendingUserMessage.images.length : 0;
-  const pendingAttachmentNames = getUserAttachmentNames(pendingUserMessage);
-  // 同一文本连发两次时，文本 + 图片数 + 附件名可能完全一致（例如重复问同一句），
-  // 只按内容比较会把第二次的乐观气泡吞掉。两侧都带 turnId/runId 时以它为身份
-  // （同一 turn 才是同一条消息），否则退回内容比较。
-  const pendingTurnId = pendingUserMessage.turnId || pendingUserMessage.runId;
-
-  return messages.some(message => {
-    if (message.type !== "user") return false;
-    const messageTurnId = message.turnId || message.runId;
-    if (pendingTurnId || messageTurnId) {
-      return Boolean(pendingTurnId && messageTurnId && pendingTurnId === messageTurnId);
-    }
-    if (normalizeUserMessageText(message.content) !== pendingText) return false;
-
-    const imageCount = Array.isArray(message.images) ? message.images.length : 0;
-    if (imageCount !== pendingImageCount) return false;
-
-    const attachmentNames = getUserAttachmentNames(message);
-    return attachmentNames.join("\n") === pendingAttachmentNames.join("\n");
-  });
-}
-
-/* ------------------------------------------------------------------ */
-/*  Hook                                                              */
-/* ------------------------------------------------------------------ */
-
+/**
+ * 聊天主链路的顶层状态聚合点 —— `ChatInterfaceV2` 直接消费它的返回对象（**39 键、键序固定**）。
+ *
+ * issue #467 之后这里只剩**编排**与「跨族共享的状态/ref」，各族逻辑都在子 hook 里：
+ *
+ * | 关注点 | 归属 | 调用点为什么在这里 |
+ * |---|---|---|
+ * | 会话身份解析（`currentSessionId` + 渲染期镜像） | `use-chat-session-identity` | 一切派生都依赖它，必须最先调用 |
+ * | 消息视图（投影 + 乐观气泡 + 增删/回退） | `use-chat-transcript-view` | 必须在「乐观气泡 flush」之后、分页之前 |
+ * | 分页窗口 + 滚动定位（含全量加载） | `use-chat-pagination-scroll`（内嵌 `use-chat-load-all`） | 5 条 effect 要排在会话加载/搜索定位之前 |
+ * | 会话加载 + 外部消息刷新 | `use-chat-session-lifecycle` | 紧跟分页的 5 条 effect |
+ * | 搜索定位 | `use-chat-search-navigation` | 夹在会话加载与 token 用量之间 |
+ * | token 用量 | `use-chat-token-usage` | 原顺序里排在搜索定位之后、锚定之前 |
+ * | 滚动锚定 | `use-chat-scroll-anchor` | 必须排在上述 effect 之后（读它们的滚动副作用） |
+ * | 处理中状态 + 轮询 + 遮罩收起 | `use-chat-processing-status` | 三条紧接锚定之后 |
+ *
+ * 调用点次序即 effect 展开次序：拆分前 17 条 effect 与拆分后的展开顺序**索引一一对应**
+ * （见 `docs/notes/implemented/2026-09-20-chat-session-state-full-decomposition.md`）。
+ */
 export function useChatSessionState({
   selectedProject,
   selectedSession,
@@ -208,7 +97,6 @@ export function useChatSessionState({
   sessionStore,
 }: UseChatSessionStateArgs) {
   const [isLoading, setIsLoading] = useState(false);
-  const [currentSessionId, setCurrentSessionId] = useState<string | null>(selectedSession?.id || null);
   const [isLoadingSessionMessages, setIsLoadingSessionMessages] = useState(false);
   const [canAbortSession, setCanAbortSession] = useState(false);
   const [isAborting, setIsAborting] = useState(false);
@@ -216,71 +104,20 @@ export function useChatSessionState({
   const [claudeStatus, setClaudeStatus] = useState<ClaudeWorkStatus | null>(null);
   const [satiStatus, setSatiStatus] = useState<SatiWorkStatus | null>(null);
   const [sessionLoadError, setSessionLoadError] = useState<string | null>(null);
-  const [viewHiddenCount, setViewHiddenCount] = useState(0);
 
   const searchScrollActiveRef = useRef(false);
 
   const createDiff = useMemo<DiffCalculator>(() => createCachedDiffCalculator(), []);
 
-  /* ---------------------------------------------------------------- */
-  /*  Derive chatMessages from the store                              */
-  /* ---------------------------------------------------------------- */
-
-  // Bug fix (was: `selectedSession?.id || currentSessionId || null`): when the
-  // user clicks "+ session" the parent flips `selectedSession` to null, but
-  // `currentSessionId` still holds the previous session's id for one render
-  // tick — so storeMessages would briefly read the OLD session's messages
-  // and bleed them into the freshly-cleared chat view.
-  //
-  // Strategy:
-  //   1. Mirror `selectedSession.id` into `currentSessionId` during render
-  //      whenever the selection changes — drops any stale carryover.
-  //   2. Expose an `effectiveCurrentSessionId` ref so the *current* render
-  //      uses the cleared value, not the lagging React state.
-  //   3. While the selection is stable but `currentSessionId` advances
-  //      (e.g. backend emits `session_created` for a from-welcome submit
-  //      before the parent navigates), keep mirroring forward so the new
-  //      id is visible immediately.
-  const selSid = selectedSession?.id ?? null;
-  const lastSeenSelSidRef = useRef<string | null>(selSid);
-  const effectiveCurrentRef = useRef<string | null>(selSid);
-  if (lastSeenSelSidRef.current !== selSid) {
-    lastSeenSelSidRef.current = selSid;
-    effectiveCurrentRef.current = selSid;
-    if (currentSessionId !== selSid) {
-      setCurrentSessionId(selSid);
-    }
-  } else if (currentSessionId !== effectiveCurrentRef.current) {
-    const pendingSessionId = pendingViewSessionRef.current?.sessionId ?? null;
-    const isPendingSessionHandoff = Boolean(currentSessionId) && pendingSessionId === currentSessionId;
-    if (selSid) {
-      effectiveCurrentRef.current = selSid;
-      if (currentSessionId !== selSid) {
-        setCurrentSessionId(selSid);
-      }
-    } else if (isPendingSessionHandoff) {
-      effectiveCurrentRef.current = currentSessionId;
-    } else {
-      effectiveCurrentRef.current = null;
-      if (currentSessionId !== null) {
-        setCurrentSessionId(null);
-      }
-    }
-  }
-  const pendingSessionIdForRender = pendingViewSessionRef.current?.sessionId ?? null;
-  // No selectedSession means we are intentionally on a fresh chat surface unless
-  // the backend is still handing us the real id for the first message.
-  const hasStaleUnselectedCurrentSession =
-    Boolean(currentSessionId) && !selSid && pendingSessionIdForRender !== currentSessionId;
-  if (hasStaleUnselectedCurrentSession) {
-    effectiveCurrentRef.current = null;
-    setCurrentSessionId(null);
-  }
-
-  const activeSessionId = selSid ?? effectiveCurrentRef.current;
-  const activeScrollKey = selectedProject && activeSessionId ? `${selectedProject.name}:${activeSessionId}` : null;
-  const sessionIsReadOnly = isReadOnlySession(selectedSession);
-  const sessionRequestParams = useMemo(() => getSessionRequestParams(selectedSession), [selectedSession]);
+  // 会话身份（`currentSessionId` 及其渲染期镜像）：必须在一切派生之前。
+  const {
+    currentSessionId,
+    setCurrentSessionId,
+    activeSessionId,
+    activeScrollKey,
+    sessionIsReadOnly,
+    sessionRequestParams,
+  } = useChatSessionIdentity({ selectedProject, selectedSession, pendingViewSessionRef });
 
   // store 拉取参数的公共前缀（5 处调用点逐字一致）——单一事实源防漂移。
   const buildFetchParams = useCallback(
@@ -323,84 +160,16 @@ export function useChatSessionState({
   }
   prevActiveSessionRef.current = activeSessionId;
 
-  const storeMessages = activeSessionId ? sessionStore.getMessages(activeSessionId) : EMPTY_NORMALIZED_MESSAGES;
-  // 空分支用模块级常量（与 storeMessages 同款模式）：保持引用稳定，使下方
-  // activityMessages useMemo 依赖不随渲染变化（exhaustive-deps），同时保留
-  // 「slot.activityMessages 引用替换 → 重算」的引用级失效语义。
-  const activityStoreMessages = activeSessionId
-    ? (sessionStore.getActivityMessages?.(activeSessionId) ?? EMPTY_NORMALIZED_MESSAGES)
-    : EMPTY_NORMALIZED_MESSAGES;
-  const subagentLinks = activeSessionId ? sessionStore.getSessionSlot?.(activeSessionId)?.subagentLinks : undefined;
-
-  // Reset viewHiddenCount when store messages change
-  const prevStoreLenRef = useRef(0);
-  if (storeMessages.length !== prevStoreLenRef.current) {
-    prevStoreLenRef.current = storeMessages.length;
-    if (viewHiddenCount > 0) setViewHiddenCount(0);
-  }
-
-  // `pendingViewSessionRef.current.sessionId` is the session the optimistic
-  // bubble was actually queued for. session_created stamps it. We read it
-  // here AND list it as a memo dep (via `pendingTargetSessionId`) so the
-  // memo recomputes when session_created upgrades the ref from null → real id.
-  const pendingTargetSessionId = pendingViewSessionRef.current?.sessionId ?? null;
-
-  const chatMessages = useMemo(() => {
-    const all = normalizedToChatMessages(storeMessages, subagentLinks);
-    // The optimistic user bubble must ONLY render in the session it was
-    // submitted into. Two valid surfaces:
-    //   1. The welcome surface itself (activeSessionId=null), while we are
-    //      still waiting for `session_created` to tell us the real id.
-    //   2. The exact session id that `pendingViewSessionRef` was bound to
-    //      at submit time.
-    // Without this gate, a sidebar click after a welcome submit (or any
-    // session switch while the bubble is queued) would prepend the
-    // optimistic text onto the WRONG session's transcript — surfaced as
-    // "the latest query I just typed appears at the top of an unrelated
-    // session I just opened". The handoff block above eventually pushes
-    // the bubble into the right store + clears it, but React's discard-
-    // and-rerender on render-phase setState isn't a guarantee under
-    // concurrent rendering / batched parent updates, so we also defend
-    // here at the read site.
-    const pendingBelongsHere = shouldRenderPendingBubble(activeSessionId, pendingTargetSessionId);
-    if (pendingUserMessage && pendingBelongsHere && !hasEquivalentUserMessage(all, pendingUserMessage)) {
-      return [pendingUserMessage, ...all];
-    }
-    if (viewHiddenCount > 0 && viewHiddenCount < all.length) return all.slice(0, -viewHiddenCount);
-    return all;
-  }, [storeMessages, viewHiddenCount, pendingUserMessage, activeSessionId, pendingTargetSessionId, subagentLinks]);
-
-  // 流式 tick 高频 render：activityStoreMessages 引用在 store 未更新时稳定
-  // （slot.activityMessages 只在 upsertActivity/setActivities 时替换），
-  // useMemo 命中跳过每 tick 的 normalizedToChatMessages 全量转换（P3-1）。
-  const activityMessages = useMemo(() => normalizedToChatMessages(activityStoreMessages), [activityStoreMessages]);
-
-  /* ---------------------------------------------------------------- */
-  /*  addMessage / clearMessages / rewindMessages                     */
-  /* ---------------------------------------------------------------- */
-
-  const addMessage = useCallback(
-    (msg: ChatMessage, targetSessionId?: string | null) => {
-      const sessionId = targetSessionId !== undefined ? targetSessionId : activeSessionId;
-      if (!sessionId) {
-        // No session yet — show as pending until the backend creates one
-        setPendingUserMessage(msg);
-        return;
-      }
-      const normalized = chatMessageToNormalized(msg, sessionId, "sati");
-      if (normalized) {
-        sessionStore.appendRealtime(sessionId, normalized);
-      }
-    },
-    [activeSessionId, sessionStore],
-  );
-
-  const clearMessages = useCallback(() => {
-    if (!activeSessionId) return;
-    sessionStore.clearRealtime(activeSessionId);
-  }, [activeSessionId, sessionStore]);
-
-  const rewindMessages = useCallback((count: number) => setViewHiddenCount(count), []);
+  // 消息视图（投影 + 乐观气泡 + 增删/回退）。调用点即语义：它在「气泡 flush」之后读同一个
+  // store，且分页 hook 需要它产出的 chatMessages。
+  const { chatMessages, activityMessages, addMessage, clearMessages, rewindMessages, setViewHiddenCount } =
+    useChatTranscriptView({
+      sessionStore,
+      activeSessionId,
+      pendingUserMessage,
+      setPendingUserMessage,
+      pendingViewSessionRef,
+    });
 
   /* ---------------------------------------------------------------- */
   /*  分页窗口 + 滚动定位（#159 N02 拆到 useChatPaginationScroll）        */
@@ -410,37 +179,7 @@ export function useChatSessionState({
   // 会话内位置恢复 / 首屏落底）在拆分前就排在下面的「会话加载 effect」与更下方的
   // 「搜索定位 effect」之前——`pendingInitialScrollRef` 与 `searchScrollActiveRef`
   // 的读写次序决定首屏是否落到底、搜索跳转时是否被抢滚动。不要把它挪到它们之后。
-  const {
-    hasMoreMessages,
-    setHasMoreMessages,
-    totalMessages,
-    setTotalMessages,
-    isUserScrolledUp,
-    setIsUserScrolledUp,
-    visibleMessageCount,
-    setVisibleMessageCount,
-    allMessagesLoaded,
-    setAllMessagesLoaded,
-    isLoadingAllMessages,
-    loadAllJustFinished,
-    showLoadAllOverlay,
-    setShowLoadAllOverlay,
-    messagesOffsetRef,
-    allMessagesLoadedRef,
-    pendingScrollRestoreRef,
-    scrollPositionRef,
-    isLoadingMoreRef,
-    scrollContainerRef,
-    scrollToBottom,
-    scheduleScrollToBottom,
-    scrollToBottomAndReset,
-    isNearBottom,
-    handleScroll,
-    loadAllMessages,
-    loadEarlierMessages,
-    visibleMessages,
-    resetPagination,
-  } = useChatPaginationScroll({
+  const pagination = useChatPaginationScroll({
     chatMessages,
     activeScrollKey,
     isLoadingSessionMessages,
@@ -465,12 +204,12 @@ export function useChatSessionState({
     buildFetchParams,
     ws,
     sendMessage,
-    messagesOffsetRef,
+    messagesOffsetRef: pagination.messagesOffsetRef,
     resetStreamingState,
-    resetPagination,
+    resetPagination: pagination.resetPagination,
     setIsLoadingSessionMessages,
-    setHasMoreMessages,
-    setTotalMessages,
+    setHasMoreMessages: pagination.setHasMoreMessages,
+    setTotalMessages: pagination.setTotalMessages,
     setViewHiddenCount,
     setTokenBudget,
     setClaudeStatus,
@@ -484,8 +223,8 @@ export function useChatSessionState({
     externalMessageUpdate,
     autoScrollToBottom,
     isLoading,
-    isNearBottom,
-    scrollToBottom,
+    isNearBottom: pagination.isNearBottom,
+    scrollToBottom: pagination.scrollToBottom,
   });
 
   // 搜索定位（读取搜索目标 / 清交班标记 / 跳转与高亮）外置到 ./use-chat-search-navigation
@@ -498,13 +237,13 @@ export function useChatSessionState({
     buildFetchParams,
     chatMessages,
     isLoadingSessionMessages,
-    allMessagesLoadedRef,
-    messagesOffsetRef,
-    scrollContainerRef,
-    setAllMessagesLoaded,
-    setHasMoreMessages,
-    setTotalMessages,
-    setVisibleMessageCount,
+    allMessagesLoadedRef: pagination.allMessagesLoadedRef,
+    messagesOffsetRef: pagination.messagesOffsetRef,
+    scrollContainerRef: pagination.scrollContainerRef,
+    setAllMessagesLoaded: pagination.setAllMessagesLoaded,
+    setHasMoreMessages: pagination.setHasMoreMessages,
+    setTotalMessages: pagination.setTotalMessages,
+    setVisibleMessageCount: pagination.setVisibleMessageCount,
     searchScrollActiveRef,
     pendingViewSessionRef,
   });
@@ -518,7 +257,7 @@ export function useChatSessionState({
     setTokenBudget,
   });
 
-  const streamContentKey = useMemo(() => getStreamContentKey(visibleMessages), [visibleMessages]);
+  const streamContentKey = useMemo(() => getStreamContentKey(pagination.visibleMessages), [pagination.visibleMessages]);
 
   // 滚动锚定（跟随底部 / 增长时保住阅读位置 / 绑定 scroll 监听）。
   // 同样地，调用点即语义：这三条 effect 必须排在「会话加载」与「搜索定位」之后，
@@ -527,14 +266,14 @@ export function useChatSessionState({
     autoScrollToBottom,
     chatMessages,
     streamContentKey,
-    isUserScrolledUp,
-    scrollContainerRef,
-    scrollPositionRef,
-    isLoadingMoreRef,
-    pendingScrollRestoreRef,
+    isUserScrolledUp: pagination.isUserScrolledUp,
+    scrollContainerRef: pagination.scrollContainerRef,
+    scrollPositionRef: pagination.scrollPositionRef,
+    isLoadingMoreRef: pagination.isLoadingMoreRef,
+    pendingScrollRestoreRef: pagination.pendingScrollRestoreRef,
     searchScrollActiveRef,
-    scheduleScrollToBottom,
-    handleScroll,
+    scheduleScrollToBottom: pagination.scheduleScrollToBottom,
+    handleScroll: pagination.handleScroll,
   });
 
   // 「处理中」状态与轮询外置到 ./use-chat-processing-status（issue #467）：这三条 effect
@@ -550,8 +289,8 @@ export function useChatSessionState({
     setCanAbortSession,
     ws,
     sendMessage,
-    hasMoreMessages,
-    setShowLoadAllOverlay,
+    hasMoreMessages: pagination.hasMoreMessages,
+    setShowLoadAllOverlay: pagination.setShowLoadAllOverlay,
   });
 
   return {
@@ -566,33 +305,33 @@ export function useChatSessionState({
     setCurrentSessionId,
     isLoadingSessionMessages,
     sessionLoadError,
-    hasMoreMessages,
-    totalMessages,
+    hasMoreMessages: pagination.hasMoreMessages,
+    totalMessages: pagination.totalMessages,
     canAbortSession,
     setCanAbortSession,
     isAborting,
     setIsAborting,
-    isUserScrolledUp,
-    setIsUserScrolledUp,
+    isUserScrolledUp: pagination.isUserScrolledUp,
+    setIsUserScrolledUp: pagination.setIsUserScrolledUp,
     tokenBudget,
     setTokenBudget,
-    visibleMessageCount,
-    visibleMessages,
-    loadEarlierMessages,
-    loadAllMessages,
-    allMessagesLoaded,
-    isLoadingAllMessages,
-    loadAllJustFinished,
-    showLoadAllOverlay,
+    visibleMessageCount: pagination.visibleMessageCount,
+    visibleMessages: pagination.visibleMessages,
+    loadEarlierMessages: pagination.loadEarlierMessages,
+    loadAllMessages: pagination.loadAllMessages,
+    allMessagesLoaded: pagination.allMessagesLoaded,
+    isLoadingAllMessages: pagination.isLoadingAllMessages,
+    loadAllJustFinished: pagination.loadAllJustFinished,
+    showLoadAllOverlay: pagination.showLoadAllOverlay,
     claudeStatus,
     setClaudeStatus,
     satiStatus,
     setSatiStatus,
     createDiff,
-    scrollContainerRef,
-    scrollToBottom,
-    scrollToBottomAndReset,
-    isNearBottom,
-    handleScroll,
+    scrollContainerRef: pagination.scrollContainerRef,
+    scrollToBottom: pagination.scrollToBottom,
+    scrollToBottomAndReset: pagination.scrollToBottomAndReset,
+    isNearBottom: pagination.isNearBottom,
+    handleScroll: pagination.handleScroll,
   };
 }
