@@ -1,7 +1,8 @@
 # bridge-reencode Specification
 
 ## Purpose
-TBD - created by archiving change bridge-reencode. Update Purpose after archive.
+
+让模型在收尾前先把需求用自己的话重述一遍、并给出要求的中间形式（bridge-and-re-encode），降低「答非所问但看着像答了」的概率。实现见 `src/methodology/runtime/components/bridge-reencode.ts`（默认注册进方法论注册表；按推理/分析触发关键词命中注入提示）。
 
 ## Requirements
 

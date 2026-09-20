@@ -1,7 +1,8 @@
 # skill-validation Specification
 
 ## Purpose
-TBD - created by archiving change jspace-workspace-ledger. Update Purpose after archive.
+
+`scripts/validate-skills.mjs` 的校验范围：`type: role` 前置元数据一致性（`domains`/`tools` 必填、`omitTools`/`readOnly`/`systemPrompt` 类型）、无版本营销话术、专利同族角色的结构化要求（告警级）。已挂 `pnpm lint`（`check:skills`）。
 
 ## Requirements
 

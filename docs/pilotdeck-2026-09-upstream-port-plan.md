@@ -1,6 +1,7 @@
 # Sati × PilotDeck 引入方案（2026-09-11 后合并 PR 批次）
 
-Status: proposed（P1 已落地，见 `docs/notes/implemented/2026-09-16-tokenizer-special-token-literals.md`）
+Status: implemented（P1–P6 均已落地；各 P 对应 note：`2026-09-16-tokenizer-special-token-literals` / `2026-09-16-compaction-terminal-state` / `2026-09-16-optional-feature-defaults` / `2026-09-16-active-turn-absolute-projection` / `2026-09-16-thinking-effort-no-silent-clamp` / `2026-09-18-chat-presentation-polish`）
+更正说明（2026-09-20）：原写 `proposed（P1 已落地）`，低估完成度；对照 `docs/notes/implemented/` 与 `src/patent/evaluate/`、`src/gateway/protocol/version.ts`（1.9 条目）已复核。
 范围：PilotDeck 在 2026-09-11 之后合并的 10 个 PR 中，经评估值得引入的 6 项
 基准：Sati `main`，HEAD `6e151032a`；上游 tag 之外新增 PR #593（2026-09-16 合并，未进 tag 列表）
 分支策略：每项一条分支 + 一个 PR（AGENTS.md 关键环境事实：main 受保护）

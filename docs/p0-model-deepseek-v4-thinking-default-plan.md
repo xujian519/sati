@@ -2,7 +2,8 @@
 
 > 前提：评测链路已用"显式 `thinking:{mode:"off"}`"workaround（见 `feat(patent)` 提交）。
 > 本方案是**全局**模型层修复，独立于评测链路，供单独评审。
-> 只做设计，不实施。
+> **已实施**（2026-08-26）：`docs/notes/implemented/2026-08-26-p0-model-deepseek-v4-agent-loop-thinking.md`（提案件仍留 `docs/notes/proposed/2026-08-26-p0-model-deepseek-v4-thinking-default.md`）。
+> 更正说明（2026-09-20，docs↔code 一致性审计）：原写「只做设计，不实施」。
 
 ---
 

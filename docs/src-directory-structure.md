@@ -8,21 +8,21 @@
 
 ## 一、顶层总览
 
-`src/` 当前为 **29 个功能模块** + 两个根级文件（`env.ts` 环境常量、`version.ts` 版本号）。每个模块自带 barrel（`index.ts`），入口为 `src/cli/sati.ts`，无顶层 `index.ts`。
+`src/` 当前为 **<!-- claim:src_module_count -->32<!-- /claim --> 个功能模块** + 两个根级文件（`env.ts` 环境常量、`version.ts` 版本号）。模块清单（含一行职责与 barrel 有无）由 `scripts/gen-doc-claims.ts` 从目录现算生成，见 [`docs/code-facts.md`](./code-facts.md) §3——**模块清单不在本文手写，那正是历史上漏列模块的成因**。入口为 `src/cli/sati.ts`，无顶层 `index.ts`。
 
 ## 二、模块组织模式：三派并存（且都合理）
 
 | 模式 | 特征 | 模块 |
 |---|---|---|
-| **分层式** | `protocol/`（类型契约）+ `runtime/`（实现）+ `config/`（配置），模块内 `index.ts` barrel | agent, always-on, cron, lifecycle, literature, methodology, mcp, rule, task, workflow |
-| **功能子域式** | 按业务语义拆出多个子目录，子目录内再各自组织 | adapters（channel/web）, patent（20+ 子域）, knowledge, model, session, context, tool, gateway, permission, router, cli, web |
-| **扁平式** | 仅一两个文件，不做子目录 | fs, network, status, telemetry, browser（backend/）, test-support（llm-replay/）, shared（env/paths/retry） |
+| **分层式** | `protocol/`（类型契约）+ `runtime/`（实现）+ `config/`（配置），模块内 `index.ts` barrel | agent, always-on, board, cron, lifecycle, literature, methodology, mcp, rule, task |
+| **功能子域式** | 按业务语义拆出多个子目录，子目录内再各自组织 | adapters（channel/web）, patent（20+ 子域）, knowledge, model, session, context, tool, gateway, permission, router, cli, web, browser（backend/）, extension（plugins/skills/…）, pilot（config/workspace/…）, test-support（llm-replay/） |
+| **扁平式** | 仅一两个文件，不做子目录 | fs, network, runtime, status, telemetry, shared（env/paths/retry） |
 
 **为什么允许三派并存**：分层式是「重逻辑」模块的标准骨架；扁平式是「轻量工具」模块（fs/network 就是几个纯函数，套三层反而拉低可读性）；功能子域式用于「一个域内有明显语义切分」的模块（patent 域最重，20+ 子域）。这符合「重的域多分层、轻的工具扁平」的自然规律，**强制统一反而有害**。
 
 ## 三、命名规范遵循情况与实际例外
 
-CLAUDE.md 规定的「目录 kebab-case、类文件 PascalCase、普通文件 kebab-case」在代码库里得到较高遵循，例如 `adapters/channel/` 下每个渠道统一为 `Channel.ts`（Pascal）+ `-render.ts`（kebab）；有自有 `resolve`/State 语义的 6 个渠道（feishu/weixin/qq/wecom/wecom-callback/api-server）另带 `SessionMapper.ts`（Pascal），其余 13 个渠道直接构造共享的 `protocol/ChatSessionMapper.ts`（薄壳已于 2026-09-17 删除，见 `notes/implemented/2026-09-17-adapters-session-mapper-shells.md`）。
+CLAUDE.md 规定的「目录 kebab-case、类文件 PascalCase、普通文件 kebab-case」在代码库里得到较高遵循，例如 `adapters/channel/` 下每个渠道统一为 `Channel.ts`（Pascal）+ `-render.ts`（kebab）；有自有 `resolve`/State 语义的 6 个渠道（feishu/weixin/qq/wecom/wecom-callback/api-server）另带 `SessionMapper.ts`（Pascal），其余 15 个渠道直接构造共享的 `protocol/ChatSessionMapper.ts`（薄壳已于 2026-09-17 删除，见 `notes/implemented/2026-09-17-adapters-session-mapper-shells.md`）。
 
 已识别、但**有意保留**的例外：
 
@@ -35,7 +35,7 @@ CLAUDE.md 规定的「目录 kebab-case、类文件 PascalCase、普通文件 ke
 
 ## 五、数据资产与源码的边界（整理时必须区分）
 
-`src/knowledge/patent/wiki/patent-cards/` 下有 1500+ 篇**中文文件名**的 markdown 卡片。这些是运行时生成的知识卡片——**git 未跟踪（已核实为 0 条）**，属数据资产而非源码。
+`src/knowledge/patent/wiki/` 子树下为**中文文件名**的 markdown 卡片（实测 `patent-cards/` 目录 130 个 `.md`、整棵 wiki 子树 1344 个 `.md`；`.gitignore` 无 wiki/patent-cards 规则）。属数据资产而非源码；运行期 `knowledge.db` 的 wiki 卡片规模是另一个口径，不在仓库内、不可机械核对。
 
 **整理源码目录时严禁当作源码处理这批文件**（不得移动/重命名/删除）。它们的命名、内容由生成流程决定。
 
@@ -43,7 +43,7 @@ CLAUDE.md 规定的「目录 kebab-case、类文件 PascalCase、普通文件 ke
 
 以下点在体检中识别到，但按「浅层清理」力度保留不动，记此以供后续评估：
 
-- `.DS_Store`（macOS 元数据）——已清理，见 §七，且已被 `.gitignore` 全局忽略（第 178-179 行）。
+- `.DS_Store`（macOS 元数据）——已清理，见 §七，且已被 `.gitignore` 全局忽略（`.gitignore:186-187`）。
 - 各模块子目录命名（`adapters/channel/qq` vs 类名 `QQ`）——纯风格，未动。
 
 ## 七、本轮已处理

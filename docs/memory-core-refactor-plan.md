@@ -1,7 +1,7 @@
 # edgeclaw-memory-core 拆解+补测试专项实施方案
 
 - 创建日期：2026-08-17
-- 状态：**全部完成 ✅（2026-08-17）**——批次 0-6 落地，子包测试 222 例全绿
+- 状态：**批次完成；§5 DoD（≤600 行）未达标**（2026-08-17 记为「全部完成」，2026-09-20 复核后按 §5 实测更正：5 个文件 690–1728 行，差异已登记 `docs/technical-debt/metrics.md` 的 vendored 节）——批次 0-6 落地，子包测试全绿
 - 前置：`docs/technical-debt-report.md` 待决事项 #1（子包 5 个 >1000 行文件零测试）；方法论先例 `docs/god-function-refactor-plan.md`
 - 目标：对 5 个大文件先补行为基线测试（characterization），再按职责聚类拆分；子包测试从 0 起步覆盖核心路径
 

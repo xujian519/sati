@@ -2,7 +2,8 @@
 
 > 对标 PenguinHarness 的 `agent-optimization` / `agent-evaluation` / `benchmark-design` 技能
 > （`packages/skills/skills/agent-optimization/SKILL.md` 等）。
-> 本方案只做**设计**，不实施；评审通过后落为实施计划，落地时补 `docs/notes/implemented/` note。
+> **已实施**（2026-08-26）：`docs/notes/implemented/2026-08-26-p0-1-self-evolution-loop.md`；代码在 `src/patent/evaluate/{rubric,scoreboard,benchmark,snapshot,evolve}.ts` + `scripts/patent-evolve.mjs`。
+> 更正说明（2026-09-20，docs↔code 一致性审计）：原写「只做设计，不实施」，与本 note 冲突。
 
 ---
 

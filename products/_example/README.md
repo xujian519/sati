@@ -42,5 +42,5 @@ _example/
 ln -s $(pwd)/products/customer-a/plugins/example-compliance ~/.sati/plugins/example-compliance
 
 # 启动
-npm run server
+pnpm server
 ```

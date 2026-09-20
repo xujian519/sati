@@ -3,6 +3,8 @@
 > 定位：`docs/*-plan.md` 实施计划（决策背景见 `docs/notes/implemented/2026-08-23-type-assertion-cleanup-priority.md`）。
 > 遵循排期：`docs/technical-debt/next-batches-schedule.md` §7 复评结论 ① —— **全项目 ROI 最高的单项**，纯机械、`typecheck` 自验证、无 UI、不触碰 `inputSchema`、不使 llm-replay fixture 失配。
 
+> **状态（2026-09-20 复核）**：片 1（`gateway/GatewayWsConnection.ts` 的 `as never` ×43）与片 2（`gateway/client/RemoteGateway.ts` 的 `as XResult` ×29）**已收敛**——`grep -rn "as never" src/` 与 `RemoteGateway.ts` 内的 `as XResult` 现均为 0（前者只剩注释文字命中）。片 3–6 的收敛进度未在本文件回填，见 `docs/technical-debt/backlog.md` 的 TD-TYPE-002 条目。
+
 ## 目标与边界
 
 - **目标**：把全源码 >90 处类型强转/断言收敛为类型守卫、row-mapper 或精确结果类型，让入参/结果/DB 行在编译期恢复形状校验。

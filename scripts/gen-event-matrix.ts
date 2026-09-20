@@ -23,14 +23,30 @@ const OUTPUT_PATH = join(REPO_ROOT, "docs", "event-producer-consumer.md");
 const EVENT_TYPE_FILES: Array<{ file: string; typeName: string }> = [
   { file: "src/agent/protocol/events.ts", typeName: "AgentEvent" },
   { file: "src/gateway/protocol/types.ts", typeName: "GatewayEvent" },
-  { file: "src/gateway/protocol/frames.ts", typeName: "WsFrame" },
+  // 注意：`frames.ts` 不在列表内。它声明的是**传输帧形状**（hello/hello_ok/request/
+  // response/event/notification 的判别字段），不是事件语汇；此前登记的 `WsFrame`
+  // 类型名在该文件里并不存在，条目静默失效（门禁恒绿但覆盖为零）。事件语汇只有
+  // 下列三处；新增语汇时补此处并跑 `pnpm gen:event-matrix`。
   // M4（Task 11）：TeamEvent 变体（task_retried 等）入矩阵——emit 调用点（scheduler/
   // 工具层）在 collectSites 已扫描，缺的是声明语汇解析；team_event 网关帧行不变。
   { file: "src/agent/team/protocol/events.ts", typeName: "TeamEvent" },
 ];
 
-/** 事件名 → 语汇名（AgentEvent / GatewayEvent / WsFrame）。 */
+/** 事件名 → 语汇名（AgentEvent / GatewayEvent / TeamEvent）。 */
 type EventVocabMap = Map<string, string[]>;
+
+/**
+ * 生产者侧 emit-like 调用名集合：字符串事件名（首参）与对象字面量（次参）两条路径
+ * 都按此集合匹配，故文档表头由它派生，不再手写第二份副本。
+ */
+const PRODUCER_CALLEES = [
+  "emit",
+  "dispatch",
+  "emitAgentEvent",
+  "emitEvent",
+  "emitForSession",
+  "sendNotification",
+] as const;
 
 /**
  * 事件流消费入口白名单：for-await-of 循环消费对应语汇流的**全部**事件。
@@ -293,11 +309,7 @@ function renderMatrix(): string {
   // 曾覆盖的这两类字符串事件名调用点）；emitForSession 为 M4（Task 11）追加——
   // emit(captain, event)/emitForSession(sessionKey, event) 第二参对象字面量形态
   // 的 TeamEvent 广播（scheduler/网关链路）须入生产者矩阵。
-  const producers = collectSites(
-    join(REPO_ROOT, "src"),
-    ["emit", "dispatch", "emitAgentEvent", "emitEvent", "emitForSession", "sendNotification"],
-    "producer",
-  );
+  const producers = collectSites(join(REPO_ROOT, "src"), [...PRODUCER_CALLEES], "producer");
   const consumers = collectSites(join(REPO_ROOT, "src"), ["on", "subscribe"], "consumer");
   const streamConsumers = collectStreamConsumers(join(REPO_ROOT, "src"));
 
@@ -307,7 +319,7 @@ function renderMatrix(): string {
     "# 事件生产者/消费者矩阵（阶段四 T8）",
     "",
     "从源码生成：事件名取自 discriminated union 的 type 字面量（含交叉类型如 GatewayEvent，见附录）；生产者为",
-    "emit/dispatch/emitAgentEvent/emitEvent 字符串事件名调用点、对象字面量首参调用点与 yield { type } 泵；",
+    `${PRODUCER_CALLEES.join("/")} 字符串事件名调用点、对象字面量参调用点与 yield { type } 泵；`,
     "消费者为 on/subscribe 字符串订阅调用点 + 事件流消费点（for-await 语汇流，折叠为「{callee} 流 ×N」，明细见附录）。",
     "改事件后运行 `pnpm gen:event-matrix --check`（CI 门禁）。",
     "",

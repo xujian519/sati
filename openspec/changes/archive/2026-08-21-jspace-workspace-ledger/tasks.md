@@ -34,7 +34,7 @@
 ## 7. skill-validation
 
 - [x] 7.1 Extend `scripts/validate-skills.mjs` with role frontmatter checks, no-version-talk scan, and same-family role spine checks (warn-level, no false positives).
-- [x] 7.2 Add `check:skills` to `package.json` (standalone; not wired into lint because the validator already hard-fails on pre-existing container/symlink skills `ego-browser`/`patent-teams`).
+- [x] 7.2 Add `check:skills` to `package.json`. **Update（2026-09-20）**: it IS wired into the `pnpm lint` chain (`package.json` scripts.lint) — the earlier reservation (hard-fail on pre-existing container/symlink skills) no longer applies.
 
 ## 8. Dependencies & config wiring
 

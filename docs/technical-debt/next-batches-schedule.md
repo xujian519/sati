@@ -1,6 +1,7 @@
 # Sati 后续批次专项排期建议
 
 > 日期：2026-08-23（当前主流程批次「技术债修复」进行中）
+> **已被取代（2026-09-20）**：本文所有行数/计数指标以 `docs/technical-debt/metrics.md`（`pnpm check:techdebt-metrics` 保真、`pnpm measure:update` 刷新）为准；§7「模块级依赖环 0」的结论已被 `docs/technical-debt/audit-report-2026-08-27.md` §1 推翻（发现 3 组运行时值循环 SCC）。保留本文作为排期决策的历史记录。
 > 依据：`docs/technical-debt/backlog.md` §29.C 修复排期（B1–B6 全量审计后），与已建 issue 一一映射。
 > 定位：**专项 Sprint 排程**。区分「可顺手」的机会型条目与「必须专项」的 L 工作量条目；标注工作量大、爆炸半径、是否需要浏览器验证、是否存在硬截止。
 

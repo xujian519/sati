@@ -3,7 +3,9 @@
 > 对应方案：`docs/patent-provenance-claim-coverage-plan.md`（v2.1）
 > 顺序依据：方案 §五 落地顺序（评审 F1 调整）
 > 编制日期：2026-08-20
-> 状态：**未开始**（T0 可立即开工）
+> 状态：**已完成**（T0–T8 全部落地，见本文件 §任务表 与 `docs/notes/implemented/` 相关 note；T9 为条件触发项，未做）
+>
+> 更正说明（2026-09-20，docs↔code 一致性审计）：本行原写「未开始」，与同文件任务表的 ✅ 直接冲突。代码侧已核实：`src/patent/claim-coverage/{coverage-check,skeleton,types}.ts` 存在。
 > 提交规范：每任务完成后单独提交，Conventional Commits（`feat(patent): ...`），git hook 强制
 
 ---

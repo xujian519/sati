@@ -3,7 +3,7 @@
 # 事件生产者/消费者矩阵（阶段四 T8）
 
 从源码生成：事件名取自 discriminated union 的 type 字面量（含交叉类型如 GatewayEvent，见附录）；生产者为
-emit/dispatch/emitAgentEvent/emitEvent 字符串事件名调用点、对象字面量首参调用点与 yield { type } 泵；
+emit/dispatch/emitAgentEvent/emitEvent/emitForSession/sendNotification 字符串事件名调用点、对象字面量参调用点与 yield { type } 泵；
 消费者为 on/subscribe 字符串订阅调用点 + 事件流消费点（for-await 语汇流，折叠为「{callee} 流 ×N」，明细见附录）。
 改事件后运行 `pnpm gen:event-matrix --check`（CI 门禁）。
 

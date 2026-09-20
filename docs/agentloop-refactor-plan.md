@@ -1,7 +1,7 @@
 # AgentLoop 拆解专项实施文档
 
 - 创建日期：2026-08-14
-- 状态：**轮次 1–8 完成**——`AgentLoop.ts` 2433 → 1133 行，issue #147 已结清（收口判据见 `docs/notes/implemented/2026-09-14-agentloop-decomposition-closure.md`）
+- 状态：**轮次 1–8 完成**——`AgentLoop.ts` 2433 → 约 1.1 千行（表内各轮次的「→ N 行」是当时的快照；**当前行数以 `docs/technical-debt/metrics.md` 为准**，勿在文档写死），issue #147 已结清（收口判据见 `docs/notes/implemented/2026-09-14-agentloop-decomposition-closure.md`）
 - 前置：阶段一/阶段二（`docs/deepseek-harness-phase1-plan.md` / `phase2-plan.md`）
 
 ---

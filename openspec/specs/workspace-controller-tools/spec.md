@@ -1,7 +1,8 @@
 # workspace-controller-tools Specification
 
 ## Purpose
-TBD - created by archiving change jspace-workspace-ledger. Update Purpose after archive.
+
+J-Space 账本的控制器工具：`workspace_note` 校验并持久化账本编辑（拒绝畸形写、合法与非法并存时合法部分仍生效，不做决策也不阻断）、`workspace_ship` 报告型检测 register 泄漏/失败签名（不阻断交付）。实现见 `src/tool/builtin/workspace/`；随 `SATI_WORKSPACE_LEDGER_ENABLED` opt-in 注册。
 
 ## Requirements
 

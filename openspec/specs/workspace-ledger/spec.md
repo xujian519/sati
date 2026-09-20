@@ -1,7 +1,8 @@
 # workspace-ledger Specification
 
 ## Purpose
-TBD - created by archiving change jspace-workspace-ledger. Update Purpose after archive.
+
+以 `<workspace-state>` 块（Goal/Core/Verified/Open/Next 五段固定顺序）承载工作区账本：开账须同时给 Goal+Next、Verified 单调编号且须带覆盖、Open 只能关闭于已记录 checkpoint、Core 至多两个活跃条目。账本由 transcript 重派生并在每次模型调用前重新注入，因此抗压缩遮蔽。实现见 `src/session/workspace/`；开关 `SATI_WORKSPACE_LEDGER_ENABLED`（默认关）。
 
 ## Requirements
 

@@ -1,7 +1,8 @@
 # metacognitive-control Specification
 
 ## Purpose
-TBD - created by archiving change metacognitive-control. Update Purpose after archive.
+
+要求模型在不确定答案收尾前标注置信度、并把单句诊断带入重试：`shaky` 触发一次控制退出（外化薄弱步骤 / 带诊断重试 / 升级），不无限循环。实现见 `src/agent/loop/metacognitiveControl.ts`；默认关（`SATI_METACOGNITIVE_CONTROL_ENABLED`）。
 
 ## Requirements
 

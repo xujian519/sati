@@ -21,7 +21,7 @@
 | #17 | read-before-write/edit 观测策略：三态 + 版本 CAS（`packages/fs/fs-observation-policy/`） | T5 |
 | #18 | 工具卫生：per-tool 超时强制 + 防死循环提醒（`packages/guard/timeout-policy/`、`packages/guard/repeat-tool-reminder/`） | T6 |
 | #19 | 配置分层解析 + last-good-facts 回退（`packages/settings/settings/`、`packages/llm/llm-deepseek/src/index.ts:203`） | T7 |
-| #20 | 事件生产者/消费者矩阵自动生成 + `--check` 门禁（`scripts/gen-doc-graphs.ts`） | T8 |
+| #20 | 事件生产者/消费者矩阵自动生成 + `--check` 门禁（`scripts/gen-event-matrix.ts`） | T8 |
 | #21 | 工具 canonical output schema 强制校验 + 纯 render 投影（`docs/subsystems/tools.md`） | T9 |
 | #22 | 凭证双错误码：MISSING_CREDENTIAL / INVALID_CREDENTIAL（`packages/credentials/`、`packages/llm/llm/src/index.ts:assertUsableApiKey`） | T10 |
 
@@ -524,7 +524,7 @@ API key 会话录制。利用 ~/.sati/sati.yaml 已配置的 DeepSeek provider�
 | #17 | `packages/fs/fs-observation-policy/`、`packages/fs/fs/`（fs/* 事件门） |
 | #18 | `packages/guard/timeout-policy/`、`packages/guard/repeat-tool-reminder/` |
 | #19 | `packages/settings/settings/`、`packages/llm/llm-deepseek/src/index.ts:203`（last-good-facts） |
-| #20 | `scripts/gen-doc-graphs.ts` → `docs/event-producer-consumer.md` |
+| #20 | `scripts/gen-event-matrix.ts` → `docs/event-producer-consumer.md` |
 | #21 | `docs/subsystems/tools.md`（ToolDefinition/output/execute 契约） |
 | #22 | `packages/credentials/credentials/`、`packages/llm/llm/src/index.ts:assertUsableApiKey` |
 
