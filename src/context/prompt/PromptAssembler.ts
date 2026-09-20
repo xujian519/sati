@@ -1,5 +1,6 @@
 import { dirname } from "node:path";
 import type { CanonicalToolSchema } from "../../model/index.js";
+import { isPatentSkillName } from "../../pilot/workspace/patentSignals.js";
 import type {
   ContributedCommand,
   ContributedSkill,
@@ -48,8 +49,23 @@ export type PromptAssemblerResult = {
  *   4 custom_system_prompt    — replaces 1 + 3 when provided
  *   5 append_system_prompt    — always last
  */
+/**
+ * 清单渲染开关。`patentDomainEnabled: false` 时 `<available-skills>` / `<available-roles>`
+ * 不列专利技能（判据见 `src/pilot/workspace/patentSignals.ts`）。
+ *
+ * 只影响**提示词注入**，不动技能注册：非专利工作区里模型仍可经 `read_skill` 按名读到
+ * 专利技能（名字可能来自用户提示），判据误判不会造成能力不可达。代价只是省下清单体积
+ * （本机实测 63 条技能 3,650 tokens + 32 条角色 1,890 tokens，其中专利部分约 3.7k）。
+ */
+export type PromptAssemblerOptions = {
+  patentDomainEnabled?: boolean;
+};
+
 export class PromptAssembler {
-  constructor(private readonly extension: ExtensionResolver) {}
+  constructor(
+    private readonly extension: ExtensionResolver,
+    private readonly options: PromptAssemblerOptions = {},
+  ) {}
 
   assemble(input: PromptAssemblerInput): PromptAssemblerResult {
     const sections = this.buildSections(input);
@@ -168,7 +184,8 @@ export class PromptAssembler {
       sections.push(formatCommands(commands));
     }
 
-    const skills = this.extension.listSkills();
+    const patentDomainEnabled = this.options.patentDomainEnabled ?? true;
+    const skills = this.extension.listSkills().filter(skill => patentDomainEnabled || !isPatentSkillName(skill.name));
     if (skills.length > 0) {
       const plainSkills = skills.filter(s => !s.role);
       const roles = skills.filter(

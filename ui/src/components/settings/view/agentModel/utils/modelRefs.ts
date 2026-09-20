@@ -6,7 +6,7 @@ import {
 } from "../../../../../shared/modelProtocolDefaults";
 import { patch } from "../../modelPool/utils/patch";
 import type { SatiConfig } from "../../modelPool/types";
-import type { ActiveModelCapabilities, ResolvedLimit } from "../types";
+import type { ActiveModelCapabilities, ModelWindowOverrideEntry, ModelWindowOverrides, ResolvedLimit } from "../types";
 
 export function splitModelRef(ref: string | undefined): { providerId: string; modelId: string } | null {
   const value = ref?.trim() ?? "";
@@ -41,18 +41,32 @@ function protocolDefaultsFor(protocol: string | undefined): ProtocolModelDefault
   return (known ? PROTOCOL_MODEL_DEFAULTS[known] : undefined) ?? PROTOCOL_MODEL_DEFAULTS[FALLBACK_PROTOCOL];
 }
 
-/** Model declaration > catalog entry > protocol default — the engine's own order. */
+/** 覆盖层键：`<provider>/<model>`（与引擎 `modelWindowKey` 同构）。 */
+export function modelWindowKey(providerId: string, modelId: string): string {
+  return `${providerId}/${modelId}`;
+}
+
+/**
+ * Model declaration > window overlay (observed / probe) > catalog entry > protocol default
+ * —— the engine's own order（引擎侧同一优先级，见 `src/model/config/parseModelConfig.ts`）。
+ */
 function resolveLimit(
   override: number | undefined,
+  windowValue: number | undefined,
+  windowSource: "probe" | "observed" | undefined,
   catalogValue: number | undefined,
   protocolValue: number,
 ): ResolvedLimit {
   if (override !== undefined) return { tokens: override, source: "config" };
+  if (windowValue !== undefined && windowSource !== undefined) return { tokens: windowValue, source: windowSource };
   if (catalogValue !== undefined) return { tokens: catalogValue, source: "catalog" };
   return { tokens: protocolValue, source: "default" };
 }
 
-export function activeModelCapabilities(config: SatiConfig): ActiveModelCapabilities | null {
+export function activeModelCapabilities(
+  config: SatiConfig,
+  windowOverrides?: ModelWindowOverrides | null,
+): ActiveModelCapabilities | null {
   const ref = config.agent?.model ?? "";
   if (!ref) return null;
   const slash = ref.indexOf("/");
@@ -80,6 +94,7 @@ export function activeModelCapabilities(config: SatiConfig): ActiveModelCapabili
   const catalogModel = catalogProvider?.models.find(m => m.id === modelId);
   const protocol = provider.protocol ?? catalogProvider?.protocol ?? FALLBACK_PROTOCOL;
   const protocolDefaults = protocolDefaultsFor(protocol);
+  const windowOverride: ModelWindowOverrideEntry | undefined = windowOverrides?.[modelWindowKey(providerId, modelId)];
   return {
     ref,
     providerId,
@@ -92,13 +107,18 @@ export function activeModelCapabilities(config: SatiConfig): ActiveModelCapabili
     maxContextTokensOverride,
     effectiveContext: resolveLimit(
       maxContextTokensOverride,
+      windowOverride?.maxContextTokens,
+      windowOverride?.source,
       catalogModel?.maxContextTokens,
       protocolDefaults.maxContextTokens,
     ),
     effectiveOutput: resolveLimit(
       maxOutputTokensOverride,
+      windowOverride?.maxOutputTokens,
+      windowOverride?.source,
       catalogModel?.maxOutputTokens,
       protocolDefaults.maxOutputTokens,
     ),
+    ...(windowOverride ? { windowOverride } : {}),
   };
 }

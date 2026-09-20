@@ -22,3 +22,4 @@
 - 事件矩阵按 `file:line` 硬编码：跨文件移动代码（含 eslint --fix 删 import）后必须 `pnpm gen:event-matrix`。
 - lint-staged 顺序 biome→eslint：eslint --fix 后需重新 biome 化。
 - 改动 `.github/labels.yml` 或 issue 模板的 scope 勾选项后，除门禁外还需手动跑一次 `node scripts/sync-labels.mjs` 把标签实体同步到仓库（CI 无仓库设置写权限）。
+- `.gitignore` 忽略 `*.test.ts`（本地草稿豁免）：后端 `*.spec.ts` 与 UI `*.test.tsx` 不受影响，但**新增 `*.test.ts` 必须 `git add -f`**，否则文件不入库、CI 也永远不跑（仓库里已有 23 个 force-add 的 `.test.ts`；#449 曾因此漏掉一个 hook 测试）。

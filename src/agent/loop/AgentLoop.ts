@@ -167,6 +167,9 @@ export class AgentLoop {
       missingToolResultRecoveryContext: () => this.missingToolResultRecoveryContext(),
       dispatchLifecycle: this.dispatchLifecycle,
       runAutoCompact: (state, input, options) => runAutoCompact(this.dependencies.context, state, input, options),
+      ...(dependencies.recordObservedContextWindow
+        ? { recordObservedContextWindow: dependencies.recordObservedContextWindow }
+        : {}),
     };
     this.modelRequest = { config, dependencies, dispatchLifecycle: this.dispatchLifecycle };
     this.responseAssembly = {

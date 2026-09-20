@@ -42,7 +42,9 @@ import { createModelRuntime, type ModelRuntime } from "../model/index.js";
 import { resolveEmbeddingClient, resolveRerankClient } from "../model/embedding/index.js";
 import { createPolicyKey, normalizeRetryReason } from "../model/streaming/retryState.js";
 import { loadPilotConfig } from "../pilot/index.js";
+import { getPilotProjectChatDir } from "../shared/paths/pilotPaths.js";
 import { isBuiltinToolGroupEnabled, isOptionalFeatureEnabled } from "../pilot/config/optionalFeature.js";
+import { detectPatentWorkspace, PATENT_DOMAIN } from "../pilot/workspace/patentSignals.js";
 import type { PilotConfigDiagnostic, PilotConfigSnapshot } from "../pilot/config/types.js";
 import { createRouterRuntime, type RouterRuntime } from "../router/index.js";
 import type { RouterEvent, RouterEventBus } from "../router/protocol/events.js";
@@ -81,6 +83,11 @@ export type ProjectRuntime = {
   memory?: MemoryResolver;
   /** Backing memory service for maintenance / introspection. */
   memoryService?: EdgeClawMemoryService;
+  /**
+   * 工作区专利判据结果（#450）：控制 patent 域工具与技能/角色清单是否对模型可见。
+   * 装配期算一次并随运行时缓存；工作区变成专利项目后需重启或显式配 `tools.patentDomain`。
+   */
+  patentDomainEnabled: boolean;
   /** 知识库路径探测结果（knowledge.capabilities 可观测性出口数据源）。 */
   knowledgePaths?: KnowledgeDbPaths;
   /** 知识库运行时状态聚合（各 resolver 打点；gateway 出口读快照）。 */
@@ -385,12 +392,28 @@ export function createProjectRuntimeResolver(deps: ProjectRuntimeFactoryDeps): P
       tools.register(tool);
     }
 
+    // 工作区专利判据（#450 构件①）：patent 域是**工作区级**事实，而 tools 段是机器级配置。
+    // 判据为否时把 `patent` 并入隐藏域——28 个专利工具（~13.7k tokens schema）不再推给
+    // 每个非专利工作区；判据为是时行为与改动前逐字一致。显式 `tools.patentDomain` 最高优先。
+    const patentVerdict = detectPatentWorkspace({
+      projectRoot,
+      explicit: toolsConfig?.patentDomain,
+      hasPatentsConfig: snapshot.config.patents !== undefined,
+      projectChatsDir: getPilotProjectChatDir(projectRoot, deps.pilotHome),
+    });
+
     // 项目级工具域裁剪（tools.visibleDomains / tools.hiddenDomains）：注册表构建完成后
     // 统一收窄——主会话、子代理与团队成员会话都从这份注册表派生，配置对三者一致生效。
     // 域语义复用 `ToolRegistry.listByDomains`（hidden 优先；未标注 domain 的工具不受约束）。
     const visibleDomains = toolsConfig?.visibleDomains;
-    const hiddenDomains = toolsConfig?.hiddenDomains;
-    if (visibleDomains?.length || hiddenDomains?.length) {
+    const configuredHiddenDomains = toolsConfig?.hiddenDomains;
+    const hiddenDomains = [...(configuredHiddenDomains ?? []), ...(patentVerdict.enabled ? [] : [PATENT_DOMAIN])];
+    logger.info(
+      `patent domain ${patentVerdict.enabled ? "enabled" : "hidden"} for ${projectRoot} (signal: ${patentVerdict.signal}${
+        patentVerdict.evidence ? `, evidence: ${patentVerdict.evidence}` : ""
+      })`,
+    );
+    if (visibleDomains?.length || hiddenDomains.length) {
       const knownDomains = new Set<string>(
         tools
           .list()
@@ -415,7 +438,8 @@ export function createProjectRuntimeResolver(deps: ProjectRuntimeFactoryDeps): P
         );
       }
       // 配置的域没有任何工具命中：通常是拼写错误，或该域工具已被上游开关关闭。
-      const unmatched = [...new Set([...(visibleDomains ?? []), ...(hiddenDomains ?? [])])].filter(
+      // 只检查**用户写的**域名：判据推导出的 `patent` 被上游开关关掉时不该报警（不是配置问题）。
+      const unmatched = [...new Set([...(visibleDomains ?? []), ...(configuredHiddenDomains ?? [])])].filter(
         domain => !knownDomains.has(domain),
       );
       if (unmatched.length > 0) {
@@ -522,6 +546,7 @@ export function createProjectRuntimeResolver(deps: ProjectRuntimeFactoryDeps): P
       knowledgeStats,
       knowledgeEmbeddingConfigured: Boolean(embeddingClient),
       knowledgeRerankConfigured: Boolean(rerankClient),
+      patentDomainEnabled: patentVerdict.enabled,
       projectStorage: {
         projectRoot,
         pilotHome: deps.pilotHome,

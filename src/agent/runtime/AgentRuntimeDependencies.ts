@@ -123,6 +123,17 @@ export type AgentRuntimeDependencies = {
     provider: string,
     model: string,
   ) => { maxContextTokens: number; maxOutputTokens?: number } | undefined;
+  /**
+   * 窗口观测回写（issue #449）：模型错误恢复链从真实超限报错反推出上下文上限时
+   * 调用一次（仅 `provider-context-cap` 分支），由宿主持久化到窗口覆盖层，
+   * 使该事实跨会话/进程重启存活。未注入 = 保持既有瞬态行为。
+   */
+  recordObservedContextWindow?: (input: {
+    provider: string;
+    model: string;
+    maxContextTokens: number;
+    reason: string;
+  }) => void;
   now?: () => Date;
   uuid?: () => string;
   auditRecorder?: SatiToolAuditRecorder;

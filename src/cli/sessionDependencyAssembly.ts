@@ -12,6 +12,7 @@
  * 同一个 `HookRuntime` 上（见 `prepareSessionRuntime`），本模块不持有也不得重建它。
  */
 
+import { join } from "node:path";
 import { createAgentEventBuffer, type CreateAgentSessionOptions } from "../agent/index.js";
 import type { AgentSubagentTranscriptHooks } from "../agent/runtime/AgentRuntimeDependencies.js";
 import { createPlanTodoStateManager } from "../agent/runtime/PlanTodoState.js";
@@ -35,6 +36,7 @@ import {
 import { GatewayElicitationChannel, type InProcessGateway } from "../gateway/index.js";
 import type { LifecycleRuntime } from "../lifecycle/index.js";
 import type { ModelRuntime } from "../model/index.js";
+import { MODEL_WINDOW_STORE_FILENAME, ModelWindowStore } from "../model/window/store.js";
 import type { loadPilotConfig } from "../pilot/index.js";
 import type { RouterRuntime } from "../router/index.js";
 import { createAgentProjectSessionStorage } from "../session/index.js";
@@ -52,6 +54,8 @@ export type SessionDependenciesRuntimeView = {
   router: RouterRuntime;
   /** 未启用记忆时为 undefined（原闭包取 `runtime.memory`）。 */
   memory?: MemoryResolver;
+  /** 工作区专利判据结果（#450）：控制技能/角色清单里的专利条目。 */
+  patentDomainEnabled: boolean;
 };
 
 export type SessionDependenciesInput = {
@@ -125,6 +129,21 @@ export function buildSessionDependencies(deps: SessionDependenciesInput): Sessio
         return undefined;
       }
     },
+    // 窗口观测回写（#449）：真实超限报错反推出的上限落盘到
+    // `<pilotHome>/model-windows.json`，下次解析即作为覆盖层生效
+    // （config 显式声明之下、catalog 之上）。写失败只影响持久性，
+    // 本轮仍由瞬态 cap 兜住，故吞掉错误不阻断。
+    recordObservedContextWindow: ({ provider, model, maxContextTokens, reason }) => {
+      const store = new ModelWindowStore(join(deps.pilotHome, MODEL_WINDOW_STORE_FILENAME));
+      store
+        .record(provider, model, {
+          maxContextTokens,
+          source: "observed",
+          updatedAt: now().toISOString(),
+          via: reason,
+        })
+        .catch(() => {});
+    },
   };
   const extendDependencies = (storage: ReturnType<typeof createAgentProjectSessionStorage>) => {
     const toolResultBudget = new ToolResultBudget({ toolResultsDir: storage.toolResultsDir });
@@ -180,6 +199,7 @@ export function buildSessionDependencies(deps: SessionDependenciesInput): Sessio
     const contextRuntime = new DefaultContextRuntime({
       extension,
       projectRoot,
+      patentDomainEnabled: runtime.patentDomainEnabled,
       memoryResolver,
       memoryRetrievalTimeoutMs: runtime.snapshot.config.memory?.retrievalTimeoutMs,
       // 项目知识偏好透传：knowledge provider 据此强制注入/加权审查标准

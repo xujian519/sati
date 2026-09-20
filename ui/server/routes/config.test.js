@@ -877,3 +877,57 @@ function jsonResponse(payload, overrides = {}) {
     json: async () => payload,
   };
 }
+
+describe("model-windows overlay route (#449)", () => {
+  it("returns exists:false when the overlay file is absent", async () => {
+    const home = mkdtempSync(join(tmpdir(), "sati-window-route-"));
+    tempDirs.push(home);
+    process.env.SATI_HOME = home;
+
+    const { request } = await createConfigApp();
+    const data = await request("/api/config/model-windows");
+
+    expect(data).toEqual({ exists: false, entries: {} });
+  });
+
+  it("returns the persisted window facts when the file exists", async () => {
+    const home = mkdtempSync(join(tmpdir(), "sati-window-route-"));
+    tempDirs.push(home);
+    process.env.SATI_HOME = home;
+    writeFileSync(
+      join(home, "model-windows.json"),
+      JSON.stringify({
+        version: 1,
+        entries: {
+          "relay/custom-model": {
+            maxContextTokens: 262144,
+            source: "probe",
+            updatedAt: "2026-09-19T00:00:00.000Z",
+            via: "context_length",
+          },
+        },
+      }),
+      "utf8",
+    );
+
+    const { request } = await createConfigApp();
+    const data = await request("/api/config/model-windows");
+
+    expect(data.exists).toBe(true);
+    expect(data.entries["relay/custom-model"].maxContextTokens).toBe(262144);
+    expect(data.entries["relay/custom-model"].source).toBe("probe");
+  });
+
+  it("treats a corrupt file as no facts instead of failing the request", async () => {
+    const home = mkdtempSync(join(tmpdir(), "sati-window-route-"));
+    tempDirs.push(home);
+    process.env.SATI_HOME = home;
+    writeFileSync(join(home, "model-windows.json"), "{ not json", "utf8");
+
+    const { request } = await createConfigApp();
+    const data = await request("/api/config/model-windows");
+
+    expect(data.exists).toBe(false);
+    expect(data.entries).toEqual({});
+  });
+});
