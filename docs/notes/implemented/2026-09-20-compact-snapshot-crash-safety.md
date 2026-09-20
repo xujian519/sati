@@ -21,7 +21,8 @@ Status: implemented
 
 **先复现再动手**（P0）：`tests/session/compact-snapshot-crash.spec.ts` 四条用例全部红灯，
 失败值即症状——`边界已落盘而替换消息全部未落盘` 的模型可见投影是**空串**，
-`legacy 替换记录` 一案只剩 `partial replacement tail` 一条残缺内容。
+`legacy 替换记录` 一案只剩 `partial replacement tail` 一条残缺内容。（这两条用例按最终取定的
+双轨口径改判为「legacy 形态的既有语义」，见下 Decision；缺陷窗口本身在 legacy 形态上依旧存在。）
 
 ## Decision
 
@@ -31,15 +32,15 @@ Status: implemented
    改为把整份替换上下文写进 `boundary.snapshot = { version: 1, messages }`。**授权丢弃历史**
    与**替换内容完整**由此变成同一份记录的两面。
 2. **有效性门控取代存在性判据**：新增 `src/session/transcript/CompactSnapshot.ts` 的
-   `readCompactSnapshot`（逐层校验版本、非空、role、逐 content block 形状）作为唯一授权；
-   `replayFull` 只在快照有效时丢弃边界前历史，否则保留原文并发
+   `readCompactSnapshot`（逐层校验版本、非空、role、逐 content block 形状）作为快照形态的
+   唯一授权；快照声明存在却校验不通过时，`replayFull` 不丢弃边界前历史，保留原文并发
    `transcript_entry_invalid` warning。效力**不依赖 turn 完成**——落盘那一刻替换内容已完整。
 3. **保留输出门禁**：Sati 的压缩重放消息本来要过 `PatentOutputGate`（免责声明等质量处理），
    上游形态会丢掉这一步。改为先 `processMessage(..., { skipApproval: true })` 取门禁后文本，
    再内联进快照——门禁语义不变，只是"写哪去"变了。
 4. **职责拆分**：`findLastCompactBoundaryIndex` 保持「任意边界」语义（`editLastTurn` 的
    压缩尾巴前置校验、`replayShadowedMessages` 的原文展开都需要认识 legacy 边界），
-   新增 `findLastCompactSnapshotIndex` 供重放授权。
+   重放授权改用文件内私有的 `findLastReplayBoundaryIndex`（双轨判定，不外泄）。
 
 配套两种 Sati 官有耦合的修复：
 
@@ -50,13 +51,20 @@ Status: implemented
   标记，并把 `control_boundary` 加入 `retargetEntriesToSession` 的处理集。否则分叉会话的
   快照继续指向**源会话目录**的媒体/溢出文件。
 
-**legacy 口径（本 PR 的行为变化，取上游判别口径 A）**：既有会话磁盘上是 legacy 形态
-（边界无快照 + 逐条替换记录）。改动后这类边界**不再授权丢弃历史**，legacy 替换记录被跳过，
-原文历史照常进入模型上下文——即「压缩被保守回滚」，与上游文案一致（may require compaction
-again after resume）。
+**legacy 口径（双轨 B）**：既有会话磁盘上是 legacy 形态（边界无快照 + 逐条替换记录）。
+重放授权按**是否声明快照**分两轨（`findLastReplayBoundaryIndex` + `CompactSnapshot.declaresCompactSnapshot`）：
+
+- **无 `snapshot` 字段**（真 legacy 记录）：沿用旧语义——边界授权丢弃边界前历史，替换内容
+  由紧随边界的替换消息提供。既有会话的重放结果与本次改动前一致（原文不复活、不触发再压缩）。
+- **声明了 `snapshot` 却读不出来**（截断、版本不符、异构写入）：不按 legacy 放行，该边界不授权
+  丢弃历史，保留原文并发 warning。损坏记录不能被当成「从未有过快照」。
 
 ## Alternatives considered
 
+- **legacy 单路径口径 A（legacy 边界一律不授权丢弃历史，压缩被保守回滚）** — 曾随首个 PR 落地，
+  同日内改判为双轨 B：既有已压缩会话续算时原文历史整段复活，上下文变长并可能立刻触发再压缩，
+  属于对存量数据的非预期行为变化；A 的收益（存量会话的崩溃窗口）只在实际发生崩溃时兑现，
+  而代价每次续算都付。B 把选择权留给形态本身：新数据走新路径，存量数据行为不变。
 - **照搬上游 `prepareTail()` 与 `flush: true`（fsync）** — 落选：Sati 的 `JsonlTranscriptWriter`
   已有更强的 torn-tail 处理（逐记录 `write(2)` + 短写循环 + 首写前探测补换行），而全仓无 fsync
   传统。单记录形态下「快照记录不完整 ⇒ 不授权丢历史」，崩溃安全不依赖 fsync；`flush: true`
@@ -79,17 +87,22 @@ again after resume）。
 
 ## Consequences
 
-- **不变量**：只有「带完整且可校验快照」的边界才授权重放丢弃边界前历史；否则一律保留原文。
+- **不变量**：**快照形态**下只有「带完整且可校验快照」的边界才授权重放丢弃边界前历史；
+  声明了快照却不可读时一律保留原文；legacy 形态（无 `snapshot` 字段）沿用旧语义授权。
 - **磁盘格式**：`AgentControlBoundaryTranscriptEntry.boundary` 增可选 `snapshot`
   （`CompactSnapshotPayload = { version: 1; messages: CanonicalMessage[] }`）。只增字段，
   legacy 记录照常可读；`TranscriptReader` 泛化解析，无剥离风险。
-- **行为变化**：① legacy 边界不再遮蔽历史（原文回归上下文，可能触发再压缩）；
+- **行为变化**：① legacy 会话重放结果不变，快照会话在 turn 未完成/记录残缺时不再丢上下文；
   ② 替换消息不再作为独立 `durable_message` 条目落盘（`extractWebVisibleMessages` /
   `extractSubagentExecutionMessages` 本就把它排除在 Web 投影外，故 UI 无可见变化）；
   ③ 跨进程续算形态判定更准确——边界记录不算「响应已到」，压缩后立即崩溃仍判 (a) 形态自动续算。
+- **边界损坏时的冗余**：快照声明存在却不可读时边界不授权遮蔽，其后散落的 legacy 替换消息按
+  普通条目一并进入上下文 ⇒ 原文 + 一份冗余摘要。安全侧冗余（多喂不丢），且只出现在
+  「新形态记录损坏」这一异常路径上。
 - **测试面**：新增 `tests/session/compact-snapshot-crash.spec.ts`（4 条，先红后绿）与
   `tests/web/fork-compact-snapshot.spec.ts`（1 条，负控制：摘掉 `control_boundary` 重定向 ⇒
-  快照内媒体路径停在源会话目录）；`transcript-replay-compaction.spec.ts` 改写为快照/legacy 双契约；
+  快照内媒体路径停在源会话目录）；`transcript-replay-compaction.spec.ts` 改写为快照/legacy 双契约
+  （含「声明快照却不可读不按 legacy 放行」一条）；
   四份 fixture（`project-messages` / `shadowed-messages-replay` / `transcript-replay-cache` /
   `output-gate-wiring` D5 两条）由 legacy 形态迁到快照形态，D5 的「压缩重放走门禁且不重复挂起」
   断言改为读快照内容。

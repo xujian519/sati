@@ -3,7 +3,7 @@ import type { AgentEvent } from "../../agent/protocol/events.js";
 import type { AgentPermissionDenial, AgentTurnResult } from "../../agent/protocol/result.js";
 import type { InjectionRecord } from "../../context/protocol/types.js";
 import { mergeMetadata } from "../metadata/SessionMetadataStore.js";
-import { readCompactSnapshot } from "./CompactSnapshot.js";
+import { declaresCompactSnapshot, readCompactSnapshot } from "./CompactSnapshot.js";
 import {
   isCompactBoundaryEntry,
   type AgentTranscriptDiagnostic,
@@ -21,6 +21,7 @@ export type AgentTranscriptReplayResult = {
   /**
    * Index of the last compact_boundary entry consumed during replay. When
    * present, only messages after this entry are kept in `messages`.
+   * 采纳的边界由双轨口径选出，见 `findLastReplayBoundaryIndex`。
    */
   lastCompactBoundaryIndex?: number;
   /** Last compact boundary entry encountered (for resume relink). */
@@ -28,11 +29,11 @@ export type AgentTranscriptReplayResult = {
 };
 
 /**
- * Find the index of the last compact boundary entry（不论是否带快照）。
+ * Find the index of the last compact boundary entry（不论形态）。
  *
  * 用于「最后一次压缩发生在哪」这类判定：编辑/重生成最后 turn 的前置校验
  * （`editLastTurn`）与遮蔽原文展开（`replayShadowedMessages`）都要认识 legacy
- * 边界。**授权重放丢弃历史**请用 `findLastCompactSnapshotIndex`。
+ * 边界。**授权重放丢弃历史**的判定见 `findLastReplayBoundaryIndex`。
  */
 export function findLastCompactBoundaryIndex(entries: AgentTranscriptEntry[]): number {
   for (let index = entries.length - 1; index >= 0; index -= 1) {
@@ -44,16 +45,27 @@ export function findLastCompactBoundaryIndex(entries: AgentTranscriptEntry[]): n
 }
 
 /**
- * Find the index of the last compact boundary carrying a complete, valid snapshot.
+ * 重放授权的边界索引（**双轨口径**）：
  *
- * 只有它授权重放丢弃边界前历史：legacy 边界（边界与替换消息分两条记录写入）
- * 无法证明替换内容完整，崩溃后可能只剩残缺替换内容。
+ * - **快照形态**（边界内联整份替换上下文）：校验通过才授权——「授权丢弃历史」
+ *   与「替换内容完整」是同一份记录的两面，记录不完整即不授权。
+ * - **legacy 形态**（边界与逐条替换消息分两条记录，磁盘上没有 snapshot 字段）：
+ *   沿用旧语义授权丢弃历史，替换内容由紧随其后的替换消息提供。既有已压缩会话
+ *   因此不改变重放结果（不擅自让原文复活、不引入再压缩）。
+ *
+ * 「声明了 snapshot 却校验不通过」（截断/旧版本/异构写入）**不**走 legacy 放行，
+ * 而是跳过该边界并报 warning——损坏的记录不能被当成「从未有过快照」。
  */
-export function findLastCompactSnapshotIndex(entries: AgentTranscriptEntry[]): number {
+function findLastReplayBoundaryIndex(entries: AgentTranscriptEntry[]): number {
   for (let index = entries.length - 1; index >= 0; index -= 1) {
-    if (readCompactSnapshot(entries[index]!) !== undefined) {
-      return index;
+    const entry = entries[index]!;
+    if (!isCompactBoundaryEntry(entry)) {
+      continue;
     }
+    if (declaresCompactSnapshot(entry) && readCompactSnapshot(entry) === undefined) {
+      continue;
+    }
+    return index;
   }
   return -1;
 }
@@ -261,7 +273,7 @@ function appendProjection(entries: AgentTranscriptEntry[], cache: ProjectionCach
 }
 
 function replayFull(entries: AgentTranscriptEntry[]): AgentTranscriptReplayResult {
-  const lastBoundaryIndex = findLastCompactSnapshotIndex(entries);
+  const lastBoundaryIndex = findLastReplayBoundaryIndex(entries);
   const messages: CanonicalMessage[] = [];
   const events: AgentEvent[] = [];
   const diagnostics: AgentTranscriptDiagnostic[] = [];
@@ -302,11 +314,6 @@ function replayFull(entries: AgentTranscriptEntry[]): AgentTranscriptReplayResul
         if (isShadowed) {
           break;
         }
-        // legacy 替换记录（无快照时代的「边界 + 逐条替换消息」形态）：无法
-        // 证明整份替换内容完整，其原文历史一并保留，不再重复进入上下文。
-        if (entry.message.metadata?.compactReplacement === true) {
-          break;
-        }
         if (!completedTurnIds.has(entry.turnId)) {
           diagnostics.push({
             code: "transcript_entry_invalid",
@@ -335,19 +342,22 @@ function replayFull(entries: AgentTranscriptEntry[]): AgentTranscriptReplayResul
         break;
       case "control_boundary": {
         const snapshot = readCompactSnapshot(entry);
-        if (index === lastBoundaryIndex && snapshot !== undefined) {
+        if (index === lastBoundaryIndex) {
           lastCompactBoundary = entry;
           // 快照整体即压缩后的模型可见上下文；生效不依赖该 turn 是否有
-          // turn_result——落盘时已是完整替换内容。
-          messages.push(...cloneMessages(snapshot));
-          for (const message of snapshot) {
-            events.push(projectMessageEvent(entry.sessionId, entry.turnId, message));
+          // turn_result——落盘时已是完整替换内容。legacy 形态（无快照）此处
+          // 无内容可推，其替换内容由紧随边界的替换消息提供（见 message 分支）。
+          if (snapshot !== undefined) {
+            messages.push(...cloneMessages(snapshot));
+            for (const message of snapshot) {
+              events.push(projectMessageEvent(entry.sessionId, entry.turnId, message));
+            }
           }
-        } else if (snapshot === undefined && isCompactBoundaryEntry(entry)) {
+        } else if (snapshot === undefined && declaresCompactSnapshot(entry)) {
           diagnostics.push({
             code: "transcript_entry_invalid",
             severity: "warning",
-            message: "Ignoring compact boundary without a valid complete snapshot; retaining prior context.",
+            message: "Ignoring compact boundary with an unreadable snapshot; retaining prior context.",
           });
         }
         break;

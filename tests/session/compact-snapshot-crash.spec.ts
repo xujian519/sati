@@ -13,8 +13,10 @@ import { replayTranscriptEntries } from "../../src/session/transcript/Transcript
  * 就丢弃边界前历史 ⇒ 模型上下文凭空缩水；若替换消息所属 turn 还缺 turn_result，
  * 这些替换消息本身也会被跳过 ⇒ 上下文几乎清空。
  *
- * 契约：只有「带完整且可校验快照」的边界才授权丢弃边界前历史；无快照（legacy）
- * 或快照损坏的边界保留原文历史并给出 warning。
+ * 契约（双轨口径）：**快照形态**只有「带完整且可校验快照」的边界才授权丢弃边界前
+ * 历史；快照声明存在却不可读时保留原文历史并给出 warning。**legacy 形态**（磁盘上
+ * 没有 snapshot 字段）沿用旧语义：边界授权丢弃历史、替换内容由紧随的替换消息提供
+ * ——既有会话的重放结果因此不变（代价见 `docs/notes/implemented/2026-09-20-compact-snapshot-crash-safety.md`）。
  */
 
 const createdAt = "2026-09-20T00:00:00.000Z";
@@ -123,17 +125,18 @@ function hasInvalidBoundaryDiagnostic(entries: AgentTranscriptEntry[]): boolean 
   );
 }
 
-test("边界已落盘而替换消息全部未落盘（记录间崩溃）时保留压缩前历史", () => {
+test("legacy 形态（边界无 snapshot 字段）沿用旧语义：边界授权丢弃历史", () => {
   const entries = [...historyEntries(), compactBoundary(4)];
 
-  const text = replayText(entries);
+  const replay = replayTranscriptEntries(entries);
 
-  assert.match(text, /old accepted input/);
-  assert.match(text, /old assistant reply/);
-  assert.equal(hasInvalidBoundaryDiagnostic(entries), true);
+  assert.equal(replay.lastCompactBoundaryIndex, 3, "legacy 边界仍授权丢弃边界前历史");
+  assert.equal(replay.lastCompactBoundary?.type, "control_boundary");
+  assert.deepEqual(replay.messages, [], "替换消息未落盘时上下文为空——这是 legacy 形态的既有窗口");
+  assert.equal(hasInvalidBoundaryDiagnostic(entries), false, "legacy 形态是完整记录，不得被当作损坏记录告警");
 });
 
-test("legacy 替换记录（无快照，turn 已完成）不再作为模型可见消息重复进入上下文", () => {
+test("legacy 替换记录（无快照，turn 已完成）按旧语义重放为模型可见消息", () => {
   const entries = [
     ...historyEntries(),
     compactBoundary(4),
@@ -143,8 +146,8 @@ test("legacy 替换记录（无快照，turn 已完成）不再作为模型可�
 
   const text = replayText(entries);
 
-  assert.match(text, /old accepted input/);
-  assert.doesNotMatch(text, /partial replacement tail/);
+  assert.doesNotMatch(text, /old accepted input/);
+  assert.match(text, /partial replacement tail/);
 });
 
 test("有效快照在 turn 未完成时即生效，不依赖 turn_result", () => {

@@ -50,6 +50,24 @@ export function readCompactSnapshot(entry: CompactSnapshotCarrier): CanonicalMes
   return messages;
 }
 
+/**
+ * 该边界记录是否**声明**了快照（不论快照本身是否校验通过）。
+ *
+ * 用于区分 legacy 形态与「新形态但快照损坏」：前者磁盘上根本没有 snapshot 字段，
+ * 按双轨口径沿用旧语义；后者的 snapshot 字段存在却读不出来，一律不授权丢历史
+ * 并报 warning——损坏的记录不能被当成「从未有过快照」来放行。
+ */
+export function declaresCompactSnapshot(entry: CompactSnapshotCarrier): boolean {
+  if (entry.type !== "control_boundary") {
+    return false;
+  }
+  const boundary: unknown = entry.boundary;
+  if (!isRecord(boundary) || boundary.kind !== "compact" || boundary.subtype !== "compact_boundary") {
+    return false;
+  }
+  return boundary.snapshot !== undefined;
+}
+
 function isMessage(value: unknown): value is CanonicalMessage {
   return (
     isRecord(value) &&

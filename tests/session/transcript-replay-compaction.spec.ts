@@ -108,7 +108,7 @@ test("transcript replay resumes from the compact snapshot baked into the boundar
   );
 });
 
-test("legacy boundary (boundary + per-message replacements) retains prior history instead of trusting it", () => {
+test("legacy boundary (boundary + per-message replacements) keeps the legacy path: drops prior history", () => {
   const entries: AgentTranscriptEntry[] = [
     ...oldHistoryEntries(),
     {
@@ -158,17 +158,74 @@ test("legacy boundary (boundary + per-message replacements) retains prior histor
   const replay = replayTranscriptEntries(entries);
   const replayText = replay.messages.map(messageText).join("\n");
 
-  assert.equal(replay.lastCompactBoundaryIndex, undefined, "legacy 边界不授权丢弃历史");
-  assert.match(replayText, /old accepted input/);
+  assert.equal(replay.lastCompactBoundaryIndex, 3, "legacy 边界沿用旧语义授权丢弃历史");
+  assert.equal(replay.lastCompactBoundary?.type, "control_boundary");
+  assert.doesNotMatch(replayText, /old accepted input/);
+  assert.doesNotMatch(replayText, /old assistant reply/);
+  assert.match(replayText, /\[CONTEXT COMPACTION - REFERENCE ONLY\]/);
+  assert.match(replayText, /kept tail input/);
+  assert.equal(
+    replay.diagnostics.some(diagnostic => diagnostic.code === "transcript_entry_invalid"),
+    false,
+    "legacy 边界是完整记录（只是没有快照字段），不得报损坏告警",
+  );
+});
+
+test("boundary declaring an unreadable snapshot is not waved through as legacy", () => {
+  // 磁盘上的旧版本记录：类型系统里不存在 version 2，故意构造异构形状验证放行口径。
+  const corruptedBoundary = {
+    type: "control_boundary",
+    sessionId: "session-compact",
+    turnId: "turn-compact",
+    sequence: 4,
+    createdAt,
+    boundary: {
+      kind: "compact",
+      subtype: "compact_boundary",
+      compactMetadata: {
+        trigger: "auto",
+        preTokens: 120,
+        postTokens: 40,
+        messagesSummarized: 2,
+      },
+      // 声明了快照却读不出来（版本不符）：既不能证明替换内容完整，也不能当作
+      // 「从没有过快照」按 legacy 放行。
+      snapshot: { version: 2, messages: [] },
+    },
+  } as unknown as AgentTranscriptEntry;
+
+  const entries: AgentTranscriptEntry[] = [
+    ...oldHistoryEntries(),
+    corruptedBoundary,
+    {
+      type: "durable_message",
+      sessionId: "session-compact",
+      turnId: "turn-compact",
+      sequence: 5,
+      createdAt,
+      message: {
+        role: "user",
+        metadata: { compactReplacement: true },
+        content: [{ type: "text", text: "partial replacement tail" }],
+      },
+    },
+    turnResult("turn-compact", 6),
+  ];
+
+  const replay = replayTranscriptEntries(entries);
+  const replayText = replay.messages.map(messageText).join("\n");
+
+  assert.match(replayText, /old accepted input/, "损坏记录不授权丢弃历史");
   assert.match(replayText, /old assistant reply/);
-  assert.doesNotMatch(replayText, /\[CONTEXT COMPACTION - REFERENCE ONLY\]/);
-  assert.doesNotMatch(replayText, /kept tail input/);
+  assert.equal(replay.lastCompactBoundaryIndex, undefined);
   assert.equal(
     replay.diagnostics.some(
-      diagnostic =>
-        diagnostic.code === "transcript_entry_invalid" && /without a valid complete snapshot/.test(diagnostic.message),
+      diagnostic => diagnostic.code === "transcript_entry_invalid" && /unreadable snapshot/.test(diagnostic.message),
     ),
     true,
-    "legacy 边界须产出 warning 说明历史被保留",
+    "损坏记录须留下告警",
   );
+  // 未授权边界时其后消息按普通条目进入上下文：损坏记录不遮蔽，也不吞掉散落的替换消息
+  // （原文 + 一份冗余摘要，安全侧冗余；见决策记录 Consequences）。
+  assert.match(replayText, /partial replacement tail/);
 });

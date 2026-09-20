@@ -56,7 +56,7 @@ Status: implemented（#599 的 P0 / P1 / P3 已落地；P4 见「非目标」）
 - `TurnRunner` 的压缩重放本来要过 `PatentOutputGate`（免责声明等），上游形态会丢掉这一步
   ⇒ 先门禁取文本、再内联快照。
 - `findLastCompactBoundaryIndex` 在 Sati 身兼两职（编辑最后 turn 的压缩尾巴校验、遮蔽原文展开），
-  不能直接改语义 ⇒ 拆出 `findLastCompactSnapshotIndex` 专供重放授权。
+  不能直接改语义 ⇒ 重放授权改用文件内私有的 `findLastReplayBoundaryIndex`（双轨判定，见 P2）。
 
 ## 四、落地批次与状态
 
@@ -64,7 +64,7 @@ Status: implemented（#599 的 P0 / P1 / P3 已落地；P4 见「非目标」）
 |---|---|---|
 | P0 | 先复现：`tests/session/compact-snapshot-crash.spec.ts` 四条用例（含记录间崩溃、部分落盘、turn 未完成、快照损坏） | ✅ 先红（4/4 fail，症状为空投影）后绿 |
 | P1 | 单记录快照 + 有效性门控 + 门禁保留 + 两个 Sati 官有耦合修复 | ✅ `src/session/transcript/CompactSnapshot.ts`、`TurnRunner`、`TranscriptEntry`、`TranscriptReplay` |
-| P2 | legacy 口径：取**上游判别口径 A**（保守回退原文 + warning + 忽略 legacy 替换记录） | ✅ 已实现（行为变化见 note） |
+| P2 | legacy 口径：取**双轨 B**（无 `snapshot` 字段的旧记录沿用旧语义；声明快照却不可读的记录不授权丢历史 + warning） | ✅ 已实现（改判理由与行为边界见 note 的 Decision / Alternatives） |
 | P3 | fork 重定向（`mapTranscriptEntryMessages` + `control_boundary` 入处理集） | ✅ 含负控制用例 |
 | P4 | durability 加固（fsync 级） | ⛔ 非目标，理由见下 |
 
