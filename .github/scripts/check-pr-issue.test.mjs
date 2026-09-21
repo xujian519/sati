@@ -4,8 +4,8 @@ import test from "node:test";
 import { evaluatePrTraceability, stripInvisible } from "./check-pr-issue.mjs";
 
 /** 便捷断言：期望命中的路径（或 null 表示不通过）。 */
-function expectPath(title, body, path) {
-  const result = evaluatePrTraceability(title, body);
+function expectPath(title, body, path, author) {
+  const result = evaluatePrTraceability(title, body, author);
   assert.equal(result.pass, path !== null, `pass 应为 ${path !== null}`);
   assert.equal(result.path, path, `path 应为 ${path}`);
 }
@@ -55,6 +55,55 @@ test("无任何引用的正文不通过", () => {
 
 test("标题与正文均为空不通过", () => {
   expectPath("", "", null);
+});
+
+// ---------------------------------------------------------------------------
+// 自动化依赖升级 bot 豁免（2026-09-21）。判据用真实 PR 正文形态：
+// 下面三段 body 分别取自本轮 dependabot PR #490（ws，正文无 `#编号`）与
+// #487（react-router-dom，changelog 里恰好带 `#15498`）—— 同一批 PR 的判定
+// 结果本不应由上游 changelog 的写法决定。
+// ---------------------------------------------------------------------------
+
+/** 真实形态：release notes 里**没有** `#编号`（对应 #490 ws）。 */
+const BOT_BODY_NO_REF = [
+  "Bumps [ws](https://github.com/websockets/ws) from 8.21.1 to 8.21.3.",
+  "<details><summary>Release notes</summary>",
+  "<li>The server now correctly rejects permessage-deflate offers (e97a20ea).</li>",
+  "</details>",
+].join("\n");
+
+/** 真实形态：changelog 里**恰好有** `#编号`（对应 #487 react-router-dom）。 */
+const BOT_BODY_WITH_REF = [
+  "Bumps [react-router-dom](https://github.com/remix-run/react-router) from 7.18.2 to 7.18.4.",
+  '<li>Release v7.18.4 (<a href="...">#15498</a>)</li>',
+].join("\n");
+
+test("dependabot 的依赖升级 PR 通过（正文无任何 issue 引用）", () => {
+  expectPath("chore(deps): bump ws from 8.21.1 to 8.21.3 in /ui", BOT_BODY_NO_REF, "bot", "dependabot[bot]");
+});
+
+test("dependabot 的依赖升级 PR 通过（changelog 恰好带 #编号，同样是 bot 路径）", () => {
+  // 与上一条同为 bot，必须走同一条路径 —— 判定结果不随上游 changelog 写法摆动。
+  expectPath("chore(deps): bump react-router-dom from 7.18.2 to 7.18.4", BOT_BODY_WITH_REF, "bot", "dependabot[bot]");
+});
+
+test("Renovate 的依赖升级 PR 通过", () => {
+  expectPath("chore(deps): update dependency ws to v8.21.3", "", "bot", "renovate[bot]");
+});
+
+test("【负控制】人类账号即使正文与 dependabot 完全一致也不豁免", () => {
+  // 同一份 body、换成人类作者 ⇒ 必须回到「无引用即失败」。
+  // 若豁免写成按正文形态（而非作者身份）判定，本用例会转绿而漏放行。
+  expectPath("chore(deps): bump ws from 8.21.1 to 8.21.3", BOT_BODY_NO_REF, null, "xujian519");
+});
+
+test("【负控制】昵称含 dependabot 的人类账号不豁免（缺少 [bot] 后缀）", () => {
+  // 豁免面只开给 GitHub App 身份；`dependabot-fan` 这类账号必须照常判失败。
+  expectPath("chore: 随手改点东西", "## 说明\n本次调整若干配置", null, "dependabot-fan");
+});
+
+test("【负控制】空作者不触发 bot 分支", () => {
+  expectPath("chore: 改动", "## 说明\n不涉及视觉变更", null, "");
 });
 
 // ---------------------------------------------------------------------------
