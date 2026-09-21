@@ -107,7 +107,7 @@
     "undici": "^8.10.1",
     "weixin-ilink": "^0.1.0",
     "ws": "^8.21.3",
-    "yaml": "^2.8.4"
+    "yaml": "^2.9.1"
   },
   "packageManager": "pnpm@10.32.1",
   "pnpm": {
