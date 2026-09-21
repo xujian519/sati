@@ -25,7 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/stale@v9
+      - uses: actions/stale@v11
         with:
           # 只治理 issue；PR 由评审流程与 dependabot 覆盖，不在此自动关闭。
           days-before-pr-stale: -1
