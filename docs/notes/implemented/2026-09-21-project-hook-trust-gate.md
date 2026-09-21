@@ -38,6 +38,13 @@ Status: implemented
 - **声明投影**：`summarizeHookDeclarations` 把声明投影成「事件 / matcher / 类型 / 原文摘要（命令、URL、
   提示词首行，截断 300 字符）」供人评审。看不见内容的「授权」不是授权；路径与命令不进遥测，但必须
   出现在本机审批界面上。
+- **浏览器面**：`ui/server/routes/hookTrust.js`（`GET /api/hook-trust?projectKey=` / `POST /api/hook-trust/decide`）
+  → `RemoteGateway.hookTrustList` / `hookTrustDecide`（WS 转发）→ 网关方法。UI 侧是应用级横幅
+  `HookTrustBanner`（挂在 `AppShellV2` 的 `<main>` 之上、与聊天 composer 内的审批条无关）：
+  只列出 `trusted` 之外的条目，展开可见每条声明的原文与插件目录，逐条「允许并启用 / 拒绝」，
+  全部已评审时**不渲染**（默认零占用）。文案走 i18n 命名空间 `hookTrust`（en + zh-CN）。
+  远程客户端必须同步实现这两个方法——`ui/server` 与网关是**两个进程**，走 `createRemoteGateway`
+  而不是进程内 gateway；漏了它就只有一个永远 `not_configured` 的 Web 面（浏览器验证时正是这样发现的）。
 
 ## Alternatives considered
 
@@ -67,6 +74,10 @@ Status: implemented
   一个版本所要换取的「有准备的破坏」。
 - fail-closed 的代价：一次瞬时 IO 失败会让本回合不装载项目 hook（日志说明原因）。`global` 与
   `builtin` hook 不受影响，宿主注入的权限回调也不受影响（它没有 `source`）。
-- 仍未做：Web 侧审批界面与 `ui/server` 的 REST 路由（协议与 CLI 已可用，界面属增量）；
-  telemetry 的 `hook_trust.revoked` 专用事件同样留到与 Web 面一起落，避免一轮改两处公共契约。
+- **生效边界＝新会话**：`HookRuntime` 是装配期快照，没有失效通道。授权/撤销/声明改动都只影响
+  **之后新建的会话**；已存在的会话继续用它装配时的那份 hook 集合。界面与日志都按此语义表述
+  （授权后新建会话即生效；已开着的会话不会中途改变行为）。这条是 1.2a 已记录的 R3 的落地形态，
+  不是新引入的限制。
+- 仍未做：telemetry 的 `hook_trust.revoked` 专用事件（`AnalyticsEventName` 是公共契约，
+  与 Web 面分开落地以免一轮改两处契约）。
 - 报告与决定的粒度是**插件**（`pluginId = <name>@project`），不区分 matcher/hook 槽位。

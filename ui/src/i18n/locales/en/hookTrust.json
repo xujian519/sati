@@ -1,0 +1,23 @@
+{
+  "title": "Project hooks need review",
+  "subtitle_one": "{{count}} plugin declares hooks that are not loaded yet",
+  "subtitle_other": "{{count}} plugins declare hooks that are not loaded yet",
+  "expand": "Review declarations",
+  "collapse": "Hide declarations",
+  "approve": "Approve and enable",
+  "reject": "Reject",
+  "enabled": "Enabled",
+  "status": {
+    "pending": "never reviewed",
+    "stale": "changed since review",
+    "revoked": "rejected",
+    "blocked": "cannot be verified"
+  },
+  "noHooks": "This plugin declares no hooks.",
+  "digest": "content digest",
+  "footer": "Unreviewed project hooks do not run. Editing the declaration — or any file in the plugin folder — invalidates an approval and asks again.",
+  "dismiss": "Not now",
+  "errors": {
+    "requestFailed": "Hook trust request failed ({{status}})"
+  }
+}

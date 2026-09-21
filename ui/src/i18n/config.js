@@ -30,6 +30,7 @@ import enTasks from "./locales/en/tasks.json";
 import enTeamPanel from "./locales/en/teamPanel.json";
 import enStylePanel from "./locales/en/stylePanel.json";
 import enKanban from "./locales/en/kanban.json";
+import enHookTrust from "./locales/en/hookTrust.json";
 import zhCommon from "./locales/zh-CN/common.json";
 import zhSettings from "./locales/zh-CN/settings.json";
 import zhAuth from "./locales/zh-CN/auth.json";
@@ -42,6 +43,7 @@ import zhCodeEditor from "./locales/zh-CN/codeEditor.json";
 import zhTeamPanel from "./locales/zh-CN/teamPanel.json";
 import zhStylePanel from "./locales/zh-CN/stylePanel.json";
 import zhKanban from "./locales/zh-CN/kanban.json";
+import zhHookTrust from "./locales/zh-CN/hookTrust.json";
 import { languages } from "./languages.js";
 
 const getSavedLanguage = () => {
@@ -74,6 +76,7 @@ i18n
         teamPanel: enTeamPanel,
         stylePanel: enStylePanel,
         kanban: enKanban,
+        hookTrust: enHookTrust,
       },
       "zh-CN": {
         common: zhCommon,
@@ -88,6 +91,7 @@ i18n
         teamPanel: zhTeamPanel,
         stylePanel: zhStylePanel,
         kanban: zhKanban,
+        hookTrust: zhHookTrust,
       },
     },
 
@@ -107,6 +111,7 @@ i18n
       "routing",
       "teamPanel",
       "kanban",
+      "hookTrust",
     ],
     defaultNS: "common",
     keySeparator: ".",

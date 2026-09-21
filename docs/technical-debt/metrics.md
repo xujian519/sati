@@ -7,11 +7,11 @@
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1053 / 176366 |
+| src TS 文件 / 行数 | 1053 / 176383 |
 | src JS 文件 | 0 |
 | tests 文件 | 584 |
-| ui/src 文件 / 行数 | 571 / 92364 |
-| ui/server 文件 / 行数 | 108 / 31827 |
+| ui/src 文件 / 行数 | 575 / 92802 |
+| ui/server 文件 / 行数 | 110 / 32001 |
 
 ## 指标口径
 
@@ -57,8 +57,8 @@
 | `ui/src/hooks/useProjectsState.ts` | `useProjectsState` | 647 | function |
 | `src/adapters/channel/tui/app/TuiApp.tsx` | `TuiApp` | 643 | function |
 | `src/cli/sati.ts` | `main` | 642 | function |
+| `ui/src/components/app-shell/AppShellV2.tsx` | `AppShellV2` | 631 | function |
 | `ui/src/stores/useSessionStore.ts` | `createSessionActions` | 631 | function |
-| `ui/src/components/app-shell/AppShellV2.tsx` | `AppShellV2` | 630 | function |
 | `ui/src/components/onboarding/view/subcomponents/LlmConfigurationStep.tsx` | `LlmConfigurationStep` | 630 | function |
 | `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` | `(anonymous)` | 622 | arrow |
 | `ui/src/components/main-content/view/MainContent.tsx` | `SplitBody` | 573 | function |
@@ -204,6 +204,7 @@
 | chat | 374 | 374 | 0 | 0 |
 | codeEditor | 143 | 143 | 0 | 0 |
 | common | 435 | 435 | 0 | 0 |
+| hookTrust | 17 | 17 | 0 | 0 |
 | kanban | 44 | 44 | 0 | 0 |
 | routing | 64 | 64 | 0 | 0 |
 | settings | 1060 | 1060 | 0 | 0 |
