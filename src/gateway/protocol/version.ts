@@ -101,6 +101,13 @@ export const PROTOCOL_RELEASES = [
       "context_budget 事件新增可选 fixedOverheadTokens：本地估算中不随对话增长的那部分（system prompt + 工具 schema）。旧客户端忽略该字段即退回单一用量显示；压缩重建的历史预算（source: compact）不带此字段，因为那一刻的 used 只含消息。",
     ],
   },
+  {
+    version: "1.11",
+    note: "2026-09-22: 无新方法；permission_request 事件新增可选 origin（子代理 fork 内的工具调用请求授权时，UI 需要知道「谁在请求」——父界面此前只看到工具名，分不清是主代理还是哪个子代理）。",
+    changes: [
+      'permission_request 事件新增可选 origin: { kind: "subagent", subagentId, subagentType? }：fork 身份来自 hook 输入的 agentId/agentType（由 ToolRuntime 在子代理会话内填入）。主代理自身的请求不带该字段，旧客户端忽略即退回旧显示。',
+    ],
+  },
 ] as const satisfies readonly ProtocolReleaseEntry[];
 
 /** 台账条目类型（含 `note` / `changes`）。 */

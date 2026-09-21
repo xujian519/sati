@@ -123,6 +123,11 @@ export interface NormalizedMessage {
   requestId?: string;
   input?: unknown;
   context?: unknown;
+  /**
+   * `permission_request` 帧的发起者归属：子代理 fork 内的工具调用才有
+   * （网关 `permission_request.origin` 经 bridge 透传）。主代理自身请求不带。
+   */
+  origin?: { kind: string; subagentId: string; subagentType?: string };
   newSessionId?: string;
   status?: string;
   summary?: string;

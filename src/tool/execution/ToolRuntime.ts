@@ -517,6 +517,12 @@ ${formatValidationError(tool.name, updatedValidation.issues, {
           transcriptPath: "",
           cwd: context.cwd,
           permissionMode: context.permissionMode,
+          // 子代理 fork 内的调用：把 fork 身份填进 hook 输入（`agentId` /
+          // `agentType` 是 hook 协议的既有字段，此前无人填充）。命令 hook 与
+          // 网关权限 hook 据此知道「谁在请求」，不必从 sessionId 反解——那里
+          // 拿不到子代理类型。
+          ...(context.subagentId ? { agentId: context.subagentId } : {}),
+          ...(context.subagentType ? { agentType: context.subagentType } : {}),
         },
         matchQuery: toolName,
         payload: {
