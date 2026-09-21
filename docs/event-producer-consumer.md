@@ -16,8 +16,8 @@ emit/dispatch/emitAgentEvent/emitEvent/emitForSession/sendNotification 字符串
 | assistant_message | src/agent/loop/modelErrorRecovery.ts:192, src/agent/loop/modelErrorRecovery.ts:230, src/agent/loop/responseAssembly.ts:385, src/agent/loop/turnExit.ts:148 | src/gateway/client/InProcessGateway.ts:569 |
 | assistant_text_delta | src/gateway/client/InProcessGateway.ts:401 | submitTurn 流 ×14 |
 | assistant_thinking_delta | - | submitTurn 流 ×14 |
-| compact_completed | src/context/compaction/CompactionEngine.ts:297, src/context/compaction/CompactionEngine.ts:314 | src/gateway/client/InProcessGateway.ts:569 |
-| compact_started | src/context/compaction/CompactionEngine.ts:181 | src/gateway/client/InProcessGateway.ts:569 |
+| compact_completed | src/context/compaction/CompactionEngine.ts:357, src/context/compaction/CompactionEngine.ts:374 | src/gateway/client/InProcessGateway.ts:569 |
+| compact_started | src/context/compaction/CompactionEngine.ts:207 | src/gateway/client/InProcessGateway.ts:569 |
 | config_changed | - | submitTurn 流 ×14 |
 | context_budget | src/agent/loop/AgentLoop.ts:452, src/agent/loop/AgentLoop.ts:465 | src/gateway/client/InProcessGateway.ts:569, submitTurn 流 ×14 |
 | doomloop_signal | - | src/gateway/client/InProcessGateway.ts:569 |
