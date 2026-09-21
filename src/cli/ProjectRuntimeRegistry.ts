@@ -43,6 +43,14 @@ import { type SatiToolDefinition } from "../tool/index.js";
 import { RouterEventBus } from "../router/protocol/events.js";
 import { logger, type TelemetryClient } from "../telemetry/index.js";
 import {
+  computeWorkspaceIdentityKey,
+  evaluateProjectHookTrust,
+  HookTrustReporter,
+  HookTrustStore,
+  hookTrustStorePath,
+} from "../extension/plugins/trust/index.js";
+import type { SatiLoadedPlugin } from "../extension/index.js";
+import {
   createProjectRuntimeResolver,
   type ProjectRuntime,
   type ProjectRuntimeResolver,
@@ -116,6 +124,10 @@ export class ProjectRuntimeRegistry {
    */
   private readonly sessionMcpRuntimes = new Map<string, McpRuntime>();
 
+  /** 1.2a：项目级 hook 信任的读取面与上报面（只报告，不参与任何决策）。 */
+  private readonly hookTrustStore: HookTrustStore;
+  private readonly hookTrustReporter = new HookTrustReporter();
+
   /**
    * 推理方法论注册表（共享）：为所有会话的 `methodologyInjection` 回调提供
    * PDCA / SWOT / 5 Whys / MECE / Fishbone / First Principles / Six Hats 匹配。
@@ -146,6 +158,7 @@ export class ProjectRuntimeRegistry {
   constructor(private readonly options: ProjectRuntimeRegistryOptions) {
     this._extraTools = options.extraTools ? [...options.extraTools] : [];
     this._sessionOverrides = options.sessionOverrides;
+    this.hookTrustStore = new HookTrustStore(hookTrustStorePath(options.pilotHome));
     this.runtimeResolver = createProjectRuntimeResolver({
       fallbackProjectRoot: options.fallbackProjectRoot,
       pilotHome: options.pilotHome,
@@ -533,12 +546,31 @@ export class ProjectRuntimeRegistry {
     return resolve(runtime.projectRoot) !== resolve(this.options.pilotHome);
   }
 
+  /**
+   * 1.2a：上报项目级 hook 的信任状态（**只报告**，不拦截——未评审的项目 hook 照常装载执行）。
+   * 观测面失败一律吞掉：报告期不得让会话起不来，也不得改变任何执行行为。
+   */
+  private async reportProjectHookTrust(projectRoot: string, plugins: SatiLoadedPlugin[]): Promise<void> {
+    try {
+      const workspaceIdentityKey = await computeWorkspaceIdentityKey(projectRoot);
+      const evaluation = await evaluateProjectHookTrust({
+        plugins,
+        workspaceIdentityKey,
+        trustFile: this.hookTrustStore.read(),
+      });
+      this.hookTrustReporter.report(evaluation);
+    } catch {
+      // 报告期静默：该模块当前不参与任何决策。
+    }
+  }
+
   private async prepareSessionRuntime(context: GatewaySessionContext) {
     const runtime = this.resolve(context.projectKey);
     await runtime.pluginRuntime.refresh();
     syncRoleDefinitions(runtime.pluginRuntime, this.options.builtinSkillsRoot);
     await this.ensureMcpReady(runtime);
     const contributions = runtime.pluginRuntime.snapshotContributions();
+    await this.reportProjectHookTrust(runtime.projectRoot, contributions.plugins);
     const toolSurface = await provisionSessionTools({
       sessionKey: context.sessionKey,
       projectTools: runtime.tools,
