@@ -10,12 +10,16 @@
  */
 import { createHash } from "node:crypto";
 import { readFile, readdir, writeFile } from "node:fs/promises";
-import { dirname, join, relative } from "node:path";
+import { dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const pkgRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const distRoot = join(pkgRoot, "dist");
 const manifestPath = join(pkgRoot, "checksums.sha256");
+
+// 清单以正斜杠路径存储（上游在 POSIX 环境生成）；Windows 上 relative() 返回反斜杠，
+// 需统一规范化，否则每个文件都会被误判为 MISSING + EXTRA。
+const toManifestPath = (file) => relative(pkgRoot, file).split(sep).join("/");
 
 async function walk(dir) {
   const entries = await readdir(dir, { withFileTypes: true });
@@ -36,7 +40,7 @@ async function generate() {
   const files = (await walk(distRoot)).sort();
   const lines = [];
   for (const file of files) {
-    lines.push(`${await sha256(file)}  ${relative(pkgRoot, file)}`);
+    lines.push(`${await sha256(file)}  ${toManifestPath(file)}`);
   }
   await writeFile(manifestPath, lines.join("\n") + "\n");
   console.log(`checksums.sha256 updated: ${files.length} files under dist/`);
@@ -52,7 +56,7 @@ async function verify() {
   }
   const actual = new Map();
   for (const file of await walk(distRoot)) {
-    actual.set(relative(pkgRoot, file), await sha256(file));
+    actual.set(toManifestPath(file), await sha256(file));
   }
   const errors = [];
   for (const [rel, hash] of expected) {
