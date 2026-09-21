@@ -54,7 +54,7 @@
     "@replit/codemirror-minimap": "^0.5.2",
     "@tailwindcss/typography": "^0.5.20",
     "@uiw/react-codemirror": "^4.25.11",
-    "@univerjs/core": "0.25.1",
+    "@univerjs/core": "0.25.2",
     "@univerjs/design": "0.25.1",
     "@univerjs/docs": "0.25.1",
     "@univerjs/docs-ui": "0.25.1",
