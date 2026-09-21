@@ -745,6 +745,39 @@ test("summary request overflowing twice falls back deterministically (bounded on
   assert.match(summaryText(result.summaryMessage), /^\[CONTEXT COMPACTION - REFERENCE ONLY\]/);
 });
 
+test("structured non-PTL summary errors do not trigger a replan", async () => {
+  const summaryRequests: CanonicalModelRequest[] = [];
+  const engine = new CompactionEngine({
+    model: {
+      async *stream(request: CanonicalModelRequest): AsyncIterable<CanonicalModelEvent> {
+        summaryRequests.push(request);
+        yield {
+          type: "error",
+          error: {
+            provider: "local",
+            protocol: "openai",
+            code: "server_error",
+            message: "upstream is having a bad day",
+            retryable: true,
+          } satisfies CanonicalModelError,
+        };
+      },
+    },
+    provider: "local",
+    model_: "local-chat",
+  });
+
+  const result = await engine.run({ trigger: "auto", messages: tokenTailFixture(), keepTailRatio: 0.05 });
+
+  // 反向重选只针对「摘要请求自己超窗」：其他失败重试同一份输入没有意义。
+  assert.equal(summaryRequests.length, 1);
+  assert.equal(result.status, "fallback");
+  assert.equal(
+    result.diagnostics.some(diagnostic => diagnostic.code === "compact_summary_prompt_too_long"),
+    false,
+  );
+});
+
 test("summary input preserves thinking blocks from the summarized prefix", async () => {
   const summaryRequests: CanonicalModelRequest[] = [];
   const engine = new CompactionEngine({
