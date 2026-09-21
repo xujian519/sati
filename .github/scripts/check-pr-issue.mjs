@@ -2,9 +2,9 @@
 /**
  * PR 可追溯性门禁：强制 pull request 能回溯到一个需求来源。
  *
- * 输入：环境变量 PR_TITLE、PR_BODY（由 .github/workflows/ci.yml 注入，值为
- * `github.event.pull_request.title/.body`）。不在 pull_request 事件上时本 job
- * 不会运行（workflow 侧用 `if: github.event_name == 'pull_request'` 限制）。
+ * 输入：环境变量 PR_TITLE、PR_BODY、PR_AUTHOR（由 .github/workflows/ci.yml 注入，
+ * 值为 `github.event.pull_request.title/.body/.user.login`）。不在 pull_request
+ * 事件上时本 job 不会运行（workflow 侧用 `if: github.event_name == 'pull_request'` 限制）。
  *
  * 通过条件（任一命中即通过）：
  *   1. 关联写法：PR 标题/描述中出现 `Closes #123`、`Fixes #123`、
@@ -13,8 +13,23 @@
  *   3. 技术债编号：出现 `TD-PATENT-N06` 等债编号（项目以
  *      docs/technical-debt/backlog.md 登记并以此作为可回溯来源）。
  *   4. 显式豁免：出现「无关联 issue」/「No associated issue」/「skip-issue-check」等标记。
+ *   5. 自动化依赖升级 bot（见下「关于 bot PR」）。
  *
  * 失败：退出码非 0，使 CI job 失败，并打印如何修复的指引。
+ *
+ * ## 关于 bot PR（2026-09-21 补）
+ *
+ * dependabot / Renovate 生成的依赖升级 PR 由机器撰写，正文是**上游 release notes
+ * 的转述**，天然不会引用**本仓**的 issue。要求它关联本仓 issue 属于类别错误：
+ * 能满足的话那条引用也只会是手工补上的假引用。可回溯性由
+ * `.github/dependabot.yml`（谁开单）+ 上游 changelog（升了什么）承载，
+ * 不依赖 PR 正文。故对 bot 作者直接放行。
+ *
+ * 之所以要显式列出这一条：bot 正文里**是否恰好出现 `#123`** 完全取决于上游
+ * changelog 的写法，使门禁对同一批 PR 时灵时不灵 —— 实测同一轮 dependabot PR
+ * 中，`ws`（release notes 无 `#` 编号）判失败，而 `react-router-dom`
+ * （changelog 里带 `#15498`）判通过。判定结果本应与「PR 有无需求来源」无关，
+ * 这种非确定性由本分支消除。
  *
  * ## 判定前先剥离「人类看不见的内容」
  *
@@ -50,6 +65,9 @@ const TECH_DEBT = /\bTD-[A-Z][A-Z0-9-]*\d\b/i;
 // 4. 显式豁免标记。收紧为「完整声明」：早先的裸 `n/a` 会命中 PR 模板里的 `N/A`，
 //    裸 `no issue` 会命中英文行文（如 "there is no issue with ..."），豁免口子过宽。
 const EXEMPT = /(无关联\s*issue|(?:no|without)\s+(?:associated|linked|related)\s+issue|skip-issue-check)/i;
+// 5. 自动化依赖升级 bot（dependabot / Renovate）。**必须以 `[bot]` 结尾才算**，
+//    否则 `dependabot-fan` 这类人类账号会被误放行 —— 豁免面只开给 GitHub App 身份。
+const BOT_AUTHOR = /^(?:dependabot|renovate(?:-preview)?)\[bot\]$/;
 
 /** 已闭合的 HTML 注释，以及（按 CommonMark）延伸到文末的未闭合注释。 */
 const HTML_COMMENT = /<!--[\s\S]*?-->|<!--[\s\S]*$/g;
@@ -67,9 +85,11 @@ export function stripInvisible(text) {
  * 判断 PR 标题/描述是否满足可追溯门禁。
  * @param {string|undefined} title PR 标题
  * @param {string|undefined} body PR 描述
- * @returns {{ pass: boolean, path: "issue-link"|"bare-number"|"tech-debt"|"exempt"|null }}
+ * @param {string|undefined} author PR 作者登录名；命中自动化 bot 时直接放行
+ * @returns {{ pass: boolean, path: "issue-link"|"bare-number"|"tech-debt"|"exempt"|"bot"|null }}
  */
-export function evaluatePrTraceability(title, body) {
+export function evaluatePrTraceability(title, body, author) {
+  if (BOT_AUTHOR.test(author ?? "")) return { pass: true, path: "bot" };
   const text = stripInvisible(`${title ?? ""}\n${body ?? ""}`);
   if (LINK_KEYWORD.test(text)) return { pass: true, path: "issue-link" };
   if (BARE_NUMBER.test(text)) return { pass: true, path: "bare-number" };
@@ -82,7 +102,7 @@ export function evaluatePrTraceability(title, body) {
 const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 
 if (isMain) {
-  const { pass, path } = evaluatePrTraceability(process.env.PR_TITLE, process.env.PR_BODY);
+  const { pass, path } = evaluatePrTraceability(process.env.PR_TITLE, process.env.PR_BODY, process.env.PR_AUTHOR);
 
   if (pass) {
     const label = {
@@ -90,6 +110,7 @@ if (isMain) {
       "bare-number": "检测到 # 引用",
       "tech-debt": "检测到技术债编号（TD-*）",
       exempt: "已显式声明「无关联 issue」",
+      bot: "自动化依赖升级 bot（dependabot / Renovate），豁免正文引用",
     }[path];
     console.log(`✓ PR 已通过可追溯门禁（${label}）`);
     process.exit(0);
