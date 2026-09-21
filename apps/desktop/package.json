@@ -21,7 +21,7 @@
     "generate-icon": "bash scripts/generate-icon.sh"
   },
   "dependencies": {
-    "yaml": "^2.8.3"
+    "yaml": "^2.9.1"
   },
   "devDependencies": {
     "@electron/notarize": "^3.0.0",
