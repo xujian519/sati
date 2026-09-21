@@ -1,0 +1,211 @@
+{
+  "$comment": "架构边界门禁（scripts/check-architecture-boundaries.mjs）的存量豁免清单。命中此处 = 存量不阻塞；新增条目等于承认一笔新债，请在 PR 说明理由。由 --update-baseline 生成，勿手改排序。",
+  "version": 1,
+  "exemptions": [
+    {
+      "rule": "file-size",
+      "file": "src/adapters/channel/feishu/FeishuChannel.ts",
+      "lines": 1337
+    },
+    {
+      "rule": "file-size",
+      "file": "src/adapters/channel/protocol/ImLiveReplyController.ts",
+      "lines": 1017
+    },
+    {
+      "rule": "file-size",
+      "file": "src/adapters/channel/tui/app/TuiApp.tsx",
+      "lines": 855
+    },
+    {
+      "rule": "file-size",
+      "file": "src/adapters/channel/wecom/WeComChannel.ts",
+      "lines": 1764
+    },
+    {
+      "rule": "file-size",
+      "file": "src/adapters/channel/weixin/WeixinChannel.ts",
+      "lines": 1497
+    },
+    {
+      "rule": "file-size",
+      "file": "src/agent/loop/AgentLoop.ts",
+      "lines": 1150
+    },
+    {
+      "rule": "file-size",
+      "file": "src/always-on/runtime/DiscoveryFire.ts",
+      "lines": 1079
+    },
+    {
+      "rule": "file-size",
+      "file": "src/cli/sati.ts",
+      "lines": 1028
+    },
+    {
+      "rule": "file-size",
+      "file": "src/context/DefaultContextRuntime.ts",
+      "lines": 902
+    },
+    {
+      "rule": "file-size",
+      "file": "src/gateway/client/InProcessGateway.ts",
+      "lines": 1489
+    },
+    {
+      "rule": "file-size",
+      "file": "src/gateway/protocol/types.ts",
+      "lines": 911
+    },
+    {
+      "rule": "file-size",
+      "file": "src/model/catalog/providers.ts",
+      "lines": 1593
+    },
+    {
+      "rule": "file-size",
+      "file": "src/model/streaming/streamModel.ts",
+      "lines": 1085
+    },
+    {
+      "rule": "file-size",
+      "file": "src/patent/evidence/engine.ts",
+      "lines": 842
+    },
+    {
+      "rule": "file-size",
+      "file": "src/pilot/config/loadPilotConfig.ts",
+      "lines": 922
+    },
+    {
+      "rule": "file-size",
+      "file": "src/tool/builtin/kanban.ts",
+      "lines": 816
+    },
+    {
+      "rule": "file-size",
+      "file": "ui/server/routes/agent.js",
+      "lines": 1224
+    },
+    {
+      "rule": "file-size",
+      "file": "ui/server/routes/commands.js",
+      "lines": 1082
+    },
+    {
+      "rule": "file-size",
+      "file": "ui/server/routes/config.js",
+      "lines": 1173
+    },
+    {
+      "rule": "file-size",
+      "file": "ui/server/routes/config.test.js",
+      "lines": 934
+    },
+    {
+      "rule": "file-size",
+      "file": "ui/server/routes/git.js",
+      "lines": 1529
+    },
+    {
+      "rule": "file-size",
+      "file": "ui/server/routes/taskmaster.js",
+      "lines": 1179
+    },
+    {
+      "rule": "file-size",
+      "file": "ui/server/sati-bridge.js",
+      "lines": 2347
+    },
+    {
+      "rule": "file-size",
+      "file": "ui/server/services/satiConfig.js",
+      "lines": 876
+    },
+    {
+      "rule": "file-size",
+      "file": "ui/server/services/spreadsheetPreview.js",
+      "lines": 813
+    },
+    {
+      "rule": "file-size",
+      "file": "ui/src/components/app-shell/AppShellV2.tsx",
+      "lines": 893
+    },
+    {
+      "rule": "file-size",
+      "file": "ui/src/components/app-shell/SidebarV2.tsx",
+      "lines": 1310
+    },
+    {
+      "rule": "file-size",
+      "file": "ui/src/components/chat-v2/ComposerV2.tsx",
+      "lines": 1188
+    },
+    {
+      "rule": "file-size",
+      "file": "ui/src/components/chat-v2/MessagesPaneV2.render.test.tsx",
+      "lines": 1234
+    },
+    {
+      "rule": "file-size",
+      "file": "ui/src/components/chat-v2/MessagesPaneV2.tsx",
+      "lines": 1183
+    },
+    {
+      "rule": "file-size",
+      "file": "ui/src/components/chat-v2/processGrouping.ts",
+      "lines": 1294
+    },
+    {
+      "rule": "file-size",
+      "file": "ui/src/components/chat/hooks/useChatRealtimeHandlers.ts",
+      "lines": 1005
+    },
+    {
+      "rule": "file-size",
+      "file": "ui/src/components/chat/tools/configs/toolConfigs.ts",
+      "lines": 864
+    },
+    {
+      "rule": "file-size",
+      "file": "ui/src/components/main-content-v2/CronV2.tsx",
+      "lines": 1130
+    },
+    {
+      "rule": "file-size",
+      "file": "ui/src/components/main-content-v2/DashboardV2.tsx",
+      "lines": 1345
+    },
+    {
+      "rule": "file-size",
+      "file": "ui/src/components/main-content-v2/FilesV2.tsx",
+      "lines": 964
+    },
+    {
+      "rule": "file-size",
+      "file": "ui/src/components/main-content-v2/skills/import/ImportFromFolder.tsx",
+      "lines": 825
+    },
+    {
+      "rule": "file-size",
+      "file": "ui/src/components/main-content-v2/SkillsV2.tsx",
+      "lines": 1441
+    },
+    {
+      "rule": "file-size",
+      "file": "ui/src/components/main-content/view/MainContent.tsx",
+      "lines": 1111
+    },
+    {
+      "rule": "file-size",
+      "file": "ui/src/hooks/useProjectsState.ts",
+      "lines": 901
+    },
+    {
+      "rule": "file-size",
+      "file": "ui/src/stores/useSessionStore.ts",
+      "lines": 1347
+    }
+  ]
+}
