@@ -1,6 +1,12 @@
 # Agent Note: 项目级 hook 信任报告期（1.2a）
 
-Status: implemented
+Status: implemented（2026-09-21 起为强制期所取代，见
+`docs/notes/implemented/2026-09-21-project-hook-trust-gate.md`）
+
+> **后续变更（1.2b）**：本文描述的「只报告不阻断」已不再成立。现在 `pending` / `stale` /
+> `revoked` / `blocked` 的 project hook **不进入 `HookRuntime`**（`retainTrustedHookMatchers`
+> 在装配点过滤），授权/撤销经协议 1.11 与 `sati hooks` 落盘。本文其余部分（内容哈希、存储
+> 读路径、工作区身份键、来源标记、上报去重）仍是现状描述。
 
 ## Problem
 

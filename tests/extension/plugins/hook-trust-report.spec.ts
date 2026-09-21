@@ -308,7 +308,7 @@ test("1.2a：报告按工作区去重——内容不变不重复输出，状态�
   assert.equal(reporter.report({ workspaceIdentityKey: "ws2", entries: [{ ...entry, status: "trusted" }] }), true);
   assert.equal(reporter.report({ workspaceIdentityKey: "ws3", entries: [] }), false);
   assert.equal(lines.length, 3);
-  assert.match(lines[0] ?? "", /^warn: Hook trust \(report only\): workspace=ws1 /u);
+  assert.match(lines[0] ?? "", /^warn: Hook trust: workspace=ws1 projectPlugins=1 disabled=1 /u);
   assert.match(lines[2] ?? "", /^info: Hook trust: workspace=ws2 /u);
 });
 

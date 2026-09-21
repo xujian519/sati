@@ -113,6 +113,8 @@ export const METHOD_PARAM_GUARDS = {
   grant_session_permission: OBJECT_PARAMS,
   approval_list_pending: OBJECT_PARAMS,
   approval_decide: OBJECT_PARAMS,
+  hook_trust_list: OBJECT_PARAMS,
+  hook_trust_decide: OBJECT_PARAMS,
   read_session_messages: OBJECT_PARAMS,
   read_subagent_messages: OBJECT_PARAMS,
   fork_session: OBJECT_PARAMS,

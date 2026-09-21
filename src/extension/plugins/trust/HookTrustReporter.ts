@@ -28,9 +28,9 @@ export class HookTrustReporter {
     }
     const summary = unreviewed.map(entry => `${entry.pluginName}=${entry.status}`).join(", ");
     this.log.warn(
-      `Hook trust (report only): workspace=${workspace} projectPlugins=${evaluation.entries.length} ` +
-        `unreviewed=${unreviewed.length} [${summary}] — project hooks still execute unreviewed; ` +
-        "the approval gate lands in a later release.",
+      `Hook trust: workspace=${workspace} projectPlugins=${evaluation.entries.length} ` +
+        `disabled=${unreviewed.length} [${summary}] — unreviewed project hooks are not loaded; ` +
+        "review them with `sati hooks list` (or the hook-trust panel) to enable.",
     );
     return true;
   }

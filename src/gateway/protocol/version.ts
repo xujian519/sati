@@ -101,6 +101,10 @@ export const PROTOCOL_RELEASES = [
       "context_budget 事件新增可选 fixedOverheadTokens：本地估算中不随对话增长的那部分（system prompt + 工具 schema）。旧客户端忽略该字段即退回单一用量显示；压缩重建的历史预算（source: compact）不带此字段，因为那一刻的 used 只含消息。",
     ],
   },
+  {
+    version: "1.11",
+    note: "2026-09-21: 新增可选项目级 hook 信任方法 hook_trust_list / hook_trust_decide（未评审的项目插件 hook 默认不装载，用户经此列出声明并授权/撤销；见 docs/notes/implemented/2026-09-21-project-hook-trust-gate.md）。",
+  },
 ] as const satisfies readonly ProtocolReleaseEntry[];
 
 /** 台账条目类型（含 `note` / `changes`）。 */
@@ -196,6 +200,9 @@ export const PROTOCOL_METHOD_VERSION = {
   regenerate_last_turn: "1.7",
   // 1.8
   close_project_sessions: "1.8",
+  // 1.11
+  hook_trust_list: "1.11",
+  hook_trust_decide: "1.11",
 } satisfies Record<WsGatewayMethod, GatewayProtocolVersion>;
 
 /**

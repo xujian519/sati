@@ -7,9 +7,9 @@
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1050 / 175850 |
+| src TS 文件 / 行数 | 1053 / 176366 |
 | src JS 文件 | 0 |
-| tests 文件 | 582 |
+| tests 文件 | 584 |
 | ui/src 文件 / 行数 | 571 / 92364 |
 | ui/server 文件 / 行数 | 108 / 31827 |
 
@@ -32,9 +32,9 @@
 | `as unknown as`（双重断言） | 31 | ui/src(24) · adapters(2) · tool(2) |
 | 裸 `console.*` | 158 | cli(137) · telemetry(8) · ui/server(5) |
 | 空 `catch {}` | 0 | — |
-| 无参 `catch {`（总计） | 672 | ui/server(152) · ui/src(114) · adapters(70) |
+| 无参 `catch {`（总计） | 671 | ui/server(152) · ui/src(114) · adapters(70) |
 | ↳ **无注释**（隐患类，目标） | **12** | — |
-| ↳ 已带意图注释 | 660 | — |
+| ↳ 已带意图注释 | 659 | — |
 | `TODO/HACK/FIXME/XXX` | 11 | always-on(4) · tests(4) · ui/src(2) |
 | 分层违规 `ui/server→src` | 14 | — |
 | 分层违规 `src→ui` | 0 | — |
@@ -56,7 +56,7 @@
 | `ui/src/components/chat-v2/ChatInterfaceV2.tsx` | `ChatInterfaceV2` | 668 | function |
 | `ui/src/hooks/useProjectsState.ts` | `useProjectsState` | 647 | function |
 | `src/adapters/channel/tui/app/TuiApp.tsx` | `TuiApp` | 643 | function |
-| `src/cli/sati.ts` | `main` | 636 | function |
+| `src/cli/sati.ts` | `main` | 642 | function |
 | `ui/src/stores/useSessionStore.ts` | `createSessionActions` | 631 | function |
 | `ui/src/components/app-shell/AppShellV2.tsx` | `AppShellV2` | 630 | function |
 | `ui/src/components/onboarding/view/subcomponents/LlmConfigurationStep.tsx` | `LlmConfigurationStep` | 630 | function |
@@ -86,9 +86,9 @@
 | `ui/src/components/chat/hooks/useFileMentions.tsx` | `useFileMentions` | 366 | function |
 | `ui/src/components/settings/view/agentRoute/components/RouterSection.tsx` | `RouterSection` | 357 | function |
 | `ui/src/stores/useSessionStore.actions.test.tsx` | `(anonymous)` | 354 | arrow |
+| `src/gateway/server/GatewayWsConnection.ts` | `dispatchRequest` | 353 | method |
 | `src/tool/builtin/patentFigureProject.ts` | `createPatentFigureProjectTool` | 353 | function |
 | `ui/src/components/main-content/view/MainContent.tsx` | `MainContent` | 346 | function |
-| `src/gateway/server/GatewayWsConnection.ts` | `dispatchRequest` | 343 | method |
 | `src/patent/graph/domains/inventiveness.ts` | `buildInventivenessGraph` | 342 | function |
 | `ui/src/components/chat/view/subcomponents/MessageComponent.tsx` | `(anonymous)` | 335 | arrow |
 | `ui/src/components/main-content-v2/PlansAndCronJobs.tsx` | `PlansAndCronJobs` | 334 | function |
@@ -111,8 +111,8 @@
 | `src/adapters/channel/wecom/WeComChannel.ts` | 1764 |
 | `src/model/catalog/providers.ts` | 1593 |
 | `ui/server/routes/git.js` | 1529 |
+| `src/gateway/client/InProcessGateway.ts` | 1518 |
 | `src/adapters/channel/weixin/WeixinChannel.ts` | 1497 |
-| `src/gateway/client/InProcessGateway.ts` | 1491 |
 | `ui/src/components/main-content-v2/SkillsV2.tsx` | 1441 |
 | `ui/src/stores/useSessionStore.ts` | 1347 |
 | `ui/src/components/main-content-v2/DashboardV2.tsx` | 1345 |
@@ -131,12 +131,12 @@
 | `src/model/streaming/streamModel.ts` | 1085 |
 | `ui/server/routes/commands.js` | 1082 |
 | `src/always-on/runtime/DiscoveryFire.ts` | 1079 |
-| `src/cli/sati.ts` | 1028 |
+| `src/cli/sati.ts` | 1035 |
 | `src/adapters/channel/protocol/ImLiveReplyController.ts` | 1017 |
 | `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` | 1005 |
+| `src/gateway/protocol/types.ts` | 973 |
 | `ui/src/components/main-content-v2/FilesV2.tsx` | 964 |
 | `ui/server/routes/config.test.js` | 934 |
-| `src/pilot/config/loadPilotConfig.ts` | 922 |
 
 ## vendored 子包（单列，不计入上述规模与排名）
 
@@ -170,13 +170,13 @@
 | session | 28 |
 | router | 18 |
 | always-on | 14 |
+| extension | 13 |
 | mcp | 13 |
-| extension | 12 |
 | adapters | 11 |
 | cron | 11 |
 | pilot | 11 |
+| cli | 10 |
 | rule | 10 |
-| cli | 9 |
 | web | 9 |
 | literature | 8 |
 | permission | 4 |
@@ -193,7 +193,7 @@
 | runtime | 1 |
 | status | 1 |
 
-| **合计** | **558** |
+| **合计** | **560** |
 
 ## i18n en/zh-CN 对齐
 

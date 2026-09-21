@@ -82,12 +82,12 @@ function makeGateway(service: DiscoveryPlanService | undefined, extra: Record<st
 }
 
 describe("gateway 协议版本", () => {
-  it("当前协议版本为 1.10（1.1 discovery-plan / 1.2 审批 / 1.3 cron_update / 1.4 活动面板 / 1.5 看板 / 1.6 steering / 1.7 last-turn rewrite / 1.8 close_project_sessions / 1.9 active-turn 绝对投影 / 1.10 context_budget 固定开销拆分）", () => {
+  it("当前协议版本为 1.11（1.1 discovery-plan / 1.2 审批 / 1.3 cron_update / 1.4 活动面板 / 1.5 看板 / 1.6 steering / 1.7 last-turn rewrite / 1.8 close_project_sessions / 1.9 active-turn 绝对投影 / 1.10 context_budget 固定开销拆分 / 1.11 hook 信任）", () => {
     // 强断言：旧写法 assert.ok(["1.1", ..., "1.8"].includes(V)) 对 8 个取值**全部通过**，
     // 既不能证明当前是 1.8，1.9 发布时也会照样「通过」（issue #362）。
     // 各方法各自的引入版本见 version.ts 的 PROTOCOL_METHOD_VERSION；台账自洽性由
     // pnpm check:protocol-version 与 tests/gateway/protocol-versioning.spec.ts 把关。
-    assert.equal(SATI_GATEWAY_PROTOCOL_VERSION, "1.10");
+    assert.equal(SATI_GATEWAY_PROTOCOL_VERSION, "1.11");
   });
 });
 

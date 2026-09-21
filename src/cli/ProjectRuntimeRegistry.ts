@@ -48,8 +48,9 @@ import {
   HookTrustReporter,
   HookTrustStore,
   hookTrustStorePath,
+  retainTrustedHookMatchers,
 } from "../extension/plugins/trust/index.js";
-import type { SatiLoadedPlugin } from "../extension/index.js";
+import type { SatiHooksSettings, SatiLoadedPlugin } from "../extension/index.js";
 import {
   createProjectRuntimeResolver,
   type ProjectRuntime,
@@ -79,6 +80,11 @@ type ProjectRuntimeRegistryOptions = {
   telemetry: TelemetryClient;
   /** 决策溯源旁路开关（见 CreateLocalGatewayOptions.enableProvenance）。 */
   enableProvenance?: boolean;
+  /**
+   * 项目级 hook 信任存储。缺省按 `pilotHome` 建一份；`createLocalGateway` 显式注入
+   * 与协议服务（`createHookTrustService`）共享的实例，避免两个实例互相覆盖。
+   */
+  hookTrustStore?: HookTrustStore;
   onProjectActivated?: (projectRoot: string) => void;
 };
 
@@ -158,7 +164,7 @@ export class ProjectRuntimeRegistry {
   constructor(private readonly options: ProjectRuntimeRegistryOptions) {
     this._extraTools = options.extraTools ? [...options.extraTools] : [];
     this._sessionOverrides = options.sessionOverrides;
-    this.hookTrustStore = new HookTrustStore(hookTrustStorePath(options.pilotHome));
+    this.hookTrustStore = options.hookTrustStore ?? new HookTrustStore(hookTrustStorePath(options.pilotHome));
     this.runtimeResolver = createProjectRuntimeResolver({
       fallbackProjectRoot: options.fallbackProjectRoot,
       pilotHome: options.pilotHome,
@@ -547,10 +553,18 @@ export class ProjectRuntimeRegistry {
   }
 
   /**
-   * 1.2a：上报项目级 hook 的信任状态（**只报告**，不拦截——未评审的项目 hook 照常装载执行）。
-   * 观测面失败一律吞掉：报告期不得让会话起不来，也不得改变任何执行行为。
+   * 项目级 hook 信任（1.2a 报告 + 1.2b 强制）：评估该项目来源插件的 hook 声明，
+   * 返回**可装载的** hooks（未评审的 project hook 已剔除）供 `HookRuntime` 使用。
+   *
+   * fail-closed：评估本身失败（读盘异常、路径不可解析等）时按「全部未评审」处理——
+   * 安全门在拿不到证据时不得放行。代价是一次瞬时 IO 抖动会让用户自己的项目 hook
+   * 本回合不生效，日志会说明原因；方向选择与「权限门在不确定时拒绝」一致。
    */
-  private async reportProjectHookTrust(projectRoot: string, plugins: SatiLoadedPlugin[]): Promise<void> {
+  private async resolveTrustedHookSettings(
+    projectRoot: string,
+    plugins: SatiLoadedPlugin[],
+    hooks: SatiHooksSettings,
+  ): Promise<SatiHooksSettings> {
     try {
       const workspaceIdentityKey = await computeWorkspaceIdentityKey(projectRoot);
       const evaluation = await evaluateProjectHookTrust({
@@ -559,8 +573,10 @@ export class ProjectRuntimeRegistry {
         trustFile: this.hookTrustStore.read(),
       });
       this.hookTrustReporter.report(evaluation);
-    } catch {
-      // 报告期静默：该模块当前不参与任何决策。
+      return retainTrustedHookMatchers(hooks, evaluation);
+    } catch (error) {
+      logger.warn(`Hook trust: evaluation failed (${String(error)}); project hooks are disabled for this session.`);
+      return retainTrustedHookMatchers(hooks, { workspaceIdentityKey: "", entries: [] });
     }
   }
 
@@ -570,7 +586,11 @@ export class ProjectRuntimeRegistry {
     syncRoleDefinitions(runtime.pluginRuntime, this.options.builtinSkillsRoot);
     await this.ensureMcpReady(runtime);
     const contributions = runtime.pluginRuntime.snapshotContributions();
-    await this.reportProjectHookTrust(runtime.projectRoot, contributions.plugins);
+    const sessionHooks = await this.resolveTrustedHookSettings(
+      runtime.projectRoot,
+      contributions.plugins,
+      contributions.hooks,
+    );
     const toolSurface = await provisionSessionTools({
       sessionKey: context.sessionKey,
       projectTools: runtime.tools,
@@ -590,7 +610,7 @@ export class ProjectRuntimeRegistry {
 
     const lifecycle = buildSessionLifecycle({
       sessionKey: context.sessionKey,
-      hooks: contributions.hooks,
+      hooks: sessionHooks,
       // 装配期读一次（原 const gw = this.gateway）：无 gateway 时只装插件 hooks。
       gateway: this.gateway,
       getLiveRuleSet: () => this.getLiveRuleSet(context.sessionKey),
