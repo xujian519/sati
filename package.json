@@ -86,7 +86,7 @@
     "@google/genai": "^2.18.0",
     "@larksuiteoapi/node-sdk": "^1.72.0",
     "@modelcontextprotocol/sdk": "^1.30.0",
-    "@rdkit/rdkit": "2025.3.4-1.0.0",
+    "@rdkit/rdkit": "2026.3.6",
     "@vscode/ripgrep": "^1.18.0",
     "csv-parse": "^7.0.2",
     "edgeclaw-memory-core": "workspace:*",

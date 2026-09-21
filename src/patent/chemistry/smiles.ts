@@ -3,10 +3,17 @@
  *
  * 防幻觉第一环：任何来源的 SMILES 必须先过本模块校验，非法即不可用。
  *
- * G7 验证结论（@rdkit/rdkit 2025.3.4）：MinimalLib 未暴露
+ * G7 验证结论（@rdkit/rdkit 2025.3.4 记录，2026.3.6 复核仍成立）：MinimalLib 未暴露
  * get_canonical_smiles / get_molecular_formula —— 规范化用 mol.get_smiles()
  * （由分子对象重新生成，即规范化），分子式用 InChI 公式段提取
  * （InChI=1S/C9H8O4/... → C9H8O4），两者均不可用时回退正则元素计数（近似）。
+ *
+ * 2026.3.6 破坏性变更（仅类型面）：包内声明从 `dist/index.d.ts` 换成
+ * `dist/RDKit_minimal.d.ts`，具名导出随之改名 —— 分子接口 `JSMol` → `Mol`，
+ * 模块接口 `RDKitModule` → `MainModule`，并改由 default export
+ * `MainModuleFactory` 承载加载器。**运行时导出形态未变**
+ * （`module.exports = initRDKitModule`，两版尾部逐字相同），故本模块只需改名，
+ * 加载路径与 `createRequire` 解析方式保持不变。
  *
  * RDKit WASM 加载失败（Node/打包环境缺 wasm 资产）时降级为语法正则预检，
  * 不阻塞 L1 上线——校验结果标记 degraded，调用方追加 warning 并进入人工复核。
@@ -15,13 +22,13 @@
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
-import type { JSMol, RDKitModule } from "@rdkit/rdkit";
+import type { MainModule, Mol } from "@rdkit/rdkit";
 import { createLogger } from "../../telemetry/index.js";
 
 const logger = createLogger("chemistry");
 
 /** RDKit loader 形状（d.ts 仅在 Window 上声明，Node 侧自行定义）。 */
-type RDKitLoader = (options?: { wasmBinary?: Uint8Array; locateFile?: () => string }) => Promise<RDKitModule>;
+type RDKitLoader = (options?: { wasmBinary?: Uint8Array; locateFile?: () => string }) => Promise<MainModule>;
 
 /** SMILES 校验结果。 */
 export type SmilesValidationResult = {
@@ -40,16 +47,21 @@ export type SmilesValidationResult = {
   error?: string;
 };
 
-let modulePromise: Promise<RDKitModule | undefined> | undefined;
+let modulePromise: Promise<MainModule | undefined> | undefined;
 let loadFailureLogged = false;
 
 /** 加载 RDKit WASM（单例；失败缓存 undefined，不重复尝试）。 */
-export async function loadRdkitModule(): Promise<RDKitModule | undefined> {
+export async function loadRdkitModule(): Promise<MainModule | undefined> {
   if (!modulePromise) {
     modulePromise = (async () => {
       try {
         const require = createRequire(import.meta.url);
-        const gluePath = require.resolve("@rdkit/rdkit/dist/RDKit_minimal.js");
+        // 用**包根**解析而不写深路径 `dist/RDKit_minimal.js`：2026.3.6 起包内新增
+        // `exports` 映射（仅 "." 与 "./RDKit_minimal.wasm"），深路径会抛
+        // ERR_PACKAGE_PATH_NOT_EXPORTED；而该异常会被下面的 catch 吞成
+        // 「RDKit 不可用」，WASM 校验静默降级为语法预检。包根按 `main`/`exports["."]`
+        // 解析到同一个 dist/RDKit_minimal.js，glue 与 wasm 同目录。
+        const gluePath = require.resolve("@rdkit/rdkit");
         const wasmPath = path.join(path.dirname(gluePath), "RDKit_minimal.wasm");
         const loader = require(gluePath) as RDKitLoader;
         return await loader({ wasmBinary: readFileSync(wasmPath), locateFile: () => wasmPath });
@@ -151,7 +163,7 @@ export async function validateSmiles(smiles: string): Promise<SmilesValidationRe
 
   // 评审 H2：get_mol/get_smiles/get_inchi 对畸形输入（NUL 字节、复杂多环、
   // 近边界长度）可能抛 WASM 级异常——统一捕获归一为 ok=false，绝不外传
-  let mol: JSMol | null = null;
+  let mol: Mol | null = null;
   try {
     mol = rdkit.get_mol(value);
     if (!mol) return { ok: false, error: "RDKit 无法解析（结构非法）" };
