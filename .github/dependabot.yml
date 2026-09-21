@@ -41,6 +41,20 @@ updates:
         patterns:
           - "@univerjs/*"
 
+      # react 家族必须**整体同版**：React 在加载期自检，react 与 react-dom 版本
+      # 不一致直接抛 `Incompatible React versions: The "react" and "react-dom"
+      # packages must have the exact same version` ⇒ ui 测试在 import 阶段集体失败。
+      # dependabot 只会把「react + @types/react」视为「needs to be updated together」，
+      # **不会带上 react-dom** —— #503 实测：只升 react 到 19.3.0 而 react-dom 留在
+      # 19.2.8，ui 的 58 个测试文件全红（报错即上面那句），而 621 项已收集用例全绿
+      # （失败发生在收集期）。归组后四个包一起动。
+      react:
+        patterns:
+          - "react"
+          - "react-dom"
+          - "@types/react"
+          - "@types/react-dom"
+
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
