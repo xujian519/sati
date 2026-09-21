@@ -1,0 +1,3 @@
+# dist/ 是上游预构建产物，checksums.sha256 针对 LF 提交内容生成。
+# 强制按二进制（-text）检出，避免 Windows autocrlf 改写行尾导致校验失败。
+dist/** -text
