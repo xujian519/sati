@@ -10,7 +10,8 @@
     "sati": "./dist/src/cli/sati.js"
   },
   "scripts": {
-    "check": "pnpm check:config && pnpm typecheck && pnpm --filter sati-ui typecheck && pnpm lint && pnpm format:check",
+    "check": "pnpm check:freshness && pnpm check:config && pnpm typecheck && pnpm --filter sati-ui typecheck && pnpm lint && pnpm format:check",
+    "check:freshness": "node scripts/check-workspace-freshness.mjs",
     "check:config": "node scripts/verify-ts-config.mjs",
     "check:runtime": "node scripts/check-node-runtime.mjs",
     "install:browser": "npx @playwright/mcp install-browser chrome-for-testing",
@@ -44,7 +45,7 @@
     "measure:update": "node scripts/measure-techdebt.mjs --update docs/technical-debt/metrics.md",
     "measure:fixed-overhead": "node --import tsx scripts/measure-fixed-overhead.ts",
     "pr:open": "node scripts/open-pr.mjs",
-    "test:pr-tooling": "node --test scripts/open-pr.test.mjs scripts/sync-labels.test.mjs scripts/classify-issue.test.mjs scripts/measure-techdebt.test.mjs .github/scripts/check-pr-issue.test.mjs",
+    "test:pr-tooling": "node --test scripts/open-pr.test.mjs scripts/sync-labels.test.mjs scripts/classify-issue.test.mjs scripts/measure-techdebt.test.mjs scripts/check-workspace-freshness.test.mjs .github/scripts/check-pr-issue.test.mjs",
     "pretypecheck": "pnpm --filter edgeclaw-memory-core build",
     "typecheck": "tsc --noEmit && pnpm --filter edgeclaw-memory-core typecheck",
     "lint": "eslint src tests scripts apps/desktop && pnpm --filter sati-ui lint && pnpm check:catalog-mirror && pnpm check:event-matrix && pnpm check:patent-sop && pnpm check:patent-workflow-docs && pnpm check:html-templates && pnpm check:skills && pnpm check:i18n-namespaces && pnpm check:issue-labels && pnpm check:techdebt-metrics && pnpm check:protocol-version && pnpm check:doc-claims",
