@@ -608,6 +608,52 @@ test("summary failures fall back deterministically and cool down subsequent summ
   assert.match(summaryText(second.result?.summaryMessage), /^\[CONTEXT COMPACTION - REFERENCE ONLY\]/);
 });
 
+test("full compaction circuit-breaks when summaries never buy a tool turn", async () => {
+  const summaryRequests: CanonicalModelRequest[] = [];
+  const engine = new CompactionEngine({
+    model: {
+      async *stream(request: CanonicalModelRequest): AsyncIterable<CanonicalModelEvent> {
+        summaryRequests.push(request);
+        yield { type: "message_start", role: "assistant" };
+        yield {
+          type: "text_delta",
+          text: "## Objective\nKeep going.\n\n## Current State\nSummary was produced.\n\n## Remaining\nContinue.\n\n## Files And Artifacts\nNone.",
+        };
+        yield { type: "message_end", finishReason: "stop" };
+      },
+    },
+    provider: "local",
+    model_: "local-chat",
+  });
+  const tokenBudget = new TokenBudgetManager();
+  const runtime = new DefaultContextRuntime({
+    tokenBudget,
+    autoCompactionPolicy: new AutoCompactionPolicy(),
+    compactionEngine: engine,
+    maxContextTokens: 100,
+  });
+  const compact = () =>
+    runtime.tryAutoCompact({
+      messages: compactFixture(),
+      budgetEvaluator: candidate =>
+        Promise.resolve(tokenBudget.snapshotFromTokens(hasCompactSummary(candidate) ? 20 : 500, 100)),
+    });
+
+  // 连续两次全量压缩之间没有任何真实工具轮：省下了 token，但没换来推进。
+  assert.equal((await compact()).type, "compacted");
+  assert.equal((await compact()).type, "compacted");
+  assert.equal(summaryRequests.length, 2);
+
+  const blocked = await compact();
+  assert.equal(blocked.type, "skipped");
+  assert.equal(summaryRequests.length, 2, "熔断后不得再调用摘要模型");
+
+  // 出现真实工具轮 ⇒ 门自行打开（否则熔断一旦打开，本会话再无法压缩）。
+  runtime.noteToolTurn();
+  assert.equal((await compact()).type, "compacted");
+  assert.equal(summaryRequests.length, 3);
+});
+
 test("summary input preserves thinking blocks from the summarized prefix", async () => {
   const summaryRequests: CanonicalModelRequest[] = [];
   const engine = new CompactionEngine({
