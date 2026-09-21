@@ -68,8 +68,8 @@ importers:
         specifier: ^3.15.0
         version: 3.15.0
       juice:
-        specifier: ^12.1.2
-        version: 12.1.2
+        specifier: ^12.1.3
+        version: 12.1.3
       mupdf:
         specifier: ^1.28.0
         version: 1.28.0
@@ -3649,6 +3649,10 @@ packages:
     resolution: {integrity: sha512-zwfzJecQ/Uej6tusMqwAqU/6KL2XaB2VZ2Jg54Je6ahNBGNH6Ek6g3jjNCF0fG9EWQKGZNddNjU5F1ZQn/sBnA==}
     engines: {node: '>=20.19.0'}
 
+  entities@8.1.0:
+    resolution: {integrity: sha512-kxL7msIffSuh9aaFAMD7rxAIuTRMAHMeBtgHW2yUdWw732ZNh4MehkF2gdjvtdmikkaIP9bFDDJOPlsvm7avrA==}
+    engines: {node: '>=20.19.0'}
+
   env-paths@2.2.1:
     resolution: {integrity: sha512-+h1lkLKhZMTYjog1VEpJNG7NZJWcuc2DDk/qsqSTRRCOXiLjeQ1d1/udrUGhqMxUgAlwKNZ0cf2uqan5GLuS2A==}
     engines: {node: '>=6'}
@@ -4639,8 +4643,8 @@ packages:
   jszip@3.10.1:
     resolution: {integrity: sha512-xXDvecyTpGLrqFrvkrUSoxxfJI5AH7U8zxxtVclpsUtMCq4JQ290LY8AW5c7Ggnr/Y/oK+bQMbqK2qmtk3pN4g==}
 
-  juice@12.1.2:
-    resolution: {integrity: sha512-qNFegEEo14v4aCh0OwdWhGsHKoxWx6RYl1GyzMhxNHfFnVGFi+MFgAiJ6pyFWPw0KucvPwmHctXPZwrsD0ufqg==}
+  juice@12.1.3:
+    resolution: {integrity: sha512-gf4p4NqkV6nqA/72EoP2XDcMYrflf1fup7ZMimSXFgH751L7+ztnl8Xg9Vd5OuUpUMp/EoD59VtjQ0sOIKaFPA==}
     engines: {node: '>=22.12.0'}
     hasBin: true
 
@@ -5557,8 +5561,8 @@ packages:
     peerDependencies:
       postcss: ^8.4
 
-  postcss-safe-parser@7.0.1:
-    resolution: {integrity: sha512-0AioNCJZ2DPYz5ABT6bddIqlhgwhpHZ/l65YAYo0BCIn0xiDpsnTHz0gnoTGk0OXZW0JRs+cDwL8u/teRdz+8A==}
+  postcss-safe-parser@7.1.0:
+    resolution: {integrity: sha512-1WzZxRLaAFwEh6Do+zyGpjWV3nGJNxxhuh7Ubu/q1ICImMgZJnLwhoaEpRbG4pJppp2Y1ncL9ffA2f+LhrefQg==}
     engines: {node: '>=18.0'}
     peerDependencies:
       postcss: ^8.4.31
@@ -5567,8 +5571,8 @@ packages:
     resolution: {integrity: sha512-IQ7TZdoaqbT+LCpShg46jnZVlhWD2w6iQYAcYXfHARZ7X1t/UGhhceQDs5X0cGqKvYlHNOuv7Oa1xmb0oQuA3w==}
     engines: {node: '>=4'}
 
-  postcss-selector-parser@7.1.5:
-    resolution: {integrity: sha512-KvvtD7SrlBP7dlgkBghEE3r84CABm5SmV2aNcG4oCA+qDnJ/tvKonFVvwWAyyWUEwxuNawdfEAZKP9zM3oZ2Uw==}
+  postcss-selector-parser@7.1.6:
+    resolution: {integrity: sha512-7qASPzhKF2l2KLboRZux8CCTRMdGiV08vWmyKzPz22qZ7ZjQBOeY7rNzNoCLSUiftJ7HUq0GERHmxw/t0dCdMw==}
     engines: {node: '>=4'}
 
   postcss@8.5.26:
@@ -7225,13 +7229,13 @@ snapshots:
 
   '@csstools/css-tokenizer@4.0.0': {}
 
-  '@csstools/selector-resolve-nested@4.0.1(postcss-selector-parser@7.1.5)':
+  '@csstools/selector-resolve-nested@4.0.1(postcss-selector-parser@7.1.6)':
     dependencies:
-      postcss-selector-parser: 7.1.5
+      postcss-selector-parser: 7.1.6
 
-  '@csstools/selector-specificity@6.0.0(postcss-selector-parser@7.1.5)':
+  '@csstools/selector-specificity@6.0.0(postcss-selector-parser@7.1.6)':
     dependencies:
-      postcss-selector-parser: 7.1.5
+      postcss-selector-parser: 7.1.6
 
   '@dnd-kit/accessibility@3.1.1(react@19.3.0)':
     dependencies:
@@ -10155,6 +10159,8 @@ snapshots:
 
   entities@8.0.0: {}
 
+  entities@8.1.0: {}
+
   env-paths@2.2.1: {}
 
   env-paths@3.0.0: {}
@@ -11419,15 +11425,15 @@ snapshots:
       readable-stream: 2.3.8
       setimmediate: 1.0.5
 
-  juice@12.1.2:
+  juice@12.1.3:
     dependencies:
       cheerio: 1.2.0
       commander: 14.0.3
-      entities: 8.0.0
-      postcss: 8.5.26
-      postcss-nesting: 14.0.1(postcss@8.5.26)
-      postcss-safe-parser: 7.0.1(postcss@8.5.26)
-      postcss-selector-parser: 7.1.5
+      entities: 8.1.0
+      postcss: 8.5.28
+      postcss-nesting: 14.0.1(postcss@8.5.28)
+      postcss-safe-parser: 7.1.0(postcss@8.5.28)
+      postcss-selector-parser: 7.1.6
       web-resource-inliner: 8.0.0
 
   jwa@2.0.1:
@@ -12475,25 +12481,25 @@ snapshots:
   postcss-nested@7.0.2(postcss@8.5.26):
     dependencies:
       postcss: 8.5.26
-      postcss-selector-parser: 7.1.5
+      postcss-selector-parser: 7.1.6
 
-  postcss-nesting@14.0.1(postcss@8.5.26):
+  postcss-nesting@14.0.1(postcss@8.5.28):
     dependencies:
-      '@csstools/selector-resolve-nested': 4.0.1(postcss-selector-parser@7.1.5)
-      '@csstools/selector-specificity': 6.0.0(postcss-selector-parser@7.1.5)
-      postcss: 8.5.26
-      postcss-selector-parser: 7.1.5
+      '@csstools/selector-resolve-nested': 4.0.1(postcss-selector-parser@7.1.6)
+      '@csstools/selector-specificity': 6.0.0(postcss-selector-parser@7.1.6)
+      postcss: 8.5.28
+      postcss-selector-parser: 7.1.6
 
-  postcss-safe-parser@7.0.1(postcss@8.5.26):
+  postcss-safe-parser@7.1.0(postcss@8.5.28):
     dependencies:
-      postcss: 8.5.26
+      postcss: 8.5.28
 
   postcss-selector-parser@6.0.10:
     dependencies:
       cssesc: 3.0.0
       util-deprecate: 1.0.2
 
-  postcss-selector-parser@7.1.5:
+  postcss-selector-parser@7.1.6:
     dependencies:
       cssesc: 3.0.0
       util-deprecate: 1.0.2
