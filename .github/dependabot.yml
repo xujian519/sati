@@ -1,16 +1,45 @@
 version: 2
+
+# ⚠️ 为什么 npm 只留 "/" 一个条目（2026-09-21 修复）
+#
+# 本仓是 pnpm workspace（pnpm-workspace.yaml 列了 ui / apps/desktop /
+# src/context/memory/edgeclaw-memory-core / vendor/nuo-patent），
+# **全仓只有一个 pnpm-lock.yaml，位于仓库根**。
+#
+# 工作区根（"/"）这一条已经覆盖全部子包 —— 实测证据：
+#   * #305 / #484 / #482 / #485（"/" 条目产出）都同时改了 <子包>/package.json
+#     与根 pnpm-lock.yaml，且覆盖 ui 的 devDependencies（如 jsdom、typescript）；
+#   * #225 只改 apps/desktop/package.json 与根 pnpm-lock.yaml —— 而 electron
+#     仅声明在 apps/desktop/package.json 里，证明 "/" 确实管到 apps/desktop。
+#
+# 再单列子目录（原配置有 "/ui"）会就同一个依赖重复开单，而子目录那一单
+# **只改 package.json、不带根 lockfile 更新** ⇒ CI 的
+# `pnpm install --frozen-lockfile` 必然 ERR_PNPM_OUTDATED_LOCKFILE。
+# 历史实测 11/11 一致：当前开放的 #487/#488/#489/#490，以及已关闭的
+# #309/#310/#311/#312、#231、#266、#268，全部只改 ui/package.json；
+# 而它们在 "/" 下的孪生兄弟（#484/#482/#486/#485、#305/#308/#304、#262/#261…）
+# 都带 lockfile 并已合并。即每周固定产生约 4 个注定失败、只能手工关闭的 PR。
+# 结论：删掉重复子目录条目，只保留工作区根 "/"。
 updates:
   - package-ecosystem: "npm"
-    directories:
-      - "/"
-      - "/ui"
-      - "/apps/desktop"
-      - "/src/context/memory/edgeclaw-memory-core"
+    directory: "/"
     schedule:
       interval: "weekly"
       day: "monday"
       time: "09:00"
       timezone: "Asia/Shanghai"
+    # 合并重复条目后同时开放的 PR 上限；保持默认 5 会让升级排队等待，
+    # 取 10 与原先「每条目各 5」的吞吐大致相当。
+    open-pull-requests-limit: 10
+    groups:
+      # univer 全家桶（13 个 @univerjs/*，全部锁在 ui/package.json）的类型依赖
+      # 跨包 interface augmentation 合并：版本必须**完全一致**。逐包单独升级会造出
+      # 混版树，FUniver / FWorksheet / FEventName 上的接口互相看不见，
+      # ui typecheck 一次爆 10+ 个 TS2339 / TS2345（#482、#486 实测）。
+      # 归组后同一轮的所有 @univerjs/* 升级进同一个 PR，保证同版。
+      univerjs:
+        patterns:
+          - "@univerjs/*"
 
   - package-ecosystem: "github-actions"
     directory: "/"
@@ -19,4 +48,3 @@ updates:
       day: "monday"
       time: "09:00"
       timezone: "Asia/Shanghai"
-
