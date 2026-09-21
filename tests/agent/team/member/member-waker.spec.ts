@@ -9,6 +9,11 @@ import test from "node:test";
 import type { GatewayEvent, GatewaySubmitTurnInput } from "../../../../src/gateway/protocol/types.js";
 import { registerRoleDefinition, unregisterRoleDefinition } from "../../../../src/agent/sub/builtinSubagentTypes.js";
 import {
+  NON_USER_ORIGIN_MARKER,
+  NON_USER_ORIGIN_NOTICE,
+  withNonUserOriginNotice,
+} from "../../../../src/context/prompt/nonUserOriginNotice.js";
+import {
   TeamDb,
   TeamMemberNotFoundError,
   TeamMemberRetiredError,
@@ -50,10 +55,24 @@ test("唤醒：以成员 sessionKey + channelKey cron + canPrompt false 提交�
     assert.deepEqual(recorded.inputs[0], {
       sessionKey: "team:t1:m1",
       channelKey: "cron",
-      message: "请继续检索任务 T-1",
+      // 成员回合由调度器/队长/对等成员触发，非其用户本人：消息带非用户来源护栏。
+      message: withNonUserOriginNotice("请继续检索任务 T-1"),
       canPrompt: false,
       modelRoute: { provider: "deepseek", model: "deepseek-v4-flash" },
     });
+  } finally {
+    db.close();
+  }
+});
+
+test("唤醒：followup 带非用户来源护栏，原始文本保留在末尾", async () => {
+  const { db, recorded, gateway } = setup();
+  try {
+    await wakeMember(db, gateway, "m1", "任务 T-9 已转派给你");
+    const message = recorded.inputs[0]?.message ?? "";
+    assert.ok(message.startsWith(NON_USER_ORIGIN_MARKER), "护栏抬头必须居首");
+    assert.ok(message.includes(NON_USER_ORIGIN_NOTICE), "护栏说明必须存在");
+    assert.ok(message.endsWith("任务 T-9 已转派给你"), "不得改写原始 followup 文本");
   } finally {
     db.close();
   }

@@ -7,6 +7,7 @@ import {
   SatiLifecycleRuntimeError,
 } from "../../src/lifecycle/index.js";
 import { HookRuntime } from "../../src/extension/hooks/execution/HookRuntime.js";
+import { NON_USER_ORIGIN_MARKER, withNonUserOriginNotice } from "../../src/context/prompt/nonUserOriginNotice.js";
 import type { HookRuntimeRunInput, HookRuntimeRunResult } from "../../src/extension/hooks/execution/HookRuntime.js";
 import type { SatiHookExecutionEvent } from "../../src/extension/hooks/events/HookExecutionEventBus.js";
 import type { SatiLifecycleError } from "../../src/lifecycle/protocol/effects.js";
@@ -103,12 +104,17 @@ test("LifecycleRuntime.dispatch maps additional_context effects to user messages
   assert.equal(result.messages.length, 1);
   assert.equal(result.messages[0]!.role, "user");
   assert.equal(result.effects.length, 2);
+  // 钩子注入不是用户输入：内容带非用户来源护栏，但 `<hook_context` 必须仍居首，
+  // 否则压缩锚点判定（INTERNAL_USER_TEXT_PREFIXES）会把它当成真实用户请求。
   assert.deepEqual(result.messages[0]!.content, [
     {
       type: "text",
-      text: '<hook_context source="plugin-a">\nctx body\n</hook_context>',
+      text: `<hook_context source="plugin-a">\n${withNonUserOriginNotice("ctx body")}\n</hook_context>`,
     },
   ]);
+  const text = (result.messages[0]!.content[0] as { text: string }).text;
+  assert.ok(text.startsWith("<hook_context"), "标签必须居首");
+  assert.ok(text.includes(NON_USER_ORIGIN_MARKER), "护栏抬头必须存在");
   assert.deepEqual(result.messages[0]!.metadata, { synthetic: true, purpose: "hook_context" });
 });
 

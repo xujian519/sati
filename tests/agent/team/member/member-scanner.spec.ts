@@ -8,6 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { getPilotProjectChatDir } from "../../../../src/pilot/index.js";
+import { withNonUserOriginNotice } from "../../../../src/context/prompt/nonUserOriginNotice.js";
 import { sanitizeSessionIdForPath } from "../../../../src/session/storage/ProjectSessionStorage.js";
 import type { GatewayEvent, GatewaySubmitTurnInput } from "../../../../src/gateway/protocol/types.js";
 import type { TeamEvent } from "../../../../src/agent/team/protocol/events.js";
@@ -98,7 +99,8 @@ test("冷恢复：(a) 形态断点成员被重唤醒，健康成员跳过", asyn
     });
     assert.equal(result.scanned, 2);
     assert.equal(result.resumed, 1);
-    assert.deepEqual(recorded.messages, ["[team-resume] 继续未完成的工作"]);
+    // 冷恢复消息同样带非用户来源护栏（唤醒统一经 wakeMember 收口）。
+    assert.deepEqual(recorded.messages, [withNonUserOriginNotice("[team-resume] 继续未完成的工作")]);
   } finally {
     db.close();
     await rm(root, { recursive: true, force: true });

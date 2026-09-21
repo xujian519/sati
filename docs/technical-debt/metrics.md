@@ -7,9 +7,9 @@
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1043 / 175367 |
+| src TS 文件 / 行数 | 1044 / 175413 |
 | src JS 文件 | 0 |
-| tests 文件 | 579 |
+| tests 文件 | 581 |
 | ui/src 文件 / 行数 | 571 / 92364 |
 | ui/server 文件 / 行数 | 108 / 31827 |
 
@@ -101,7 +101,7 @@
 | `src/patent/figuregen/check.ts` | `checkFigures` | 306 | function |
 | `src/cli/projectRuntimeFactory.ts` | `resolve` | 303 | function |
 | `ui/src/components/settings/view/integrations/im/components/WeixinChannelSection.tsx` | `WeixinChannelSection` | 303 | function |
-| `src/gateway/client/InProcessGateway.ts` | `submitTurn` | 300 | method |
+| `src/gateway/client/InProcessGateway.ts` | `submitTurn` | 301 | method |
 
 ## Top 30 大文件
 
@@ -112,7 +112,7 @@
 | `src/model/catalog/providers.ts` | 1593 |
 | `ui/server/routes/git.js` | 1529 |
 | `src/adapters/channel/weixin/WeixinChannel.ts` | 1497 |
-| `src/gateway/client/InProcessGateway.ts` | 1489 |
+| `src/gateway/client/InProcessGateway.ts` | 1491 |
 | `ui/src/components/main-content-v2/SkillsV2.tsx` | 1441 |
 | `ui/src/stores/useSessionStore.ts` | 1347 |
 | `ui/src/components/main-content-v2/DashboardV2.tsx` | 1345 |
@@ -164,8 +164,8 @@
 | tool | 64 |
 | agent | 57 |
 | knowledge | 38 |
-| context | 32 |
-| gateway | 32 |
+| context | 33 |
+| gateway | 33 |
 | model | 32 |
 | session | 28 |
 | router | 18 |
@@ -193,7 +193,7 @@
 | runtime | 1 |
 | status | 1 |
 
-| **合计** | **555** |
+| **合计** | **557** |
 
 ## i18n en/zh-CN 对齐
 
