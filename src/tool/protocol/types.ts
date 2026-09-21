@@ -461,6 +461,15 @@ export type SatiToolDefinition<Input = unknown, Output = unknown> = {
   shouldDefer?: boolean;
   alwaysLoad?: boolean;
   searchHint?: string;
+  /**
+   * 该工具的工作单元永远需要用户当面确认：置位后任何 allow 路径
+   * （bypassPermissions 模式、user/session allow 规则、plan 只读直通）都抬高为
+   * 一次提问，且提问不提供「本会话允许」入口。只写 `true`（`false` 无意义，省略即可）。
+   *
+   * 代价：无法提问的会话（cron / team 成员唤醒 / always-on）会硬拒绝该工具——
+   * 这是 fail-closed 的刻意取舍，标记前须确认该工具不被自主链路调用。
+   */
+  alwaysAsk?: true;
   isReadOnly(input: Input): boolean;
   isConcurrencySafe(input: Input): boolean;
   isDestructive?(input: Input): boolean;

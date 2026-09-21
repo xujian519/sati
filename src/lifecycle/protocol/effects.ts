@@ -19,7 +19,15 @@ export type SatiHookEffect =
   | { type: "permission_decision"; behavior: SatiHookPermissionBehavior; reason?: string }
   | { type: "updated_tool_input"; input: Record<string, unknown> }
   | { type: "updated_mcp_tool_output"; output: unknown }
-  | { type: "permission_request_result"; result: SatiPermissionRequestResult }
+  | {
+      type: "permission_request_result";
+      result: SatiPermissionRequestResult;
+      /**
+       * 该决策是否由宿主注册的交互式 `callback` hook 作出（即用户本人作答）。
+       * 声明式 hook（command/prompt/http/agent）不设该位——它们不能代表用户批准。
+       */
+      interactive?: boolean;
+    }
   | { type: "initial_user_message"; message: string }
   | { type: "watch_paths"; paths: string[] }
   | { type: "worktree_path"; path: string }

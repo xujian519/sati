@@ -7,9 +7,9 @@
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1043 / 175250 |
+| src TS 文件 / 行数 | 1043 / 175367 |
 | src JS 文件 | 0 |
-| tests 文件 | 578 |
+| tests 文件 | 579 |
 | ui/src 文件 / 行数 | 571 / 92364 |
 | ui/server 文件 / 行数 | 108 / 31827 |
 
@@ -75,9 +75,9 @@
 | `ui/src/components/code-editor/view/subcomponents/SpreadsheetInteractivePreview.tsx` | `SpreadsheetInteractivePreview` | 407 | function |
 | `ui/src/components/settings/view/integrations/im/components/WeComChannelSection.tsx` | `WeComChannelSection` | 398 | function |
 | `ui/src/components/chat/hooks/useSlashCommands.ts` | `useSlashCommands` | 395 | function |
+| `src/tool/execution/ToolRuntime.ts` | `execute` | 388 | method |
 | `ui/src/components/main-content-v2/CronV2.test.tsx` | `(anonymous)` | 384 | arrow |
 | `src/web/client/webMessage.ts` | `applyWebGatewayEvent` | 383 | function |
-| `src/tool/execution/ToolRuntime.ts` | `execute` | 382 | method |
 | `ui/src/components/app-shell/MainAreaV2.tsx` | `MainAreaV2Content` | 381 | function |
 | `ui/src/components/settings/view/integrations/im/components/FeishuChannelSection.tsx` | `FeishuChannelSection` | 381 | function |
 | `ui/src/components/chat/tools/components/InteractiveRenderers/AskUserQuestionPanel.tsx` | `AskUserQuestionPanel` | 378 | arrow |
@@ -161,7 +161,7 @@
 | 模块 | 测试文件 |
 |---|---|
 | patent | 121 |
-| tool | 63 |
+| tool | 64 |
 | agent | 57 |
 | knowledge | 38 |
 | context | 32 |
@@ -193,7 +193,7 @@
 | runtime | 1 |
 | status | 1 |
 
-| **合计** | **554** |
+| **合计** | **555** |
 
 ## i18n en/zh-CN 对齐
 

@@ -109,7 +109,7 @@ export class HookRuntime {
         });
       }
 
-      effects.push(...effectsFromHookOutput(result.output, hookName));
+      effects.push(...effectsFromHookOutput(result.output, hookName, hook.type === "callback"));
     }
 
     return { effects, events, blockingErrors, nonBlockingErrors };
@@ -167,7 +167,13 @@ export class HookRuntime {
   }
 }
 
-function effectsFromHookOutput(output: SatiHookOutput, hookName: string): SatiHookEffect[] {
+/**
+ * `interactive` 标记由宿主注册的 `callback` hook 作出的决策：只有宿主能注册
+ * callback（`parseHooksConfig` 拒绝磁盘声明 callback），因此这是唯一能代表用户
+ * 本人作答的 hook 种类。声明式 hook（command/prompt/http/agent）的 allow 属自动
+ * 放行，不得用来批准需要当面确认的工具。
+ */
+function effectsFromHookOutput(output: SatiHookOutput, hookName: string, interactive: boolean): SatiHookEffect[] {
   if (output.type === "async") {
     return [];
   }
@@ -211,7 +217,7 @@ function effectsFromHookOutput(output: SatiHookOutput, hookName: string): SatiHo
       effects.push({ type: "updated_mcp_tool_output", output: specific.updatedMCPToolOutput });
     }
     if (specific.decision) {
-      effects.push({ type: "permission_request_result", result: specific.decision });
+      effects.push({ type: "permission_request_result", result: specific.decision, interactive });
     }
     if (specific.retry) {
       effects.push({ type: "retry_permission_denied" });

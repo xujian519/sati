@@ -116,6 +116,8 @@ export function createRenderPatentDocumentTool(): SatiToolDefinition<RenderPaten
     },
     isReadOnly: () => false,
     isConcurrencySafe: () => true,
+    // 交付物渲染是面向客户的终局动作：默认 skipPermissions 下不该无人值守地落盘。
+    alwaysAsk: true,
     async execute(input, context: SatiToolRuntimeContext) {
       // 输入契约校验（fail-closed；即使绕过 schema 校验也在此拦截）。
       if (!TEMPLATE_IDS.includes(input.template as DocumentTemplateId)) {

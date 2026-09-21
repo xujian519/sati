@@ -208,6 +208,7 @@ ${formatValidationError(tool.name, updatedValidation.issues, {
     }
 
     let decision = await this.permissionRuntime.decide(tool, executeInput, context, call.id);
+    const alwaysAskLocked = decision.type === "ask" && decision.request.metadata?.alwaysAsk === true;
     if (decision.type === "ask") {
       const permissionHookResult = await this.dispatchLifecycle(
         "PermissionRequest",
@@ -217,6 +218,7 @@ ${formatValidationError(tool.name, updatedValidation.issues, {
         context,
         {
           permissionSuggestions: decision.request.options,
+          ...(alwaysAskLocked ? { alwaysAsk: true } : {}),
         },
       );
       this.eventEmitter?.({
@@ -227,7 +229,11 @@ ${formatValidationError(tool.name, updatedValidation.issues, {
         toolName: tool.name,
       });
       const permissionRequestResult = findEffect(permissionHookResult.effects, "permission_request_result");
-      if (permissionRequestResult?.result.behavior === "allow") {
+      // `alwaysAsk` 工具只接受宿主交互式 hook 的 allow——那是网关权限提示，
+      // 即用户本人的作答。声明式 hook（全局配置或项目插件）的 allow 属自动放行，
+      // 不能批准正需要当面确认的工具。
+      const allowCounts = permissionRequestResult?.interactive === true || !alwaysAskLocked;
+      if (permissionRequestResult?.result.behavior === "allow" && allowCounts) {
         decision = {
           type: "allow",
           reason: { type: "runtime", message: `PermissionRequest hook allowed ${tool.name}.` },

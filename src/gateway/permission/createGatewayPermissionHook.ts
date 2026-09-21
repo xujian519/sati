@@ -118,7 +118,11 @@ export function createGatewayPermissionHook(options: CreateGatewayPermissionHook
       if (signal && onAbort) signal.removeEventListener("abort", onAbort);
     });
 
-    if (decision.decision === "allow" && decision.remember) {
+    if (decision.decision === "allow" && decision.remember && hookInput.alwaysAsk !== true) {
+      // `alwaysAsk` 工具不落会话级 allow 规则：它每次都必须重新问。规则虽然
+      // 也过不了 PermissionRuntime 的 alwaysAsk 判定，但写进去会让界面显示
+      // 一个永不生效的授权，故直接不落。
+      //
       // Mutate the live array shared with PermissionContext.rules.allow
       // so the next tool.checkPermissions() / decide() in this same turn
       // walks the allow branch instead of asking again.

@@ -5,7 +5,11 @@ import type { SatiToolDefinition, SatiToolRuntimeContext } from "../../src/tool/
 
 function makeTool(
   name: string,
-  opts?: { readOnly?: boolean; checkPermissions?: SatiToolDefinition["checkPermissions"] },
+  opts?: {
+    readOnly?: boolean;
+    alwaysAsk?: true;
+    checkPermissions?: SatiToolDefinition["checkPermissions"];
+  },
 ): SatiToolDefinition {
   return {
     name,
@@ -14,6 +18,7 @@ function makeTool(
     inputSchema: { type: "object", properties: {} },
     isReadOnly: () => opts?.readOnly ?? false,
     isConcurrencySafe: () => false,
+    ...(opts?.alwaysAsk ? { alwaysAsk: true } : {}),
     ...(opts?.checkPermissions ? { checkPermissions: opts.checkPermissions } : {}),
     execute: async () => ({ content: [{ type: "text", text: "ok" }] }),
   };
@@ -439,4 +444,152 @@ test("non-matching deny rule is ignored", async () => {
     "call-1",
   );
   assert.equal(decision.type, "ask");
+});
+
+// ---------------------------------------------------------------------------
+// alwaysAsk 硬门
+// ---------------------------------------------------------------------------
+
+test("alwaysAsk 工具在 bypassPermissions 下仍提问", async () => {
+  const tool = makeTool("render_x", { alwaysAsk: true });
+  const decision = await runtime.decide(tool, {}, makeContext({ mode: "bypassPermissions" }), "call-1");
+  assert.equal(decision.type, "ask");
+});
+
+test("alwaysAsk 工具在 plan 模式对只读工具也提问（只读直通被抬高）", async () => {
+  const tool = makeTool("read_x", { readOnly: true, alwaysAsk: true });
+  const decision = await runtime.decide(tool, {}, makeContext({ mode: "plan" }), "call-1");
+  assert.equal(decision.type, "ask");
+});
+
+test("alwaysAsk 不放松 plan 模式对非只读工具的拒绝", async () => {
+  const tool = makeTool("write_x", { alwaysAsk: true });
+  const decision = await runtime.decide(tool, { file_path: "a.txt" }, makeContext({ mode: "plan" }), "call-1");
+  assert.equal(decision.type, "deny");
+  if (decision.type === "deny") assert.equal(decision.reason.type, "mode");
+});
+
+test("alwaysAsk 忽略 user allow 规则", async () => {
+  const tool = makeTool("write_x", { alwaysAsk: true });
+  const allowRule = rule({ toolName: "write_x" });
+  const decision = await runtime.decide(tool, {}, makeContext({ rules: { allow: [allowRule] } }), "call-1");
+  assert.equal(decision.type, "ask");
+});
+
+test("alwaysAsk 忽略 session allow 规则", async () => {
+  const tool = makeTool("write_x", { alwaysAsk: true });
+  const sessionAllow = rule({ toolName: "write_x", source: "session" });
+  const decision = await runtime.decide(tool, {}, makeContext({ rules: { allow: [sessionAllow] } }), "call-1");
+  assert.equal(decision.type, "ask");
+});
+
+test("alwaysAsk 不覆盖 deny 规则", async () => {
+  const tool = makeTool("write_x", { alwaysAsk: true });
+  const denyRule = rule({ toolName: "write_x", behavior: "deny" });
+  const decision = await runtime.decide(tool, {}, makeContext({ rules: { deny: [denyRule] } }), "call-1");
+  assert.equal(decision.type, "deny");
+  if (decision.type === "deny") assert.equal(decision.reason.type, "rule");
+});
+
+test("alwaysAsk 覆盖工具级 allow（改判为提问）", async () => {
+  const tool = makeTool("write_x", {
+    alwaysAsk: true,
+    checkPermissions: async () => ({ type: "allow", reason: { type: "tool", toolName: "write_x", message: "ok" } }),
+  });
+  const decision = await runtime.decide(tool, {}, makeContext(), "call-1");
+  assert.equal(decision.type, "ask");
+});
+
+test("alwaysAsk 覆盖工具级 passthrough", async () => {
+  const tool = makeTool("write_x", { alwaysAsk: true, checkPermissions: async () => ({ type: "passthrough" }) });
+  const decision = await runtime.decide(tool, {}, makeContext({ mode: "bypassPermissions" }), "call-1");
+  assert.equal(decision.type, "ask");
+});
+
+test("alwaysAsk 不会把工具级 deny 降级为可批准（allow 规则短路时必须先问 checkPermissions）", async () => {
+  const tool = makeTool("write_x", {
+    alwaysAsk: true,
+    checkPermissions: async () => ({
+      type: "deny",
+      reason: { type: "safety", message: "hard deny" },
+      message: "hard deny",
+    }),
+  });
+  const allowRule = rule({ toolName: "write_x" });
+  const decision = await runtime.decide(
+    tool,
+    {},
+    makeContext({ mode: "bypassPermissions", rules: { allow: [allowRule] } }),
+    "call-1",
+  );
+  assert.equal(decision.type, "deny");
+});
+
+test("alwaysAsk 在 canPrompt=false 的会话硬拒绝（fail-closed）", async () => {
+  const tool = makeTool("write_x", { alwaysAsk: true });
+  const decision = await runtime.decide(
+    tool,
+    {},
+    makeContext({ canPrompt: false, mode: "bypassPermissions" }),
+    "call-1",
+  );
+  assert.equal(decision.type, "deny");
+  if (decision.type === "deny") {
+    assert.equal(decision.reason.type, "runtime");
+    assert.match(decision.message, /always requires confirmation/);
+  }
+});
+
+test("alwaysAsk 提问请求带 alwaysAsk 标记且摘掉「本会话允许」", async () => {
+  const tool = makeTool("write_x", {
+    alwaysAsk: true,
+    checkPermissions: async () => ({
+      type: "ask",
+      reason: { type: "tool", toolName: "write_x", message: "outside workspace" },
+      request: {
+        toolCallId: "",
+        toolName: "write_x",
+        inputSummary: "{}",
+        reason: { type: "tool", toolName: "write_x", message: "outside workspace" },
+        options: [
+          { id: "allow_once", label: "Allow once" },
+          { id: "allow_session", label: "Allow this folder for this session" },
+          { id: "deny", label: "Deny" },
+        ],
+        metadata: { externalPath: "/tmp/x" },
+      },
+    }),
+  });
+  const decision = await runtime.decide(tool, {}, makeContext({ mode: "bypassPermissions" }), "call-1");
+  assert.equal(decision.type, "ask");
+  if (decision.type === "ask") {
+    assert.equal(decision.request.metadata?.alwaysAsk, true);
+    // 工具自带的 metadata 保留（界面仍能展示路径）
+    assert.equal(decision.request.metadata?.externalPath, "/tmp/x");
+    assert.deepEqual(
+      decision.request.options.map(o => o.id),
+      ["allow_once", "deny"],
+    );
+    // 工具自带的原因保留，界面提示更具体
+    assert.equal(decision.reason.type, "tool");
+  }
+});
+
+test("alwaysAsk 在无工具级请求时补齐 allow_once 入口", async () => {
+  const tool = makeTool("write_x", { alwaysAsk: true });
+  const decision = await runtime.decide(tool, {}, makeContext({ mode: "bypassPermissions" }), "call-1");
+  assert.equal(decision.type, "ask");
+  if (decision.type === "ask") {
+    assert.deepEqual(
+      decision.request.options.map(o => o.id),
+      ["allow_once", "deny", "cancel"],
+    );
+    assert.equal(decision.reason.type, "tool");
+  }
+});
+
+test("未标记 alwaysAsk 的工具在 bypassPermissions 下照旧自动放行（回归）", async () => {
+  const tool = makeTool("write_x");
+  const decision = await runtime.decide(tool, {}, makeContext({ mode: "bypassPermissions" }), "call-1");
+  assert.equal(decision.type, "allow");
 });
