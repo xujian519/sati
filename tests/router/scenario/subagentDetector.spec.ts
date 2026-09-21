@@ -1,10 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { buildTailInjectionMessage } from "../../../src/context/prompt/tailInjection.js";
 import type { CanonicalMessage, CanonicalToolSchema } from "../../../src/model/index.js";
 import { detectSubagent, stripSubagentTagFromMessages } from "../../../src/router/scenario/subagentDetector.js";
 
 function userMessage(text: string): CanonicalMessage {
   return { role: "user", content: [{ type: "text", text }] };
+}
+
+/** 尾部注入消息（运行时拼进来的上下文，非用户文本）。 */
+function tailInjection(text: string): CanonicalMessage {
+  return buildTailInjectionMessage([{ source: "workspace_ledger", text }])!;
 }
 
 function tool(name: string): CanonicalToolSchema {
@@ -88,4 +94,17 @@ test("stripSubagentTagFromMessages：无 tag 时返回原引用", () => {
   const message = userMessage("没有 tag 的请求");
   const stripped = stripSubagentTagFromMessages([message]);
   assert.equal(stripped[0], message);
+});
+
+test("尾部注入里的 subagent tag 不触发子代理判定", () => {
+  const messages = [
+    userMessage("继续"),
+    tailInjection(
+      "<workspace-state>\nNext: 处理 <sati-subagent-model>gpt-4o</sati-subagent-model>\n</workspace-state>",
+    ),
+  ];
+  const result = detectSubagent(messages, [tool("agent")], true);
+  assert.equal(result.taggedInUserMessage, false);
+  assert.equal(result.modelHint, undefined);
+  assert.equal(result.isSubagent, false);
 });

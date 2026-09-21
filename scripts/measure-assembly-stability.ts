@@ -16,28 +16,35 @@
  *
  * 能测什么 / 测不到什么（诚实边界）：
  *   能测：默认配置下 system prompt 是否逐轮稳定；可变段（SATI.md 项目指令）被外部改动时
- *         system prompt 是否整块变化；system / 工具 schema / 消息三段 token 分布；断点位置。
- *   测不到：需要真实写入才会出现的可变段（账本块要经 `workspace_note` 写入才有内容——
- *         空账本不产生块，见 `readWorkspaceLedgerBlock` 的 `empty` 分支）；记忆附件段
- *         （需要配置记忆 provider）；provider 侧的 `cache_control` 落点（本脚本在
+ *         system prompt 是否整块变化；真实写入账本后（`ledger-live` 场景由脚本化模型调用
+ *         `workspace_note`）账本块落在哪里、是否打穿 system 前缀；system / 工具 schema /
+ *         消息三段 token 分布；断点位置与末条消息的 purpose。
+ *   测不到：记忆附件段（`memoryAttachmentBuilder` 需注入自定义 `MemoryResolver`，网关无此测试钩子）；
+ *         plan-todo 追加段（需先批准计划）；provider 侧的 `cache_control` 落点（本脚本在
  *         `__testModelFactory` 处截获请求，早于 provider adapter，故只报 canonical 断点）。
  *
- * 读法：**同一次运行内**比较各轮 system digest（逐字节一致才算「稳定」）；跨次运行的绝对 token
- * 数可能相差 ±1（会话时间锚点随启动时刻变），别拿它当回归判据。
+ * 读法：**同一次运行内**比较各轮 system digest（逐字节一致才算「稳定」）。工作区路径固定为
+ * `<tmp>/sati-assembly-measure/<场景名>`（每次运行前清空）：`cwd` 会进 `<user-context>`，
+ * 若用 `mkdtemp` 的随机后缀，跨次运行的 system prompt 从根上就不同（不只是 token 数 ±1），
+ * 前后对比失去意义。固定路径后，同一场景跨运行的 digest 应一致（当日）。
  *
  * 用法：
- *   node --import tsx scripts/measure-assembly-stability.ts          # 人类可读
- *   node --import tsx scripts/measure-assembly-stability.ts --json   # 机器可读（改动前后对比用）
+ *   node --import tsx scripts/measure-assembly-stability.ts          # 人类可读（stdout）
+ *   node --import tsx scripts/measure-assembly-stability.ts --json   # 机器可读（**stderr**）
+ *
+ * 机器可读输出走 stderr 是有意的：Sati 自身的日志（`[sati] …`）写 stdout，混在一起没法解析。
  */
 
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createLocalGateway } from "../src/cli/createLocalGateway.js";
 import { countTokens } from "../src/context/budget/tokenizer.js";
 import type { CanonicalModelRequest, ModelRuntime } from "../src/model/index.js";
+import type { CanonicalModelEvent, CanonicalToolCall } from "../src/model/protocol/canonical.js";
 import { DEFAULT_MODEL_CAPABILITIES } from "../src/model/protocol/capabilities.js";
+import type { PermissionMode } from "../src/permission/protocol/types.js";
 
 const BASE_CONFIG = [
   "schemaVersion: 1",
@@ -66,14 +73,30 @@ const WINDOW_TOKENS = 131072;
  * 说的「每轮打穿 system 缓存」的实际形态。token 口径与协议无关，故只跑一种协议。
  */
 
-/** 只回一句话的假模型：只为抓取请求，不落真实流量。 */
-function fakeModelRuntime(requests: CanonicalModelRequest[]): ModelRuntime {
+/**
+ * 假模型：只为抓取请求，不落真实流量。默认只回一句话；`script` 可按**请求序号**（从 1 起）
+ * 让某一次请求发出工具调用——用于驱动「需要真实写入才会出现的可变段」（如账本块）。
+ */
+function fakeModelRuntime(
+  requests: CanonicalModelRequest[],
+  script?: (requestIndex: number) => CanonicalToolCall[],
+): ModelRuntime {
   return {
     stream: async function* (request) {
       requests.push(request);
+      const toolCalls = script?.(requests.length) ?? [];
       yield { type: "message_start", role: "assistant" };
+      if (toolCalls.length === 0) {
+        yield { type: "text_delta", text: "ok" };
+        yield { type: "message_end", finishReason: "stop" };
+        return;
+      }
       yield { type: "text_delta", text: "ok" };
-      yield { type: "message_end", finishReason: "stop" };
+      for (const toolCall of toolCalls) {
+        yield { type: "tool_call_start", id: toolCall.id, name: toolCall.name } satisfies CanonicalModelEvent;
+        yield { type: "tool_call_end", toolCall } satisfies CanonicalModelEvent;
+      }
+      yield { type: "message_end", finishReason: "tool_call" };
     },
     complete: async () => ({ role: "assistant", content: [{ type: "text", text: "ok" }], finishReason: "stop" }),
     getCapabilities: () => DEFAULT_MODEL_CAPABILITIES,
@@ -99,6 +122,8 @@ type TurnMeasurement = {
   breakpointOffsets: number[];
   /** Anthropic 专有的 per-request 缓存布局（非 anthropic 协议为 undefined）。 */
   cachePlan?: { system: boolean; messageOffsets: number[]; fingerprint: string };
+  /** 末条消息的 `metadata.purpose`（尾部注入应为 `context_injection`）。 */
+  lastMessagePurpose?: string;
   /** system prompt 前 600 字符（定位「多出来的是什么」）。 */
   systemPromptPreview: string;
 };
@@ -118,6 +143,10 @@ type ScenarioSpec = {
   initialProjectInstructions?: string;
   /** 账本开关（SATI_WORKSPACE_LEDGER_ENABLED）。 */
   ledgerEnabled?: boolean;
+  /** 网关权限模式：需要真实写工具的场景用 bypassPermissions（否则挂起等审批）。 */
+  permissionMode?: PermissionMode;
+  /** 按请求序号（从 1 起）产出工具调用的脚本（undefined = 全程纯文本）。 */
+  script?: (requestIndex: number) => CanonicalToolCall[];
   /** 每轮提交前的钩子：返回本次外部改动的说明（undefined = 无改动）。 */
   beforeTurn?: (turn: number, root: string) => string | undefined;
   turnCount: number;
@@ -133,7 +162,10 @@ function breakpointOffsets(request: CanonicalModelRequest): number[] {
 }
 
 async function measureScenario(spec: ScenarioSpec): Promise<ScenarioMeasurement> {
-  const root = mkdtempSync(join(tmpdir(), "sati-assembly-"));
+  // 固定路径（不用 mkdtemp）：cwd 进 system prompt，随机后缀会让跨次运行不可比。
+  const root = join(tmpdir(), "sati-assembly-measure", spec.name);
+  rmSync(root, { recursive: true, force: true });
+  mkdirSync(root, { recursive: true });
   const pilotHome = join(root, "pilot-home");
   mkdirSync(pilotHome, { recursive: true });
   writeFileSync(join(pilotHome, "sati.yaml"), BASE_CONFIG, "utf8");
@@ -145,11 +177,12 @@ async function measureScenario(spec: ScenarioSpec): Promise<ScenarioMeasurement>
   const local = createLocalGateway({
     projectRoot: root,
     pilotHome,
+    ...(spec.permissionMode === undefined ? {} : { permissionMode: spec.permissionMode }),
     env: {
       SATI_KNOWLEDGE_DIR: join(root, "knowledge-absent"),
       ...(spec.ledgerEnabled ? { SATI_WORKSPACE_LEDGER_ENABLED: "1" } : {}),
     },
-    __testModelFactory: () => fakeModelRuntime(requests),
+    __testModelFactory: () => fakeModelRuntime(requests, spec.script),
   });
 
   const turns: TurnMeasurement[] = [];
@@ -180,6 +213,9 @@ async function measureScenario(spec: ScenarioSpec): Promise<ScenarioMeasurement>
         messageTokens: countTokens(JSON.stringify(request.messages ?? [])),
         messageCount: request.messages?.length ?? 0,
         breakpointOffsets: breakpointOffsets(request),
+        ...(request.messages?.at(-1)?.metadata?.purpose === undefined
+          ? {}
+          : { lastMessagePurpose: String(request.messages.at(-1)?.metadata?.purpose) }),
         ...(request.cachePlan
           ? {
               cachePlan: {
@@ -229,6 +265,25 @@ const SCENARIOS: ScenarioSpec[] = [
     ledgerEnabled: true,
     turnCount: 2,
   },
+  {
+    name: "ledger-live",
+    note:
+      "账本开关打开且真写入：第 1 轮首次请求由脚本化模型调用 workspace_note（bypassPermissions 免审批），" +
+      "此后账本块每轮都在",
+    ledgerEnabled: true,
+    permissionMode: "bypassPermissions",
+    script: requestIndex =>
+      requestIndex === 1
+        ? [
+            {
+              id: "note-1",
+              name: "workspace_note",
+              input: { goal: "量出 system prompt 是否逐轮稳定", next: "对比账本写入前后的 system digest" },
+            },
+          ]
+        : [],
+    turnCount: 3,
+  },
 ];
 
 const results: ScenarioMeasurement[] = [];
@@ -237,12 +292,13 @@ for (const spec of SCENARIOS) {
 }
 
 if (process.argv.includes("--json")) {
-  console.log(JSON.stringify(results, null, 2));
+  // stderr：stdout 留给的人类输出与 Sati 日志，混流后 JSON 无法解析。
+  console.error(JSON.stringify(results, null, 2));
 } else {
   for (const result of results) {
     console.log(`\n=== ${result.scenario} ===  ${result.note}`);
     console.log(
-      "turn  system  digest        tools   messages  (msg数)  cachePlan(system + 末尾消息偏移, 指纹)  跨轮一致",
+      "turn  system  digest        tools   messages  (msg数)  cachePlan(system + 末尾消息偏移, 指纹)  跨轮一致  末条 purpose",
     );
     for (const turn of result.turns) {
       if (turn.externalChange !== undefined) {
@@ -255,7 +311,7 @@ if (process.argv.includes("--json")) {
         `${String(turn.turn).padEnd(5)} ${String(turn.systemTokens).padStart(6)}  ${turn.systemDigest}  ` +
           `${String(turn.toolSchemaTokens).padStart(5)}   ${String(turn.messageTokens).padStart(8)}  ` +
           `(${String(turn.messageCount).padStart(3)})   ${plan.padEnd(38)}  ` +
-          `${turn.sameSystemAsPreviousTurn ? "是" : "否"}`,
+          `${turn.sameSystemAsPreviousTurn ? "是" : "否"}        ${turn.lastMessagePurpose ?? "-"}`,
       );
       if (turn.breakpointOffsets.length > 0) {
         console.log(

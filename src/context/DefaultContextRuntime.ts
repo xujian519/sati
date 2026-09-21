@@ -240,13 +240,17 @@ export class DefaultContextRuntime implements ContextRuntime {
     // 「模型可见 = 已记录」：动态注入段落的来源清单，随 ModelContext 返回，
     // 由调用方作为带 source 标记的参考条目落 transcript（不进入重放投影）。
     const injections: InjectionRecord[] = [];
+    // 逐调用可变的段落走**尾部注入**（调用方合成消息尾部的合成消息）：记忆附件按
+    // 检索 query 逐轮变化，放进 system prompt 会把它前面的整段缓存前缀一起作废。
+    const tailInjections: InjectionRecord[] = [];
     if (memoryPromise) {
       const memory = await memoryPromise;
       for (const block of memory.attachments) {
         for (const content of block.content) {
           if (content.type === "text" && content.text.trim().length > 0) {
-            parts.push(content.text);
-            injections.push({ source: "memory", text: content.text });
+            const record = { source: "memory", text: content.text };
+            injections.push(record);
+            tailInjections.push(record);
           }
         }
       }
@@ -264,6 +268,7 @@ export class DefaultContextRuntime implements ContextRuntime {
           systemPrompt: parts.join("\n\n"),
           systemPromptParts: parts,
           injections,
+          tailInjections,
           tools: input.tools,
           diagnostics,
           boundaries: [],
@@ -329,6 +334,7 @@ export class DefaultContextRuntime implements ContextRuntime {
       systemPrompt: joined,
       systemPromptParts: parts,
       injections,
+      tailInjections,
       tools: input.tools,
       diagnostics,
       boundaries: [],

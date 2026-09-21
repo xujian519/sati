@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildPromptDateNotice } from "../../../src/context/prompt/promptDateNotice.js";
+import { buildTailInjectionMessage } from "../../../src/context/prompt/tailInjection.js";
 import type { CanonicalMessage } from "../../../src/model/index.js";
 import { extractLastUserMessage } from "../../../src/router/tokenSaver/extractLastUserMessage.js";
 
@@ -70,5 +71,24 @@ test("跳过跨日日期通知，返回其前面的真实用户消息", () => {
 
 test("只有日期通知时返回 undefined", () => {
   const messages = [textMessage("assistant", "回复"), buildPromptDateNotice("2026-09-11")];
+  assert.equal(extractLastUserMessage(messages), undefined);
+});
+
+test("跳过尾部注入，返回其前面的真实用户消息", () => {
+  const messages = [
+    textMessage("user", "请分析权利要求"),
+    textMessage("assistant", "回复"),
+    buildTailInjectionMessage([
+      { source: "workspace_ledger", text: "<workspace-state>\nGoal: x\n</workspace-state>" },
+    ])!,
+  ];
+  assert.equal(extractLastUserMessage(messages), "请分析权利要求");
+});
+
+test("只有尾部注入时返回 undefined（注入内容不是用户意图）", () => {
+  const messages = [
+    textMessage("assistant", "回复"),
+    buildTailInjectionMessage([{ source: "memory", text: "<memory-context>命中的知识卡片</memory-context>" }])!,
+  ];
   assert.equal(extractLastUserMessage(messages), undefined);
 });

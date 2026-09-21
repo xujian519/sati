@@ -7,9 +7,9 @@
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1044 / 175459 |
+| src TS 文件 / 行数 | 1045 / 175562 |
 | src JS 文件 | 0 |
-| tests 文件 | 580 |
+| tests 文件 | 583 |
 | ui/src 文件 / 行数 | 571 / 92364 |
 | ui/server 文件 / 行数 | 108 / 31827 |
 
@@ -164,7 +164,7 @@
 | tool | 63 |
 | agent | 58 |
 | knowledge | 38 |
-| context | 32 |
+| context | 34 |
 | gateway | 32 |
 | model | 32 |
 | session | 28 |
@@ -172,10 +172,10 @@
 | always-on | 14 |
 | mcp | 13 |
 | adapters | 11 |
+| cli | 11 |
 | cron | 11 |
 | extension | 11 |
 | pilot | 11 |
-| cli | 10 |
 | rule | 10 |
 | web | 9 |
 | literature | 8 |
@@ -193,7 +193,7 @@
 | runtime | 1 |
 | status | 1 |
 
-| **合计** | **556** |
+| **合计** | **559** |
 
 ## i18n en/zh-CN 对齐
 

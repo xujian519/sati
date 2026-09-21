@@ -4,8 +4,11 @@
  * 抽取自 AgentLoop（issue #147 / TD-SIZE-001）。
  *
  * 「模型可见 = 已记录」纪律在本模块收口：动态注入段落（记忆/指令/方法论/
- * 账本/元认知）既进 system prompt 又落 injected_context 审计，且同 turn 内
- * 相同 source+text 只落库一次；预算预演（previewOnly）不落库也不推进缓存代数。
+ * 账本/元认知）既进请求又落 injected_context 审计，且同 turn 内相同
+ * source+text 只落库一次；预算预演（previewOnly）不落库也不推进缓存代数。
+ * 逐轮可变的段落（plan-todo/账本/记忆/方法论）进**消息尾部**合成消息，
+ * 会话内静态的段落（默认提示、调用方 append、项目指令、元认知）留 system
+ * prompt——分桶判据见 `src/context/prompt/tailInjection.ts`。
  */
 
 import {
@@ -17,6 +20,7 @@ import {
 } from "../../model/index.js";
 import { NullContextRuntime } from "../../context/NullContextRuntime.js";
 import { promptCacheEnabled, resolveRequestCachePlan } from "../../context/cache/CachePlan.js";
+import { buildTailInjectionMessage } from "../../context/prompt/tailInjection.js";
 import type { TokenBudgetSnapshot } from "../../context/index.js";
 import type { RouterDecision } from "../../router/index.js";
 import { renderWorkspaceLedgerBlock, type WorkspaceLedgerBlock } from "../../session/workspace/WorkspaceLedger.js";
@@ -26,7 +30,7 @@ import { defaultAgentThinking } from "../../model/thinking/registry.js";
 import type { AgentLoopInput } from "../protocol/input.js";
 import type { AgentRuntimeConfig } from "../runtime/AgentRuntimeConfig.js";
 import type { AgentRuntimeDependencies } from "../runtime/AgentRuntimeDependencies.js";
-import { applyMethodologyAddendum, computeMethodologyAddendum } from "./methodologyInjection.js";
+import { computeMethodologyAddendum } from "./methodologyInjection.js";
 import { buildMetacognitivePrompt } from "./metacognitiveControl.js";
 import { filterAskModeTools, toolToCanonicalSchema, type LifecycleDispatcher } from "./misc.js";
 import { appendPlanModeReminder, normalizeMessagesForModelRequest } from "./messages.js";
@@ -61,8 +65,9 @@ export interface ModelRequestOptions {
 /**
  * Read and render the current workspace ledger block (empty when disabled).
  * Re-reading fresh from the store (backed by the transcript) is what lets the
- * ledger survive compaction — the block is injected as a system-prompt
- * addendum rather than living in message history.
+ * ledger survive compaction — the block is injected as a request-tail synthetic
+ * message (see `tailInjection.ts`) rather than living in message history or in
+ * the system prompt (which would invalidate the cached prefix every turn).
  *
  * An unreadable transcript yields `status: "unavailable"`; the store has already
  * logged why, and there is no authoritative ledger to inject, so the block is
@@ -116,6 +121,9 @@ export async function createModelRequest(
   const metacognitiveAddendum = deps.config.metacognitiveControl
     ? (deps.config.metacognitivePrompt ?? buildMetacognitivePrompt())
     : undefined;
+  // 逐轮可变的段落（plan-todo 追加段、账本块）不能进 system prompt——见
+  // `src/context/prompt/tailInjection.ts` 的分桶判据。计算一次，既进尾部注入又落审计。
+  const planTodoAddendum = planTodo?.buildPromptAddendum();
   const prepared = await contextRuntime.prepareForModel({
     previewOnly: options.previewOnly,
     sessionId: input.sessionId,
@@ -130,10 +138,9 @@ export async function createModelRequest(
     tools,
     maxMessages: deps.config.maxContextMessages,
     customSystemPrompt: deps.config.systemPrompt,
-    appendSystemPrompt:
-      [input.appendSystemPrompt, planTodo?.buildPromptAddendum(), workspaceLedgerBlock?.block, metacognitiveAddendum]
-        .filter(Boolean)
-        .join("\n\n") || undefined,
+    // 调用方给的是「本次运行固定」的角色/场景补充（如团队成员的 rolePrompt），
+    // 属会话内静态内容，留在 system prompt；逐轮可变的段落下沉到消息尾部。
+    appendSystemPrompt: [input.appendSystemPrompt, metacognitiveAddendum].filter(Boolean).join("\n\n") || undefined,
     abortSignal: input.abortSignal,
   });
 
@@ -156,7 +163,7 @@ export async function createModelRequest(
     logger.warn(`${diagnostic.code}: ${diagnostic.message} (${diagnostic.mediaType}, ${diagnostic.path})`);
   }
 
-  // 单次计算方法论 addendum：既落库审计又拼 system prompt，避免同一 inject
+  // 单次计算方法论 addendum：既落库审计又拼尾部注入，避免同一 inject
   // 回调执行两次导致「记录文本 ≠ 模型实际所见」。
   const methodologyAddendum = computeMethodologyAddendum(requestMessages, deps.config.methodologyInjection);
 
@@ -189,15 +196,25 @@ export async function createModelRequest(
     }
   }
 
+  // 逐轮可变的注入段落合成为一条尾部合成消息（顺序固定，段落原文逐字节保留）：
+  // plan-todo 追加段 → 账本块 → 记忆附件（运行时返回）→ 方法论追加段。
+  const tailInjection = buildTailInjectionMessage([
+    ...(planTodoAddendum ? [{ source: "plan_todo", text: planTodoAddendum }] : []),
+    ...(workspaceLedgerBlock && !workspaceLedgerBlock.empty
+      ? [{ source: "workspace_ledger", text: workspaceLedgerBlock.block }]
+      : []),
+    ...(prepared.tailInjections ?? []),
+    ...(methodologyAddendum ? [{ source: "methodology", text: methodologyAddendum }] : []),
+  ]);
+  const requestMessagesWithTail =
+    tailInjection === undefined ? materialized.messages : [...materialized.messages, tailInjection];
+
   return {
     provider: deps.config.provider,
     model: deps.config.model,
     messages:
-      deps.config.permissionMode === "plan" ? appendPlanModeReminder(materialized.messages) : materialized.messages,
-    systemPrompt: applyMethodologyAddendum(
-      prepared.systemPrompt ?? deps.config.systemPrompt ?? "",
-      methodologyAddendum,
-    ),
+      deps.config.permissionMode === "plan" ? appendPlanModeReminder(requestMessagesWithTail) : requestMessagesWithTail,
+    systemPrompt: prepared.systemPrompt ?? deps.config.systemPrompt ?? "",
     tools: prepared.tools,
     toolChoice: deps.config.toolChoice,
     maxOutputTokens: deps.config.maxOutputTokens,
@@ -212,14 +229,14 @@ export async function createModelRequest(
     cacheBreakpoints: prepared.cacheBreakpoints,
     // A5：Anthropic per-request 稳定缓存布局（system + recent3）。仅在
     // anthropic 协议、无显式微压缩断点、环境开关开启时规划；逐调用可变
-    // 注入（账本/提醒）位于消息尾部，不破坏断点前缀。
+    // 注入（账本/记忆/方法论）位于消息尾部，不破坏断点前缀。
     cachePlan: resolveRequestCachePlan(
       {
         provider: deps.config.provider,
         model: deps.config.model,
         systemPrompt: prepared.systemPrompt ?? deps.config.systemPrompt,
         tools: prepared.tools,
-        messages: materialized.messages,
+        messages: requestMessagesWithTail,
         enabled: promptCacheEnabled() && deps.dependencies.getProviderProtocol?.(deps.config.provider) === "anthropic",
         explicitBreakpoints: prepared.cacheBreakpoints,
       },
