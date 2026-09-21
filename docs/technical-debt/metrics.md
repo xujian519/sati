@@ -7,9 +7,9 @@
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1044 / 175456 |
+| src TS 文件 / 行数 | 1044 / 175459 |
 | src JS 文件 | 0 |
-| tests 文件 | 579 |
+| tests 文件 | 580 |
 | ui/src 文件 / 行数 | 571 / 92364 |
 | ui/server 文件 / 行数 | 108 / 31827 |
 
@@ -70,7 +70,7 @@
 | `ui/src/components/chat-v2/MessageRowV2.tsx` | `MessageRowV2` | 429 | function |
 | `ui/src/components/code-editor/view/subcomponents/DocxBuiltinPreview.tsx` | `DocxBuiltinPreview` | 421 | function |
 | `src/gateway/client/eventMapping.ts` | `mapAgentEventForTurn` | 417 | function |
-| `src/cli/projectRuntimeFactory.ts` | `createProjectRuntimeResolver` | 411 | function |
+| `src/cli/projectRuntimeFactory.ts` | `createProjectRuntimeResolver` | 414 | function |
 | `ui/src/components/chat-v2/processGrouping.test.ts` | `(anonymous)` | 409 | arrow |
 | `ui/src/components/code-editor/view/subcomponents/SpreadsheetInteractivePreview.tsx` | `SpreadsheetInteractivePreview` | 407 | function |
 | `ui/src/components/settings/view/integrations/im/components/WeComChannelSection.tsx` | `WeComChannelSection` | 398 | function |
@@ -98,8 +98,8 @@
 | `ui/src/components/chat/hooks/useSlashCommandExecute.ts` | `useSlashCommandExecute` | 331 | function |
 | `ui/src/components/code-editor/view/CodeEditor.tsx` | `CodeEditor` | 310 | function |
 | `ui/src/components/chat-v2/SubagentDetailMessageFlow.tsx` | `SubagentDetailMessageFlow` | 309 | function |
+| `src/cli/projectRuntimeFactory.ts` | `resolve` | 306 | function |
 | `src/patent/figuregen/check.ts` | `checkFigures` | 306 | function |
-| `src/cli/projectRuntimeFactory.ts` | `resolve` | 303 | function |
 | `ui/src/components/settings/view/integrations/im/components/WeixinChannelSection.tsx` | `WeixinChannelSection` | 303 | function |
 | `src/gateway/client/InProcessGateway.ts` | `submitTurn` | 300 | method |
 
@@ -175,8 +175,8 @@
 | cron | 11 |
 | extension | 11 |
 | pilot | 11 |
+| cli | 10 |
 | rule | 10 |
-| cli | 9 |
 | web | 9 |
 | literature | 8 |
 | permission | 4 |
@@ -193,7 +193,7 @@
 | runtime | 1 |
 | status | 1 |
 
-| **合计** | **555** |
+| **合计** | **556** |
 
 ## i18n en/zh-CN 对齐
 
