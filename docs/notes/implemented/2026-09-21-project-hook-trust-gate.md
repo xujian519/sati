@@ -64,6 +64,17 @@ Status: implemented
 - **只提供 Web 界面审批** — 落选：见 Problem 第 2 条。协议 + CLI 先行，Web 面随后（同一 PR 栈）。
 - **把授权直接写进 `sati.yaml`** — 落选：`src/` 内没有 sati.yaml 写通道，且信任是运行时事实，
   与用户配置混写会让「用户改了什么」不可辨认（同 1.2a）。
+- **新增 `hook_trust.revoked` 作为 `AnalyticsEventName` 的第 3 个成员** — 落选：`analytics.v2` 的接收端
+  契约是**两层模型**（`eventName` 只有 `feature_used` / `error_occurred`，业务语义全在 `module` /
+  `phase` / `metadata`），并明确记录了「已删除按功能命名的事件类型（`app_started`、`session_active`）」。
+  加第三个名字要同步改接收端与 DAU 口径，收益只是省一个 phase 字符串。
+- **装配期遥测带上工作区身份键** — 落选：`workspaceIdentityKey` 是 canonical 路径的 sha256，路径空间
+  可穷举，等于把「你的仓库在哪」以弱化形式发出去。产品问题（强制期是否在真实项目里误伤）用计数就够；
+  日志里的 12 位前缀继续用于本机定位。
+- **CLI 路径也上报决策** — 落选：`sati hooks` 是一次性进程，collector 需要 flush/shutdown 时机与
+  「pilot 配置里 telemetry 是否启用」的读取；不为一条 CLI 遥测新增这套生命周期（见 Consequences）。
+- **在遥测里上插件名 / `pluginId`** — 落选：插件名来自被克隆的仓库，是可被写入任意内容的自定义字符串；
+  计数与状态分布已能回答「强制期拦下了多少」。需要定位具体插件时看本机日志与 `sati hooks list`。
 
 ## Consequences
 
@@ -78,6 +89,11 @@ Status: implemented
   **之后新建的会话**；已存在的会话继续用它装配时的那份 hook 集合。界面与日志都按此语义表述
   （授权后新建会话即生效；已开着的会话不会中途改变行为）。这条是 1.2a 已记录的 R3 的落地形态，
   不是新引入的限制。
-- 仍未做：telemetry 的 `hook_trust.revoked` 专用事件（`AnalyticsEventName` 是公共契约，
-  与 Web 面分开落地以免一轮改两处契约）。
+- 仍未做：无。
+- **遥测**（本 note 覆盖的最后一个子项）：装配期报告走 `phase: "hook_trust"`，授权/撤销走
+  `phase: "hook_trust_decide"`——都是 `feature_used` 的专有 phase，**不**新增 `AnalyticsEventName` 成员。
+  两者共用日志那一次「内容变化」判定（同一份信号不判两次）。撤销 = `outcome: success` +
+  `metadata.verdict: "revoke"`；授权失败 = `outcome: denied` + `metadata.reason`，查询上可分辨。
+  只上计数、结果与状态：插件名、`pluginId`、目录、命令、工作区身份一律不上报。`sati hooks` CLI 路径
+  不上报（一次性进程无常驻 flush 时机；决策本身已持久化在信任存储里）。
 - 报告与决定的粒度是**插件**（`pluginId = <name>@project`），不区分 matcher/hook 槽位。

@@ -132,7 +132,7 @@ export class ProjectRuntimeRegistry {
 
   /** 1.2a：项目级 hook 信任的读取面与上报面（只报告，不参与任何决策）。 */
   private readonly hookTrustStore: HookTrustStore;
-  private readonly hookTrustReporter = new HookTrustReporter();
+  private readonly hookTrustReporter: HookTrustReporter;
 
   /**
    * 推理方法论注册表（共享）：为所有会话的 `methodologyInjection` 回调提供
@@ -165,6 +165,7 @@ export class ProjectRuntimeRegistry {
     this._extraTools = options.extraTools ? [...options.extraTools] : [];
     this._sessionOverrides = options.sessionOverrides;
     this.hookTrustStore = options.hookTrustStore ?? new HookTrustStore(hookTrustStorePath(options.pilotHome));
+    this.hookTrustReporter = new HookTrustReporter(logger, options.telemetry);
     this.runtimeResolver = createProjectRuntimeResolver({
       fallbackProjectRoot: options.fallbackProjectRoot,
       pilotHome: options.pilotHome,

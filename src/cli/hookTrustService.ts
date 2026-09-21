@@ -12,7 +12,7 @@ import type {
   GatewayHookTrustListInput,
   GatewayHookTrustListResult,
 } from "../gateway/protocol/types.js";
-import { logger } from "../telemetry/index.js";
+import { logger, type TelemetryClient } from "../telemetry/index.js";
 import type { PluginRuntime } from "../extension/plugins/runtime/PluginRuntime.js";
 import type { SatiLoadedPlugin } from "../extension/plugins/protocol/plugin.js";
 import {
@@ -22,6 +22,7 @@ import {
   HookTrustStore,
   summarizeHookDeclarations,
   type HookTrustEntry,
+  type HookTrustStatus,
 } from "../extension/plugins/trust/index.js";
 
 export type HookTrustService = {
@@ -33,6 +34,12 @@ export function createHookTrustService(deps: {
   /** 项目键 → 该项目的插件运行时与根目录（`ProjectRuntimeRegistry.resolve`）。 */
   resolveProject: (projectKey: string) => { projectRoot: string; pluginRuntime: PluginRuntime };
   store: HookTrustStore;
+  /**
+   * 决策遥测。可选：`sati hooks approve|revoke` 是一次性进程、无常驻 flush 时机，
+   * 只有 gateway 侧（`createLocalGateway` 注入的常驻 collector）上报；
+   * 决策本身已持久化在信任存储里，CLI 路径不因缺遥测而丢事实。
+   */
+  telemetry?: TelemetryClient;
 }): HookTrustService {
   async function evaluate(projectKey: string) {
     const project = deps.resolveProject(projectKey);
@@ -60,6 +67,30 @@ export function createHookTrustService(deps: {
     };
   }
 
+  /**
+   * 决策遥测：`verdict` 区分「授权」与「撤销」，`applied=false` 时 `reason` 说明
+   * 授权失败（它不是撤销，混在一起会让撤销率变成噪声）。插件名/路径/命令不上报。
+   */
+  function reportDecision(input: {
+    verdict: GatewayHookTrustDecideInput["verdict"];
+    applied: boolean;
+    reason?: GatewayHookTrustDecideResult["reason"];
+    status?: HookTrustStatus;
+  }): void {
+    deps.telemetry?.trackFeatureLoopStage({
+      module: "session",
+      phase: "hook_trust_decide",
+      loopStage: "module_event",
+      outcome: input.applied ? "success" : "denied",
+      metadata: {
+        verdict: input.verdict,
+        applied: input.applied,
+        ...(input.reason ? { reason: input.reason } : {}),
+        ...(input.status ? { status: input.status } : {}),
+      },
+    });
+  }
+
   return {
     async list(input) {
       const { workspaceIdentityKey, plugins, evaluation } = await evaluate(input.projectKey);
@@ -74,16 +105,20 @@ export function createHookTrustService(deps: {
       await project.pluginRuntime.refresh();
       const plugins = project.pluginRuntime.snapshotContributions().plugins;
       const workspaceIdentityKey = await computeWorkspaceIdentityKey(project.projectRoot);
+      const rejected = (reason: NonNullable<GatewayHookTrustDecideResult["reason"]>) => {
+        reportDecision({ verdict: input.verdict, applied: false, reason });
+        return { applied: false as const, reason };
+      };
       const plugin = plugins.find(
         candidate => candidate.source === "project" && `${candidate.name}@${candidate.source}` === input.pluginId,
       );
       if (!plugin) {
-        return { applied: false, reason: "unknown_plugin" };
+        return rejected("unknown_plugin");
       }
       const bundle = await computeHookBundleDigest(plugin.path, plugin.manifest);
       if (bundle.kind === "blocked") {
         // 无法建立摘要 ⇒ 授权无对象（授权的是摘要，不是路径），fail-closed 拒绝写入。
-        return { applied: false, reason: "blocked" };
+        return rejected("blocked");
       }
       try {
         await deps.store.record(workspaceIdentityKey, {
@@ -95,7 +130,7 @@ export function createHookTrustService(deps: {
         });
       } catch (error) {
         logger.warn(`Hook trust: failed to persist ${input.verdict} for ${input.pluginId}: ${String(error)}`);
-        return { applied: false, reason: "write_failed" };
+        return rejected("write_failed");
       }
       const evaluation = await evaluateProjectHookTrust({
         plugins,
@@ -103,6 +138,7 @@ export function createHookTrustService(deps: {
         trustFile: deps.store.read(),
       });
       const entry = evaluation.entries.find(candidate => candidate.pluginId === input.pluginId);
+      reportDecision({ verdict: input.verdict, applied: true, status: entry?.status });
       return { applied: true, ...(entry ? { entry: toEntry(entry, plugins) } : {}) };
     },
   };

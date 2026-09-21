@@ -7,6 +7,7 @@ import { PluginRuntime } from "../../src/extension/plugins/runtime/PluginRuntime
 import { HookTrustStore, hookTrustStorePath, parseHookTrustFile } from "../../src/extension/plugins/trust/index.js";
 import { createHookTrustService } from "../../src/cli/hookTrustService.js";
 import { formatHookTrustList, runHookTrustCli } from "../../src/cli/commands/hookTrust.js";
+import type { TelemetryClient, TelemetryFeatureUsedInput } from "../../src/telemetry/index.js";
 
 /**
  * 协议 1.11 服务面 + `sati hooks` CLI：授权/撤销必须真的改变装载判定，
@@ -25,11 +26,21 @@ async function makeProject(): Promise<{ projectRoot: string; pilotHome: string }
   return { projectRoot, pilotHome };
 }
 
-function serviceFor(projectRoot: string, pilotHome: string) {
+function serviceFor(projectRoot: string, pilotHome: string, telemetry?: TelemetryClient) {
   return createHookTrustService({
     resolveProject: () => ({ projectRoot, pluginRuntime: new PluginRuntime({ projectRoot, pilotHome }) }),
     store: new HookTrustStore(hookTrustStorePath(pilotHome)),
+    ...(telemetry ? { telemetry } : {}),
   });
+}
+
+function capturingTelemetry(): { telemetry: TelemetryClient; calls: TelemetryFeatureUsedInput[] } {
+  const calls: TelemetryFeatureUsedInput[] = [];
+  const telemetry = {
+    trackFeatureLoopStage: (input: TelemetryFeatureUsedInput) => void calls.push(input),
+    trackError: () => {},
+  } as unknown as TelemetryClient;
+  return { telemetry, calls };
 }
 
 test("1.2b：list 列出声明原文与状态，decide grant 后转为 trusted", async () => {
@@ -128,6 +139,33 @@ test("1.2b：CLI 子命令 list / approve / revoke 走通同一服务", async ()
     assert.equal(await runHookTrustCli({ argv: ["bogus"], projectRoot, pilotHome, write }), 1);
     assert.equal(await runHookTrustCli({ argv: ["approve"], projectRoot, pilotHome, write }), 1);
     assert.equal(await runHookTrustCli({ argv: [], projectRoot, pilotHome, write }), 0);
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+    await rm(pilotHome, { recursive: true, force: true });
+  }
+});
+
+test("1.2b：decide 上报决策遥测——撤销与授权失败必须区分开", async () => {
+  const { projectRoot, pilotHome } = await makeProject();
+  try {
+    const { telemetry, calls } = capturingTelemetry();
+    const service = serviceFor(projectRoot, pilotHome, telemetry);
+    await service.decide({ projectKey: projectRoot, pluginId: "x@project", verdict: "grant" });
+    await service.decide({ projectKey: projectRoot, pluginId: "x@project", verdict: "revoke" });
+    await service.decide({ projectKey: projectRoot, pluginId: "nope@project", verdict: "grant" });
+
+    assert.deepEqual(
+      calls.map(call => [call.phase, call.loopStage, call.outcome, call.metadata?.verdict, call.metadata?.reason]),
+      [
+        ["hook_trust_decide", "module_event", "success", "grant", undefined],
+        ["hook_trust_decide", "module_event", "success", "revoke", undefined],
+        ["hook_trust_decide", "module_event", "denied", "grant", "unknown_plugin"],
+      ],
+    );
+    assert.equal(calls[0]?.metadata?.status, "trusted");
+    assert.equal(calls[1]?.metadata?.status, "revoked");
+    // 插件 id 是声明内容，不上报。
+    assert.equal(JSON.stringify(calls).includes("x@project"), false);
   } finally {
     await rm(projectRoot, { recursive: true, force: true });
     await rm(pilotHome, { recursive: true, force: true });

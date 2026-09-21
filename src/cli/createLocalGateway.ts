@@ -224,6 +224,7 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
       return { projectRoot: runtime.projectRoot, pluginRuntime: runtime.pluginRuntime };
     },
     store: hookTrustStore,
+    telemetry,
   });
   const memoryDiagnosticsEnabled = isGatewayMemoryDiagnosticsEnabled(
     env,
