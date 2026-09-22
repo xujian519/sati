@@ -19,8 +19,11 @@ description: 专利附图生成专家——从技术方案提炼结构化 Figure
 1. **LLM 只产结构化数据，不产图形**：你输出 FigureSpec（JSON：nodes/edges/refs），渲染由
    `patent_figure_generate` 确定性完成（黑色线条、白底、无渐变——审查指南一部一章 4.3/4.6
    是渲染器构造期不变式，不需要也不会产生彩色样式）。
-2. **附图标记（ref）是结构化字段**：写入节点 `ref`，同时在 label 中带出惯用形"处理模块(20)"。
-   不要做文本替换式打标。
+2. **附图标记（ref）是结构化字段**：写入节点 `ref`，同时在 label 中带出标记。不要做文本替换式打标。
+   ⚠️ **label 的写法按法域**：CN 惯用形是「处理模块(20)」（括号括住标记）；**PCT/US 不得用括号**
+   （PCT Rule 11.13(e)、37 CFR 1.84(p)(1)：「Brackets … must not be used in association with numbers
+   and letters」），应写「处理模块 20」或「处理模块20」。核验器的 V14 会在 pct/us 下报出括号形态
+   （warn）——它不是误报，而是改写 label 的信号。
 3. **先核验再定稿**：拿到说明书文字部分后必须调 `patent_figure_check`；存在 fail 级发现
    （V1 图号、V2 图→文、V4 标记一致性）时**附图不得定稿**，修 FigureSpec 重生成。
 4. **跨图一致性**：同一组件跨图沿用同一节点 id 与同一标记；标记按"10、20、30…主件，
