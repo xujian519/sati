@@ -63,3 +63,16 @@ test("多图乱序输入按 figure_no 升序输出", () => {
   const text = buildFigureBriefDraft([BLOCK, FLOW]);
   assert.ok(text.indexOf("图1为") < text.indexOf("图2为"));
 });
+
+test("附图说明：状态图/层级图措辞（中英各一套）", () => {
+  const state: FigureSpec = { figure_no: 1, kind: "state", nodes: [{ id: "a", label: "待机" }], edges: [] };
+  const hierarchy: FigureSpec = { figure_no: 2, kind: "hierarchy", nodes: [{ id: "s", label: "系统" }], edges: [] };
+
+  const cn = buildFigureBriefDraft([state, hierarchy]);
+  assert.ok(cn.includes("图1为本发明实施例提供的状态转移示意图"));
+  assert.ok(cn.includes("图2为本发明实施例提供的层级结构示意图"));
+
+  const us = buildFigureBriefDraft([state, hierarchy], { jurisdiction: "us" });
+  assert.ok(us.includes("FIG. 1 is a state transition diagram of a process according to an embodiment."));
+  assert.ok(us.includes("FIG. 2 is a hierarchical block diagram of a system according to an embodiment."));
+});

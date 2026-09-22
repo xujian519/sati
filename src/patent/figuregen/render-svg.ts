@@ -7,11 +7,12 @@
  * 写成"图N"（CN）/ "Fig. N"（PCT）/ "FIG. N"（US），**是否需要图号由图幅数与法域
  * 决定**（单幅在 PCT/US 不得出现 "Fig."——PCT 指南 IP 5.141、37 CFR 1.84(u)(1)），
  * 需要时居中标注于图形正下方（指南一部一章 4.3"标注在相应附图的正下方"）。
- * 输出确定性：无时钟/随机/ locale 依赖。
+ * 状态图的初态/终态用符号形状（实心圆/双圈，不渲染文字）；层级图的连线表示包含关系，
+ * 不画箭头。输出确定性：无时钟/随机/ locale 依赖。
  */
 
 import { figureCaption, profileForJurisdiction } from "./office-profile.js";
-import { layoutFigure, type FigureLayout } from "./layout.js";
+import { isSymbolShape, layoutFigure, type FigureLayout } from "./layout.js";
 import { FIGURE_FONT_SIZE } from "./metrics.js";
 import { FIGURE_NO_ATTRIBUTE } from "./readback.js";
 import type { FigureNode, FigureNodeShape, FigureSpec, Jurisdiction } from "./types.js";
@@ -36,10 +37,23 @@ function xmlId(nodeId: string): string {
   return nodeId.replaceAll(/[^A-Za-z0-9_-]/gu, "_");
 }
 
+/** 形状绘制：符号形状（circle/doublecircle）无文字，label 由 renderNodeText 跳过。 */
 function renderShape(shape: FigureNodeShape, p: { x: number; y: number; width: number; height: number }): string {
   const { x, y, width: w, height: h } = p;
   const stroke = 'fill="#FFFFFF" stroke="#000000" stroke-width="1.5"';
   switch (shape) {
+    case "circle": {
+      return `<circle cx="${fmt(x + w / 2)}" cy="${fmt(y + h / 2)}" r="${fmt(Math.min(w, h) / 2)}" fill="#000000"/>`;
+    }
+    case "doublecircle": {
+      const outer = Math.min(w, h) / 2;
+      const cx = fmt(x + w / 2);
+      const cy = fmt(y + h / 2);
+      return (
+        `<circle cx="${cx}" cy="${cy}" r="${fmt(outer)}" ${stroke}/>` +
+        `<circle cx="${cx}" cy="${cy}" r="${fmt(outer * 0.62)}" ${stroke}/>`
+      );
+    }
     case "round": {
       const radius = Math.min(h / 2, 18);
       return `<rect x="${fmt(x)}" y="${fmt(y)}" width="${fmt(w)}" height="${fmt(h)}" rx="${fmt(radius)}" ${stroke}/>`;
@@ -80,6 +94,7 @@ function renderShape(shape: FigureNodeShape, p: { x: number; y: number; width: n
 }
 
 function renderNodeText(node: FigureNode, p: { x: number; y: number; width: number; height: number }): string {
+  if (isSymbolShape(node.shape)) return "";
   const lines = node.label.split("\n");
   const lineHeight = FIGURE_FONT_SIZE + 7;
   const startY = p.y + p.height / 2 - ((lines.length - 1) * lineHeight) / 2 + FIGURE_FONT_SIZE / 2 - 3;
@@ -108,10 +123,12 @@ export function renderFigureSvg(
   const layout: FigureLayout = layoutFigure(spec, { caption: caption !== undefined });
   const { width, height } = layout;
 
+  // 层级图的边表示包含关系（整体—组成部分），按惯用观感不画箭头；其余图型画箭头。
+  const edgeMarker = spec.kind === "hierarchy" ? "" : ` marker-end="url(#arrow)"`;
   const edges = layout.edges
     .map(({ edge, points, labelAt }) => {
       const polyline =
-        `<polyline fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arrow)" ` +
+        `<polyline fill="none" stroke="#000000" stroke-width="1.5"${edgeMarker} ` +
         (edge.dashed ? `stroke-dasharray="6 4" ` : "") +
         `points="${points.map(pt => `${fmt(pt.x)},${fmt(pt.y)}`).join(" ")}"/>`;
       const label =

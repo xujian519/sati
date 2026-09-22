@@ -9,10 +9,14 @@
  */
 
 import { figureCaption, profileForJurisdiction } from "./office-profile.js";
+import { isSymbolShape } from "./layout.js";
 import type { FigureNode, FigureNodeShape, FigureSpec, Jurisdiction } from "./types.js";
 
 const FONT_SIZE = 14;
 const EDGE_FONT_SIZE = 12;
+
+/** 初态实心圆的固定直径（英寸；graphviz 单位为英寸）。 */
+const INITIAL_STATE_DIAMETER_IN = 0.22;
 
 const DOT_SHAPE: Readonly<Record<FigureNodeShape, { shape: string; style?: string }>> = {
   rect: { shape: "box" },
@@ -21,6 +25,8 @@ const DOT_SHAPE: Readonly<Record<FigureNodeShape, { shape: string; style?: strin
   ellipse: { shape: "ellipse" },
   cylinder: { shape: "cylinder" },
   parallelogram: { shape: "parallelogram" },
+  circle: { shape: "circle", style: "filled" },
+  doublecircle: { shape: "doublecircle" },
 };
 
 /** DOT 带引号字符串转义：反斜杠、引号与换行（换行写作 \n 字面量，dot 出多行文本）。 */
@@ -30,9 +36,18 @@ export function dotEscape(text: string): string {
 
 function nodeAttrs(node: FigureNode): string {
   const { shape, style } = DOT_SHAPE[node.shape ?? "rect"];
-  const attrs = [`label="${dotEscape(node.label)}"`, `shape="${shape}"`];
+  // 符号节点（状态图初态/终态）无文字：label 置空，初态另填黑。
+  const attrs = [`label="${dotEscape(isSymbolShape(node.shape) ? "" : node.label)}"`, `shape="${shape}"`];
   if (style !== undefined) {
     attrs.push(`style="${style}"`);
+  }
+  if (node.shape === "circle") {
+    attrs.push(
+      'fillcolor="#000000"',
+      "fixedsize=true",
+      `width=${INITIAL_STATE_DIAMETER_IN}`,
+      `height=${INITIAL_STATE_DIAMETER_IN}`,
+    );
   }
   return attrs.join(", ");
 }
@@ -42,6 +57,7 @@ function nodeAttrs(node: FigureNode): string {
  *
  * 图号是否需要标注由图幅数与法域档案决定（单幅在 PCT/US 不得出现 "Fig."）：
  * 不编号时**不输出 caption 属性**（而不是画一个空 label——空 label 会占位）。
+ * 层级图的边表示包含关系，`arrowhead="none"` 与内置渲染器同观感。
  */
 export function buildFigureDot(
   spec: FigureSpec,
@@ -57,7 +73,8 @@ export function buildFigureDot(
     '  fontname="sans-serif";',
     `  fontsize=${FONT_SIZE};`,
     '  node [fontname="sans-serif", fontsize=14, style="filled", fillcolor="#FFFFFF", color="#000000", fontcolor="#000000"];',
-    `  edge [fontname="sans-serif", fontsize=${EDGE_FONT_SIZE}, color="#000000", fontcolor="#000000"];`,
+    `  edge [fontname="sans-serif", fontsize=${EDGE_FONT_SIZE}, color="#000000", fontcolor="#000000"` +
+      `${spec.kind === "hierarchy" ? ', arrowhead="none"' : ""}];`,
   ];
   for (const node of spec.nodes) {
     lines.push(`  "${dotEscape(node.id)}" [${nodeAttrs(node)}];`);

@@ -109,7 +109,8 @@ export function createPatentFigureGenerateTool(): SatiToolDefinition<PatentFigur
     aliases: ["PatentFigureGenerate", "figure_generate"],
     title: "Generate Patent Figures",
     description:
-      "Render patent-style figures (flowcharts for method claims, block diagrams for system claims) " +
+      "Render patent-style figures (flowcharts for method claims, block diagrams for system claims, " +
+      "state transition diagrams, and component hierarchy diagrams) " +
       "from structured FigureSpec input. Deterministic black-and-white SVG compliant with CNIPA drawing " +
       "rules (Guidelines 2023 Part I Ch1 4.3/4.6): black lines on white, no gradients. Reference numerals " +
       "are structured fields embedded as data-ref attributes and validated against Rule 21 of the " +

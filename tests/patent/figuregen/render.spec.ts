@@ -230,3 +230,102 @@ test("渲染：边以带箭头折线绘制，边标签文本存在", () => {
   assert.ok(svg.includes(">否<"));
   assert.ok(svg.includes("stroke-dasharray"), "dashed 边应有虚线样式");
 });
+
+const STATE_SPEC: FigureSpec = {
+  figure_no: 1,
+  kind: "state",
+  nodes: [
+    { id: "s0", label: "", shape: "circle" },
+    { id: "idle", label: "待机(10)", ref: 10, shape: "round" },
+    { id: "run", label: "运行(20)", ref: 20, shape: "round" },
+    { id: "sf", label: "", shape: "doublecircle" },
+  ],
+  edges: [
+    { from: "s0", to: "idle" },
+    { from: "idle", to: "run", label: "启动" },
+    { from: "run", to: "sf", label: "完成" },
+  ],
+};
+
+test("状态图：初态实心圆按固定直径、终态双圈为同心两圆、符号不渲染文字", () => {
+  const layout = layoutFigure(STATE_SPEC);
+  const byId = new Map(layout.nodes.map(n => [n.node.id, n]));
+  assert.equal(byId.get("s0")!.width, byId.get("s0")!.height, "初态为等径符号");
+  assert.ok(byId.get("s0")!.width < byId.get("idle")!.width, "符号尺寸不随 label 撑开");
+  assert.ok(byId.get("sf")!.width > byId.get("s0")!.width, "双圈外径大于实心圆");
+
+  const { svg } = renderFigureSvg(STATE_SPEC);
+  const groupOf = (id: string): string => {
+    const start = svg.indexOf(`<g id="n-${id}"`);
+    return svg.slice(start, svg.indexOf("</g>", start));
+  };
+  const initial = groupOf("s0");
+  assert.match(initial, /<circle[^>]*fill="#000000"\/>/u, "初态为实心黑圆");
+  assert.ok(!initial.includes("<text"), "符号形状不渲染文字");
+  assert.equal((groupOf("sf").match(/<circle/gu) ?? []).length, 2, "终态为双圈");
+  // 状态本身仍是带文字的圆角框；转移条件写在箭头上（箭头保留）
+  assert.ok(groupOf("idle").includes("<text"));
+  assert.ok(svg.includes('rx="'), "状态框为圆角矩形");
+  assert.ok(svg.includes('marker-end="url(#arrow)"'));
+  assert.ok(svg.includes(">启动<"));
+});
+
+test("状态图：符号节点带文字也不渲染（文字丢失由 V18 报出）", () => {
+  const noisy: FigureSpec = {
+    ...STATE_SPEC,
+    nodes: STATE_SPEC.nodes.map(node => (node.id === "s0" ? { ...node, label: "误写文字" } : node)),
+  };
+  const { svg } = renderFigureSvg(noisy);
+  assert.ok(!svg.includes("误写文字"));
+});
+
+const HIERARCHY_SPEC: FigureSpec = {
+  figure_no: 2,
+  kind: "hierarchy",
+  nodes: [
+    { id: "sys", label: "数据处理系统(1)", ref: 1 },
+    { id: "acq", label: "采集单元(10)", ref: 10 },
+    { id: "proc", label: "处理单元(20)", ref: 20 },
+    { id: "alu", label: "运算模块(21)", ref: 21 },
+  ],
+  edges: [
+    { from: "sys", to: "acq" },
+    { from: "sys", to: "proc" },
+    { from: "proc", to: "alu" },
+  ],
+};
+
+test("层级图：默认纵向、连线不画箭头、各层相对画幅居中", () => {
+  const layout = layoutFigure(HIERARCHY_SPEC);
+  const byId = new Map(layout.nodes.map(n => [n.node.id, n]));
+  assert.ok(byId.get("sys")!.y < byId.get("acq")!.y, "默认 TB：根在上");
+  assert.equal(byId.get("acq")!.y, byId.get("proc")!.y, "同一层（均为根的子节点）同高");
+  assert.ok(byId.get("proc")!.y < byId.get("alu")!.y);
+
+  const { svg } = renderFigureSvg(HIERARCHY_SPEC);
+  const polylines = svg.match(/<polyline[^>]*>/gu) ?? [];
+  assert.equal(polylines.length, 3);
+  for (const polyline of polylines) {
+    assert.ok(!polyline.includes("marker-end"), "包含关系连线不画箭头");
+  }
+
+  // 单节点层居中：其中心落在画幅中线上（含边距的两侧留白相等）
+  for (const id of ["sys", "alu"]) {
+    const node = byId.get(id)!;
+    assert.ok(
+      Math.abs(node.x + node.width / 2 - layout.width / 2) < 1e-6,
+      `${id} 所在层应居中：中心 ${node.x + node.width / 2}，画幅中线 ${layout.width / 2}`,
+    );
+  }
+});
+
+test("居中只对 hierarchy 生效（其余图型层内仍自左对齐，既有布局不变）", () => {
+  const asFlowchart = layoutFigure({
+    figure_no: 2,
+    kind: "flowchart",
+    nodes: HIERARCHY_SPEC.nodes,
+    edges: HIERARCHY_SPEC.edges,
+  });
+  const root = asFlowchart.nodes.find(n => n.node.id === "sys")!;
+  assert.ok(root.x < asFlowchart.width / 2 - root.width / 2, "flowchart 单节点层应自左对齐而非居中");
+});
