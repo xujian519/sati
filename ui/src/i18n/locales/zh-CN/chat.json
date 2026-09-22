@@ -188,7 +188,8 @@
     "allowOnce": "仅允许一次",
     "allowRemember": "允许并记住",
     "allowSaved": "允许（已保存）",
-    "deny": "拒绝"
+    "deny": "拒绝",
+    "subagentOrigin": "子代理请求：{{agent}}"
   },
   "approvalBanner": {
     "title": "专利结论待人工审批",

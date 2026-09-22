@@ -122,6 +122,10 @@ const RELAXED_FULL_COMPACTION_KEEP_TAIL_RATIO = 0.05;
 const FULL_COMPACTION_BLOCKING_COOLDOWN_MS = 30_000;
 const FULL_COMPACTION_MIN_EFFECTIVE_SAVINGS_RATIO = 0.1;
 const FULL_COMPACTION_INEFFECTIVE_LIMIT = 2;
+/** 全量压缩之间至少要有的真实工具轮数：不足即视为空转（补 token 比例之外的正交判据）。 */
+const FULL_COMPACTION_MIN_TOOL_TURNS = 1;
+/** 连续空转到该次数即熔断全量压缩（有界：不再无限烧摘要调用）。 */
+const FULL_COMPACTION_RAPID_REFILL_LIMIT = 2;
 
 export class DefaultContextRuntime implements ContextRuntime {
   private readonly extension: ExtensionResolver;
@@ -148,6 +152,15 @@ export class DefaultContextRuntime implements ContextRuntime {
   private readonly promptTimeState = new Map<string, PromptTimeState>();
   private fullCompactionCooldownUntil = 0;
   private consecutiveIneffectiveFullCompactions = 0;
+  /**
+   * 会话级：自上次全量压缩以来完成的真实工具轮数（由 agent loop 经 `noteToolTurn` 上报）。
+   * 与 `consecutiveIneffectiveFullCompactions`（只看省下的 token 比例）正交：比例判据识别不出
+   * 「省下来了、但没换来推进」——连续两次压缩之间若没有任何工具轮，模型只是把同样的内容
+   * 又读了回来，继续压缩只会烧摘要调用并丢历史。
+   */
+  private toolTurnsSinceLastCompaction = 0;
+  /** 会话级：连续「压缩之间没有工具轮」的次数。达到上限即熔断，直到出现一次真实工具轮。 */
+  private consecutiveRapidRefills = 0;
 
   constructor(options: DefaultContextRuntimeOptions = {}) {
     this.extension = options.extension ?? new NullExtensionResolver();
@@ -227,13 +240,17 @@ export class DefaultContextRuntime implements ContextRuntime {
     // 「模型可见 = 已记录」：动态注入段落的来源清单，随 ModelContext 返回，
     // 由调用方作为带 source 标记的参考条目落 transcript（不进入重放投影）。
     const injections: InjectionRecord[] = [];
+    // 逐调用可变的段落走**尾部注入**（调用方合成消息尾部的合成消息）：记忆附件按
+    // 检索 query 逐轮变化，放进 system prompt 会把它前面的整段缓存前缀一起作废。
+    const tailInjections: InjectionRecord[] = [];
     if (memoryPromise) {
       const memory = await memoryPromise;
       for (const block of memory.attachments) {
         for (const content of block.content) {
           if (content.type === "text" && content.text.trim().length > 0) {
-            parts.push(content.text);
-            injections.push({ source: "memory", text: content.text });
+            const record = { source: "memory", text: content.text };
+            injections.push(record);
+            tailInjections.push(record);
           }
         }
       }
@@ -251,6 +268,7 @@ export class DefaultContextRuntime implements ContextRuntime {
           systemPrompt: parts.join("\n\n"),
           systemPromptParts: parts,
           injections,
+          tailInjections,
           tools: input.tools,
           diagnostics,
           boundaries: [],
@@ -316,6 +334,7 @@ export class DefaultContextRuntime implements ContextRuntime {
       systemPrompt: joined,
       systemPromptParts: parts,
       injections,
+      tailInjections,
       tools: input.tools,
       diagnostics,
       boundaries: [],
@@ -416,6 +435,15 @@ export class DefaultContextRuntime implements ContextRuntime {
       // Memory capture must never break the agent turn — provider already
       // swallows in EdgeClawMemoryProvider, this catch is belt-and-suspenders.
     }
+  }
+
+  /**
+   * 记一次真实工具轮（`AgentLoop` 每执行完一批工具调用上报一次）。
+   *
+   * 只增计数、不做决策：熔断判定在 `tryAutoCompact` 的 Tier 3 门口读这两个计数器。
+   */
+  noteToolTurn(): void {
+    this.toolTurnsSinceLastCompaction += 1;
   }
 
   async tryAutoCompact(input: {
@@ -552,6 +580,20 @@ export class DefaultContextRuntime implements ContextRuntime {
     // Tier 3: CompactionEngine — full summarization via model call.
     if (this.compactionEngine) {
       const nowMs = this.now().getTime();
+      // 空转熔断（在冷却判定之前，两者的原因不同、日志要分得开）。门开条件包含
+      // 「距上次压缩仍无工具轮」——出现真实工具轮后门即自行打开（否则一旦熔断
+      // 就再无法恢复，用户后续的正当压缩需求会被永久拒绝）。
+      if (
+        this.consecutiveRapidRefills >= FULL_COMPACTION_RAPID_REFILL_LIMIT &&
+        this.toolTurnsSinceLastCompaction < FULL_COMPACTION_MIN_TOOL_TURNS
+      ) {
+        log("full_compaction_circuit_open", {
+          consecutiveRapidRefills: this.consecutiveRapidRefills,
+          toolTurnsSinceLastCompaction: this.toolTurnsSinceLastCompaction,
+          snapshot: decision.snapshot,
+        });
+        return { type: "skipped", snapshot: decision.snapshot };
+      }
       if (this.fullCompactionCooldownUntil > nowMs) {
         log("full_compaction_skipped_cooldown", {
           cooldownRemainingMs: this.fullCompactionCooldownUntil - nowMs,
@@ -628,6 +670,17 @@ export class DefaultContextRuntime implements ContextRuntime {
           consecutiveIneffectiveFullCompactions: this.consecutiveIneffectiveFullCompactions,
         });
       }
+      // 空转记账：本次全量压缩与上次之间是否有真实工具轮（走了这里就确实压了一次）。
+      if (this.toolTurnsSinceLastCompaction < FULL_COMPACTION_MIN_TOOL_TURNS) {
+        this.consecutiveRapidRefills += 1;
+        log("full_compaction_rapid_refill", {
+          consecutiveRapidRefills: this.consecutiveRapidRefills,
+          snapshot: snapshot,
+        });
+      } else {
+        this.consecutiveRapidRefills = 0;
+      }
+      this.toolTurnsSinceLastCompaction = 0;
       const initialTokens = Math.max(1, decision.snapshot.tokens);
       const savingsRatio = Math.max(0, (initialTokens - snapshot.tokens) / initialTokens);
       if (savingsRatio < FULL_COMPACTION_MIN_EFFECTIVE_SAVINGS_RATIO) {

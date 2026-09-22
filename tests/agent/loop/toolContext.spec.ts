@@ -271,3 +271,31 @@ test("ToolContextFactory 实例内子代理上下文：subagentDepth 缺省 0、
   assert.equal(ctx.subagent!.depth, 0);
   assert.equal(ctx.subagent!.maxSubagentDepth, 1, "maxSubagentDepth 缺省 1");
 });
+
+test("createToolContext：fork 会话带出 subagentId/subagentType（供 hook 归属用）", () => {
+  const { factory } = makeFactory({
+    config: {
+      isSubagent: true,
+      metadata: { subagentId: "child-agent", subagentType: "explore" },
+    },
+  });
+  const ctx = factory.createToolContext(makeInput());
+  assert.equal(ctx.subagentId, "child-agent");
+  assert.equal(ctx.subagentType, "explore");
+});
+
+test("createToolContext：主代理不因 metadata 同名字段被当成子代理归属", () => {
+  // 宿主可在主会话 metadata 里写任意键；归属只认 fork（isSubagent）——
+  // 否则父级自己的工具调用会被标成「来自子代理」。
+  const { factory } = makeFactory({ config: { metadata: { subagentId: "not-a-fork" } } });
+  const ctx = factory.createToolContext(makeInput());
+  assert.equal(ctx.subagentId, undefined);
+  assert.equal(ctx.subagentType, undefined);
+});
+
+test("createToolContext：fork 会话 metadata 缺字段时不注入空归属", () => {
+  const { factory } = makeFactory({ config: { isSubagent: true, metadata: { subagentId: 42 } } });
+  const ctx = factory.createToolContext(makeInput());
+  assert.equal(ctx.subagentId, undefined, "非字符串 metadata 不得当 id 使用");
+  assert.equal(ctx.subagentType, undefined);
+});

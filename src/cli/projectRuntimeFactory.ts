@@ -294,7 +294,10 @@ export function createProjectRuntimeResolver(deps: ProjectRuntimeFactoryDeps): P
     const paperSearchConfig = toolsConfig?.paperSearch;
 
     // 语义检索（可选）：embedding 端点配置解析一次，分发给记忆、知识库与附图检索。
-    const knowledgePaths = resolveKnowledgeDbPaths();
+    // 必须用调用方传入的 env：否则 `createLocalGateway({env})` 对
+    // `SATI_KNOWLEDGE_DIR` / `SATI_LAW_DB` 等覆盖会被静默忽略，回落到宿主 process.env
+    // （测量脚本因此无法隔离本机知识库，测出的数字跨机不可比）。
+    const knowledgePaths = resolveKnowledgeDbPaths(deps.env);
     const embeddingDiagnostics: PilotConfigDiagnostic[] = [];
     const embeddingClient = resolveEmbeddingClient(
       snapshot.config.memory?.embedding,

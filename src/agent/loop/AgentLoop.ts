@@ -778,6 +778,10 @@ export class AgentLoop {
     }
     yield* this.subagentExecutor.drainEventBuffer();
 
+    // 压缩空转判据：一批工具调用执行完即算一次真实工具轮——无论成败，它都是
+    // 「模型试图推进」的证据（工具全错时压缩并不因此有理）。
+    this.dependencies.context?.noteToolTurn?.();
+
     // 阶段四 T6.2：连续重复软提醒——达到阈值（默认 3 次）后向下一轮请求
     // 注入一次 transient advisory（不拦截；doomLoop 仍是硬断开）。
     for (const call of toolCalls) {

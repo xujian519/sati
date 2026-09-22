@@ -89,6 +89,7 @@ export class ToolContextFactory {
       fileHistory: dependencies.fileHistory,
       workspaceLedger: dependencies.workspaceLedger,
       subagentDepth: config.subagentDepth ?? 0,
+      ...this.resolveOwnerSubagent(),
       subagent: this.buildSubagentForkApi(input),
       modelMultimodal: config.modelMultimodal,
       maxOutputTokens: config.maxOutputTokens,
@@ -106,6 +107,23 @@ export class ToolContextFactory {
             },
           }
         : {}),
+    };
+  }
+
+  /**
+   * fork 身份 → 工具上下文的 `subagentId` / `subagentType`。只认 fork 会话
+   * （`isSubagent`）：主代理 config 的 metadata 里若有同名字段（宿主自定义）
+   * 不得被当成子代理归属。→ `ToolRuntime` 据此填写 hook 输入的 agentId/agentType。
+   */
+  private resolveOwnerSubagent(): { subagentId?: string; subagentType?: string } {
+    const { config } = this.host;
+    if (!config.isSubagent) return {};
+    const metadata = config.metadata ?? {};
+    const subagentId = typeof metadata.subagentId === "string" ? metadata.subagentId : undefined;
+    const subagentType = typeof metadata.subagentType === "string" ? metadata.subagentType : undefined;
+    return {
+      ...(subagentId ? { subagentId } : {}),
+      ...(subagentType ? { subagentType } : {}),
     };
   }
 

@@ -32,6 +32,7 @@ type LatestChatMessage = {
   toolName?: string;
   input?: unknown;
   context?: unknown;
+  origin?: unknown;
   error?: string;
   tool?: unknown;
   toolId?: string;
@@ -73,6 +74,23 @@ function getMessageRunId(message: LatestChatMessage | NormalizedMessage): string
 /** 桥帧（LatestChatMessage）→ store 模型（NormalizedMessage）。桥已归一化字段形状，此处收敛类型边界断言。 */
 function toNormalizedMessage(msg: LatestChatMessage): NormalizedMessage {
   return msg as unknown as NormalizedMessage;
+}
+
+/**
+ * 桥帧 `origin` → 待审批条目（形状校验后再入 state）：缺 `subagentId` 的帧
+ * 按「无归属」处理，避免把畸形帧渲染成「来自子代理 undefined」。
+ */
+function parseRequestOrigin(value: unknown): PendingPermissionRequest["origin"] {
+  const record = asRecord(value);
+  if (!record) return undefined;
+  const subagentId = typeof record.subagentId === "string" ? record.subagentId.trim() : "";
+  if (!subagentId) return undefined;
+  const subagentType = typeof record.subagentType === "string" ? record.subagentType.trim() : "";
+  return {
+    kind: typeof record.kind === "string" && record.kind ? record.kind : "subagent",
+    subagentId,
+    ...(subagentType ? { subagentType } : {}),
+  };
 }
 
 function parseAssistantStreamTimestamp(value?: string): number | null {
@@ -850,6 +868,7 @@ export function useChatRealtimeHandlers({
           onSessionProcessing?.(sid);
           setPendingPermissionRequests(prev => {
             if (prev.some((r: PendingPermissionRequest) => r.requestId === requestId)) return prev;
+            const origin = parseRequestOrigin(msg.origin);
             return [
               ...prev,
               {
@@ -857,6 +876,7 @@ export function useChatRealtimeHandlers({
                 toolName: msg.toolName || "UnknownTool",
                 input: msg.input,
                 context: msg.context,
+                ...(origin ? { origin } : {}),
                 sessionId: sid,
                 receivedAt: new Date(),
                 isElicitation: Boolean((msg as { isElicitation?: boolean }).isElicitation),
