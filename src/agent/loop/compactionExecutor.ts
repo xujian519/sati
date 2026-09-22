@@ -89,6 +89,7 @@ export async function* runAutoCompact(
       return { compacted: true, snapshot: compact.snapshot };
     }
     if (options.fallbackTruncateRatio !== undefined) {
+      logFallbackTruncate(options.stage, input, options.fallbackTruncateRatio, "not_compacted");
       state.messages = [
         ...truncateHeadKeepRatio(compactInputMessages, options.fallbackTruncateRatio),
         ...transientPrompts,
@@ -98,6 +99,7 @@ export async function* runAutoCompact(
   } catch (error: unknown) {
     logAutoCompactFailure(options.stage, input, error);
     if (options.fallbackTruncateRatio !== undefined) {
+      logFallbackTruncate(options.stage, input, options.fallbackTruncateRatio, "compaction_failed");
       state.messages = [
         ...truncateHeadKeepRatio(compactInputMessages, options.fallbackTruncateRatio),
         ...transientPrompts,
@@ -105,6 +107,22 @@ export async function* runAutoCompact(
     }
     return { compacted: false };
   }
+}
+
+/**
+ * 兜底截断是**有损且无摘要**的动作（丢了被截段落的语义，只留尾部原文），必须留痕：
+ * 熔断/冷却跳过压缩时它同样会被触发，静默截断会让人看不出历史为何变短。
+ */
+function logFallbackTruncate(
+  stage: string,
+  input: { sessionId: string; turnId: string },
+  ratio: number,
+  reason: "not_compacted" | "compaction_failed",
+): void {
+  autoCompactLogger.warn(
+    `${stage} fell back to head truncation (ratio=${ratio}, reason=${reason}) ` +
+      `sessionId=${input.sessionId} turnId=${input.turnId}`,
+  );
 }
 
 /** 落压缩边界快照（transcript 投影 / UI 压缩边界行依赖它）。 */

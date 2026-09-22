@@ -7,9 +7,9 @@
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1043 / 175250 |
+| src TS 文件 / 行数 | 1043 / 175325 |
 | src JS 文件 | 0 |
-| tests 文件 | 578 |
+| tests 文件 | 579 |
 | ui/src 文件 / 行数 | 571 / 92364 |
 | ui/server 文件 / 行数 | 108 / 31827 |
 
@@ -125,7 +125,7 @@
 | `ui/src/components/chat-v2/MessagesPaneV2.tsx` | 1183 |
 | `ui/server/routes/taskmaster.js` | 1179 |
 | `ui/server/routes/config.js` | 1173 |
-| `src/agent/loop/AgentLoop.ts` | 1146 |
+| `src/agent/loop/AgentLoop.ts` | 1150 |
 | `ui/src/components/main-content-v2/CronV2.tsx` | 1130 |
 | `ui/src/components/main-content/view/MainContent.tsx` | 1111 |
 | `src/model/streaming/streamModel.ts` | 1085 |
@@ -162,7 +162,7 @@
 |---|---|
 | patent | 121 |
 | tool | 63 |
-| agent | 57 |
+| agent | 58 |
 | knowledge | 38 |
 | context | 32 |
 | gateway | 32 |
@@ -193,7 +193,7 @@
 | runtime | 1 |
 | status | 1 |
 
-| **合计** | **554** |
+| **合计** | **555** |
 
 ## i18n en/zh-CN 对齐
 

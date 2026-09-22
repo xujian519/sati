@@ -37,7 +37,7 @@ emit/dispatch/emitAgentEvent/emitEvent/emitForSession/sendNotification 字符串
 | member_stalled_approval | - | - |
 | member_status | - | - |
 | message_delivered | src/agent/team/scheduler/scheduler.ts:241 | - |
-| mode_change_requested | src/agent/loop/AgentLoop.ts:837 | src/gateway/client/InProcessGateway.ts:569 |
+| mode_change_requested | src/agent/loop/AgentLoop.ts:841 | src/gateway/client/InProcessGateway.ts:569 |
 | model_event | src/agent/loop/AgentLoop.ts:506 | src/gateway/client/InProcessGateway.ts:569 |
 | model_recovery_failed | - | src/gateway/client/InProcessGateway.ts:569 |
 | model_request_started | src/agent/loop/AgentLoop.ts:389 | src/gateway/client/InProcessGateway.ts:569, submitTurn 流 ×14 |
@@ -78,11 +78,11 @@ emit/dispatch/emitAgentEvent/emitEvent/emitForSession/sendNotification 字符串
 | tool_call_finished | - | submitTurn 流 ×14 |
 | tool_call_started | - | submitTurn 流 ×14 |
 | tool_calls_detected | src/agent/loop/AgentLoop.ts:749 | src/gateway/client/InProcessGateway.ts:569 |
-| tool_result | src/agent/loop/AgentLoop.ts:844 | src/gateway/client/InProcessGateway.ts:569 |
+| tool_result | src/agent/loop/AgentLoop.ts:848 | src/gateway/client/InProcessGateway.ts:569 |
 | tool_result_detail_available | src/gateway/client/eventMapping.ts:246, src/gateway/client/eventMapping.ts:252, src/gateway/client/eventMapping.ts:272 | submitTurn 流 ×14 |
-| tool_results_projected | src/agent/loop/AgentLoop.ts:875, src/agent/loop/modelErrorRecovery.ts:300 | src/gateway/client/InProcessGateway.ts:569 |
+| tool_results_projected | src/agent/loop/AgentLoop.ts:879, src/agent/loop/modelErrorRecovery.ts:300 | src/gateway/client/InProcessGateway.ts:569 |
 | turn_completed | src/agent/loop/turnExit.ts:123, src/agent/loop/turnExit.ts:183, src/agent/turn/TurnRunner.ts:201, src/gateway/client/InProcessGateway.ts:405, src/gateway/client/eventMapping.ts:523, src/session/transcript/TranscriptReplay.ts:259, src/session/transcript/TranscriptReplay.ts:335 | src/gateway/client/InProcessGateway.ts:569, submitTurn 流 ×14 |
-| turn_continued | src/agent/loop/AgentLoop.ts:1053, src/agent/loop/compactionExecutor.ts:82, src/agent/loop/modelErrorRecovery.ts:151, src/agent/loop/modelErrorRecovery.ts:269, src/agent/loop/modelErrorRecovery.ts:378, src/agent/loop/modelErrorRecovery.ts:454, src/agent/loop/modelErrorRecovery.ts:470, src/agent/loop/modelErrorRecovery.ts:482, src/agent/loop/recoveryStrategies.ts:38, src/agent/loop/recoveryStrategies.ts:122 | src/gateway/client/InProcessGateway.ts:569 |
+| turn_continued | src/agent/loop/AgentLoop.ts:1057, src/agent/loop/compactionExecutor.ts:82, src/agent/loop/modelErrorRecovery.ts:151, src/agent/loop/modelErrorRecovery.ts:269, src/agent/loop/modelErrorRecovery.ts:378, src/agent/loop/modelErrorRecovery.ts:454, src/agent/loop/modelErrorRecovery.ts:470, src/agent/loop/modelErrorRecovery.ts:482, src/agent/loop/recoveryStrategies.ts:38, src/agent/loop/recoveryStrategies.ts:122 | src/gateway/client/InProcessGateway.ts:569 |
 | turn_failed | src/agent/loop/turnExit.ts:120, src/agent/turn/TurnRunner.ts:200 | src/gateway/client/InProcessGateway.ts:569 |
 | turn_started | src/agent/turn/TurnRunner.ts:206 | src/gateway/client/InProcessGateway.ts:569, submitTurn 流 ×14 |
 | user_prompt_submitted | src/agent/turn/TurnRunner.ts:270 | src/gateway/client/InProcessGateway.ts:569 |
