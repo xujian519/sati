@@ -556,6 +556,36 @@ export const api = {
     undo: body => api.kanban._post("undo", body),
   },
 
+  // 项目级 hook 信任（协议 1.12）：ui/server /api/hook-trust/* → gateway hook_trust_* 方法。
+  // list 返回 { workspaceIdentityKey, entries }；decide 返回 { applied, reason?, entry? }。
+  hookTrust: {
+    list: async projectKey => {
+      const response = await authenticatedFetch(`/api/hook-trust?projectKey=${encodeURIComponent(projectKey)}`);
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        const { default: i18n } = await import("../i18n/config.js");
+        throw new Error(
+          payload?.error?.message || i18n.t("hookTrust:errors.requestFailed", { status: response.status }),
+        );
+      }
+      return payload;
+    },
+    decide: async (projectKey, pluginId, verdict) => {
+      const response = await authenticatedFetch("/api/hook-trust/decide", {
+        method: "POST",
+        body: JSON.stringify({ projectKey, pluginId, verdict }),
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        const { default: i18n } = await import("../i18n/config.js");
+        throw new Error(
+          payload?.error?.message || i18n.t("hookTrust:errors.requestFailed", { status: response.status }),
+        );
+      }
+      return payload;
+    },
+  },
+
   // Generic GET method for any endpoint
   get: endpoint => authenticatedFetch(`/api${endpoint}`),
 

@@ -40,6 +40,7 @@ Commands:
   config delete <key.path>      Delete a nested config value from sati.yaml
   cron <list|create|delete|stop> Manage cron tasks (requires a running server)
   chat                          Search chat history
+  hooks <list|approve|revoke>   Review project plugin hooks (unreviewed ones are not loaded)
   browsers [--doctor] [--json]  Probe browser backends (ego lite / BrowserOS neo / browser-use / @playwright/mcp)
   skills migrate                Migrate skills from other agents
   update [--check|--restart]    Update sati from the git remote
@@ -603,6 +604,12 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
   if (command === "chat") {
     const { runChatSearchCli } = await import("./commands/chatSearch.js");
     await runChatSearchCli(argv.slice(1));
+    return;
+  }
+
+  if (command === "hooks") {
+    const { runHookTrustCli } = await import("./commands/hookTrust.js");
+    process.exitCode = await runHookTrustCli({ argv: argv.slice(1) });
     return;
   }
 

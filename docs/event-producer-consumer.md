@@ -9,27 +9,27 @@ emit/dispatch/emitAgentEvent/emitEvent/emitForSession/sendNotification 字符串
 
 | 事件 | 生产者 | 消费者 |
 | --- | --- | --- |
-| agent_status | src/adapters/channel/feishu/FeishuChannel.ts:635, src/adapters/channel/weixin/WeixinChannel.ts:836, src/cli/projectRuntimeFactory.ts:159, src/gateway/client/InProcessGateway.ts:431 | src/gateway/client/InProcessGateway.ts:571, submitTurn 流 ×14 |
+| agent_status | src/adapters/channel/feishu/FeishuChannel.ts:635, src/adapters/channel/weixin/WeixinChannel.ts:836, src/cli/projectRuntimeFactory.ts:159, src/gateway/client/InProcessGateway.ts:442 | src/gateway/client/InProcessGateway.ts:582, submitTurn 流 ×14 |
 | approval_pending | src/cli/patentOutputGateFactory.ts:149 | submitTurn 流 ×14 |
 | approval_resolved | src/cli/patentOutputGateFactory.ts:77 | submitTurn 流 ×14 |
 | assistant_attachment | src/gateway/client/eventMapping.ts:258 | submitTurn 流 ×14 |
-| assistant_message | src/agent/loop/modelErrorRecovery.ts:192, src/agent/loop/modelErrorRecovery.ts:230, src/agent/loop/responseAssembly.ts:385, src/agent/loop/turnExit.ts:148 | src/gateway/client/InProcessGateway.ts:571 |
-| assistant_text_delta | src/gateway/client/InProcessGateway.ts:402 | submitTurn 流 ×14 |
+| assistant_message | src/agent/loop/modelErrorRecovery.ts:192, src/agent/loop/modelErrorRecovery.ts:230, src/agent/loop/responseAssembly.ts:385, src/agent/loop/turnExit.ts:148 | src/gateway/client/InProcessGateway.ts:582 |
+| assistant_text_delta | src/gateway/client/InProcessGateway.ts:413 | submitTurn 流 ×14 |
 | assistant_thinking_delta | - | submitTurn 流 ×14 |
-| compact_completed | src/context/compaction/CompactionEngine.ts:357, src/context/compaction/CompactionEngine.ts:374 | src/gateway/client/InProcessGateway.ts:571 |
-| compact_started | src/context/compaction/CompactionEngine.ts:207 | src/gateway/client/InProcessGateway.ts:571 |
+| compact_completed | src/context/compaction/CompactionEngine.ts:357, src/context/compaction/CompactionEngine.ts:374 | src/gateway/client/InProcessGateway.ts:582 |
+| compact_started | src/context/compaction/CompactionEngine.ts:207 | src/gateway/client/InProcessGateway.ts:582 |
 | config_changed | - | submitTurn 流 ×14 |
-| context_budget | src/agent/loop/AgentLoop.ts:452, src/agent/loop/AgentLoop.ts:465 | src/gateway/client/InProcessGateway.ts:571, submitTurn 流 ×14 |
-| doomloop_signal | - | src/gateway/client/InProcessGateway.ts:571 |
+| context_budget | src/agent/loop/AgentLoop.ts:452, src/agent/loop/AgentLoop.ts:465 | src/gateway/client/InProcessGateway.ts:582, submitTurn 流 ×14 |
+| doomloop_signal | - | src/gateway/client/InProcessGateway.ts:582 |
 | elicitation_cancelled | src/gateway/elicitation/GatewayElicitationChannel.ts:108, src/gateway/elicitation/GatewayElicitationChannel.ts:114 | submitTurn 流 ×14 |
 | elicitation_request | src/gateway/elicitation/GatewayElicitationChannel.ts:87 | submitTurn 流 ×14 |
-| elicitation_requested | src/cli/sessionDependencyAssembly.ts:242, src/gateway/elicitation/GatewayElicitationChannel.ts:101 | src/gateway/client/InProcessGateway.ts:571 |
-| elicitation_resolved | - | src/gateway/client/InProcessGateway.ts:571 |
-| empty_output_recovery | src/agent/loop/recoveryStrategies.ts:63 | src/gateway/client/InProcessGateway.ts:571 |
-| error | src/adapters/channel/qq/qqbot-gateway.ts:94, src/adapters/channel/qq/qqbot-gateway.ts:280, src/cli/sati.ts:964, src/gateway/client/InProcessGateway.ts:442, src/model/providers/openai-responses/stream.ts:131, src/model/streaming/streamModel.ts:181, src/model/streaming/streamModel.ts:230, src/model/streaming/streamModel.ts:236, src/model/streaming/streamModel.ts:241, src/model/streaming/streamModel.ts:318, src/model/streaming/streamModel.ts:487, src/router/execution/executeRouterDecision.ts:278, src/router/execution/executeRouterDecision.ts:340, src/router/execution/executeRouterDecision.ts:374, src/router/execution/executeRouterDecision.ts:687 | src/adapters/channel/discord/DiscordChannel.ts:113, src/adapters/channel/homeassistant/HomeAssistantChannel.ts:141, src/adapters/channel/mattermost/MattermostChannel.ts:121, src/adapters/channel/protocol/httpBody.ts:25, src/adapters/channel/qq/QQChannel.ts:88, src/adapters/channel/qq/qqbot-gateway.ts:93, src/adapters/channel/wecom/WeComChannel.ts:330, src/adapters/channel/wecom-callback/WeComCallbackChannel.ts:66, src/adapters/channel/whatsapp/WhatsAppChannel.ts:85, src/always-on/runtime/SignalWatcher.ts:50, src/always-on/workspace/GitWorktreeProvider.ts:149, src/always-on/workspace/SnapshotCopyProvider.ts:167, src/always-on/workspace/WorkspaceApply.ts:32, src/always-on/workspace/WorkspaceApply.ts:153, src/cli/ExtensionWatchManager.ts:139, src/extension/hooks/execution/CommandHookExecutor.ts:80, src/gateway/server/websocket.ts:26, src/patent/figuregen/cad/freecad.ts:298, src/patent/figuregen/render-graphviz.ts:70, src/patent/figuregen/render-graphviz.ts:71, src/session/artifacts/FileArtifactCollector.ts:339, src/task/runtime/BackgroundTaskRuntime.ts:266, src/tool/builtin/bash/commandRunner.ts:65, src/tool/builtin/bash/commandRunner.ts:164, src/tool/builtin/executeCode.ts:577, src/tool/builtin/executeCode.ts:620, src/tool/builtin/executeCode.ts:671, src/tool/builtin/executeCode.ts:679, src/tool/builtin/executeCodeRpc.ts:100, src/tool/builtin/filesystem/ripgrep.ts:65, src/tool/builtin/filesystem/syntaxDiagnostics.ts:393, submitTurn 流 ×14 |
-| file_artifacts | src/agent/turn/TurnRunner.ts:184, src/agent/turn/TurnRunner.ts:391, src/session/transcript/InMemoryTranscriptWriter.ts:73, src/session/transcript/JsonlTranscriptWriter.ts:214 | src/gateway/client/InProcessGateway.ts:571, submitTurn 流 ×14 |
-| input_accepted | src/agent/turn/TurnRunner.ts:231, src/session/transcript/TranscriptReplay.ts:231, src/session/transcript/TranscriptReplay.ts:303 | src/gateway/client/InProcessGateway.ts:571 |
-| instructions_loaded | src/agent/loop/modelRequest.ts:153 | src/gateway/client/InProcessGateway.ts:571 |
+| elicitation_requested | src/cli/sessionDependencyAssembly.ts:242, src/gateway/elicitation/GatewayElicitationChannel.ts:101 | src/gateway/client/InProcessGateway.ts:582 |
+| elicitation_resolved | - | src/gateway/client/InProcessGateway.ts:582 |
+| empty_output_recovery | src/agent/loop/recoveryStrategies.ts:63 | src/gateway/client/InProcessGateway.ts:582 |
+| error | src/adapters/channel/qq/qqbot-gateway.ts:94, src/adapters/channel/qq/qqbot-gateway.ts:280, src/cli/sati.ts:971, src/gateway/client/InProcessGateway.ts:453, src/model/providers/openai-responses/stream.ts:131, src/model/streaming/streamModel.ts:181, src/model/streaming/streamModel.ts:230, src/model/streaming/streamModel.ts:236, src/model/streaming/streamModel.ts:241, src/model/streaming/streamModel.ts:318, src/model/streaming/streamModel.ts:487, src/router/execution/executeRouterDecision.ts:278, src/router/execution/executeRouterDecision.ts:340, src/router/execution/executeRouterDecision.ts:374, src/router/execution/executeRouterDecision.ts:687 | src/adapters/channel/discord/DiscordChannel.ts:113, src/adapters/channel/homeassistant/HomeAssistantChannel.ts:141, src/adapters/channel/mattermost/MattermostChannel.ts:121, src/adapters/channel/protocol/httpBody.ts:25, src/adapters/channel/qq/QQChannel.ts:88, src/adapters/channel/qq/qqbot-gateway.ts:93, src/adapters/channel/wecom/WeComChannel.ts:330, src/adapters/channel/wecom-callback/WeComCallbackChannel.ts:66, src/adapters/channel/whatsapp/WhatsAppChannel.ts:85, src/always-on/runtime/SignalWatcher.ts:50, src/always-on/workspace/GitWorktreeProvider.ts:149, src/always-on/workspace/SnapshotCopyProvider.ts:167, src/always-on/workspace/WorkspaceApply.ts:32, src/always-on/workspace/WorkspaceApply.ts:153, src/cli/ExtensionWatchManager.ts:139, src/extension/hooks/execution/CommandHookExecutor.ts:80, src/gateway/server/websocket.ts:26, src/patent/figuregen/cad/freecad.ts:298, src/patent/figuregen/render-graphviz.ts:70, src/patent/figuregen/render-graphviz.ts:71, src/session/artifacts/FileArtifactCollector.ts:339, src/task/runtime/BackgroundTaskRuntime.ts:266, src/tool/builtin/bash/commandRunner.ts:65, src/tool/builtin/bash/commandRunner.ts:164, src/tool/builtin/executeCode.ts:577, src/tool/builtin/executeCode.ts:620, src/tool/builtin/executeCode.ts:671, src/tool/builtin/executeCode.ts:679, src/tool/builtin/executeCodeRpc.ts:100, src/tool/builtin/filesystem/ripgrep.ts:65, src/tool/builtin/filesystem/syntaxDiagnostics.ts:393, submitTurn 流 ×14 |
+| file_artifacts | src/agent/turn/TurnRunner.ts:184, src/agent/turn/TurnRunner.ts:391, src/session/transcript/InMemoryTranscriptWriter.ts:73, src/session/transcript/JsonlTranscriptWriter.ts:214 | src/gateway/client/InProcessGateway.ts:582, submitTurn 流 ×14 |
+| input_accepted | src/agent/turn/TurnRunner.ts:231, src/session/transcript/TranscriptReplay.ts:231, src/session/transcript/TranscriptReplay.ts:303 | src/gateway/client/InProcessGateway.ts:582 |
+| instructions_loaded | src/agent/loop/modelRequest.ts:153 | src/gateway/client/InProcessGateway.ts:582 |
 | kanban_updated | src/gateway/server/GatewayWsConnection.ts:51 | submitTurn 流 ×14 |
 | member_added | src/tool/builtin/team/teamManagement.ts:104, src/tool/builtin/team/teamManagement.ts:161 | - |
 | member_idle | src/agent/team/scheduler/scheduler.ts:314 | - |
@@ -37,32 +37,32 @@ emit/dispatch/emitAgentEvent/emitEvent/emitForSession/sendNotification 字符串
 | member_stalled_approval | - | - |
 | member_status | - | - |
 | message_delivered | src/agent/team/scheduler/scheduler.ts:241 | - |
-| mode_change_requested | src/agent/loop/AgentLoop.ts:841 | src/gateway/client/InProcessGateway.ts:571 |
-| model_event | src/agent/loop/AgentLoop.ts:506 | src/gateway/client/InProcessGateway.ts:571 |
-| model_recovery_failed | - | src/gateway/client/InProcessGateway.ts:571 |
-| model_request_started | src/agent/loop/AgentLoop.ts:389 | src/gateway/client/InProcessGateway.ts:571, submitTurn 流 ×14 |
-| permission_denied | src/tool/execution/ToolRuntime.ts:271 | src/gateway/client/InProcessGateway.ts:571 |
+| mode_change_requested | src/agent/loop/AgentLoop.ts:841 | src/gateway/client/InProcessGateway.ts:582 |
+| model_event | src/agent/loop/AgentLoop.ts:506 | src/gateway/client/InProcessGateway.ts:582 |
+| model_recovery_failed | - | src/gateway/client/InProcessGateway.ts:582 |
+| model_request_started | src/agent/loop/AgentLoop.ts:389 | src/gateway/client/InProcessGateway.ts:582, submitTurn 流 ×14 |
+| permission_denied | src/tool/execution/ToolRuntime.ts:271 | src/gateway/client/InProcessGateway.ts:582 |
 | permission_request | src/gateway/permission/createGatewayPermissionHook.ts:85 | submitTurn 流 ×14 |
-| permission_requested | src/tool/execution/ToolRuntime.ts:224 | src/gateway/client/InProcessGateway.ts:571 |
+| permission_requested | src/tool/execution/ToolRuntime.ts:224 | src/gateway/client/InProcessGateway.ts:582 |
 | plan_mode_changed | - | submitTurn 流 ×14 |
-| post_tool_execute | src/tool/execution/ToolRuntime.ts:356, src/tool/execution/ToolRuntime.ts:412 | src/gateway/client/InProcessGateway.ts:571 |
-| pre_tool_execute | src/tool/execution/ToolRuntime.ts:147 | src/gateway/client/InProcessGateway.ts:571 |
-| retry_progress | - | src/gateway/client/InProcessGateway.ts:571 |
-| session_aborted | - | src/gateway/client/InProcessGateway.ts:571 |
-| session_ended | src/agent/session/AgentSession.ts:180 | src/gateway/client/InProcessGateway.ts:571 |
-| session_started | src/agent/session/AgentSession.ts:94 | src/gateway/client/InProcessGateway.ts:571 |
-| setup_completed | src/agent/session/AgentSession.ts:117 | src/gateway/client/InProcessGateway.ts:571 |
-| steer_applied | src/agent/loop/AgentLoop.ts:350 | src/gateway/client/InProcessGateway.ts:571, submitTurn 流 ×14 |
-| steer_unapplied | src/agent/session/AgentSession.ts:160 | src/gateway/client/InProcessGateway.ts:571, submitTurn 流 ×14 |
-| stop_failure | src/agent/loop/AgentLoop.ts:521, src/agent/loop/modelErrorRecovery.ts:239, src/agent/loop/modelErrorRecovery.ts:542 | src/gateway/client/InProcessGateway.ts:571 |
-| stop_requested | src/agent/loop/AgentLoop.ts:666 | src/gateway/client/InProcessGateway.ts:571 |
+| post_tool_execute | src/tool/execution/ToolRuntime.ts:356, src/tool/execution/ToolRuntime.ts:412 | src/gateway/client/InProcessGateway.ts:582 |
+| pre_tool_execute | src/tool/execution/ToolRuntime.ts:147 | src/gateway/client/InProcessGateway.ts:582 |
+| retry_progress | - | src/gateway/client/InProcessGateway.ts:582 |
+| session_aborted | - | src/gateway/client/InProcessGateway.ts:582 |
+| session_ended | src/agent/session/AgentSession.ts:180 | src/gateway/client/InProcessGateway.ts:582 |
+| session_started | src/agent/session/AgentSession.ts:94 | src/gateway/client/InProcessGateway.ts:582 |
+| setup_completed | src/agent/session/AgentSession.ts:117 | src/gateway/client/InProcessGateway.ts:582 |
+| steer_applied | src/agent/loop/AgentLoop.ts:350 | src/gateway/client/InProcessGateway.ts:582, submitTurn 流 ×14 |
+| steer_unapplied | src/agent/session/AgentSession.ts:160 | src/gateway/client/InProcessGateway.ts:582, submitTurn 流 ×14 |
+| stop_failure | src/agent/loop/AgentLoop.ts:521, src/agent/loop/modelErrorRecovery.ts:239, src/agent/loop/modelErrorRecovery.ts:542 | src/gateway/client/InProcessGateway.ts:582 |
+| stop_requested | src/agent/loop/AgentLoop.ts:666 | src/gateway/client/InProcessGateway.ts:582 |
 | structured_output | src/gateway/client/eventMapping.ts:521 | submitTurn 流 ×14 |
-| subagent_completed | src/agent/loop/toolContext.ts:306 | src/gateway/client/InProcessGateway.ts:571 |
-| subagent_model_event | src/agent/sub/SubAgentSession.ts:196 | src/gateway/client/InProcessGateway.ts:571 |
-| subagent_started | src/agent/loop/toolContext.ts:194 | src/gateway/client/InProcessGateway.ts:571 |
-| subagent_status | src/agent/loop/subagentExecutor.ts:168 | src/gateway/client/InProcessGateway.ts:571 |
-| subagent_tool_calls_detected | src/agent/sub/SubAgentSession.ts:204 | src/gateway/client/InProcessGateway.ts:571 |
-| subagent_tool_result | src/agent/sub/SubAgentSession.ts:212 | src/gateway/client/InProcessGateway.ts:571 |
+| subagent_completed | src/agent/loop/toolContext.ts:306 | src/gateway/client/InProcessGateway.ts:582 |
+| subagent_model_event | src/agent/sub/SubAgentSession.ts:196 | src/gateway/client/InProcessGateway.ts:582 |
+| subagent_started | src/agent/loop/toolContext.ts:194 | src/gateway/client/InProcessGateway.ts:582 |
+| subagent_status | src/agent/loop/subagentExecutor.ts:168 | src/gateway/client/InProcessGateway.ts:582 |
+| subagent_tool_calls_detected | src/agent/sub/SubAgentSession.ts:204 | src/gateway/client/InProcessGateway.ts:582 |
+| subagent_tool_result | src/agent/sub/SubAgentSession.ts:212 | src/gateway/client/InProcessGateway.ts:582 |
 | task_claimed | src/agent/team/scheduler/scheduler.ts:270 | - |
 | task_completed | src/tool/builtin/team/teamTasks.ts:363 | - |
 | task_created | src/tool/builtin/team/teamTasks.ts:215 | - |
@@ -74,19 +74,19 @@ emit/dispatch/emitAgentEvent/emitEvent/emitForSession/sendNotification 字符串
 | team_created | src/tool/builtin/team/teamManagement.ts:94 | - |
 | team_event | - | submitTurn 流 ×14 |
 | team_share_updated | src/tool/builtin/team/teamShare.ts:114 | - |
-| token_cap_adjusted | src/agent/loop/modelErrorRecovery.ts:367, src/agent/loop/modelErrorRecovery.ts:407, src/agent/loop/modelErrorRecovery.ts:429, src/agent/loop/recoveryStrategies.ts:111 | src/gateway/client/InProcessGateway.ts:571 |
+| token_cap_adjusted | src/agent/loop/modelErrorRecovery.ts:367, src/agent/loop/modelErrorRecovery.ts:407, src/agent/loop/modelErrorRecovery.ts:429, src/agent/loop/recoveryStrategies.ts:111 | src/gateway/client/InProcessGateway.ts:582 |
 | tool_call_finished | - | submitTurn 流 ×14 |
 | tool_call_started | - | submitTurn 流 ×14 |
-| tool_calls_detected | src/agent/loop/AgentLoop.ts:749 | src/gateway/client/InProcessGateway.ts:571 |
-| tool_result | src/agent/loop/AgentLoop.ts:848 | src/gateway/client/InProcessGateway.ts:571 |
+| tool_calls_detected | src/agent/loop/AgentLoop.ts:749 | src/gateway/client/InProcessGateway.ts:582 |
+| tool_result | src/agent/loop/AgentLoop.ts:848 | src/gateway/client/InProcessGateway.ts:582 |
 | tool_result_detail_available | src/gateway/client/eventMapping.ts:246, src/gateway/client/eventMapping.ts:252, src/gateway/client/eventMapping.ts:272 | submitTurn 流 ×14 |
-| tool_results_projected | src/agent/loop/AgentLoop.ts:879, src/agent/loop/modelErrorRecovery.ts:300 | src/gateway/client/InProcessGateway.ts:571 |
-| turn_completed | src/agent/loop/turnExit.ts:123, src/agent/loop/turnExit.ts:183, src/agent/turn/TurnRunner.ts:201, src/gateway/client/InProcessGateway.ts:406, src/gateway/client/eventMapping.ts:523, src/session/transcript/TranscriptReplay.ts:259, src/session/transcript/TranscriptReplay.ts:335 | src/gateway/client/InProcessGateway.ts:571, submitTurn 流 ×14 |
-| turn_continued | src/agent/loop/AgentLoop.ts:1057, src/agent/loop/compactionExecutor.ts:82, src/agent/loop/modelErrorRecovery.ts:151, src/agent/loop/modelErrorRecovery.ts:269, src/agent/loop/modelErrorRecovery.ts:378, src/agent/loop/modelErrorRecovery.ts:454, src/agent/loop/modelErrorRecovery.ts:470, src/agent/loop/modelErrorRecovery.ts:482, src/agent/loop/recoveryStrategies.ts:38, src/agent/loop/recoveryStrategies.ts:122 | src/gateway/client/InProcessGateway.ts:571 |
-| turn_failed | src/agent/loop/turnExit.ts:120, src/agent/turn/TurnRunner.ts:200 | src/gateway/client/InProcessGateway.ts:571 |
-| turn_started | src/agent/turn/TurnRunner.ts:206 | src/gateway/client/InProcessGateway.ts:571, submitTurn 流 ×14 |
-| user_prompt_submitted | src/agent/turn/TurnRunner.ts:270 | src/gateway/client/InProcessGateway.ts:571 |
-| warning | src/agent/loop/AgentLoop.ts:650, src/agent/loop/modelErrorRecovery.ts:143, src/agent/turn/TurnRunner.ts:272 | src/gateway/client/InProcessGateway.ts:571 |
+| tool_results_projected | src/agent/loop/AgentLoop.ts:879, src/agent/loop/modelErrorRecovery.ts:300 | src/gateway/client/InProcessGateway.ts:582 |
+| turn_completed | src/agent/loop/turnExit.ts:123, src/agent/loop/turnExit.ts:183, src/agent/turn/TurnRunner.ts:201, src/gateway/client/InProcessGateway.ts:417, src/gateway/client/eventMapping.ts:523, src/session/transcript/TranscriptReplay.ts:259, src/session/transcript/TranscriptReplay.ts:335 | src/gateway/client/InProcessGateway.ts:582, submitTurn 流 ×14 |
+| turn_continued | src/agent/loop/AgentLoop.ts:1057, src/agent/loop/compactionExecutor.ts:82, src/agent/loop/modelErrorRecovery.ts:151, src/agent/loop/modelErrorRecovery.ts:269, src/agent/loop/modelErrorRecovery.ts:378, src/agent/loop/modelErrorRecovery.ts:454, src/agent/loop/modelErrorRecovery.ts:470, src/agent/loop/modelErrorRecovery.ts:482, src/agent/loop/recoveryStrategies.ts:38, src/agent/loop/recoveryStrategies.ts:122 | src/gateway/client/InProcessGateway.ts:582 |
+| turn_failed | src/agent/loop/turnExit.ts:120, src/agent/turn/TurnRunner.ts:200 | src/gateway/client/InProcessGateway.ts:582 |
+| turn_started | src/agent/turn/TurnRunner.ts:206 | src/gateway/client/InProcessGateway.ts:582, submitTurn 流 ×14 |
+| user_prompt_submitted | src/agent/turn/TurnRunner.ts:270 | src/gateway/client/InProcessGateway.ts:582 |
+| warning | src/agent/loop/AgentLoop.ts:650, src/agent/loop/modelErrorRecovery.ts:143, src/agent/turn/TurnRunner.ts:272 | src/gateway/client/InProcessGateway.ts:582 |
 | worktree_created | - | submitTurn 流 ×14 |
 | worktree_removed | - | submitTurn 流 ×14 |
 
@@ -97,5 +97,5 @@ emit/dispatch/emitAgentEvent/emitEvent/emitForSession/sendNotification 字符串
 
 | 流入口 | 语汇 | 消费站点 |
 | --- | --- | --- |
-| submit | AgentEvent | src/gateway/client/InProcessGateway.ts:571 |
-| submitTurn | GatewayEvent | src/adapters/channel/api-server/ApiServerChannel.ts:364, src/adapters/channel/api-server/ApiServerChannel.ts:436, src/adapters/channel/cli/CliChannel.ts:77, src/adapters/channel/feishu/FeishuChannel.ts:588, src/adapters/channel/protocol/ImTurnProcessor.ts:78, src/adapters/channel/tui/TuiChannel.ts:76, src/adapters/channel/webhook/WebhookChannel.ts:282, src/adapters/channel/wecom/WeComChannel.ts:938, src/adapters/channel/weixin/WeixinChannel.ts:789, src/agent/team/member/member-waker.ts:77, src/always-on/runtime/DiscoveryFire.ts:961, src/cli/ProjectRuntimeRegistry.ts:494, src/cron/runtime/CronFire.ts:101, src/gateway/server/GatewayWsConnection.ts:185 |
+| submit | AgentEvent | src/gateway/client/InProcessGateway.ts:582 |
+| submitTurn | GatewayEvent | src/adapters/channel/api-server/ApiServerChannel.ts:364, src/adapters/channel/api-server/ApiServerChannel.ts:436, src/adapters/channel/cli/CliChannel.ts:77, src/adapters/channel/feishu/FeishuChannel.ts:588, src/adapters/channel/protocol/ImTurnProcessor.ts:78, src/adapters/channel/tui/TuiChannel.ts:76, src/adapters/channel/webhook/WebhookChannel.ts:282, src/adapters/channel/wecom/WeComChannel.ts:938, src/adapters/channel/weixin/WeixinChannel.ts:789, src/agent/team/member/member-waker.ts:77, src/always-on/runtime/DiscoveryFire.ts:961, src/cli/ProjectRuntimeRegistry.ts:501, src/cron/runtime/CronFire.ts:101, src/gateway/server/GatewayWsConnection.ts:185 |

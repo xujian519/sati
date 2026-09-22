@@ -9,6 +9,7 @@ import {
   type ScanTeamMembersResult,
 } from "../agent/team/index.js";
 import { HookRuntime } from "../extension/index.js";
+import { HookTrustStore, hookTrustStorePath } from "../extension/plugins/trust/index.js";
 import { LifecycleRuntime } from "../lifecycle/index.js";
 import {
   InProcessGateway,
@@ -32,6 +33,7 @@ import { logger, createTelemetryCollector, type TelemetryClient } from "../telem
 import { describeExtensionScope, resolveBuiltinSkillsRoot } from "./gatewaySupport.js";
 import { ExtensionWatchManager, type ExtensionWatchEvent } from "./ExtensionWatchManager.js";
 import { ProjectRuntimeRegistry } from "./ProjectRuntimeRegistry.js";
+import { createHookTrustService } from "./hookTrustService.js";
 import { buildGatewayRuntimeOptions } from "./gatewayRuntimeOptions.js";
 import { buildTeamSubsystem } from "./teamSubsystem.js";
 
@@ -195,6 +197,9 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
     },
   });
   const fallbackProjectRoot = options.fallbackProjectRoot ?? projectRoot;
+  // 项目级 hook 信任（1.2a 报告 + 1.2b 强制）：存储与协议服务共享同一实例——
+  // 两个实例会互相覆盖写入（各自读旧表再整表写回）。
+  const hookTrustStore = new HookTrustStore(hookTrustStorePath(pilotHome));
   registry = new ProjectRuntimeRegistry({
     fallbackProjectRoot,
     pilotHome,
@@ -209,9 +214,18 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
     autoElicitation: options.autoElicitation,
     telemetry,
     enableProvenance: options.enableProvenance,
+    hookTrustStore,
     onProjectActivated: activeProjectRoot => extensionWatchManager.watchProject(activeProjectRoot),
   });
   const defaultRuntime = registry.resolve();
+  const hookTrustService = createHookTrustService({
+    resolveProject: projectKey => {
+      const runtime = registry.resolve(projectKey);
+      return { projectRoot: runtime.projectRoot, pluginRuntime: runtime.pluginRuntime };
+    },
+    store: hookTrustStore,
+    telemetry,
+  });
   const memoryDiagnosticsEnabled = isGatewayMemoryDiagnosticsEnabled(
     env,
     defaultRuntime.snapshot.config.gateway?.memoryDiagnostics,
@@ -298,6 +312,7 @@ export function createLocalGateway(options: CreateLocalGatewayOptions = {}): Cre
       telemetry,
       kanbanBoardManager,
       skillManager,
+      hookTrustService,
       cron: options.cron,
       sessionPresence,
       registry,

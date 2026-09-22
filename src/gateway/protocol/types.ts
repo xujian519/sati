@@ -552,6 +552,55 @@ export type GatewayApprovalDecideResult = {
   delivered: boolean;
 };
 
+/** 项目级 hook 信任：一条待评审/已授权的 hook 声明（1.12）。 */
+export type GatewayHookTrustEntry = {
+  /** `${pluginName}@project`。 */
+  pluginId: string;
+  pluginName: string;
+  /** 插件目录的绝对路径（仅本机 UI 展示用；不落日志/遥测）。 */
+  pluginRoot: string;
+  status: "trusted" | "pending" | "stale" | "revoked" | "blocked";
+  /** 证据缺失/失效的原因（`trusted` 之外才有）。 */
+  detail?: string;
+  /** 当前目录内容摘要（`blocked` 时缺省）。 */
+  digest?: string;
+  /** 该插件实际声明的 hook（人工评审据此决定是否授权）。 */
+  hooks: Array<{
+    event: string;
+    /** matcher 模式；缺省 = 该事件下全部匹配。 */
+    matcher?: string;
+    kind: "command" | "prompt" | "http" | "agent" | "callback";
+    /** 单行摘要：命令原文 / URL / 提示词首行。 */
+    summary: string;
+    /** `if` 条件（子代理名等限定）。 */
+    condition?: string;
+  }>;
+};
+
+export type GatewayHookTrustListInput = {
+  projectKey: string;
+};
+
+export type GatewayHookTrustListResult = {
+  /** 工作区身份摘要（与存储键同源）。 */
+  workspaceIdentityKey: string;
+  entries: GatewayHookTrustEntry[];
+};
+
+export type GatewayHookTrustDecideInput = {
+  projectKey: string;
+  pluginId: string;
+  verdict: "grant" | "revoke";
+};
+
+export type GatewayHookTrustDecideResult = {
+  /** false = 未应用（插件不在该项目、来源非 project、或摘要无法建立）。 */
+  applied: boolean;
+  reason?: "unknown_plugin" | "blocked" | "write_failed";
+  /** 应用后的条目（授权/撤销后的最新状态）。 */
+  entry?: GatewayHookTrustEntry;
+};
+
 export type GatewaySessionPermissionGrantInput = {
   sessionKey: string;
   entry: string;
@@ -772,6 +821,19 @@ export interface Gateway {
    * Optional — 同 approvalListPending。
    */
   approvalDecide?(input: GatewayApprovalDecideInput): Promise<GatewayApprovalDecideResult>;
+  /**
+   * 项目级 hook 信任（1.12）：列出该项目里**项目来源**插件声明的 hook 及其信任状态。
+   * 供审批 UI 展示「将要被授权的东西」（`entries[].hooks` 即声明原文投影）。
+   * Optional — 旧实现无此能力时 hosts 应 feature-detect（未接线返回 `not_configured`）。
+   */
+  hookTrustList?(input: GatewayHookTrustListInput): Promise<GatewayHookTrustListResult>;
+  /**
+   * 项目级 hook 信任（1.12）：授权/撤销某插件目录的当前内容摘要。
+   * 授权以**内容摘要**为准：声明或目录内任何文件事后被改 → 该授权自动作废（`stale`），
+   * 须重新评审。撤销删除记录而非留历史（重授权是显式动作）。
+   * Optional — 同 hookTrustList。
+   */
+  hookTrustDecide?(input: GatewayHookTrustDecideInput): Promise<GatewayHookTrustDecideResult>;
   /**
    * Grants a tool only for the current session. This is intentionally
    * non-persistent: global Settings / permissions.json stay unchanged.

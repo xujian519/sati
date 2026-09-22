@@ -23,6 +23,7 @@ import { api } from "../../utils/api";
 import { resolveMarkdownFileHref } from "../chat/utils/resolveMarkdownFileHref";
 import type { SessionNavigationOptions } from "../main-content/types/types";
 import { ConnectionBanner } from "../ui/ConnectionBanner";
+import { HookTrustBanner } from "../hook-trust/view/HookTrustBanner";
 import ErrorBoundary from "../main-content/view/ErrorBoundary";
 import { StylePanelHost } from "../patent/StylePanel";
 import SidebarV2 from "./SidebarV2";
@@ -638,6 +639,7 @@ export default function AppShellV2() {
           )}
 
           <main className="flex min-h-0 min-w-0 flex-1 flex-col">
+            <HookTrustBanner projectPath={selectedProject?.fullPath || selectedProject?.path || null} />
             <MainAreaV2
               projects={sidebarSharedProps.projects}
               selectedProject={selectedProject}

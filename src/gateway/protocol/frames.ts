@@ -43,6 +43,8 @@ export type WsGatewayMethod =
   | "grant_session_permission"
   | "approval_list_pending"
   | "approval_decide"
+  | "hook_trust_list"
+  | "hook_trust_decide"
   | "read_session_messages"
   | "read_subagent_messages"
   | "fork_session"

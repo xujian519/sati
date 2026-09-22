@@ -17,9 +17,9 @@
 | `node_engine` | Node 版本下限 | `>=22.13.0` | package.json engines.node |
 | `pnpm_version` | pnpm 版本 | `10.32.1` | package.json packageManager |
 | `typescript_version` | TypeScript 版本 | `6.0.3` | package.json devDependencies.typescript |
-| `protocol_version` | 网关协议版本（台账末条） | `1.11` | src/gateway/protocol/version.ts PROTOCOL_RELEASES |
-| `protocol_release_count` | 协议台账版本条目数 | `12` | src/gateway/protocol/version.ts PROTOCOL_RELEASES |
-| `gateway_method_count` | 网关方法数 | `70` | src/gateway/protocol/version.ts PROTOCOL_METHOD_VERSION |
+| `protocol_version` | 网关协议版本（台账末条） | `1.12` | src/gateway/protocol/version.ts PROTOCOL_RELEASES |
+| `protocol_release_count` | 协议台账版本条目数 | `13` | src/gateway/protocol/version.ts PROTOCOL_RELEASES |
+| `gateway_method_count` | 网关方法数 | `72` | src/gateway/protocol/version.ts PROTOCOL_METHOD_VERSION |
 
 ## 2. 计数矩阵
 
@@ -51,10 +51,10 @@
 | `src/always-on/` | 38 | ✓ | 常驻后台执行（Discovery 计划/报告/工作周期） |
 | `src/board/` | 8 | ✓ | 项目看板（protocol/runtime/storage 三组，kanban_* 工具与网关方法组） |
 | `src/browser/` | 6 | — | 浏览器后端抽象（ego lite / BrowserOS 等后端探测与驱动） |
-| `src/cli/` | 28 | ✓ | CLI 入口与命令（sati.ts / satiServer.ts / createLocalGateway.ts） |
+| `src/cli/` | 30 | ✓ | CLI 入口与命令（sati.ts / satiServer.ts / createLocalGateway.ts） |
 | `src/context/` | 316 | ✓ | 上下文（压缩/预算/记忆/向量/workspace registerLeak） |
 | `src/cron/` | 18 | ✓ | 定时任务（config/protocol/runtime/storage/tool） |
-| `src/extension/` | 50 | ✓ | 插件系统（plugin.json、lifecycle hooks、skills、贡献点） |
+| `src/extension/` | 51 | ✓ | 插件系统（plugin.json、lifecycle hooks、skills、贡献点） |
 | `src/fs/` | 1 | — | 文件系统小工具（JSONL run 写入器） |
 | `src/gateway/` | 39 | ✓ | WebSocket 网关（protocol/server/client/approval） |
 | `src/knowledge/` | 46 | ✓ | 知识库（图谱/判例/法规/embeddings/wiki 卡片） |

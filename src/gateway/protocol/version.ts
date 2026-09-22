@@ -108,6 +108,10 @@ export const PROTOCOL_RELEASES = [
       'permission_request 事件新增可选 origin: { kind: "subagent", subagentId, subagentType? }：fork 身份来自 hook 输入的 agentId/agentType（由 ToolRuntime 在子代理会话内填入）。主代理自身的请求不带该字段，旧客户端忽略即退回旧显示。',
     ],
   },
+  {
+    version: "1.12",
+    note: "2026-09-21: 新增可选项目级 hook 信任方法 hook_trust_list / hook_trust_decide（未评审的项目插件 hook 默认不装载，用户经此列出声明并授权/撤销；见 docs/notes/implemented/2026-09-21-project-hook-trust-gate.md）。",
+  },
 ] as const satisfies readonly ProtocolReleaseEntry[];
 
 /** 台账条目类型（含 `note` / `changes`）。 */
@@ -203,6 +207,9 @@ export const PROTOCOL_METHOD_VERSION = {
   regenerate_last_turn: "1.7",
   // 1.8
   close_project_sessions: "1.8",
+  // 1.12
+  hook_trust_list: "1.12",
+  hook_trust_decide: "1.12",
 } satisfies Record<WsGatewayMethod, GatewayProtocolVersion>;
 
 /**

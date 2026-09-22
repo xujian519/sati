@@ -6,10 +6,11 @@
  * 「用户改了什么」不可辨认——同 `src/model/window/store.ts` 的理由。
  *
  * 读路径 fail-closed：文件缺失/损坏/版本未知一律按空表处理 → 所有项目插件回到
- * `pending`（强制期须重新评审），绝不因存储坏了而把未评审的声明当已授权。
+ * `pending`（须重新评审），绝不因存储坏了而把未评审的声明当已授权。
  */
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { mkdirSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { atomicWriteJson } from "../../../patent/persist-utils.js";
 import { HOOK_TRUST_STORE_VERSION, type HookTrustFile, type HookTrustRecord } from "./protocol.js";
 
 export const HOOK_TRUST_STORE_FILENAME = "hook-trust.json";
@@ -71,5 +72,33 @@ export class HookTrustStore {
     } catch {
       return emptyFile();
     }
+  }
+
+  /** 单条查询。 */
+  lookup(workspaceIdentityKey: string, pluginId: string): HookTrustRecord | undefined {
+    return this.read().entries[hookTrustKey(workspaceIdentityKey, pluginId)];
+  }
+
+  /**
+   * 写入一条决定（同键覆盖）。写路径按「先读整表 → 覆盖该键 → 原子写」进行：
+   * 信任表的写入频率是人工点击级，无需并发合并；原子写保证不会留下半截文件
+   * （半截文件在下次读取时按空表处理，等于丢掉全部授权——代价是重新评审，
+   * 而不是误授权）。撤销同样走本方法（写 `decision: "revoked"`）：保留「用户曾
+   * 明确拒绝过这一份内容」的记录，比删掉后与「从未评审」不可分辨更有用。
+   */
+  async record(workspaceIdentityKey: string, record: HookTrustRecord): Promise<HookTrustRecord> {
+    const file = this.read();
+    const key = hookTrustKey(workspaceIdentityKey, record.pluginId);
+    const next: HookTrustFile = {
+      version: HOOK_TRUST_STORE_VERSION,
+      entries: { ...file.entries, [key]: record },
+    };
+    await this.writeFile(next);
+    return record;
+  }
+
+  private async writeFile(file: HookTrustFile): Promise<void> {
+    mkdirSync(dirname(this.filePath), { recursive: true });
+    await atomicWriteJson(this.filePath, `${JSON.stringify(file, null, 2)}\n`);
   }
 }

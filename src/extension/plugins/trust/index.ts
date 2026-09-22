@@ -20,5 +20,15 @@ export {
   hookTrustStorePath,
   parseHookTrustFile,
 } from "./HookTrustStore.js";
-export { computeWorkspaceIdentityKey, declaresHooks, evaluateProjectHookTrust } from "./evaluateHookTrust.js";
+export {
+  computeWorkspaceIdentityKey,
+  declaresHooks,
+  evaluateProjectHookTrust,
+  retainTrustedHookMatchers,
+} from "./evaluateHookTrust.js";
+export {
+  HOOK_DECLARATION_SUMMARY_MAX_CHARS,
+  summarizeHookDeclarations,
+  type HookDeclarationSummary,
+} from "./hookDeclarationSummary.js";
 export { HookTrustReporter } from "./HookTrustReporter.js";

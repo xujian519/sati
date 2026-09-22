@@ -16,6 +16,10 @@ import type {
   Gateway,
   GatewayElicitationResponseInput,
   GatewayEvent,
+  GatewayHookTrustDecideInput,
+  GatewayHookTrustDecideResult,
+  GatewayHookTrustListInput,
+  GatewayHookTrustListResult,
   GatewayPermissionDecisionInput,
   GatewayServerInfo,
   GatewaySubmitTurnInput,
@@ -239,6 +243,19 @@ export class RemoteGateway implements Gateway {
 
   async permissionDecide(input: GatewayPermissionDecisionInput): Promise<{ delivered: boolean }> {
     return this.client.request<{ delivered: boolean }>("permission_decide", input);
+  }
+
+  /**
+   * 项目级 hook 信任（协议 1.12）。浏览器经 `ui/server` 的 REST 路由到本客户端，
+   * 由 gateway 侧宿主注入的实现回答——故这里只做方法名与载荷的转发（与
+   * `always_on_*` / `kanban_*` 同形）。
+   */
+  async hookTrustList(input: GatewayHookTrustListInput): Promise<GatewayHookTrustListResult> {
+    return this.client.request<GatewayHookTrustListResult>("hook_trust_list", input);
+  }
+
+  async hookTrustDecide(input: GatewayHookTrustDecideInput): Promise<GatewayHookTrustDecideResult> {
+    return this.client.request<GatewayHookTrustDecideResult>("hook_trust_decide", input);
   }
 
   async grantSessionPermission(

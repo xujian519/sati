@@ -1,0 +1,23 @@
+{
+  "title": "项目 hook 待确认",
+  "subtitle_one": "{{count}} 个插件声明了 hook，尚未启用",
+  "subtitle_other": "{{count}} 个插件声明了 hook，尚未启用",
+  "expand": "查看声明",
+  "collapse": "收起声明",
+  "approve": "允许并启用",
+  "reject": "拒绝",
+  "enabled": "已启用",
+  "status": {
+    "pending": "从未评审",
+    "stale": "评审后已变更",
+    "revoked": "已拒绝",
+    "blocked": "无法核验"
+  },
+  "noHooks": "该插件未声明 hook。",
+  "digest": "内容摘要",
+  "footer": "未评审的项目 hook 不会执行。改动声明（或插件目录里的任何文件）会让已有授权失效并再次询问。",
+  "dismiss": "稍后再说",
+  "errors": {
+    "requestFailed": "hook 信任请求失败（{{status}}）"
+  }
+}

@@ -19,7 +19,7 @@ import {
   type HookTrustEntry,
   type HookTrustFile,
 } from "../../../src/extension/plugins/trust/index.js";
-import type { Logger } from "../../../src/telemetry/index.js";
+import type { Logger, TelemetryClient, TelemetryFeatureUsedInput } from "../../../src/telemetry/index.js";
 
 /**
  * 1.2a 报告期：项目级 hook 的信任评估与上报。
@@ -58,6 +58,15 @@ function capturingLogger(): { logger: Logger; lines: string[] } {
   const lines: string[] = [];
   const push = (prefix: string) => (message: string) => void lines.push(`${prefix}: ${message}`);
   return { logger: { info: push("info"), warn: push("warn"), error: push("error"), debug: push("debug") }, lines };
+}
+
+function capturingTelemetry(): { telemetry: TelemetryClient; calls: TelemetryFeatureUsedInput[] } {
+  const calls: TelemetryFeatureUsedInput[] = [];
+  const telemetry = {
+    trackFeatureLoopStage: (input: TelemetryFeatureUsedInput) => void calls.push(input),
+    trackError: () => {},
+  } as unknown as TelemetryClient;
+  return { telemetry, calls };
 }
 
 test("1.2a：摘要跟内容走而非 mtime——改写声明变摘要，仅改 mtime 不变", async () => {
@@ -308,8 +317,41 @@ test("1.2a：报告按工作区去重——内容不变不重复输出，状态�
   assert.equal(reporter.report({ workspaceIdentityKey: "ws2", entries: [{ ...entry, status: "trusted" }] }), true);
   assert.equal(reporter.report({ workspaceIdentityKey: "ws3", entries: [] }), false);
   assert.equal(lines.length, 3);
-  assert.match(lines[0] ?? "", /^warn: Hook trust \(report only\): workspace=ws1 /u);
+  assert.match(lines[0] ?? "", /^warn: Hook trust: workspace=ws1 projectPlugins=1 disabled=1 /u);
   assert.match(lines[2] ?? "", /^info: Hook trust: workspace=ws2 /u);
+});
+
+test("1.2b：上报变化同时上遥测——只上计数与状态分布", () => {
+  const { logger } = capturingLogger();
+  const { telemetry, calls } = capturingTelemetry();
+  const reporter = new HookTrustReporter(logger, telemetry);
+  const pending: HookTrustEntry = {
+    pluginId: "x@project",
+    pluginName: "secret-name",
+    source: "project",
+    status: "pending",
+    digest: "sha256:ab",
+  };
+
+  reporter.report({ workspaceIdentityKey: "ws1", entries: [pending] });
+  // 同一工作区同一内容：日志与遥测共用一次变化判定，都不得重复。
+  reporter.report({ workspaceIdentityKey: "ws1", entries: [pending] });
+  reporter.report({ workspaceIdentityKey: "ws1", entries: [{ ...pending, status: "trusted" }] });
+  // 空表（该项目没有插件声明 hook）不是信号。
+  reporter.report({ workspaceIdentityKey: "ws1", entries: [] });
+
+  assert.equal(calls.length, 2);
+  assert.deepEqual(calls[0], {
+    module: "session",
+    phase: "hook_trust",
+    loopStage: "module_event",
+    outcome: "denied",
+    metadata: { projectPlugins: 1, disabled: 1, trusted: 0, pending: 1, stale: 0, revoked: 0, blocked: 0 },
+  });
+  assert.equal(calls[1]?.outcome, "success");
+  // 插件名是用户内容：只上计数与状态，不出本机。
+  assert.equal(JSON.stringify(calls).includes("secret-name"), false);
+  assert.equal(JSON.stringify(calls).includes("sha256:ab"), false);
 });
 
 test("1.2a：工作区身份键为 32 位 hex 摘要，且路径不同则键不同", async () => {

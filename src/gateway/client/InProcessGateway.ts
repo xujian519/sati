@@ -57,6 +57,10 @@ import type {
   GatewayApprovalListPendingResult,
   GatewayElicitationResponseInput,
   GatewayEvent,
+  GatewayHookTrustDecideInput,
+  GatewayHookTrustDecideResult,
+  GatewayHookTrustListInput,
+  GatewayHookTrustListResult,
   GatewayCancelSteerInput,
   GatewayCancelSteerResult,
   GatewaySteerTurnInput,
@@ -240,6 +244,13 @@ export type InProcessGatewayOptions = {
   panelHeartbeat?: (input: { sessionKeys: string[] }) => Promise<{ touched: number }>;
   /** M4：团队面板快照 delegate（TeamDb 直查 + presence 在线态；不触发模型回路）。 */
   teamPanelSnapshot?: (input: { sessionKey?: string }) => Promise<{ teams: unknown[] }>;
+  /**
+   * 项目级 hook 信任（1.12）delegate — wired by `createLocalGateway` 到 cli 侧
+   * `createHookTrustService`（读取信任存储 + 该项目的插件运行时）。
+   * powers the `hook_trust_list` / `hook_trust_decide` protocol methods.
+   */
+  hookTrustList?: (input: GatewayHookTrustListInput) => Promise<GatewayHookTrustListResult>;
+  hookTrustDecide?: (input: GatewayHookTrustDecideInput) => Promise<GatewayHookTrustDecideResult>;
   /** M4：面板操作 delegate——直调既有 team_* 工具（权限/事件走工具层既有链）。 */
   teamToolCall?: (input: {
     tool: string;
@@ -923,6 +934,22 @@ export class InProcessGateway implements Gateway {
     // 此处仅兜底从总线移除（宿主未配置回调时保证不残留）。UI 侧在决策返回后乐观移除。
     this.approvalBus.remove(input.sessionKey, input.pendingIndex);
     return { delivered: true };
+  }
+
+  async hookTrustList(input: GatewayHookTrustListInput): Promise<GatewayHookTrustListResult> {
+    if (!this.options.hookTrustList) {
+      // 未接线统一兜底形态：与 GatewayWsConnection 的 notConfigured 出口一致
+      // （feature-detect 语义，旧宿主不因缺能力而抛错）。
+      return notConfigured({ workspaceIdentityKey: "", entries: [] }, "Hook trust is not configured on this gateway.");
+    }
+    return this.options.hookTrustList(input);
+  }
+
+  async hookTrustDecide(input: GatewayHookTrustDecideInput): Promise<GatewayHookTrustDecideResult> {
+    if (!this.options.hookTrustDecide) {
+      return notConfigured({ applied: false }, "Hook trust is not configured on this gateway.");
+    }
+    return this.options.hookTrustDecide(input);
   }
 
   async panelHeartbeat(input: { sessionKeys: string[] }): Promise<{

@@ -376,6 +376,16 @@ export class GatewayWsConnection {
           return this.options.gateway.approvalDecide(frame.params as GatewayMethodParams<"approvalDecide">);
         }
         return Promise.resolve(notConfigured({ delivered: false }, "Approval decide not available"));
+      case "hook_trust_list":
+        if (this.options.gateway.hookTrustList) {
+          return this.options.gateway.hookTrustList(frame.params as GatewayMethodParams<"hookTrustList">);
+        }
+        return Promise.resolve(notConfigured({ workspaceIdentityKey: "", entries: [] }, "Hook trust not available"));
+      case "hook_trust_decide":
+        if (this.options.gateway.hookTrustDecide) {
+          return this.options.gateway.hookTrustDecide(frame.params as GatewayMethodParams<"hookTrustDecide">);
+        }
+        return Promise.resolve(notConfigured({ applied: false }, "Hook trust not available"));
       case "read_session_messages":
         return this.options.gateway.readSessionMessages(frame.params as GatewayMethodParams<"readSessionMessages">);
       case "read_subagent_messages":
