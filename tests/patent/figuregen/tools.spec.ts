@@ -16,8 +16,19 @@ import { createPatentFigureGenerateTool } from "../../../src/tool/builtin/patent
 import type { SatiToolRuntimeContext } from "../../../src/tool/protocol/types.js";
 import { checkFigures } from "../../../src/patent/figuregen/check.js";
 import { parseFigureSidecar } from "../../../src/patent/figuregen/sidecar.js";
-import type { FigureKind, FigureNodeShape, FigureSpec } from "../../../src/patent/figuregen/types.js";
-import { FIGURE_INPUT_SCHEMA_REF } from "../../../src/tool/builtin/patentFigureSchema.js";
+import type {
+  ChartLineStyle,
+  ChartMarker,
+  FigureKind,
+  FigureNodeShape,
+  FigureSpec,
+} from "../../../src/patent/figuregen/types.js";
+import {
+  CHART_LINE_STYLES,
+  CHART_MARKERS,
+  FIGURE_INPUT_SCHEMA_REF,
+  FIGURE_KINDS,
+} from "../../../src/tool/builtin/patentFigureSchema.js";
 
 function makeContext(cwd: string): SatiToolRuntimeContext {
   return {
@@ -49,6 +60,136 @@ const FIG: FigureSpec = {
   ],
   edges: [{ from: "a", to: "b" }],
 };
+
+/** 曲线图（矢量通路）：nodes/edges 留空数组，数据在 chart 字段。 */
+const CHART: FigureSpec = {
+  figure_no: 1,
+  kind: "chart",
+  nodes: [],
+  edges: [],
+  chart: {
+    x: { title: "温度(℃)", min: 20, max: 80 },
+    y: { title: "转化率(%)" },
+    series: [
+      {
+        name: "实施例1",
+        points: [
+          [20, 4],
+          [50, 58],
+          [80, 96],
+        ],
+        marker: "filled-circle",
+      },
+      {
+        name: "对比例1",
+        points: [
+          [20, 2],
+          [50, 22],
+          [80, 41],
+        ],
+        marker: "filled-triangle",
+        line: "dashed",
+      },
+    ],
+  },
+};
+
+test("patent_figure_generate：曲线图落盘（空 nodes 合法）+ 附图说明写「曲线图」", async () => {
+  const cwd = tempCwd();
+  try {
+    const tool = createPatentFigureGenerateTool();
+    const result = await tool.execute(
+      { figures: [CHART], output_name: "case-chart", invention_name: "一种催化剂性能测试方法" },
+      makeContext(cwd),
+    );
+    const svg = readFileSync(join(cwd, ".sati", "figures", "case-chart-fig1.svg"), "utf8");
+    assert.ok(svg.includes("<polyline"), "应有数据折线");
+    assert.ok(svg.includes(">温度(℃)</text>"), "应有横轴标目");
+    assert.ok(svg.includes(">实施例1</text>"), "应有图例");
+    assert.ok(svg.includes('data-figure-no="1"'));
+
+    const text = result.content[0].type === "text" ? result.content[0].text : "";
+    assert.ok(text.includes("曲线图"), text);
+    assert.ok(text.includes("一种催化剂性能测试方法的曲线图"), text);
+
+    // sidecar 无损：chart 载荷逐字段保留（供 patent_figure_check 与附图门禁重放）
+    const sidecar = parseFigureSidecar(readFileSync(join(cwd, ".sati", "figures", "case-chart-figures.json"), "utf8"));
+    assert.deepEqual(sidecar.figures[0]!.spec, CHART);
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("patent_figure_generate：曲线图 + graphviz 通路 fail-loud（不落盘半成品）", async () => {
+  const cwd = tempCwd();
+  const previous = process.env.SATI_FIGURE_RENDERER;
+  process.env.SATI_FIGURE_RENDERER = "graphviz-wasm";
+  try {
+    const tool = createPatentFigureGenerateTool();
+    await assert.rejects(
+      tool.execute({ figures: [CHART], output_name: "case-chart-wasm" }, makeContext(cwd)),
+      /曲线图.*无法绘制/u,
+    );
+    assert.equal(existsSync(join(cwd, ".sati", "figures", "case-chart-wasm-fig1.svg")), false, "不得留下半成品");
+  } finally {
+    if (previous === undefined) delete process.env.SATI_FIGURE_RENDERER;
+    else process.env.SATI_FIGURE_RENDERER = previous;
+    rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("入参结构性校验：曲线图缺 chart/空 series/畸形数据点/缺轴标目一律 fail-closed", async () => {
+  const cwd = tempCwd();
+  try {
+    const tool = createPatentFigureGenerateTool();
+    const base = { x: { title: "t(s)" }, y: { title: "y" }, series: [{ points: [[0, 0]] }] };
+    const cases: { chart: unknown; pattern: RegExp }[] = [
+      { chart: undefined, pattern: /缺少 chart 数据/u },
+      { chart: { ...base, series: [] }, pattern: /series 不能为空/u },
+      { chart: { ...base, series: [{ points: [] }] }, pattern: /没有数据点/u },
+      { chart: { ...base, series: [{ points: [[0]] }] }, pattern: /不是 \[x, y\] 两个有限数/u },
+      { chart: { ...base, series: [{ points: [[0, "1"]] }] }, pattern: /不是 \[x, y\] 两个有限数/u },
+      { chart: { ...base, y: { title: "  " } }, pattern: /y 轴缺少标目/u },
+    ];
+    for (const { chart, pattern } of cases) {
+      const figure = { ...CHART, chart } as unknown as FigureSpec;
+      await assert.rejects(
+        tool.execute({ figures: [figure], output_name: "case-bad" }, makeContext(cwd)),
+        pattern,
+        `未拦下：${JSON.stringify(chart)}`,
+      );
+    }
+    // 空 nodes 的非曲线图仍被拦（既有不变式不因曲线图放宽而失效）
+    await assert.rejects(
+      tool.execute(
+        { figures: [{ figure_no: 1, kind: "flowchart", nodes: [], edges: [] }], output_name: "case-empty" },
+        makeContext(cwd),
+      ),
+      /nodes 不能为空/u,
+    );
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("patent_figure_check：曲线图入参同样 fail-closed（不只 generate 拦）", async () => {
+  const cwd = tempCwd();
+  try {
+    const tool = createPatentFigureCheckTool();
+    await assert.rejects(
+      tool.execute(
+        {
+          figures: [{ ...CHART, chart: { x: { title: "" }, y: { title: "y" }, series: [{ points: [[0, 0]] }] } }],
+          spec_text: "",
+        },
+        makeContext(cwd),
+      ),
+      /x 轴缺少标目/u,
+    );
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
+});
 
 test("patent_figure_generate：SVG 落盘 + 附图说明草稿", async () => {
   const cwd = tempCwd();
@@ -335,7 +476,13 @@ test("patent_figure_generate：符号形状带文字时工具输出报出 V18（
 
 test("入参枚举与 FigureKind/FigureNodeShape 同步（类型加了而 schema 漏加即失配）", () => {
   // Record<…, true> 由类型穷尽性强制：新增 kind/shape 时此处编译不过，提醒同步 schema。
-  const kinds: Record<FigureKind, true> = { flowchart: true, block: true, state: true, hierarchy: true };
+  const kinds: Record<FigureKind, true> = {
+    flowchart: true,
+    block: true,
+    state: true,
+    hierarchy: true,
+    chart: true,
+  };
   const shapes: Record<FigureNodeShape, true> = {
     rect: true,
     round: true,
@@ -351,4 +498,32 @@ test("入参枚举与 FigureKind/FigureNodeShape 同步（类型加了而 schema
     .properties;
   assert.deepEqual(props.kind!.enum, Object.keys(kinds));
   assert.deepEqual(itemProps.shape!.enum, Object.keys(shapes));
+});
+
+test("入参枚举与 ChartMarker/ChartLineStyle 同步（曲线图取值同源守卫）", () => {
+  const markers: Record<ChartMarker, true> = {
+    none: true,
+    circle: true,
+    square: true,
+    triangle: true,
+    "filled-circle": true,
+    "filled-square": true,
+    "filled-triangle": true,
+    cross: true,
+    plus: true,
+  };
+  const lines: Record<ChartLineStyle, true> = { solid: true, dashed: true, dotted: true };
+  const props = FIGURE_INPUT_SCHEMA_REF.properties as Record<
+    string,
+    { enum?: string[]; properties?: Record<string, unknown> }
+  >;
+  const series = (
+    props.chart!.properties!.series as unknown as { items: { properties: Record<string, { enum?: string[] }> } }
+  ).items.properties;
+  assert.deepEqual(series.marker!.enum, Object.keys(markers));
+  assert.deepEqual(series.line!.enum, Object.keys(lines));
+  // 运行时收窄用的常量也必须与类型同源（schema 与常量各写一份必然漂移）。
+  assert.deepEqual(CHART_MARKERS, Object.keys(markers));
+  assert.deepEqual(CHART_LINE_STYLES, Object.keys(lines));
+  assert.deepEqual(FIGURE_KINDS, props.kind!.enum);
 });
