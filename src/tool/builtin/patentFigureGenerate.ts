@@ -14,8 +14,9 @@
  * FigureSpec 与生成期核验快照，供下游在有说明书文本时零信息损耗重跑规则，
  * 见 figuregen/sidecar.ts）+ 可选 `<name>-figures.html`。
  *
- * 渲染器选择走 SATI_FIGURE_RENDERER 环境变量（builtin 默认 / graphviz 本机可选
- * 增强，复杂大图用）：环境变量而非 inputSchema 选项，避免动 llm-replay 请求键。
+ * 渲染器选择走 SATI_FIGURE_RENDERER 环境变量（builtin 默认 / graphviz 系统 dot /
+ * graphviz-wasm 打包 WASM，后两者均为复杂大图可选增强）：环境变量而非 inputSchema
+ * 选项，避免动 llm-replay 请求键。默认保持 builtin——改默认会使全部快照与既有行为突变。
  */
 
 import { mkdir, writeFile } from "node:fs/promises";
@@ -44,7 +45,9 @@ import {
   FIGURE_RENDERER_ENV,
   renderFigureSvgWithGraphviz,
   resolveDotBinary,
+  type DotRunner,
 } from "../../patent/figuregen/render-graphviz.js";
+import { createWasmDotRunner } from "../../patent/figuregen/render-viz-wasm.js";
 import { caseOutputsDir } from "../../patent/paths.js";
 import { SatiToolRuntimeError } from "../protocol/errors.js";
 import type { SatiToolDefinition, SatiToolRuntimeContext } from "../protocol/types.js";
@@ -75,11 +78,11 @@ export type PatentFigureGenerateInput = {
 const FORMATS: readonly string[] = ["svg", "html", "both"];
 
 /**
- * 渲染器选择：SATI_FIGURE_RENDERER=graphviz 时走本机 graphviz dot（复杂大图
- * 可选增强）；缺省 builtin。不做成 inputSchema 选项是因为默认注册工具的 schema
- * 参与 llm-replay 请求键，任何变更都须重录 fixture（见 figuregen 决策记录）。
+ * 渲染器选择：SATI_FIGURE_RENDERER=graphviz 走本机 dot，=graphviz-wasm 走打包 WASM
+ * （均复杂大图可选增强）；缺省 builtin。不做成 inputSchema 选项是因为默认注册工具的
+ * schema 参与 llm-replay 请求键，任何变更都须重录 fixture（见 figuregen 决策记录）。
  */
-type FigureRenderer = "builtin" | "graphviz";
+type FigureRenderer = "builtin" | "graphviz" | "graphviz-wasm";
 
 function resolveFigureRenderer(env: NodeJS.ProcessEnv = process.env): FigureRenderer {
   const value = (env[FIGURE_RENDERER_ENV] ?? "").trim();
@@ -89,9 +92,12 @@ function resolveFigureRenderer(env: NodeJS.ProcessEnv = process.env): FigureRend
   if (value === "graphviz") {
     return "graphviz";
   }
+  if (value === "graphviz-wasm") {
+    return "graphviz-wasm";
+  }
   throw new SatiToolRuntimeError(
     "invalid_tool_input",
-    `非法 ${FIGURE_RENDERER_ENV} "${value}"（可用: builtin, graphviz）`,
+    `非法 ${FIGURE_RENDERER_ENV} "${value}"（可用: builtin, graphviz, graphviz-wasm）`,
     { tool: "patent_figure_generate" },
   );
 }
@@ -233,6 +239,7 @@ export function createPatentFigureGenerateTool(): SatiToolDefinition<PatentFigur
         });
         const renderer = resolveFigureRenderer();
         let dotPath: string | null = null;
+        let wasmRunner: DotRunner | undefined;
         if (renderer === "graphviz") {
           dotPath = resolveDotBinary();
           if (dotPath === null) {
@@ -243,7 +250,20 @@ export function createPatentFigureGenerateTool(): SatiToolDefinition<PatentFigur
               { tool: "patent_figure_generate" },
             );
           }
+        } else if (renderer === "graphviz-wasm") {
+          // graphviz-wasm 不依赖系统 dot 二进制；WASM 加载失败在首次渲染时 fail-loud，
+          // 绝不静默回退内置渲染器（那会让"要 graphviz 布局"的意图被悄悄违背）。
+          wasmRunner = createWasmDotRunner();
         }
+        const renderOne = async (figure: FigureSpec): Promise<string> => {
+          if (renderer === "graphviz" && dotPath !== null) {
+            return (await renderFigureSvgWithGraphviz(figure, { dotPath, jurisdiction, figureCount })).svg;
+          }
+          if (renderer === "graphviz-wasm" && wasmRunner !== undefined) {
+            return (await renderFigureSvgWithGraphviz(figure, { runner: wasmRunner, jurisdiction, figureCount })).svg;
+          }
+          return renderFigureSvg(figure, { jurisdiction, figureCount }).svg;
+        };
         const files: {
           path: string;
           figure_no: number;
@@ -257,10 +277,7 @@ export function createPatentFigureGenerateTool(): SatiToolDefinition<PatentFigur
         const sheetText = sheet === undefined ? undefined : sheetNumberText(profile, sheet.index, sheet.total);
         const pagePaths: { path: string; figure_no: number }[] = [];
         for (const figure of figures) {
-          const { svg } =
-            renderer === "graphviz" && dotPath !== null
-              ? await renderFigureSvgWithGraphviz(figure, { dotPath, jurisdiction, figureCount })
-              : renderFigureSvg(figure, { jurisdiction, figureCount });
+          const svg = await renderOne(figure);
           const path = resolve(outputDir, `${input.output_name}-fig${figure.figure_no}.svg`);
           await writeFile(path, svg, "utf8");
           const caption = figureCaption(profile, figure.figure_no, figureCount);
@@ -339,9 +356,11 @@ export function createPatentFigureGenerateTool(): SatiToolDefinition<PatentFigur
           );
         }
 
+        const rendererLabel: string | undefined =
+          renderer === "graphviz" ? "graphviz dot" : renderer === "graphviz-wasm" ? "graphviz (WASM)" : undefined;
         const lines: string[] = [
           `已生成 ${files.length} 幅附图（黑白线条，审查指南一部一章 4.3/4.6 合规` +
-            (renderer === "graphviz" ? "；渲染器: graphviz dot）：" : "）："),
+            (rendererLabel === undefined ? "）：" : `；渲染器: ${rendererLabel}）：`),
           ...files.map(file => `- 图${file.figure_no}: ${file.path}`),
           `- 图号：${captionRendered ? `${figureCaption(profile, 1, figureCount)} 式样，标注在图形正下方` : "本案仅一幅附图，按 " + profile.office + " 档案不标注图号"}` +
             `（法域 ${jurisdiction} ⇒ 档案 ${profile.office}）`,

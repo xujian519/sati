@@ -12,6 +12,10 @@
  * 可选系统依赖（决策记录 2026-08-28：不加重桌面分发），缺失由调用方
  * fail-closed 报错，不做静默回退。渲染选择经 SATI_FIGURE_RENDERER 环境变量
  * （工具层读取）；不选 schema 选项是因为 llm-replay 请求键绑定工具 inputSchema。
+ *
+ * 渲染后端经 DotRunner 接缝可替换：本模块默认给子进程 runner（`dot -Tsvg`），
+ * WASM runner 在 render-viz-wasm.ts（无系统 graphviz 的机器走同一套加工链）。
+ * 加工链（剥离头部/黑白扫描/data-ref 注入/回读自检）对两种后端逐字节同一份代码。
  */
 
 import { spawn } from "node:child_process";
@@ -46,15 +50,34 @@ export function resolveDotBinary(env: NodeJS.ProcessEnv = process.env): string |
   return null;
 }
 
+/**
+ * DOT 渲染后端：吃 DOT 源、吐 SVG 文本。唯一契约是"输入 DOT 字符串、输出 SVG 文本"，
+ * 加工链（postProcessGraphvizSvg）对子进程与 WASM 两种后端完全一致。
+ */
+export type DotRunner = (dot: string, signal?: AbortSignal) => Promise<string>;
+
 type DotRunResult = { stdout: string; stderr: string };
 
-/** dot -Tsvg：DOT 源走 stdin，SVG 走 stdout。非零退出/超时/启动失败均带 stderr 报错。 */
-function runDot(dotPath: string, source: string, timeoutMs: number): Promise<DotRunResult> {
+/** dot -Tsvg：DOT 源走 stdin，SVG 走 stdout。非零退出/超时/启动失败/取消均带 stderr 报错。 */
+function runDot(dotPath: string, source: string, timeoutMs: number, signal?: AbortSignal): Promise<DotRunResult> {
   return new Promise((resolve, reject) => {
+    if (signal?.aborted === true) {
+      reject(new Error("graphviz dot 渲染已取消（signal 已 abort）"));
+      return;
+    }
     const child = spawn(dotPath, ["-Tsvg"], { stdio: ["pipe", "pipe", "pipe"] });
     const stdout: Buffer[] = [];
     const stderr: Buffer[] = [];
     let timedOut = false;
+    let aborted = false;
+    const detach = (): void => {
+      signal?.removeEventListener("abort", onAbort);
+    };
+    const onAbort = (): void => {
+      aborted = true;
+      child.kill("SIGKILL");
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
     const timer = setTimeout(() => {
       timedOut = true;
       child.kill("SIGKILL");
@@ -70,10 +93,16 @@ function runDot(dotPath: string, source: string, timeoutMs: number): Promise<Dot
     child.stdin.on("error", () => {});
     child.on("error", err => {
       clearTimeout(timer);
+      detach();
       reject(new Error(`无法执行 graphviz dot（${dotPath}）: ${err.message}`));
     });
     child.on("close", code => {
       clearTimeout(timer);
+      detach();
+      if (aborted) {
+        reject(new Error("graphviz dot 渲染已取消（signal 已 abort）"));
+        return;
+      }
       if (timedOut) {
         reject(new Error(`graphviz dot 渲染超时（${timeoutMs}ms）`));
         return;
@@ -87,6 +116,14 @@ function runDot(dotPath: string, source: string, timeoutMs: number): Promise<Dot
     });
     child.stdin.end(source, "utf8");
   });
+}
+
+/** 构造子进程 dot 后端（`dot -Tsvg`，DOT 走 stdin、SVG 走 stdout、超时默认 30s）。 */
+export function createSubprocessDotRunner(dotPath: string, timeoutMs: number = DEFAULT_DOT_TIMEOUT_MS): DotRunner {
+  return async (dot, signal) => {
+    const { stdout } = await runDot(dotPath, dot, timeoutMs, signal);
+    return stdout;
+  };
 }
 
 /** 颜色关键字 → 十六进制（dot 会把 bgcolor 等按原样输出为关键字色名）。 */
@@ -160,31 +197,35 @@ export function postProcessGraphvizSvg(rawSvg: string, refsById: ReadonlyMap<str
 }
 
 export type GraphvizRenderOptions = {
-  /** dot 可执行文件路径；缺省走 resolveDotBinary()。 */
+  /** DOT 渲染后端；提供时不再要求/使用 dot 二进制（WASM 后端走这里）。 */
+  runner?: DotRunner;
+  /** dot 可执行文件路径；缺省走 resolveDotBinary()。仅在未提供 runner 时使用。 */
   dotPath?: string;
   jurisdiction?: Jurisdiction;
   /** 本案附图总幅数（图号是否需要标注由图幅数与法域档案共同决定；缺省 1）。 */
   figureCount?: number;
-  /** dot 进程超时（毫秒），默认 30s。 */
+  /** dot 进程超时（毫秒），默认 30s。仅在未提供 runner 时使用。 */
   timeoutMs?: number;
 };
 
 /**
- * Graphviz 渲染单幅附图：DOT 生成 → dot -Tsvg → 加工 → readback 自检
- * （figure_no 与全部 data-ref 必须可回读还原，否则抛错）。
+ * Graphviz 渲染单幅附图：DOT 生成 → 后端渲染（子进程 dot 或 WASM）→ 加工 →
+ * readback 自检（figure_no 与全部 data-ref 必须可回读还原，否则抛错）。
  */
 export async function renderFigureSvgWithGraphviz(
   spec: FigureSpec,
   options: GraphvizRenderOptions = {},
 ): Promise<{ svg: string; width: number; height: number }> {
-  const dotPath = options.dotPath ?? resolveDotBinary();
-  if (dotPath === null) {
-    throw new Error(`未找到 graphviz dot 可执行文件：请安装 graphviz，或用 ${GRAPHVIZ_DOT_ENV} 指定路径`);
+  let runner = options.runner;
+  if (runner === undefined) {
+    const dotPath = options.dotPath ?? resolveDotBinary();
+    if (dotPath === null) {
+      throw new Error(`未找到 graphviz dot 可执行文件：请安装 graphviz，或用 ${GRAPHVIZ_DOT_ENV} 指定路径`);
+    }
+    runner = createSubprocessDotRunner(dotPath, options.timeoutMs);
   }
-  const { stdout } = await runDot(
-    dotPath,
+  const rawSvg = await runner(
     buildFigureDot(spec, { jurisdiction: options.jurisdiction, figureCount: options.figureCount ?? 1 }),
-    options.timeoutMs ?? DEFAULT_DOT_TIMEOUT_MS,
   );
   const refsById = new Map<string, number>();
   for (const node of spec.nodes) {
@@ -194,7 +235,7 @@ export async function renderFigureSvgWithGraphviz(
   }
   // 图号条件化后，可见标注可能不存在（单幅在 PCT/US 不得出现 "Fig."），故把机器可读的
   // 图号写进根元素属性，与内置渲染器同一契约（readback 优先读它）。
-  const svg = withFigureNumberAttribute(postProcessGraphvizSvg(stdout, refsById), spec.figure_no);
+  const svg = withFigureNumberAttribute(postProcessGraphvizSvg(rawSvg, refsById), spec.figure_no);
 
   const parsed = parseFigureSvg(svg);
   if (parsed.figureNo !== spec.figure_no) {

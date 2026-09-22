@@ -92,12 +92,15 @@ export {
   dotNodeTitle,
 } from "./dot.js";
 export {
+  createSubprocessDotRunner,
   FIGURE_RENDERER_ENV,
   GRAPHVIZ_DOT_ENV,
   postProcessGraphvizSvg,
   renderFigureSvgWithGraphviz,
   resolveDotBinary,
+  type DotRunner,
 } from "./render-graphviz.js";
+export { createWasmDotRunner, type VizLoader } from "./render-viz-wasm.js";
 export { parseFigureSvg, type ParsedFigureSvg } from "./readback.js";
 export {
   DEFAULT_SVG_MAX_BYTES,
