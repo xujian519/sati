@@ -594,12 +594,13 @@ test("标注：无标注时图幅与旧行为逐位一致（预留带只在有�
 test("标注：标号重叠 ⇒ C7 warn；锚点落在图外 ⇒ C8 warn；标号越出图幅 ⇒ C9 fail", () => {
   const table = loadTable("plate-front.json");
 
-  // C7：两个锚点几乎同位置、引线方向一致 ⇒ 标号重叠
+  // C7：两个标号显式钉到同一处（label_offset_mm）⇒ 标号重叠。
+  // 注意缺省路径**不会**再产生重叠：择位引擎会为第二个标记换方向/换长度（见下一条断言）。
   const overlapping = renderCadSvg(table, {
     figureNo: 1,
     annotations: [
-      { ref: 10, atMm: [40, 15, 10] },
-      { ref: 11, atMm: [40, 15, 10.001] },
+      { ref: 10, atMm: [40, 15, 10], labelOffsetMm: [10, 0] },
+      { ref: 11, atMm: [40, 15, 10.001], labelOffsetMm: [10, 0] },
     ],
   });
   const c7 = checkCadProjection({ table, render: overlapping, hiddenLines: false }).find(
@@ -607,6 +608,24 @@ test("标注：标号重叠 ⇒ C7 warn；锚点落在图外 ⇒ C8 warn；标�
   );
   assert.equal(c7?.severity, "warn");
   assert.match(c7!.message, /重叠/u);
+
+  // 同一组锚点交给引擎择位：两个标号互不压盖，C7 不报
+  const placed = renderCadSvg(table, {
+    figureNo: 1,
+    annotations: [
+      { ref: 10, atMm: [40, 15, 10] },
+      { ref: 11, atMm: [40, 15, 10.001] },
+    ],
+  });
+  assert.equal(placed.labels.length, 2);
+  const [boxA, boxB] = [placed.labels[0]!.boxMm, placed.labels[1]!.boxMm];
+  const labelOverlap =
+    boxA.left < boxB.right && boxB.left < boxA.right && boxA.top < boxB.bottom && boxB.top < boxA.bottom;
+  assert.ok(!labelOverlap, `择位后标号不得重叠：${JSON.stringify([boxA, boxB])}`);
+  assert.ok(
+    !checkCadProjection({ table, render: placed, hiddenLines: false }).some(finding => finding.rule === "C7"),
+    "择位引擎避开了重叠，C7 不应再报",
+  );
 
   // C8：锚点写在投影几何之外（该处图面上没有几何）
   const outside = renderCadSvg(table, { figureNo: 1, annotations: [{ ref: 12, atMm: [400, 15, 10] }] });
@@ -627,6 +646,10 @@ test("标注：标号重叠 ⇒ C7 warn；锚点落在图外 ⇒ C8 warn；标�
   );
   assert.equal(c9?.severity, "fail");
   assert.match(c9!.message, /超出图幅/u);
+  // 钉死偏移的体检：该引线顺着平板顶边延长出去 ⇒ C10 同时报"标记线与主线条分不清"
+  const findings = checkCadProjection({ table, render: pushedOut, hiddenLines: false });
+  assert.equal(findings.find(finding => finding.rule === "C10")?.severity, "warn");
+  assert.match(findings.find(finding => finding.rule === "C10")!.message, /标记线与主线条分不清/u);
 });
 
 test("剖视图：剖切面轮廓是闭合回路（乱序边序必须被拼成走向，否则剖面线会画到面外）", () => {
