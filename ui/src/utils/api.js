@@ -556,7 +556,7 @@ export const api = {
     undo: body => api.kanban._post("undo", body),
   },
 
-  // 项目级 hook 信任（协议 1.11）：ui/server /api/hook-trust/* → gateway hook_trust_* 方法。
+  // 项目级 hook 信任（协议 1.12）：ui/server /api/hook-trust/* → gateway hook_trust_* 方法。
   // list 返回 { workspaceIdentityKey, entries }；decide 返回 { applied, reason?, entry? }。
   hookTrust: {
     list: async projectKey => {

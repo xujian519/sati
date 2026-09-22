@@ -249,6 +249,11 @@ export interface PendingPermissionRequest {
   sessionId?: string | null;
   receivedAt?: Date;
   /**
+   * 发起者归属：子代理 fork 内的工具调用请求授权时才有。渲染层据此标注
+   * 「谁在请求」（父界面同时可能有主代理与多个并行子代理在跑）。
+   */
+  origin?: { kind: string; subagentId: string; subagentType?: string };
+  /**
    * True when this request originated from a gateway elicitation channel
    * (e.g. `ask_user_question`) rather than the permission bus. The decision
    * needs to round-trip through `elicitation-response` instead of the

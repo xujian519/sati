@@ -40,7 +40,7 @@ import {
 import type { TeamEventEmitter } from "../../../../src/agent/team/protocol/events.js";
 import { WorkerRegistry, createPatentWorkerGate, defaultPatentWorkers } from "../../../../src/patent/index.js";
 import { SESSION_PRESENCE_GRACE_MS } from "../../../../src/gateway/server/sessionPresence.js";
-import type { ModelRuntime } from "../../../../src/model/index.js";
+import type { CanonicalMessage, ModelRuntime } from "../../../../src/model/index.js";
 import { DEFAULT_MODEL_CAPABILITIES } from "../../../../src/model/protocol/capabilities.js";
 import type { CanonicalModelRequest } from "../../../../src/model/protocol/canonical.js";
 import { registerRoleDefinition } from "../../../../src/agent/sub/builtinSubagentTypes.js";
@@ -144,7 +144,7 @@ function completingMemberModel(
   return {
     stream: async function* (request: CanonicalModelRequest) {
       yield { type: "message_start", role: "assistant" };
-      const last = request.messages[request.messages.length - 1];
+      const last = lastRealMessage(request.messages);
       const lastHasToolResult = last?.content.some(block => block.type === "tool_result") ?? false;
       const ticket = getTicket();
       if (!lastHasToolResult && ticket !== undefined) {
@@ -215,7 +215,7 @@ function retryThenCompleteModel(
   return {
     stream: async function* (request: CanonicalModelRequest) {
       yield { type: "message_start", role: "assistant" };
-      const last = request.messages[request.messages.length - 1];
+      const last = lastRealMessage(request.messages);
       const lastHasToolResult = last?.content.some(block => block.type === "tool_result") ?? false;
       const ticket = getTicket?.();
       if (!lastHasToolResult && ticket !== undefined) {
@@ -281,6 +281,22 @@ function makeTools(db: TeamDb, scheduler: TeamScheduler, workerGate?: WorkerGate
 
 // 转录断点条目（form "a"：request_header 已落、无任何 durable 消息）——member-scanner 用例同款
 type JsonEntry = Record<string, unknown>;
+
+/**
+ * 末条「真实对话」消息：跳过 synthetic 消息。
+ *
+ * 运行时会在消息尾部拼入只存在于请求投影的 synthetic 消息（尾部注入 / 跨日日期通知 /
+ * plan 模式提醒），它们排在工具结果之后——假模型若直接看 `messages.at(-1)`，会把
+ * 「工具结果已回填」误判成「还没回填」，从而反复发同一个工具调用（回合不收敛）。
+ */
+function lastRealMessage(messages: CanonicalModelRequest["messages"]): CanonicalMessage | undefined {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message?.metadata?.synthetic === true) continue;
+    return message;
+  }
+  return undefined;
+}
 
 function baseEntry(sessionId: string, turnId: string, sequence: number, type: string): JsonEntry {
   return { type, sessionId, turnId, sequence, createdAt: "2026-08-19T00:00:00.000Z" };

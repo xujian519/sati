@@ -1,16 +1,16 @@
 # Sati 技术债务指标基线与趋势
 
 > 由 `node scripts/measure-techdebt.mjs --update` 自动生成，谨防手工编辑。
-> 最近一次快照：**2026-09-21**
+> 最近一次快照：**2026-09-22**
 
 ## 规模
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1053 / 176443 |
+| src TS 文件 / 行数 | 1055 / 176836 |
 | src JS 文件 | 0 |
-| tests 文件 | 584 |
-| ui/src 文件 / 行数 | 575 / 92802 |
+| tests 文件 | 592 |
+| ui/src 文件 / 行数 | 576 / 92914 |
 | ui/server 文件 / 行数 | 110 / 32001 |
 
 ## 指标口径
@@ -50,7 +50,7 @@
 | `ui/src/components/main-content-v2/FilesV2.tsx` | `FilesV2` | 853 | function |
 | `ui/src/components/chat-v2/MessagesPaneV2.tsx` | `MessagesPaneV2` | 824 | function |
 | `ui/src/components/chat-v2/ComposerV2.tsx` | `ComposerV2` | 741 | function |
-| `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` | `useChatRealtimeHandlers` | 719 | function |
+| `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` | `useChatRealtimeHandlers` | 721 | function |
 | `ui/src/components/git-panel/hooks/useGitPanelController.ts` | `useGitPanelController` | 704 | function |
 | `ui/src/components/main-content-v2/skills/import/ImportFromFolder.tsx` | `ImportFromFolder` | 688 | function |
 | `ui/src/components/chat-v2/ChatInterfaceV2.tsx` | `ChatInterfaceV2` | 668 | function |
@@ -60,7 +60,7 @@
 | `ui/src/components/app-shell/AppShellV2.tsx` | `AppShellV2` | 631 | function |
 | `ui/src/stores/useSessionStore.ts` | `createSessionActions` | 631 | function |
 | `ui/src/components/onboarding/view/subcomponents/LlmConfigurationStep.tsx` | `LlmConfigurationStep` | 630 | function |
-| `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` | `(anonymous)` | 622 | arrow |
+| `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` | `(anonymous)` | 624 | arrow |
 | `ui/src/components/main-content/view/MainContent.tsx` | `SplitBody` | 573 | function |
 | `ui/src/components/chat/hooks/useSessionSubmit.ts` | `useSessionSubmit` | 528 | function |
 | `ui/src/components/main-content-v2/CronV2.tsx` | `CronFormView` | 476 | function |
@@ -70,7 +70,7 @@
 | `ui/src/components/chat-v2/MessageRowV2.tsx` | `MessageRowV2` | 429 | function |
 | `ui/src/components/code-editor/view/subcomponents/DocxBuiltinPreview.tsx` | `DocxBuiltinPreview` | 421 | function |
 | `src/gateway/client/eventMapping.ts` | `mapAgentEventForTurn` | 417 | function |
-| `src/cli/projectRuntimeFactory.ts` | `createProjectRuntimeResolver` | 411 | function |
+| `src/cli/projectRuntimeFactory.ts` | `createProjectRuntimeResolver` | 414 | function |
 | `ui/src/components/chat-v2/processGrouping.test.ts` | `(anonymous)` | 409 | arrow |
 | `ui/src/components/code-editor/view/subcomponents/SpreadsheetInteractivePreview.tsx` | `SpreadsheetInteractivePreview` | 407 | function |
 | `ui/src/components/settings/view/integrations/im/components/WeComChannelSection.tsx` | `WeComChannelSection` | 398 | function |
@@ -98,8 +98,8 @@
 | `ui/src/components/chat/hooks/useSlashCommandExecute.ts` | `useSlashCommandExecute` | 331 | function |
 | `ui/src/components/code-editor/view/CodeEditor.tsx` | `CodeEditor` | 310 | function |
 | `ui/src/components/chat-v2/SubagentDetailMessageFlow.tsx` | `SubagentDetailMessageFlow` | 309 | function |
+| `src/cli/projectRuntimeFactory.ts` | `resolve` | 306 | function |
 | `src/patent/figuregen/check.ts` | `checkFigures` | 306 | function |
-| `src/cli/projectRuntimeFactory.ts` | `resolve` | 303 | function |
 | `ui/src/components/settings/view/integrations/im/components/WeixinChannelSection.tsx` | `WeixinChannelSection` | 303 | function |
 | `src/gateway/client/InProcessGateway.ts` | `submitTurn` | 301 | method |
 
@@ -114,7 +114,7 @@
 | `src/gateway/client/InProcessGateway.ts` | 1518 |
 | `src/adapters/channel/weixin/WeixinChannel.ts` | 1497 |
 | `ui/src/components/main-content-v2/SkillsV2.tsx` | 1441 |
-| `ui/src/stores/useSessionStore.ts` | 1347 |
+| `ui/src/stores/useSessionStore.ts` | 1352 |
 | `ui/src/components/main-content-v2/DashboardV2.tsx` | 1345 |
 | `src/adapters/channel/feishu/FeishuChannel.ts` | 1337 |
 | `ui/src/components/app-shell/SidebarV2.tsx` | 1310 |
@@ -125,16 +125,16 @@
 | `ui/src/components/chat-v2/MessagesPaneV2.tsx` | 1183 |
 | `ui/server/routes/taskmaster.js` | 1179 |
 | `ui/server/routes/config.js` | 1173 |
-| `src/agent/loop/AgentLoop.ts` | 1146 |
+| `src/agent/loop/AgentLoop.ts` | 1150 |
 | `ui/src/components/main-content-v2/CronV2.tsx` | 1130 |
 | `ui/src/components/main-content/view/MainContent.tsx` | 1111 |
 | `src/model/streaming/streamModel.ts` | 1085 |
 | `ui/server/routes/commands.js` | 1082 |
 | `src/always-on/runtime/DiscoveryFire.ts` | 1079 |
 | `src/cli/sati.ts` | 1035 |
+| `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` | 1025 |
 | `src/adapters/channel/protocol/ImLiveReplyController.ts` | 1017 |
-| `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` | 1005 |
-| `src/gateway/protocol/types.ts` | 973 |
+| `src/gateway/protocol/types.ts` | 984 |
 | `ui/src/components/main-content-v2/FilesV2.tsx` | 964 |
 | `ui/server/routes/config.test.js` | 934 |
 
@@ -161,21 +161,21 @@
 | 模块 | 测试文件 |
 |---|---|
 | patent | 121 |
-| tool | 64 |
-| agent | 57 |
+| tool | 65 |
+| agent | 59 |
 | knowledge | 38 |
-| context | 33 |
-| gateway | 33 |
+| context | 35 |
+| gateway | 34 |
 | model | 32 |
 | session | 28 |
 | router | 18 |
 | always-on | 14 |
 | extension | 13 |
 | mcp | 13 |
+| cli | 12 |
 | adapters | 11 |
 | cron | 11 |
 | pilot | 11 |
-| cli | 10 |
 | rule | 10 |
 | web | 9 |
 | literature | 8 |
@@ -193,7 +193,7 @@
 | runtime | 1 |
 | status | 1 |
 
-| **合计** | **560** |
+| **合计** | **568** |
 
 ## i18n en/zh-CN 对齐
 
@@ -201,7 +201,7 @@
 |---|---|---|---|---|
 | alwaysOn | 156 | 156 | 0 | 0 |
 | auth | 23 | 23 | 0 | 0 |
-| chat | 374 | 374 | 0 | 0 |
+| chat | 375 | 375 | 0 | 0 |
 | codeEditor | 143 | 143 | 0 | 0 |
 | common | 435 | 435 | 0 | 0 |
 | hookTrust | 17 | 17 | 0 | 0 |

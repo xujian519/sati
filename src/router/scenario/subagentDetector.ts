@@ -1,3 +1,4 @@
+import { isTailInjection } from "../../context/prompt/tailInjection.js";
 import type { CanonicalMessage, CanonicalToolSchema } from "../../model/index.js";
 
 const SUBAGENT_TAG_PATTERN = /<(?:sati|ccr)-subagent-model>([\s\S]+?)<\/(?:sati|ccr)-subagent-model>/i;
@@ -23,6 +24,11 @@ export function detectSubagent(
 
   for (const message of messages) {
     if (message.role !== "user") {
+      continue;
+    }
+    // 尾部注入是运行时拼进来的上下文（账本/记忆/方法论），其中的 `[subagent: …]` 字样
+    // 不是用户写的调度标记，不得据此判定子代理场景。
+    if (isTailInjection(message)) {
       continue;
     }
     for (const block of message.content) {

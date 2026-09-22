@@ -213,6 +213,17 @@ type GatewayTurnScopedEventMetadata = {
   runId?: string;
 };
 
+/**
+ * 事件发起者归属：当一次交互式往返（权限请求等）并非由会话自身的主代理发起时
+ * 携带。当前唯一形态是子代理 fork（`agent` 工具）内的工具调用——`subagentType`
+ * 来自 fork 定义，hook 层拿不到时省略。
+ */
+export type GatewayEventOrigin = {
+  kind: "subagent";
+  subagentId: string;
+  subagentType?: string;
+};
+
 export type GatewayEvent = GatewayTurnScopedEventMetadata &
   (
     | { type: "turn_started"; runId: string }
@@ -257,7 +268,7 @@ export type GatewayEvent = GatewayTurnScopedEventMetadata &
         data?: Record<string, unknown>;
       }
     | { type: "tool_result_detail_available"; toolCallId: string; resultPath?: string; fullText?: string }
-    | { type: "permission_request"; requestId: string; toolName: string; payload: unknown }
+    | { type: "permission_request"; requestId: string; toolName: string; payload: unknown; origin?: GatewayEventOrigin }
     /**
      * 输出门禁挂起（patent 域 HITL）：命中审批词的专利结论已挂起等待人工审批。
      * 消息本体已入库（不丢消息），挂起仅流程控制。宿主应展示审批入口，
@@ -541,7 +552,7 @@ export type GatewayApprovalDecideResult = {
   delivered: boolean;
 };
 
-/** 项目级 hook 信任：一条待评审/已授权的 hook 声明（1.11）。 */
+/** 项目级 hook 信任：一条待评审/已授权的 hook 声明（1.12）。 */
 export type GatewayHookTrustEntry = {
   /** `${pluginName}@project`。 */
   pluginId: string;
@@ -811,13 +822,13 @@ export interface Gateway {
    */
   approvalDecide?(input: GatewayApprovalDecideInput): Promise<GatewayApprovalDecideResult>;
   /**
-   * 项目级 hook 信任（1.11）：列出该项目里**项目来源**插件声明的 hook 及其信任状态。
+   * 项目级 hook 信任（1.12）：列出该项目里**项目来源**插件声明的 hook 及其信任状态。
    * 供审批 UI 展示「将要被授权的东西」（`entries[].hooks` 即声明原文投影）。
    * Optional — 旧实现无此能力时 hosts 应 feature-detect（未接线返回 `not_configured`）。
    */
   hookTrustList?(input: GatewayHookTrustListInput): Promise<GatewayHookTrustListResult>;
   /**
-   * 项目级 hook 信任（1.11）：授权/撤销某插件目录的当前内容摘要。
+   * 项目级 hook 信任（1.12）：授权/撤销某插件目录的当前内容摘要。
    * 授权以**内容摘要**为准：声明或目录内任何文件事后被改 → 该授权自动作废（`stale`），
    * 须重新评审。撤销删除记录而非留历史（重授权是显式动作）。
    * Optional — 同 hookTrustList。

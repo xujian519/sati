@@ -49,6 +49,12 @@ export type AgentContextRuntime = {
    */
   captureTurn?(input: AgentContextCaptureTurnInput): Promise<void>;
   /**
+   * Optional. 记一次真实工具轮：`DefaultContextRuntime` 用它区分「压缩省下了 token」
+   * 与「压缩换来了推进」——连续两次全量压缩之间没有工具轮即视为空转并熔断。
+   * 最小运行时（`NullContextRuntime`）不实现，循环侧调用为 no-op。
+   */
+  noteToolTurn?(): void;
+  /**
    * Optional. Proactive auto-compaction: evaluates the token budget and
    * triggers summarization when the context approaches `maxContextTokens`.
    * Minimal runtimes (`NullContextRuntime`) leave this undefined.

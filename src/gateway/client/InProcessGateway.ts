@@ -245,7 +245,7 @@ export type InProcessGatewayOptions = {
   /** M4：团队面板快照 delegate（TeamDb 直查 + presence 在线态；不触发模型回路）。 */
   teamPanelSnapshot?: (input: { sessionKey?: string }) => Promise<{ teams: unknown[] }>;
   /**
-   * 项目级 hook 信任（1.11）delegate — wired by `createLocalGateway` 到 cli 侧
+   * 项目级 hook 信任（1.12）delegate — wired by `createLocalGateway` 到 cli 侧
    * `createHookTrustService`（读取信任存储 + 该项目的插件运行时）。
    * powers the `hook_trust_list` / `hook_trust_decide` protocol methods.
    */

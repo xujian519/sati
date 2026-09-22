@@ -1,13 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { CanonicalMessage } from "../../../src/model/index.js";
-import {
-  applyMethodologyAddendum,
-  computeMethodologyAddendum,
-  findFirstUserText,
-} from "../../../src/agent/loop/methodologyInjection.js";
-
-const SYSTEM = "You are Sati.";
+import { computeMethodologyAddendum, findFirstUserText } from "../../../src/agent/loop/methodologyInjection.js";
 
 function userMessage(blocks: Array<{ type: "text"; text: string }>): CanonicalMessage {
   return { role: "user", content: blocks };
@@ -86,15 +80,6 @@ test("computeMethodologyAddendum：回调只被调用一次（单次计算供落
   });
   assert.equal(addendum, "got:hello");
   assert.equal(calls, 1, "inject 回调必须且只执行一次");
-});
-
-test("applyMethodologyAddendum：空 addendum 原样返回", () => {
-  assert.equal(applyMethodologyAddendum(SYSTEM, undefined), SYSTEM);
-  assert.equal(applyMethodologyAddendum(SYSTEM, ""), SYSTEM);
-});
-
-test("applyMethodologyAddendum：追加 addendum 到 system prompt", () => {
-  assert.equal(applyMethodologyAddendum(SYSTEM, "methodology: 写权利要求"), `${SYSTEM}\n\nmethodology: 写权利要求`);
 });
 
 test("findFirstUserText：取第一条 user 文本消息并拼接多文本块", () => {

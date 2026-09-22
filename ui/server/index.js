@@ -183,7 +183,7 @@ app.use(tokenUsageRoutes);
 // Kanban API Routes (protected) — 全部经 gateway kanban_* 方法转发（Phase 5）
 app.use("/api/kanban", authenticateToken, kanbanRoutes);
 
-// Hook trust API Routes (protected) — 经 gateway hook_trust_* 方法转发（协议 1.11）
+// Hook trust API Routes (protected) — 经 gateway hook_trust_* 方法转发（协议 1.12）
 app.use("/api/hook-trust", authenticateToken, hookTrustRoutes);
 
 // Serve React app for all other routes (excluding static files)

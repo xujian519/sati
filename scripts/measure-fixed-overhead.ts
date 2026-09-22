@@ -11,6 +11,12 @@
  * 机器相关量（MCP `<mcp-instructions>`、记忆段）在空 pilotHome 下为 0，因此本脚本给出的是
  * **下界**；开发机口径（含本机 MCP 配置）会高出数千 tokens。
  *
+ * ⚠️ 2026-09-21 修正：上面的「无知识库」此前并不成立——网关构造路径解析知识库时没透传调用方
+ * env（`resolveKnowledgeDbPaths()` 少了 `deps.env`），`SATI_KNOWLEDGE_DIR` 覆盖被忽略、回落到
+ * 宿主 `process.env`，于是本机知识卡片（法规/商标卡片，数千 token）会混进数字并随命中内容漂移。
+ * 缺口已修（`docs/notes/implemented/2026-09-21-knowledge-paths-env-threading.md`）；本机实测
+ * 非专利工作区 system prompt 由 6061 → 5099。跨版本对比前先确认这一点。
+ *
  * 用法：
  *   node --import tsx scripts/measure-fixed-overhead.ts            # 非专利工作区 + 专利工作区
  *   node --import tsx scripts/measure-fixed-overhead.ts --json     # 机器可读

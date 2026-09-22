@@ -2,7 +2,7 @@ import express from "express";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 /**
- * `/api/hook-trust` 路由：转发到 gateway `hook_trust_*` 方法（协议 1.11）。
+ * `/api/hook-trust` 路由：转发到 gateway `hook_trust_*` 方法（协议 1.12）。
  *
  * 与 `routes/kanban.js` 同一形态——路由不碰信任存储，唯一事实源是 gateway 侧。
  * 本测试钉三件事：入参校验、feature-detect（旧 gateway 无该方法 → 501 not_configured）、

@@ -10,7 +10,7 @@ import { formatHookTrustList, runHookTrustCli } from "../../src/cli/commands/hoo
 import type { TelemetryClient, TelemetryFeatureUsedInput } from "../../src/telemetry/index.js";
 
 /**
- * 协议 1.11 服务面 + `sati hooks` CLI：授权/撤销必须真的改变装载判定，
+ * 协议 1.12 服务面 + `sati hooks` CLI：授权/撤销必须真的改变装载判定，
  * 且 `list` 要让人看见将被执行的内容（看不见内容的授权不是授权）。
  */
 

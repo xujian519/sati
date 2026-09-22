@@ -56,7 +56,7 @@ export type GatewayRuntimeOptionsDeps = {
   getTeamDb: () => TeamDb;
   /** 由 bindServer 晚绑定，闭包取数。 */
   getBoundServer: () => { broadcastNotification(name: string, payload?: unknown): void } | undefined;
-  /** 项目级 hook 信任服务（协议 1.11；与注册表共享同一信任存储实例）。 */
+  /** 项目级 hook 信任服务（协议 1.12；与注册表共享同一信任存储实例）。 */
   hookTrustService: HookTrustService;
 };
 
@@ -67,7 +67,7 @@ export function buildGatewayRuntimeOptions(deps: GatewayRuntimeOptionsDeps): InP
     kanban: deps.kanbanBoardManager,
     cron: deps.cron,
     skillManager: deps.skillManager,
-    // 项目级 hook 信任（1.11）：服务侧读同一份信任存储与同一份插件运行时快照。
+    // 项目级 hook 信任（1.12）：服务侧读同一份信任存储与同一份插件运行时快照。
     hookTrustList: input => deps.hookTrustService.list(input),
     hookTrustDecide: input => deps.hookTrustService.decide(input),
     setSessionCwd: (sessionKey, cwd) => deps.registry.setSessionCwd(sessionKey, cwd),

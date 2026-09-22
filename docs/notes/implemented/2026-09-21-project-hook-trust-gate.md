@@ -29,7 +29,7 @@ Status: implemented
   原子写）。授权记 `decision: "granted"` + 当时的内容摘要；**撤销写 `decision: "revoked"` 而不是删除**
   ——删掉就与「从未评审」不可分辨，保留记录才能解释「这个插件为什么一直不生效」，并让重新授权成为
   显式动作。
-- **协议 1.11**：新增可选方法 `hook_trust_list` / `hook_trust_decide`（未接线的宿主返回
+- **协议 1.12**：新增可选方法 `hook_trust_list` / `hook_trust_decide`（未接线的宿主返回
   `not_configured`，符合 MINOR + feature-detect 的既定纪律）。实现由宿主注入
   （`createLocalGateway` → `createHookTrustService`），与注册表**共享同一个存储实例**——两个实例会
   各自读旧表再整表写回，互相覆盖。
@@ -97,3 +97,9 @@ Status: implemented
   只上计数、结果与状态：插件名、`pluginId`、目录、命令、工作区身份一律不上报。`sati hooks` CLI 路径
   不上报（一次性进程无常驻 flush 时机；决策本身已持久化在信任存储里）。
 - 报告与决定的粒度是**插件**（`pluginId = <name>@project`），不区分 matcher/hook 槽位。
+- **协议版本号让给先合入的链，本刀落在 1.12**：`permission_request.origin`（#519）先合入占用
+  1.11，本刀随之把台账条目与 `PROTOCOL_METHOD_VERSION` 的 `hook_trust_list` / `hook_trust_decide`
+  改号为 1.12，并同步本记录与报告期 note、两处版本钉测试，以及代码/UI 注释里的版本引用
+  （`docs/code-facts.md` 的 `protocol_version` / `protocol_release_count` 由 `pnpm gen:doc-claims`
+  回填）。两条链相互独立、台账都是「末条追加一条」，同区域必然冲突；`protocolLedgerIssues` 的
+  `version-duplicate` 与 `version-gap` 是第二道网——漏改号会因重复或空洞被门禁拦住。

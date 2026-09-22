@@ -22,7 +22,7 @@ export type ContextBoundary = {
 };
 
 /**
- * 注入内容参考条目（「模型可见 = 已记录」）：动态注入到 system prompt 的段落原文。
+ * 注入内容参考条目（「模型可见 = 已记录」）：动态注入到模型请求的段落原文。
  * 带 source 标记落 transcript 供审计/回放查询，不进入模型可见 messages。
  */
 export type InjectionRecord = {
@@ -45,6 +45,12 @@ export type ModelContext = {
    * 供审计/回放查询（不进入模型可见 messages）。
    */
   injections?: InjectionRecord[];
+  /**
+   * 逐调用可变的注入段落，应由调用方合成为**消息尾部**的合成消息
+   * （见 `src/context/prompt/tailInjection.ts`），不进 system prompt：
+   * system prompt 是缓存前缀块，逐轮变化的内容落在里面会整段打穿前缀。
+   */
+  tailInjections?: InjectionRecord[];
   tools: CanonicalToolSchema[];
   diagnostics: ContextDiagnostic[];
   boundaries: ContextBoundary[];

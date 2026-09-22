@@ -246,7 +246,7 @@ export class RemoteGateway implements Gateway {
   }
 
   /**
-   * 项目级 hook 信任（协议 1.11）。浏览器经 `ui/server` 的 REST 路由到本客户端，
+   * 项目级 hook 信任（协议 1.12）。浏览器经 `ui/server` 的 REST 路由到本客户端，
    * 由 gateway 侧宿主注入的实现回答——故这里只做方法名与载荷的转发（与
    * `always_on_*` / `kanban_*` 同形）。
    */

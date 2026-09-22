@@ -1,5 +1,5 @@
 /**
- * 项目级 hook 信任（协议 1.11）的 UI 类型。
+ * 项目级 hook 信任（协议 1.12）的 UI 类型。
  *
  * 与 `src/gateway/protocol/types.ts` 的 `GatewayHookTrust*` 手工镜像——两侧编译期
  * 互不约束（边界铁律：`ui/` 不导入 `src/`），入口处在 `parseHookTrustSnapshot` 收窄一次形状。
