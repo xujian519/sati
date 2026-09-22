@@ -600,8 +600,12 @@ pnpm tsx scripts/figure-benchmark/gen-compliance.ts
    PCT 11.13(a) 禁止）。要立须单独立项。
 2. **图型扩展**（状态图、组件层级图、电路图、曲线图、DOT 通路的剖视图、时序图、外观设计六面视图）：
    属「出图能力侧」，与合规侧正交。其中**外观设计需另行核验 37 CFR 1.152** 等条文。
-3. **图外引线标号**（deepseek-harness 的 `leader-line.ts`，906 行含候选锚点择位、碰撞规避、
-   越界扩画布、退化内嵌告警）：工程量大且与落版/画幅耦合，建议落版稳定后单独立项。
+3. ~~**图外引线标号**（deepseek-harness 的 `leader-line.ts`，906 行含候选锚点择位、碰撞规避、
+   越界扩画布、退化内嵌告警）：工程量大且与落版/画幅耦合，建议落版稳定后单独立项。~~ →
+   **已完成**（2026-09-22，后续叠加分支）：CAD 通路已换装择位引擎（候选锚点择位 + 碰撞规避 +
+   退化告警；画幅改走既有预留带而非外扩），新增 C10/C11 两条规则。见
+   `docs/notes/implemented/2026-09-22-figure-leader-line-placement.md`。内置/DOT 通路仍是
+   "图内标号"形态，接入需先定"哪些节点该外引"的语义（未做）。
 4. **多面板 `panels`（FIG.1A/1B）与跨图自动续号 `figure_family`**：需要新的入参契约与标号分配
    算法，与 §5.6 的 schema 变更**不得**混在一次重录里（否则出问题无法二分定位）。
 5. **栅格输出（png/pdf）**：与「Sati 只出矢量 + Chromium 打印出 PDF」的既有交付契约冲突；
@@ -617,7 +621,9 @@ pnpm tsx scripts/figure-benchmark/gen-compliance.ts
   graphviz 通路的 fail-closed 缺陷（连字符节点 id）。见
   `docs/notes/implemented/2026-09-22-figure-default-renderer-decision.md` 与
   `scripts/figure-benchmark/renderer-compare.ts`（可复算）。
-- 引线标号（第 3 项）——它是「剖面线/标记线与主线条不得互相妨碍」（4.3 明文）唯一缺的落地手段。
+- ~~引线标号（第 3 项）——它是「剖面线/标记线与主线条不得互相妨碍」（4.3 明文）唯一缺的落地手段。~~
+  → **已完成**（2026-09-22）：`src/patent/figuregen/leader-line.ts` 择位引擎 + CAD 通路换装 +
+  C10/C11；详见上面第 3 项的指针。
 - 图型扩展按「DOT 通路先（状态图/层级图，复用 `dot.ts`）→ 矢量通路后（电路/曲线/剖视/时序）」
   分批。
 
