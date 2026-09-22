@@ -40,6 +40,7 @@ import {
   getStateString,
 } from "../../handler.js";
 import {
+  assertSafeSvg,
   checkFigures,
   findFigureSidecar,
   parseFigureSvg,
@@ -130,6 +131,17 @@ export async function detectFigureDrift(inputs: LocatedInputs): Promise<string[]
     } catch {
       // sidecar 声明的附图文件读不到（已被删除/移动或不可读）→ 记一条 drift 并跳到下一张；汇总之 drifts 非空会让调用方抛 InterruptStageError（high guardrail，人工决策放行/重生成/退回）。
       drifts.push(`图${figure.figure_no}: sidecar 声明的附图文件不存在（${figure.file}）`);
+      continue;
+    }
+    // 跨信任边界读盘：sidecar 声明的 SVG 可能已被人工改写（漂移检测本就是为这一场景存在），
+    // 故先过安全门；被拒时记一条 drift（核验结论在"文件不可信"时不成立）。
+    try {
+      assertSafeSvg(svg);
+    } catch (err) {
+      drifts.push(
+        `图${figure.figure_no}: 附图 SVG 未通过安全检查（${err instanceof Error ? err.message : String(err)}）` +
+          "——跨信任边界读取已拒绝",
+      );
       continue;
     }
     let parsed;

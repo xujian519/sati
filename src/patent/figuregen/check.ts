@@ -23,6 +23,11 @@
  * - V8 说明书有附图的应指定一幅摘要附图（指南一部一章 4.5.2）：多图未指定/
  *   指定多幅 → WARN
  * - V9 实用新型附图是说明书组成部分，应当有附图（指南一部二章 7.3 + 细则 20.5）
+ * - V12/V13/V14 图面用语（细则第 21 条第 3 款 + 指南一部一章 4.3；纯函数在
+ *   `wording-rules.ts`，依据与法域适用性见该模块头注）：只吃图面词语（节点 label +
+ *   边标签），不吃说明书正文——正文侧括号规则由 V10/V11 覆盖，不重复报。
+ *   V12 非必需注释/禁止标注 → WARN；V13 图面词语非中文（仅 cn）→ WARN；
+ *   V14 标号形态（小写字母后缀；数字与括号/引号/圈号连用仅非 cn）→ WARN
  *
  * V6（黑白线条）为渲染器构造期不变式，由 render-svg 单测保证，不在此重复。
  */
@@ -39,14 +44,31 @@ import {
 } from "./page-contract.js";
 import { splitSpecFaces } from "./spec-sections.js";
 import type { DocumentKind, FigureSpec, Jurisdiction } from "./types.js";
+import { scanFigureWording, type WordingHit, type WordingRuleId } from "./wording-rules.js";
 
 /** V5 阈值：单行 label 最大字符数 / 最大行数（超出视为疑似注释性文字）。 */
 export const COMMENT_LABEL_LINE_MAX = 40;
 export const COMMENT_LABEL_LINES_MAX = 3;
 
+/** V12–V14 证据行上限（超出只报条数，避免长图把报告淹没）。 */
+export const WORDING_EVIDENCE_MAX = 15;
+
 export type FigureCheckSeverity = "fail" | "warn" | "info";
 
-export type FigureCheckRuleId = "V1" | "V2" | "V3" | "V4" | "V5" | "V7" | "V8" | "V9" | "V10" | "V11";
+export type FigureCheckRuleId =
+  | "V1"
+  | "V2"
+  | "V3"
+  | "V4"
+  | "V5"
+  | "V7"
+  | "V8"
+  | "V9"
+  | "V10"
+  | "V11"
+  | "V12"
+  | "V13"
+  | "V14";
 
 export type FigureCheckOptions = {
   /** 生成期无说明书文本可核时跳过 V2/V3（V1/V4/V5/V7/V8/V9 照常）。 */
@@ -125,6 +147,29 @@ function extractBracketRefs(specText: string): number[] {
     found.add(Number(match[1]));
   }
   return [...found].sort((a, b) => a - b);
+}
+
+/** V12–V14 依据措辞（cn 引 CN 条文；域外引 37 CFR 1.84 与 PCT 明文，逐条溯源见 references/*.md）。 */
+const WORDING_MESSAGES: Record<WordingRuleId, { cn: string; intl: string }> = {
+  V12: {
+    cn: "附图图面含非必需注释或禁止标注（V12，细则第 21 条第 3 款：附图中除必需的词语外，不应当含有其他注释）",
+    intl: 'Non-essential annotation on the drawing surface (V12, 37 CFR 1.84(k) / PCT Guide 5.150: indications such as "actual size" or "scale 1/2" are not permitted)',
+  },
+  V13: {
+    cn: "附图图面词语应使用中文（V13，指南一部一章 4.3：附图中的词语应当使用中文，必要时可以在其后的括号里注明原文）",
+    intl: "Figure wording should be in Chinese (V13, CNIPA Guidelines Part I Chapter 1 §4.3)",
+  },
+  V14: {
+    cn: "附图标记形态不规范（V14，指南一部一章 4.3：附图标记应当使用阿拉伯数字编号）",
+    intl: "Non-conforming reference-numeral form (V14, 37 CFR 1.84(p)(1) / PCT Rule 11.13(e): brackets, circles or inverted commas must not be used in association with numbers and letters)",
+  },
+};
+
+/** 按规则聚合证据行（同一处缺陷只报一次；超上限只报条数）。 */
+function buildWordingEvidence(hits: readonly WordingHit[]): string[] {
+  const lines = [...new Set(hits.map(hit => `图${hit.figure_no} ${hit.where} ${hit.describe}：「${hit.text}」`))];
+  if (lines.length <= WORDING_EVIDENCE_MAX) return lines;
+  return [...lines.slice(0, WORDING_EVIDENCE_MAX), `（另有 ${lines.length - WORDING_EVIDENCE_MAX} 处同类命中）`];
 }
 
 export function checkFigures(
@@ -422,6 +467,20 @@ export function checkFigures(
       severity: "fail",
       message:
         "实用新型申请未提供任何附图（V9，指南一部二章 7.3 + 细则第 20 条第 5 款：附图是说明书组成部分，实用新型应当有附图）",
+    });
+  }
+
+  // V12–V14 图面用语（依据与法域适用性见 wording-rules.ts 头注；skipTextRules 不跳过——
+  // 三条规则吃的是图面词语，与说明书文本无关）。
+  const wordingHits = scanFigureWording(figures, options.jurisdiction ?? "cn");
+  for (const rule of ["V12", "V13", "V14"] as const) {
+    const hits = wordingHits.filter(hit => hit.rule === rule);
+    if (hits.length === 0) continue;
+    findings.push({
+      rule,
+      severity: hits.some(hit => hit.severity === "warn") ? "warn" : "info",
+      message: us ? WORDING_MESSAGES[rule].intl : WORDING_MESSAGES[rule].cn,
+      evidence: buildWordingEvidence(hits),
     });
   }
 

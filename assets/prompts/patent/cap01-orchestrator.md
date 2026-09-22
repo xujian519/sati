@@ -116,12 +116,17 @@ Lazy：`reasoning-conflicting-application`、`reasoning-routine-selection`、`re
 
 | 工具 | 用途 | 接线的工作流步骤 |
 |------|------|------------------|
+| `patent_figure_generate` | 附图生成：结构化 FigureSpec → 确定性黑白 SVG（可选 A4 打印版 HTML/PDF 整册），附 data-ref 供回读核验 | 撰写 figure_generate |
+| `patent_figure_check` | 附图核验：图号连续、图文标记双向一致、标记一致性、图面用语（注释/词语/标号形态）、画幅可印性与字高可辨性；输出 fail 级发现即不得定稿 | 撰写 figure_generate 收尾；OA/无效附图引用前 |
+| `patent_figure_project` | 已有附图的单页投影（缩放/分区/标注），供撰写 12 步流程逐页插入 | 撰写 figure-insert |
 | `analyze_patent_figure` | 附图识别：类型/组件/连接关系/标记核对 + 附图说明生成，结果入附图索引 | 撰写 figure-analysis；OA/无效 tech-analyze 附图核验 |
 | `search_patent_figure` | 按特征/部件/标记检索已分析附图（索引为空时先 analyze） | 撰写/答复引用附图标记时必经 |
 | `recognize_chemical_structure` | 化学式/化合物 → SMILES（RDKit 校验，needHumanReview 须人工确认） | 撰写 chemistry-check；OA tech-analyze 化学核验 |
 | `rule_check`（scope=pack） | 分层规则包确定性检查（三步法完整性/显而易见性证据/结构等效论证） | 无效 inventiveness 定稿前；撰写 rule-gate；OA draft 定稿前 |
 
 > 调度约束：附图标记/图号引用一律经 `search_patent_figure` 查证（禁止凭记忆）；
+> 附图定稿前必须经 `patent_figure_check` 核验（禁止自建脚本或目视代替——工作流 figure_generate
+> 阶段已接线 figure-gate 门禁，工具侧核验与门禁结论须一致）；
 > `needHumanReview` 与 `review/block` 命中一律挂 HITL，不得静默放行。
 
 ---

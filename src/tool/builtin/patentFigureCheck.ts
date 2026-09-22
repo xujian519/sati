@@ -12,7 +12,9 @@
 import { readFile } from "node:fs/promises";
 import { basename, isAbsolute, resolve } from "node:path";
 import {
+  assertSafeSvg,
   checkFigures,
+  isSvgSafetyError,
   parseFigureSvg,
   type DocumentKind,
   type FigureSpec,
@@ -162,6 +164,17 @@ export function createPatentFigureCheckTool(): SatiToolDefinition<PatentFigureCh
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           throw new SatiToolRuntimeError("invalid_tool_input", `无法读取附图文件 ${svgPath}: ${message}`, {
+            tool: "patent_figure_check",
+            path: svgPath,
+          });
+        }
+        // 跨信任边界读盘：外部 SVG 先过安全门（大小上限 + 拒 DOCTYPE/ENTITY/CDATA），
+        // 再进解析器（解析器自身不设安全边界，见 figuregen/svg-safety.ts）。
+        try {
+          assertSafeSvg(svg);
+        } catch (err) {
+          if (!isSvgSafetyError(err)) throw err;
+          throw new SatiToolRuntimeError("invalid_tool_input", `附图 ${svgPath} 未通过安全检查: ${err.message}`, {
             tool: "patent_figure_check",
             path: svgPath,
           });

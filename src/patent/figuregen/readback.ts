@@ -8,6 +8,9 @@
  *   <title> 内，data-ref 由 postProcessGraphvizSvg 注入，图号标注为图尾
  *   <text>（"图N" / "FIG. N"）。
  * 外部工具产出的 SVG 不在此契约内。
+ *
+ * 调用方纪律：凡是**跨信任边界读盘**得到的 SVG（用户提供、第三方工具产出、被人工改过），
+ * 必须先过 `svg-safety.ts` 的 `assertSafeSvg` 再进入本解析器——本模块只解析，不设安全边界。
  */
 
 import type { FigureNode } from "./types.js";

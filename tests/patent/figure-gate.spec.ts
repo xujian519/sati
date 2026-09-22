@@ -202,6 +202,29 @@ test("figure-gate：sidecar 与 SVG 漂移（图被改写）→ fail-loud 挂 HI
   }
 });
 
+test("figure-gate：SVG 被注入 DOCTYPE/ENTITY → 安全检查拒读并记 drift（跨信任边界）", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "sati-gate-unsafe-"));
+  try {
+    await generateFigures(dir);
+    const svgPath = join(dir, "case-g-fig1.svg");
+    const clean = readFileSync(svgPath, "utf8");
+    writeFileSync(svgPath, `<!DOCTYPE svg SYSTEM "x">\n<!ENTITY a "b">\n${clean}`, "utf8");
+    const outcome = await runGate({
+      figure_dir: dir,
+      claims_draft: "1. 一种装置，包括处理模块(20)。",
+      spec_draft: "",
+    });
+    assert.ok(outcome.interrupted, "注入的 SVG 应 fail-loud");
+    const drift = outcome.interrupted.data.figure_drift as string[];
+    assert.ok(
+      drift.some(line => line.includes("未通过安全检查")),
+      drift.join(" / "),
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("figure-gate：无说明书文本时 V2/V3 跳过并在报告注明（不把标记全判为未提及）", async () => {
   const dir = mkdtempSync(join(tmpdir(), "sati-gate-notext-"));
   try {

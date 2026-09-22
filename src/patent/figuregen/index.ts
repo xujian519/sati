@@ -22,12 +22,25 @@ export {
   stripRefMark,
   COMMENT_LABEL_LINE_MAX,
   COMMENT_LABEL_LINES_MAX,
+  WORDING_EVIDENCE_MAX,
   type FigureCheckFinding,
   type FigureCheckOptions,
   type FigureCheckResult,
   type FigureCheckRuleId,
   type FigureCheckSeverity,
 } from "./check.js";
+export {
+  WORDING_KIND_SPEC,
+  inspectWording,
+  scanFigureWording,
+  type WordingHit,
+  type WordingIssue,
+  type WordingIssueKind,
+  type WordingKindSpec,
+  type WordingRuleId,
+  type WordingScope,
+  type WordingSeverity,
+} from "./wording-rules.js";
 export {
   defaultDirection,
   layoutFigure,
@@ -69,6 +82,13 @@ export {
   resolveDotBinary,
 } from "./render-graphviz.js";
 export { parseFigureSvg, type ParsedFigureSvg } from "./readback.js";
+export {
+  DEFAULT_SVG_MAX_BYTES,
+  SvgSafetyError,
+  assertSafeSvg,
+  isSvgSafetyError,
+  type SvgSafetyErrorCode,
+} from "./svg-safety.js";
 export { splitSpecFaces, type SpecFaces } from "./spec-sections.js";
 export {
   FIGURE_SIDECAR_VERSION,

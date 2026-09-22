@@ -7,9 +7,9 @@
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1055 / 176836 |
+| src TS 文件 / 行数 | 1057 / 177263 |
 | src JS 文件 | 0 |
-| tests 文件 | 592 |
+| tests 文件 | 594 |
 | ui/src 文件 / 行数 | 576 / 92914 |
 | ui/server 文件 / 行数 | 110 / 32001 |
 
@@ -96,10 +96,10 @@
 | `ui/src/components/main-content-v2/DashboardV2.tsx` | `DashboardV2` | 332 | function |
 | `ui/src/hooks/useSatiConfig.ts` | `useSatiConfigState` | 332 | function |
 | `ui/src/components/chat/hooks/useSlashCommandExecute.ts` | `useSlashCommandExecute` | 331 | function |
+| `src/patent/figuregen/check.ts` | `checkFigures` | 320 | function |
 | `ui/src/components/code-editor/view/CodeEditor.tsx` | `CodeEditor` | 310 | function |
 | `ui/src/components/chat-v2/SubagentDetailMessageFlow.tsx` | `SubagentDetailMessageFlow` | 309 | function |
 | `src/cli/projectRuntimeFactory.ts` | `resolve` | 306 | function |
-| `src/patent/figuregen/check.ts` | `checkFigures` | 306 | function |
 | `ui/src/components/settings/view/integrations/im/components/WeixinChannelSection.tsx` | `WeixinChannelSection` | 303 | function |
 | `src/gateway/client/InProcessGateway.ts` | `submitTurn` | 301 | method |
 
@@ -160,7 +160,7 @@
 
 | 模块 | 测试文件 |
 |---|---|
-| patent | 121 |
+| patent | 123 |
 | tool | 65 |
 | agent | 59 |
 | knowledge | 38 |
@@ -193,7 +193,7 @@
 | runtime | 1 |
 | status | 1 |
 
-| **合计** | **568** |
+| **合计** | **570** |
 
 ## i18n en/zh-CN 对齐
 
