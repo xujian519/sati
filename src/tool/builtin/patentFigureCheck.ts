@@ -16,16 +16,24 @@ import {
   checkFigures,
   isSvgSafetyError,
   parseFigureSvg,
+  profileForJurisdiction,
   type DocumentKind,
   type FigureSpec,
   type Jurisdiction,
+  type OfficeProfile,
 } from "../../patent/figuregen/index.js";
 import { figureSpecsToAnalysis } from "../../patent/figure/bridge.js";
 import { checkFigureConsistency } from "../../patent/figure/multi-figure-consistency.js";
 import { analyzeImageBuffer, type PixelFinding, type PixelMetrics } from "../../patent/figuregen/pixel-gate.js";
 import { SatiToolRuntimeError } from "../protocol/errors.js";
 import type { SatiToolDefinition, SatiToolRuntimeContext } from "../protocol/types.js";
-import { FIGURE_INPUT_SCHEMA_REF } from "./patentFigureSchema.js";
+import {
+  FIGURE_INPUT_SCHEMA_REF,
+  JURISDICTIONS,
+  toFigureCount,
+  toJurisdiction,
+  toSheet,
+} from "./patentFigureSchema.js";
 
 export type PatentFigureCheckInput = {
   figures?: FigureSpec[];
@@ -36,6 +44,9 @@ export type PatentFigureCheckInput = {
   description_text?: string;
   document_kind?: string;
   jurisdiction?: string;
+  figure_count?: number;
+  sheet_index?: number;
+  sheet_total?: number;
 };
 
 /** 栅格图核查条目（报告面：文件名 + 指标 + 发现）。 */
@@ -47,7 +58,11 @@ type PixelGateEntry = PixelMetrics & { name: string; findings: PixelFinding[] };
  * 读盘/解码失败**fail-explicit**：栅格图的核验路径只有这一条，静默跳过等于"零门禁
  * 假装已核验"（与 `readback.ts` 对外部 SVG 的诚实声明不同——那里至少还有结构契约）。
  */
-async function runPixelGateForPaths(paths: readonly string[], cwd: string): Promise<PixelGateEntry[]> {
+async function runPixelGateForPaths(
+  paths: readonly string[],
+  cwd: string,
+  office: OfficeProfile["office"],
+): Promise<PixelGateEntry[]> {
   const entries: PixelGateEntry[] = [];
   for (const imagePath of paths) {
     const absolute = isAbsolute(imagePath) ? imagePath : resolve(cwd, imagePath);
@@ -62,7 +77,7 @@ async function runPixelGateForPaths(paths: readonly string[], cwd: string): Prom
       });
     }
     try {
-      const { metrics, findings } = await analyzeImageBuffer(buffer, { name: basename(imagePath) });
+      const { metrics, findings } = await analyzeImageBuffer(buffer, { name: basename(imagePath), office });
       entries.push({ ...metrics, name: basename(imagePath), findings });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -85,16 +100,19 @@ export function createPatentFigureCheckTool(): SatiToolDefinition<PatentFigureCh
     description:
       "Validate patent figures against the specification text (Rule 21 of the CNIPA Implementing " +
       "Regulations 2023): figure numbering, figure-to-text and text-to-figure numeral consistency, " +
-      "one-numeral-one-component, annotation-like labels, claim/description numeral-bracket conventions, " +
-      "canvas legibility, abstract-figure designation and the utility-model drawings requirement. Every " +
-      "finding names its rule id and cites the governing provision, so the report is self-explanatory. " +
-      "Pass the full specification text (claims + description). Input: structured `figures`, `svg_paths` " +
-      "(re-parses SVGs produced by patent_figure_generate) and/or `image_paths` for raster drawings " +
-      "(customer scans, CAD exports, third-party images), which get a pixel-level check instead: " +
-      "black-and-white purity, minimum line width, DPI and printed size against the A4 printable area (no " +
-      "OCR — the figure number must be declared via the file name). Figures are not final until this check " +
-      "reports ok. Rules and their workflow are documented in the `patent-illustrator` skill. Registered by " +
-      "default; pass `patentFigure: false` to skip.",
+      "one-numeral-one-component, annotation-like labels, drawing-surface wording (annotation prefixes, " +
+      "body references, dimension/scale indications, trailing punctuation, figure number inside the " +
+      "drawing, non-Chinese wording, numeral shape), claim/description numeral-bracket conventions, " +
+      "canvas legibility against the per-office printable area and minimum character height, conditional " +
+      "view numbering (single view must not be numbered under PCT/US), sheet numbering, abstract-figure " +
+      "designation and the utility-model drawings requirement. Every finding names its rule id and cites " +
+      "the governing provision, so the report is self-explanatory. Pass the full specification text " +
+      "(claims + description). Input: structured `figures`, `svg_paths` (re-parses SVGs produced by " +
+      "patent_figure_generate) and/or `image_paths` for raster drawings (customer scans, CAD exports, " +
+      "third-party images), which get a pixel-level check instead: black-and-white purity, minimum line " +
+      "width, DPI and printed size against the printable area (no OCR — the figure number must be declared " +
+      "via the file name). Figures are not final until this check reports ok. Rules and their workflow are " +
+      "documented in the `patent-illustrator` skill. Registered by default; pass `patentFigure: false` to skip.",
     kind: "custom",
     domain: "patent",
     inputSchema: {
@@ -142,10 +160,25 @@ export function createPatentFigureCheckTool(): SatiToolDefinition<PatentFigureCh
         },
         jurisdiction: {
           type: "string",
-          enum: ["cn", "us"],
+          enum: JURISDICTIONS,
           description:
-            "Jurisdiction (default cn): us skips CN-only rules (V8 abstract figure, V9 utility model) and cites 37 CFR 1.84",
+            "Target office (default cn): cn=CNIPA (CN-only rules V8/V9/V10/V11 + 图N numbering), us=USPTO " +
+            "(37 CFR 1.84 profile, FIG. N numbering), pct=PCT (PCT Rule 11 profile, Fig. N numbering, CN " +
+            "bracket rules V10/V11 not applied)",
         },
+        figure_count: {
+          type: "integer",
+          minimum: 1,
+          description:
+            "本案附图总幅数（缺省取本次核验的附图数）：分次生成/只核验单幅时须声明——它决定图号是否" +
+            "应当出现（单幅在 pct/us 不得编号）与纸面尺寸判据",
+        },
+        sheet_index: {
+          type: "integer",
+          minimum: 1,
+          description: "附图页序号（与 sheet_total 成对声明；多页附图未声明时 V17 提示）",
+        },
+        sheet_total: { type: "integer", minimum: 1, description: "附图页总页数（成对声明；≥2 时 V17 核验页码声明）" },
       },
     },
     isReadOnly: () => true,
@@ -153,10 +186,15 @@ export function createPatentFigureCheckTool(): SatiToolDefinition<PatentFigureCh
     async execute(input, context: SatiToolRuntimeContext) {
       const documentKind: DocumentKind | undefined =
         input.document_kind === "utility" ? "utility" : input.document_kind === "invention" ? "invention" : undefined;
-      const jurisdiction: Jurisdiction = input.jurisdiction === "us" ? "us" : "cn";
+      const jurisdiction: Jurisdiction = toJurisdiction(input.jurisdiction);
+      const profile = profileForJurisdiction(jurisdiction);
+      const sheet = toSheet({ sheet_index: input.sheet_index, sheet_total: input.sheet_total });
 
       const figures: FigureSpec[] = [...(input.figures ?? [])];
-      for (const svgPath of input.svg_paths ?? []) {
+      // 已交付 SVG 的图号观测（V15/V16 的判据：图号的**可见形态**只在交付文件里可观测）。
+      const numberedFigureNos: number[] = [];
+      const svgPaths = input.svg_paths ?? [];
+      for (const svgPath of svgPaths) {
         const absolute = isAbsolute(svgPath) ? svgPath : resolve(context.cwd, svgPath);
         let svg: string;
         try {
@@ -190,6 +228,7 @@ export function createPatentFigureCheckTool(): SatiToolDefinition<PatentFigureCh
           });
         }
         figures.push({ figure_no: parsed.figureNo, kind: "flowchart", nodes: parsed.nodes, edges: [] });
+        if (parsed.numbered) numberedFigureNos.push(parsed.figureNo);
       }
       const imagePaths = input.image_paths ?? [];
       if (figures.length === 0 && imagePaths.length === 0) {
@@ -214,10 +253,13 @@ export function createPatentFigureCheckTool(): SatiToolDefinition<PatentFigureCh
         const result = checkFigures(figures, input.spec_text, {
           documentKind: documentKind,
           jurisdiction: jurisdiction,
+          figureCount: toFigureCount(input.figure_count, figures.length),
+          ...(svgPaths.length === 0 ? {} : { numberedFigureNos }),
+          ...(sheet === undefined ? {} : { sheetIndex: sheet.index, sheetTotal: sheet.total }),
           ...(explicitFaces === undefined ? {} : { faces: explicitFaces }),
           ...(figures.length === 0 ? { skipTextRules: true, skipLayoutRules: true } : {}),
         });
-        const pixelResults = await runPixelGateForPaths(imagePaths, context.cwd);
+        const pixelResults = await runPixelGateForPaths(imagePaths, context.cwd, profile.office);
         const pixelFail = pixelResults.flatMap(r => r.findings.filter(f => f.severity === "fail")).length;
         const pixelWarn = pixelResults.flatMap(r => r.findings.filter(f => f.severity === "warn")).length;
         const lines: string[] = [
@@ -234,6 +276,14 @@ export function createPatentFigureCheckTool(): SatiToolDefinition<PatentFigureCh
                 `文字面分节：${result.specFaces.sectioned ? "已分节" : "未分节"}${
                   result.specFaces.sectioned ? "" : "（V10/V11 未生效）"
                 }——${result.specFaces.reason}`,
+              ]),
+          ...(result.bracketRules === undefined ? [] : [`括号规则：${result.bracketRules.reason}`]),
+          ...(svgPaths.length === 0
+            ? []
+            : [
+                `图号观测（已交付 SVG）：${
+                  numberedFigureNos.length === 0 ? "均无图号标注" : `图${numberedFigureNos.join("、图")} 带图号`
+                }`,
               ]),
         ];
         if (result.findings.length > 0) {
@@ -277,9 +327,11 @@ export function createPatentFigureCheckTool(): SatiToolDefinition<PatentFigureCh
 
         lines.push(
           "",
-          jurisdiction === "us"
-            ? "Basis: 37 CFR 1.84 (drawings); MPEP 608.02 (reference characters). Figures are final only with no fail-level findings."
-            : "依据：专利法实施细则（2023）第 20/21 条、审查指南一部一章 4.3/4.5.2/4.6 与一部二章 7.3；无 fail 级发现方可定稿附图。",
+          jurisdiction === "cn"
+            ? "依据：专利法实施细则（2023）第 20/21/22 条、审查指南一部一章 4.3/4.5.2/4.6、五部一章 4.2/4.3/5.6 与一部二章 7.3；无 fail 级发现方可定稿附图。"
+            : jurisdiction === "us"
+              ? "Basis: 37 CFR 1.84 (drawings, incl. (g) margins, (k) scale, (p) reference characters, (u) view numbering) and MPEP 608.02. Figures are final only with no fail-level findings."
+              : "Basis: PCT Rule 11.5/11.6/11.13, Administrative Instructions Section 207 and PCT Applicant's Guide IP 5.141/5.150. Figures are final only with no fail-level findings.",
         );
         return {
           content: [{ type: "text", text: lines.join("\n") }],

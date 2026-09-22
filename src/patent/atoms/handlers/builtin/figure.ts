@@ -120,9 +120,18 @@ async function locateInputs(
   return { missing };
 }
 
-/** 回读自检：sidecar 声明的图必须与其 SVG 的图号 / data-ref 集合一致（漂移 fail-loud）。 */
-export async function detectFigureDrift(inputs: LocatedInputs): Promise<string[]> {
+/**
+ * 回读自检：sidecar 声明的图必须与其 SVG 的图号 / data-ref 集合一致（漂移 fail-loud）。
+ *
+ * 顺带产出**图号观测**（哪些图带可见图号）：V15/V16 的判据是交付文件的可见形态，而图号
+ * 条件化后"应当有"与"实际有"是两件事——回读同一批文件得到观测，避免再读一遍盘。
+ */
+export async function detectFigureDrift(inputs: LocatedInputs): Promise<{
+  drifts: string[];
+  numberedFigureNos: number[];
+}> {
   const drifts: string[] = [];
+  const numberedFigureNos: number[] = [];
   for (const figure of inputs.sidecar.figures) {
     const path = join(inputs.dir, figure.file);
     let svg: string;
@@ -157,6 +166,7 @@ export async function detectFigureDrift(inputs: LocatedInputs): Promise<string[]
     if (parsed.figureNo !== figure.spec.figure_no) {
       drifts.push(`图${figure.figure_no}: 图内图号标注为 ${parsed.figureNo}，与 sidecar 不一致`);
     }
+    if (parsed.numbered) numberedFigureNos.push(figure.spec.figure_no);
     const expected = figure.spec.nodes
       .filter(node => node.ref !== undefined)
       .map(node => `${node.id}:${node.ref}`)
@@ -172,7 +182,7 @@ export async function detectFigureDrift(inputs: LocatedInputs): Promise<string[]
       );
     }
   }
-  return drifts;
+  return { drifts, numberedFigureNos };
 }
 
 /** 输入内容哈希：spec 集合 + 说明书文本 + 辖区/文种（结论与输入的对应关系可审计）。 */
@@ -201,6 +211,7 @@ function renderReport(input: {
   result: FigureCheckResult;
   textFaces: string;
   skippedTextRules: boolean;
+  numberedFigureNos: readonly number[];
   forced: boolean;
 }): string {
   const fails = input.result.findings.filter(f => f.severity === "fail");
@@ -211,11 +222,17 @@ function renderReport(input: {
     `- 附图: ${input.sidecar.figures.map(f => `图${f.figure_no} ${f.file}`).join("；")}（渲染器 ${input.sidecar.renderer}）`,
     `- 生成期核验: ${input.sidecar.check.ok ? "通过" : "有发现"}（文本侧规则未参与）`,
     `- 文本面: ${input.textFaces}${input.skippedTextRules ? "——无说明书文本，V2/V3 未生效" : ""}`,
+    `- 图号观测: ${
+      input.numberedFigureNos.length === 0
+        ? `均无图号标注（本案 ${input.sidecar.figures.length} 幅）`
+        : `图${input.numberedFigureNos.join("、图")} 带图号`
+    }`,
     ...(input.result.specFaces === undefined
       ? []
       : [
           `- 文字面分节: ${input.result.specFaces.sectioned ? "已分节" : "未分节"}（${input.result.specFaces.reason}）`,
         ]),
+    ...(input.result.bracketRules === undefined ? [] : [`- 括号规则: ${input.result.bracketRules.reason}`]),
   ];
   if (input.result.findings.length > 0) {
     lines.push("", "发现：");
@@ -262,10 +279,16 @@ export class FigureGateHandler implements StageHandler {
     // 无文本层（如门被放在定稿前）：V2/V3 无法判定，如实跳过而非把全部标记判为"未提及"。
     const skippedTextRules = specText.trim().length === 0;
 
+    // 先回读交付文件（漂移检测与图号观测同源），再跑确定性规则——图号义务（V15/V16）只有
+    // 在交付形态可观测时才能判，缺了观测就退化成"猜渲染器应该怎么写"。
+    const { drifts, numberedFigureNos } = await detectFigureDrift(located);
+
     const result = checkFigures(specs, specText, {
       skipTextRules: skippedTextRules,
       documentKind: documentKind,
       jurisdiction: jurisdiction,
+      figureCount: sidecar.figures.length,
+      numberedFigureNos,
     });
 
     const report = renderReport({
@@ -275,6 +298,7 @@ export class FigureGateHandler implements StageHandler {
       result,
       textFaces: textFaces.length > 0 ? textFaces : "（无）",
       skippedTextRules,
+      numberedFigureNos,
       forced: Boolean(state[APPROVAL_GRANTED_KEY]),
     });
 
@@ -288,7 +312,6 @@ export class FigureGateHandler implements StageHandler {
       figures: sidecar.figures,
     });
 
-    const drifts = await detectFigureDrift(located);
     if (drifts.length > 0) {
       throw new InterruptStageError("figure-gate", "附图文件与 sidecar 不一致（核验结论不可信）", {
         guardrail_level: "high",

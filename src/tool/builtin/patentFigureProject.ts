@@ -21,23 +21,31 @@ import { isAbsolute, resolve } from "node:path";
 import {
   CAD_VIEWS,
   buildFigureSidecar,
+  buildSubmissionPage,
   checkCadProjection,
+  figureCaption,
   figureSidecarFileName,
   isCadSectionView,
   isCadView,
+  printableArea,
+  profileForJurisdiction,
   projectStep,
   renderCadSvg,
   resolveFreecadCmd,
+  sheetNumberText,
   type CadRefAnnotation,
   type CadRunner,
   type CadView,
   type DocumentKind,
+  type FigureSidecarLayout,
+  type FigureSidecarSheet,
   type FigureSpec,
   type Jurisdiction,
 } from "../../patent/figuregen/index.js";
 import { caseOutputsDir } from "../../patent/paths.js";
 import { SatiToolRuntimeError } from "../protocol/errors.js";
 import type { SatiToolDefinition, SatiToolRuntimeContext } from "../protocol/types.js";
+import { JURISDICTIONS, toFigureCount, toJurisdiction, toSheet } from "./patentFigureSchema.js";
 
 /** 附图标记标注入参（模型坐标锚点 + 可选图面偏移）。 */
 export type PatentFigureProjectAnnotation = {
@@ -59,6 +67,10 @@ export type PatentFigureProjectInput = {
   jurisdiction?: string;
   document_kind?: string;
   tolerance_mm?: number;
+  figure_count?: number;
+  sheet_index?: number;
+  sheet_total?: number;
+  fit_to_page?: boolean;
 };
 
 /** 标注数量上限（超出属调用方构造错误：图面容不下，且多为误传）。 */
@@ -136,13 +148,36 @@ export function createPatentFigureProjectTool(
         },
         case_id: { type: "string", description: "案卷 id；提供时落盘 data/cases/<caseId>/outputs/" },
         output_dir: { type: "string", description: "显式输出目录（覆盖默认 .sati/figures/ 与 case_id）" },
-        jurisdiction: { type: "string", enum: ["cn", "us"], description: "辖区（默认 cn）：us 图号标注为 FIG. N" },
+        jurisdiction: {
+          type: "string",
+          enum: JURISDICTIONS,
+          description:
+            "Target office (default cn): cn=CNIPA (图N), us=USPTO (FIG. N, 37 CFR 1.84 profile), " +
+            "pct=PCT (Fig. N, PCT Rule 11 profile); single-figure cases are unnumbered under pct/us",
+        },
         document_kind: {
           type: "string",
           enum: ["invention", "utility"],
           description: "发明/实用新型（写入 sidecar，供附图门判定 V9）",
         },
         tolerance_mm: { type: "number", description: "投影离散化容差（毫米，默认 0.5；越小越平滑、边表越大）" },
+        figure_count: {
+          type: "integer",
+          minimum: 1,
+          description:
+            "本案附图总幅数（缺省 1）：本工具一次只投影一幅，多视图案卷须声明总数——它决定是否需要图号" +
+            "（单幅在 pct/us 不得出现 Fig./FIG.）",
+        },
+        sheet_index: {
+          type: "integer",
+          minimum: 1,
+          description: "附图页序号（与 sheet_total 成对声明；缺省不落页码）",
+        },
+        sheet_total: { type: "integer", minimum: 1, description: "附图页总页数（成对声明；页码体例按法域档案）" },
+        fit_to_page: {
+          type: "boolean",
+          description: "是否另产提交落版页 <name>-fig<N>-page.svg（默认 false：投影图 SVG 仍是主产物）",
+        },
       },
     },
     isReadOnly: () => false,
@@ -163,7 +198,18 @@ export function createPatentFigureProjectTool(
       }
       const figureNo =
         Number.isInteger(input.figure_no) && (input.figure_no ?? 0) > 0 ? (input.figure_no as number) : 1;
-      const jurisdiction: Jurisdiction = input.jurisdiction === "us" ? "us" : "cn";
+      const jurisdiction: Jurisdiction = toJurisdiction(input.jurisdiction);
+      const profile = profileForJurisdiction(jurisdiction);
+      const area = printableArea(profile);
+      const figureCount = toFigureCount(input.figure_count, 1);
+      const sheet = toSheet({ sheet_index: input.sheet_index, sheet_total: input.sheet_total });
+      if (sheet === undefined && (input.sheet_index !== undefined || input.sheet_total !== undefined)) {
+        throw new SatiToolRuntimeError(
+          "invalid_tool_input",
+          "sheet_index 与 sheet_total 须成对给出且均 ≥1（附图页码体例由法域档案决定，缺一项无法判定）",
+          { tool: "patent_figure_project" },
+        );
+      }
       const documentKind: DocumentKind | undefined =
         input.document_kind === "utility" ? "utility" : input.document_kind === "invention" ? "invention" : undefined;
       const hiddenLines = input.hidden_lines === true;
@@ -288,6 +334,7 @@ export function createPatentFigureProjectTool(
         const render = renderCadSvg(table, {
           figureNo,
           jurisdiction,
+          figureCount,
           hiddenLines,
           ...(annotations.length === 0 ? {} : { annotations }),
         });
@@ -308,6 +355,32 @@ export function createPatentFigureProjectTool(
         await mkdir(outputDir, { recursive: true });
         const svgPath = resolve(outputDir, `${input.output_name}-fig${figureNo}.svg`);
         await writeFile(svgPath, render.svg, "utf8");
+
+        // 落版页（附加产物）：CAD 图以 mm 为坐标单位，故图内字高按 mm 直接传入。
+        const caption = figureCaption(profile, figureNo, figureCount);
+        const sheetText = sheet === undefined ? undefined : sheetNumberText(profile, sheet.index, sheet.total);
+        const sheetField: FigureSidecarSheet | undefined =
+          sheet === undefined || sheetText === undefined ? undefined : { ...sheet, text: sheetText };
+        let layoutField: FigureSidecarLayout | undefined;
+        let pagePath: string | undefined;
+        if (input.fit_to_page === true) {
+          const page = buildSubmissionPage({
+            drawingSvg: render.svg,
+            office: profile.office,
+            ...(sheet === undefined ? {} : { sheetIndex: sheet.index, sheetTotal: sheet.total }),
+            sourceCharHeightMm: 3.5,
+          });
+          pagePath = resolve(outputDir, `${input.output_name}-fig${figureNo}-page.svg`);
+          await writeFile(pagePath, page.svg, "utf8");
+          layoutField = {
+            file: `${input.output_name}-fig${figureNo}-page.svg`,
+            page_scale: page.metrics.pageScale,
+            placed_width_mm: page.metrics.placedWidthMm,
+            placed_height_mm: page.metrics.placedHeightMm,
+            char_height_mm: page.metrics.charHeightMm,
+            ...(page.warnings.length === 0 ? {} : { warnings: page.warnings }),
+          };
+        }
 
         // 图号 + 标记骨架 spec：CAD 图的画幅由投影几何决定（不由本模块布局决定），但**标记**
         // 是真实存在的图面内容 ⇒ 落进 nodes（label=标号、ref=标记），使 V2/V4 在定稿期可用
@@ -334,6 +407,9 @@ export function createPatentFigureProjectTool(
                 {
                   figure_no: figureNo,
                   path: svgPath,
+                  ...(caption === undefined ? {} : { caption }),
+                  ...(sheetField === undefined ? {} : { sheet: sheetField }),
+                  ...(layoutField === undefined ? {} : { layout: layoutField }),
                   geometry: {
                     source: "cad",
                     view,
@@ -374,7 +450,11 @@ export function createPatentFigureProjectTool(
           `已投影 ${view} 视图（FreeCAD 无头，命令来源: ${cmdSource}）：`,
           `- 图${figureNo}: ${svgPath}`,
           `- 几何范围 ${table.edges.length} 条投影边（可见 ${render.visibleEdges} / 隐藏 ${render.hiddenEdges}）`,
-          `- 纸面尺寸 ${render.widthMm.toFixed(1)}×${render.heightMm.toFixed(1)}mm（适配缩放 ${(render.scale * 100).toFixed(0)}%，A4 可印区 170×257mm 内）`,
+          `- 纸面尺寸 ${render.widthMm.toFixed(1)}×${render.heightMm.toFixed(1)}mm（适配缩放 ${(render.scale * 100).toFixed(0)}%，` +
+            `${profile.office} 可印区 ${area.widthMm.toFixed(1)}×${area.heightMm.toFixed(1)}mm 内）`,
+          `- 图号：${caption === undefined ? `本案仅一幅附图，按 ${profile.office} 档案不标注图号` : `${caption}（标注在图下方）`}`,
+          ...(sheetText === undefined ? [] : [`- 附图页页码：本图页写作 ${sheetText}`]),
+          ...(pagePath === undefined ? [] : [`- 提交落版页（A4 整页）: ${pagePath}`]),
           ...(table.section === undefined
             ? []
             : [
@@ -407,6 +487,16 @@ export function createPatentFigureProjectTool(
               mimeType: "image/svg+xml",
               description: `CAD 投影图 图${figureNo}`,
             },
+            ...(pagePath === undefined
+              ? []
+              : [
+                  {
+                    type: "file" as const,
+                    path: pagePath,
+                    mimeType: "image/svg+xml",
+                    description: `CAD 投影落版页 图${figureNo}`,
+                  },
+                ]),
             {
               type: "file" as const,
               path: sidecarPath,

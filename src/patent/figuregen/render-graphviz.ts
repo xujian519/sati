@@ -18,7 +18,7 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { delimiter, join } from "node:path";
 import { buildFigureDot, dotNodeTitle } from "./dot.js";
-import { parseFigureSvg } from "./readback.js";
+import { parseFigureSvg, withFigureNumberAttribute } from "./readback.js";
 import type { FigureSpec, Jurisdiction } from "./types.js";
 
 /** 渲染器选择环境变量：`builtin`（默认）| `graphviz`。 */
@@ -163,6 +163,8 @@ export type GraphvizRenderOptions = {
   /** dot 可执行文件路径；缺省走 resolveDotBinary()。 */
   dotPath?: string;
   jurisdiction?: Jurisdiction;
+  /** 本案附图总幅数（图号是否需要标注由图幅数与法域档案共同决定；缺省 1）。 */
+  figureCount?: number;
   /** dot 进程超时（毫秒），默认 30s。 */
   timeoutMs?: number;
 };
@@ -181,7 +183,7 @@ export async function renderFigureSvgWithGraphviz(
   }
   const { stdout } = await runDot(
     dotPath,
-    buildFigureDot(spec, { jurisdiction: options.jurisdiction }),
+    buildFigureDot(spec, { jurisdiction: options.jurisdiction, figureCount: options.figureCount ?? 1 }),
     options.timeoutMs ?? DEFAULT_DOT_TIMEOUT_MS,
   );
   const refsById = new Map<string, number>();
@@ -190,7 +192,9 @@ export async function renderFigureSvgWithGraphviz(
       refsById.set(node.id, node.ref);
     }
   }
-  const svg = postProcessGraphvizSvg(stdout, refsById);
+  // 图号条件化后，可见标注可能不存在（单幅在 PCT/US 不得出现 "Fig."），故把机器可读的
+  // 图号写进根元素属性，与内置渲染器同一契约（readback 优先读它）。
+  const svg = withFigureNumberAttribute(postProcessGraphvizSvg(stdout, refsById), spec.figure_no);
 
   const parsed = parseFigureSvg(svg);
   if (parsed.figureNo !== spec.figure_no) {

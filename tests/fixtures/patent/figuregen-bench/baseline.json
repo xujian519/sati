@@ -3,6 +3,15 @@
     {
       "id": "flow-tb-8",
       "title": "8 步 TB 流程图（单图可印区内）",
+      "office": "cnipa",
+      "jurisdiction": "cn",
+      "figure_count": 1,
+      "caption_rendered": true,
+      "min_char_height_mm": {
+        "mm": 2,
+        "basis": "practice"
+      },
+      "font_below_limit": 0,
       "figures": [
         {
           "figure_no": 1,
@@ -31,6 +40,15 @@
     {
       "id": "flow-tb-12",
       "title": "12 步 TB 流程图（曾静默通过、实被分页切断）",
+      "office": "cnipa",
+      "jurisdiction": "cn",
+      "figure_count": 1,
+      "caption_rendered": true,
+      "min_char_height_mm": {
+        "mm": 2,
+        "basis": "practice"
+      },
+      "font_below_limit": 0,
       "figures": [
         {
           "figure_no": 1,
@@ -65,6 +83,15 @@
     {
       "id": "flow-tb-16",
       "title": "16 步 TB 流程图（画幅明显超框）",
+      "office": "cnipa",
+      "jurisdiction": "cn",
+      "figure_count": 1,
+      "caption_rendered": true,
+      "min_char_height_mm": {
+        "mm": 2,
+        "basis": "practice"
+      },
+      "font_below_limit": 0,
       "figures": [
         {
           "figure_no": 1,
@@ -99,11 +126,20 @@
     {
       "id": "flow-tb-8-us",
       "title": "8 步 TB 流程图（US 辖区，英文文字面）",
+      "office": "uspto",
+      "jurisdiction": "us",
+      "figure_count": 1,
+      "caption_rendered": false,
+      "min_char_height_mm": {
+        "mm": 3.2,
+        "basis": "statute"
+      },
+      "font_below_limit": 0,
       "figures": [
         {
           "figure_no": 1,
           "width_mm": 52.917,
-          "height_mm": 239.183,
+          "height_mm": 228.6,
           "fits_printable_area": true,
           "printed_font_mm": 3.704
         }
@@ -127,6 +163,15 @@
     {
       "id": "block-cjk-long",
       "title": "CJK 长标注方框图（字宽按全角 1em 度量）",
+      "office": "cnipa",
+      "jurisdiction": "cn",
+      "figure_count": 1,
+      "caption_rendered": true,
+      "min_char_height_mm": {
+        "mm": 2,
+        "basis": "practice"
+      },
+      "font_below_limit": 0,
       "figures": [
         {
           "figure_no": 1,
@@ -161,21 +206,30 @@
     {
       "id": "block-latin-long",
       "title": "Latin 长标注方框图（字宽按半角 0.5em 度量）",
+      "office": "uspto",
+      "jurisdiction": "us",
+      "figure_count": 1,
+      "caption_rendered": false,
+      "min_char_height_mm": {
+        "mm": 3.2,
+        "basis": "statute"
+      },
+      "font_below_limit": 1,
       "figures": [
         {
           "figure_no": 1,
           "width_mm": 353.219,
-          "height_mm": 37.306,
+          "height_mm": 26.723,
           "fits_printable_area": false,
-          "printed_font_mm": 1.783
+          "printed_font_mm": 1.769
         }
       ],
-      "zoom": 0.4813,
+      "zoom": 0.4777,
       "page_fit_rate": 0,
       "printed_font_mm": {
-        "min": 1.783,
-        "median": 1.783,
-        "max": 1.783
+        "min": 1.769,
+        "median": 1.769,
+        "max": 1.769
       },
       "rule_hits": {
         "V7": {
@@ -195,6 +249,15 @@
     {
       "id": "block-lr-3node",
       "title": "3 节点 LR 方框图（可印区内的正向对照）",
+      "office": "cnipa",
+      "jurisdiction": "cn",
+      "figure_count": 1,
+      "caption_rendered": true,
+      "min_char_height_mm": {
+        "mm": 2,
+        "basis": "practice"
+      },
+      "font_below_limit": 0,
       "figures": [
         {
           "figure_no": 1,
@@ -223,6 +286,15 @@
     {
       "id": "block-lr-wide",
       "title": "6 级 LR 串联方框图（横向超框面）",
+      "office": "cnipa",
+      "jurisdiction": "cn",
+      "figure_count": 1,
+      "caption_rendered": true,
+      "min_char_height_mm": {
+        "mm": 2,
+        "basis": "practice"
+      },
+      "font_below_limit": 0,
       "figures": [
         {
           "figure_no": 1,
@@ -257,6 +329,15 @@
     {
       "id": "bracket-faces",
       "title": "括号按面判定（权利要求漏括号 + 正文用括号）",
+      "office": "cnipa",
+      "jurisdiction": "cn",
+      "figure_count": 1,
+      "caption_rendered": true,
+      "min_char_height_mm": {
+        "mm": 2,
+        "basis": "practice"
+      },
+      "font_below_limit": 0,
       "figures": [
         {
           "figure_no": 1,
@@ -296,6 +377,15 @@
     {
       "id": "label-normalization",
       "title": "同组件跨图两种标注形态（名称归一化，V4 不得误报）",
+      "office": "cnipa",
+      "jurisdiction": "cn",
+      "figure_count": 2,
+      "caption_rendered": true,
+      "min_char_height_mm": {
+        "mm": 2,
+        "basis": "practice"
+      },
+      "font_below_limit": 0,
       "figures": [
         {
           "figure_no": 1,
@@ -331,6 +421,15 @@
     {
       "id": "uniform-zoom-mixed",
       "title": "混排画幅（一图超高 → 统一缩放 < 1 且打印字高不足）",
+      "office": "cnipa",
+      "jurisdiction": "cn",
+      "figure_count": 2,
+      "caption_rendered": true,
+      "min_char_height_mm": {
+        "mm": 2,
+        "basis": "practice"
+      },
+      "font_below_limit": 0,
       "figures": [
         {
           "figure_no": 1,
@@ -368,26 +467,356 @@
         "sectioned": true,
         "reason": "已识别权利要求面；已识别说明书正文面；已排除附图说明小节"
       }
+    },
+    {
+      "id": "office-cn-single",
+      "title": "CN 单幅（保留图号；字高下限为实践下限 2.0mm）",
+      "office": "cnipa",
+      "jurisdiction": "cn",
+      "figure_count": 1,
+      "caption_rendered": true,
+      "min_char_height_mm": {
+        "mm": 2,
+        "basis": "practice"
+      },
+      "font_below_limit": 0,
+      "figures": [
+        {
+          "figure_no": 1,
+          "width_mm": 52.917,
+          "height_mm": 123.825,
+          "fits_printable_area": true,
+          "printed_font_mm": 3.704
+        }
+      ],
+      "zoom": 1,
+      "page_fit_rate": 1,
+      "printed_font_mm": {
+        "min": 3.704,
+        "median": 3.704,
+        "max": 3.704
+      },
+      "rule_hits": {},
+      "fail_findings": 0,
+      "warn_findings": 0,
+      "ok": true,
+      "spec_faces": {
+        "sectioned": true,
+        "reason": "已识别权利要求面；已识别说明书正文面；已排除附图说明小节"
+      }
+    },
+    {
+      "id": "office-us-single",
+      "title": "US 单幅（不得编号；字高下限 3.2mm）",
+      "office": "uspto",
+      "jurisdiction": "us",
+      "figure_count": 1,
+      "caption_rendered": false,
+      "min_char_height_mm": {
+        "mm": 3.2,
+        "basis": "statute"
+      },
+      "font_below_limit": 0,
+      "figures": [
+        {
+          "figure_no": 1,
+          "width_mm": 52.917,
+          "height_mm": 113.242,
+          "fits_printable_area": true,
+          "printed_font_mm": 3.704
+        }
+      ],
+      "zoom": 1,
+      "page_fit_rate": 1,
+      "printed_font_mm": {
+        "min": 3.704,
+        "median": 3.704,
+        "max": 3.704
+      },
+      "rule_hits": {},
+      "fail_findings": 0,
+      "warn_findings": 0,
+      "ok": true,
+      "spec_faces": {
+        "sectioned": false,
+        "reason": "未找到说明书小节标题（说明书/技术领域/背景技术/发明内容/附图说明/具体实施方式），无法分面——V10/V11 未生效"
+      }
+    },
+    {
+      "id": "office-pct-two",
+      "title": "PCT 两幅（Fig. N 写法；字高下限 3.2mm；页边距含 bottom 10mm）",
+      "office": "pct",
+      "jurisdiction": "pct",
+      "figure_count": 2,
+      "caption_rendered": true,
+      "min_char_height_mm": {
+        "mm": 3.2,
+        "basis": "statute"
+      },
+      "font_below_limit": 0,
+      "figures": [
+        {
+          "figure_no": 1,
+          "width_mm": 52.917,
+          "height_mm": 152.665,
+          "fits_printable_area": true,
+          "printed_font_mm": 3.704
+        },
+        {
+          "figure_no": 2,
+          "width_mm": 52.917,
+          "height_mm": 94.985,
+          "fits_printable_area": true,
+          "printed_font_mm": 3.704
+        }
+      ],
+      "zoom": 1,
+      "page_fit_rate": 1,
+      "printed_font_mm": {
+        "min": 3.704,
+        "median": 3.704,
+        "max": 3.704
+      },
+      "rule_hits": {},
+      "fail_findings": 0,
+      "warn_findings": 0,
+      "ok": true,
+      "spec_faces": {
+        "sectioned": false,
+        "reason": "未返回分节结论"
+      }
+    },
+    {
+      "id": "numbering-missing-multi",
+      "title": "两幅却均无图号（V15 fail：编号义务）",
+      "office": "uspto",
+      "jurisdiction": "us",
+      "figure_count": 2,
+      "caption_rendered": true,
+      "min_char_height_mm": {
+        "mm": 3.2,
+        "basis": "statute"
+      },
+      "font_below_limit": 0,
+      "figures": [
+        {
+          "figure_no": 1,
+          "width_mm": 52.917,
+          "height_mm": 94.985,
+          "fits_printable_area": true,
+          "printed_font_mm": 3.704
+        },
+        {
+          "figure_no": 2,
+          "width_mm": 52.917,
+          "height_mm": 94.985,
+          "fits_printable_area": true,
+          "printed_font_mm": 3.704
+        }
+      ],
+      "zoom": 1,
+      "page_fit_rate": 1,
+      "printed_font_mm": {
+        "min": 3.704,
+        "median": 3.704,
+        "max": 3.704
+      },
+      "rule_hits": {
+        "V15": {
+          "fail": 1,
+          "warn": 0,
+          "info": 0
+        }
+      },
+      "fail_findings": 1,
+      "warn_findings": 0,
+      "ok": false,
+      "spec_faces": {
+        "sectioned": false,
+        "reason": "未找到说明书小节标题（说明书/技术领域/背景技术/发明内容/附图说明/具体实施方式），无法分面——V10/V11 未生效"
+      }
+    },
+    {
+      "id": "numbering-single-numbered",
+      "title": "PCT 单幅却带图号（V16 warn：单幅不得编号）",
+      "office": "pct",
+      "jurisdiction": "pct",
+      "figure_count": 1,
+      "caption_rendered": false,
+      "min_char_height_mm": {
+        "mm": 3.2,
+        "basis": "statute"
+      },
+      "font_below_limit": 0,
+      "figures": [
+        {
+          "figure_no": 1,
+          "width_mm": 52.917,
+          "height_mm": 84.402,
+          "fits_printable_area": true,
+          "printed_font_mm": 3.704
+        }
+      ],
+      "zoom": 1,
+      "page_fit_rate": 1,
+      "printed_font_mm": {
+        "min": 3.704,
+        "median": 3.704,
+        "max": 3.704
+      },
+      "rule_hits": {
+        "V16": {
+          "fail": 0,
+          "warn": 1,
+          "info": 0
+        }
+      },
+      "fail_findings": 0,
+      "warn_findings": 1,
+      "ok": true,
+      "spec_faces": {
+        "sectioned": false,
+        "reason": "未返回分节结论"
+      }
+    },
+    {
+      "id": "wording-surface-cn",
+      "title": "图面用语（CN：注释前缀/正文引用/尺寸标注/句末标点/图号入图/非中文词语/字母后缀）",
+      "office": "cnipa",
+      "jurisdiction": "cn",
+      "figure_count": 1,
+      "caption_rendered": true,
+      "min_char_height_mm": {
+        "mm": 2,
+        "basis": "practice"
+      },
+      "font_below_limit": 0,
+      "figures": [
+        {
+          "figure_no": 1,
+          "width_mm": 64.029,
+          "height_mm": 181.504,
+          "fits_printable_area": true,
+          "printed_font_mm": 3.704
+        }
+      ],
+      "zoom": 1,
+      "page_fit_rate": 1,
+      "printed_font_mm": {
+        "min": 3.704,
+        "median": 3.704,
+        "max": 3.704
+      },
+      "rule_hits": {
+        "V10": {
+          "fail": 1,
+          "warn": 0,
+          "info": 0
+        },
+        "V12": {
+          "fail": 0,
+          "warn": 1,
+          "info": 0
+        },
+        "V13": {
+          "fail": 0,
+          "warn": 1,
+          "info": 0
+        },
+        "V14": {
+          "fail": 0,
+          "warn": 1,
+          "info": 0
+        }
+      },
+      "fail_findings": 1,
+      "warn_findings": 3,
+      "ok": false,
+      "spec_faces": {
+        "sectioned": true,
+        "reason": "已识别权利要求面；已识别说明书正文面；已排除附图说明小节"
+      }
+    },
+    {
+      "id": "wording-surface-pct",
+      "title": "图面用语（PCT：括号连用属禁止形态，非中文词语不判）",
+      "office": "pct",
+      "jurisdiction": "pct",
+      "figure_count": 2,
+      "caption_rendered": true,
+      "min_char_height_mm": {
+        "mm": 3.2,
+        "basis": "statute"
+      },
+      "font_below_limit": 0,
+      "figures": [
+        {
+          "figure_no": 1,
+          "width_mm": 41.804,
+          "height_mm": 66.146,
+          "fits_printable_area": true,
+          "printed_font_mm": 3.704
+        },
+        {
+          "figure_no": 2,
+          "width_mm": 52.917,
+          "height_mm": 94.985,
+          "fits_printable_area": true,
+          "printed_font_mm": 3.704
+        }
+      ],
+      "zoom": 1,
+      "page_fit_rate": 1,
+      "printed_font_mm": {
+        "min": 3.704,
+        "median": 3.704,
+        "max": 3.704
+      },
+      "rule_hits": {
+        "V12": {
+          "fail": 0,
+          "warn": 1,
+          "info": 0
+        },
+        "V14": {
+          "fail": 0,
+          "warn": 1,
+          "info": 0
+        }
+      },
+      "fail_findings": 0,
+      "warn_findings": 2,
+      "ok": true,
+      "spec_faces": {
+        "sectioned": false,
+        "reason": "未返回分节结论"
+      }
     }
   ],
   "totals": {
-    "figures": 13,
-    "page_fit_rate": 0.5385,
+    "figures": 23,
+    "page_fit_rate": 0.7391,
     "printed_font_mm": {
-      "min": 1.783,
-      "median": 2.685,
+      "min": 1.769,
+      "median": 3.704,
       "max": 3.704
     },
     "rule_hits": {
-      "V10": 1,
+      "V10": 2,
       "V11": 1,
+      "V12": 2,
+      "V13": 1,
+      "V14": 2,
+      "V15": 1,
+      "V16": 1,
       "V7": 7
     },
-    "fail_findings": 7,
-    "warn_findings": 2,
+    "fail_findings": 9,
+    "warn_findings": 8,
+    "font_below_limit": 1,
     "spec_faces_sectioned": {
-      "sectioned": 10,
-      "total": 11
+      "sectioned": 12,
+      "total": 18
     }
   }
 }
