@@ -17,17 +17,30 @@
  * - V11 说明书正文惯例为"名称+数字"（与权利要求面规则相反）：正文面以括号引用图内标记
  *   → WARN（排除 式(1)/步骤(1)/图(1) 与附图说明小节"1—混料器"式样）
  * - V7 附图缩小到三分之二时仍应能清晰分辨细节（指南一部一章 4.3，官方已核验）：
- *   **介质锚定**（A4 可印区 + 毫米，常量与 html.ts 同源）——画幅超出可印区会被
- *   分页切断 ⇒ FAIL（metric=page_fit）；打印字高低于最小可辨字高 ⇒ WARN
- *   （metric=font_size，证据给出实际 mm 与再缩 2/3 后的 mm）
+ *   **介质锚定**（法域档案的可印区 + 毫米，常量与 html.ts 同源）——画幅超出可印区会被
+ *   分页切断 ⇒ FAIL（metric=page_fit）；打印字高低于该法域的字高下限 ⇒ WARN
+ *   （metric=font_size）。字高下限取自**档案**：CN 无附图专有的条文数值（第五部分第一章
+ *   5.2 的 3.5mm 是纸件申请正文的通用要求），故用实践下限 2.0mm 并在 message 里注明
+ *   "实践下限（非法条数值）"；PCT/US 为条文数值 3.2mm（PCT Rule 11.13(h) / 37 CFR
+ *   1.84(p)(3)）
  * - V8 说明书有附图的应指定一幅摘要附图（指南一部一章 4.5.2）：多图未指定/
- *   指定多幅 → WARN
- * - V9 实用新型附图是说明书组成部分，应当有附图（指南一部二章 7.3 + 细则 20.5）
+ *   指定多幅 → WARN（CNIPA 特有，非 cn 辖区跳过）
+ * - V9 实用新型附图是说明书组成部分，应当有附图（指南一部二章 7.3 + 细则 20.5；非 cn 跳过）
  * - V12/V13/V14 图面用语（细则第 21 条第 3 款 + 指南一部一章 4.3；纯函数在
  *   `wording-rules.ts`，依据与法域适用性见该模块头注）：只吃图面词语（节点 label +
  *   边标签），不吃说明书正文——正文侧括号规则由 V10/V11 覆盖，不重复报。
  *   V12 非必需注释/禁止标注 → WARN；V13 图面词语非中文（仅 cn）→ WARN；
  *   V14 标号形态（小写字母后缀；数字与括号/引号/圈号连用仅非 cn）→ WARN
+ * - V15 多幅却未标注图号 → FAIL（编号义务：指南一部一章 4.3「附图总数在两幅以上的，应当
+ *   使用阿拉伯数字顺序编号」/ PCT Rule 11.13(k) / 37 CFR 1.84(u)(1)）
+ * - V16 单幅却标注图号 → WARN（**仅 pct/us**：PCT 指南 IP 5.141 与 37 CFR 1.84(u)(1)
+ *   明令单幅不得编号、不得出现 "Fig."/"FIG."；CN 只是把编号义务系于两幅以上，未禁止，
+ *   故对 CN 不判——Sati 自家 CN 产物默认带"图1"，判它只会制造噪音）
+ * - V17 多页附图未声明页码 → WARN（CN 指南 4.3/5.6「说明书附图应当用阿拉伯数字顺序编写
+ *   页码」；PCT 行政规程 207(b)(iii) 与 37 CFR 1.84(t) 规定 1/3 体例）
+ *
+ * V15/V16 需要**可观测的交付形态**（已交付 SVG 的图号回读）才判：只有结构化 FigureSpec
+ * 而没有交付文件时，图号是渲染期由本模块决定的，对"看不见的东西"判违规属错误归因。
  *
  * V6（黑白线条）为渲染器构造期不变式，由 render-svg 单测保证，不在此重复。
  */
@@ -35,13 +48,13 @@
 import { layoutFigure } from "./layout.js";
 import { FIGURE_FONT_SIZE } from "./metrics.js";
 import {
-  LEGIBILITY_SHRINK_FACTOR,
-  MIN_PRINTED_FONT_MM,
-  PRINTABLE_HEIGHT_MM,
-  PRINTABLE_WIDTH_MM,
-  pxToMm,
-  uniformFigureZoom,
-} from "./page-contract.js";
+  minCharHeight,
+  printableArea,
+  profileForJurisdiction,
+  sheetNumberText,
+  shouldRenderCaption,
+} from "./office-profile.js";
+import { LEGIBILITY_SHRINK_FACTOR, pxToMm, uniformFigureZoom } from "./page-contract.js";
 import { splitSpecFaces } from "./spec-sections.js";
 import type { DocumentKind, FigureSpec, Jurisdiction } from "./types.js";
 import { scanFigureWording, type WordingHit, type WordingRuleId } from "./wording-rules.js";
@@ -68,7 +81,16 @@ export type FigureCheckRuleId =
   | "V11"
   | "V12"
   | "V13"
-  | "V14";
+  | "V14"
+  | "V15"
+  | "V16"
+  | "V17";
+
+/** 按法域取依据措辞（CN 引 CN 条文，us 引 37 CFR，pct 引 PCT 细则/指南）。 */
+function basis(jurisdiction: Jurisdiction, texts: { cn: string; us: string; pct: string }): string {
+  if (jurisdiction === "cn") return texts.cn;
+  return jurisdiction === "us" ? texts.us : texts.pct;
+}
 
 export type FigureCheckOptions = {
   /** 生成期无说明书文本可核时跳过 V2/V3（V1/V4/V5/V7/V8/V9 照常）。 */
@@ -85,10 +107,31 @@ export type FigureCheckOptions = {
    * 与字号由原图决定，用本模块布局结果判 V7 属错误归因（必然误报）。
    */
   skipLayoutRules?: boolean;
-  /** 发明/实用新型（V9 仅对 utility 生效；US 辖区无此规则）。 */
+  /** 发明/实用新型（V9 仅对 utility 生效；非 cn 辖区无此规则）。 */
   documentKind?: DocumentKind;
-  /** 辖区（默认 cn）：us 跳过 V8 摘要附图/V9 实用新型规则，违规信息引用 37 CFR 1.84。 */
+  /**
+   * 辖区（默认 cn）：us 跳过 V8/V9 与 CN 特有措辞并引 37 CFR；pct 再跳过 V10/V11
+   * （CN 括号规则在 PCT 体例下未核验，不猜）。
+   */
   jurisdiction?: Jurisdiction;
+  /**
+   * 本案附图**总幅数**（缺省取本次核验的附图数）。
+   *
+   * 与 `figures.length` 可能不同：分次调用生成附图、或只核验其中一幅时，只有调用方知道总数；
+   * 它决定图号是否需要标注（档案 `shouldRenderCaption`）⇒ 也决定 V7 量的画幅高度。
+   */
+  figureCount?: number;
+  /**
+   * **已交付 SVG 回读到的图号集合**（带可见图号的图号）。
+   *
+   * 只有给了它才判 V15/V16——图号的可见形态只在交付文件里可观测；结构化 FigureSpec
+   * 没有"是否带图号"这一信息，缺省不判（不猜）。
+   */
+  numberedFigureNos?: readonly number[];
+  /** 附图页序号（多页附图；缺省不判 V17）。 */
+  sheetIndex?: number;
+  /** 附图页总页数（≥2 时要求声明页码，V17）。 */
+  sheetTotal?: number;
 };
 
 export type FigureCheckFinding = {
@@ -111,6 +154,8 @@ export type FigureCheckResult = {
   refsInText: number[];
   /** 文字面分节情况：V10/V11 是否需要分面、分面是否成功（如实声明，勿静默）。 */
   specFaces?: { sectioned: boolean; reason: string };
+  /** 括号规则（V10/V11）适用性：不适用的法域如实声明原因（pct）。 */
+  bracketRules?: { applied: boolean; reason: string };
 };
 
 /** 剥离 label 中的括号标记后缀，得到组件名称主干。 */
@@ -178,16 +223,29 @@ export function checkFigures(
   options: FigureCheckOptions = {},
 ): FigureCheckResult {
   const findings: FigureCheckFinding[] = [];
+  const jurisdiction: Jurisdiction = options.jurisdiction ?? "cn";
+  const profile = profileForJurisdiction(jurisdiction);
+  const figureCount = options.figureCount ?? figures.length;
 
   // V1 图号连续编号
   const figureNos = figures.map(f => f.figure_no);
   const sortedNos = [...figureNos].sort((a, b) => a - b);
   const expected = Array.from({ length: figures.length }, (_, i) => i + 1);
   const duplicated = sortedNos.filter((no, i) => i > 0 && no === sortedNos[i - 1]);
-  const us = options.jurisdiction === "us";
-  const v1Basis = us
-    ? "37 CFR 1.84: views should be numbered in consecutive sequence (FIG. 1, FIG. 2, ...)"
-    : "细则第 21 条：附图应按'图1，图2……'顺序编号";
+  const us = jurisdiction === "us";
+  const intl = jurisdiction !== "cn";
+  const v1Basis = basis(jurisdiction, {
+    cn: "细则第 21 条：附图应按'图1，图2……'顺序编号",
+    us: "37 CFR 1.84(u)(1): views must be numbered in consecutive Arabic numerals, starting with 1",
+    pct: "PCT Rule 11.13(k): figures numbered in Arabic numerals consecutively",
+  });
+  // V2/V3/V4 的依据：CN 有明文；us 引 37 CFR；pct 细则未规定图文标记双向对应，按 CN 口径
+  // 执行并如实标注（不把 CN 条文伪装成 PCT 条文，也不因未核验就悄悄不判）。
+  const refConsistencyBasis = basis(jurisdiction, {
+    cn: "细则第 21 条",
+    us: "37 CFR 1.84; MPEP 608.02",
+    pct: "细则第 21 条口径（PCT 细则未规定图文标记的双向对应）",
+  });
   if (figures.length === 0) {
     findings.push({
       rule: "V1",
@@ -227,9 +285,9 @@ export function checkFigures(
     findings.push({
       rule: "V2",
       severity: "fail",
-      message: us
+      message: intl
         ? "Reference numeral shown in a figure but not described in the specification (V2, 37 CFR 1.84; MPEP 608.02)"
-        : "附图中出现的附图标记未在说明书文字部分中提及（V2，细则第 21 条）",
+        : `附图中出现的附图标记未在说明书文字部分中提及（V2，${refConsistencyBasis}）`,
       evidence: missingEvidence,
     });
   }
@@ -240,9 +298,9 @@ export function checkFigures(
     findings.push({
       rule: "V3",
       severity: "warn",
-      message: us
+      message: intl
         ? "Bracketed numeral in the specification not found in any figure (V3, 37 CFR 1.84; may not be a reference numeral — confirm manually)"
-        : "说明书文字部分出现的括号标记未出现于任何附图（V3，细则第 21 条；数字未必是附图标记，请人工确认）",
+        : `说明书文字部分出现的括号标记未出现于任何附图（V3，${refConsistencyBasis}；数字未必是附图标记，请人工确认）`,
       evidence: orphanRefs.map(ref => `括号标记 ${ref} 未出现于任何附图`),
     });
   }
@@ -271,7 +329,7 @@ export function checkFigures(
         findings.push({
           rule: "V4",
           severity: "fail",
-          message: `同一附图标记应始终表示同一组成部分（V4，${us ? "37 CFR 1.84" : "细则第 21 条"}）`,
+          message: `同一附图标记应始终表示同一组成部分（V4，${refConsistencyBasis}）`,
           figure_nos: [figure.figure_no],
           evidence: [`图${figure.figure_no} 中标记 ${ref} 重复用于 ${ids.size} 个不同节点`],
         });
@@ -283,9 +341,9 @@ export function checkFigures(
       findings.push({
         rule: "V4",
         severity: "fail",
-        message: us
+        message: intl
           ? "Same reference numeral maps to different component names across figures (V4, 37 CFR 1.84)"
-          : "同一附图标记跨图对应不同名称（V4，细则第 21 条：表示同一组成部分的附图标记应当一致）",
+          : `同一附图标记跨图对应不同名称（V4，${refConsistencyBasis}：表示同一组成部分的附图标记应当一致）`,
         evidence: [`标记 ${ref} 对应多个名称：${[...names].join(" / ")}`],
       });
     }
@@ -295,7 +353,7 @@ export function checkFigures(
       findings.push({
         rule: "V4",
         severity: "fail",
-        message: `同一节点跨图使用了不同附图标记（V4，${us ? "37 CFR 1.84" : "细则第 21 条"}）`,
+        message: `同一节点跨图使用了不同附图标记（V4，${refConsistencyBasis}）`,
         evidence: [`节点 id「${id}」跨图标记不一致：${[...refs].join(" / ")}`],
       });
     }
@@ -326,9 +384,13 @@ export function checkFigures(
   // V10/V11 括号规则（需文字面分节成功；细则第 22 条：权利要求中的附图标记置于括号内，
   // 而说明书正文惯例为"名称+数字"。两个面的括号规则相反，故必须按面判定——
   // 分节失败时两条规则整体跳过并如实声明，不对混合文本猜面判违规。）
+  //
+  // pct 下整族跳过：这两条的判据是 CN 细则第 22 条与中文正文惯例，PCT 体例下未核验
+  // （PCT Rule 6.2(b) 只规定权利要求"可以"带括号标记，未规定正文惯例），不猜。
+  const bracketRulesApply = jurisdiction !== "pct";
   const explicitFaces = options.faces;
   const faces =
-    options.skipTextRules === true
+    options.skipTextRules === true || !bracketRulesApply
       ? undefined
       : explicitFaces !== undefined
         ? {
@@ -395,53 +457,73 @@ export function checkFigures(
     }
   }
 
-  // V7 缩小三分之二可辨（介质锚定：A4 可印区 + 打印字高毫米）；skipLayoutRules 时跳过
+  // V7 缩小三分之二可辨（介质锚定：法域档案的可印区 + 打印字高毫米）；skipLayoutRules 时跳过
   // （骨架类输入的画幅不由本模块决定，见 FigureCheckOptions.skipLayoutRules）。
   //
-  // 判据来自交付形态（A4 打印），不是画幅像素：px 代理与纸面脱钩，12 步流程图画幅
+  // 判据来自交付形态（打印稿），不是画幅像素：px 代理与纸面脱钩，12 步流程图画幅
   // 355mm 高仍"通过"却会被分页切断（实测，见 docs/patent-figure-hardening-plan.md §3）。
   // 统一缩放系数（uniformFigureZoom，与 html.ts 同源）保证同文档字高一致，
   // 故字高判定用统一系数而非单图系数（后者会高估实际打印字高）。
+  //
+  // 画幅必须与渲染同源：图号是否需要标注由图幅数与档案决定，**不编号时画幅少一条标注带**
+  // （layoutFigure 的 caption 选项），核验器与渲染器用同一判据，否则量的是另一张图。
+  const captionRendered = shouldRenderCaption(profile, figureCount);
+  const area = printableArea(profile);
+  const charHeight = minCharHeight(profile);
   const paperSizes = options.skipLayoutRules
     ? []
     : figures.map(figure => {
-        const { width, height } = layoutFigure(figure);
+        const { width, height } = layoutFigure(figure, { caption: captionRendered });
         return { figure_no: figure.figure_no, widthMm: pxToMm(width), heightMm: pxToMm(height) };
       });
-  const zoom = uniformFigureZoom(paperSizes);
+  const zoom = uniformFigureZoom(paperSizes, profile);
+  const pageFitBasis = basis(jurisdiction, {
+    cn: "指南一部一章 4.3：缩小到三分之二时仍应能清晰分辨图中各个细节",
+    us: "37 CFR 1.84(g)：sight no greater than 17.0 cm by 26.2 cm on A4",
+    pct: "PCT Rule 11.6(c)：usable surface shall not exceed 26.2 cm x 17.0 cm",
+  });
   for (const size of paperSizes) {
-    const oversize = size.widthMm > PRINTABLE_WIDTH_MM || size.heightMm > PRINTABLE_HEIGHT_MM;
+    const oversize = size.widthMm > area.widthMm || size.heightMm > area.heightMm;
     if (oversize) {
       findings.push({
         rule: "V7",
         severity: "fail",
         metric: "page_fit",
         message:
-          `图${size.figure_no} 纸面尺寸 ${size.widthMm.toFixed(1)}×${size.heightMm.toFixed(1)}mm 超出 A4 可印区` +
-          ` ${PRINTABLE_WIDTH_MM}×${PRINTABLE_HEIGHT_MM}mm（V7，指南一部一章 4.3：缩小到三分之二时仍应能清晰分辨` +
-          `图中各个细节）——超出部分会被分页切断，应拆分为多幅附图或减小画幅（当前需缩至 ${(zoom * 100).toFixed(0)}%）`,
+          `图${size.figure_no} 纸面尺寸 ${size.widthMm.toFixed(1)}×${size.heightMm.toFixed(1)}mm 超出` +
+          `${profile.office} 可印区 ${area.widthMm.toFixed(1)}×${area.heightMm.toFixed(1)}mm（V7，${pageFitBasis}）` +
+          `——超出部分会被分页切断，应拆分为多幅附图或减小画幅（当前需缩至 ${(zoom * 100).toFixed(0)}%）`,
         figure_nos: [size.figure_no],
       });
     }
     const printed = pxToMm(FIGURE_FONT_SIZE) * zoom;
-    if (printed < MIN_PRINTED_FONT_MM) {
+    if (charHeight !== undefined && printed < charHeight.mm) {
+      const limitNote =
+        charHeight.basis === "statute"
+          ? `最小字高 ${charHeight.mm}mm`
+          : `最小字高 ${charHeight.mm}mm（实践下限，非法条数值——CN 无附图专有的字高条文）`;
       findings.push({
         rule: "V7",
         severity: "warn",
         metric: "font_size",
         message:
-          `图${size.figure_no} 图内文字打印字高约 ${printed.toFixed(2)}mm 低于最小可辨字高 ${MIN_PRINTED_FONT_MM}mm` +
-          `（V7，指南一部一章 4.3：缩小到三分之二仍应清晰可辨），建议减少节点文字或拆分附图`,
+          `图${size.figure_no} 图内文字打印字高约 ${printed.toFixed(2)}mm 低于 ${limitNote}` +
+          `（V7，${basis(jurisdiction, {
+            cn: "指南一部一章 4.3：缩小到三分之二仍应清晰可辨",
+            us: "37 CFR 1.84(p)(3)：numbers, letters and reference characters must measure at least .32 cm in height",
+            pct: "PCT Rule 11.13(h)：the height of the numbers and letters shall not be less than 0.32 cm",
+          })}），建议减少节点文字或拆分附图`,
         figure_nos: [size.figure_no],
         evidence: [
-          `纸面缩放系数 ${zoom.toFixed(2)}，再缩 2/3 后字高约 ${(printed * LEGIBILITY_SHRINK_FACTOR).toFixed(2)}mm`,
+          `纸面缩放系数 ${zoom.toFixed(2)}，再缩 2/3 后字高约 ` +
+            `${(printed * profile.reductionRatio).toFixed(2)}mm（LEGIBILITY_SHRINK_FACTOR=${LEGIBILITY_SHRINK_FACTOR}）`,
         ],
       });
     }
   }
 
-  // V8 摘要附图指定（CNIPA 特有：USPTO 无摘要附图制度）
-  if (figures.length > 1 && !us) {
+  // V8 摘要附图指定（CNIPA 特有：PCT/US 无摘要附图制度）
+  if (figures.length > 1 && !intl) {
     const abstractNos = figures.filter(f => f.abstract === true).map(f => f.figure_no);
     if (abstractNos.length === 0) {
       findings.push({
@@ -460,8 +542,8 @@ export function checkFigures(
     }
   }
 
-  // V9 实用新型必须有附图（CNIPA 特有：USPTO 无实用新型制度）
-  if (!us && options.documentKind === "utility" && figures.length === 0) {
+  // V9 实用新型必须有附图（CNIPA 特有：PCT/US 无实用新型制度）
+  if (!intl && options.documentKind === "utility" && figures.length === 0) {
     findings.push({
       rule: "V9",
       severity: "fail",
@@ -472,7 +554,7 @@ export function checkFigures(
 
   // V12–V14 图面用语（依据与法域适用性见 wording-rules.ts 头注；skipTextRules 不跳过——
   // 三条规则吃的是图面词语，与说明书文本无关）。
-  const wordingHits = scanFigureWording(figures, options.jurisdiction ?? "cn");
+  const wordingHits = scanFigureWording(figures, jurisdiction);
   for (const rule of ["V12", "V13", "V14"] as const) {
     const hits = wordingHits.filter(hit => hit.rule === rule);
     if (hits.length === 0) continue;
@@ -484,11 +566,82 @@ export function checkFigures(
     });
   }
 
+  // V15/V16 图号义务。只在**交付形态可观测**时判（调用方给 numberedFigureNos，即已交付 SVG
+  // 的回读结果）：结构化 FigureSpec 里没有"是否带图号"这一信息，缺省不判（不猜）。
+  const numbered = options.numberedFigureNos;
+  if (numbered !== undefined && figures.length > 0) {
+    const numberingBasis = basis(jurisdiction, {
+      cn: "指南一部一章 4.3：附图总数在两幅以上的，应当使用阿拉伯数字顺序编号，并在编号前冠以“图”字",
+      us: "37 CFR 1.84(u)(1)：view numbers must be preceded by the abbreviation “FIG.”",
+      pct: "PCT Rule 11.13(k)：figures shall be numbered in Arabic numerals consecutively",
+    });
+    const missingNos = figures.filter(figure => !numbered.includes(figure.figure_no)).map(f => f.figure_no);
+    if (figureCount >= 2 && missingNos.length > 0) {
+      findings.push({
+        rule: "V15",
+        severity: "fail",
+        message: `本案附图共 ${figureCount} 幅，每一幅都应当标注图号（V15，${numberingBasis}）`,
+        figure_nos: missingNos,
+        evidence: missingNos.map(no => `图${no} 的交付 SVG 中未找到图号标注`),
+      });
+    }
+    if (figureCount < 2 && numbered.length > 0 && profile.forbidCaptionWhenSingle) {
+      findings.push({
+        rule: "V16",
+        severity: "warn",
+        message:
+          "仅一幅附图时不得编号、不得出现 “Fig.”/“FIG.”（V16，" +
+          basis(jurisdiction, {
+            cn: "CN 未禁止单幅编号（本条不判）",
+            us: "37 CFR 1.84(u)(1)：where only a single view is used … it must not be numbered and the abbreviation “FIG.” must not appear",
+            pct: "PCT 申请人指南 IP 5.141：where a single figure is sufficient … it should not be numbered and the abbreviation Fig. should not appear",
+          }) +
+          "）",
+        figure_nos: [...numbered],
+        evidence: numbered.map(no => `图${no} 带图号标注，而本案只有一幅附图`),
+      });
+    }
+  }
+
+  // V17 多页附图的页码声明：页码是**页级**要素（不在单幅图内），故只在调用方声明了页数、
+  // 却没给出页码信息时判——"每份附图集都没页码"这类全局判定属错误归因（Sati 在只出单幅
+  // SVG 的路径上不合成最终图页；需页码时应走落版页或由代理师按模板排页）。
+  if (options.sheetTotal !== undefined && options.sheetTotal >= 2) {
+    const sheetBasis = basis(jurisdiction, {
+      cn: "指南一部一章 4.3 + 五部一章 5.6：说明书附图应当用阿拉伯数字顺序编写页码，页码置于每页下部页边的上沿并左右居中",
+      us: "37 CFR 1.84(t)：the number of each sheet by two Arabic numerals on either side of an oblique line",
+      pct: "PCT 行政规程 Section 207(b)(iii)：1/3, 2/3, 3/3",
+    });
+    const { sheetIndex, sheetTotal } = options;
+    if (sheetIndex === undefined || sheetIndex < 1 || sheetIndex > sheetTotal) {
+      findings.push({
+        rule: "V17",
+        severity: "warn",
+        message: `本案附图共 ${sheetTotal} 页，须逐页声明页码（V17，${sheetBasis}）`,
+        evidence: [
+          sheetIndex === undefined
+            ? `未声明附图页序号；本图页按档案体例应写作 ${sheetNumberText(profile, 1, sheetTotal)}`
+            : `附图页序号 ${sheetIndex} 超出 1..${sheetTotal}`,
+        ],
+      });
+    }
+  }
+
+  const bracketRules = bracketRulesApply
+    ? undefined
+    : {
+        applied: false,
+        reason:
+          "pct 未适用 CN 括号规则（V10/V11 依据细则第 22 条与中文正文惯例，PCT 体例下未核验；" +
+          "PCT Rule 6.2(b) 只规定权利要求“可以”带括号标记）",
+      };
+
   return {
     ok: !findings.some(f => f.severity === "fail"),
     findings,
     refsInFigures,
     refsInText,
     ...(specFaces === undefined ? {} : { specFaces }),
+    ...(bracketRules === undefined ? {} : { bracketRules }),
   };
 }

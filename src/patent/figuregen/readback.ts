@@ -11,14 +11,39 @@
  *
  * 调用方纪律：凡是**跨信任边界读盘**得到的 SVG（用户提供、第三方工具产出、被人工改过），
  * 必须先过 `svg-safety.ts` 的 `assertSafeSvg` 再进入本解析器——本模块只解析，不设安全边界。
+ *
+ * 图号来源两处（先属性后文本）：图号自 2026-09-22 起**条件化**（单幅在 PCT/US 不得出现
+ * "Fig."/"FIG."），故渲染器在根元素写 `data-figure-no`（`FIGURE_NO_ATTRIBUTE`）作为回读的
+ * 权威来源；文本标注作为回落，使旧产物与历史案卷仍可回读。`numbered` 报告"是否带可见图号"，
+ * 供核验器判 V15/V16（编号义务是可见形态的要求，属性是机器契约，两者不可混同）。
  */
 
 import type { FigureNode } from "./types.js";
 
+/** 根元素上的图号属性（渲染器写入、回读优先取它）。 */
+export const FIGURE_NO_ATTRIBUTE = "data-figure-no";
+
 export type ParsedFigureSvg = {
   figureNo: number;
   nodes: FigureNode[];
+  /** 是否带**可见**图号标注（属性不算；供 V15/V16 判定可见形态）。 */
+  numbered: boolean;
 };
+
+/**
+ * 在根 `<svg>` 上写入图号属性（graphviz 等外部渲染器加工后调用，把"机器可读的图号"
+ * 补齐到与本模块内置渲染器同一契约）。
+ */
+export function withFigureNumberAttribute(svg: string, figureNo: number): string {
+  if (new RegExp(`\\b${FIGURE_NO_ATTRIBUTE}="`, "u").test(svg)) {
+    return svg;
+  }
+  const rootEnd = svg.indexOf(">", svg.indexOf("<svg"));
+  if (rootEnd === -1) {
+    throw new TypeError("SVG 缺少 <svg 根元素标签的结束符");
+  }
+  return `${svg.slice(0, rootEnd)} ${FIGURE_NO_ATTRIBUTE}="${figureNo}"${svg.slice(rootEnd)}`;
+}
 
 function unescapeXml(text: string): string {
   // 数字实体先行（如 graphviz 边名的 &#45;）；命名实体 &amp; 必须最后展开，
@@ -33,17 +58,20 @@ function unescapeXml(text: string): string {
 }
 
 /**
- * 解析单幅本模块渲染的 SVG。缺"图N"/"FIG. N"标注时抛错（外部 SVG 不在契约内）。
- * 图号取最后一个 text 标注（两个渲染器都把 caption 放在图尾，避免节点文本
- * 恰好含"图N"字样时误配）。
+ * 解析单幅本模块渲染的 SVG。图号取根元素属性 `data-figure-no`，缺失时回落到图尾的可见
+ * 标注（"图N" / "FIG. N"，两个渲染器都把 caption 放在图尾，避免节点文本恰好含"图N"
+ * 字样时误配）；两者都没有才抛错。
  */
 export function parseFigureSvg(svg: string): ParsedFigureSvg {
-  const captions = [...svg.matchAll(/<text[^>]*>(?:FIG\.\s*|图)(\d+)<\/text>/gu)];
+  const attribute = svg.match(new RegExp(`\\b${FIGURE_NO_ATTRIBUTE}="(\\d+)"`, "u"));
+  const captions = [...svg.matchAll(/<text[^>]*>(?:FIG\.\s*|Fig\.\s*|图)(\d+)<\/text>/gu)];
   const caption = captions[captions.length - 1];
-  if (!caption) {
-    throw new TypeError("SVG 缺少'图N'图号标注：仅支持解析 patent_figure_generate 产出的附图");
+  const figureNo = attribute ? Number(attribute[1]) : caption ? Number(caption[1]) : undefined;
+  if (figureNo === undefined) {
+    throw new TypeError(
+      `SVG 缺少图号（${FIGURE_NO_ATTRIBUTE} 属性与"图N"标注均缺失）：仅支持解析 patent_figure_generate 产出的附图`,
+    );
   }
-  const figureNo = Number(caption[1]);
 
   const nodes: FigureNode[] = [];
   // 深度追踪扫描（graph0 分组包裹全部节点/边分组，惰性正则会把首个子分组
@@ -87,5 +115,5 @@ export function parseFigureSvg(svg: string): ParsedFigureSvg {
       ...(refMatch ? { ref: Number(refMatch[1]) } : {}),
     });
   }
-  return { figureNo, nodes };
+  return { figureNo, nodes, numbered: caption !== undefined };
 }

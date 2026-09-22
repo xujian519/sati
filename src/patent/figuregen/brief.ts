@@ -4,9 +4,12 @@
  * 确定性模板文本：图N 为……；附图标记说明跨图去重、按标记升序、名称剥离括号
  * 标记（与校验器 stripRefMark 同一实现，保证"同一组成部分标记一致"的呈现面）。
  * US 辖区输出英文 BRIEF DESCRIPTION OF THE DRAWINGS（"FIG. N is a ..." 惯用句式）。
+ * 图号引用与附图标注**同源**（`figureCaption`）：CN "图N"、PCT "Fig. N"、US "FIG. N"；
+ * 单幅在 PCT/US 不编号时正文改用"附图/The figure"称代，避免图文自相矛盾。
  */
 
 import { stripRefMark } from "./check.js";
+import { figureCaption, profileForJurisdiction } from "./office-profile.js";
 import type { DocumentKind, FigureSpec, Jurisdiction } from "./types.js";
 
 export type FigureBriefOptions = {
@@ -28,6 +31,7 @@ function kindTextEn(kind: FigureSpec["kind"]): string {
 
 export function buildFigureBriefDraft(specs: readonly FigureSpec[], options: FigureBriefOptions = {}): string {
   const sorted = [...specs].sort((a, b) => a.figure_no - b.figure_no);
+  const profile = profileForJurisdiction(options.jurisdiction);
   const markers = new Map<number, string>();
   for (const figure of specs) {
     for (const node of figure.nodes) {
@@ -41,7 +45,13 @@ export function buildFigureBriefDraft(specs: readonly FigureSpec[], options: Fig
     const lines: string[] = ["BRIEF DESCRIPTION OF THE DRAWINGS"];
     for (const figure of sorted) {
       const ofName = options.inventionName === undefined ? "" : ` of the "${options.inventionName}"`;
-      lines.push(`FIG. ${figure.figure_no} is a ${kindTextEn(figure.kind)}${ofName} according to an embodiment.`);
+      // 图号条件化：单视图案卷的附图不带 "FIG."，正文引用也随之不编号（否则图与说明自相矛盾）。
+      const ref = figureCaption(profile, figure.figure_no, sorted.length);
+      lines.push(
+        ref === undefined
+          ? `The figure is a ${kindTextEn(figure.kind)}${ofName} according to an embodiment.`
+          : `${ref} is a ${kindTextEn(figure.kind)}${ofName} according to an embodiment.`,
+      );
     }
     if (markers.size > 0) {
       const items = [...markers.entries()].sort(([a], [b]) => a - b).map(([ref, name]) => `${ref} — ${name}`);
@@ -54,7 +64,9 @@ export function buildFigureBriefDraft(specs: readonly FigureSpec[], options: Fig
   const lines: string[] = ["附图说明"];
   for (const figure of sorted) {
     const head = options.inventionName === undefined ? "" : `${options.inventionName}的`;
-    lines.push(`图${figure.figure_no}为${subject}实施例提供的${head}${kindText(figure.kind)}；`);
+    // 图号写法与附图同源（CN "图N"、PCT "Fig. N"）；未编号的单幅用"附图"称代。
+    const ref = figureCaption(profile, figure.figure_no, sorted.length) ?? "附图";
+    lines.push(`${ref}为${subject}实施例提供的${head}${kindText(figure.kind)}；`);
   }
   if (markers.size > 0) {
     const items = [...markers.entries()].sort(([a], [b]) => a - b).map(([ref, name]) => `${ref}—${name}`);

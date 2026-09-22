@@ -49,7 +49,24 @@ export {
   type Point,
   type RoutedEdge,
 } from "./layout.js";
-export { figureCaption, renderFigureSvg } from "./render-svg.js";
+export { renderFigureSvg } from "./render-svg.js";
+export {
+  DEFAULT_OFFICE_PROFILE,
+  TARGET_OFFICES,
+  figureCaption,
+  minCharHeight,
+  officeForJurisdiction,
+  officeProfile,
+  printableArea,
+  profileForJurisdiction,
+  sheetNumberText,
+  shouldRenderCaption,
+  type CaptionStyle,
+  type OfficeProfile,
+  type SheetNumbering,
+  type TargetOffice,
+} from "./office-profile.js";
+export { buildSubmissionPage, type SubmissionPageMetrics, type SubmissionPageOptions } from "./submission-page.js";
 export { FIGURE_FONT_SIZE, isWideChar, measureTextWidth } from "./metrics.js";
 export {
   A4_HEIGHT_MM,
@@ -101,6 +118,8 @@ export {
   type FigureSidecarCheck,
   type FigureSidecarFigure,
   type FigureSidecarGeometry,
+  type FigureSidecarLayout,
+  type FigureSidecarSheet,
 } from "./sidecar.js";
 export * from "./cad/index.js";
 export { renderFiguresHtml, type FiguresHtmlOptions } from "./html.js";

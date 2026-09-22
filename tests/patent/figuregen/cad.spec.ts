@@ -314,8 +314,11 @@ test("渲染：front 视图出黑白 SVG（仅 #000000/#FFFFFF）、图号标注
   assert.equal((withHidden.svg.match(/<polyline/gu) ?? []).length, withHidden.visibleEdges + withHidden.hiddenEdges);
   assert.match(withHidden.svg, /stroke-dasharray/u, "开启隐藏线时虚线绘制");
 
-  const us = renderCadSvg(table, { figureNo: 3, jurisdiction: "us" });
-  assert.match(us.svg, />FIG\. 3</u);
+  const usMulti = renderCadSvg(table, { figureNo: 3, jurisdiction: "us", figureCount: 2 });
+  assert.match(usMulti.svg, />FIG\. 3</u);
+  // 单幅在 us/pct 不得编号（37 CFR 1.84(u)(1)、PCT 指南 IP 5.141）
+  const usSingle = renderCadSvg(table, { figureNo: 3, jurisdiction: "us" });
+  assert.doesNotMatch(usSingle.svg, /FIG\./u);
 });
 
 test("渲染：大几何按可印区适配缩放，纸面尺寸不超框", () => {

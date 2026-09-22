@@ -8,7 +8,7 @@
  * graphviz 会把它写进 SVG <title>，供 data-ref 注入与 readback 回读。
  */
 
-import { figureCaption } from "./render-svg.js";
+import { figureCaption, profileForJurisdiction } from "./office-profile.js";
 import type { FigureNode, FigureNodeShape, FigureSpec, Jurisdiction } from "./types.js";
 
 const FONT_SIZE = 14;
@@ -42,15 +42,23 @@ function nodeAttrs(node: FigureNode): string {
   return attrs.join(", ");
 }
 
-/** 渲染单幅附图为 DOT 源（确定性，同 FigureSpec 逐字节一致）。 */
-export function buildFigureDot(spec: FigureSpec, options: { jurisdiction?: Jurisdiction } = {}): string {
+/**
+ * 渲染单幅附图为 DOT 源（确定性，同 FigureSpec 逐字节一致）。
+ *
+ * 图号是否需要标注由图幅数与法域档案决定（单幅在 PCT/US 不得出现 "Fig."）：
+ * 不编号时**不输出 caption 属性**（而不是画一个空 label——空 label 会占位）。
+ */
+export function buildFigureDot(
+  spec: FigureSpec,
+  options: { jurisdiction?: Jurisdiction; figureCount?: number } = {},
+): string {
   const direction = spec.direction ?? (spec.kind === "block" ? "LR" : "TB");
+  const caption = figureCaption(profileForJurisdiction(options.jurisdiction), spec.figure_no, options.figureCount ?? 1);
   const lines: string[] = [
     "digraph {",
     '  bgcolor="#FFFFFF";',
     `  rankdir="${direction}";`,
-    `  label="${dotEscape(figureCaption(spec.figure_no, options.jurisdiction))}";`,
-    '  labelloc="b";',
+    ...(caption === undefined ? [] : [`  label="${dotEscape(caption)}";`, '  labelloc="b";']),
     '  fontname="sans-serif";',
     `  fontsize=${FONT_SIZE};`,
     '  node [fontname="sans-serif", fontsize=14, style="filled", fillcolor="#FFFFFF", color="#000000", fontcolor="#000000"];',

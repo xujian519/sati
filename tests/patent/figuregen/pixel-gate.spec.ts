@@ -90,19 +90,30 @@ test("PX2：高 DPI 下过细线宽判 warn；线宽充足不触发", () => {
   assert.ok(sparseLine[0].message.includes("跳过线宽判定"));
 });
 
-test("PX3：纸面尺寸超出 A4 可印区判 warn；尺寸在框内不触发", () => {
+test("PX3：纸面尺寸超出可印区判 warn；尺寸在框内不触发；判据按法域档案", () => {
   // 3000px @96dpi ≈ 793mm，远超 170×257mm
   const oversize = analyzeGrayImage(withBars(blankImage(3000, 400), 20, 3));
-  const sizeFinding = oversize.findings.filter(f => f.rule === "PX3" && f.message.includes("A4 可印区"));
+  const sizeFinding = oversize.findings.filter(f => f.rule === "PX3" && f.message.includes("可印区"));
   assert.equal(sizeFinding.length, 1);
   assert.equal(sizeFinding[0].severity, "warn");
+  assert.ok(sizeFinding[0].message.includes("cnipa"), "报告须写明按哪套法域档案判定");
   assert.ok(oversize.metrics.printedWidthMm !== undefined && oversize.metrics.printedWidthMm > 170);
 
   const small = analyzeGrayImage(withBars(blankImage(400, 300), 10, 3));
   assert.deepEqual(
-    small.findings.filter(f => f.rule === "PX3" && f.message.includes("A4 可印区")),
+    small.findings.filter(f => f.rule === "PX3" && f.message.includes("可印区")),
     [],
   );
+});
+
+test("PX3：可印区判据按法域档案取（uspto 下边距 10mm ⇒ 版心更高）", () => {
+  // 630×985px @96dpi ≈ 166.7×260.6mm：cnipa 版心 170×257mm 判 warn（超高），
+  // uspto 版心 168.7×261.6mm 不超 —— 同一张图在两套档案下结论不同，证明判据确实按档案取。
+  const image = withBars(blankImage(630, 985), 40, 3);
+  const cnipa = analyzeGrayImage(image, { office: "cnipa" });
+  const uspto = analyzeGrayImage(image, { office: "uspto" });
+  assert.equal(cnipa.findings.filter(f => f.rule === "PX3" && f.message.includes("可印区")).length, 1);
+  assert.equal(uspto.findings.filter(f => f.rule === "PX3" && f.message.includes("可印区")).length, 0);
 });
 
 test("PX3：DPI 越界判 warn 并标注估算/元数据来源", () => {

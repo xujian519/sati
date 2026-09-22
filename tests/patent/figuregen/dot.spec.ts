@@ -228,9 +228,16 @@ test("真机集成：dot 渲染 → data-ref 自检 → 回读还原（无 graph
   );
 });
 
-test("真机集成：dot 渲染 US 辖区（FIG. N 标注）", {
+test("真机集成：dot 渲染 US 辖区（多幅 → FIG. N；单幅 → 不得出现 FIG.）", {
   skip: resolveDotBinary() === null ? "graphviz not installed" : false,
 }, async () => {
-  const { svg } = await renderFigureSvgWithGraphviz({ ...SPEC, figure_no: 3 }, { jurisdiction: "us" });
-  assert.match(svg, /<text[^>]*>FIG\. 3<\/text>/u);
+  const multi = await renderFigureSvgWithGraphviz({ ...SPEC, figure_no: 3 }, { jurisdiction: "us", figureCount: 2 });
+  assert.match(multi.svg, /<text[^>]*>FIG\. 3<\/text>/u);
+
+  // 单幅：37 CFR 1.84(u)(1) 不得编号、不得出现 "FIG."；图号仍可由根元素 data-figure-no 回读
+  const single = await renderFigureSvgWithGraphviz({ ...SPEC, figure_no: 3 }, { jurisdiction: "us" });
+  assert.doesNotMatch(single.svg, /FIG\./u);
+  const parsed = parseFigureSvg(single.svg);
+  assert.equal(parsed.figureNo, 3);
+  assert.equal(parsed.numbered, false);
 });

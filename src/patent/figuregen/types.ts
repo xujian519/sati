@@ -46,5 +46,8 @@ export type FigureSpec = {
 
 export type DocumentKind = "invention" | "utility";
 
-/** 辖区：cn=CNIPA（默认），us=USPTO（PCT/出海申请）。影响图号标注、规则适用与附图说明措辞。 */
-export type Jurisdiction = "cn" | "us";
+/**
+ * 法域（目标受理局/指定局）：cn=CNIPA（默认）、us=USPTO、pct=PCT 国际申请。
+ * 影响图号写法、纸面常数与规则适用（见 `office-profile.ts` 的档案；cn/us 的历史行为不变）。
+ */
+export type Jurisdiction = "cn" | "us" | "pct";
