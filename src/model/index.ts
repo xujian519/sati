@@ -61,6 +61,7 @@ export {
   type ModelMessageAssemblerState,
 } from "./streaming/assembleModelMessage.js";
 export { normalizeModelError } from "./errors/normalizeModelError.js";
+export { isPromptTooLong, type PromptTooLongSignal } from "./errors/promptTooLong.js";
 
 export type {
   CanonicalAudioBlock,

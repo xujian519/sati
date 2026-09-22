@@ -1,9 +1,11 @@
 import { randomUUID } from "node:crypto";
-import type {
-  CanonicalMessage,
-  CanonicalModelEvent,
-  CanonicalModelRequest,
-  CanonicalUsage,
+import {
+  isPromptTooLong,
+  type CanonicalMessage,
+  type CanonicalModelError,
+  type CanonicalModelEvent,
+  type CanonicalModelRequest,
+  type CanonicalUsage,
 } from "../../model/index.js";
 import type { TokenAccountingRuntime } from "../budget/TokenAccountingRuntime.js";
 import { TokenBudgetManager } from "../budget/TokenBudgetManager.js";
@@ -73,6 +75,11 @@ export const COMPACT_SYSTEM_PROMPT_DEFAULT =
 export const COMPACT_MAX_OUTPUT_TOKENS = 20_000;
 
 const COMPACT_SUMMARY_FAILURE_COOLDOWN_MS = 60_000;
+/**
+ * 摘要调用次数上限：第一次按既定尾比例；仅在 PTL（摘要请求自己超窗）时反向重选
+ * 再试一次。有界一次，避免在失败边缘反复烧模型调用。
+ */
+const MAX_SUMMARY_ATTEMPTS = 2;
 
 /**
  * 压缩终止状态。`fallback` = 摘要模型调用失败或不可用，改用确定性摘要降级
@@ -153,29 +160,48 @@ export class CompactionEngine {
     const compactionId = this.options.uuid?.() ?? randomUUID();
     const preTokens = this.estimateMessages(input.messages);
     const tailRatio = clamp(input.keepTailRatio ?? DEFAULT_KEEP_TAIL_RATIO, 0, 1);
-    const tailTokenBudget = Math.max(1, Math.floor(preTokens * tailRatio));
     const protectedToolNames =
       input.protectedToolNames === null ? new Set<string>() : (input.protectedToolNames ?? this.protectedToolNames);
     const minTailMessages = input.protectedToolNames === null ? RELAXED_MIN_TAIL_MESSAGES : DEFAULT_MIN_TAIL_MESSAGES;
-    const compactPlan = planFullCompactionMessages(
-      input.messages,
-      tailTokenBudget,
-      protectedToolNames,
-      minTailMessages,
-      turnMessages => this.estimateMessages(turnMessages),
-    );
-    const messagesToSummarize = compactPlan.messagesToSummarize;
-    const retainedTailExceededBudget = this.estimateMessages(compactPlan.messagesToKeep) > tailTokenBudget;
-    const messagesToKeep = retainedTailExceededBudget
-      ? projectOversizedRetainedToolResults(compactPlan.messagesToKeep, collectToolNamesByCallId(input.messages))
-      : compactPlan.messagesToKeep;
+    /**
+     * 计划（要总结什么、保留什么）必须能在本次 run 内重算，且**先于**任何落盘/事件生效：
+     * 先落一条失败边界再落一条重算边界会让 shadowedRanges 与被遮蔽原文错位。
+     */
+    const planAt = (ratio: number): FullCompactionPlanState => {
+      const tailTokenBudget = Math.max(1, Math.floor(preTokens * clamp(ratio, 0, 1)));
+      const compactPlan = planFullCompactionMessages(
+        input.messages,
+        tailTokenBudget,
+        protectedToolNames,
+        minTailMessages,
+        turnMessages => this.estimateMessages(turnMessages),
+      );
+      const retainedTailExceededBudget = this.estimateMessages(compactPlan.messagesToKeep) > tailTokenBudget;
+      const messagesToKeep = retainedTailExceededBudget
+        ? projectOversizedRetainedToolResults(compactPlan.messagesToKeep, collectToolNamesByCallId(input.messages))
+        : compactPlan.messagesToKeep;
+      return { ratio, compactPlan, messagesToKeep, retainedTailExceededBudget };
+    };
+    let plan = planAt(tailRatio);
+    /** 反向重选：目标尾比例必须**更大**（多留原文），算不出更大值就不重试。 */
+    const widenRetainedTail = (
+      current: FullCompactionPlanState,
+      modelError: CanonicalModelError,
+    ): FullCompactionPlanState | undefined => {
+      const nextRatio = nextTailRatioForPromptTooLong({
+        currentRatio: current.ratio,
+        preTokens,
+        promptTooLongMaxContextTokens: modelError.maxContextTokens,
+      });
+      return nextRatio > current.ratio ? planAt(nextRatio) : undefined;
+    };
 
     await this.options.lifecycle?.dispatch({
       event: "PreCompact",
       payload: {
         trigger: input.trigger,
         preTokens,
-        messagesSummarized: messagesToSummarize.length,
+        messagesSummarized: plan.compactPlan.messagesToSummarize.length,
       },
     });
     this.options.eventEmitter?.({
@@ -191,37 +217,68 @@ export class CompactionEngine {
     let summaryError: string | undefined;
     let summaryUsage: CanonicalUsage | undefined;
     let summaryCancelled = false;
+    /** 重选留下的诊断：与摘要失败诊断同一通道，随结果落盘/展示。 */
+    const replanDiagnostics: ContextDiagnostic[] = [];
 
     try {
-      if (messagesToSummarize.length === 0) {
+      if (plan.compactPlan.messagesToSummarize.length === 0) {
         // Nothing to summarize: still emit a boundary so the transcript captures
         // the intent, but no model call happens.
+      } else if (this.isSummaryFailureCooldownActive()) {
+        summaryError = this.summaryFailureError ?? "context summary is in cooldown";
+        summaryMessage = buildDeterministicFallbackSummary(plan.compactPlan.messagesToSummarize, summaryError);
       } else {
-        const summaryAnchors =
-          input.protectedToolNames === null
-            ? buildCompactSummaryAnchors(messagesToSummarize, this.protectedToolNames)
-            : undefined;
-        const summaryInput = projectMessagesForSummary(messagesToSummarize);
-        if (this.isSummaryFailureCooldownActive()) {
-          summaryError = this.summaryFailureError ?? "context summary is in cooldown";
-          summaryMessage = buildDeterministicFallbackSummary(messagesToSummarize, summaryError);
-        } else {
+        // 失败冷却未生效时最多两次摘要调用：PTL 时反向重选（保留更多近期原文）再试一次。
+        for (let attempt = 1; attempt <= MAX_SUMMARY_ATTEMPTS; attempt += 1) {
+          const messagesToSummarize = plan.compactPlan.messagesToSummarize;
+          if (messagesToSummarize.length === 0) {
+            // 重选后尾预算吃下全部历史：无需总结，也不再调用模型。
+            break;
+          }
+          const summaryAnchors =
+            input.protectedToolNames === null
+              ? buildCompactSummaryAnchors(messagesToSummarize, this.protectedToolNames)
+              : undefined;
+          const summaryInput = projectMessagesForSummary(messagesToSummarize);
           try {
             const result = await this.summarize(summaryInput, input.userInstruction, input.signal, summaryAnchors);
             summaryMessage = wrapSummaryMessage(result.message);
             summaryUsage = result.usage;
             this.summaryFailureCooldownUntil = 0;
             this.summaryFailureError = undefined;
+            break;
           } catch (error) {
-            summaryError = error instanceof Error ? error.message : String(error);
             // 用户中断不是摘要失败：不进入失败冷却，否则下一次压缩会被 60s 冷却
             // 挡掉、静默退化成确定性摘要。
             summaryCancelled = input.signal?.aborted === true;
+            const modelError = extractModelError(error);
+            // 反向重选：摘要请求**自己**超窗时，正确的反应是保留更多近期原文（少总结），
+            // 而不是继续压缩更多——压得越狠，摘要输入越大，下一轮还会超窗。
+            const replanned =
+              !summaryCancelled &&
+              attempt < MAX_SUMMARY_ATTEMPTS &&
+              modelError !== undefined &&
+              isPromptTooLong(modelError)
+                ? widenRetainedTail(plan, modelError)
+                : undefined;
+            if (replanned) {
+              replanDiagnostics.push({
+                code: "compact_summary_prompt_too_long",
+                severity: "info",
+                message:
+                  `The summary request itself exceeded the model context window; retrying with a larger ` +
+                  `retained tail (keepTailRatio ${plan.ratio} → ${replanned.ratio}).`,
+              });
+              plan = replanned;
+              continue;
+            }
+            summaryError = error instanceof Error ? error.message : String(error);
             if (!summaryCancelled) {
               this.summaryFailureCooldownUntil = Date.now() + COMPACT_SUMMARY_FAILURE_COOLDOWN_MS;
               this.summaryFailureError = summaryError;
             }
             summaryMessage = buildDeterministicFallbackSummary(messagesToSummarize, summaryError);
+            break;
           }
         }
       }
@@ -229,7 +286,7 @@ export class CompactionEngine {
       const boundaryMarker = this.createBoundaryMarker({
         trigger: input.trigger,
         preTokens,
-        messagesSummarized: messagesToSummarize.length,
+        messagesSummarized: plan.compactPlan.messagesToSummarize.length,
         summarySucceeded: summaryError === undefined,
       });
 
@@ -253,13 +310,16 @@ export class CompactionEngine {
       } else {
         diagnostics = [];
       }
-      if (retainedTailExceededBudget && messagesToKeep !== compactPlan.messagesToKeep) {
+      if (plan.retainedTailExceededBudget && plan.messagesToKeep !== plan.compactPlan.messagesToKeep) {
         diagnostics.push({
           code: "compact_retained_tool_output_truncated",
           severity: "warning",
           message:
             "Oversized retained tool output was replaced with a bounded preview so the compacted context can fit the tail budget.",
         });
+      }
+      if (replanDiagnostics.length > 0) {
+        diagnostics = [...replanDiagnostics, ...diagnostics];
       }
 
       const status: CompactionStatus = summaryCancelled ? "cancelled" : summaryError ? "fallback" : "success";
@@ -268,11 +328,11 @@ export class CompactionEngine {
         status,
         trigger: input.trigger,
         preTokens,
-        messagesSummarized: messagesToSummarize.length,
-        shadowedMessageIndexes: compactPlan.shadowedMessageIndexes,
+        messagesSummarized: plan.compactPlan.messagesToSummarize.length,
+        shadowedMessageIndexes: plan.compactPlan.shadowedMessageIndexes,
         summaryMessage,
         boundaryMarker,
-        messagesToKeep,
+        messagesToKeep: plan.messagesToKeep,
         attachments: input.attachments ?? [],
         hookResults: input.hookResults ?? [],
         diagnostics,
@@ -303,7 +363,7 @@ export class CompactionEngine {
         status,
         preTokens,
         postTokens: result.postTokens,
-        messagesSummarized: messagesToSummarize.length,
+        messagesSummarized: plan.compactPlan.messagesToSummarize.length,
       });
 
       return result;
@@ -319,7 +379,7 @@ export class CompactionEngine {
         trigger: input.trigger,
         status: "failed",
         preTokens,
-        messagesSummarized: messagesToSummarize.length,
+        messagesSummarized: plan.compactPlan.messagesToSummarize.length,
       });
       throw error;
     }
@@ -375,7 +435,9 @@ export class CompactionEngine {
           usage = event.usage;
           break;
         case "error":
-          throw new Error(event.error.message);
+          // 结构化错误必须原样保留：丢掉 code / recoverableViaCompact / maxContextTokens
+          // 会让调用方无法识别 PTL，也就无法反向重选（只看到一句 message）。
+          throw new SummaryModelError(event.error);
         default:
           break;
       }
@@ -427,6 +489,56 @@ export function buildPostCompactMessages(result: CompactionResult): CanonicalMes
   out.push(...result.attachments);
   out.push(...result.hookResults);
   return ensureTrailingUserMessage(out);
+}
+
+/**
+ * 摘要调用失败时保留 provider 的结构化错误。丢成 `new Error(message)` 会丢
+ * `code` / `recoverableViaCompact` / `maxContextTokens`——调用方只能看到一句话，
+ * 无法判断「摘要请求自己超窗」（本引擎据此反向重选）。
+ */
+export class SummaryModelError extends Error {
+  constructor(readonly modelError: CanonicalModelError) {
+    super(modelError.message);
+    this.name = "SummaryModelError";
+  }
+}
+
+/** 取出可判定的模型错误：只认自己带的 `SummaryModelError`（其他异常按普通失败处理）。 */
+function extractModelError(error: unknown): CanonicalModelError | undefined {
+  return error instanceof SummaryModelError ? error.modelError : undefined;
+}
+
+/** `planAt` 的一次计划结果（PTL 重选会整体替换它，因此必须自洽）。 */
+type FullCompactionPlanState = {
+  /** 本次计划使用的尾比例（重选后是新值）。 */
+  ratio: number;
+  compactPlan: {
+    messagesToSummarize: CanonicalMessage[];
+    messagesToKeep: CanonicalMessage[];
+    shadowedMessageIndexes: number[];
+  };
+  messagesToKeep: CanonicalMessage[];
+  retainedTailExceededBudget: boolean;
+};
+
+/**
+ * 反向重选的目标尾比例（只会更大）：
+ * - 有报错携带的上限时，按「摘要集最多能占多少」反推：`(preTokens - 上限) / preTokens`
+ *   ——用整段对话 token 保守估计（摘要输入只是其投影，按整段算不会少留原文）。
+ * - 没有上限时退化为尾预算翻倍。
+ * 两者取大并截到 1；比例不变（1）即表示无处可让，调用方不应重试。
+ */
+function nextTailRatioForPromptTooLong(input: {
+  currentRatio: number;
+  preTokens: number;
+  promptTooLongMaxContextTokens?: number;
+}): number {
+  const reported = input.promptTooLongMaxContextTokens;
+  const derivedFromReported =
+    reported !== undefined && reported > 0 && input.preTokens > reported
+      ? (input.preTokens - reported) / input.preTokens
+      : 0;
+  return clamp(Math.max(input.currentRatio * 2, derivedFromReported), 0, 1);
 }
 
 function planFullCompactionMessages(

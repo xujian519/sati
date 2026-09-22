@@ -12,6 +12,7 @@ import {
 import type {
   CanonicalContentBlock,
   CanonicalMessage,
+  CanonicalModelError,
   CanonicalModelEvent,
   CanonicalModelRequest,
 } from "../../src/model/index.js";
@@ -652,6 +653,129 @@ test("full compaction circuit-breaks when summaries never buy a tool turn", asyn
   runtime.noteToolTurn();
   assert.equal((await compact()).type, "compacted");
   assert.equal(summaryRequests.length, 3);
+});
+
+test("summary request overflowing its own window replans with a larger retained tail", async () => {
+  const summaryRequests: CanonicalModelRequest[] = [];
+  const inputMessages = tokenTailFixture();
+  const engine = new CompactionEngine({
+    model: {
+      async *stream(request: CanonicalModelRequest): AsyncIterable<CanonicalModelEvent> {
+        summaryRequests.push(request);
+        if (summaryRequests.length === 1) {
+          // 摘要请求自己超窗：provider 以 error 事件送达（结构化错误必须保留）。
+          yield {
+            type: "error",
+            error: {
+              provider: "local",
+              protocol: "openai",
+              code: "prompt_too_long",
+              message: "This model's maximum context length is 8192 tokens, however you requested 12000 tokens",
+              retryable: false,
+              maxContextTokens: 8192,
+            } satisfies CanonicalModelError,
+          };
+          return;
+        }
+        yield { type: "message_start", role: "assistant" };
+        yield {
+          type: "text_delta",
+          text: "## Objective\nKeep going.\n\n## Current State\nReplanned summary.\n\n## Remaining\nContinue.\n\n## Files And Artifacts\nNone.",
+        };
+        yield { type: "message_end", finishReason: "stop" };
+      },
+    },
+    provider: "local",
+    model_: "local-chat",
+  });
+
+  const result = await engine.run({ trigger: "auto", messages: inputMessages, keepTailRatio: 0.05 });
+
+  // 反向重选：保留更多近期原文 ⇒ 摘要输入更小，第二次调用成功。
+  assert.equal(summaryRequests.length, 2);
+  assert.ok(summaryRequests[1]!.messages.length < summaryRequests[0]!.messages.length);
+  assert.equal(result.status, "success");
+  assert.equal(result.error, undefined);
+  assert.match(summaryText(result.summaryMessage), /Replanned summary/);
+  assert.equal(
+    result.diagnostics.some(diagnostic => diagnostic.code === "compact_summary_prompt_too_long"),
+    true,
+  );
+  // 计划已在本次 run 内整体重算：遮蔽索引必须与**重算后**的计划自洽，
+  // 否则 transcript 的 shadowedRanges 会指向错误的原文。
+  assert.equal(result.shadowedMessageIndexes?.length, result.messagesSummarized);
+  const kept = new Set(result.messagesToKeep);
+  for (const index of result.shadowedMessageIndexes ?? []) {
+    assert.equal(kept.has(inputMessages[index]!), false);
+  }
+});
+
+test("summary request overflowing twice falls back deterministically (bounded one replan)", async () => {
+  const summaryRequests: CanonicalModelRequest[] = [];
+  const engine = new CompactionEngine({
+    model: {
+      async *stream(request: CanonicalModelRequest): AsyncIterable<CanonicalModelEvent> {
+        summaryRequests.push(request);
+        yield {
+          type: "error",
+          error: {
+            provider: "local",
+            protocol: "openai",
+            code: "prompt_too_long",
+            message: "prompt is too long: 300000 tokens > 200000 maximum",
+            retryable: false,
+          } satisfies CanonicalModelError,
+        };
+      },
+    },
+    provider: "local",
+    model_: "local-chat",
+  });
+
+  const result = await engine.run({ trigger: "auto", messages: tokenTailFixture(), keepTailRatio: 0.05 });
+
+  // 有界：只重试一次，不无限烧摘要调用。
+  assert.equal(summaryRequests.length, 2);
+  assert.equal(result.status, "fallback");
+  assert.match(result.error ?? "", /prompt is too long/u);
+  assert.equal(
+    result.diagnostics.some(diagnostic => diagnostic.code === "compact_summary_failed"),
+    true,
+  );
+  assert.match(summaryText(result.summaryMessage), /^\[CONTEXT COMPACTION - REFERENCE ONLY\]/);
+});
+
+test("structured non-PTL summary errors do not trigger a replan", async () => {
+  const summaryRequests: CanonicalModelRequest[] = [];
+  const engine = new CompactionEngine({
+    model: {
+      async *stream(request: CanonicalModelRequest): AsyncIterable<CanonicalModelEvent> {
+        summaryRequests.push(request);
+        yield {
+          type: "error",
+          error: {
+            provider: "local",
+            protocol: "openai",
+            code: "server_error",
+            message: "upstream is having a bad day",
+            retryable: true,
+          } satisfies CanonicalModelError,
+        };
+      },
+    },
+    provider: "local",
+    model_: "local-chat",
+  });
+
+  const result = await engine.run({ trigger: "auto", messages: tokenTailFixture(), keepTailRatio: 0.05 });
+
+  // 反向重选只针对「摘要请求自己超窗」：其他失败重试同一份输入没有意义。
+  assert.equal(summaryRequests.length, 1);
+  assert.equal(result.status, "fallback");
+  assert.equal(
+    result.diagnostics.some(diagnostic => diagnostic.code === "compact_summary_prompt_too_long"),
+    false,
+  );
 });
 
 test("summary input preserves thinking blocks from the summarized prefix", async () => {

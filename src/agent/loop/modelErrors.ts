@@ -5,13 +5,7 @@
  * AgentStatusMessage 构建器（无运行期状态）。
  */
 
-import {
-  PROMPT_TOO_LONG_ANTHROPIC_PATTERN,
-  PROMPT_TOO_LONG_OPENAI_PATTERN,
-  REQUEST_TOO_LARGE_PATTERN,
-  type CanonicalModelError,
-  type CanonicalUsage,
-} from "../../model/index.js";
+import { isPromptTooLong, type CanonicalModelError, type CanonicalUsage } from "../../model/index.js";
 import { agentError } from "../protocol/errors.js";
 import type { AgentTurnResult } from "../protocol/result.js";
 import {
@@ -27,22 +21,6 @@ export type AgentStatusMessage = {
   text: string;
   detail?: Record<string, unknown>;
 };
-
-export function isPromptTooLong(error: CanonicalModelError): boolean {
-  if (error.code === "prompt_too_long" || error.recoverableViaCompact) {
-    return true;
-  }
-  if (PROMPT_TOO_LONG_ANTHROPIC_PATTERN.test(error.message)) {
-    return true;
-  }
-  if (PROMPT_TOO_LONG_OPENAI_PATTERN.test(error.message)) {
-    return true;
-  }
-  if (REQUEST_TOO_LARGE_PATTERN.test(error.message)) {
-    return true;
-  }
-  return false;
-}
 
 /** 凭证 seam 稳定双码（阶段四 T10）：missing 可修复、invalid 重试无意义。 */
 export function isMissingCredentialError(error: CanonicalModelError): boolean {
