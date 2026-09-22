@@ -20,6 +20,7 @@
  */
 
 import { figureCaption, officeProfile, printableArea } from "../office-profile.js";
+import { planLeaderLines, type LeaderSegment } from "../leader-line.js";
 import { measureTextWidth } from "../metrics.js";
 import type { Jurisdiction } from "../types.js";
 import {
@@ -81,6 +82,15 @@ export type CadLabelPlacement = {
   labelMm: [number, number];
   /** 文本包围盒（纸面毫米；按 `measureTextWidth` 估算，用于重叠/越界判定）。 */
   boxMm: { left: number; top: number; right: number; bottom: number };
+  /** 引线折线（纸面毫米）；退化为就地标号时为空。 */
+  leaderMm: readonly LeaderSegment[];
+  /** 是否退化（无可用引线落位：标号就地画在锚点上）。 */
+  degraded: boolean;
+  /**
+   * 钉死偏移（`label_offset_mm`）的后果（引线面 + 标号压盖图内内容）。引擎择位的落位恒为空
+   * ——见 `leader-line.ts` 的判据。
+   */
+  conflicts: readonly string[];
 };
 
 export type CadRenderResult = {
@@ -99,6 +109,8 @@ export type CadRenderResult = {
   hatchSegments: number;
   /** 标注落位（缺省无标注时为空数组）。 */
   labels: CadLabelPlacement[];
+  /** 标注择位告警（无可用引线落位 ⇒ 退化就地标号；缺省无标注时为空数组）。 */
+  labelWarnings: string[];
   /** 绘制几何（不含标注）的纸面范围：判定"锚点是否落在图内"用。 */
   geometryBoundsMm: { left: number; top: number; right: number; bottom: number };
 };
@@ -232,18 +244,6 @@ function cutFacePolylines(
   return cutFaces.map(face => face.loops.map(loop => loop.map(point => toPaperFromModel(point))));
 }
 
-/** 文本包围盒估算（纸面毫米）：宽度按字符类别累计，高度取字号的 1.2 倍、基线偏下 0.2。 */
-function labelBox(ref: number, labelMm: [number, number]): CadLabelPlacement["boxMm"] {
-  const text = String(ref);
-  const halfWidth = measureTextWidth(text, CAD_REF_FONT_MM) / 2;
-  return {
-    left: labelMm[0] - halfWidth,
-    right: labelMm[0] + halfWidth,
-    top: labelMm[1] - CAD_REF_FONT_MM * 1.0,
-    bottom: labelMm[1] + CAD_REF_FONT_MM * 0.2,
-  };
-}
-
 /** 投影边表 → 黑白 SVG（A4 可印区适配；确定性：无时钟/随机）。 */
 export function renderCadSvg(table: CadEdgeTable, options: CadRenderOptions): CadRenderResult {
   const hiddenLines = options.hiddenLines === true;
@@ -277,6 +277,8 @@ export function renderCadSvg(table: CadEdgeTable, options: CadRenderOptions): Ca
 
   // 标注预留带：标号向图外引，故四边各留出"最长引线 + 半个最宽标号 + 余量"。
   // 有预留带 ⇒ 含标注的纸面尺寸**由构造保证**不超可印区（几何另按可用宽度缩放）。
+  // 预留带同时是择位引擎的**画幅约束**：带内放不下候选时引擎不硬画（那会被裁或压图），
+  // 而是把标号退化为就地标注并告警（见 leader-line.ts）。
   const profile = officeProfile(
     options.jurisdiction === "us" ? "uspto" : options.jurisdiction === "pct" ? "pct" : "cnipa",
   );
@@ -303,7 +305,6 @@ export function renderCadSvg(table: CadEdgeTable, options: CadRenderOptions): Ca
   const heightMm = geometryHeight * scale + band * 2;
 
   const toPaper = (x: number, y: number): [number, number] => [band + (x - minX) * scale, band + (y - minY) * scale];
-  const toSvg = toPaper;
 
   const geometryBoundsMm = {
     left: band,
@@ -312,12 +313,15 @@ export function renderCadSvg(table: CadEdgeTable, options: CadRenderOptions): Ca
     bottom: band + geometryHeight * scale,
   };
 
-  const paths = projected
+  // 纸面折线只算一次：SVG 路径与"引线不得与之共线"的障碍线段同源（两处各算一遍必然漂移）
+  const paperPolylines = projected.map(entry => ({
+    edge: entry.edge,
+    points: entry.points.map(([x, y]) => toPaper(x, y)),
+  }));
+
+  const paths = paperPolylines
     .map(entry => {
-      const points = entry.points.map(([x, y]) => {
-        const [sx, sy] = toSvg(x, y);
-        return `${fmt(sx)},${fmt(sy)}`;
-      });
+      const points = entry.points.map(([sx, sy]) => `${fmt(sx)},${fmt(sy)}`);
       const style =
         `fill="none" stroke="#000000" stroke-width="${CAD_LINE_WIDTH_MM}"` +
         (entry.edge.kind === "hidden" ? ` stroke-dasharray="${CAD_HIDDEN_DASH_MM[0]} ${CAD_HIDDEN_DASH_MM[1]}"` : "");
@@ -342,39 +346,76 @@ export function renderCadSvg(table: CadEdgeTable, options: CadRenderOptions): Ca
           .map(([from, to]) => `M${fmt(from[0])} ${fmt(from[1])}L${fmt(to[0])} ${fmt(to[1])}`)
           .join("")}" fill="none" stroke="#000000" stroke-width="${CAD_HATCH_LINE_WIDTH_MM}"/>\n`;
 
-  // 附图标记：锚点投影 → 引线 → 标号（分组 id 形如 "n-ref-<标记>"，与内置渲染器的
-  // 回读契约同构：patent_figure_check 的 svg_paths 回读可直接复核 CAD 图）
+  // 附图标记：锚点投影 → 择位（引线 + 标号）。分组 id 形如 "n-ref-<标记>"，与内置渲染器的
+  // 回读契约同构（patent_figure_check 的 svg_paths 回读可直接复核 CAD 图）。
+  //
+  // 择位交给 leader-line.ts：标号不压图内内容、引线不与主线条共线重叠、引线之间不交叉。
+  // 障碍分两类、口径不同——几何外接框只约束**标号**（锚点在零件内部时，引线要出图必然穿过
+  // 外接框，那是常规制图形态），线条才约束**引线**（共线重叠即分不清标记线与主线条）。
   const centerPaper: [number, number] = [
     (geometryBoundsMm.left + geometryBoundsMm.right) / 2,
     (geometryBoundsMm.top + geometryBoundsMm.bottom) / 2,
   ];
-  const labels: CadLabelPlacement[] = [];
-  const annotationMarkup = annotations
-    .map((annotation, index) => {
-      const [anchorX, anchorY] = toPaper(...anchorsLocal[index]!);
-      let direction: [number, number] | undefined;
-      let labelMm: [number, number];
-      if (annotation.labelOffsetMm !== undefined) {
-        const [dx, dy] = annotation.labelOffsetMm;
-        labelMm = [anchorX + dx, anchorY + dy];
-        direction = normalize([dx, dy]);
-      } else {
-        direction = normalize([anchorX - centerPaper[0], anchorY - centerPaper[1]]) ?? [0, -1];
-        labelMm = [anchorX + direction[0] * CAD_REF_LEADER_MM, anchorY + direction[1] * CAD_REF_LEADER_MM];
-      }
-      const box = labelBox(annotation.ref, labelMm);
-      labels.push({ ref: annotation.ref, anchorMm: [anchorX, anchorY], labelMm, boxMm: box });
-      const leader =
-        direction === undefined
-          ? ""
-          : `<polyline points="${fmt(anchorX)},${fmt(anchorY)} ` +
-            `${fmt(labelMm[0] - direction[0] * CAD_REF_LABEL_GAP_MM)},` +
-            `${fmt(labelMm[1] - direction[1] * CAD_REF_LABEL_GAP_MM)}" fill="none" ` +
-            `stroke="#000000" stroke-width="${CAD_LINE_WIDTH_MM}"/>`;
+  const obstacleSegments: LeaderSegment[] = [];
+  for (const entry of paperPolylines) {
+    for (let index = 1; index < entry.points.length; index += 1) {
+      const [x1, y1] = entry.points[index - 1]!;
+      const [x2, y2] = entry.points[index]!;
+      obstacleSegments.push({ from: { x: x1, y: y1 }, to: { x: x2, y: y2 } });
+    }
+  }
+  for (const [from, to] of hatchSegments) {
+    obstacleSegments.push({ from: { x: from[0], y: from[1] }, to: { x: to[0], y: to[1] } });
+  }
+  const plan = planLeaderLines(
+    annotations.map((annotation, index) => {
+      const [x, y] = toPaper(...anchorsLocal[index]!);
+      return {
+        id: String(annotation.ref),
+        text: String(annotation.ref),
+        anchor: { x, y },
+        ...(annotation.labelOffsetMm === undefined ? {} : { pinnedOffsetMm: annotation.labelOffsetMm }),
+      };
+    }),
+    { boxes: [geometryBoundsMm], segments: obstacleSegments },
+    {
+      fontSizeMm: CAD_REF_FONT_MM,
+      gapMm: CAD_REF_LABEL_GAP_MM,
+      minLeaderMm: CAD_REF_LEADER_MM,
+      // 引线上限取几何对角尺度：锚点在零件深处时必须能一路引到图外（缺省 6mm 够不到中心）
+      maxLeaderMm:
+        Math.max(geometryBoundsMm.right - geometryBoundsMm.left, geometryBoundsMm.bottom - geometryBoundsMm.top) *
+          0.75 +
+        CAD_REF_LEADER_MM,
+      canvas: { left: 0, top: 0, right: widthMm, bottom: heightMm },
+      figureCenter: { x: centerPaper[0], y: centerPaper[1] },
+    },
+  );
+  // 落位按目标顺序返回（leader-line.ts 的顺序纪律），故与 annotations 逐位对齐：
+  // 标记取值直接取原 annotation，不从 id 反解（避免未来换成非数字 id 时静默变 NaN）。
+  const labels: CadLabelPlacement[] = plan.placements.map((placement, index) => ({
+    ref: annotations[index]!.ref,
+    anchorMm: [placement.anchor.x, placement.anchor.y],
+    labelMm: [placement.labelPoint.x, placement.labelPoint.y],
+    boxMm: placement.box,
+    leaderMm: placement.leader,
+    degraded: placement.degraded,
+    conflicts: placement.conflicts,
+  }));
+  const annotationMarkup = plan.placements
+    .map(placement => {
+      const leader = placement.leader
+        .map(
+          segment =>
+            `<polyline points="${fmt(segment.from.x)},${fmt(segment.from.y)} ` +
+            `${fmt(segment.to.x)},${fmt(segment.to.y)}" fill="none" stroke="#000000" ` +
+            `stroke-width="${CAD_LINE_WIDTH_MM}"/>`,
+        )
+        .join("");
       return (
-        `<g id="n-ref-${annotation.ref}" data-ref="${annotation.ref}">${leader}` +
-        `<text x="${fmt(labelMm[0])}" y="${fmt(labelMm[1])}" font-size="${CAD_REF_FONT_MM}" ` +
-        `text-anchor="middle" fill="#000000">${annotation.ref}</text></g>`
+        `<g id="n-ref-${placement.id}" data-ref="${placement.id}">${leader}` +
+        `<text x="${fmt(placement.labelPoint.x)}" y="${fmt(placement.labelPoint.y)}" font-size="${CAD_REF_FONT_MM}" ` +
+        `text-anchor="middle" fill="#000000">${escapeXml(placement.text)}</text></g>`
       );
     })
     .join("\n");
@@ -405,6 +446,7 @@ export function renderCadSvg(table: CadEdgeTable, options: CadRenderOptions): Ca
     cutFaces: cutFaces.length,
     hatchSegments: hatchSegments.length,
     labels,
+    labelWarnings: plan.warnings,
     geometryBoundsMm,
   };
 }

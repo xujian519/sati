@@ -7,9 +7,9 @@
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1060 / 178521 |
+| src TS 文件 / 行数 | 1061 / 179122 |
 | src JS 文件 | 0 |
-| tests 文件 | 600 |
+| tests 文件 | 601 |
 | ui/src 文件 / 行数 | 576 / 92914 |
 | ui/server 文件 / 行数 | 110 / 32001 |
 
@@ -67,7 +67,7 @@
 | `ui/src/components/chat/hooks/useChatComposerState.ts` | `useChatComposerState` | 467 | function |
 | `src/router/execution/executeRouterDecision.ts` | `executeRouterDecision` | 449 | function |
 | `ui/src/components/settings/view/modelPool/components/ProviderCard.tsx` | `ProviderCard` | 447 | function |
-| `src/tool/builtin/patentFigureProject.ts` | `createPatentFigureProjectTool` | 431 | function |
+| `src/tool/builtin/patentFigureProject.ts` | `createPatentFigureProjectTool` | 434 | function |
 | `ui/src/components/chat-v2/MessageRowV2.tsx` | `MessageRowV2` | 429 | function |
 | `src/patent/figuregen/check.ts` | `checkFigures` | 428 | function |
 | `ui/src/components/code-editor/view/subcomponents/DocxBuiltinPreview.tsx` | `DocxBuiltinPreview` | 421 | function |
@@ -92,10 +92,10 @@
 | `ui/src/components/main-content/view/MainContent.tsx` | `MainContent` | 346 | function |
 | `src/patent/graph/domains/inventiveness.ts` | `buildInventivenessGraph` | 342 | function |
 | `src/tool/builtin/patentFigureGenerate.ts` | `createPatentFigureGenerateTool` | 335 | function |
+| `src/tool/builtin/patentFigureProject.ts` | `execute` | 335 | method |
 | `ui/src/components/chat/view/subcomponents/MessageComponent.tsx` | `(anonymous)` | 335 | arrow |
 | `ui/src/components/main-content-v2/PlansAndCronJobs.tsx` | `PlansAndCronJobs` | 334 | function |
 | `src/gateway/client/telemetry.ts` | `emitSessionTelemetry` | 333 | function |
-| `src/tool/builtin/patentFigureProject.ts` | `execute` | 332 | method |
 | `ui/src/components/main-content-v2/DashboardV2.tsx` | `DashboardV2` | 332 | function |
 | `ui/src/hooks/useSatiConfig.ts` | `useSatiConfigState` | 332 | function |
 | `ui/src/components/chat/hooks/useSlashCommandExecute.ts` | `useSlashCommandExecute` | 331 | function |
@@ -162,7 +162,7 @@
 
 | 模块 | 测试文件 |
 |---|---|
-| patent | 128 |
+| patent | 129 |
 | tool | 65 |
 | agent | 59 |
 | knowledge | 38 |
@@ -195,7 +195,7 @@
 | runtime | 1 |
 | status | 1 |
 
-| **合计** | **575** |
+| **合计** | **576** |
 
 ## i18n en/zh-CN 对齐
 

@@ -17,6 +17,12 @@
  * - C7 标注重叠：两个附图标记的标号框相交 → warn（标号糊在一起不可读）
  * - C8 标注锚点：锚点投影落在绘制几何范围之外 → warn（锚点多半写错了：投影图内没有该处）
  * - C9 标号越界：标号框超出图幅 → fail（会被画幅裁掉，图面上只剩半截数字）
+ * - C10 钉死落位的后果：`label_offset_mm` 指定的标号压在图内内容上、或引线与主线条共线重叠
+ *   （打印后分不清哪条是标记线，指南一部一章 4.3）、或引线穿过别的标号/与别的引线交叉
+ *   → warn。**引擎择位的落位不会触发本规则**（择位判据已排除），故本规则实际是"钉死偏移
+ *   的体检"：谁把标号钉到了主线条上，谁在这里被报出来。
+ * - C11 标号退化：无可用引线落位 ⇒ 标号就地画在锚点上（压在图上）→ warn。退化是引擎的
+ *   兜底而不是静默改写，故必须可观测。
  *
  * 明确不做（诚实边界）：**最小线间距**检查需要先重建轮廓（相邻边共享端点，逐点距离必然
  * 为 0），属更大的一块工作；当前先以"边数/退化边/缩放"三项覆盖可判定的部分。
@@ -25,7 +31,7 @@
 import type { FigureCheckSeverity } from "../check.js";
 import type { CadEdgeTable } from "./types.js";
 
-export type CadRuleId = "C1" | "C2" | "C3" | "C4" | "C5" | "C6" | "C7" | "C8" | "C9";
+export type CadRuleId = "C1" | "C2" | "C3" | "C4" | "C5" | "C6" | "C7" | "C8" | "C9" | "C10" | "C11";
 
 export type CadFinding = {
   rule: CadRuleId;
@@ -62,7 +68,18 @@ export type CadCheckInput = {
     /** 剖面线段数（0 而存在剖切面 ⇒ C6）。 */
     hatchSegments?: number;
     /** 标注落位（纸面毫米）。 */
-    labels?: readonly { ref: number; anchorMm: [number, number]; labelMm: [number, number]; boxMm: CadBox }[];
+    labels?: readonly {
+      ref: number;
+      anchorMm: [number, number];
+      labelMm: [number, number];
+      boxMm: CadBox;
+      /** 引线折线（C10）；旧调用方不给则跳过 C10。 */
+      leaderMm?: readonly { from: { x: number; y: number }; to: { x: number; y: number } }[];
+      /** 是否退化（C11）。 */
+      degraded?: boolean;
+      /** 钉死落位的后果（C10）。 */
+      conflicts?: readonly string[];
+    }[];
     /** 绘制几何（不含标注）的纸面范围（C8）。 */
     geometryBoundsMm?: CadBox;
   };
@@ -238,6 +255,35 @@ export function checkCadProjection(input: CadCheckInput): CadFinding[] {
         ],
       });
     }
+  }
+
+  // C10 钉死落位的后果：引擎择位不会留下冲突，故有冲突必是 label_offset_mm 钉出来的
+  const conflicted = labels.filter(label => (label.conflicts ?? []).length > 0);
+  if (conflicted.length > 0) {
+    findings.push({
+      rule: "C10",
+      severity: "warn",
+      message:
+        `有 ${conflicted.length} 个标记的显式落位（label_offset_mm）与图面冲突：` +
+        "标记线与主线条分不清、或引线穿过别的标号（指南一部一章 4.3：标记线与主线条不得互相妨碍）",
+      evidence: [
+        ...conflicted.slice(0, 5).flatMap(label => label.conflicts!.map(conflict => `标记 ${label.ref}：${conflict}`)),
+        "去掉 label_offset_mm 让引擎自行择位（引擎会避开图内线条与已放标号）",
+      ],
+    });
+  }
+
+  // C11 标号退化：无可用落位 ⇒ 就地标号（压在图上），必须可观测而不是静默降级
+  const degraded = labels.filter(label => label.degraded === true);
+  if (degraded.length > 0) {
+    findings.push({
+      rule: "C11",
+      severity: "warn",
+      message:
+        `有 ${degraded.length} 个标记找不到可用的引线落位，退化为就地标号（无引线，标号压在图上）：` +
+        "请显式指定该标记的落位，或减少同时标注的标记",
+      evidence: degraded.slice(0, 5).map(label => `标记 ${label.ref} 标号落在锚点上，无引线`),
+    });
   }
 
   return findings;

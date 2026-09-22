@@ -464,6 +464,9 @@ export function createPatentFigureProjectTool(
             ? []
             : [
                 `- 附图标记 ${annotations.length} 个（模型坐标锚点 + 引线）：${annotations.map(a => a.ref).join("、")}`,
+                // 择位降级（无可用引线落位 ⇒ 标号压在图上）必须显式报出：C11 是机器可读的
+                // 检查项，这里再给一句人能直接照做的说明
+                ...render.labelWarnings.map(warning => `- 标注择位降级：${warning}`),
               ]),
           `- 附图 sidecar: ${sidecarPath}`,
           "",

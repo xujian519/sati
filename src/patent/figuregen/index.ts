@@ -49,6 +49,23 @@ export {
   type Point,
   type RoutedEdge,
 } from "./layout.js";
+export {
+  DEFAULT_CLEARANCE_MM,
+  DEFAULT_COLLINEAR_ANGLE_DEG,
+  DEFAULT_COLLINEAR_GAP_MM,
+  DEFAULT_LEADER_STEP_MM,
+  LEADER_DIRECTIONS_DEG,
+  labelBoxOf,
+  planLeaderLines,
+  type LeaderBox,
+  type LeaderLineOptions,
+  type LeaderObstacles,
+  type LeaderPlacement,
+  type LeaderPlan,
+  type LeaderPoint,
+  type LeaderSegment,
+  type LeaderTarget,
+} from "./leader-line.js";
 export { renderFigureSvg } from "./render-svg.js";
 export {
   DEFAULT_OFFICE_PROFILE,
