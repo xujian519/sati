@@ -37,7 +37,7 @@
 | `patent_manifest_count` | 内置 patent manifest 数 | `8` | assets/workflows/patent/generated/*.yaml（由 check:patent-workflow-docs 保真） |
 | `drafting_stage_count` | patent_drafting_v1 阶段数 | `25` | assets/workflows/patent/generated/patent_drafting_v1.yaml |
 | `event_total_count` | 事件总数（生产者/消费者矩阵行数） | `80` | docs/event-producer-consumer.md（由 check:event-matrix 保真） |
-| `lint_gate_count` | pnpm lint 链上的领域门禁数 | `11` | package.json scripts.lint |
+| `lint_gate_count` | pnpm lint 链上的领域门禁数 | `12` | package.json scripts.lint |
 | `ci_job_count` | CI job 数 | `3` | .github/workflows/ci.yml |
 
 ## 3. `src/` 模块索引
@@ -81,7 +81,7 @@
 
 ## 4. 门禁链与 CI
 
-`pnpm lint` 在 eslint + UI lint 之后挂 **11** 个领域门禁（按执行顺序）：
+`pnpm lint` 在 eslint + UI lint 之后挂 **12** 个领域门禁（按执行顺序）：
 
 - `pnpm check:catalog-mirror`
 - `pnpm check:event-matrix`
@@ -93,6 +93,7 @@
 - `pnpm check:issue-labels`
 - `pnpm check:techdebt-metrics`
 - `pnpm check:protocol-version`
+- `pnpm check:architecture-boundaries`
 - `pnpm check:doc-claims`
 
 CI（`.github/workflows/ci.yml`）共 **3** 个 job：
