@@ -36,6 +36,13 @@ type WebGatewayEventMetadata = {
   runId?: string;
 };
 
+/** 交互式往返的发起者归属（镜像 `GatewayEventOrigin`）。 */
+export type WebGatewayEventOrigin = {
+  kind: "subagent";
+  subagentId: string;
+  subagentType?: string;
+};
+
 export type WebGatewayEvent = WebGatewayEventMetadata &
   (
     | { type: "turn_started"; runId: string }
@@ -80,6 +87,8 @@ export type WebGatewayEvent = WebGatewayEventMetadata &
         requestId: string;
         toolName: string;
         payload: unknown;
+        /** 子代理 fork 内的请求才有（镜像 `GatewayEventOrigin`）；UI 据此显示来源。 */
+        origin?: WebGatewayEventOrigin;
       }
     | {
         type: "approval_pending";

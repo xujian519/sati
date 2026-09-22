@@ -48,6 +48,24 @@ test("selectRecentMessageBreakpoints picks the last three message indices", () =
   assert.deepEqual(selectRecentMessageBreakpoints([]), []);
 });
 
+test("selectRecentMessageBreakpoints 跳过尾部注入消息（其前缀永不重现）", () => {
+  const tailInjection = {
+    role: "user" as const,
+    content: [{ type: "text" as const, text: "injected" }],
+    metadata: { synthetic: true, purpose: "context_injection" },
+  };
+  const messages = [
+    textMessage("user", "1"),
+    textMessage("assistant", "2"),
+    textMessage("user", "3"),
+    textMessage("assistant", "4"),
+    tailInjection,
+  ];
+
+  assert.deepEqual(selectRecentMessageBreakpoints(messages), [1, 2, 3]);
+  assert.deepEqual(selectRecentMessageBreakpoints([tailInjection]), []);
+});
+
 test("stableSerialize sorts keys so equal content yields equal output", () => {
   assert.equal(stableSerialize({ b: 1, a: 2 }), stableSerialize({ a: 2, b: 1 }));
   assert.notEqual(stableSerialize({ a: 1 }), stableSerialize({ a: 2 }));

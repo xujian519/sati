@@ -47,6 +47,9 @@ function makeFixture(
   options: {
     config?: Partial<AgentRuntimeConfig>;
     injections?: Array<{ source: string; text: string }>;
+    tailInjections?: Array<{ source: string; text: string }>;
+    planTodo?: AgentRuntimeDependencies["planTodoManager"];
+    workspaceLedger?: AgentRuntimeDependencies["workspaceLedger"];
     materializeRequest?: AgentRouterRuntime["materializeRequest"];
     tokenAccounting?: AgentRuntimeDependencies["tokenAccounting"];
   } = {},
@@ -93,6 +96,8 @@ function makeFixture(
       },
     },
     tokenAccounting: options.tokenAccounting,
+    ...(options.planTodo ? { planTodoManager: options.planTodo } : {}),
+    ...(options.workspaceLedger ? { workspaceLedger: options.workspaceLedger } : {}),
     context: {
       prepareForModel: async input => {
         fixture.prepared.push(input);
@@ -105,6 +110,7 @@ function makeFixture(
           diagnostics: [],
           boundaries: [],
           injections: options.injections,
+          tailInjections: options.tailInjections,
         };
       },
       applyToolResults: async input => ({ messages: input.messages, diagnostics: [] }),
@@ -217,6 +223,87 @@ test("createModelRequest：plan 模式在消息尾部追加计划提醒", async 
   const plain = await createModelRequest(makeFixture().deps, [user("hi")], baseInput());
 
   assert.equal(request.messages.length > plain.messages.length, true);
+});
+
+// ---------------------------------------------------------------------------
+// 系统提示分桶：逐轮可变注入进消息尾部（2.3）
+// ---------------------------------------------------------------------------
+
+/** plan-todo 句柄桩：只提供被装配读取的 `buildPromptAddendum`。 */
+function planTodoManager(addendum: string | undefined): AgentRuntimeDependencies["planTodoManager"] {
+  return {
+    forSession: () => ({
+      buildPromptAddendum: () => addendum,
+    }),
+  } as unknown as AgentRuntimeDependencies["planTodoManager"];
+}
+
+/** 账本 provider 桩：返回一个已开账的最小状态（渲染出 `<workspace-state>` 块）。 */
+function workspaceLedger(goal: string, next: string): AgentRuntimeDependencies["workspaceLedger"] {
+  return {
+    read: async () => ({
+      status: "ok",
+      state: { goal, core: [], verified: [], open: [], next },
+    }),
+    write: async () => {},
+  } as unknown as AgentRuntimeDependencies["workspaceLedger"];
+}
+
+function tailInjectionText(request: CanonicalModelRequest): string {
+  const last = request.messages.at(-1);
+  if (!last || last.metadata?.purpose !== "context_injection") return "";
+  return last.content.map(block => (block.type === "text" ? block.text : "")).join("\n");
+}
+
+test("createModelRequest：plan-todo 追加段与账本块进消息尾部，不进 system prompt", async () => {
+  const f = makeFixture({
+    config: { workspaceLedger: true },
+    planTodo: planTodoManager("You are executing an approved plan."),
+    workspaceLedger: workspaceLedger("交付装配改动", "续跑装配稳定性测量"),
+  });
+
+  const request = await createModelRequest(f.deps, [user("hi")], baseInput());
+
+  assert.equal(request.systemPrompt, "sys prompt", "system prompt 不得掺入逐轮可变段落");
+  const tail = tailInjectionText(request);
+  assert.ok(tail.includes("You are executing an approved plan."), "plan-todo 追加段应在尾部注入里");
+  assert.ok(tail.includes("<workspace-state>"), "账本块应在尾部注入里");
+  assert.ok(tail.includes("交付装配改动"), "账本块内容应逐字节保留");
+});
+
+test("createModelRequest：运行时返回的尾部分段与自带分段合成同一条消息（顺序固定）", async () => {
+  const f = makeFixture({
+    config: { workspaceLedger: true, methodologyInjection: () => "methodology: 先复述再结论" },
+    planTodo: planTodoManager("plan-todo 段"),
+    workspaceLedger: workspaceLedger("目标", "下一步"),
+    tailInjections: [{ source: "memory", text: "<memory-context>命中的记忆</memory-context>" }],
+  });
+
+  const request = await createModelRequest(f.deps, [user("hi")], baseInput());
+
+  const tail = tailInjectionText(request);
+  const order = ["plan-todo 段", "<workspace-state>", "<memory-context>", "methodology: 先复述再结论"];
+  const positions = order.map(fragment => {
+    const index = tail.indexOf(fragment);
+    assert.ok(index >= 0, `尾部注入应包含 ${fragment}`);
+    return index;
+  });
+  assert.deepEqual(
+    positions,
+    [...positions].sort((left, right) => left - right),
+    "顺序应为 plan-todo → 账本 → 记忆 → 方法论",
+  );
+});
+
+test("createModelRequest：无逐轮可变段落时不追加尾部消息（请求形状不变）", async () => {
+  const f = makeFixture();
+  const request = await createModelRequest(f.deps, [user("hi")], baseInput());
+
+  assert.equal(request.messages.length, 1);
+  assert.equal(
+    request.messages.some(message => message.metadata?.purpose === "context_injection"),
+    false,
+  );
 });
 
 // ---------------------------------------------------------------------------

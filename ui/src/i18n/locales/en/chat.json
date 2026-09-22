@@ -188,7 +188,8 @@
     "allowOnce": "Allow once",
     "allowRemember": "Allow & remember",
     "allowSaved": "Allow (saved)",
-    "deny": "Deny"
+    "deny": "Deny",
+    "subagentOrigin": "Requested by subagent: {{agent}}"
   },
   "approvalBanner": {
     "title": "Patent conclusion awaiting review",

@@ -22,6 +22,14 @@ interface PermissionRequestsBannerProps {
   onPlanExecutionApproved?: () => void;
 }
 
+/**
+ * 来源标签：优先子代理类型（可读，如 `explore`），缺类型时退回短 id ——
+ * fork id 是 UUID，全量显示会挤掉工具名那一行。
+ */
+function describeRequestOrigin(origin: NonNullable<PendingPermissionRequest["origin"]>): string {
+  return origin.subagentType || origin.subagentId.slice(0, 8);
+}
+
 export default function PermissionRequestsBanner({
   pendingPermissionRequests,
   handlePermissionDecision,
@@ -44,11 +52,14 @@ export default function PermissionRequestsBanner({
     }
     const rawInput = formatToolInputForDisplay(request.input);
     const entry = buildSatiToolPermissionEntry(request.toolName, rawInput) ?? request.requestId;
-    const group = grouped.get(entry);
+    // 归属不同的请求不合并：合并会给出错误的「谁在请求」标注，也把子代理的
+    // 请求混进主代理那一条。
+    const groupKey = request.origin ? `${entry}@@${request.origin.subagentId}` : entry;
+    const group = grouped.get(groupKey);
     if (group) {
       group.push(request);
     } else {
-      grouped.set(entry, [request]);
+      grouped.set(groupKey, [request]);
     }
   }
 
@@ -66,7 +77,7 @@ export default function PermissionRequestsBanner({
         );
       })}
 
-      {Array.from(grouped.entries()).map(([entry, requests]) => {
+      {Array.from(grouped.entries()).map(([groupKey, requests]) => {
         const first = requests[0];
         const allIds = requests.map(r => r.requestId);
         const rawInput = formatToolInputForDisplay(first.input);
@@ -74,10 +85,9 @@ export default function PermissionRequestsBanner({
         const settings = getSatiSettings();
         const alreadyAllowed = permissionEntry ? settings.allowedTools.includes(permissionEntry) : false;
         const rememberLabel = alreadyAllowed ? t("permissionBanner.allowSaved") : t("permissionBanner.allowRemember");
-
         return (
           <div
-            key={entry}
+            key={groupKey}
             className="rounded-lg border border-amber-200 bg-amber-50 p-3 shadow-xs dark:border-amber-800 dark:bg-amber-900/20"
           >
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -90,6 +100,11 @@ export default function PermissionRequestsBanner({
                 <div className="text-xs text-amber-800 dark:text-amber-200">
                   {t("permissionBanner.tool")} <span className="font-mono">{first.toolName}</span>
                 </div>
+                {first.origin && (
+                  <div className="text-xs text-amber-800 dark:text-amber-200">
+                    {t("permissionBanner.subagentOrigin", { agent: describeRequestOrigin(first.origin) })}
+                  </div>
+                )}
               </div>
               {permissionEntry && (
                 <div className="text-xs text-amber-700 dark:text-amber-300">

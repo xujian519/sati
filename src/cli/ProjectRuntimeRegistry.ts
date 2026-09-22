@@ -335,7 +335,7 @@ export class ProjectRuntimeRegistry {
    */
   knowledgeCapabilitiesReport(projectKey?: string): KnowledgeCapabilitiesResult {
     const runtime = this.resolve(projectKey);
-    const paths = runtime.knowledgePaths ?? resolveKnowledgeDbPaths();
+    const paths = runtime.knowledgePaths ?? resolveKnowledgeDbPaths(this.options.env);
     const embeddingConfigured = runtime.knowledgeEmbeddingConfigured ?? false;
     const rerankConfigured = runtime.knowledgeRerankConfigured ?? false;
     const stats = runtime.knowledgeStats?.snapshot();

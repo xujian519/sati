@@ -17,8 +17,8 @@
 | `node_engine` | Node 版本下限 | `>=22.13.0` | package.json engines.node |
 | `pnpm_version` | pnpm 版本 | `10.32.1` | package.json packageManager |
 | `typescript_version` | TypeScript 版本 | `6.0.3` | package.json devDependencies.typescript |
-| `protocol_version` | 网关协议版本（台账末条） | `1.10` | src/gateway/protocol/version.ts PROTOCOL_RELEASES |
-| `protocol_release_count` | 协议台账版本条目数 | `11` | src/gateway/protocol/version.ts PROTOCOL_RELEASES |
+| `protocol_version` | 网关协议版本（台账末条） | `1.11` | src/gateway/protocol/version.ts PROTOCOL_RELEASES |
+| `protocol_release_count` | 协议台账版本条目数 | `12` | src/gateway/protocol/version.ts PROTOCOL_RELEASES |
 | `gateway_method_count` | 网关方法数 | `70` | src/gateway/protocol/version.ts PROTOCOL_METHOD_VERSION |
 
 ## 2. 计数矩阵
@@ -37,7 +37,7 @@
 | `patent_manifest_count` | 内置 patent manifest 数 | `8` | assets/workflows/patent/generated/*.yaml（由 check:patent-workflow-docs 保真） |
 | `drafting_stage_count` | patent_drafting_v1 阶段数 | `25` | assets/workflows/patent/generated/patent_drafting_v1.yaml |
 | `event_total_count` | 事件总数（生产者/消费者矩阵行数） | `80` | docs/event-producer-consumer.md（由 check:event-matrix 保真） |
-| `lint_gate_count` | pnpm lint 链上的领域门禁数 | `11` | package.json scripts.lint |
+| `lint_gate_count` | pnpm lint 链上的领域门禁数 | `12` | package.json scripts.lint |
 | `ci_job_count` | CI job 数 | `3` | .github/workflows/ci.yml |
 
 ## 3. `src/` 模块索引
@@ -52,7 +52,7 @@
 | `src/board/` | 8 | ✓ | 项目看板（protocol/runtime/storage 三组，kanban_* 工具与网关方法组） |
 | `src/browser/` | 6 | — | 浏览器后端抽象（ego lite / BrowserOS 等后端探测与驱动） |
 | `src/cli/` | 28 | ✓ | CLI 入口与命令（sati.ts / satiServer.ts / createLocalGateway.ts） |
-| `src/context/` | 315 | ✓ | 上下文（压缩/预算/记忆/向量/workspace registerLeak） |
+| `src/context/` | 316 | ✓ | 上下文（压缩/预算/记忆/向量/workspace registerLeak） |
 | `src/cron/` | 18 | ✓ | 定时任务（config/protocol/runtime/storage/tool） |
 | `src/extension/` | 50 | ✓ | 插件系统（plugin.json、lifecycle hooks、skills、贡献点） |
 | `src/fs/` | 1 | — | 文件系统小工具（JSONL run 写入器） |
@@ -62,7 +62,7 @@
 | `src/literature/` | 13 | ✓ | 学术论文检索（arXiv/OpenAlex/Semantic Scholar/Crossref） |
 | `src/mcp/` | 16 | ✓ | MCP 客户端/协议/运行时 |
 | `src/methodology/` | 14 | ✓ | 方法论注册表（five-whys/mece/triz/bridge-reencode 等） |
-| `src/model/` | 74 | ✓ | 模型抽象（providers/embedding/catalog/resolveModelInfo/streaming） |
+| `src/model/` | 75 | ✓ | 模型抽象（providers/embedding/catalog/resolveModelInfo/streaming） |
 | `src/network/` | 3 | ✓ | 网络层（fetch 封装） |
 | `src/patent/` | 178 | ✓ | 专利执行管线（workflow/graph/atoms/evidence/figure/document 等） |
 | `src/permission/` | 7 | ✓ | 权限（decision/PermissionRuntime + guard/ToolGuardRegistry） |
@@ -81,7 +81,7 @@
 
 ## 4. 门禁链与 CI
 
-`pnpm lint` 在 eslint + UI lint 之后挂 **11** 个领域门禁（按执行顺序）：
+`pnpm lint` 在 eslint + UI lint 之后挂 **12** 个领域门禁（按执行顺序）：
 
 - `pnpm check:catalog-mirror`
 - `pnpm check:event-matrix`
@@ -93,6 +93,7 @@
 - `pnpm check:issue-labels`
 - `pnpm check:techdebt-metrics`
 - `pnpm check:protocol-version`
+- `pnpm check:architecture-boundaries`
 - `pnpm check:doc-claims`
 
 CI（`.github/workflows/ci.yml`）共 **3** 个 job：

@@ -70,7 +70,7 @@ Status: implemented
   行为**零变化**；工作区身份、内容哈希、来源标记三块 1.2b 直接复用。
 - 代价：每个新会话装配时对项目插件目录做一次全量读取哈希（仅 `project` 来源、有上限、
   同目录缓存不参与）。这是 1.2a 的刻意选择——缓存会重新引入「mtime 不变则内容不可见」的问题。
-- 未做（属 1.2b）：不拦截、不审批、无 `hook_trust_*` 网关方法（协议 1.11）、无应用级 UI；
+- 未做（属 1.2b）：不拦截、不审批、无 `hook_trust_*` 网关方法（协议 1.12）、无应用级 UI；
   报告按**插件**粒度，不区分 matcher/hook 槽位（1.2b 的授权记录才带 matcherIndex/hookIndex）。
 - 已知不精确处：`loadPluginFromPath` 目前吞掉 `parseHooksConfig` 的 diagnostics，
   声明语法错误的插件在报告里表现为「没有 hook」而非「声明有问题」——同属 1.2b 的评审面。
