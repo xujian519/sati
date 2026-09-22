@@ -45,7 +45,13 @@ export function withFigureNumberAttribute(svg: string, figureNo: number): string
   return `${svg.slice(0, rootEnd)} ${FIGURE_NO_ATTRIBUTE}="${figureNo}"${svg.slice(rootEnd)}`;
 }
 
-function unescapeXml(text: string): string {
+/**
+ * XML 文本反转义（含数字实体）。
+ *
+ * 数字实体必须先行：graphviz 在 `<title>` 里把 `-` 写成 `&#45;`（避免 `--` 破坏 XML 注释），
+ * 节点 id 是 `f1-n1` 这类形态时，不解码就永远匹配不上。
+ */
+export function unescapeXml(text: string): string {
   // 数字实体先行（如 graphviz 边名的 &#45;）；命名实体 &amp; 必须最后展开，
   // 保证字面量 "&#45;" 只被解码一层。
   const numericFirst = text.replaceAll(/&#(\d+);/gu, (_match, code: string) => String.fromCharCode(Number(code)));

@@ -196,6 +196,30 @@ test("WASM runner：经 renderFigureSvgWithGraphviz 加工链（data-ref 注入 
   );
 });
 
+test("真机 WASM：连字符节点 id（生产形态 f1-n1）——graphviz 把 title 里的 - 转义为 &#45; 也不影响注入", async () => {
+  // CI 无系统 dot，graphviz 通路的真机覆盖只能靠 WASM；这条盯的是「按未转义字面量匹配 title」
+  // 那类缺陷（连字符 id 会让整条通路 fail-closed），与 dot.spec 的真机用例互为对照。
+  const spec: FigureSpec = {
+    figure_no: 1,
+    kind: "flowchart",
+    nodes: [
+      { id: "f1-n1", label: "接收交底书", ref: 10, shape: "round" },
+      { id: "f1-n2", label: "提取技术特征", ref: 20, shape: "rect" },
+    ],
+    edges: [{ from: "f1-n1", to: "f1-n2" }],
+  };
+  const { svg } = await renderFigureSvgWithGraphviz(spec, { runner: createWasmDotRunner() });
+  assert.deepEqual(
+    parseFigureSvg(svg)
+      .nodes.filter(node => node.ref !== undefined)
+      .map(node => [node.id, node.ref]),
+    [
+      ["f1-n1", 10],
+      ["f1-n2", 20],
+    ],
+  );
+});
+
 test("真机 WASM：builtin 与 graphviz-wasm 同 spec 出图，均黑白合规且 data-ref 回读一致", async () => {
   const builtin = renderFigureSvg(SPEC, {}).svg;
   const wasm = (await renderFigureSvgWithGraphviz(SPEC, { runner: createWasmDotRunner() })).svg;

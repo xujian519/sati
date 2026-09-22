@@ -21,8 +21,8 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { delimiter, join } from "node:path";
-import { buildFigureDot, dotNodeTitle } from "./dot.js";
-import { parseFigureSvg, withFigureNumberAttribute } from "./readback.js";
+import { buildFigureDot } from "./dot.js";
+import { parseFigureSvg, unescapeXml, withFigureNumberAttribute } from "./readback.js";
 import type { FigureSpec, Jurisdiction } from "./types.js";
 
 /** 渲染器选择环境变量：`builtin`（默认）| `graphviz`。 */
@@ -160,6 +160,33 @@ function parseCanvasSize(svg: string): { width: number; height: number } {
 }
 
 /**
+ * 定位节点分组开标签的 `>` 位置：扫 `class="node"` 分组，取其**首个子元素** `<title>`、
+ * 反转义后与节点 id 比对。
+ *
+ * 不能拿"未转义的 title 字符串"去 `indexOf`：graphviz 会把 `-` 写成 `&#45;`
+ * （`<title>f1&#45;n1</title>`），而节点 id 用连字符是常规形态（`f1-n1`）——按字面量
+ * 匹配会让整条 graphviz 通路对这类 id 一律 fail-closed。要求 title 是首个子元素，
+ * 同时挡住"读到嵌套分组的 title"。
+ */
+function findNodeGroupTagEnd(svg: string, nodeId: string): number | undefined {
+  for (const match of svg.matchAll(/<g\b([^>]*)>/gu)) {
+    if (!/\bclass="node"/u.test(match[1]!)) {
+      continue;
+    }
+    const tagEnd = (match.index ?? 0) + match[0].length - 1;
+    const groupEnd = svg.indexOf("</g>", tagEnd);
+    if (groupEnd === -1) {
+      continue;
+    }
+    const titleMatch = svg.slice(tagEnd + 1, groupEnd).match(/^\s*<title>([\s\S]*?)<\/title>/u);
+    if (titleMatch !== null && unescapeXml(titleMatch[1]!) === nodeId) {
+      return tagEnd;
+    }
+  }
+  return undefined;
+}
+
+/**
  * 把 dot 的原始 SVG 加工为 figuregen 交付契约：剥离头部（XML 声明/DOCTYPE/
  * 生成器注释）、归一化颜色并做黑白扫描、向节点分组注入 data-ref。
  */
@@ -172,24 +199,9 @@ export function postProcessGraphvizSvg(rawSvg: string, refsById: ReadonlyMap<str
   assertBlackWhite(svg);
 
   for (const [nodeId, ref] of refsById) {
-    const titleTag = `<title>${dotNodeTitle(nodeId)}</title>`;
-    const titleIdx = svg.indexOf(titleTag);
-    if (titleIdx === -1) {
-      throw new Error(`graphviz SVG 未找到节点「${nodeId}」的 title，无法注入 data-ref（fail-closed）`);
-    }
-    const groupIdx = svg.lastIndexOf("<g ", titleIdx);
-    if (groupIdx === -1) {
-      throw new Error(`graphviz SVG 节点「${nodeId}」的 title 外无 <g> 分组，无法注入 data-ref（fail-closed）`);
-    }
-    const tagEnd = svg.indexOf(">", groupIdx);
-    if (tagEnd === -1 || tagEnd > titleIdx) {
-      throw new Error(`graphviz SVG 节点「${nodeId}」的分组标签未闭合，无法注入 data-ref（fail-closed）`);
-    }
-    // title 与其所在分组开标签之间不得再有任何标签：确认找到的 <g> 就是
-    // <title> 的直接父分组（graphviz 输出中 title 恒为节点分组首子元素）。
-    const between = svg.slice(tagEnd + 1, titleIdx);
-    if (between.includes("<g") || between.includes("</g>")) {
-      throw new Error(`graphviz SVG 节点「${nodeId}」的分组结构异常，无法注入 data-ref（fail-closed）`);
+    const tagEnd = findNodeGroupTagEnd(svg, nodeId);
+    if (tagEnd === undefined) {
+      throw new Error(`graphviz SVG 未找到节点「${nodeId}」的 title（分组内首个子元素，解码后比对；fail-closed）`);
     }
     svg = `${svg.slice(0, tagEnd)} data-ref="${ref}"${svg.slice(tagEnd)}`;
   }

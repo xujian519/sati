@@ -121,15 +121,42 @@ test("加工：剥离头部、颜色关键字归一化、data-ref 注入到节�
   assert.ok(!svg.slice(0, svg.indexOf('id="node2"')).includes("data-ref"), "无标记节点分组不带 data-ref");
 });
 
-test("加工：fail-closed——title 缺失或分组结构异常时抛错", () => {
-  const raw = '<svg xmlns="http://www.w3.org/2000/svg"><g id="node1" class="node"><text>无 title</text></g></svg>';
-  assert.throws(() => postProcessGraphvizSvg(raw, new Map([["step", 20]])), /title.*fail-closed/u);
+test("加工：fail-closed——分组缺 title、title 非首子元素、或 title 与节点 id 不符时抛错", () => {
+  const noTitle = '<svg xmlns="http://www.w3.org/2000/svg"><g id="node1" class="node"><text>无 title</text></g></svg>';
+  assert.throws(() => postProcessGraphvizSvg(noTitle, new Map([["step", 20]])), /title.*fail-closed/u);
 
-  // 分组开标签若非 "<g " 形态（如换行书写），就近回溯会落到外层分组，
-  // title 与分组之间隔着标签 → 结构异常 fail-closed，绝不注入错位。
-  const malformed =
-    '<svg xmlns="http://www.w3.org/2000/svg"><g id="graph0" class="graph"><g\nid="node1" class="node"><title>step</title></g></g></svg>';
-  assert.throws(() => postProcessGraphvizSvg(malformed, new Map([["step", 20]])), /结构异常/u);
+  // title 不是分组首个子元素：可能是嵌套分组的 title ⇒ 不得注入错位
+  const titleNotFirst =
+    '<svg xmlns="http://www.w3.org/2000/svg"><g id="node1" class="node"><text>x</text><title>step</title></g></svg>';
+  assert.throws(() => postProcessGraphvizSvg(titleNotFirst, new Map([["step", 20]])), /title.*fail-closed/u);
+
+  const otherId = '<svg xmlns="http://www.w3.org/2000/svg"><g id="node1" class="node"><title>other</title></g></svg>';
+  assert.throws(() => postProcessGraphvizSvg(otherId, new Map([["step", 20]])), /title.*fail-closed/u);
+});
+
+test("加工：节点 id 含连字符（graphviz 把 - 转义为 &#45;）仍能注入 data-ref 并回读原 id", () => {
+  // graphviz 为避免 `--` 破坏 XML 注释，把 title 里的 `-` 写成 `&#45;`；
+  // 生产 id 形态是 `f1-n1`（gen-cases.ts / 工作流原子），按未转义字面量匹配会一律 fail-closed。
+  const raw = [
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0.00 0.00 247.00 72.00">',
+    '<g id="graph0" class="graph">',
+    "<title>图1</title>",
+    '<text xml:space="preserve" text-anchor="middle" x="123" y="-10" font-size="14.00">图1</text>',
+    '<g id="node1" class="node">',
+    "<title>f1&#45;b1</title>",
+    '<polygon fill="white" stroke="#000000" points="27,-18 27,-54 141,-54 141,-18 27,-18"/>',
+    '<text text-anchor="middle" x="84" y="-32" font-size="14.00" fill="#000000">输入接口单元</text>',
+    "</g>",
+    "</g>",
+    "</svg>",
+  ].join("\n");
+
+  const svg = postProcessGraphvizSvg(raw, new Map([["f1-b1", 10]]));
+  assert.ok(/<g id="node1" class="node" data-ref="10">/u.test(svg), "转义 title 的节点分组也要注入 data-ref");
+  assert.deepEqual(
+    parseFigureSvg(svg).nodes.map(node => [node.id, node.ref]),
+    [["f1-b1", 10]],
+  );
 });
 
 test("回读：graphviz 渲染产物（title 取回原 id，graph/edge 分组跳过）", () => {
@@ -225,6 +252,30 @@ test("真机集成：dot 渲染 → data-ref 自检 → 回读还原（无 graph
   assert.deepEqual(
     withRef.map(node => [node.id, node.ref]),
     [["step", 20]],
+  );
+});
+
+test("真机集成：连字符节点 id（生产形态 f1-n1）走 dot 全链路（无 graphviz 自动 skip）", {
+  skip: resolveDotBinary() === null ? "graphviz not installed" : false,
+}, async () => {
+  const spec: FigureSpec = {
+    figure_no: 1,
+    kind: "flowchart",
+    nodes: [
+      { id: "f1-n1", label: "接收交底书", ref: 10, shape: "round" },
+      { id: "f1-n2", label: "提取技术特征", ref: 20, shape: "rect" },
+    ],
+    edges: [{ from: "f1-n1", to: "f1-n2" }],
+  };
+  const { svg } = await renderFigureSvgWithGraphviz(spec, { jurisdiction: "cn" });
+  assert.deepEqual(
+    parseFigureSvg(svg)
+      .nodes.filter(node => node.ref !== undefined)
+      .map(node => [node.id, node.ref]),
+    [
+      ["f1-n1", 10],
+      ["f1-n2", 20],
+    ],
   );
 });
 
