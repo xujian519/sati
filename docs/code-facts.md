@@ -17,8 +17,8 @@
 | `node_engine` | Node 版本下限 | `>=22.13.0` | package.json engines.node |
 | `pnpm_version` | pnpm 版本 | `10.32.1` | package.json packageManager |
 | `typescript_version` | TypeScript 版本 | `6.0.3` | package.json devDependencies.typescript |
-| `protocol_version` | 网关协议版本（台账末条） | `1.10` | src/gateway/protocol/version.ts PROTOCOL_RELEASES |
-| `protocol_release_count` | 协议台账版本条目数 | `11` | src/gateway/protocol/version.ts PROTOCOL_RELEASES |
+| `protocol_version` | 网关协议版本（台账末条） | `1.11` | src/gateway/protocol/version.ts PROTOCOL_RELEASES |
+| `protocol_release_count` | 协议台账版本条目数 | `12` | src/gateway/protocol/version.ts PROTOCOL_RELEASES |
 | `gateway_method_count` | 网关方法数 | `70` | src/gateway/protocol/version.ts PROTOCOL_METHOD_VERSION |
 
 ## 2. 计数矩阵

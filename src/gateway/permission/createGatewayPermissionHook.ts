@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
+import type { SatiHookInput } from "../../extension/hooks/protocol/input.js";
 import type { CallbackHookHandler } from "../../extension/hooks/execution/CallbackHookExecutor.js";
 import type { SatiHookSyncOutput } from "../../extension/hooks/protocol/output.js";
 import type { PermissionRule } from "../../permission/protocol/types.js";
-import type { GatewayEvent } from "../protocol/types.js";
+import type { GatewayEvent, GatewayEventOrigin } from "../protocol/types.js";
 import type { GatewayPermissionBus, GatewayPermissionDecision } from "./GatewayPermissionBus.js";
 
 export const GATEWAY_PERMISSION_CALLBACK_NAME = "sati.gateway.permission";
@@ -40,7 +41,10 @@ export type CreateGatewayPermissionHookOptions = {
  *      callback hook (this handler).
  *   3. Handler emits a `permission_request` GatewayEvent into the
  *      active `submitTurn` queue, mints a `requestId`, and parks itself
- *      on a Promise registered with the GatewayPermissionBus.
+ *      on a Promise registered with the GatewayPermissionBus. Subagent
+ *      forks share the parent's hook (and sessionKey), so their asks land
+ *      in the parent's stream; the fork identity rides along as `origin`
+ *      (`hookInput.agentId` / `agentType`) so the banner can say who asks.
  *   4. The Web UI's banner fires `permissionDecide(requestId, allow/deny,
  *      remember)`, which the gateway routes to `bus.consume(...)`, which
  *      resolves the Promise.
@@ -76,12 +80,14 @@ export function createGatewayPermissionHook(options: CreateGatewayPermissionHook
       payload = {};
     }
     const requestId = options.uuid ? options.uuid() : randomUUID();
+    const origin = resolveOrigin(hookInput);
 
     const delivered = options.emit({
       type: "permission_request",
       requestId,
       toolName,
       payload,
+      ...(origin ? { origin } : {}),
     });
 
     if (!delivered) {
@@ -145,6 +151,21 @@ export function createGatewayPermissionHook(options: CreateGatewayPermissionHook
           decision.decision === "allow" ? { behavior: "allow" } : { behavior: "deny", message: decision.reason },
       },
     } satisfies SatiHookSyncOutput;
+  };
+}
+
+/**
+ * 从 hook 输入读出子代理归属。`agentId` / `agentType` 由 `ToolRuntime` 在
+ * fork 会话内填入（主代理调用不带）——帧里带上它，UI 才能显示「谁在请求」。
+ */
+function resolveOrigin(hookInput: SatiHookInput): GatewayEventOrigin | undefined {
+  const subagentId = typeof hookInput.agentId === "string" ? hookInput.agentId.trim() : "";
+  if (!subagentId) return undefined;
+  const subagentType = typeof hookInput.agentType === "string" ? hookInput.agentType.trim() : "";
+  return {
+    kind: "subagent",
+    subagentId,
+    ...(subagentType ? { subagentType } : {}),
   };
 }
 

@@ -213,6 +213,17 @@ type GatewayTurnScopedEventMetadata = {
   runId?: string;
 };
 
+/**
+ * 事件发起者归属：当一次交互式往返（权限请求等）并非由会话自身的主代理发起时
+ * 携带。当前唯一形态是子代理 fork（`agent` 工具）内的工具调用——`subagentType`
+ * 来自 fork 定义，hook 层拿不到时省略。
+ */
+export type GatewayEventOrigin = {
+  kind: "subagent";
+  subagentId: string;
+  subagentType?: string;
+};
+
 export type GatewayEvent = GatewayTurnScopedEventMetadata &
   (
     | { type: "turn_started"; runId: string }
@@ -257,7 +268,7 @@ export type GatewayEvent = GatewayTurnScopedEventMetadata &
         data?: Record<string, unknown>;
       }
     | { type: "tool_result_detail_available"; toolCallId: string; resultPath?: string; fullText?: string }
-    | { type: "permission_request"; requestId: string; toolName: string; payload: unknown }
+    | { type: "permission_request"; requestId: string; toolName: string; payload: unknown; origin?: GatewayEventOrigin }
     /**
      * 输出门禁挂起（patent 域 HITL）：命中审批词的专利结论已挂起等待人工审批。
      * 消息本体已入库（不丢消息），挂起仅流程控制。宿主应展示审批入口，

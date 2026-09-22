@@ -355,6 +355,14 @@ export type SatiToolRuntimeContext = {
    */
   subagentDepth?: number;
   /**
+   * 本次工具调用所属的子代理身份（fork 会话才有）。经 `ToolRuntime` 写入
+   * 生命周期 hook 输入的 `agentId` / `agentType`，使 hook 与网关权限请求
+   * 能回答「谁在请求」，而不必从 sessionId 的 `::sub::` 标记反解（那里
+   * 拿不到子代理类型）。缺失表示主代理自身发起的调用。
+   */
+  subagentId?: string;
+  subagentType?: string;
+  /**
    * Subagent fork API (C2 §6.2). Wired in by the AgentLoop when the parent
    * supports forking; absent for stand-alone tool runtimes (tests). When
    * absent, the `agent` tool falls back to the legacy single-shot model

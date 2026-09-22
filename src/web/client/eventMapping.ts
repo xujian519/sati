@@ -247,6 +247,7 @@ export function mapGatewayEventToFrames(
           toolName: event.toolName,
           input: event.payload,
           context: { provider },
+          ...(event.origin ? { origin: event.origin } : {}),
         },
       ];
 

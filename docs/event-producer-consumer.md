@@ -42,7 +42,7 @@ emit/dispatch/emitAgentEvent/emitEvent/emitForSession/sendNotification 字符串
 | model_recovery_failed | - | src/gateway/client/InProcessGateway.ts:569 |
 | model_request_started | src/agent/loop/AgentLoop.ts:389 | src/gateway/client/InProcessGateway.ts:569, submitTurn 流 ×14 |
 | permission_denied | src/tool/execution/ToolRuntime.ts:265 | src/gateway/client/InProcessGateway.ts:569 |
-| permission_request | src/gateway/permission/createGatewayPermissionHook.ts:80 | submitTurn 流 ×14 |
+| permission_request | src/gateway/permission/createGatewayPermissionHook.ts:85 | submitTurn 流 ×14 |
 | permission_requested | src/tool/execution/ToolRuntime.ts:222 | src/gateway/client/InProcessGateway.ts:569 |
 | plan_mode_changed | - | submitTurn 流 ×14 |
 | post_tool_execute | src/tool/execution/ToolRuntime.ts:350, src/tool/execution/ToolRuntime.ts:406 | src/gateway/client/InProcessGateway.ts:569 |
@@ -57,9 +57,9 @@ emit/dispatch/emitAgentEvent/emitEvent/emitForSession/sendNotification 字符串
 | stop_failure | src/agent/loop/AgentLoop.ts:521, src/agent/loop/modelErrorRecovery.ts:239, src/agent/loop/modelErrorRecovery.ts:542 | src/gateway/client/InProcessGateway.ts:569 |
 | stop_requested | src/agent/loop/AgentLoop.ts:666 | src/gateway/client/InProcessGateway.ts:569 |
 | structured_output | src/gateway/client/eventMapping.ts:521 | submitTurn 流 ×14 |
-| subagent_completed | src/agent/loop/toolContext.ts:288 | src/gateway/client/InProcessGateway.ts:569 |
+| subagent_completed | src/agent/loop/toolContext.ts:306 | src/gateway/client/InProcessGateway.ts:569 |
 | subagent_model_event | src/agent/sub/SubAgentSession.ts:196 | src/gateway/client/InProcessGateway.ts:569 |
-| subagent_started | src/agent/loop/toolContext.ts:176 | src/gateway/client/InProcessGateway.ts:569 |
+| subagent_started | src/agent/loop/toolContext.ts:194 | src/gateway/client/InProcessGateway.ts:569 |
 | subagent_status | src/agent/loop/subagentExecutor.ts:168 | src/gateway/client/InProcessGateway.ts:569 |
 | subagent_tool_calls_detected | src/agent/sub/SubAgentSession.ts:204 | src/gateway/client/InProcessGateway.ts:569 |
 | subagent_tool_result | src/agent/sub/SubAgentSession.ts:212 | src/gateway/client/InProcessGateway.ts:569 |
