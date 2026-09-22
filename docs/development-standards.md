@@ -10,7 +10,7 @@
 
 ## 0. 一分钟总览
 
-四个门禁 + 三个配套纪律。现状：**已有 4 道门禁**，但缺"负控制"与"决策记录"两块底座。
+四个代码门禁 + 一道开工前基线检查，外加三个配套纪律。现状：**已有 4 道代码门禁**，但缺"负控制"与"决策记录"两块底座。
 
 | 门禁 | 命令 | 机器上保证什么 | 现状 |
 |---|---|---|---|
@@ -18,6 +18,7 @@
 | lint | `pnpm lint` | 未用 import、import 顺序、react 规则 + 领域门禁 + 类型感知(`no-floating-promises`/`no-misused-promises`,仅 src)+ 危险 API 禁令(`no-restricted-imports` 禁 `exec`/`execSync`,仅 src) | ⚠️ 类型感知与危险 API 均仅 `src/`(tests/scripts/桌面壳豁免)、`any`=warn |
 | format | `pnpm format:check` | Biome 格式（2 空格、双引号、分号、120 列） | ✅ |
 | test | `pnpm test` + `cd ui && pnpm test` | 后端 node:test + UI vitest | ✅（无覆盖率） |
+| 基线新鲜度 | `pnpm check:freshness` | 不在过期基线上开工（落后自己的远端即失败；无自有提交且落后 `origin/main` 超阈值即失败） | ✅（默认离线，`--fetch` 才联网） |
 
 配套三件（本规范的灵魂，见 §4、§5）：
 
@@ -65,6 +66,7 @@
 | 提交信息 | `scripts/check-commit-msg.mjs`（commit-msg hook） | Conventional Commits（含 `release` 类型） |
 | 提交前 | `scripts/lint-staged.mjs`（pre-commit hook） | staged 文件 biome format + eslint --fix，按 ui/root 分流 |
 | 边界 | `scripts/check-ui-server-boundary.mjs`（挂 ui lint） | `ui/` 不 import `src/`（.js specifier 下 eslint 规则失效，用纯路径静态校验） |
+| 基线新鲜度 | `scripts/check-workspace-freshness.mjs`（`pnpm check:freshness`，挂 `pnpm check` 首位） | 不在过期基线上开工——本仓有两条按 `file:line` 硬编码的产物门禁（事件矩阵、文档事实层 claim），旧基线上的分析结论与生成物都是错的 |
 | 领域门禁 | `check:catalog-mirror` / `check:event-matrix` / `check:patent-sop` / `check:patent-workflow-docs` / `check:html-templates` / `check:skills` / `check:i18n-namespaces` / `check:issue-labels` / `check:techdebt-metrics` / `check:protocol-version` / `check:doc-claims`（均挂 `pnpm lint`，共 <!-- claim:lint_gate_count -->11<!-- /claim --> 个） | 模型目录镜像、事件矩阵新鲜度、专利 SOP 引用、workflow 文档幂等、HTML 模板、skill frontmatter、i18n namespace 注册一致、标签清单与 issue 模板一致、技术债指标基线、协议台账、文档事实层（版本/计数/模块索引） |
 | 测试 | 后端 `node:test` + UI `vitest` + Playwright e2e + `llm-replay` 无 key 重放 seam | 单元/集成/回路级；用例数与测试文件数**不写进文档**（每加一个测试就会变，跑一次 `pnpm test` 才准） |
 | 版本 | `scripts/bump-version.mjs` | 根 / ui / apps-desktop 三处 version lockstep |
@@ -139,6 +141,23 @@
 - UI 覆盖：`ui/` 有 vitest，可直接接 `@vitest/coverage-v8` + 阈值。
 - **信条**（比阈值更重要）：未覆盖行**优先判断为死代码删除**，不是补测试——写进规范，防"为覆盖率写空测试"；覆盖是必要非充分；禁止 `--passWithNoTests`、禁止收窄 include 藏文件、禁止降阈值。
 
+### 门禁 5：基线新鲜度（`pnpm check:freshness`）
+
+**动机**：本仓有两条按 `file:line` 硬编码的产物门禁（事件矩阵 `docs/event-producer-consumer.md`、文档事实层 claim）——在过期基线上分析或改码，产出的是**错误结论与错误生成物**（借自 `zai-org/ZCode`：其本地分支曾落后主线 140 个提交而无人察觉）。
+
+**判定规则**（`scripts/check-workspace-freshness.mjs`）：
+
+| 规则 | 条件 | 处置 |
+|---|---|---|
+| R1 | 本地分支落后自己的 upstream（任何数量） | 失败：`git merge --ff-only <upstream>` |
+| R2 | `ahead==0` 且落后 `origin/main` 超阈值（默认 10） | 失败：纯过期检出，没有任何自有提交 |
+| R3 | `ahead>0`（特性分支有自有提交）且落后 `origin/main` 超阈值 | 仅告警：分叉本身正常，对齐主线前先确认改动状态 |
+| R4 | 非 git 工作树 / 无 upstream / 无 `origin/main` / git 不可用 | 跳过该规则并打印原因，不算失败 |
+
+**纪律**：默认**不**联网（`--fetch` 才拉远端；离线时打印 `origin/main` 参照点的提交与时间，让读数可判），阈值用 `--max-behind-main N` 调。挂 `pnpm check` **首位**而不是 `pnpm lint`：本检查依赖本地 git 状态与可选网络，不适合每次 lint / pre-commit 都跑；CI 的 `quality` job 不跑 `pnpm check`（它逐条跑 typecheck/lint/format/test），且 CI checkout 通常是无 upstream 的 detached HEAD，天然走 R4。
+
+**负控制（✅ 已落地）**：`scripts/check-workspace-freshness.test.mjs`（挂 `pnpm test:pr-tooling`）在临时目录搭 local-origin 三件套（bare origin + seed 推送 + client 克隆），用真实 git 操作制造落后/分叉/无参照场景断言退出码与输出；「默认不联网」由「克隆后上游再推进、不加 `--fetch` 时 `origin/main` ref 必须仍未更新」锁住。
+
 ### 领域门禁（Sati 特有，✅ 已落地，维持）
 
 `pnpm lint` 末尾已挂接 <!-- claim:lint_gate_count -->11<!-- /claim --> 个领域门禁，任何事件面/专利 SOP/模板/标签/i18n/文档事实改动漏改即红。**这些是 Sati 相对模板的"超额资产"，保持并继续维护**（清单的生成源见 `docs/code-facts.md` §4）：
@@ -176,6 +195,7 @@
 | typecheck 底线 | `scripts/verify-ts-config.mjs`（`pnpm check:config`）在 `pnpm check` 断言开关为 true（✅ 已落地）；测试级 `verify-config.spec.ts` |
 | lint 规则 | `tests/development-standards/lint-contract.spec.ts` 对 fixture 跑 lint 断言非零 |
 | 边界门禁 | `check-ui-server-boundary.mjs` 已有（可加反向 fixture：伪造 ui→src import 断言非零） |
+| 基线新鲜度门禁 | `scripts/check-workspace-freshness.test.mjs`：临时 git 三件套制造「落后远端 / 纯过期检出 / 特性分支分叉 / 无 origin/main / 非 git 工作树」五种场景断言退出码；变异验证（把 R2 置为恒假、把默认离线改为默认 fetch）各自变红 |
 
 **(b) 铁律必须有门禁或 lint，不能只是散文**。Sati 的既有铁律逐条给"可机械执行"方案：
 
@@ -261,7 +281,8 @@
 ## 附录 A：命令速查
 
 ```sh
-pnpm check            # 聚合门禁：check:config + typecheck + ui typecheck + lint + format:check（不含 test）
+pnpm check            # 聚合门禁：check:freshness + check:config + typecheck + ui typecheck + lint + format:check（不含 test）
+pnpm check:freshness  # 开工前基线新鲜度（默认离线；--fetch 拉最新远端，--max-behind-main N 调阈值）
 pnpm typecheck        # tsc --noEmit（根）+ edgeclaw-memory-core typecheck；先 build 子包
 pnpm lint             # eslint src tests scripts apps/desktop + ui lint + <!-- claim:lint_gate_count -->11<!-- /claim --> 个领域门禁
 pnpm format:check     # biome check（格式）
@@ -297,6 +318,7 @@ node scripts/bump-version.mjs patch|minor|major   # 版本 lockstep
 | `scripts/check-commit-msg.mjs` | Conventional Commits 校验（commit-msg hook） |
 | `scripts/lint-staged.mjs` | staged 文件 biome + eslint 分流（pre-commit hook） |
 | `scripts/check-ui-server-boundary.mjs` | ui→src 边界门禁（挂 ui lint） |
+| `scripts/check-workspace-freshness.mjs` | 开工前基线新鲜度（挂 `pnpm check` 首位；负控制见同名 `.test.mjs`） |
 | `scripts/gen-event-matrix.ts` | 事件矩阵生成器（--check 挂 lint） |
 | `scripts/gen-doc-claims.ts` + `scripts/doc-claims/resolvers.ts` | 文档事实层生成器与解析器（--check 挂 lint） |
 | `docs/code-facts.md` | 代码事实层（生成物）：版本矩阵 / 计数矩阵 / src 模块索引 / 门禁与 CI |
