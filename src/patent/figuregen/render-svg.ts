@@ -12,6 +12,7 @@
  */
 
 import { figureCaption, profileForJurisdiction } from "./office-profile.js";
+import { layoutChart, renderChartBody } from "./chart.js";
 import { isSymbolShape, layoutFigure, type FigureLayout } from "./layout.js";
 import { FIGURE_FONT_SIZE } from "./metrics.js";
 import { FIGURE_NO_ATTRIBUTE } from "./readback.js";
@@ -113,6 +114,9 @@ function renderNodeText(node: FigureNode, p: { x: number; y: number; width: numb
  * `figureCount` 为本案附图总幅数（缺省 1）：图号是否需要标注由图幅数与法域档案共同决定
  * （见 `office-profile.ts` 的 `shouldRenderCaption`），核验器用同一判据量纸面尺寸。
  * 根元素写 `data-figure-no`：图号条件化后，机器回读（漂移检测）仍有无歧义的图号来源。
+ *
+ * 曲线图（kind: "chart"）走直接绘制的矢量通路（见 `chart.ts`）：数据不是图论结构，
+ * 分层布局与 Graphviz 都不适用。
  */
 export function renderFigureSvg(
   spec: FigureSpec,
@@ -120,6 +124,18 @@ export function renderFigureSvg(
 ): { svg: string; width: number; height: number } {
   const profile = profileForJurisdiction(options.jurisdiction);
   const caption = figureCaption(profile, spec.figure_no, options.figureCount ?? 1);
+
+  if (spec.kind === "chart") {
+    const chart = layoutChart(spec.chart, { caption: caption !== undefined });
+    // 图号由本函数统一加在图形正下方（4.3），曲线图不加箭头 marker，故 defs 留空。
+    const body = `${renderChartBody(chart)}\n`;
+    return {
+      svg: documentSvg(spec.figure_no, chart.width, chart.height, body, "", caption),
+      width: chart.width,
+      height: chart.height,
+    };
+  }
+
   const layout: FigureLayout = layoutFigure(spec, { caption: caption !== undefined });
   const { width, height } = layout;
 
@@ -149,23 +165,40 @@ export function renderFigureSvg(
     })
     .join("");
 
+  const defs =
+    `<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" ` +
+    `orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 Z" fill="#000000"/></marker></defs>\n`;
+
+  return { svg: documentSvg(spec.figure_no, width, height, edges + nodes, defs, caption), width, height };
+}
+
+/**
+ * 组装完整 SVG 文档：白底 + 可选 defs + 图形片段 + 图号标注（居中，图形正下方）。
+ *
+ * `body` 为各图元的拼接串（调用方自行决定是否以换行收尾）；`defs` 为空串时整段省略。
+ */
+function documentSvg(
+  figureNo: number,
+  width: number,
+  height: number,
+  body: string,
+  defs: string,
+  caption: string | undefined,
+): string {
   const captionText =
     caption === undefined
       ? ""
       : `<text x="${fmt(width / 2)}" y="${fmt(height - 16)}" font-size="${FIGURE_FONT_SIZE}" ` +
         `text-anchor="middle" fill="#000000">${escapeXml(caption)}</text>\n`;
 
-  const svg =
-    `<svg xmlns="http://www.w3.org/2000/svg" ${FIGURE_NO_ATTRIBUTE}="${spec.figure_no}" ` +
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" ${FIGURE_NO_ATTRIBUTE}="${figureNo}" ` +
     `width="${fmt(width)}" height="${fmt(height)}" ` +
     `viewBox="0 0 ${fmt(width)} ${fmt(height)}" font-family="sans-serif">\n` +
     `<rect x="0" y="0" width="${fmt(width)}" height="${fmt(height)}" fill="#FFFFFF"/>\n` +
-    `<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">` +
-    `<path d="M0,1 L9,5 L0,9 Z" fill="#000000"/></marker></defs>\n` +
-    edges +
-    nodes +
+    defs +
+    body +
     captionText +
-    `</svg>\n`;
-
-  return { svg, width, height };
+    `</svg>\n`
+  );
 }

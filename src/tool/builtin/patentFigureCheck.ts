@@ -28,6 +28,7 @@ import { analyzeImageBuffer, type PixelFinding, type PixelMetrics } from "../../
 import { SatiToolRuntimeError } from "../protocol/errors.js";
 import type { SatiToolDefinition, SatiToolRuntimeContext } from "../protocol/types.js";
 import {
+  assertFigurePayloads,
   FIGURE_INPUT_SCHEMA_REF,
   JURISDICTIONS,
   toFigureCount,
@@ -191,6 +192,9 @@ export function createPatentFigureCheckTool(): SatiToolDefinition<PatentFigureCh
       const sheet = toSheet({ sheet_index: input.sheet_index, sheet_total: input.sheet_total });
 
       const figures: FigureSpec[] = [...(input.figures ?? [])];
+      // 结构性校验只针对**调用方给出的结构化附图**：svg_paths 回读的骨架没有 nodes/chart 载荷
+      // （回读的观测对象是图号与标记），套用"必须有节点"的约束会误伤那条通路。
+      assertFigurePayloads(input.figures ?? [], "patent_figure_check");
       // 已交付 SVG 的图号观测（V15/V16 的判据：图号的**可见形态**只在交付文件里可观测）。
       const numberedFigureNos: number[] = [];
       const svgPaths = input.svg_paths ?? [];

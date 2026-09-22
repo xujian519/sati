@@ -27,6 +27,7 @@
  * 3. 量纲/技术词（`24V`、`3D`、`5G`）——与标号同形，无上下文无法可靠区分。
  */
 
+import { chartWordingLabels } from "./chart.js";
 import type { FigureSpec, Jurisdiction } from "./types.js";
 
 /** 发现级别（与 check.ts 的 FigureCheckSeverity 结构兼容；本模块不反向导入，避免环）。 */
@@ -232,7 +233,7 @@ export type WordingHit = {
   readonly text: string;
 };
 
-/** 扫描全部附图的图面词语（节点 label + 边标签）。 */
+/** 扫描全部附图的图面词语（节点 label + 边标签；曲线图为轴标目与图例）。 */
 export function scanFigureWording(figures: readonly FigureSpec[], jurisdiction: Jurisdiction = "cn"): WordingHit[] {
   const hits: WordingHit[] = [];
   const collect = (figureNo: number, where: string, text: string): void => {
@@ -254,6 +255,8 @@ export function scanFigureWording(figures: readonly FigureSpec[], jurisdiction: 
     for (const edge of figure.edges) {
       if (edge.label !== undefined) collect(figure.figure_no, `边「${edge.from}→${edge.to}」`, edge.label);
     }
+    // 曲线图没有节点/边，写上图面的词语是轴标目与图例 —— 同样受"图面词语"规则约束。
+    for (const label of chartWordingLabels(figure.chart)) collect(figure.figure_no, label.where, label.text);
   }
   return hits;
 }

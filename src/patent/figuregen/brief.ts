@@ -27,6 +27,7 @@ const KIND_TEXT: Readonly<Record<FigureSpec["kind"], string>> = {
   block: "结构框图",
   state: "状态转移示意图",
   hierarchy: "层级结构示意图",
+  chart: "曲线图",
 };
 
 const KIND_TEXT_EN: Readonly<Record<FigureSpec["kind"], string>> = {
@@ -34,6 +35,7 @@ const KIND_TEXT_EN: Readonly<Record<FigureSpec["kind"], string>> = {
   block: "block diagram of a system",
   state: "state transition diagram of a process",
   hierarchy: "hierarchical block diagram of a system",
+  chart: "graph of measurement data",
 };
 
 export function buildFigureBriefDraft(specs: readonly FigureSpec[], options: FigureBriefOptions = {}): string {

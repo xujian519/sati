@@ -52,6 +52,7 @@ import { caseOutputsDir } from "../../patent/paths.js";
 import { SatiToolRuntimeError } from "../protocol/errors.js";
 import type { SatiToolDefinition, SatiToolRuntimeContext } from "../protocol/types.js";
 import {
+  assertFigurePayloads,
   FIGURE_INPUT_SCHEMA_REF,
   JURISDICTIONS,
   toFigureCount,
@@ -110,7 +111,7 @@ export function createPatentFigureGenerateTool(): SatiToolDefinition<PatentFigur
     title: "Generate Patent Figures",
     description:
       "Render patent-style figures (flowcharts for method claims, block diagrams for system claims, " +
-      "state transition diagrams, and component hierarchy diagrams) " +
+      "state transition diagrams, component hierarchy diagrams, and curve charts for measured data) " +
       "from structured FigureSpec input. Deterministic black-and-white SVG compliant with CNIPA drawing " +
       "rules (Guidelines 2023 Part I Ch1 4.3/4.6): black lines on white, no gradients. Reference numerals " +
       "are structured fields embedded as data-ref attributes and validated against Rule 21 of the " +
@@ -183,14 +184,7 @@ export function createPatentFigureGenerateTool(): SatiToolDefinition<PatentFigur
           tool: "patent_figure_generate",
         });
       }
-      for (const figure of figures) {
-        if (!Array.isArray(figure.nodes) || figure.nodes.length === 0) {
-          throw new SatiToolRuntimeError("invalid_tool_input", `图${figure.figure_no} 的 nodes 不能为空`, {
-            tool: "patent_figure_generate",
-            figure_no: figure.figure_no,
-          });
-        }
-      }
+      assertFigurePayloads(figures, "patent_figure_generate");
       if (!/^[A-Za-z0-9._\-\u4e00-\u9fa5]{1,100}$/u.test(input.output_name)) {
         throw new SatiToolRuntimeError("invalid_tool_input", `非法 output_name: ${JSON.stringify(input.output_name)}`, {
           tool: "patent_figure_generate",
@@ -255,6 +249,19 @@ export function createPatentFigureGenerateTool(): SatiToolDefinition<PatentFigur
           // graphviz-wasm 不依赖系统 dot 二进制；WASM 加载失败在首次渲染时 fail-loud，
           // 绝不静默回退内置渲染器（那会让"要 graphviz 布局"的意图被悄悄违背）。
           wasmRunner = createWasmDotRunner();
+        }
+        // 曲线图只能由内置渲染器绘制（graphviz 画不出坐标轴与数据曲线）：先于落盘整体拒绝，
+        // 避免"前几幅写盘、后几幅报错"的半成品目录。
+        if (renderer !== "builtin") {
+          const chartFigure = figures.find(figure => figure.kind === "chart");
+          if (chartFigure !== undefined) {
+            throw new SatiToolRuntimeError(
+              "tool_execution_failed",
+              `图${chartFigure.figure_no} 是曲线图（kind="chart"），${FIGURE_RENDERER_ENV} 通路（${renderer}）无法绘制：` +
+                `请去掉 ${FIGURE_RENDERER_ENV} 或设为 builtin 后重试（曲线图走内置矢量渲染器）`,
+              { tool: "patent_figure_generate", figure_no: chartFigure.figure_no },
+            );
+          }
         }
         const renderOne = async (figure: FigureSpec): Promise<string> => {
           if (renderer === "graphviz" && dotPath !== null) {

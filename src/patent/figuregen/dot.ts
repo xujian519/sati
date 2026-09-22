@@ -58,11 +58,20 @@ function nodeAttrs(node: FigureNode): string {
  * 图号是否需要标注由图幅数与法域档案决定（单幅在 PCT/US 不得出现 "Fig."）：
  * 不编号时**不输出 caption 属性**（而不是画一个空 label——空 label 会占位）。
  * 层级图的边表示包含关系，`arrowhead="none"` 与内置渲染器同观感。
+ *
+ * 曲线图（kind: "chart"）**fail-loud**：Graphviz 只表达"节点 + 边"，画不出坐标轴、
+ * 刻度与数据曲线；静默出一张空图会让"要 graphviz 布局"的意图变成一张错图。
  */
 export function buildFigureDot(
   spec: FigureSpec,
   options: { jurisdiction?: Jurisdiction; figureCount?: number } = {},
 ): string {
+  if (spec.kind === "chart") {
+    throw new TypeError(
+      `图${spec.figure_no} 是曲线图（kind="chart"），只能由内置渲染器绘制：graphviz 无法表达坐标轴与数据曲线` +
+        `（请去掉 SATI_FIGURE_RENDERER 或设为 builtin）`,
+    );
+  }
   const direction = spec.direction ?? (spec.kind === "block" ? "LR" : "TB");
   const caption = figureCaption(profileForJurisdiction(options.jurisdiction), spec.figure_no, options.figureCount ?? 1);
   const lines: string[] = [
