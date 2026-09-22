@@ -86,11 +86,7 @@ export {
   uniformFigureZoom,
   type FigurePaperSize,
 } from "./page-contract.js";
-export {
-  buildFigureDot,
-  dotEscape,
-  dotNodeTitle,
-} from "./dot.js";
+export { buildFigureDot, dotEscape } from "./dot.js";
 export {
   createSubprocessDotRunner,
   FIGURE_RENDERER_ENV,

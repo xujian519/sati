@@ -611,8 +611,12 @@ pnpm tsx scripts/figure-benchmark/gen-compliance.ts
 
 **本轮之后建议立刻排（本轮已为其铺好路）**
 
-- W0-3 稳定后，把「默认渲染器是否切换为 `graphviz-wasm`」作为独立决策（需量化对比 builtin 的
-  布局质量与 WASM 的启动成本）。
+- ~~W0-3 稳定后，把「默认渲染器是否切换为 `graphviz-wasm`」作为独立决策~~ → **已完成**
+  （2026-09-22，后续叠加分支）：量化对比 21 用例 × 3 后端，结论**保持 `builtin` 默认**、
+  graphviz 系维持 opt-in，并给出「字高余量不足时改走 `graphviz-wasm`」的判据；对比中还修掉
+  graphviz 通路的 fail-closed 缺陷（连字符节点 id）。见
+  `docs/notes/implemented/2026-09-22-figure-default-renderer-decision.md` 与
+  `scripts/figure-benchmark/renderer-compare.ts`（可复算）。
 - 引线标号（第 3 项）——它是「剖面线/标记线与主线条不得互相妨碍」（4.3 明文）唯一缺的落地手段。
 - 图型扩展按「DOT 通路先（状态图/层级图，复用 `dot.ts`）→ 矢量通路后（电路/曲线/剖视/时序）」
   分批。

@@ -72,6 +72,14 @@ FigureSpec 契约对两个渲染器完全一致，切换渲染器不需要改 sp
 | graphviz | 本机安装 graphviz 后设 `SATI_FIGURE_RENDERER=graphviz`（dot 路径可用 `SATI_GRAPHVIZ_DOT` 指定） | 复杂大图/多回边/宽分支 |
 | graphviz-wasm | 设 `SATI_FIGURE_RENDERER=graphviz-wasm`（打包 WASM 引擎，**无需**本机安装 graphviz） | 同上，但机器上没有 graphviz（含桌面端分发场景） |
 
+**何时该改走 `graphviz-wasm`（2026-09-22 实测判据）**：两套布局器在 21 个基准用例上的缺陷计数
+打平（文字交叠/标签穿线/边穿节点均为 0），差别集中在**落在纸面上的字高**——graphviz 的源字号
+是 14pt（4.94mm）而内置渲染器是 14px（3.70mm），同画幅缩放后前者字高一律更大（例：16 步流程图
+2.03mm vs 3.13mm，CN 实践下限 2.0mm）。故：**当内置渲染器缩放后的打印字高不足法域下限的 1.2 倍、
+或画幅需缩到 2/3 以下时，改用 `graphviz-wasm`**；常规图保持默认（默认渲染器是唯一确定性、
+不依赖第三方版本的路径，也是 CI 覆盖最厚的一侧）。`patent_figure_check` 的 V7 会报出打印字高，
+照它判断即可。对比脚本 `scripts/figure-benchmark/renderer-compare.ts` 可复算这些数字。
+
 - graphviz 渲染器与内置渲染器遵守同一合规不变式：黑白线条、无渐变（构造期扫描，非黑白
   fail-closed）；附图标记同样以 data-ref 内嵌，`patent_figure_check` 的 `svg_paths` 回读
   照常可用（图号标注"图N"/"FIG. N" 均可解析）。

@@ -28,11 +28,6 @@ export function dotEscape(text: string): string {
   return text.replaceAll("\\", "\\\\").replaceAll('"', '\\"').replaceAll("\r\n", "\n").replaceAll("\n", "\\n");
 }
 
-/** 节点文本：graphviz 在 SVG 文本内容里仅转义 & < >。 */
-function escapeXmlText(text: string): string {
-  return text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
-}
-
 function nodeAttrs(node: FigureNode): string {
   const { shape, style } = DOT_SHAPE[node.shape ?? "rect"];
   const attrs = [`label="${dotEscape(node.label)}"`, `shape="${shape}"`];
@@ -80,9 +75,4 @@ export function buildFigureDot(
   }
   lines.push("}", "");
   return lines.join("\n");
-}
-
-/** 供测试断言 title 匹配口径：graphviz SVG 文本内容转义后的节点 id。 */
-export function dotNodeTitle(nodeId: string): string {
-  return escapeXmlText(nodeId);
 }
