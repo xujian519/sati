@@ -308,7 +308,6 @@ export function chartOutOfRange(chart: FigureChart | undefined): string[] {
     y: clampTickCount(chart?.y?.ticks),
   });
   const evidence: string[] = [];
-  const describe = (value: number): string => fmtTick(value);
   for (const [index, points] of pointsBySeries.entries()) {
     const name = resolved[index]!.series.name?.trim() || `第 ${index + 1} 条`;
     const outside = points.filter(
@@ -321,13 +320,13 @@ export function chartOutOfRange(chart: FigureChart | undefined): string[] {
     if (outside.length === 0) continue;
     const sample = outside
       .slice(0, 3)
-      .map(point => `(${describe(point.x)}, ${describe(point.y)})`)
+      .map(point => `(${fmtTick(point.x)}, ${fmtTick(point.y)})`)
       .join(" ");
     const suffix = outside.length > 3 ? ` 等 ${outside.length} 点` : "";
     evidence.push(
       `曲线「${name}」有数据点落在坐标轴范围外：${sample}${suffix}` +
-        `（横轴 ${describe(ranges.x.range[0])}..${describe(ranges.x.range[1])}，` +
-        `纵轴 ${describe(ranges.y.range[0])}..${describe(ranges.y.range[1])}）`,
+        `（横轴 ${fmtTick(ranges.x.range[0])}..${fmtTick(ranges.x.range[1])}，` +
+        `纵轴 ${fmtTick(ranges.y.range[0])}..${fmtTick(ranges.y.range[1])}）`,
     );
   }
   return evidence;
