@@ -1,15 +1,15 @@
 # Sati 技术债务指标基线与趋势
 
 > 由 `node scripts/measure-techdebt.mjs --update` 自动生成，谨防手工编辑。
-> 最近一次快照：**2026-09-21**
+> 最近一次快照：**2026-09-22**
 
 ## 规模
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1045 / 175643 |
+| src TS 文件 / 行数 | 1046 / 175806 |
 | src JS 文件 | 0 |
-| tests 文件 | 586 |
+| tests 文件 | 589 |
 | ui/src 文件 / 行数 | 572 / 92476 |
 | ui/server 文件 / 行数 | 108 / 31827 |
 
@@ -75,9 +75,9 @@
 | `ui/src/components/code-editor/view/subcomponents/SpreadsheetInteractivePreview.tsx` | `SpreadsheetInteractivePreview` | 407 | function |
 | `ui/src/components/settings/view/integrations/im/components/WeComChannelSection.tsx` | `WeComChannelSection` | 398 | function |
 | `ui/src/components/chat/hooks/useSlashCommands.ts` | `useSlashCommands` | 395 | function |
+| `src/tool/execution/ToolRuntime.ts` | `execute` | 388 | method |
 | `ui/src/components/main-content-v2/CronV2.test.tsx` | `(anonymous)` | 384 | arrow |
 | `src/web/client/webMessage.ts` | `applyWebGatewayEvent` | 383 | function |
-| `src/tool/execution/ToolRuntime.ts` | `execute` | 382 | method |
 | `ui/src/components/app-shell/MainAreaV2.tsx` | `MainAreaV2Content` | 381 | function |
 | `ui/src/components/settings/view/integrations/im/components/FeishuChannelSection.tsx` | `FeishuChannelSection` | 381 | function |
 | `ui/src/components/chat/tools/components/InteractiveRenderers/AskUserQuestionPanel.tsx` | `AskUserQuestionPanel` | 378 | arrow |
@@ -101,7 +101,7 @@
 | `src/cli/projectRuntimeFactory.ts` | `resolve` | 306 | function |
 | `src/patent/figuregen/check.ts` | `checkFigures` | 306 | function |
 | `ui/src/components/settings/view/integrations/im/components/WeixinChannelSection.tsx` | `WeixinChannelSection` | 303 | function |
-| `src/gateway/client/InProcessGateway.ts` | `submitTurn` | 300 | method |
+| `src/gateway/client/InProcessGateway.ts` | `submitTurn` | 301 | method |
 
 ## Top 30 大文件
 
@@ -112,7 +112,7 @@
 | `src/model/catalog/providers.ts` | 1593 |
 | `ui/server/routes/git.js` | 1529 |
 | `src/adapters/channel/weixin/WeixinChannel.ts` | 1497 |
-| `src/gateway/client/InProcessGateway.ts` | 1489 |
+| `src/gateway/client/InProcessGateway.ts` | 1491 |
 | `ui/src/components/main-content-v2/SkillsV2.tsx` | 1441 |
 | `ui/src/stores/useSessionStore.ts` | 1352 |
 | `ui/src/components/main-content-v2/DashboardV2.tsx` | 1345 |
@@ -161,11 +161,11 @@
 | 模块 | 测试文件 |
 |---|---|
 | patent | 121 |
-| tool | 64 |
+| tool | 65 |
 | agent | 59 |
 | knowledge | 38 |
-| context | 34 |
-| gateway | 33 |
+| context | 35 |
+| gateway | 34 |
 | model | 32 |
 | session | 28 |
 | router | 18 |
@@ -193,7 +193,7 @@
 | runtime | 1 |
 | status | 1 |
 
-| **合计** | **562** |
+| **合计** | **565** |
 
 ## i18n en/zh-CN 对齐
 

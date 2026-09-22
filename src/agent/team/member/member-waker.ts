@@ -6,6 +6,7 @@
  * 由 gateway 内部 resume 路径完成（与 runTaskResumeScan 的续算接线同构）。
  */
 import type { GatewayEvent, GatewaySubmitTurnInput } from "../../../gateway/protocol/types.js";
+import { withNonUserOriginNotice } from "../../../context/prompt/nonUserOriginNotice.js";
 import { getSubagentDefinition } from "../../sub/builtinSubagentTypes.js";
 import type { TeamDb } from "../storage/team-db.js";
 import { parseModelRouteJson } from "./modelRouteJson.js";
@@ -64,7 +65,10 @@ export async function wakeMember(
     const input: GatewaySubmitTurnInput = {
       sessionKey: member.sessionKey,
       channelKey: "cron",
-      message: followupMessage,
+      // 成员回合的 followup 由调度器/队长/对等成员撰写，不是成员自己的用户：
+      // 加护栏抬头，声明它既不是用户指令也不构成授权（成员 canPrompt 恒为 false，
+      // 一旦被读成「已获批准」就没有第二次纠正机会）。
+      message: withNonUserOriginNotice(followupMessage),
       canPrompt: false,
       ...(modelRoute !== undefined ? { modelRoute } : {}),
       ...(rolePrompt ? { appendSystemPrompt: rolePrompt } : {}),

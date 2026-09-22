@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import type { DiscoveryPlanService } from "../../always-on/web/DiscoveryPlanService.js";
+import { withNonUserOriginNotice } from "../../context/prompt/nonUserOriginNotice.js";
 import { type CanonicalMessage } from "../../model/index.js";
 import { sanitizeSessionIdForPath } from "../../session/index.js";
 import type { SessionRouter } from "../SessionRouter.js";
@@ -563,7 +564,8 @@ export class InProcessGateway implements Gateway {
         const agentInput = await buildAgentInputWithAttachments(input.message, input.attachments, allowedReadFiles);
         const syntheticMessages: CanonicalMessage[] = (input.syntheticMessages ?? []).map(s => ({
           role: "user" as const,
-          content: [{ type: "text" as const, text: s.text }],
+          // 渠道附带的提示不是用户输入：加护栏抬头，避免被读成用户指令或授权。
+          content: [{ type: "text" as const, text: withNonUserOriginNotice(s.text) }],
           metadata: { synthetic: true, purpose: s.purpose ?? "channel_hint" },
         }));
         for await (const event of session.submit(agentInput, {

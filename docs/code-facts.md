@@ -52,7 +52,7 @@
 | `src/board/` | 8 | ✓ | 项目看板（protocol/runtime/storage 三组，kanban_* 工具与网关方法组） |
 | `src/browser/` | 6 | — | 浏览器后端抽象（ego lite / BrowserOS 等后端探测与驱动） |
 | `src/cli/` | 28 | ✓ | CLI 入口与命令（sati.ts / satiServer.ts / createLocalGateway.ts） |
-| `src/context/` | 315 | ✓ | 上下文（压缩/预算/记忆/向量/workspace registerLeak） |
+| `src/context/` | 316 | ✓ | 上下文（压缩/预算/记忆/向量/workspace registerLeak） |
 | `src/cron/` | 18 | ✓ | 定时任务（config/protocol/runtime/storage/tool） |
 | `src/extension/` | 44 | ✓ | 插件系统（plugin.json、lifecycle hooks、skills、贡献点） |
 | `src/fs/` | 1 | — | 文件系统小工具（JSONL run 写入器） |

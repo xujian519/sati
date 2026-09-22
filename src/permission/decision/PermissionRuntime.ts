@@ -33,6 +33,72 @@ export class PermissionRuntime {
     context: SatiToolRuntimeContext,
     toolCallId: string,
   ): Promise<PermissionDecision> {
+    const decision = await this.decideByRules(tool, input, context, toolCallId);
+    return tool.alwaysAsk === true ? this.raiseAlwaysAsk(tool, input, context, toolCallId, decision) : decision;
+  }
+
+  /**
+   * `alwaysAsk` 抬高下限：最终结论若本会是 allow（bypassPermissions 模式、
+   * user/session allow 规则、plan 只读直通都走这条），一律改判为提问；结论若
+   * 本会是 ask，则补上标记并去掉「本会话允许」入口。deny/cancel 一律原样返回
+   * ——该标记只能扩大「可以问什么」，不能扩大「可以做什么」，因此放在判定链
+   * 之外包一层，而不是插进链中的某个分支。
+   *
+   * 改判前必须求 `tool.checkPermissions`：上面那些 allow 路径都在它之前就返回了，
+   * 不求的话工具级硬拒（如 bash 的 HARD_DENY_PATTERNS）会从「永不允许」退化成
+   * 「可批准一次」。
+   */
+  private async raiseAlwaysAsk(
+    tool: SatiToolDefinition,
+    input: unknown,
+    context: SatiToolRuntimeContext,
+    toolCallId: string,
+    decision: PermissionDecision,
+  ): Promise<PermissionDecision> {
+    if (decision.type === "deny" || decision.type === "cancel") {
+      return decision;
+    }
+
+    const permissionContext = context.permissionContext;
+
+    if (permissionContext.canPrompt === false) {
+      // fail-closed：alwaysAsk 的工具无法在不提问的前提下获批，因此在不能提问的
+      // 会话（cron、team 成员唤醒、always-on）中直接不可用。
+      return deny({
+        type: "runtime",
+        message: `Tool ${tool.name} always requires confirmation, but prompts are disabled for this session.`,
+      });
+    }
+
+    if (decision.type === "ask") {
+      return { ...decision, request: markAlwaysAsk(decision.request) };
+    }
+
+    const toolPermission = await tool.checkPermissions?.(input, context);
+    const toolDecision = normalizeToolPermission(toolPermission, tool, input, toolCallId, permissionContext);
+    if (toolDecision && (toolDecision.type === "deny" || toolDecision.type === "cancel")) {
+      return toolDecision;
+    }
+
+    const toolAsk = toolDecision?.type === "ask" ? toolDecision : undefined;
+    const reason: PermissionDecisionReason = toolAsk?.reason ?? {
+      type: "tool",
+      toolName: tool.name,
+      message: `Tool ${tool.name} requires explicit confirmation for every call.`,
+    };
+    return {
+      type: "ask",
+      reason,
+      request: markAlwaysAsk(toolAsk?.request ?? createPermissionRequest(tool, input, toolCallId, reason)),
+    };
+  }
+
+  private async decideByRules(
+    tool: SatiToolDefinition,
+    input: unknown,
+    context: SatiToolRuntimeContext,
+    toolCallId: string,
+  ): Promise<PermissionDecision> {
     const permissionContext = context.permissionContext;
 
     // 单调 deny Guard：先于一切规则执行。Guard 只拒绝不放行，任何
@@ -322,6 +388,22 @@ function createPermissionRequest(
       { id: "deny", label: "Deny" },
       { id: "cancel", label: "Cancel" },
     ],
+  };
+}
+
+/**
+ * 给请求打上 `alwaysAsk` 标记并摘掉「本会话允许」选项：该标记的意义正在于
+ * 任何一次点击都不该让它在本会话内静默失效。工具自带的 request 可能带
+ * `allow_session`（如 write_permissions），必须在命中时丢弃。
+ */
+function markAlwaysAsk(request: PermissionRequest): PermissionRequest {
+  const options = request.options.filter(option => option.id !== "allow_session");
+  return {
+    ...request,
+    options: options.some(option => option.id === "allow_once")
+      ? options
+      : [{ id: "allow_once", label: "Allow once" }, ...options],
+    metadata: { ...request.metadata, alwaysAsk: true },
   };
 }
 

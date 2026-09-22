@@ -1,4 +1,5 @@
 import type { CanonicalMessage } from "../../model/index.js";
+import { withNonUserOriginNotice } from "../../context/prompt/nonUserOriginNotice.js";
 import { HookRuntime } from "../../extension/hooks/execution/HookRuntime.js";
 import { createHookInput } from "../../extension/hooks/protocol/input.js";
 import type { LifecycleDispatchInput, LifecycleDispatchResult } from "../protocol/payloads.js";
@@ -47,7 +48,10 @@ function createMessagesFromEffects(effects: LifecycleDispatchResult["effects"]):
         content: [
           {
             type: "text",
-            text: `<hook_context source="${effect.source}">\n${effect.content}\n</hook_context>`,
+            // 护栏放在标签内、`<hook_context` 仍居首：压缩锚点判定按文本前缀排除
+            // 内部消息（`INTERNAL_USER_TEXT_PREFIXES`），抬头压在最前面会把它变成
+            // 「真实用户请求」。
+            text: `<hook_context source="${effect.source}">\n${withNonUserOriginNotice(effect.content)}\n</hook_context>`,
           },
         ],
         metadata: { synthetic: true, purpose: "hook_context" },
