@@ -2,7 +2,7 @@
 
 > 状态：**已实施**（2026-09-22）。四个提交组全部落地：`feat(patent): 附图外部 SVG 安全门与图面用语规则 V12–V14`（PR-A）、
 > `… 附图法域档案 + 落版页 + 图号条件化 + 逐法域字高`（PR-C）、`… 制图工具入参增 pct/图幅/页码/落版（含 fixture 重录）`（PR-D）、
-> `… Graphviz WASM 渲染后端`（PR-B）。决策记录见 `docs/notes/implemented/2026-09-22-figure-*.md`（9 条）。
+> `… Graphviz WASM 渲染后端`（PR-B）。决策记录见 `docs/notes/implemented/2026-09-22-figure-*.md`（8 条）。
 > 实施中的**偏离与新增**见文末「§9 实施结果与偏离」——评审请重点看该节。
 > 范围：`src/patent/figuregen/`、`src/tool/builtin/patentFigure*.ts`、`skills/patent-illustrator/`、
 > `assets/prompts/patent/cap01-orchestrator.md`、根 `package.json`（新增一个依赖）
@@ -117,7 +117,7 @@ toolSchemaDigest: digestForReplay(
 | W1-2 | `{落地日}-figure-submission-page` | 为何默认 `fit_to_page: false`（与 DSH 不同） |
 | W1-3 | `{落地日}-figure-conditional-caption` | 为何图号是条件化而非「总是编号」；画幅变更的代价 |
 | W1-4 | `{落地日}-figure-per-jurisdiction-font-minimum` | 为何 CN 保留 2.0mm 实践下限而不改判「无下限」 |
-| W1-5 | `{落地日}-figure-jurisdiction-enum-pct` | 为何把 pct 放进 `jurisdiction` 而不是新字段；V10/V11 在 pct 下的处置 |
+| W1-5 | `{落地日}-figure-pct-jurisdiction` | 为何把 pct 放进 `jurisdiction` 而不是新字段；V10/V11 在 pct 下的处置 |
 
 > 本轮是提案阶段，`docs/notes/proposed/` 暂不新建（提案以本文档为唯一载体，落地后逐 PR
 > 迁为 `implemented/`）。
