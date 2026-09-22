@@ -18,6 +18,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import type { CadFinding } from "./cad/checks.js";
 import type { FigureCheckFinding, FigureCheckResult } from "./check.js";
+import { officeForJurisdiction, type TargetOffice } from "./office-profile.js";
 import type { DocumentKind, FigureSpec, Jurisdiction } from "./types.js";
 
 /** sidecar 契约版本（结构变更须升版本并同步本模块的解析校验）。 */
@@ -57,6 +58,25 @@ export type FigureSidecarFigure = {
   file: string;
   spec: FigureSpec;
   geometry?: FigureSidecarGeometry;
+  /** 图号标注（未编号时缺省——单幅在 PCT/US 不得编号，见 office-profile.ts）。 */
+  caption?: string;
+  /** 附图页页码（声明了页数时记录，供审计"页码体例是否与档案一致"）。 */
+  sheet?: FigureSidecarSheet;
+  /** 提交落版页摘要（`fit_to_page` 产出时记录）。 */
+  layout?: FigureSidecarLayout;
+};
+
+/** 附图页页码：文本按档案体例生成（`1/3` 或顺序数字），index/total 保留结构。 */
+export type FigureSidecarSheet = { index: number; total: number; text: string };
+
+/** 落版页摘要：产物文件名 + 落版缩放与纸面尺寸（版式判据与实际排版可对照）。 */
+export type FigureSidecarLayout = {
+  file: string;
+  page_scale: number;
+  placed_width_mm: number;
+  placed_height_mm: number;
+  char_height_mm: number;
+  warnings?: readonly string[];
 };
 
 export type FigureSidecar = {
@@ -66,6 +86,8 @@ export type FigureSidecar = {
   output_name: string;
   renderer: string;
   jurisdiction: Jurisdiction;
+  /** 法域档案键（与 jurisdiction 同源，显式落盘便于审计"按哪套纸面常数出的图"）。 */
+  office?: TargetOffice;
   document_kind?: DocumentKind;
   check: FigureSidecarCheck;
   figures: FigureSidecarFigure[];
@@ -82,7 +104,14 @@ export type BuildFigureSidecarInput = {
   jurisdiction: Jurisdiction;
   documentKind?: DocumentKind;
   /** 本批产出（figure_no 与文件名/绝对路径；CAD 图另带几何来源与投影参数）。 */
-  files: readonly { figure_no: number; path: string; geometry?: FigureSidecarGeometry }[];
+  files: readonly {
+    figure_no: number;
+    path: string;
+    geometry?: FigureSidecarGeometry;
+    caption?: string;
+    sheet?: FigureSidecarSheet;
+    layout?: FigureSidecarLayout;
+  }[];
   figures: readonly FigureSpec[];
   check: FigureCheckResult;
   /** 生成期核验是否跳过文本侧规则（生成期恒为 true）。 */
@@ -97,12 +126,23 @@ export function buildFigureSidecar(input: BuildFigureSidecarInput): FigureSideca
   const geometryByNo = new Map(
     input.files.flatMap(file => (file.geometry === undefined ? [] : [[file.figure_no, file.geometry] as const])),
   );
+  const extrasByNo = new Map(
+    input.files.map(file => [
+      file.figure_no,
+      {
+        ...(file.caption === undefined ? {} : { caption: file.caption }),
+        ...(file.sheet === undefined ? {} : { sheet: file.sheet }),
+        ...(file.layout === undefined ? {} : { layout: file.layout }),
+      },
+    ]),
+  );
   return {
     version: FIGURE_SIDECAR_VERSION,
     generated_at: input.generatedAt ?? new Date().toISOString(),
     output_name: input.outputName,
     renderer: input.renderer,
     jurisdiction: input.jurisdiction,
+    office: officeForJurisdiction(input.jurisdiction),
     ...(input.documentKind === undefined ? {} : { document_kind: input.documentKind }),
     check: {
       stage: "generation",
@@ -119,6 +159,7 @@ export function buildFigureSidecar(input: BuildFigureSidecarInput): FigureSideca
           file: fileByNo.get(figure.figure_no) ?? `fig${figure.figure_no}.svg`,
           spec: figure,
           ...(geometry === undefined ? {} : { geometry }),
+          ...(extrasByNo.get(figure.figure_no) ?? {}),
         };
       }),
   };

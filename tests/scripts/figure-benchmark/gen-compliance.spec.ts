@@ -100,14 +100,67 @@ test("LR 布局画幅：3 节点 LR 方框图落进可印区且无违规", () =>
   assert.equal(item.warn_findings, 0);
 });
 
-test("文字面分节：中文字面分节成功；英文小节标题不分节必须如实声明", () => {
+test("文字面分节：中文成功、英文标题降级、pct 整族不适用（三种情形都在基线里如实可见）", () => {
   const metrics = computeBenchmarkMetrics();
   const us = metrics.cases.find(item => item.id === "flow-tb-8-us");
   assert.ok(us);
   assert.equal(us.spec_faces.sectioned, false, "英文标题不在启发式标题集内，应如实降级");
   assert.match(us.spec_faces.reason, /未找到说明书小节标题/u);
-  assert.equal(metrics.totals.spec_faces_sectioned.total, metrics.cases.length);
-  assert.equal(metrics.totals.spec_faces_sectioned.sectioned, metrics.cases.length - 1);
+
+  const cn = metrics.cases.find(item => item.id === "flow-tb-8");
+  assert.ok(cn);
+  assert.equal(cn.spec_faces.sectioned, true, "中文小节标题应分节成功");
+
+  // pct：V10/V11 依据 CN 细则第 22 条与中文正文惯例，整族不适用 ⇒ 不计为"已分节"
+  for (const item of metrics.cases.filter(candidate => candidate.jurisdiction === "pct")) {
+    assert.equal(item.spec_faces.sectioned, false, `${item.id}（pct）不应计为已分节`);
+  }
+
+  // 其余中文用例全部应当分节成功（分节失败必须是"有原因"的，不允许静默漏分）
+  const cnCases = metrics.cases.filter(item => item.jurisdiction === "cn");
+  const unsectioned = cnCases.filter(item => !item.spec_faces.sectioned).map(item => item.id);
+  assert.deepEqual(unsectioned, [], `中文用例分节失败：${unsectioned.join(", ")}`);
+});
+
+test("语义锚点（法域）：图号条件化——cn 单幅有图号、pct/us 单幅无图号，画幅随之变化", () => {
+  assert.equal(metricsFor("office-cn-single").caption_rendered, true, "CN 单幅保留图号（指南 4.3 未禁止）");
+  assert.equal(metricsFor("office-us-single").caption_rendered, false, "US 单幅不得编号（1.84(u)(1)）");
+  assert.equal(metricsFor("numbering-single-numbered").caption_rendered, false, "PCT 单幅不得编号（IP 5.141）");
+  assert.equal(metricsFor("office-pct-two").caption_rendered, true, "多幅按档案标注");
+
+  // 画幅确实随编号变化：同一拓扑（4 步 TB）在 CN 比 US 多一条图号标注带
+  const cnHeight = metricsFor("office-cn-single").figures[0]!.height_mm;
+  const usHeight = metricsFor("office-us-single").figures[0]!.height_mm;
+  assert.ok(cnHeight - usHeight > 5, `CN 画幅应多出标注带（cn ${cnHeight} vs us ${usHeight}）`);
+});
+
+test("语义锚点（法域）：字高下限按档案取——CN 实践下限 2.0mm、PCT/US 条文 3.2mm", () => {
+  assert.deepEqual(metricsFor("office-cn-single").min_char_height_mm, { mm: 2, basis: "practice" });
+  assert.deepEqual(metricsFor("office-us-single").min_char_height_mm, { mm: 3.2, basis: "statute" });
+  assert.deepEqual(metricsFor("office-pct-two").min_char_height_mm, { mm: 3.2, basis: "statute" });
+});
+
+test("语义锚点：编号义务——两幅无图号判 V15 fail；pct 单幅带图号判 V16 warn", () => {
+  assert.ok((metricsFor("numbering-missing-multi").rule_hits.V15?.fail ?? 0) >= 1, "多幅缺号应 fail");
+  assert.ok((metricsFor("numbering-single-numbered").rule_hits.V16?.warn ?? 0) >= 1, "单幅带号应 warn");
+});
+
+test("语义锚点：图面用语规则的法域适用性（CN 判 V12/V13/V14；PCT 不判 V13）", () => {
+  const cn = metricsFor("wording-surface-cn");
+  assert.ok((cn.rule_hits.V12?.warn ?? 0) >= 1, "CN 应命中 V12（注释/正文引用/尺寸/标点）");
+  assert.ok((cn.rule_hits.V13?.warn ?? 0) >= 1, "CN 应命中 V13（非中文词语）");
+  assert.ok((cn.rule_hits.V14?.warn ?? 0) >= 1, "CN 应命中 V14（小写字母后缀）");
+
+  const pct = metricsFor("wording-surface-pct");
+  assert.equal(pct.rule_hits.V13, undefined, "PCT 不判非中文词语");
+  assert.ok((pct.rule_hits.V14?.warn ?? 0) >= 1, "PCT 判标号与括号连用");
+  assert.ok((pct.rule_hits.V12?.warn ?? 0) >= 1, "PCT 判比例标注（IP 5.150 / 1.84(k)）");
+});
+
+test("语义锚点：档案键落进基线（法域判据可审计）", () => {
+  assert.equal(metricsFor("office-cn-single").office, "cnipa");
+  assert.equal(metricsFor("office-us-single").office, "uspto");
+  assert.equal(metricsFor("office-pct-two").office, "pct");
 });
 
 test("确定性：同一输入两次计算完全一致（基线比对的前提）", () => {

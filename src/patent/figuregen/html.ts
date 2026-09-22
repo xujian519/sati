@@ -1,8 +1,8 @@
 /**
  * src/patent/figuregen — 附图 A4 打印版式（单文件 HTML）。
  *
- * 面向交付的打印 HTML：@page A4（边距与 `page-contract.ts` 同源——核验器 V7 的
- * 可印区判据与这里的实际版式必须一致，否则阈值会与实际排版漂移）、逐图分页、
+ * 面向交付的打印 HTML：@page A4（边距与可印区取自 `office-profile.ts` 的**法域档案**——核验器
+ * V7 的可印区判据与这里的实际版式必须一致，否则阈值会与实际排版漂移）、逐图分页、
  * 黑白约束（内嵌 SVG 已是黑白不变式输出）。PDF 由既有 Chromium 打印管线
  * （export_html / export-html.mjs）从此 HTML 产出。
  *
@@ -13,20 +13,15 @@
  * ③ `max-height` + `break-inside: avoid` 兜底：不可解析画幅时仍不溢出、不跨页切断。
  */
 
-import {
-  CSS_PX_PER_INCH,
-  MM_PER_INCH,
-  PRINTABLE_HEIGHT_MM,
-  type FigurePaperSize,
-  uniformFigureZoom,
-} from "./page-contract.js";
+import { printableArea, profileForJurisdiction, type OfficeProfile } from "./office-profile.js";
+import { CSS_PX_PER_INCH, MM_PER_INCH, type FigurePaperSize, uniformFigureZoom } from "./page-contract.js";
 import { renderFigureSvg } from "./render-svg.js";
 import type { FigureSpec, Jurisdiction } from "./types.js";
 
 export type FiguresHtmlOptions = {
   /** 文档标题（<title> 与首页题头；通常为发明名称）。 */
   title?: string;
-  /** 辖区（默认 cn）：us 时内嵌 SVG 图号标注为 FIG. N。 */
+  /** 辖区（默认 cn）：决定图号写法与是否需要图号（见 office-profile.ts）。 */
   jurisdiction?: Jurisdiction;
   /** 预渲染 SVG（figure_no → svg 文本）：graphviz 等异步渲染器先出图再排版的注入点；
    * 缺省图走内置 renderFigureSvg。 */
@@ -71,15 +66,20 @@ export function svgRootSizeMm(svg: string): FigurePaperSize | undefined {
 /** 渲染全部附图为可打印的单文件 HTML（A4 版式）。 */
 export function renderFiguresHtml(specs: readonly FigureSpec[], options: FiguresHtmlOptions = {}): string {
   const title = options.title ?? "说明书附图";
-  const entries = [...specs]
-    .sort((a, b) => a.figure_no - b.figure_no)
-    .map(spec => {
-      const preRendered = options.renderedSvgs?.get(spec.figure_no);
-      const svg = preRendered ?? renderFigureSvg(spec, { jurisdiction: options.jurisdiction }).svg;
-      return { spec, svg, size: svgRootSizeMm(svg) };
-    });
+  const profile: OfficeProfile = profileForJurisdiction(options.jurisdiction);
+  const area = printableArea(profile);
+  const sorted = [...specs].sort((a, b) => a.figure_no - b.figure_no);
+  const entries = sorted.map(spec => {
+    const preRendered = options.renderedSvgs?.get(spec.figure_no);
+    const svg =
+      preRendered ?? renderFigureSvg(spec, { jurisdiction: options.jurisdiction, figureCount: sorted.length }).svg;
+    return { spec, svg, size: svgRootSizeMm(svg) };
+  });
 
-  const zoom = uniformFigureZoom(entries.flatMap(entry => (entry.size === undefined ? [] : [entry.size])));
+  const zoom = uniformFigureZoom(
+    entries.flatMap(entry => (entry.size === undefined ? [] : [entry.size])),
+    profile,
+  );
 
   const sections = entries
     .map(entry => {
@@ -99,13 +99,13 @@ export function renderFiguresHtml(specs: readonly FigureSpec[], options: Figures
 <meta charset="utf-8">
 <title>${title}—说明书附图</title>
 <style>
-  @page { size: A4; margin: 25mm 15mm 15mm 25mm; }
+  @page { size: A4; margin: ${profile.margins.topMm}mm ${profile.margins.rightMm}mm ${profile.margins.bottomMm}mm ${profile.margins.leftMm}mm; }
   html, body { background: #FFFFFF; color: #000000; font-family: sans-serif; margin: 0; padding: 0; }
   h1 { font-size: 16pt; text-align: center; font-weight: normal; margin: 12mm 0 8mm; }
   .figure-page { page-break-after: always; break-inside: avoid; text-align: center; }
   .figure-page:last-child { page-break-after: auto; }
   .figure-box { display: inline-block; max-width: 100%; }
-  .figure-box svg { display: block; width: 100%; height: auto; max-height: ${PRINTABLE_HEIGHT_MM}mm; }
+  .figure-box svg { display: block; width: 100%; height: auto; max-height: ${area.heightMm}mm; }
   .figure-box-auto svg { width: auto; max-width: 100%; }
 </style>
 </head>

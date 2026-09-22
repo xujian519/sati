@@ -3,12 +3,17 @@
  *
  * 审查指南 2023 一部一章 4.3/4.6 的黑白合规是构造期不变式：仅 #000000/#FFFFFF、
  * 无渐变、无彩色函数；文字黑色背景白净。附图标记写入节点分组的 data-ref 属性
- * （供核验器/代理师工具回读），文本层同时渲染"组件名(N)"惯用形。图号"图N"按
- * 细则第 21 条式样居中标注于图下方。输出确定性：无时钟/随机/ locale 依赖。
+ * （供核验器/代理师工具回读），文本层同时渲染"组件名(N)"惯用形。图号按法域档案
+ * 写成"图N"（CN）/ "Fig. N"（PCT）/ "FIG. N"（US），**是否需要图号由图幅数与法域
+ * 决定**（单幅在 PCT/US 不得出现 "Fig."——PCT 指南 IP 5.141、37 CFR 1.84(u)(1)），
+ * 需要时居中标注于图形正下方（指南一部一章 4.3"标注在相应附图的正下方"）。
+ * 输出确定性：无时钟/随机/ locale 依赖。
  */
 
+import { figureCaption, profileForJurisdiction } from "./office-profile.js";
 import { layoutFigure, type FigureLayout } from "./layout.js";
 import { FIGURE_FONT_SIZE } from "./metrics.js";
+import { FIGURE_NO_ATTRIBUTE } from "./readback.js";
 import type { FigureNode, FigureNodeShape, FigureSpec, Jurisdiction } from "./types.js";
 
 const EDGE_FONT_SIZE = 12;
@@ -87,18 +92,20 @@ function renderNodeText(node: FigureNode, p: { x: number; y: number; width: numb
     .join("");
 }
 
-/** 渲染单幅附图为完整 SVG 文档。 */
-/** 图号标注：cn="图N"（细则第 21 条式样），us="FIG. N"（USPTO 惯例）。 */
-export function figureCaption(figureNo: number, jurisdiction: Jurisdiction = "cn"): string {
-  return jurisdiction === "us" ? `FIG. ${figureNo}` : `图${figureNo}`;
-}
-
-/** 渲染单幅附图为完整 SVG 文档。 */
+/**
+ * 渲染单幅附图为完整 SVG 文档。
+ *
+ * `figureCount` 为本案附图总幅数（缺省 1）：图号是否需要标注由图幅数与法域档案共同决定
+ * （见 `office-profile.ts` 的 `shouldRenderCaption`），核验器用同一判据量纸面尺寸。
+ * 根元素写 `data-figure-no`：图号条件化后，机器回读（漂移检测）仍有无歧义的图号来源。
+ */
 export function renderFigureSvg(
   spec: FigureSpec,
-  options: { jurisdiction?: Jurisdiction } = {},
+  options: { jurisdiction?: Jurisdiction; figureCount?: number } = {},
 ): { svg: string; width: number; height: number } {
-  const layout: FigureLayout = layoutFigure(spec);
+  const profile = profileForJurisdiction(options.jurisdiction);
+  const caption = figureCaption(profile, spec.figure_no, options.figureCount ?? 1);
+  const layout: FigureLayout = layoutFigure(spec, { caption: caption !== undefined });
   const { width, height } = layout;
 
   const edges = layout.edges
@@ -125,16 +132,22 @@ export function renderFigureSvg(
     })
     .join("");
 
+  const captionText =
+    caption === undefined
+      ? ""
+      : `<text x="${fmt(width / 2)}" y="${fmt(height - 16)}" font-size="${FIGURE_FONT_SIZE}" ` +
+        `text-anchor="middle" fill="#000000">${escapeXml(caption)}</text>\n`;
+
   const svg =
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${fmt(width)}" height="${fmt(height)}" ` +
+    `<svg xmlns="http://www.w3.org/2000/svg" ${FIGURE_NO_ATTRIBUTE}="${spec.figure_no}" ` +
+    `width="${fmt(width)}" height="${fmt(height)}" ` +
     `viewBox="0 0 ${fmt(width)} ${fmt(height)}" font-family="sans-serif">\n` +
     `<rect x="0" y="0" width="${fmt(width)}" height="${fmt(height)}" fill="#FFFFFF"/>\n` +
     `<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">` +
     `<path d="M0,1 L9,5 L0,9 Z" fill="#000000"/></marker></defs>\n` +
     edges +
     nodes +
-    `<text x="${fmt(width / 2)}" y="${fmt(height - 16)}" font-size="${FIGURE_FONT_SIZE}" text-anchor="middle" fill="#000000">` +
-    `${figureCaption(spec.figure_no, options.jurisdiction)}</text>\n` +
+    captionText +
     `</svg>\n`;
 
   return { svg, width, height };

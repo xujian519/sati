@@ -89,6 +89,7 @@
     "@larksuiteoapi/node-sdk": "^1.72.0",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@rdkit/rdkit": "2026.3.6",
+    "@viz-js/viz": "^3.29.0",
     "@vscode/ripgrep": "^1.18.0",
     "csv-parse": "^7.0.2",
     "edgeclaw-memory-core": "workspace:*",

@@ -91,8 +91,11 @@ function assignLayers(nodes: readonly FigureNode[], edges: readonly FigureEdge[]
 
 /**
  * 布局单幅附图。direction 缺省按 kind 取默认（flowchart=TB，block=LR）。
+ *
+ * `caption: false` 时不计入图号标注带的高度（PCT/US 单幅不得编号时画幅随之变小：
+ * 编号画在图形正下方的专用带里，不编号就不该留这条空白带）。
  */
-export function layoutFigure(spec: FigureSpec): FigureLayout {
+export function layoutFigure(spec: FigureSpec, options: { caption?: boolean } = {}): FigureLayout {
   const direction = spec.direction ?? defaultDirection(spec.kind);
   const sizes = new Map<string, { width: number; height: number }>();
   for (const node of spec.nodes) sizes.set(node.id, nodeSize(node));
@@ -123,7 +126,7 @@ export function layoutFigure(spec: FigureSpec): FigureLayout {
   const contentH =
     direction === "TB" ? rowHeights.reduce((sum, h) => sum + h, 0) + layerGaps : Math.max(1, ...stackHeights);
   const width = contentW + MARGIN * 2;
-  const height = contentH + MARGIN * 2 + CAPTION_H;
+  const height = contentH + MARGIN * 2 + (options.caption === false ? 0 : CAPTION_H);
 
   // 主轴坐标 = 分层方向（TB: y，LR: x）；副轴 = 层内顺序
   const positioned = new Map<string, PositionedNode>();

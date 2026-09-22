@@ -10,6 +10,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { buildFigureBriefDraft } from "../../../src/patent/figuregen/brief.js";
 import { checkFigures } from "../../../src/patent/figuregen/check.js";
+import { parseFigureSvg } from "../../../src/patent/figuregen/readback.js";
 import { renderFigureSvg } from "../../../src/patent/figuregen/render-svg.js";
 import type { FigureSpec } from "../../../src/patent/figuregen/types.js";
 
@@ -25,13 +26,30 @@ function flowchart(figureNo: number, ref?: number): FigureSpec {
   };
 }
 
-test("渲染：US 辖区图号标注为 FIG. N；CN 保持 图N", () => {
-  const us = renderFigureSvg(flowchart(3), { jurisdiction: "us" });
-  assert.match(us.svg, /<text[^>]*>FIG\. 3<\/text>/);
-  assert.ok(!us.svg.includes(">图3<"));
+test("渲染：图号按法域与图幅数条件化（CN 图N / PCT Fig. N / US FIG. N；单幅在 pct·us 不编号）", () => {
+  // 多幅：三法域各自的图号写法（图号文本与档案同源）
+  assert.match(renderFigureSvg(flowchart(3), { jurisdiction: "us", figureCount: 2 }).svg, /<text[^>]*>FIG\. 3<\/text>/);
+  assert.match(
+    renderFigureSvg(flowchart(3), { jurisdiction: "pct", figureCount: 2 }).svg,
+    /<text[^>]*>Fig\. 3<\/text>/,
+  );
+  assert.match(renderFigureSvg(flowchart(3), { figureCount: 2 }).svg, /<text[^>]*>图3<\/text>/);
 
-  const cn = renderFigureSvg(flowchart(3));
-  assert.match(cn.svg, /<text[^>]*>图3<\/text>/);
+  // 单幅：pct/us 不得出现 Fig./FIG.（37 CFR 1.84(u)(1)、PCT 指南 IP 5.141），但图号仍可由
+  // 根元素 data-figure-no 回读（机器契约与可见形态分离）
+  for (const jurisdiction of ["us", "pct"] as const) {
+    const single = renderFigureSvg(flowchart(3), { jurisdiction });
+    const parsed = parseFigureSvg(single.svg);
+    assert.equal(parsed.numbered, false, `${jurisdiction} 单幅不应带可见图号`);
+    assert.equal(parsed.figureNo, 3, "无可见图号时仍可从 data-figure-no 回读图号");
+    assert.doesNotMatch(single.svg, /FIG\.|Fig\./u, `${jurisdiction} 单幅不得出现 Fig./FIG.`);
+  }
+
+  // CN：指南一部一章 4.3 只把编号义务系于"两幅以上"，未禁止单幅编号，且附图说明会引用图号
+  const cnSingle = renderFigureSvg(flowchart(3));
+  assert.match(cnSingle.svg, /<text[^>]*>图3<\/text>/);
+  assert.equal(parseFigureSvg(cnSingle.svg).numbered, true);
+  assert.ok(!cnSingle.svg.includes(">FIG. 3<"));
 });
 
 test("校验：US 模式跳过 V8 摘要附图与 V9 实用新型规则", () => {

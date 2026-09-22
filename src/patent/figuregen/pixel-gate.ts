@@ -22,7 +22,8 @@
  * 构造的灰度缓冲测试，无需二进制 fixture。
  */
 
-import { PRINTABLE_HEIGHT_MM, PRINTABLE_WIDTH_MM, pxToMm } from "./page-contract.js";
+import { DEFAULT_OFFICE_PROFILE, officeProfile, printableArea, type TargetOffice } from "./office-profile.js";
+import { pxToMm } from "./page-contract.js";
 import type { FigureCheckSeverity } from "./check.js";
 
 /** 规则号（`PX*` 与 CNIPA 的 `V*` 分列，见模块注释）。 */
@@ -67,6 +68,8 @@ export type PixelGateOptions = {
   figureNo?: number;
   /** DPI 元数据（缺省按 96 估算并在证据里注明）。 */
   dpi?: number;
+  /** 目标法域档案（决定"纸面尺寸是否超可印区"的判据；缺省 cnipa）。 */
+  office?: TargetOffice;
 };
 
 export type PixelMetrics = {
@@ -148,6 +151,8 @@ export function analyzeGrayImage(image: GrayImage, options: PixelGateOptions = {
   const dpiEstimated = options.dpi === undefined || options.dpi <= 0;
   const dpi = dpiEstimated ? 96 : options.dpi!;
   const declaredFigureNo = options.figureNo ?? declaredFigureNoFromName(options.name ?? "");
+  const profile = options.office === undefined ? DEFAULT_OFFICE_PROFILE : officeProfile(options.office);
+  const area = printableArea(profile);
 
   const metrics: PixelMetrics = {
     width: image.width,
@@ -243,13 +248,13 @@ export function analyzeGrayImage(image: GrayImage, options: PixelGateOptions = {
       message: `DPI ${dpi} 超出可用区间 ${PIXEL_MIN_DPI}-${PIXEL_MAX_DPI}，打印清晰度或元数据可疑`,
     });
   }
-  if (metrics.printedWidthMm > PRINTABLE_WIDTH_MM || metrics.printedHeightMm > PRINTABLE_HEIGHT_MM) {
+  if (metrics.printedWidthMm > area.widthMm || metrics.printedHeightMm > area.heightMm) {
     findings.push({
       rule: "PX3",
       severity: "warn",
       message:
-        `纸面尺寸 ${metrics.printedWidthMm.toFixed(1)}×${metrics.printedHeightMm.toFixed(1)}mm 超出 A4 可印区 ` +
-        `${PRINTABLE_WIDTH_MM}×${PRINTABLE_HEIGHT_MM}mm，排版时将缩放（线宽与字高按同比例下降）`,
+        `纸面尺寸 ${metrics.printedWidthMm.toFixed(1)}×${metrics.printedHeightMm.toFixed(1)}mm 超出 ` +
+        `${profile.office} 可印区 ${area.widthMm.toFixed(1)}×${area.heightMm.toFixed(1)}mm，排版时将缩放（线宽与字高按同比例下降）`,
       evidence: [`${dpi}DPI${dpiEstimated ? "（估算）" : ""}`, `按 ${pxToMm(1).toFixed(4)}mm/px（96dpi）折算参考`],
     });
   }

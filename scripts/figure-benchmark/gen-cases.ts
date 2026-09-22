@@ -23,6 +23,10 @@ export type GenBenchmarkCase = {
   specText: string;
   jurisdiction?: Jurisdiction;
   documentKind?: DocumentKind;
+  /** 本案附图总幅数（缺省取 figures.length）；与法域档案共同决定图号是否需要标注。 */
+  figureCount?: number;
+  /** 已交付 SVG 回读到的图号集合（给出才判 V15/V16；缺省不判，见 check.ts 的注释）。 */
+  numberedFigureNos?: readonly number[];
   figures: FigureSpec[];
 };
 
@@ -363,6 +367,152 @@ export const GENERATION_BENCHMARK_CASES: readonly GenBenchmarkCase[] = [
       claims: `${claimsParagraph(flowItems(12))}\n2. 一种数据处理装置，其特征在于，用于执行权利要求1所述的方法。`,
       description: `${descriptionParagraph(flowItems(12))}图2所示的简化流程同样由上述单元配合完成。`,
       brief: "图1为本申请实施例提供的完整流程示意图；图2为简化流程示意图。",
+    }),
+  },
+
+  // ---- 法域 × 图幅数矩阵 + 编号义务 + 图面用语（2026-09-22 对齐 deepseek-harness 的合规侧）----
+  {
+    id: "office-cn-single",
+    title: "CN 单幅（保留图号；字高下限为实践下限 2.0mm）",
+    documentKind: "invention",
+    figureCount: 1,
+    numberedFigureNos: [1],
+    figures: [tbFlow(1, flowItems(4), { abstract: true })],
+    specText: specTextOf({
+      claims: claimsParagraph(flowItems(4)),
+      description: descriptionParagraph(flowItems(4)),
+      brief: "图1为本申请实施例提供的流程示意图。",
+    }),
+  },
+  {
+    id: "office-us-single",
+    title: "US 单幅（不得编号；字高下限 3.2mm）",
+    jurisdiction: "us",
+    documentKind: "invention",
+    figureCount: 1,
+    numberedFigureNos: [],
+    figures: [tbFlow(1, flowItems(4))],
+    specText: [
+      "CLAIMS",
+      `1. A data processing method, comprising: ${flowItems(4)
+        .map(item => `${item.label} (${item.ref})`)
+        .join("; ")}.`,
+      "",
+      "DESCRIPTION",
+      "",
+      "DETAILED DESCRIPTION",
+      `In an embodiment, the steps include ${flowItems(4)
+        .map(item => `${item.label} ${item.ref}`)
+        .join(", ")}, executed in sequence.`,
+    ].join("\n"),
+  },
+  {
+    id: "office-pct-two",
+    title: "PCT 两幅（Fig. N 写法；字高下限 3.2mm；页边距含 bottom 10mm）",
+    jurisdiction: "pct",
+    documentKind: "invention",
+    figureCount: 2,
+    numberedFigureNos: [1, 2],
+    figures: [tbFlow(1, flowItems(5), { abstract: true }), tbFlow(2, flowItems(3))],
+    specText: specTextOf({
+      claims: claimsParagraph(flowItems(5)),
+      description: `${descriptionParagraph(flowItems(5))}图2为简化流程。`,
+      brief: "图1为本申请实施例提供的流程示意图；图2为简化流程示意图。",
+    }),
+  },
+  {
+    id: "numbering-missing-multi",
+    title: "两幅却均无图号（V15 fail：编号义务）",
+    jurisdiction: "us",
+    documentKind: "invention",
+    figureCount: 2,
+    numberedFigureNos: [],
+    figures: [tbFlow(1, flowItems(3)), tbFlow(2, flowItems(3))],
+    specText: [
+      "CLAIMS",
+      `1. A data processing method, comprising: ${flowItems(3)
+        .map(item => `${item.label} (${item.ref})`)
+        .join("; ")}.`,
+      "",
+      "DESCRIPTION",
+      "",
+      "DETAILED DESCRIPTION",
+      `The steps include ${flowItems(3)
+        .map(item => `${item.label} ${item.ref}`)
+        .join(", ")}.`,
+    ].join("\n"),
+  },
+  {
+    id: "numbering-single-numbered",
+    title: "PCT 单幅却带图号（V16 warn：单幅不得编号）",
+    jurisdiction: "pct",
+    documentKind: "invention",
+    figureCount: 1,
+    numberedFigureNos: [1],
+    figures: [tbFlow(1, flowItems(3))],
+    specText: specTextOf({
+      claims: claimsParagraph(flowItems(3)),
+      description: descriptionParagraph(flowItems(3)),
+      brief: "附图为流程示意图。",
+    }),
+  },
+  {
+    id: "wording-surface-cn",
+    title: "图面用语（CN：注释前缀/正文引用/尺寸标注/句末标点/图号入图/非中文词语/字母后缀）",
+    documentKind: "invention",
+    figureCount: 1,
+    numberedFigureNos: [1],
+    figures: [
+      {
+        figure_no: 1,
+        kind: "flowchart",
+        nodes: [
+          { id: "w1", label: "注：此处为优选实施方式", shape: "rect" },
+          { id: "w2", label: "Input Sensor", shape: "rect" },
+          { id: "w3", label: "如图1所示，两模块相连", shape: "rect" },
+          { id: "w4", label: "管径 20mm 的管路", ref: 20, shape: "rect" },
+          { id: "w5", label: "子件20a", ref: 21, shape: "rect" },
+          { id: "w6", label: "该步骤至此完成。", shape: "rect" },
+        ],
+        // 串联：使布局为单列，避免同层并排把画幅撑爆而引入与用语无关的 V7 fail
+        edges: [
+          { from: "w1", to: "w2" },
+          { from: "w2", to: "w3" },
+          { from: "w3", to: "w4" },
+          { from: "w4", to: "w5" },
+          { from: "w5", to: "w6" },
+        ],
+      },
+    ],
+    specText: specTextOf({
+      claims: "1. 一种处理装置，其特征在于，包括处理模块20。",
+      description: "本申请实施例中，处理模块20连接管路20、子件21。",
+      brief: "图1为本申请实施例提供的流程示意图。",
+    }),
+  },
+  {
+    id: "wording-surface-pct",
+    title: "图面用语（PCT：括号连用属禁止形态，非中文词语不判）",
+    jurisdiction: "pct",
+    documentKind: "invention",
+    figureCount: 2,
+    numberedFigureNos: [1, 2],
+    figures: [
+      {
+        figure_no: 1,
+        kind: "flowchart",
+        nodes: [
+          { id: "p1", label: "控制器(90)", ref: 90, shape: "rect" },
+          { id: "p2", label: "比例 1:2", shape: "rect" },
+        ],
+        edges: [{ from: "p1", to: "p2" }],
+      },
+      tbFlow(2, flowItems(3)),
+    ],
+    specText: specTextOf({
+      claims: claimsParagraph(flowItems(3)),
+      description: `${descriptionParagraph(flowItems(3))}控制器90连接管路。`,
+      brief: "图1为控制关系示意图；图2为流程示意图。",
     }),
   },
 ];

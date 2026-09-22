@@ -19,8 +19,9 @@
  * 纸面配置属交付排版约定**，本模块不声称遵循其中之一（需按最终申请格式复核）。
  */
 
-import { PRINTABLE_HEIGHT_MM, PRINTABLE_WIDTH_MM } from "../page-contract.js";
+import { figureCaption, officeProfile, printableArea } from "../office-profile.js";
 import { measureTextWidth } from "../metrics.js";
+import type { Jurisdiction } from "../types.js";
 import {
   projectModelPoints,
   type CadAxisImages,
@@ -60,7 +61,9 @@ export type CadRefAnnotation = {
 export type CadRenderOptions = {
   /** 图号（SVG 图号标注"图N"，细则第 21 条式样）。 */
   figureNo: number;
-  jurisdiction?: "cn" | "us";
+  jurisdiction?: Jurisdiction;
+  /** 本案附图总幅数（图号是否需要标注由图幅数与法域档案共同决定；缺省 1）。 */
+  figureCount?: number;
   /** 是否绘制隐藏线（**默认关**：CNIPA 实务以剖视图表达内部结构，虚线易与标记线混淆）。 */
   hiddenLines?: boolean;
   /** 图面外边距（毫米）。 */
@@ -274,6 +277,10 @@ export function renderCadSvg(table: CadEdgeTable, options: CadRenderOptions): Ca
 
   // 标注预留带：标号向图外引，故四边各留出"最长引线 + 半个最宽标号 + 余量"。
   // 有预留带 ⇒ 含标注的纸面尺寸**由构造保证**不超可印区（几何另按可用宽度缩放）。
+  const profile = officeProfile(
+    options.jurisdiction === "us" ? "uspto" : options.jurisdiction === "pct" ? "pct" : "cnipa",
+  );
+  const area = printableArea(profile);
   const anchorsLocal = annotations.map(annotation => localFromModel(annotation.atMm));
   const reserve = (() => {
     if (annotations.length === 0) return 0;
@@ -284,12 +291,12 @@ export function renderCadSvg(table: CadEdgeTable, options: CadRenderOptions): Ca
       const halfWidth = measureTextWidth(String(annotation.ref), CAD_REF_FONT_MM) / 2;
       needed = Math.max(needed, Math.min(reach, CAD_REF_LEADER_MM * 6) + halfWidth + CAD_REF_RESERVE_PAD_MM);
     }
-    const cap = Math.min(PRINTABLE_WIDTH_MM, PRINTABLE_HEIGHT_MM) * CAD_MAX_RESERVE_RATIO;
+    const cap = Math.min(area.widthMm, area.heightMm) * CAD_MAX_RESERVE_RATIO;
     return Math.min(needed, cap);
   })();
 
-  const availableWidth = PRINTABLE_WIDTH_MM - margin * 2 - reserve * 2;
-  const availableHeight = PRINTABLE_HEIGHT_MM - margin * 2 - reserve * 2;
+  const availableWidth = area.widthMm - margin * 2 - reserve * 2;
+  const availableHeight = area.heightMm - margin * 2 - reserve * 2;
   const scale = Math.min(1, availableWidth / geometryWidth, availableHeight / geometryHeight);
   const band = margin + reserve;
   const widthMm = geometryWidth * scale + band * 2;
@@ -372,16 +379,20 @@ export function renderCadSvg(table: CadEdgeTable, options: CadRenderOptions): Ca
     })
     .join("\n");
 
-  const caption = options.jurisdiction === "us" ? `FIG. ${options.figureNo}` : `图${options.figureNo}`;
+  const caption = figureCaption(profile, options.figureNo, options.figureCount ?? 1);
   const captionY = heightMm - 2;
+  const captionMarkup =
+    caption === undefined
+      ? ""
+      : `<text x="${fmt(widthMm / 2)}" y="${fmt(captionY)}" font-size="3.5" text-anchor="middle" fill="#000000">` +
+        `${escapeXml(caption)}</text>\n`;
   const svg =
     `<svg xmlns="http://www.w3.org/2000/svg" width="${fmt(widthMm)}mm" height="${fmt(heightMm)}mm" ` +
     `viewBox="0 0 ${fmt(widthMm)} ${fmt(heightMm)}" font-family="sans-serif">\n` +
     `<rect x="0" y="0" width="${fmt(widthMm)}" height="${fmt(heightMm)}" fill="#FFFFFF"/>\n` +
     `${hatchPath}${paths}\n` +
     (annotationMarkup.length > 0 ? `${annotationMarkup}\n` : "") +
-    `<text x="${fmt(widthMm / 2)}" y="${fmt(captionY)}" font-size="3.5" text-anchor="middle" fill="#000000">` +
-    `${escapeXml(caption)}</text>\n` +
+    captionMarkup +
     `</svg>\n`;
 
   return {

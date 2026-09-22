@@ -198,6 +198,28 @@ test("patent_figure_generate：dot 进程失败透出退出码与 stderr", async
   }
 });
 
+test("patent_figure_generate：SATI_FIGURE_RENDERER=graphviz-wasm 在无系统 dot 时仍能出图", async () => {
+  const cwd = mkdtempSync(join(tmpdir(), "sati-figuregen-gv-"));
+  try {
+    // 无系统 dot 模拟：PATH 清空且 SATI_GRAPHVIZ_DOT 指向不存在的路径——
+    // graphviz-wasm 分支不解析 dot 二进制，故此配置下仍应出图。
+    await withEnv(
+      { SATI_FIGURE_RENDERER: "graphviz-wasm", SATI_GRAPHVIZ_DOT: join(tmpdir(), "sati-missing-dot"), PATH: "" },
+      async () => {
+        const tool = createPatentFigureGenerateTool();
+        const result = await tool.execute({ figures: [FIG], output_name: "wasm" }, makeContext(cwd));
+        const svg = readFileSync(join(cwd, ".sati", "figures", "wasm-fig1.svg"), "utf8");
+        assert.ok(svg.startsWith("<svg"), "头部应被剥离");
+        assert.ok(svg.includes('data-ref="20"'), "data-ref 注入");
+        const text = result.content[0].type === "text" ? result.content[0].text : "";
+        assert.ok(text.includes("渲染器: graphviz (WASM)"), text);
+      },
+    );
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
 test("patent_figure_generate：SATI_FIGURE_RENDERER 非法值 fail-closed", async () => {
   const cwd = mkdtempSync(join(tmpdir(), "sati-figuregen-gv-"));
   try {

@@ -22,12 +22,25 @@ export {
   stripRefMark,
   COMMENT_LABEL_LINE_MAX,
   COMMENT_LABEL_LINES_MAX,
+  WORDING_EVIDENCE_MAX,
   type FigureCheckFinding,
   type FigureCheckOptions,
   type FigureCheckResult,
   type FigureCheckRuleId,
   type FigureCheckSeverity,
 } from "./check.js";
+export {
+  WORDING_KIND_SPEC,
+  inspectWording,
+  scanFigureWording,
+  type WordingHit,
+  type WordingIssue,
+  type WordingIssueKind,
+  type WordingKindSpec,
+  type WordingRuleId,
+  type WordingScope,
+  type WordingSeverity,
+} from "./wording-rules.js";
 export {
   defaultDirection,
   layoutFigure,
@@ -36,7 +49,24 @@ export {
   type Point,
   type RoutedEdge,
 } from "./layout.js";
-export { figureCaption, renderFigureSvg } from "./render-svg.js";
+export { renderFigureSvg } from "./render-svg.js";
+export {
+  DEFAULT_OFFICE_PROFILE,
+  TARGET_OFFICES,
+  figureCaption,
+  minCharHeight,
+  officeForJurisdiction,
+  officeProfile,
+  printableArea,
+  profileForJurisdiction,
+  sheetNumberText,
+  shouldRenderCaption,
+  type CaptionStyle,
+  type OfficeProfile,
+  type SheetNumbering,
+  type TargetOffice,
+} from "./office-profile.js";
+export { buildSubmissionPage, type SubmissionPageMetrics, type SubmissionPageOptions } from "./submission-page.js";
 export { FIGURE_FONT_SIZE, isWideChar, measureTextWidth } from "./metrics.js";
 export {
   A4_HEIGHT_MM,
@@ -62,13 +92,23 @@ export {
   dotNodeTitle,
 } from "./dot.js";
 export {
+  createSubprocessDotRunner,
   FIGURE_RENDERER_ENV,
   GRAPHVIZ_DOT_ENV,
   postProcessGraphvizSvg,
   renderFigureSvgWithGraphviz,
   resolveDotBinary,
+  type DotRunner,
 } from "./render-graphviz.js";
+export { createWasmDotRunner, type VizLoader } from "./render-viz-wasm.js";
 export { parseFigureSvg, type ParsedFigureSvg } from "./readback.js";
+export {
+  DEFAULT_SVG_MAX_BYTES,
+  SvgSafetyError,
+  assertSafeSvg,
+  isSvgSafetyError,
+  type SvgSafetyErrorCode,
+} from "./svg-safety.js";
 export { splitSpecFaces, type SpecFaces } from "./spec-sections.js";
 export {
   FIGURE_SIDECAR_VERSION,
@@ -81,6 +121,8 @@ export {
   type FigureSidecarCheck,
   type FigureSidecarFigure,
   type FigureSidecarGeometry,
+  type FigureSidecarLayout,
+  type FigureSidecarSheet,
 } from "./sidecar.js";
 export * from "./cad/index.js";
 export { renderFiguresHtml, type FiguresHtmlOptions } from "./html.js";
