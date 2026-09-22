@@ -2,6 +2,38 @@
 
 本文件按版本记录 Sati 的重要变更。桌面端版本号（`release(desktop)`）与根 `package.json` 由 `scripts/bump-version.mjs` 同步维护。
 
+## v0.3.1 - 2026-09-22
+
+> **版本目标（2026-09-22）**：项目级 hook 信任的门禁化落地（报告期 → 强制期 + CLI/Web 双审批入口 + 遥测），上下文装配精细化（系统提示分桶、非用户来源护栏抬头、压缩与摘要的两处反向选择/熔断修正），专利附图链路扩面（Graphviz WASM 渲染后端、法域档案与落版页、图外引线标号择位引擎、状态图/层级图/曲线图/坐标图四类新图型），以及两项新门禁（架构边界、基线新鲜度）。
+
+### Feat
+- feat(extension): 项目级 hook 信任报告期（#511，只报告不阻断）→ 强制期（#512，未评审不装载 + CLI 审批），协议 1.11
+- feat(ui): 项目级 hook 信任的 Web 审批入口（REST + 应用级横幅）
+- feat(telemetry): 项目 hook 信任的装配期与决策遥测
+- feat(permission): 工具级 alwaysAsk 硬门——自动放行抹不掉的确认
+- feat(gateway): `permission_request` 增可选 `origin`，子代理请求授权在父界面标出来源（协议 1.11）
+- feat(context): 系统提示分桶——逐轮可变注入下沉到消息尾部；非用户来源文本加护栏抬头
+- feat(patent): Graphviz WASM 渲染后端（`SATI_FIGURE_RENDERER=graphviz-wasm`）+ 渲染器对比脚本与度量口径护栏（默认渲染器维持 builtin）
+- feat(patent): 附图法域档案 + 落版页 + 图号条件化 + 逐法域字高；制图工具入参增 `pct`/图幅/页码/落版（inputSchema 变更 + fixture 重录）
+- feat(patent): 图外引线标号择位引擎（候选锚点 / 碰撞规避 / 退化告警）+ CAD 通路换装
+- feat(patent): 图型扩展——状态图与组件层级图、曲线图与坐标图（矢量通路）；外部 SVG 安全门与图面用语规则 V12–V14
+- feat(tooling): 架构边界门禁（并修复空转的 `ui/server`→`src` 门禁）；开工前基线新鲜度门禁（`check:freshness` 挂 `pnpm check` 首位）
+
+### Fix
+- fix(context): 摘要请求自身超窗时反向重选（保留更多原文，而非压得更狠）；全量压缩补「空转」熔断（两次压缩之间无工具轮即停）
+- fix(patent): graphviz 通路按解码 `title` 定位节点分组（含连字符的节点 id 不再 fail-closed）
+- fix(cli): 知识库路径解析透传调用方 env
+- fix(vendor): 修复 Windows 下 nuo-patent checksum 校验的路径与行尾失配
+- fix(ci): dependabot 去掉重复工作区目录、给 univer 分组，门禁豁免 bot PR
+- fix(deps): react 家族整体升 19.3.0（补 react-dom 同版）
+
+### Test
+- test(patent): 图型扩展工具级端到端 + 入参枚举与类型同步守卫；曲线图单测与端到端（刻度取整 / 标记分配 / 规则命中 / 通路冲突）
+- test(context): 非 PTL 结构化错误不得触发摘要反向重选
+
+### Chore
+- chore(deps): better-sqlite3 13.0.3、vite 8.3.0、i18next 26.4.2、lucide-react 1.47.0 等依赖升级；rdkit 2026.3.6 / univer 0.25.2（修复 rdkit 深路径导致的 WASM 静默降级）
+
 ## v0.3.0 - 2026-09-20
 
 > **版本目标（2026-09-20）**：工具面按项目配置裁剪（#451/#452）、模型上下文窗口覆盖层与 UI 生效窗口显示（#449/#453/#454）、patent 域工作区判据（#450）、文档↔代码一致性审计与文档事实层门禁，以及 #159 聊天链路 hook 拆解续作（N01/N03/N08/N15/TD-UI-CHAT-N02）。
