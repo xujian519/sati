@@ -16,7 +16,8 @@ import { createPatentFigureGenerateTool } from "../../../src/tool/builtin/patent
 import type { SatiToolRuntimeContext } from "../../../src/tool/protocol/types.js";
 import { checkFigures } from "../../../src/patent/figuregen/check.js";
 import { parseFigureSidecar } from "../../../src/patent/figuregen/sidecar.js";
-import type { FigureSpec } from "../../../src/patent/figuregen/types.js";
+import type { FigureKind, FigureNodeShape, FigureSpec } from "../../../src/patent/figuregen/types.js";
+import { FIGURE_INPUT_SCHEMA_REF } from "../../../src/tool/builtin/patentFigureSchema.js";
 
 function makeContext(cwd: string): SatiToolRuntimeContext {
   return {
@@ -267,4 +268,87 @@ test("patent_figure_check：文字面分节结论随报告输出（未分节则�
   );
   const sectionedText = sectioned.content[0].type === "text" ? sectioned.content[0].text : "";
   assert.ok(sectionedText.includes("文字面分节：已分节"));
+});
+
+const STATE: FigureSpec = {
+  figure_no: 1,
+  kind: "state",
+  nodes: [
+    { id: "s0", label: "", shape: "circle" },
+    { id: "idle", label: "待机(10)", ref: 10, shape: "round" },
+    { id: "sf", label: "", shape: "doublecircle" },
+  ],
+  edges: [
+    { from: "s0", to: "idle" },
+    { from: "idle", to: "sf", label: "完成" },
+  ],
+};
+
+test("patent_figure_generate：状态图/层级图端到端（落盘 + sidecar 无损 + 措辞）", async () => {
+  const cwd = tempCwd();
+  try {
+    const tool = createPatentFigureGenerateTool();
+    const hierarchy: FigureSpec = {
+      figure_no: 2,
+      kind: "hierarchy",
+      nodes: [
+        { id: "sys", label: "系统(1)", ref: 1 },
+        { id: "mod", label: "模块(10)", ref: 10 },
+      ],
+      edges: [{ from: "sys", to: "mod" }],
+    };
+    const result = await tool.execute(
+      { figures: [STATE, hierarchy], output_name: "case-st", invention_name: "一种状态机" },
+      makeContext(cwd),
+    );
+    const text = result.content[0].type === "text" ? result.content[0].text : "";
+    assert.ok(text.includes("图1为本发明实施例提供的一种状态机的状态转移示意图"));
+    assert.ok(text.includes("图2为本发明实施例提供的一种状态机的层级结构示意图"));
+
+    const sidecar = parseFigureSidecar(readFileSync(join(cwd, ".sati", "figures", "case-st-figures.json"), "utf8"));
+    assert.deepEqual(
+      sidecar.figures.map(f => f.spec),
+      [STATE, hierarchy],
+      "符号形状与新图型应无损进入 sidecar（供下游零信息损耗重跑规则）",
+    );
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("patent_figure_generate：符号形状带文字时工具输出报出 V18（不静默丢字）", async () => {
+  const cwd = tempCwd();
+  try {
+    const tool = createPatentFigureGenerateTool();
+    const noisy: FigureSpec = {
+      ...STATE,
+      nodes: STATE.nodes.map(node => (node.id === "s0" ? { ...node, label: "初态", ref: 99 } : node)),
+    };
+    const result = await tool.execute({ figures: [noisy], output_name: "case-v18" }, makeContext(cwd));
+    const text = result.content[0].type === "text" ? result.content[0].text : "";
+    assert.ok(text.includes("[WARN] V18"), text);
+    assert.ok(text.includes("标记 99 亦随之不显示"));
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("入参枚举与 FigureKind/FigureNodeShape 同步（类型加了而 schema 漏加即失配）", () => {
+  // Record<…, true> 由类型穷尽性强制：新增 kind/shape 时此处编译不过，提醒同步 schema。
+  const kinds: Record<FigureKind, true> = { flowchart: true, block: true, state: true, hierarchy: true };
+  const shapes: Record<FigureNodeShape, true> = {
+    rect: true,
+    round: true,
+    diamond: true,
+    ellipse: true,
+    cylinder: true,
+    parallelogram: true,
+    circle: true,
+    doublecircle: true,
+  };
+  const props = FIGURE_INPUT_SCHEMA_REF.properties as Record<string, { enum?: string[] }>;
+  const itemProps = (props.nodes as unknown as { items: { properties: Record<string, { enum?: string[] }> } }).items
+    .properties;
+  assert.deepEqual(props.kind!.enum, Object.keys(kinds));
+  assert.deepEqual(itemProps.shape!.enum, Object.keys(shapes));
 });
