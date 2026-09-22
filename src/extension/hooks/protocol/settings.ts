@@ -1,3 +1,4 @@
+import type { SatiPluginSourceKind } from "../../plugins/protocol/plugin.js";
 import type { SatiHookEvent } from "./events.js";
 
 export type SatiHookCommand =
@@ -53,6 +54,12 @@ export type SatiHookMatcher = {
   pluginName?: string;
   pluginId?: string;
   pluginRoot?: string;
+  /**
+   * 声明来源。由宿主在拍平插件贡献时填（`loadPluginHooks`），**不从磁盘配置读**——
+   * 否则被克隆的仓库可以用 `"source": "builtin"` 自称可信。取 `SatiPluginSourceKind`
+   * 是仅类型的反向引用（运行时已擦除，无循环）。
+   */
+  source?: SatiPluginSourceKind;
 };
 
 export type SatiHooksSettings = Partial<Record<SatiHookEvent, SatiHookMatcher[]>>;

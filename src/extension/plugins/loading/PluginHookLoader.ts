@@ -14,6 +14,7 @@ export function loadPluginHooks(plugins: SatiLoadedPlugin[]): SatiHooksSettings 
           pluginName: plugin.name,
           pluginId: `${plugin.name}@${plugin.source}`,
           pluginRoot: plugin.path,
+          source: plugin.source,
         })),
       ];
     }

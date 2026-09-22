@@ -7,9 +7,9 @@
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1046 / 175806 |
+| src TS 文件 / 行数 | 1052 / 176243 |
 | src JS 文件 | 0 |
-| tests 文件 | 589 |
+| tests 文件 | 590 |
 | ui/src 文件 / 行数 | 572 / 92476 |
 | ui/server 文件 / 行数 | 108 / 31827 |
 
@@ -32,9 +32,9 @@
 | `as unknown as`（双重断言） | 31 | ui/src(24) · adapters(2) · tool(2) |
 | 裸 `console.*` | 158 | cli(137) · telemetry(8) · ui/server(5) |
 | 空 `catch {}` | 0 | — |
-| 无参 `catch {`（总计） | 667 | ui/server(152) · ui/src(114) · adapters(70) |
-| ↳ **无注释**（隐患类，目标） | **8** | — |
-| ↳ 已带意图注释 | 659 | — |
+| 无参 `catch {`（总计） | 672 | ui/server(152) · ui/src(114) · adapters(70) |
+| ↳ **无注释**（隐患类，目标） | **12** | — |
+| ↳ 已带意图注释 | 660 | — |
 | `TODO/HACK/FIXME/XXX` | 11 | always-on(4) · tests(4) · ui/src(2) |
 | 分层违规 `ui/server→src` | 14 | — |
 | 分层违规 `src→ui` | 0 | — |
@@ -171,10 +171,10 @@
 | router | 18 |
 | always-on | 14 |
 | mcp | 13 |
+| extension | 12 |
 | adapters | 11 |
 | cli | 11 |
 | cron | 11 |
-| extension | 11 |
 | pilot | 11 |
 | rule | 10 |
 | web | 9 |
@@ -193,7 +193,7 @@
 | runtime | 1 |
 | status | 1 |
 
-| **合计** | **565** |
+| **合计** | **566** |
 
 ## i18n en/zh-CN 对齐
 
