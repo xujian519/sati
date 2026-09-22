@@ -38,6 +38,9 @@
  *   故对 CN 不判——Sati 自家 CN 产物默认带"图1"，判它只会制造噪音）
  * - V17 多页附图未声明页码 → WARN（CN 指南 4.3/5.6「说明书附图应当用阿拉伯数字顺序编写
  *   页码」；PCT 行政规程 207(b)(iii) 与 37 CFR 1.84(t) 规定 1/3 体例）
+ * - V18 伪状态符号节点（circle/doublecircle）含文字 → WARN。**依据是渲染契约而非条文**：
+ *   实心圆/双圈是符号形状，渲染器不输出其 label（黑底黑字不可见）⇒ 写了文字会静默丢失；
+ *   需要文字的状态请用 round（状态框）。不引条文，避免把工具契约伪装成法条要求。
  *
  * V15/V16 需要**可观测的交付形态**（已交付 SVG 的图号回读）才判：只有结构化 FigureSpec
  * 而没有交付文件时，图号是渲染期由本模块决定的，对"看不见的东西"判违规属错误归因。
@@ -45,7 +48,7 @@
  * V6（黑白线条）为渲染器构造期不变式，由 render-svg 单测保证，不在此重复。
  */
 
-import { layoutFigure } from "./layout.js";
+import { isSymbolShape, layoutFigure } from "./layout.js";
 import { FIGURE_FONT_SIZE } from "./metrics.js";
 import {
   minCharHeight,
@@ -84,7 +87,8 @@ export type FigureCheckRuleId =
   | "V14"
   | "V15"
   | "V16"
-  | "V17";
+  | "V17"
+  | "V18";
 
 /** 按法域取依据措辞（CN 引 CN 条文，us 引 37 CFR，pct 引 PCT 细则/指南）。 */
 function basis(jurisdiction: Jurisdiction, texts: { cn: string; us: string; pct: string }): string {
@@ -378,6 +382,27 @@ export function checkFigures(
       severity: "warn",
       message: "附图节点文字疑似含注释性段落（V5，细则第 21 条第 3 款：附图中除必需的词语外不应当含有其他注释）",
       evidence: annotationEvidence,
+    });
+  }
+
+  // V18 伪状态符号节点不应含文字（渲染契约，非条文——实心圆/双圈不渲染 label，文字会静默丢失）。
+  const symbolTextEvidence: string[] = [];
+  for (const figure of figures) {
+    for (const node of figure.nodes) {
+      if (!isSymbolShape(node.shape) || node.label.trim() === "") continue;
+      const refNote = node.ref === undefined ? "" : `，标记 ${node.ref} 亦随之不显示`;
+      symbolTextEvidence.push(
+        `图${figure.figure_no} 节点「${node.id}」形状 ${node.shape} 为符号，label「${node.label.replace(/\n/gu, " ")}」不被渲染${refNote}`,
+      );
+    }
+  }
+  if (symbolTextEvidence.length > 0) {
+    findings.push({
+      rule: "V18",
+      severity: "warn",
+      message:
+        "符号形状节点（circle/doublecircle）含文字，文字不会被渲染（V18，渲染契约非条文：实心圆/双圈不输出 label；带文字的状态请用 round 形状）",
+      evidence: symbolTextEvidence,
     });
   }
 

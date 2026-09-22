@@ -1,13 +1,14 @@
 /**
  * src/patent/figuregen — 确定性分层布局器。
  *
- * flowchart 默认 TB、block 默认 LR；最长路径分层（回边跳过，保证有环输入不死循环），
- * 同层按输入顺序横向排布。输出为渲染所需的节点盒与边折线（含边标签落点）。
+ * flowchart/state/hierarchy 默认 TB、block 默认 LR；最长路径分层（回边跳过，保证有环输入不死循环），
+ * 同层按输入顺序横向排布（hierarchy 例外：各层相对最宽层居中，树形观感）。输出为渲染所需的
+ * 节点盒与边折线（含边标签落点）。符号形状（circle/doublecircle）按固定直径，不受 label 影响。
  * 全程无随机/时钟输入：同一 FigureSpec 永远产出同一布局（快照测试的前提）。
  */
 
 import { measureTextWidth } from "./metrics.js";
-import type { FigureDirection, FigureEdge, FigureKind, FigureNode, FigureSpec } from "./types.js";
+import type { FigureDirection, FigureEdge, FigureKind, FigureNode, FigureNodeShape, FigureSpec } from "./types.js";
 
 export type Point = { x: number; y: number };
 
@@ -44,11 +45,26 @@ const LAYER_GAP = 64;
 const SIB_GAP = 32;
 const CAPTION_H = 40;
 
+/**
+ * 符号形状的固定直径（px）：实心圆/双圈表示状态图的初态/终态，是符号而非文字框，
+ * 尺寸不随 label 变化（label 非空时渲染器忽略文字，check 的 V18 告警）。
+ */
+const SYMBOL_SIZE: Readonly<Partial<Record<FigureNodeShape, number>>> = { circle: 22, doublecircle: 30 };
+
+/** 符号形状（无文字的图形符号）：状态图的初态（实心圆）与终态（双圈）。尺寸与文字渲染共用此判据。 */
+export function isSymbolShape(shape: FigureNodeShape | undefined): boolean {
+  return shape === "circle" || shape === "doublecircle";
+}
+
 export function defaultDirection(kind: FigureKind): FigureDirection {
   return kind === "block" ? "LR" : "TB";
 }
 
 function nodeSize(node: FigureNode): { width: number; height: number } {
+  const symbol = node.shape === undefined ? undefined : SYMBOL_SIZE[node.shape];
+  if (symbol !== undefined) {
+    return { width: symbol, height: symbol };
+  }
   const lines = node.label.split("\n");
   // 最宽行按字符类别累计（CJK 1em / Latin 0.5em）：单字宽常数会把英文标签估宽约 2 倍。
   const longest = Math.max(...lines.map(line => measureTextWidth(line)));
@@ -119,6 +135,13 @@ export function layoutFigure(spec: FigureSpec, options: { caption?: boolean } = 
     row => row.reduce((sum, n) => sum + sizes.get(n.id)!.height, 0) + Math.max(0, row.length - 1) * SIB_GAP,
   );
   const layerGaps = Math.max(0, rows.length - 1) * LAYER_GAP;
+  // 层级图按层居中（树形包含图的惯用观感：同一层的兄弟节点相对全图居中）。居中量取自
+  // 该层延长与最宽层之差，画幅又由最宽层决定 ⇒ 居中不会越出画幅。其余图型保持层内
+  // 自左（或自上）对齐——既有布局与快照不变。
+  const rowExtents = direction === "TB" ? rowWidths : stackHeights;
+  const widestExtent = Math.max(1, ...rowExtents);
+  const rowOffsets =
+    spec.kind === "hierarchy" ? rowExtents.map(extent => (widestExtent - extent) / 2) : rowExtents.map(() => 0);
   const contentW =
     direction === "TB"
       ? Math.max(1, ...rowWidths)
@@ -132,7 +155,7 @@ export function layoutFigure(spec: FigureSpec, options: { caption?: boolean } = 
   const positioned = new Map<string, PositionedNode>();
   let cross = MARGIN;
   for (const [rowIndex, row] of rows.entries()) {
-    let along = MARGIN;
+    let along = MARGIN + rowOffsets[rowIndex]!;
     for (const node of row) {
       const size = sizes.get(node.id)!;
       const x = direction === "TB" ? along : cross;

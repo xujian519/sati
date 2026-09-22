@@ -43,6 +43,7 @@ export {
 } from "./wording-rules.js";
 export {
   defaultDirection,
+  isSymbolShape,
   layoutFigure,
   type FigureLayout,
   type PositionedNode,

@@ -130,6 +130,7 @@
 | V15 多幅却未标注图号 | fail | 指南一部一章 4.3「附图总数在两幅以上……应当编号」 | 2026-09-22 新增 |
 | V16 单幅却标注图号（CN 不判：4.3 未禁止） | warn（仅 pct/us） | PCT 指南 IP 5.141 / 37 CFR 1.84(u)(1) | 2026-09-22 新增 |
 | V17 多页附图未声明页码 | warn | 指南一部一章 4.3 + 五部一章 5.6 | 2026-09-22 新增 |
+| V18 符号形状节点（circle/doublecircle）含文字 | warn | **渲染契约（非条文）**：实心圆/双圈不输出 label，文字会静默丢失；已核验的 4.3 原文无此要求，不伪装成法条 | 2026-09-22 新增 |
 
 已交付 SVG 复核：`patent_figure_check` 接受 `svg_paths`，经 `src/patent/figuregen/readback.ts`
 回读本模块渲染器产出的 data-ref 与"图N"标注。A4 打印版式：`patent_figure_generate`

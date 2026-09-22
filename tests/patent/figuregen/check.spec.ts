@@ -188,3 +188,28 @@ test("汇总：refsInFigures / refsInText 正确回流", () => {
   );
   assert.deepEqual(result.refsInText, [10, 40]);
 });
+
+test("V18 符号形状节点含文字 → WARN 并说明文字与标记都不显示；符号留空则不报", () => {
+  const stateSpec = (initialLabel: string, initialRef?: number): FigureSpec => ({
+    figure_no: 1,
+    kind: "state",
+    nodes: [
+      { id: "s0", label: initialLabel, shape: "circle", ...(initialRef === undefined ? {} : { ref: initialRef }) },
+      { id: "idle", label: "待机(10)", ref: 10 },
+    ],
+    edges: [{ from: "s0", to: "idle" }],
+  });
+
+  const noisy = checkFigures([stateSpec("初态", 1)], "待机(10)");
+  const v18 = noisy.findings.filter(f => f.rule === "V18");
+  assert.equal(v18.length, 1);
+  assert.equal(v18[0]!.severity, "warn");
+  assert.match(v18[0]!.message, /渲染契约/u);
+  assert.match(v18[0]!.evidence![0]!, /形状 circle 为符号.*标记 1 亦随之不显示/u);
+
+  const clean = checkFigures([stateSpec("")], "待机(10)");
+  assert.deepEqual(
+    clean.findings.filter(f => f.rule === "V18"),
+    [],
+  );
+});

@@ -21,13 +21,20 @@ export type FigureBriefOptions = {
   jurisdiction?: Jurisdiction;
 };
 
-function kindText(kind: FigureSpec["kind"]): string {
-  return kind === "block" ? "结构框图" : "方法流程示意图";
-}
+/** 图型 → 附图说明用词（Record 穷尽所有 kind：新增图型时编译期即报缺项）。 */
+const KIND_TEXT: Readonly<Record<FigureSpec["kind"], string>> = {
+  flowchart: "方法流程示意图",
+  block: "结构框图",
+  state: "状态转移示意图",
+  hierarchy: "层级结构示意图",
+};
 
-function kindTextEn(kind: FigureSpec["kind"]): string {
-  return kind === "block" ? "block diagram of a system" : "flowchart of a method";
-}
+const KIND_TEXT_EN: Readonly<Record<FigureSpec["kind"], string>> = {
+  flowchart: "flowchart of a method",
+  block: "block diagram of a system",
+  state: "state transition diagram of a process",
+  hierarchy: "hierarchical block diagram of a system",
+};
 
 export function buildFigureBriefDraft(specs: readonly FigureSpec[], options: FigureBriefOptions = {}): string {
   const sorted = [...specs].sort((a, b) => a.figure_no - b.figure_no);
@@ -49,8 +56,8 @@ export function buildFigureBriefDraft(specs: readonly FigureSpec[], options: Fig
       const ref = figureCaption(profile, figure.figure_no, sorted.length);
       lines.push(
         ref === undefined
-          ? `The figure is a ${kindTextEn(figure.kind)}${ofName} according to an embodiment.`
-          : `${ref} is a ${kindTextEn(figure.kind)}${ofName} according to an embodiment.`,
+          ? `The figure is a ${KIND_TEXT_EN[figure.kind]}${ofName} according to an embodiment.`
+          : `${ref} is a ${KIND_TEXT_EN[figure.kind]}${ofName} according to an embodiment.`,
       );
     }
     if (markers.size > 0) {
@@ -66,7 +73,7 @@ export function buildFigureBriefDraft(specs: readonly FigureSpec[], options: Fig
     const head = options.inventionName === undefined ? "" : `${options.inventionName}的`;
     // 图号写法与附图同源（CN "图N"、PCT "Fig. N"）；未编号的单幅用"附图"称代。
     const ref = figureCaption(profile, figure.figure_no, sorted.length) ?? "附图";
-    lines.push(`${ref}为${subject}实施例提供的${head}${kindText(figure.kind)}；`);
+    lines.push(`${ref}为${subject}实施例提供的${head}${KIND_TEXT[figure.kind]}；`);
   }
   if (markers.size > 0) {
     const items = [...markers.entries()].sort(([a], [b]) => a - b).map(([ref, name]) => `${ref}—${name}`);

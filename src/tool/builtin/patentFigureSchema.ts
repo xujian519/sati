@@ -51,8 +51,10 @@ export const FIGURE_INPUT_SCHEMA_REF: SatiJsonSchema = {
     },
     kind: {
       type: "string",
-      enum: ["flowchart", "block"],
-      description: "flowchart=方法流程图（默认纵向），block=系统结构框图（默认横向）",
+      enum: ["flowchart", "block", "state", "hierarchy"],
+      description:
+        "flowchart=方法流程图（默认纵向），block=系统结构框图（默认横向），" +
+        "state=状态转移图（纵向；初态 circle、终态 doublecircle），hierarchy=组件层级图（纵向；连线表示包含关系，不画箭头）",
     },
     direction: { type: "string", enum: ["TB", "LR"], description: "布局方向，缺省按 kind 取默认" },
     abstract: {
@@ -74,8 +76,10 @@ export const FIGURE_INPUT_SCHEMA_REF: SatiJsonSchema = {
           ref: { type: "integer", description: "专利附图标记（细则第 21 条双向核验对象）" },
           shape: {
             type: "string",
-            enum: ["rect", "round", "diamond", "ellipse", "cylinder", "parallelogram"],
-            description: "节点形状；缺省矩形",
+            enum: ["rect", "round", "diamond", "ellipse", "cylinder", "parallelogram", "circle", "doublecircle"],
+            description:
+              "节点形状；缺省矩形。状态图：round=状态、circle=初态、doublecircle=终态；" +
+              "circle/doublecircle 为符号形状，不渲染文字（label 请留空，勿写标记）",
           },
         },
       },

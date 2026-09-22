@@ -292,3 +292,63 @@ test("真机集成：dot 渲染 US 辖区（多幅 → FIG. N；单幅 → 不�
   assert.equal(parsed.figureNo, 3);
   assert.equal(parsed.numbered, false);
 });
+
+const STATE_SPEC: FigureSpec = {
+  figure_no: 1,
+  kind: "state",
+  nodes: [
+    { id: "s0", label: "", shape: "circle" },
+    { id: "idle", label: "待机(10)", ref: 10, shape: "round" },
+    { id: "sf", label: "", shape: "doublecircle" },
+  ],
+  edges: [
+    { from: "s0", to: "idle" },
+    { from: "idle", to: "sf", label: "完成" },
+  ],
+};
+
+test("DOT：状态图符号（初态填黑定尺、终态双圈）与转移边", () => {
+  const dot = buildFigureDot(STATE_SPEC);
+  assert.ok(dot.includes('rankdir="TB"'), "state 默认 TB");
+  assert.match(dot, /"s0" \[label="", shape="circle", style="filled", fillcolor="#000000", fixedsize=true/u);
+  assert.match(dot, /"sf" \[label="", shape="doublecircle"\]/u);
+  assert.match(dot, /"idle" \[label="待机\(10\)", shape="box", style="rounded,filled"\]/u);
+  assert.ok(dot.includes('label="完成"'));
+  assert.ok(!dot.includes("arrowhead"), "状态图的转移边照常带箭头");
+});
+
+test("DOT：层级图连线不带箭头（包含关系）", () => {
+  const hierarchy: FigureSpec = {
+    figure_no: 2,
+    kind: "hierarchy",
+    nodes: [
+      { id: "sys", label: "系统(1)", ref: 1 },
+      { id: "mod", label: "模块(10)", ref: 10 },
+    ],
+    edges: [{ from: "sys", to: "mod" }],
+  };
+  const dot = buildFigureDot(hierarchy);
+  assert.ok(dot.includes('rankdir="TB"'), "hierarchy 默认 TB");
+  assert.ok(dot.includes('arrowhead="none"'));
+  assert.ok(dot.includes('"sys" -> "mod";'));
+  assert.ok(!buildFigureDot(SPEC).includes("arrowhead"), "其余图型不受影响");
+});
+
+test("真机集成：状态图符号经 dot 渲染仍黑白、data-ref 可回读（无 graphviz 自动 skip）", {
+  skip: resolveDotBinary() === null ? "graphviz not installed" : false,
+}, async () => {
+  const { svg } = await renderFigureSvgWithGraphviz(STATE_SPEC);
+  const colors = svg.match(/#[0-9a-fA-F]{3,8}\b/g) ?? [];
+  for (const color of colors) {
+    assert.ok(color.toUpperCase() === "#000000" || color.toUpperCase() === "#FFFFFF", `发现非黑白颜色 ${color}`);
+  }
+  // 初态实心圆：graphviz 以 <ellipse> 输出 shape=circle，填充色必须仍是黑
+  assert.ok(svg.includes('fill="#000000"'), "初态实心圆应填黑");
+  assert.deepEqual(
+    parseFigureSvg(svg)
+      .nodes.filter(node => node.ref !== undefined)
+      .map(node => [node.id, node.ref]),
+    [["idle", 10]],
+  );
+  assert.ok(!svg.includes("s0</text>"), "符号节点不得出现文字");
+});

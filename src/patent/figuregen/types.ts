@@ -7,10 +7,33 @@
  * cn-drawing-rules.md（细则 2023 第 20/21 条、审查指南 2023 一部一章 4.3/4.5.2/4.6）。
  */
 
-/** 节点形状。flowchart 语义：rect=步骤 round=起止 diamond=判断 ellipse=端点 cylinder=存储 parallelogram=输入输出。 */
-export type FigureNodeShape = "rect" | "round" | "diamond" | "ellipse" | "cylinder" | "parallelogram";
+/**
+ * 节点形状。各图型语义：
+ * - flowchart：rect=步骤 round=起止 diamond=判断 ellipse=端点 cylinder=存储 parallelogram=输入输出
+ * - state：round=状态 circle=初态伪状态 doublecircle=终态伪状态
+ * - block / hierarchy：rect=模块 cylinder=存储 parallelogram=输入输出
+ *
+ * `circle`/`doublecircle` 是**符号形状**（不承载文字）：实心小圆与双圈表示状态图的初态/终态，
+ * 文字在实心黑底上不可见，故这两个形状的节点 label 被渲染器忽略（check 的 V18 会告警）。
+ */
+export type FigureNodeShape =
+  | "rect"
+  | "round"
+  | "diamond"
+  | "ellipse"
+  | "cylinder"
+  | "parallelogram"
+  | "circle"
+  | "doublecircle";
 
-export type FigureKind = "flowchart" | "block";
+/**
+ * 附图类型。
+ * - `flowchart` 方法流程图（默认纵向）
+ * - `block` 系统结构框图（默认横向）
+ * - `state` 状态转移图（默认纵向；初态/终态用 circle/doublecircle 符号）
+ * - `hierarchy` 组件层级图（默认纵向；连线表示包含关系，不画箭头）
+ */
+export type FigureKind = "flowchart" | "block" | "state" | "hierarchy";
 
 /** 布局主方向：TB=自上而下（方法流程默认），LR=自左向右（系统框图默认）。 */
 export type FigureDirection = "TB" | "LR";

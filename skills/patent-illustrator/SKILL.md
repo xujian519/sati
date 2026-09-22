@@ -1,6 +1,6 @@
 ---
 name: patent-illustrator
-description: 专利附图生成专家——从技术方案提炼结构化 FigureSpec（流程图/框图），经 patent_figure_generate 确定性出图（黑白线条 CNIPA 合规）、patent_figure_check 细则第 21 条双向标记核验、附图说明草稿。触发场景：画附图/流程图/框图/摘要附图、附图标记核验、说明书"附图说明"章节撰写、专利申请文件配图。
+description: 专利附图生成专家——从技术方案提炼结构化 FigureSpec（流程图/结构框图/状态图/层级图），经 patent_figure_generate 确定性出图（黑白线条 CNIPA 合规）、patent_figure_check 细则第 21 条双向标记核验、附图说明草稿。触发场景：画附图/流程图/框图/状态图/层级图/摘要附图、附图标记核验、说明书"附图说明"章节撰写、专利申请文件配图。
 ---
 
 # Patent Illustrator（专利附图专家）
@@ -47,7 +47,13 @@ description: 专利附图生成专家——从技术方案提炼结构化 Figure
 |---|---|---|---|
 | 方法权利要求/流程步骤 | flowchart | TB（默认） | ellipse=开始/结束，rect=步骤，diamond=判断（分支边必须带 是/否 label） |
 | 系统/装置权利要求 | block | LR（默认） | rect=模块，cylinder=存储，parallelogram=输入输出 |
+| 状态机/工作模式切换/协议状态 | state | TB（默认） | round=状态（框内写状态名），circle=**初态**（实心圆，label 留空），doublecircle=**终态**（双圈，label 留空）；转移条件写在箭头上 |
+| 系统组成/软件架构分层 | hierarchy | TB（默认） | rect/round=组件，边表示**包含关系**（该图型不画箭头），各层居中 |
 | 电路/网表 | 不适用本工具 | — | 走 `analyze_patent_figure` 分析轨 + netlist Mermaid 通道 |
+
+`state`/`hierarchy` 与 `flowchart`/`block` 共用同一份 FigureSpec 契约（`figure_no`/`nodes`/`edges`/`ref`），
+差别在默认方向与形状读法。**`circle`/`doublecircle` 是符号形状**：渲染器不输出其文字（黑底黑字不可见），
+写了 label 会被丢弃并由校验器报 V18——初态/终态只写节点、不写文字；要带文字的状态请用 `round`。
 
 ## 工作流
 
@@ -122,13 +128,17 @@ FigureSpec 契约对两个渲染器完全一致，切换渲染器不需要改 sp
 - **模块与工具**：figuregen（`src/patent/figuregen/`）；`patent_figure_generate` /
   `patent_figure_check` / `patent_figure_project` 三个工具**默认注册**
   （createBuiltinRegistry 的 `patentFigure: false` 可排除）。
-- **核验规则**：V1–V5、V7–V17（V6 为渲染器构造期不变式）。V12–V14 判图面用语、
-  V15/V16 判图号义务（需已交付 SVG 的回读观测）、V17 判多页附图的页码声明。
+- **核验规则**：V1–V5、V7–V18（V6 为渲染器构造期不变式）。V12–V14 判图面用语、
+  V15/V16 判图号义务（需已交付 SVG 的回读观测）、V17 判多页附图的页码声明、V18 判符号形状
+  节点（circle/doublecircle）带文字（依据是渲染契约而非条文）。
+- **图型**：flowchart / block / state（初态 circle、终态 doublecircle）/ hierarchy（连线表示包含关系、
+  无箭头、各层居中）；四者共用同一份 FigureSpec 契约。
 - **工作流门禁**：`patent_drafting_v1` 的 `figure_generate` 阶段挂 `figure-gate` 原子
   （fail 级挂 HITL），不再依赖主代理是否记得调用核验工具。
 - **法域**：cn（默认）/ us / pct，纸面常数与编号体例来自法域档案；EPO 未列（一手文本未核验）。
 - **渲染器**：builtin（默认）/ graphviz（本机 dot）/ graphviz-wasm（打包 WASM）。
 - **产物**：`<name>-figN.svg` + sidecar（`<name>-figures.json`）+ 可选 A4 打印 HTML
   （`format: html|both`）+ 可选落版页（`fit_to_page: true`）。
-- **未做**：外观设计（图片类附图）、多面板（FIG. 1A/1B）、彩色附图模式；流程/框图仍用**图内标号**
+- **未做**：外观设计（图片类附图）、多面板（FIG. 1A/1B）、彩色附图模式；电路图、曲线/坐标图、
+  时序图与 DOT/矢量通路的剖视图（图型扩展的后续批次）。流程/框图仍用**图内标号**
   （标记写在节点文本里）——**图外引线标号**目前只用于 `patent_figure_project` 的 CAD 结构图，见下条。
