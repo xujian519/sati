@@ -7,9 +7,9 @@
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1061 / 179240 |
+| src TS 文件 / 行数 | 1062 / 180178 |
 | src JS 文件 | 0 |
-| tests 文件 | 601 |
+| tests 文件 | 602 |
 | ui/src 文件 / 行数 | 576 / 92914 |
 | ui/server 文件 / 行数 | 110 / 32001 |
 
@@ -63,9 +63,9 @@
 | `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` | `(anonymous)` | 624 | arrow |
 | `ui/src/components/main-content/view/MainContent.tsx` | `SplitBody` | 573 | function |
 | `ui/src/components/chat/hooks/useSessionSubmit.ts` | `useSessionSubmit` | 528 | function |
+| `src/patent/figuregen/check.ts` | `checkFigures` | 503 | function |
 | `ui/src/components/main-content-v2/CronV2.tsx` | `CronFormView` | 476 | function |
 | `ui/src/components/chat/hooks/useChatComposerState.ts` | `useChatComposerState` | 467 | function |
-| `src/patent/figuregen/check.ts` | `checkFigures` | 449 | function |
 | `src/router/execution/executeRouterDecision.ts` | `executeRouterDecision` | 449 | function |
 | `ui/src/components/settings/view/modelPool/components/ProviderCard.tsx` | `ProviderCard` | 447 | function |
 | `src/tool/builtin/patentFigureProject.ts` | `createPatentFigureProjectTool` | 434 | function |
@@ -91,7 +91,7 @@
 | `src/gateway/server/GatewayWsConnection.ts` | `dispatchRequest` | 353 | method |
 | `ui/src/components/main-content/view/MainContent.tsx` | `MainContent` | 346 | function |
 | `src/patent/graph/domains/inventiveness.ts` | `buildInventivenessGraph` | 342 | function |
-| `src/tool/builtin/patentFigureGenerate.ts` | `createPatentFigureGenerateTool` | 336 | function |
+| `src/tool/builtin/patentFigureGenerate.ts` | `createPatentFigureGenerateTool` | 342 | function |
 | `src/tool/builtin/patentFigureProject.ts` | `execute` | 335 | method |
 | `ui/src/components/chat/view/subcomponents/MessageComponent.tsx` | `(anonymous)` | 335 | arrow |
 | `ui/src/components/main-content-v2/PlansAndCronJobs.tsx` | `PlansAndCronJobs` | 334 | function |
@@ -162,7 +162,7 @@
 
 | 模块 | 测试文件 |
 |---|---|
-| patent | 129 |
+| patent | 130 |
 | tool | 65 |
 | agent | 59 |
 | knowledge | 38 |
@@ -195,7 +195,7 @@
 | runtime | 1 |
 | status | 1 |
 
-| **合计** | **576** |
+| **合计** | **577** |
 
 ## i18n en/zh-CN 对齐
 
