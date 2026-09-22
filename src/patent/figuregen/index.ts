@@ -6,7 +6,13 @@
  */
 
 export type {
+  ChartAxis,
+  ChartLineStyle,
+  ChartMarker,
+  ChartPoint,
+  ChartSeries,
   DocumentKind,
+  FigureChart,
   FigureDirection,
   FigureEdge,
   FigureKind,
@@ -15,6 +21,20 @@ export type {
   FigureSpec,
   Jurisdiction,
 } from "./types.js";
+
+export {
+  CHART_MARKER_CYCLE,
+  chartOutOfRange,
+  chartStyleConflicts,
+  chartWordingLabels,
+  layoutChart,
+  renderChartBody,
+  resolveChartSeries,
+  type ChartLabel,
+  type ChartLayout,
+  type ChartTick,
+  type ResolvedChartSeries,
+} from "./chart.js";
 
 export {
   checkFigures,

@@ -1,6 +1,6 @@
 ---
 name: patent-illustrator
-description: 专利附图生成专家——从技术方案提炼结构化 FigureSpec（流程图/结构框图/状态图/层级图），经 patent_figure_generate 确定性出图（黑白线条 CNIPA 合规）、patent_figure_check 细则第 21 条双向标记核验、附图说明草稿。触发场景：画附图/流程图/框图/状态图/层级图/摘要附图、附图标记核验、说明书"附图说明"章节撰写、专利申请文件配图。
+description: 专利附图生成专家——从技术方案提炼结构化 FigureSpec（流程图/结构框图/状态图/层级图/曲线图），经 patent_figure_generate 确定性出图（黑白线条 CNIPA 合规）、patent_figure_check 细则第 21 条双向标记核验、附图说明草稿。触发场景：画附图/流程图/框图/状态图/层级图/曲线图/坐标图/摘要附图、附图标记核验、说明书"附图说明"章节撰写、专利申请文件配图。
 ---
 
 # Patent Illustrator（专利附图专家）
@@ -16,7 +16,8 @@ description: 专利附图生成专家——从技术方案提炼结构化 Figure
 
 ## 核心纪律
 
-1. **LLM 只产结构化数据，不产图形**：你输出 FigureSpec（JSON：nodes/edges/refs），渲染由
+1. **LLM 只产结构化数据，不产图形**：你输出 FigureSpec（JSON：nodes/edges/refs；曲线图为
+   axes/series），渲染由
    `patent_figure_generate` 确定性完成（黑色线条、白底、无渐变——审查指南一部一章 4.3/4.6
    是渲染器构造期不变式，不需要也不会产生彩色样式）。
 2. **附图标记（ref）是结构化字段**：写入节点 `ref`，同时在 label 中带出标记。不要做文本替换式打标。
@@ -49,11 +50,36 @@ description: 专利附图生成专家——从技术方案提炼结构化 Figure
 | 系统/装置权利要求 | block | LR（默认） | rect=模块，cylinder=存储，parallelogram=输入输出 |
 | 状态机/工作模式切换/协议状态 | state | TB（默认） | round=状态（框内写状态名），circle=**初态**（实心圆，label 留空），doublecircle=**终态**（双圈，label 留空）；转移条件写在箭头上 |
 | 系统组成/软件架构分层 | hierarchy | TB（默认） | rect/round=组件，边表示**包含关系**（该图型不画箭头），各层居中 |
+| 性能/实验数据（温度-转化率、时间-强度…） | chart | 固定（横轴在下、纵轴在左） | 不给 nodes/edges（留空数组），数据写 `chart`：`x`/`y` 轴标目（含单位）+ `series`（`name` 进图例，`points` 为 [x, y] 数对） |
 | 电路/网表 | 不适用本工具 | — | 走 `analyze_patent_figure` 分析轨 + netlist Mermaid 通道 |
 
 `state`/`hierarchy` 与 `flowchart`/`block` 共用同一份 FigureSpec 契约（`figure_no`/`nodes`/`edges`/`ref`），
 差别在默认方向与形状读法。**`circle`/`doublecircle` 是符号形状**：渲染器不输出其文字（黑底黑字不可见），
 写了 label 会被丢弃并由校验器报 V18——初态/终态只写节点、不写文字；要带文字的状态请用 `round`。
+
+**`chart`（曲线图）另有一套载荷**：它没有节点与边（`nodes`/`edges` 传 `[]`），数据写在 `chart` 字段：
+
+```json
+{ "figure_no": 1, "kind": "chart", "nodes": [], "edges": [],
+  "chart": {
+    "x": { "title": "温度(℃)", "min": 20, "max": 80 },
+    "y": { "title": "转化率(%)" },
+    "series": [
+      { "name": "实施例1", "points": [[20, 4], [50, 58], [80, 96]], "marker": "filled-circle" },
+      { "name": "对比例1", "points": [[20, 2], [50, 22], [80, 41]], "marker": "filled-triangle", "line": "dashed" }
+    ] } }
+```
+
+- **轴标目必填**（含单位）：图面上不写标目，读者无从知道两个方向各是什么量。
+- **范围缺省按数据推，刻度落在整档上**（数据 0..96 ⇒ 轴 0/25/50/75/100）；显式 `min`/`max`
+  原样固定、另一端仍取整；`ticks` 是目标密度（2..12，缺省 5），实际刻度数由步长决定。
+- **曲线靠标记与线型区分**（黑白附图不得用颜色）：未指定 `marker` 的多序列会自动分配不同标记；
+  显式把两条曲线设成相同 marker + line 会被 V20 报出（图面上无从分辨）。
+- **数据点不得超出坐标轴范围**：渲染器有意不裁剪，超范围的点会被画到绘图区之外（V21 报出）。
+- **曲线图只能走内置渲染器**：`SATI_FIGURE_RENDERER=graphviz*` 时工具报错（Graphviz 画不出坐标轴
+  与数据曲线），须用默认的 builtin。
+- **实用新型不能只有曲线图**（细则第 20 条第 5 款要求说明书有表示产品形状、构造的附图）：全部附图
+  都是曲线图时 V19 提示补充结构视图。
 
 ## 工作流
 
@@ -70,7 +96,9 @@ description: 专利附图生成专家——从技术方案提炼结构化 Figure
 
 ## 渲染器选择（Graphviz 可选增强）
 
-FigureSpec 契约对两个渲染器完全一致，切换渲染器不需要改 spec：
+FigureSpec 契约对两个渲染器完全一致，切换渲染器不需要改 spec——**唯一例外是曲线图
+（`kind: "chart"`），它只能由 builtin 绘制**（Graphviz 表达不了坐标轴与数据曲线；选了 graphviz
+通路时工具 fail-loud 报错，而不是静默出一张空图）：
 
 | 渲染器 | 启用方式 | 适用 |
 |---|---|---|
@@ -128,17 +156,21 @@ FigureSpec 契约对两个渲染器完全一致，切换渲染器不需要改 sp
 - **模块与工具**：figuregen（`src/patent/figuregen/`）；`patent_figure_generate` /
   `patent_figure_check` / `patent_figure_project` 三个工具**默认注册**
   （createBuiltinRegistry 的 `patentFigure: false` 可排除）。
-- **核验规则**：V1–V5、V7–V18（V6 为渲染器构造期不变式）。V12–V14 判图面用语、
+- **核验规则**：V1–V5、V7–V21（V6 为渲染器构造期不变式）。V12–V14 判图面用语、
   V15/V16 判图号义务（需已交付 SVG 的回读观测）、V17 判多页附图的页码声明、V18 判符号形状
-  节点（circle/doublecircle）带文字（依据是渲染契约而非条文）。
+  节点（circle/doublecircle）带文字、V20 判同一图内两条曲线无从分辨、V21 判数据点超出坐标轴
+  范围（V18/V20/V21 依据是渲染契约而非条文）；V19 判实用新型附图全为曲线图（细则第 20 条第 5 款，
+  warn 级提示补充结构视图；分次核验时无法判定，须一次提交全部附图）。
 - **图型**：flowchart / block / state（初态 circle、终态 doublecircle）/ hierarchy（连线表示包含关系、
-  无箭头、各层居中）；四者共用同一份 FigureSpec 契约。
+  无箭头、各层居中）/ chart（曲线图：坐标轴 + 数据序列 + 图例，走内置矢量渲染器）；前四者共用
+  nodes/edges 契约，`chart` 另有 axes/series 载荷。
 - **工作流门禁**：`patent_drafting_v1` 的 `figure_generate` 阶段挂 `figure-gate` 原子
   （fail 级挂 HITL），不再依赖主代理是否记得调用核验工具。
 - **法域**：cn（默认）/ us / pct，纸面常数与编号体例来自法域档案；EPO 未列（一手文本未核验）。
 - **渲染器**：builtin（默认）/ graphviz（本机 dot）/ graphviz-wasm（打包 WASM）。
 - **产物**：`<name>-figN.svg` + sidecar（`<name>-figures.json`）+ 可选 A4 打印 HTML
   （`format: html|both`）+ 可选落版页（`fit_to_page: true`）。
-- **未做**：外观设计（图片类附图）、多面板（FIG. 1A/1B）、彩色附图模式；电路图、曲线/坐标图、
-  时序图与 DOT/矢量通路的剖视图（图型扩展的后续批次）。流程/框图仍用**图内标号**
-  （标记写在节点文本里）——**图外引线标号**目前只用于 `patent_figure_project` 的 CAD 结构图，见下条。
+- **未做**：外观设计（图片类附图）、多面板（FIG. 1A/1B）、彩色附图模式；电路图、时序图、
+  DOT/矢量通路的剖视图（图型扩展的后续批次）；曲线图的对数坐标、误差棒与双纵轴；拟合曲线/计数器标注。
+- **标号落位**：流程/框图仍用**图内标号**（标记写在节点文本里）——**图外引线标号**目前只用于
+  `patent_figure_project` 的 CAD 结构图，见下条。

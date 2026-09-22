@@ -606,6 +606,14 @@ pnpm tsx scripts/figure-benchmark/gen-compliance.ts
    V18（符号形状带文字，依据为渲染契约而非条文）；因改 `inputSchema` 随本批重录 llm-replay fixture。
    见 `docs/notes/implemented/2026-09-22-figure-type-expansion.md`。**未做**：嵌套容器（集群框）与
    父居中的树布局、电路图、曲线/坐标图、时序图、DOT 通路剖视图、外观设计六面视图。
+   → **第二批（曲线图/坐标图，矢量通路）已完成**（2026-09-22，后续叠加分支）：新增
+   `kind: "chart"` 与 `chart` 载荷（坐标轴标目/范围/刻度密度 + 数据序列），走**内置矢量渲染器**
+   自绘（Graphviz 表达不了坐标轴与数据曲线，选了 graphviz 通路时 fail-loud）；刻度按 1/2/2.5/5
+   步长取整、黑白下以标记+线型区分曲线、图例折行；新增校验规则 V19（实用新型附图全为曲线图表，
+   依据细则第 20 条第 5 款）/V20（曲线无从分辨）/V21（数据点超出坐标轴范围，后两条为渲染契约）；
+   因改 `inputSchema` 随本批重录 llm-replay fixture。见
+   `docs/notes/implemented/2026-09-22-figure-chart-vector-path.md`。**未做**：对数坐标、误差棒、
+   双纵轴、拟合曲线标注、类目轴；其余矢量图型（电路/剖视/时序）仍未开工。
 3. ~~**图外引线标号**（deepseek-harness 的 `leader-line.ts`，906 行含候选锚点择位、碰撞规避、
    越界扩画布、退化内嵌告警）：工程量大且与落版/画幅耦合，建议落版稳定后单独立项。~~ →
    **已完成**（2026-09-22，后续叠加分支）：CAD 通路已换装择位引擎（候选锚点择位 + 碰撞规避 +
@@ -632,7 +640,8 @@ pnpm tsx scripts/figure-benchmark/gen-compliance.ts
   C10/C11；详见上面第 3 项的指针。
 - ~~图型扩展按「DOT 通路先（状态图/层级图，复用 `dot.ts`）→ 矢量通路后（电路/曲线/剖视/时序）」
   分批。~~ → **DOT 通路这一批已完成**（2026-09-22）：`state`/`hierarchy` 落地，详见上面第 2 项的
-  指针。下一批（矢量通路：电路/曲线/剖视/时序）未开工。
+  指针。**矢量通路已开工**（2026-09-22）：曲线图（`kind: "chart"`）落地，其余（电路/剖视/时序）
+  未开工。
 
 ---
 
@@ -662,7 +671,7 @@ pnpm tsx scripts/figure-benchmark/gen-compliance.ts
 | 落版默认值 | `fit_to_page` 默认 `true` | 默认 `false`，落版页为附加产物 | Sati 的 SVG + sidecar 已是稳定契约，`figure-gate` 依赖它；默认改写会让调用方与门禁同时受冲击 |
 | 规则与核算的落点 | `compliance.ts` 与核验分两处 | 规则统一在 `check.ts`，核算降为共用纯函数 | 避免「同一规则两处真相」；Sati 的 finding 已带 rule/severity/evidence |
 | 色彩策略 | `grayscale`/`semantic` 双模 + 档案色彩策略 | 维持构造期黑白不变式，不做 semantic | 见 §8 第 1 项 |
-| 图型覆盖 | 状态图/层级图/电路/曲线/剖视/时序/外观设计/模板/多面板 | 本轮不扩 | 见 §8 第 2、4 项 |
+| 图型覆盖 | 状态图/层级图/电路/曲线/剖视/时序/外观设计/模板/多面板 | 合规侧本轮不扩；此后分批补齐（状态图/层级图、曲线图已落） | 见 §8 第 2、4 项 |
 | 引线标号 | `leader-line.ts` 外置标号 + 碰撞规避 | 本轮不做；**补一条文档约束**（PCT/US 图面不得写 `(20)`） | 工程量独立；但至少把已发现的合规冲突写进规则底座 |
 | WASM 引擎 | 默认 WASM、CLI 兜底 | 作为**可选**引擎（`graphviz-wasm`），默认仍 builtin | 不突变默认行为与快照；先验证再谈切换默认 |
 | 渲染器包装 | dot-builder 与渲染器绑定 | 抽 `DotRunner` 接口，加工链（黑白扫描 + data-ref 注入 + readback 自检）与后端解耦 | Sati 既有加工链是结构优势，改后端不改链 |

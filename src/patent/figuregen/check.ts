@@ -41,6 +41,17 @@
  * - V18 伪状态符号节点（circle/doublecircle）含文字 → WARN。**依据是渲染契约而非条文**：
  *   实心圆/双圈是符号形状，渲染器不输出其 label（黑底黑字不可见）⇒ 写了文字会静默丢失；
  *   需要文字的状态请用 round（状态框）。不引条文，避免把工具契约伪装成法条要求。
+ * - V19 实用新型的附图全部为曲线图 → WARN（细则 2023 第二十条第五款"实用新型专利申请说明书
+ *   应当有表示要求保护的产品的形状、构造或者其结合的附图"；专利法第二条第三款同向）。
+ *   性能曲线图不是形状/构造视图 ⇒ 只有曲线图的实用新型申请不满足该款。**只在看全本案
+ *   （figureCount === figures.length）时判**：分次核验只拿到部分附图时无从判断是否有结构视图；
+ *   且结构视图可能由 CAD 通路单独产出（不进本数组）⇒ 级别为 warn，措辞是"请确认"而非"违规"。
+ *   ⚠️ 不引"指南一部二章 7.3(10)"：该条号在可核验的来源里未能确认（deepseek-harness 的
+ *   `plot-diagram.ts` 如此引用，但未见其核验出处），本模块只引已核验的条文。
+ * - V20 同一曲线图内两条曲线的线型与标记完全相同 → WARN。**渲染契约非条文**：黑白附图
+ *   不得用颜色区分曲线，标记与线型是唯二的区分手段，两者都相同则图面上无从分辨。
+ * - V21 曲线图有数据点落在坐标轴范围之外 → WARN。**渲染契约非条文**：轴外数据点会被画到
+ *   绘图区之外、压住刻度值与轴标目（渲染器有意不裁剪——裁剪会把超范围数据画成贴边失真）。
  *
  * V15/V16 需要**可观测的交付形态**（已交付 SVG 的图号回读）才判：只有结构化 FigureSpec
  * 而没有交付文件时，图号是渲染期由本模块决定的，对"看不见的东西"判违规属错误归因。
@@ -48,6 +59,7 @@
  * V6（黑白线条）为渲染器构造期不变式，由 render-svg 单测保证，不在此重复。
  */
 
+import { chartOutOfRange, chartStyleConflicts, layoutChart } from "./chart.js";
 import { isSymbolShape, layoutFigure } from "./layout.js";
 import { FIGURE_FONT_SIZE } from "./metrics.js";
 import {
@@ -66,7 +78,7 @@ import { scanFigureWording, type WordingHit, type WordingRuleId } from "./wordin
 export const COMMENT_LABEL_LINE_MAX = 40;
 export const COMMENT_LABEL_LINES_MAX = 3;
 
-/** V12–V14 证据行上限（超出只报条数，避免长图把报告淹没）。 */
+/** V12–V14/V20/V21 证据行上限（超出只报条数，避免长图把报告淹没）。 */
 export const WORDING_EVIDENCE_MAX = 15;
 
 export type FigureCheckSeverity = "fail" | "warn" | "info";
@@ -88,7 +100,10 @@ export type FigureCheckRuleId =
   | "V15"
   | "V16"
   | "V17"
-  | "V18";
+  | "V18"
+  | "V19"
+  | "V20"
+  | "V21";
 
 /** 按法域取依据措辞（CN 引 CN 条文，us 引 37 CFR，pct 引 PCT 细则/指南）。 */
 function basis(jurisdiction: Jurisdiction, texts: { cn: string; us: string; pct: string }): string {
@@ -217,8 +232,21 @@ const WORDING_MESSAGES: Record<WordingRuleId, { cn: string; intl: string }> = {
 /** 按规则聚合证据行（同一处缺陷只报一次；超上限只报条数）。 */
 function buildWordingEvidence(hits: readonly WordingHit[]): string[] {
   const lines = [...new Set(hits.map(hit => `图${hit.figure_no} ${hit.where} ${hit.describe}：「${hit.text}」`))];
-  if (lines.length <= WORDING_EVIDENCE_MAX) return lines;
+  return capEvidence(lines);
+}
+
+/** 证据行封顶（超出只报条数，避免长清单把报告淹没）。 */
+function capEvidence(lines: readonly string[]): string[] {
+  if (lines.length <= WORDING_EVIDENCE_MAX) return [...lines];
   return [...lines.slice(0, WORDING_EVIDENCE_MAX), `（另有 ${lines.length - WORDING_EVIDENCE_MAX} 处同类命中）`];
+}
+
+/**
+ * 单幅附图的画幅（px）。曲线图由坐标图几何决定，其余图型由分层布局决定——
+ * **核验与渲染必须同源**，否则 V7 量的是另一张图。
+ */
+function figureCanvasPx(figure: FigureSpec, caption: boolean): { width: number; height: number } {
+  return figure.kind === "chart" ? layoutChart(figure.chart, { caption }) : layoutFigure(figure, { caption });
 }
 
 export function checkFigures(
@@ -406,6 +434,60 @@ export function checkFigures(
     });
   }
 
+  // V19 实用新型不得仅有性能曲线图（细则第二十条第五款）。只在看全本案时判：分次核验
+  // 只拿到部分附图时无从判断是否另有结构视图（figureCount 与本次幅数不等即跳过）。
+  if (
+    jurisdiction === "cn" &&
+    options.documentKind === "utility" &&
+    figures.length > 0 &&
+    figureCount === figures.length &&
+    figures.every(figure => figure.kind === "chart")
+  ) {
+    findings.push({
+      rule: "V19",
+      severity: "warn",
+      message:
+        "实用新型的附图全部为曲线图，未见表示产品形状、构造的附图（V19，细则第 20 条第 5 款：" +
+        "实用新型专利申请说明书应当有表示要求保护的产品的形状、构造或者其结合的附图）——请确认本案另有结构视图" +
+        "（若结构视图由 CAD 通路单独产出，可忽略本提示）",
+      figure_nos: figures.map(figure => figure.figure_no),
+      evidence: figures.map(figure => `图${figure.figure_no} kind=chart（曲线图只表达性能数据，不是形状/构造视图）`),
+    });
+  }
+
+  // V20/V21 曲线图的图面可分辨性与轴外数据（均为渲染契约，非条文）。
+  const chartStyleEvidence: string[] = [];
+  const chartRangeEvidence: string[] = [];
+  for (const figure of figures) {
+    if (figure.kind !== "chart") continue;
+    for (const line of chartStyleConflicts(figure.chart)) {
+      chartStyleEvidence.push(`图${figure.figure_no} ${line}`);
+    }
+    for (const line of chartOutOfRange(figure.chart)) {
+      chartRangeEvidence.push(`图${figure.figure_no} ${line}`);
+    }
+  }
+  if (chartStyleEvidence.length > 0) {
+    findings.push({
+      rule: "V20",
+      severity: "warn",
+      message:
+        "同一曲线图内两条曲线的线型与标记完全相同，图面上无从分辨（V20，渲染契约非条文：" +
+        "黑白附图不得用颜色区分曲线，标记与线型是唯二的区分手段；改用不同的 marker/line）",
+      evidence: capEvidence(chartStyleEvidence),
+    });
+  }
+  if (chartRangeEvidence.length > 0) {
+    findings.push({
+      rule: "V21",
+      severity: "warn",
+      message:
+        "曲线图有数据点落在坐标轴范围之外，会被画到绘图区之外（V21，渲染契约非条文：" +
+        "渲染器有意不裁剪数据；请扩大 x/y 的 min/max 或修正数据）",
+      evidence: capEvidence(chartRangeEvidence),
+    });
+  }
+
   // V10/V11 括号规则（需文字面分节成功；细则第 22 条：权利要求中的附图标记置于括号内，
   // 而说明书正文惯例为"名称+数字"。两个面的括号规则相反，故必须按面判定——
   // 分节失败时两条规则整体跳过并如实声明，不对混合文本猜面判违规。）
@@ -498,7 +580,7 @@ export function checkFigures(
   const paperSizes = options.skipLayoutRules
     ? []
     : figures.map(figure => {
-        const { width, height } = layoutFigure(figure, { caption: captionRendered });
+        const { width, height } = figureCanvasPx(figure, captionRendered);
         return { figure_no: figure.figure_no, widthMm: pxToMm(width), heightMm: pxToMm(height) };
       });
   const zoom = uniformFigureZoom(paperSizes, profile);
