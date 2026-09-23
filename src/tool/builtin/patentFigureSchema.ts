@@ -126,6 +126,20 @@ export function assertFigurePayloads(figures: readonly FigureSpec[], tool: strin
       if (!isRecord(value) || typeof value.title !== "string" || value.title.trim() === "") {
         invalid(`图${no} 的 ${axis} 轴缺少标目（chart.${axis}.title 必填：读者须知道该轴是什么量，含单位）`, no);
       }
+      // 显式两端相等或倒置 ⇒ 零/负跨度轴：坐标映射 `(v − min) / (max − min)` 除零产 NaN，
+      // 渲染器丢弃 NaN 元素后**整条曲线从图面上消失**，而核验器的判据对 NaN 恒为 false
+      // （"通过"）——无效交付物加核验盖章，错误直达定稿。故在入参处拒绝（模型很容易为
+      // 单点数据产出 `{min: 5, max: 5}`，这里给出可操作的替代写法）。
+      const min = typeof value?.min === "number" ? value.min : undefined;
+      const max = typeof value?.max === "number" ? value.max : undefined;
+      if (min !== undefined && max !== undefined && Number.isFinite(min) && Number.isFinite(max) && min >= max) {
+        invalid(
+          `图${no} 的 ${axis} 轴范围须 min < max（收到 min=${min}、max=${max}）：零跨度轴会让坐标映射` +
+            "除零，曲线坐标变 NaN 后从图上整段消失；只有单个数据点时请给出有跨度的范围（如 [" +
+            `${min - 1}, ${max + 1}]）`,
+          no,
+        );
+      }
     }
   }
 }

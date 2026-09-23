@@ -409,6 +409,76 @@ test("V7：曲线图画幅与渲染器同源（核验量的是同一张图）", 
   assert.equal(rendered.height, layout.height);
 });
 
+test("退化轴（min === max）：不产 NaN 坐标，曲线不在交付图上消失", () => {
+  // 模型很容易为单点数据产出 `{min: 5, max: 5}`。零跨度轴会让坐标映射除零 ⇒ 曲线点变成
+  // "NaN,286"、刻度文字 x="NaN"，渲染器丢弃这些元素后**整条曲线从图上消失**。
+  const degenerate = chartSpec({
+    x: { title: "时间(h)", min: 5, max: 5 },
+    y: { title: "转化率(%)", min: 0, max: 100 },
+    series: [
+      {
+        name: "实施例1",
+        points: [
+          [5, 20],
+          [5, 60],
+        ],
+      },
+    ],
+  });
+  const { svg } = renderFigureSvg(degenerate);
+  assert.ok(!svg.includes("NaN"), `交付 SVG 不得含 NaN 坐标：\n${svg.slice(0, 600)}`);
+  // 曲线点确实画出来了（不是"没 NaN 因为什么都没画"）
+  assert.ok(/<polyline[^>]*points="[\d.]/.test(svg), "曲线应以有限坐标落在图面上");
+
+  const layout = layoutChart(degenerate.chart!, { caption: true });
+  for (const tick of [...layout.xTicks, ...layout.yTicks]) {
+    assert.ok(Number.isFinite(tick.position!), `刻度落点须为有限数：${JSON.stringify(tick)}`);
+  }
+});
+
+test("退化轴（min > max，倒置）：渲染层同样不产 NaN（护栏）", () => {
+  // 负跨度不除零（与零跨度不同），修复前就不产 NaN——本用例守的是**渲染层不因任何退化输入
+  // 产 NaN**这条不变式。工具入口另在 `assertFigurePayloads` 拒绝倒置轴（见 tools-p1 的用例）；
+  // 这里绕过工具层直调渲染器，覆盖的是"公共入口被直接调用"的那条路径。
+  const inverted = chartSpec({
+    x: { title: "时间(h)", min: 10, max: 2 },
+    y: { title: "转化率(%)", min: 0, max: 100 },
+    series: [
+      {
+        name: "实施例1",
+        points: [
+          [2, 20],
+          [10, 60],
+        ],
+      },
+    ],
+  });
+  const { svg } = renderFigureSvg(inverted);
+  assert.ok(!svg.includes("NaN"), "倒置轴不得产 NaN 坐标");
+});
+
+test("退化轴经撑开后照常通过核验（修复不得把可交付的图判死）", () => {
+  const spec = chartSpec({
+    x: { title: "时间(h)", min: 5, max: 5 },
+    y: { title: "转化率(%)", min: 0, max: 100 },
+    series: [
+      {
+        name: "实施例1",
+        points: [
+          [5, 20],
+          [5, 60],
+        ],
+      },
+    ],
+  });
+  const result = checkFigures([spec], "", { skipTextRules: true, figureCount: 1 });
+  assert.deepEqual(
+    result.findings.filter(finding => finding.rule === "V7" && finding.metric === "page_fit"),
+    [],
+    "撑开后的画幅是有限值且在可印区内",
+  );
+});
+
 test("V20/V21：曲线不可区分与轴外数据进核验报告", () => {
   const spec = chartSpec({
     x: { title: "t(s)", min: 0, max: 10 },

@@ -241,6 +241,9 @@ function clampTickCount(requested: unknown): number {
  *   **不做百分比外扩**：外扩会把"时间 0..4h"推成 -2..6h 这类含负值/超量的轴，读数反而失真。
  * - 显式端原样固定（调用方的取舍优先）：另一端按同一步长取整；两端都显式时该端可能不是步长
  *   的整数倍，此时该端没有刻度（轴仍结束在调用方给定的值上）。
+ * - 显式两端相等或倒置（`min >= max`）时**不适用"原样固定"**：零跨度轴的坐标映射除零产
+ *   NaN，整条曲线会从交付图上消失。此时候用撑开后的区间（显式值仍落在轴上）。入参层已先
+ *   拒绝这类轴（`assertFigurePayloads`），这里保底 `layoutChart` 这个公共入口不产 NaN。
  * - 实际刻度数由步长与范围共同决定，与目标刻度数可能不同（目标是"密度"而非硬性条数）。
  */
 function axisTicks(axis: ChartAxis, extent: Extent | undefined, count: number): AxisTicks {
@@ -254,10 +257,14 @@ function axisTicks(axis: ChartAxis, extent: Extent | undefined, count: number): 
     high += half;
   }
   const step = niceStep((high - low) / (count - 1));
-  const range: [number, number] = [
-    explicitMin ?? Math.floor(low / step) * step,
-    explicitMax ?? Math.ceil(high / step) * step,
-  ];
+  const floored = explicitMin ?? Math.floor(low / step) * step;
+  const ceiled = explicitMax ?? Math.ceil(high / step) * step;
+  // 上面那道守卫撑开的是 low/high，而**显式端会原样覆盖回来**：`x: {min: 5, max: 5}` 时
+  // range 仍是零跨度（`x: {min: 10, max: 5}` 则是负跨度），坐标映射 `(v − range[0]) / span`
+  // 除零得 NaN——渲染器丢弃 NaN 元素，数据曲线在交付图上整段消失，而核验器对 NaN 的判据
+  // 恒为 false（判"通过"）。故 range 自身也必须保证正跨度：不可分时退化为已撑开的 low/high
+  // （显式值仍落在轴上，读图的人看到的仍是围绕该值的窄区间）。
+  const range: [number, number] = ceiled > floored ? [floored, ceiled] : [low, high];
   const values: number[] = [];
   for (
     let multiple = Math.ceil(range[0] / step - FLOAT_EPS);

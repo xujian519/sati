@@ -153,3 +153,36 @@ test("patent_figure_check：混合输入时逐图排除——结构化附图照�
     rmSync(cwd, { recursive: true, force: true });
   }
 });
+
+test("patent_figure_generate：曲线图退化轴（min >= max）在入参处被拒", async () => {
+  const cwd = mkdtempSync(join(tmpdir(), "sati-figuregen-p1-"));
+  try {
+    const tool = createPatentFigureGenerateTool();
+    const withX = (min: number, max: number): FigureSpec => ({
+      figure_no: 1,
+      kind: "chart",
+      nodes: [],
+      edges: [],
+      chart: {
+        x: { title: "时间(h)", min, max },
+        y: { title: "转化率(%)" },
+        series: [
+          {
+            points: [
+              [5, 20],
+              [5, 60],
+            ],
+          },
+        ],
+      },
+    });
+    // 零跨度：坐标映射除零 ⇒ 曲线坐标变 NaN、整段从图上消失，而核验对 NaN 恒判"通过"
+    await assert.rejects(tool.execute({ figures: [withX(5, 5)], output_name: "pkg" }, makeContext(cwd)), /min < max/u);
+    // 倒置：同样不可交付
+    await assert.rejects(tool.execute({ figures: [withX(10, 2)], output_name: "pkg" }, makeContext(cwd)), /min < max/u);
+    // 有跨度的范围（含"单点数据的正确写法"）不受影响
+    await tool.execute({ figures: [withX(4, 6)], output_name: "pkg" }, makeContext(cwd));
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
+});
