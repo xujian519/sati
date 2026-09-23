@@ -2177,3 +2177,68 @@
 | C34 P0-8 | **#414** | `POST /api/agent` 四项缺陷（帧解析恒空 / 吞错 / 错变量 / 零调用）；**已交付（PR #426）** |
 | C34 P0-7 | **#415** | `git.js` `/status` 丢 R/C 变更；**已交付（PR #428）** |
 | C34 P0-9 | **#416** | `config.js` `/test-connection` 不识别掩码 API key；**已交付（PR #427）** |
+
+---
+
+## 37. 2026-09-23 全仓复扫（本轮 issue 批与账本回填）
+
+> **触发**：2026-09-23 全仓技术债扫描（Brooks-Lint Tech Debt Assessment，报告存档 `docs/technical-debt/audit-report-2026-09-23.md`），基线 commit `5cba87d2a`。
+>
+> **方法：先核代码再建票**——4 条并行核实 + 本机实测（帧计时 / SQL UDF 计时 / 真实 `knowledge.db` / 真实 transcript / `tsx` 复现脚本），因此本节同时包含三类结果：① **新条目**（账本此前无载体）；② **既有条目的复核更新**（含把 4 条严重级虚高的条目下调）；③ **登记失准更正与已修条目排除**。
+>
+> 本轮 20 条载体全部以 `tech-debt` / `bug` 标签落在 `status: triage`，`scope:*` 与 `priority:*` 由 `issue-triage.yml` 从正文勾选自动打上（`bug` 类另手动带 `priority:`）。本节起条目标注「最后复核」日期，约定见 §37.5。
+
+### 37.1 本轮新立条目（8 条）
+
+| 新 ID | 严重级 | 摘要 | issue | 最后复核 |
+|---|---|---|---|---|
+| `TD-PROCGATE-008` | P2 | 架构边界门禁的 `file-size` 存量豁免只按**文件名**匹配（`baselineKey` 不含行数），巨型文件可在豁免名义下持续增长——41 条豁免中 **6 条已超基线记录值**（合计 +136 行） | **#527** | 2026-09-23 |
+| `TD-PROCGATE-009` | P2 | 债务活账本的状态与影响描述均未随代码回填（状态滞后 ≥8 例 + 数量级失准 3 例），且 `backlog.md` 不在 §6.1 的回填载体清单内 | **#528** | 2026-09-23 |
+| `TD-UISERVER-N11` | P2 | 文件树 API 以 `maxDepth=10 + showHidden` 急切遍历整棵树且跳过表遗漏 `.pnpm-store`——实测 **59,287 节点 / 串行 stat 663 ms**，其中 52,639 节点（88.8%）来自 1.0G 的包管理器缓存 | **#533** | 2026-09-23 |
+| `TD-EXTENSION-N07` | P2 | 插件信任门每次会话装配 / 每次面板打开都把插件目录整树逐字节哈希，**无任何缓存**（实测 1990 文件 / 7.96 MB ⇒ 130 ms/次）；且 2000 文件上限使带 `node_modules/` 的插件永久 `blocked` | **#538** | 2026-09-23 |
+| `TD-PATENT-N26` | P2 | `figuregen/check.ts` 754 行、`checkFigures` 单函数 **503 行**（21 条规则 × 3 法域 × 10 选项共用一个作用域，`skipLayoutRules` / `figureCount` / `zoom` 互相牵动）；三个制图工具 `execute` 各 163–335 行重复产物拼装 | **#539** | 2026-09-23 |
+| `TD-PATENT-N27` | P2 | `figuregen` 内 `escapeXml` ×4、`fmt` ×4（**精度已漂移出 1/2/3 位**）、几何谓词 `boxesOverlap` / `boxWithin` ×2（同容差、一份常量一份字面量） | **#540** | 2026-09-23 |
+| `TD-EXTENSION-N08` | P3 | `HookTrustStore` 与 `ModelWindowStore` 是同一份存储骨架的两份手抄；`lookup()` 零生产调用者却被注释为「解析期热路径」；附带 `figuregen` barrel 225 个导出中 92 个模块外零消费 | **#541** | 2026-09-23 |
+| `TD-TOOL-009` | P2 | 两个制图工具把 `invalid_tool_input` 折叠成 `tool_execution_failed`（第三个工具写法正确），破坏按错误码的恢复策略与熔断识别 | **#545** | 2026-09-23 |
+
+### 37.2 本轮新发现的缺陷（4 条 `bug`，账本此前无载体）
+
+| 新 ID | 严重级 | 摘要 | issue | 最后复核 |
+|---|---|---|---|---|
+| `TD-PATENT-N28` | **P1** | 曲线图轴显式 `min === max` 触发除零 → 交付 SVG 坐标变 `NaN`（曲线整段消失），而核验 V7 的 `printed < charHeight.mm` 对 `NaN` 恒 false ⇒ 返回 `ok: true` 盖章放行。**本机 `tsx` 复现**：`points="NaN,286 NaN,256"` / `check ok = true findings = []` | **#542** | 2026-09-23 |
+| `TD-PATENT-N29` | **P1** | `svg_paths` 回读硬编码 `kind: "flowchart"`（丢弃原图型与方向）⇒ V7 量的是核验器自己重排的图。**本机复现**：交付 130×834px（34.4×220.7 mm，在 cnipa 可印区 170×257 mm 内）被报 **282.0×37.3 mm 超出可印区**判 FAIL | **#543** | 2026-09-23 |
+| `TD-PATENT-N30` | P2 | 引线择位对重复 `id` 静默丢弃「先出现的落位」——`leader-line.ts:41` 注释承诺保留先出现者，`:482-483` 的 `Map` 让后者覆盖前者；实测第一个锚点落位消失、两标号重叠、`warnings: 0` | **#544** | 2026-09-23 |
+| `TD-PATENT-N31` | P2 | A4 版式 HTML 的 `title` / `h1` 不做转义（同链路另四处均有 `escapeXml`），发明名称含 `&` / `<` 时交付 HTML 畸形，且会被交给 Chromium 打印出 PDF | **#546** | 2026-09-23 |
+
+### 37.3 既有条目的复核更新（9 条 → 8 个载体）
+
+| 台账条目 | 复核结论（2026-09-23） | issue |
+|---|---|---|
+| `TD-CATCH-001` 残留 | 12 处无注释无参 catch **全部是 #353 之后新引入**（4 个 commit，0 处遗漏）；逐处核验**均非真隐患**（语义在函数 / 文件 JSDoc 内，如 `proxyFallback.ts:54` 是 `catch { throw error; }` 抛原始错误）⇒ 实质是护栏缺位：门禁只比新鲜度无棘轮、#353 触发线 45 过高、无 lint 规则承载 | **#530** |
+| `TD-UISERVER-N02` | `sessionState` / `pendingAgentToolCalls` 已被 #413（PR #425）修好；残留改为「同文件另 4 张 per-session 缓存无上限」 | **#529** |
+| `TD-UISERVER-N04` | 仍成立；行号更正为 `git.js:823-834`（原登记 `:788-795` 是路由声明与 limit 钳制）；实测默认 `limit=10` 为 **112 ms**、`limit=100` 约 **1.12 s** ⇒ 由 P2 降 **P3** | **#534** |
+| `TD-TEAM-N09` + `TD-TEAM-N10` | N09 成立（`scheduler.ts:253` 每次派发一次全量同步读）；N10 的 (a) 性能成立、(b) 授权面是 **T6 评审的刻意取舍**（`gatewayRuntimeOptions.ts:156-160`，单用户桌面可接受）⇒ 不主张改行为，仅登记「多用户化 / 共享 gateway 前必须升 P1」 | **#531** |
+| `TD-TOOL-002` | 仍成立；补两处**决定性事实**：① 同类第二处 `filterAvailableTools.ts:19`；② clone 上注册的 MCP 工具定义本就不产出 `outputSchema`（`PluginToToolBridge.ts:58-67`）⇒ 天真透传 options 会让 per-session MCP 注册立即抛错 ⇒ 由 P2 降 **P3** | **#532** |
+| `TD-WEB-N01` + `TD-GATEWAY-003` | 均成立但实测开销小（clone 9–16 ms / 次 miss、网关序列化 ~1.1 µs / 事件）⇒ 降 **P3**；`TD-GATEWAY-003` 的位置失效（实际 `:1268-1283`）且「维护可能无人读的重放缓冲」**与代码矛盾**（有完整消费链，照字面删除会破坏重连恢复），已更正 | **#535** |
+| `TD-CONTEXT-N03` | 仍成立（P2）；行号更正为 `:246-247` / `:120`；「每轮」应读作「**每个不同 query**」（缓存键 `sessionId\0query\0projectRoot` + 30s TTL）；**新发现** abort 未透传到 memory-core（熔断只解除 `await`，内层 45s×3 仍在跑）+ 超时路径无单测 | **#536** |
+| `TD-SESSION-N02` | 仍成立（P2，开关默认关）；实测 200 次笔记累计 **3.65 MiB** 且二次增长 ⇒ 约 1000+ 次即撞 50MB 硬顶，此后账本 `unavailable`、`workspace_note` **永久拒绝写入** | **#537** |
+| `TD-UI-APP-N06` | **改写指向**：DOM 侧被三重上限（初始 5 / 每页 30 / 树缓存 500）显著缓解（本机真实规模 65–197 行）⇒ 降 P3 并入服务端整树条目；真正的卡点是 `getFileTree(depth=10)` 急切拉全树 | **#533** |
+
+### 37.4 已修与登记失准（不建票，仅更正）
+
+**已修 / 已收敛（8 条，建票前经代码核实排除）**：`TD-METRIC-001`（#339 交付，PR #373）、`TD-METRIC-002`（#340 交付）、`TD-PROCGATE-004`（#336 交付，`stale.yml:35` 已含 `priority: p0,priority: p1`）、`TD-SESSION-N01`（#344 交付，`WorkspaceLedgerStore.read()` 已有游标增量扫描）、`TD-ROUTER-001`/`002`（#343 交付，PR #384）、`TD-PATENT-N13`（专利号归一化已收敛为单一实现：`outputPaths.ts:3` 从 `egoSession.js` 导入）、`TD-SMALL-N01`（`BackgroundTaskRuntime` 已有终态条目 TTL 回收，`:352-362`）、`TD-UISERVER-N02` 的主体（#413 交付）。
+
+> ⚠️ 上述条目在本账本中**仍标 `new`**——这正是 `TD-PROCGATE-009`（#528）要治理的失效形态；本次不逐个改其状态字段（避免在未逐条复算全部 300 条的前提下制造"看起来都核过了"的假象），留待回填专项按「issue 关闭结论 + 代码证据」统一处理。
+
+**影响数字失准（3 条）**：
+- `TD-KNOWLEDGE-N02`：「最坏数十秒同步阻塞」不成立——法规语料仅 **96 部**（与项目事实层一致），LIKE 整查实测 **5.0–8.0 ms**；「~4ms/行 × 数千行」出自**判例**语料（8 万条、chunk 平均 2.7 KiB）被平移到法规语料；「桌面端默认降级路径」前提过期（`apps/desktop/scripts/download-node.sh:5-8` 已固定带 FTS5 的 Node 22.23.2）⇒ 不建票。
+- `TD-CRON-N01`：单次整文件重写实测 **0.29–0.81 ms**（2→200 任务），每 run 两次 ⇒ 不构成卡点，不建票；真正风险是跨进程最后写入者覆盖（属另一议题）。
+- `TD-GATEWAY-003`：见 §37.3 的更正说明。
+
+### 37.5 账本格式约定新增：「最后复核」（2026-09-23 起）
+
+自本节起，**新增或复核过的条目须带「最后复核：YYYY-MM-DD」**（表格列或条目的严重级行）。
+
+理由：`backlog.md` 的失效形态不是「写错了」，而是「**没人知道它多久没被核过**」——`TD-PROCGATE-009`（#528）实证了这一点：≥8 条状态滞后、3 条数量级失准，而它们的滞留时长在账本上不可见，任何后续审计都无法区分「上周核过」与「半年前核过」。
+
+约定正文见 `README.md` §如何保持新鲜 第 6 条；决策记录见 `docs/notes/implemented/2026-09-23-techdebt-backlog-recheck.md`（含备选：全量补历史日期 / 只在 issue 侧跟踪 / 加独立复核日志文件）。
