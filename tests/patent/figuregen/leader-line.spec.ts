@@ -308,6 +308,43 @@ test("确定性：同一输入两次调用逐位一致；落位按目标顺序�
   );
 });
 
+test("重复 id 被拒绝：不静默丢弃落位、不让两个标号落在同一点", () => {
+  // 落位与调用方**按下标对齐**（render-cad 即如此读回）。若重复 id 被静默容忍，两个目标会
+  // 取到同一个落位：图面上一个标号消失、另一个精确重叠，而落位报告零告警。
+  const targets: LeaderTarget[] = [
+    { id: "10", text: "10", anchor: { x: 20, y: 20 } },
+    { id: "10", text: "10", anchor: { x: 80, y: 60 } },
+  ];
+  assert.throws(
+    () => planLeaderLines(targets, {}, BASE_OPTIONS),
+    /id 须唯一/u,
+    "重复 id 必须响亮失败——挑其中一个顶替不是修复，是把错图做得更难发现",
+  );
+});
+
+test("重复 id 的拒绝覆盖钉死落位（pinned 不绕过唯一性检查）", () => {
+  const targets: LeaderTarget[] = [
+    { id: "10", text: "10", anchor: { x: 20, y: 20 }, pinnedOffsetMm: [10, 10] },
+    { id: "10", text: "10", anchor: { x: 80, y: 60 } },
+  ];
+  assert.throws(() => planLeaderLines(targets, {}, BASE_OPTIONS), /id 须唯一/u);
+});
+
+test("唯一 id 的正常输入不受影响（回归：唯一性检查不得误伤）", () => {
+  const plan = planLeaderLines(
+    [
+      { id: "10", text: "10", anchor: { x: 20, y: 20 } },
+      { id: "20", text: "20", anchor: { x: 80, y: 60 } },
+    ],
+    {},
+    { ...BASE_OPTIONS, canvas: WIDE_CANVAS },
+  );
+  assert.deepEqual(
+    plan.placements.map(placement => placement.id),
+    ["10", "20"],
+  );
+});
+
 test("几何谓词：相交（含端点接触与共线重叠）与夹角归一到 0–90", () => {
   const horizontal: LeaderSegment = { from: { x: 0, y: 0 }, to: { x: 10, y: 0 } };
   assert.ok(segmentsIntersect(horizontal, { from: { x: 5, y: -5 }, to: { x: 5, y: 5 } }), "十字相交");

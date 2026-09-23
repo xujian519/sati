@@ -16,6 +16,7 @@ import { CAD_JSON_BEGIN, CAD_JSON_END, type CadRunner } from "../../../src/paten
 import { parseFigureSidecar } from "../../../src/patent/figuregen/sidecar.js";
 import { parseFigureSvg } from "../../../src/patent/figuregen/readback.js";
 import { MAX_CAD_ANNOTATIONS, createPatentFigureProjectTool } from "../../../src/tool/builtin/patentFigureProject.js";
+import { SatiToolRuntimeError } from "../../../src/tool/protocol/errors.js";
 import type { SatiToolRuntimeContext } from "../../../src/tool/protocol/types.js";
 
 const FIXTURE_PATH = resolve(process.cwd(), "tests/fixtures/patent/cad/plate-front.json");
@@ -274,6 +275,33 @@ test("patent_figure_project：标注入参校验（锚点三元/偏移上限/数
     ),
     /至多 24 项/u,
   );
+});
+
+test("patent_figure_project：标注 ref 重复 fail-loud（重复会让标号重叠、引线消失）", async () => {
+  const tool = createPatentFigureProjectTool({ runner: okRunner, freecadCmd: "/fake/freecadcmd" });
+  const base = { step_path: "p.step", output_name: "c", view: "front" } as const;
+  // 同一附图标记标两处：render-cad 用 ref 当引线择位的 id，重复会让两个落位指向同一个位置
+  // ——图面上一个标号消失、另一个精确重叠，而落位报告零告警。入参处拒绝，不进渲染。
+  const err = await tool
+    .execute(
+      {
+        ...base,
+        annotations: [
+          { ref: 10, at_mm: [0, 0, 0] },
+          { ref: 20, at_mm: [1, 1, 1] },
+          { ref: 10, at_mm: [2, 2, 2] },
+        ],
+      },
+      context(process.cwd()),
+    )
+    .then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+  assert.ok(err instanceof SatiToolRuntimeError, `应抛 SatiToolRuntimeError，实际为 ${String(err)}`);
+  assert.equal(err.code, "invalid_tool_input");
+  assert.match(err.message, /annotations\[2\]\.ref 与 annotations\[0\]\.ref 重复/u);
+  assert.equal(err.details?.ref, 10, "details.ref 是调用方定位重复项的线索");
 });
 
 test("patent_figure_project：标注与剖切共存（同一张图上剖面线 + 标号 + 图号）", async () => {

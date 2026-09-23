@@ -239,6 +239,9 @@ export function createPatentFigureProjectTool(
           { tool: "patent_figure_project" },
         );
       }
+      // ref → 首次出现的下标：同一附图标记只应标注一处（render-cad 用 ref 当引线择位的 id，
+      // 重复会让两个标号落在同一点、先出现的锚点引线消失，而落位报告零告警）。
+      const refFirstIndex = new Map<number, number>();
       for (const [index, annotation] of rawAnnotations.entries()) {
         const position = `annotations[${index}]`;
         if (!Number.isInteger(annotation.ref) || annotation.ref <= 0 || annotation.ref > 999) {
@@ -246,6 +249,16 @@ export function createPatentFigureProjectTool(
             tool: "patent_figure_project",
           });
         }
+        const firstIndex = refFirstIndex.get(annotation.ref);
+        if (firstIndex !== undefined) {
+          throw new SatiToolRuntimeError(
+            "invalid_tool_input",
+            `${position}.ref 与 annotations[${firstIndex}].ref 重复（同为 ${annotation.ref}）：` +
+              "同一附图标记只应标注一处——重复会让两个标号落在同一点、先出现的引线消失（细则第 21 条：标记应一致）",
+            { tool: "patent_figure_project", ref: annotation.ref },
+          );
+        }
+        refFirstIndex.set(annotation.ref, index);
         if (
           !Array.isArray(annotation.at_mm) ||
           annotation.at_mm.length !== 3 ||

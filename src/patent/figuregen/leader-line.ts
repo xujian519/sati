@@ -39,7 +39,13 @@ export type LeaderSegment = { from: LeaderPoint; to: LeaderPoint };
 
 /** 标注目标：一个必须被标出的锚点（纸面坐标）。 */
 export type LeaderTarget = {
-  /** 稳定 id（落位报告与告警用；**须唯一**，重复 id 只保留先出现者的落位）。 */
+  /**
+   * 稳定 id（落位报告与告警用；**须唯一**）。
+   *
+   * 重复 id 由 {@link planLeaderLines} 拒绝：落位与调用方**按下标对齐**，两个同 id 的目标会
+   * 取到同一个落位——图面上两个标号精确重叠、先出现的锚点引线消失，而落位报告零告警
+   * （调用方无从察觉"少了一个标号"）。挑其中一个顶替不是修复，是把错图做得更难发现。
+   */
   id: string;
   /** 标号文本（数字，或 `10a` 这类带后缀的标记）。 */
   text: string;
@@ -387,6 +393,20 @@ function auditPinnedPlacement(
   return conflicts;
 }
 
+/** 重复出现的标注 id（空数组=全部唯一；去重后按首次出现顺序返回）。 */
+function findDuplicateIds(targets: readonly LeaderTarget[]): string[] {
+  const seen = new Set<string>();
+  const duplicates: string[] = [];
+  for (const target of targets) {
+    if (seen.has(target.id)) {
+      if (!duplicates.includes(target.id)) duplicates.push(target.id);
+    } else {
+      seen.add(target.id);
+    }
+  }
+  return duplicates;
+}
+
 /**
  * 规划一组图外引线标号。
  *
@@ -399,6 +419,17 @@ export function planLeaderLines(
   obstacles: LeaderObstacles = {},
   options: LeaderLineOptions,
 ): LeaderPlan {
+  // 重复 id 是契约违反（见 LeaderTarget.id）：拒绝而不是静默挑一个——"画不出来"必须比
+  // "画出错的"更响亮（同本模块头注的画幅策略）。工具层在入参处已 fail-loud，这里保底
+  // 模块契约不被绕过（`planLeaderLines` 是导出的公共入口）。
+  const duplicateIds = findDuplicateIds(targets);
+  if (duplicateIds.length > 0) {
+    throw new TypeError(
+      `标记 id 须唯一，重复：${duplicateIds.join("、")}（重复 id 会让两个标号落在同一点、` +
+        "先出现的锚点引线消失，而落位报告给不出任何异样）",
+    );
+  }
+
   const context: CandidateContext = {
     obstacles: { boxes: obstacles.boxes ?? [], segments: obstacles.segments ?? [] },
     placedBoxes: [],
@@ -471,7 +502,8 @@ export function planLeaderLines(
   }
 
   // 落位按**目标顺序**返回（钉死的前置只是放置顺序，不该改变调用方的输出顺序）；审计放在
-  // 最后：审计口径是"与全部其它落位的关系"，与放置顺序无关。
+  // 最后：审计口径是"与全部其它落位的关系"，与放置顺序无关。id 已在上文验证唯一，故这里的
+  // 索引不会互相覆盖，`ordered` 与 `targets` 逐位对应。
   const byId = new Map(placements.map(placement => [placement.id, placement]));
   const ordered = targets.map(target => byId.get(target.id)!);
   return {
