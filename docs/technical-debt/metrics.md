@@ -7,9 +7,9 @@
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1063 / 180244 |
+| src TS 文件 / 行数 | 1063 / 180251 |
 | src JS 文件 | 0 |
-| tests 文件 | 603 |
+| tests 文件 | 604 |
 | ui/src 文件 / 行数 | 576 / 92914 |
 | ui/server 文件 / 行数 | 110 / 32001 |
 
@@ -89,9 +89,9 @@
 | `ui/src/components/settings/view/agentRoute/components/RouterSection.tsx` | `RouterSection` | 357 | function |
 | `ui/src/stores/useSessionStore.actions.test.tsx` | `(anonymous)` | 354 | arrow |
 | `src/gateway/server/GatewayWsConnection.ts` | `dispatchRequest` | 353 | method |
+| `src/tool/builtin/patentFigureGenerate.ts` | `createPatentFigureGenerateTool` | 346 | function |
 | `ui/src/components/main-content/view/MainContent.tsx` | `MainContent` | 346 | function |
 | `src/patent/graph/domains/inventiveness.ts` | `buildInventivenessGraph` | 342 | function |
-| `src/tool/builtin/patentFigureGenerate.ts` | `createPatentFigureGenerateTool` | 342 | function |
 | `src/tool/builtin/patentFigureProject.ts` | `execute` | 335 | method |
 | `ui/src/components/chat/view/subcomponents/MessageComponent.tsx` | `(anonymous)` | 335 | arrow |
 | `ui/src/components/main-content-v2/PlansAndCronJobs.tsx` | `PlansAndCronJobs` | 334 | function |
@@ -162,7 +162,7 @@
 
 | 模块 | 测试文件 |
 |---|---|
-| patent | 131 |
+| patent | 132 |
 | tool | 65 |
 | agent | 59 |
 | knowledge | 38 |
@@ -195,7 +195,7 @@
 | runtime | 1 |
 | status | 1 |
 
-| **合计** | **578** |
+| **合计** | **579** |
 
 ## i18n en/zh-CN 对齐
 
