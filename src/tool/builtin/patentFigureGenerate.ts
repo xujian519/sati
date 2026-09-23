@@ -437,6 +437,10 @@ export function createPatentFigureGenerateTool(): SatiToolDefinition<PatentFigur
           ],
         };
       } catch (err) {
+        // `SatiToolRuntimeError` 原样透传：`code` 在本仓是**语义通道**——上层按它选恢复策略、
+        // 按它识别"连续传非法入参"并熔断，`details` 也随之外传。折叠成 `tool_execution_failed`
+        // 会把可修复的入参错误误报成执行环境故障（模型只会反复重试，不会去改 format）。
+        if (err instanceof SatiToolRuntimeError) throw err;
         const message = err instanceof Error ? err.message : String(err);
         throw new SatiToolRuntimeError("tool_execution_failed", `patent_figure_generate 执行失败: ${message}`, {
           tool: "patent_figure_generate",

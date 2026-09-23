@@ -350,6 +350,9 @@ export function createPatentFigureCheckTool(): SatiToolDefinition<PatentFigureCh
           content: [{ type: "text", text: lines.join("\n") }],
         };
       } catch (err) {
+        // 与 patent_figure_generate/project 同法：`SatiToolRuntimeError` 原样透传，保住 `code`
+        // 与 `details`（入参校验的 `invalid_tool_input` 不能被折叠成执行环境故障）。
+        if (err instanceof SatiToolRuntimeError) throw err;
         const message = err instanceof Error ? err.message : String(err);
         throw new SatiToolRuntimeError("tool_execution_failed", `patent_figure_check 执行失败: ${message}`, {
           tool: "patent_figure_check",
