@@ -52,7 +52,7 @@
 | `src/board/` | 8 | ✓ | 项目看板（protocol/runtime/storage 三组，kanban_* 工具与网关方法组） |
 | `src/browser/` | 6 | — | 浏览器后端抽象（ego lite / BrowserOS 等后端探测与驱动） |
 | `src/cli/` | 30 | ✓ | CLI 入口与命令（sati.ts / satiServer.ts / createLocalGateway.ts） |
-| `src/context/` | 316 | ✓ | 上下文（压缩/预算/记忆/向量/workspace registerLeak） |
+| `src/context/` | 98 | ✓ | 上下文（压缩/预算/记忆/向量/workspace registerLeak） |
 | `src/cron/` | 18 | ✓ | 定时任务（config/protocol/runtime/storage/tool） |
 | `src/extension/` | 51 | ✓ | 插件系统（plugin.json、lifecycle hooks、skills、贡献点） |
 | `src/fs/` | 1 | — | 文件系统小工具（JSONL run 写入器） |
@@ -78,6 +78,9 @@
 | `src/test-support/` | 7 | — | 测试基建（llm-replay 录制/重放 seam） |
 | `src/tool/` | 140 | ✓ | 工具系统（registry/execution/audit/builtin） |
 | `src/web/` | 13 | — | Web 服务端与浏览器客户端投影 |
+
+> 文件数按 **git 清单**统计（`git ls-files --cached --others --exclude-standard`，排除 `.d.ts`），
+> 与 `docs/technical-debt/metrics.md` 同口径 ⇒ 装了依赖、编没编译子包都不改变它（#520）。
 
 ## 4. 门禁链与 CI
 

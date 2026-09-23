@@ -159,6 +159,40 @@ test("listFiles 按扩展名过滤并排除 .d.ts", () => {
   assert.ok(files.every(f => f.endsWith(".mjs")));
 });
 
+test("【负控制】listFiles 不再按目录名豁免 `lib`：ui/src/lib 的源码可见（#530）", () => {
+  // 两处盲区叠在同一个目录上：① `lib` 曾按「任意层级的目录名」豁免 ⇒ 源码目录 `ui/src/lib/`
+  // 被整体吞掉（少算 1 处无注释无参 catch 与 5 个文件的规模）；② `ui/src` 的 `.js`/`.jsx`
+  // 曾不在任何文件级扫描里（后缀集合只收 `.ts`/`.tsx`）。
+  const files = listFiles(join(REPO_ROOT, "ui/src"), [".ts", ".tsx", ".js", ".jsx"]).map(f => relative(REPO_ROOT, f));
+  assert.ok(
+    files.includes("ui/src/lib/customNames.ts"),
+    `ui/src/lib 应可见，实际 lib 下一共：${files.filter(f => f.includes("/lib/")).join(", ") || "(无)"}`,
+  );
+  assert.ok(
+    files.some(f => f.endsWith(".jsx")),
+    "ui/src 的 .jsx 应进入扫描面",
+  );
+  assert.ok(
+    files.some(f => f.endsWith(".js")),
+    "ui/src 的 .js 应进入扫描面",
+  );
+});
+
+test("【负控制】子包编译产物仍被路径前缀豁免（#530 未放宽 vendored 边界）", () => {
+  // 把 `lib`/`ui-source` 从 EXCLUDE_DIRS 挪到路径前缀，是为了让**同名源码目录**重新可见，
+  // 不是放宽边界：子包的编译产物与生成资产必须仍然不在扫描面内，否则 vendored 规模会虚增
+  // （实测若放开 `lib/`：多出 36 个 .js）。
+  const files = listFiles(join(REPO_ROOT, "src"), [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"]).map(f =>
+    relative(REPO_ROOT, f),
+  );
+  assert.ok(!files.some(f => f.includes("edgeclaw-memory-core/lib/")), "子包 lib/ 编译产物不应进入扫描面");
+  assert.ok(!files.some(f => f.includes("edgeclaw-memory-core/ui-source/")), "子包 ui-source/ 不应进入扫描面");
+  assert.ok(
+    files.some(f => f.startsWith("src/context/memory/edgeclaw-memory-core/src/")),
+    "子包源码应仍在扫描面内（交由 VENDORED_SUBTREES 单列，而不是被抹掉）",
+  );
+});
+
 // ---------------------------------------------------------------------------
 // 基线新鲜度校验（issue #340）
 // ---------------------------------------------------------------------------

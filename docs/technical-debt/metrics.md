@@ -10,7 +10,7 @@
 | src TS 文件 / 行数 | 1066 / 180729 |
 | src JS 文件 | 0 |
 | tests 文件 | 605 |
-| ui/src 文件 / 行数 | 576 / 92914 |
+| ui/src 文件 / 行数 | 589 / 94379 |
 | ui/server 文件 / 行数 | 110 / 32001 |
 
 ## 指标口径
@@ -20,9 +20,9 @@
 | console | src + ui/server（.ts/.tsx/.js/.jsx/.mjs/.cjs；豁免两处 C39 收束入口 ui/server/utils/consoleLogger.js 与 ui/src/utils/logging.ts） |
 | unsafe | src + ui/src（.ts/.tsx，含同址 *.spec.*；TS AST 精确统计 AnyKeyword + @ts-* 指令） |
 | asUnknownAs | src + ui/src（.ts/.tsx，含同址 *.spec.*；TS AST 统计 `x as unknown as T` 双重断言）。**口径变更**：2026-09-15（issue #339）首度纳入——此前该形态完全未统计，故 0 → N 的变化来自口径变更而非新增债务 |
-| catch | src + ui/src + ui/server 产品代码（排除 *.spec.* / *.test.*）。**口径变更**：2026-09-16（issue #341）纳入 ui/server——此前仅 src + ui/src，于是「空 catch {}」报 0 而 ui/server 实有 1 处，且同为「错误 & 可观测」类的 console/todos 早已含 ui/server，口径自相矛盾 |
+| catch | src + ui/src + ui/server 产品代码（排除 *.spec.* / *.test.*）。**口径变更**：2026-09-16（issue #341）纳入 ui/server——此前仅 src + ui/src，于是「空 catch {}」报 0 而 ui/server 实有 1 处，且同为「错误 & 可观测」类的 console/todos 早已含 ui/server，口径自相矛盾；2026-09-24（issue #530）补 ui/src 的 .js/.jsx（9 个文件）并解除 `lib` 目录名豁免对**同名源码目录** `ui/src/lib/` 的误伤——此后「无注释的无参 catch」由 12 更正为 17（少算的 5 处全部计入），属口径变更而非新增债务 |
 | todos | src + ui/src + ui/server + tests（.ts/.tsx/.js/.jsx/.mjs/.cjs） |
-| vendored | src/context/memory/edgeclaw-memory-core（**整体移出文件级指标**，2026-09-16 issue #341）：外部搬入的记忆内核，自带 package.json / tsconfig 与独立 build·test，不随本仓演进。其 src 与 tests 下的 .ts 此前计入 src 规模与两张排期表，现单列于 metrics.md「vendored 子包」节；该子包自己的 lib/（编译产物）与 ui-source/（memory-dashboard 资产）本就由目录名豁免 |
+| vendored | src/context/memory/edgeclaw-memory-core（**整体移出文件级指标**，2026-09-16 issue #341）：外部搬入的记忆内核，自带 package.json / tsconfig 与独立 build·test，不随本仓演进。其 src 与 tests 下的 .ts 此前计入 src 规模与两张排期表，现单列于 metrics.md「vendored 子包」节；该子包自己的 lib/（编译产物）与 ui-source/（memory-dashboard 资产）按**路径前缀**豁免（2026-09-24 issue #530 起——此前按「任意层级目录名」豁免，会把与编译产物撞名的源码目录 `ui/src/lib/` 一并吞掉） |
 
 ## 异味指标（越少越好）
 
@@ -32,9 +32,9 @@
 | `as unknown as`（双重断言） | 31 | ui/src(24) · adapters(2) · tool(2) |
 | 裸 `console.*` | 158 | cli(137) · telemetry(8) · ui/server(5) |
 | 空 `catch {}` | 0 | — |
-| 无参 `catch {`（总计） | 671 | ui/server(152) · ui/src(114) · adapters(70) |
-| ↳ **无注释**（隐患类，目标） | **12** | — |
-| ↳ 已带意图注释 | 659 | — |
+| 无参 `catch {`（总计） | 678 | ui/server(152) · ui/src(121) · adapters(70) |
+| ↳ **无注释**（隐患类，目标） | **17** | — |
+| ↳ 已带意图注释 | 661 | — |
 | `TODO/HACK/FIXME/XXX` | 11 | always-on(4) · tests(4) · ui/src(2) |
 | 分层违规 `ui/server→src` | 14 | — |
 | 分层违规 `src→ui` | 0 | — |

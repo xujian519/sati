@@ -24,6 +24,12 @@ import { pathToFileURL } from "node:url";
 
 const ROOT = new URL("..", import.meta.url).pathname;
 
+/**
+ * 按「**任意层级的目录名**」豁免的目录：**产物类**——无论出现在哪一层都不可能是本仓源码。
+ *
+ * 只放这一类的目录名。名字本身不表明是产物的目录（`lib` / `ui-source`）改走
+ * `EXCLUDE_PATH_PREFIXES`，否则会把与编译产物同名的**源码目录**一并吞掉（#530）。
+ */
 const EXCLUDE_DIRS = new Set([
   "node_modules",
   "dist",
@@ -34,15 +40,41 @@ const EXCLUDE_DIRS = new Set([
   ".qoder",
   ".codegraph",
   "test-results",
-  "lib",
-  "ui-source",
 ]);
+
+/**
+ * 按「**仓库相对路径前缀**」豁免的目录（2026-09-24 · #530）。
+ *
+ * 为什么不能放进 `EXCLUDE_DIRS`：那里的判据是「任意层级的目录名」，于是与编译产物**同名**的
+ * 源码目录会一起被吞掉——`ui/src/lib/` 是真实源码（4 个 .ts + 1 个 .js），却因撞名 `lib` 而
+ * 不在任何文件级扫描里：少算 1 处无注释无参 catch、5 个文件的规模（`uiSrcFiles` / `uiSrcLines`）。
+ * 这类撞名不是孤例，仓内还有 `scripts/lib`、`skills/<skill>/scripts/lib`、`apps/desktop/scripts/lib`，
+ * 逐个加白名单只会让下一个人再踩一次，故改为路径限定。
+ *
+ * 下面两条都是 `edgeclaw-memory-core` 子包内的**非源码**内容：`lib/` 是编译产物（36 个 .js +
+ * 36 个 .d.ts）、`ui-source/` 是 memory-dashboard 资产。子包整体已由 `VENDORED_SUBTREES` 单列，
+ * 这里豁免它们是为了不让编译产物进入 vendored 规模统计。
+ */
+const EXCLUDE_PATH_PREFIXES = [
+  "src/context/memory/edgeclaw-memory-core/lib",
+  "src/context/memory/edgeclaw-memory-core/ui-source",
+];
+
+/**
+ * 路径前缀豁免判据（精确到**路径段**，故不会误伤 `libx/`、`library/` 这类同前缀兄弟名）。
+ *
+ * @param {string} relPath 以 `/` 分隔的仓库相对路径
+ * @returns {boolean}
+ */
+function isPathExcluded(relPath) {
+  return EXCLUDE_PATH_PREFIXES.some(prefix => relPath === prefix || relPath.startsWith(`${prefix}/`));
+}
 
 /**
  * 内嵌 vendored 子包：**仓库相对路径前缀**口径（2026-09-16 · #341）。
  *
- * 与 `EXCLUDE_DIRS` 的区别：后者按「任意层级的目录名」豁免（`lib`/`ui-source`/`dist` 无论出现在
- * 哪一层都算），这里按路径前缀精确匹配，不会误伤同名目录。
+ * 与 `EXCLUDE_DIRS` 的区别：后者按「任意层级的目录名」豁免（`dist` 无论出现在哪一层都算），
+ * 这里按路径前缀精确匹配，不会误伤同名目录。
  *
  * 为什么整体移出文件级指标：`edgeclaw-memory-core` 是从外部项目整体搬入的记忆内核，自带
  * `package.json` / `tsconfig` / 独立 `build`·`test` 脚本，本仓不参与其演进；它却占 `src` 行数的
@@ -52,8 +84,9 @@ const EXCLUDE_DIRS = new Set([
  * 混入非本仓维护的代码会直接误导排期。故按 #341 整体移出，改为在 `metrics.md` 单列一节
  * （规模 + 自身 Top 文件），既不混排期也不丢可见度。
  *
- * 注：该子包的 `lib/`（编译产物）与 `ui-source/`（memory-dashboard 资产）**本就**由
- * `EXCLUDE_DIRS` 豁免，故这里只需要挡住 `src/` 与 `tests/` 下的 .ts。
+ * 注：该子包的 `lib/`（编译产物）与 `ui-source/`（memory-dashboard 资产）由
+ * `EXCLUDE_PATH_PREFIXES` 按路径豁免（#530 起；此前按目录名，会误伤 `ui/src/lib/`），
+ * 故这里只需要挡住 `src/` 与 `tests/` 下的 .ts。
  */
 export const VENDORED_SUBTREES = ["src/context/memory/edgeclaw-memory-core"];
 
@@ -98,10 +131,10 @@ const SCOPE_DOC = {
   asUnknownAs:
     "src + ui/src（.ts/.tsx，含同址 *.spec.*；TS AST 统计 `x as unknown as T` 双重断言）。**口径变更**：2026-09-15（issue #339）首度纳入——此前该形态完全未统计，故 0 → N 的变化来自口径变更而非新增债务",
   catch:
-    "src + ui/src + ui/server 产品代码（排除 *.spec.* / *.test.*）。**口径变更**：2026-09-16（issue #341）纳入 ui/server——此前仅 src + ui/src，于是「空 catch {}」报 0 而 ui/server 实有 1 处，且同为「错误 & 可观测」类的 console/todos 早已含 ui/server，口径自相矛盾",
+    "src + ui/src + ui/server 产品代码（排除 *.spec.* / *.test.*）。**口径变更**：2026-09-16（issue #341）纳入 ui/server——此前仅 src + ui/src，于是「空 catch {}」报 0 而 ui/server 实有 1 处，且同为「错误 & 可观测」类的 console/todos 早已含 ui/server，口径自相矛盾；2026-09-24（issue #530）补 ui/src 的 .js/.jsx（9 个文件）并解除 `lib` 目录名豁免对**同名源码目录** `ui/src/lib/` 的误伤——此后「无注释的无参 catch」由 12 更正为 17（少算的 5 处全部计入），属口径变更而非新增债务",
   todos: "src + ui/src + ui/server + tests（.ts/.tsx/.js/.jsx/.mjs/.cjs）",
   vendored:
-    "src/context/memory/edgeclaw-memory-core（**整体移出文件级指标**，2026-09-16 issue #341）：外部搬入的记忆内核，自带 package.json / tsconfig 与独立 build·test，不随本仓演进。其 src 与 tests 下的 .ts 此前计入 src 规模与两张排期表，现单列于 metrics.md「vendored 子包」节；该子包自己的 lib/（编译产物）与 ui-source/（memory-dashboard 资产）本就由目录名豁免",
+    "src/context/memory/edgeclaw-memory-core（**整体移出文件级指标**，2026-09-16 issue #341）：外部搬入的记忆内核，自带 package.json / tsconfig 与独立 build·test，不随本仓演进。其 src 与 tests 下的 .ts 此前计入 src 规模与两张排期表，现单列于 metrics.md「vendored 子包」节；该子包自己的 lib/（编译产物）与 ui-source/（memory-dashboard 资产）按**路径前缀**豁免（2026-09-24 issue #530 起——此前按「任意层级目录名」豁免，会把与编译产物撞名的源码目录 `ui/src/lib/` 一并吞掉）",
 };
 
 /**
@@ -157,6 +190,7 @@ export function listFiles(dir, exts) {
     .filter(p => p.startsWith(prefix))
     .filter(p => exts.some(x => p.endsWith(x)) && !p.endsWith(".d.ts"))
     .filter(p => !p.split("/").some(seg => seg.startsWith(".") || EXCLUDE_DIRS.has(seg)))
+    .filter(p => !isPathExcluded(p))
     .map(p => join(ROOT, p))
     .sort();
 }
@@ -531,7 +565,11 @@ export async function measure() {
   const srcJsFiles = srcScan.filter(f => !f.endsWith(".ts") && !f.endsWith(".tsx"));
 
   const testsFiles = listFiles(join(ROOT, "tests"), [".ts", ".tsx", ".js"]);
-  const uiSrcFiles = listFiles(join(ROOT, "ui/src"), [".ts", ".tsx"]);
+  // `ui/src` 的 `.js` / `.jsx`（9 个）此前不在任何文件级扫描里（C39 登记、#530 修复）：
+  // 它们是产品源码（`main.jsx`、`contexts/*.jsx`、`i18n/config.js`、`utils/api.js` 等），
+  // 漏掉会让 catch / TODO / 行数三处同时少算——而 `console` 口径早就含 `ui/server` 的 .js，
+  // 两套口径自相矛盾。`godFunctions` / `scanTypeEscapes` 自身按扩展名跳过非 TS 文件，不受影响。
+  const uiSrcFiles = listFiles(join(ROOT, "ui/src"), [".ts", ".tsx", ".js", ".jsx"]);
   const uiServerFiles = listFiles(join(ROOT, "ui/server"), [".js", ".mjs", ".ts"]);
   const uiServerScan = listFiles(join(ROOT, "ui/server"), jsLike);
   const testsScan = listFiles(join(ROOT, "tests"), jsLike);

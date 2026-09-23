@@ -54,6 +54,12 @@ pnpm typecheck && pnpm lint && pnpm format:check
 
 ### 指标口径说明（重要）
 
+> **2026-09-24（#520 / #530）模块文件数改 git 口径、`lib`/`ui-source` 改路径前缀豁免、`ui/src` 后缀扩面**：三处口径失真一并修正，**跨此日期的同比须按同一口径重算**。
+> ① **`src/<模块>/` 文件数**（`docs/code-facts.md`）由 `readdirSync` 递归改为 **git 清单**（`git ls-files --cached --others --exclude-standard`，排除 `.d.ts`）——旧口径把 `node_modules` 下第三方声明（182）与 vendored 子包的编译产物（`lib/**/*.d.ts`，36）算作模块源码，同一棵树在「干净检出 / 只装依赖 / 子包已 build」三态分别算出 98 / 280 / **316**，门禁因此给出与树无关的假红，而「改基线让它变绿」等于把本机环境写进仓库。`src/context` 随之 **316 → 98**（与同为 git 口径的 `measure-techdebt` 对齐）。
+> ② **`EXCLUDE_DIRS` 的 `lib` / `ui-source` 改为「路径前缀」豁免**：按「任意层级的目录名」豁免会把与编译产物**同名**的源码目录一并吞掉——`ui/src/lib/`（4 个 `.ts` + 1 个 `.js`）长期不在任何文件级扫描里。子包内的 `lib/`（编译产物）与 `ui-source/`（资产）**仍在扫描面外**（`vendored` 规模保持 49 / 16,682）。
+> ③ **`ui/src` 的后缀集合补 `.js` / `.jsx`**（9 个文件）：它们是产品源码（`main.jsx`、`contexts/*.jsx`、`i18n/config.js`、`utils/api.js` 等），此前不在任何文件级扫描里（#341 note 的 §仍未覆盖 已登记）。`ui/src` 规模 **576 / 92,914 → 589 / 94,379**。
+> ⇒ 合并后果：**无注释的无参 catch（`TD-CATCH-001` 的治理目标）12 → 17**、无参 catch 总计 671 → 678、已带意图注释 659 → 661。`as unknown as` / 裸 `console.*` / God function / Top 大文件**不变**（前两者自身跳过非 `.ts/.tsx`）。这是**口径变更而非新增债务**：`TD-CATCH-001` 的目标数与账本条目须按新口径回填。决策见 `docs/notes/implemented/2026-09-24-metric-scope-git-and-path-prefix.md`。
+>
 > **2026-09-16（#341）catch 口径纳入 `ui/server`、vendored 子包整体移出文件级指标**：两处缺口都会让排期建立在假数字上。
 > ① **catch 口径漏掉整个 `ui/server`**（105 文件 / 31,483 行）——「空 `catch {}`」长期报 **0**，而 `ui/server/utils/plugin-loader.js:299` 实有一处；同为「错误 & 可观测」类的 `console` / `todos` 早已含 `ui/server`，**两套口径自相矛盾**。纳入后：空 catch `0 → 1`、无参 catch `517 → 684`（`ui/server` 持 175）、其中**无注释隐患类 `40 → 124`**（`ui/server` 持 84）。注意 issue 引用的「catch = `src + ui/src`」是**如实声明**（基线表口径），所以这不是实现与文档不一致，而是**口径本身选错了**。
 > ② **`edgeclaw-memory-core` 是外部搬入的记忆内核**（自带 `package.json` / `tsconfig` / 独立 `build`·`test`，不随本仓演进），其 `src/` 与 `tests/` 下的 49 个 `.ts`（16,682 行）此前计入 `src`，并在「Top 大文件」「God function」两张**排期表**里各占 3 席。现按**路径前缀**（`VENDORED_SUBTREES`）整体移出文件级指标，改在 `metrics.md` 新增的「vendored 子包」节单列（规模 + 自身 Top 文件 + ≥300 行函数数）——**单列而非删除**，否则「已单列」与「该目录被删了」在输出上不可区分。规模随之 `1078 / 186146 → 1029 / 169464`。
