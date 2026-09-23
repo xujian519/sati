@@ -88,3 +88,68 @@ test("patent_figure_check：figures 与 svg_paths 均缺省 fail-closed", async 
   const check = createPatentFigureCheckTool();
   await assert.rejects(check.execute({ spec_text: "任意" }, makeContext(process.cwd())), /至少提供一项/u);
 });
+
+/** 横向框图：交付画幅窄而高，被核验器重排成 flowchart/TB 后画幅会大幅改变。 */
+const WIDE_BLOCK: FigureSpec = {
+  figure_no: 1,
+  kind: "block",
+  direction: "LR",
+  nodes: Array.from({ length: 10 }, (_, i) => ({ id: `w${i}`, label: `模块${i + 1}` })),
+  edges: [],
+};
+
+/** 超画幅的纵向流程图（≥20 节点 TB）：结构化输入下必须判 V7 fail。 */
+const OVERSIZE_FLOW: FigureSpec = {
+  figure_no: 2,
+  kind: "flowchart",
+  direction: "TB",
+  nodes: Array.from({ length: 20 }, (_, i) => ({ id: `b${i}`, label: `步骤${i + 1}` })),
+  edges: Array.from({ length: 19 }, (_, i) => ({ from: `b${i}`, to: `b${i + 1}` })),
+};
+
+test("patent_figure_check：svg_paths 回读不按重排画幅判 V7（交付画幅不可由此推断）", async () => {
+  const cwd = mkdtempSync(join(tmpdir(), "sati-figuregen-p1-"));
+  try {
+    const generate = createPatentFigureGenerateTool();
+    await generate.execute({ figures: [WIDE_BLOCK], output_name: "wide" }, makeContext(cwd));
+
+    const check = createPatentFigureCheckTool();
+    const result = await check.execute(
+      { svg_paths: [join(cwd, ".sati", "figures", "wide-fig1.svg")], spec_text: "本案涉及一种装置。" },
+      makeContext(cwd),
+    );
+    const text = result.content[0].type === "text" ? result.content[0].text : "";
+    assert.ok(
+      !text.includes("V7"),
+      `回读骨架的画幅由交付文件决定，不得由核验器重排后判定（重排会量出交付物上不存在的尺寸）：\n${text}`,
+    );
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("patent_figure_check：混合输入时逐图排除——结构化附图照判 V7，回读骨架不判", async () => {
+  const cwd = mkdtempSync(join(tmpdir(), "sati-figuregen-p1-"));
+  try {
+    const generate = createPatentFigureGenerateTool();
+    await generate.execute({ figures: [WIDE_BLOCK], output_name: "wide" }, makeContext(cwd));
+
+    const check = createPatentFigureCheckTool();
+    const result = await check.execute(
+      {
+        figures: [OVERSIZE_FLOW],
+        svg_paths: [join(cwd, ".sati", "figures", "wide-fig1.svg")],
+        spec_text: "本案涉及一种装置。",
+        figure_count: 2,
+      },
+      makeContext(cwd),
+    );
+    const text = result.content[0].type === "text" ? result.content[0].text : "";
+    // 排除必须逐图生效：图2 是结构化输入（画幅由本模块布局决定）⇒ 照判；
+    // 图1 是回读骨架（画幅来自交付文件）⇒ 不判。整体跳过会让结构化那幅漏判。
+    assert.match(text, /\[FAIL\] V7: 图2 /u, `结构化输入的超画幅附图必须照判 V7：\n${text}`);
+    assert.ok(!/\[FAIL\] V7: 图1 /u.test(text), `回读骨架不得被判画幅：\n${text}`);
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
+});

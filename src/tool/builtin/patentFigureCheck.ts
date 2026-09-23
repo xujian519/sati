@@ -197,6 +197,8 @@ export function createPatentFigureCheckTool(): SatiToolDefinition<PatentFigureCh
       assertFigurePayloads(input.figures ?? [], "patent_figure_check");
       // 已交付 SVG 的图号观测（V15/V16 的判据：图号的**可见形态**只在交付文件里可观测）。
       const numberedFigureNos: number[] = [];
+      // 回读骨架的图号：画幅不由本模块布局决定，须逐图排除出 V7 的画幅判据。
+      const readbackFigureNos: number[] = [];
       const svgPaths = input.svg_paths ?? [];
       for (const svgPath of svgPaths) {
         const absolute = isAbsolute(svgPath) ? svgPath : resolve(context.cwd, svgPath);
@@ -231,7 +233,12 @@ export function createPatentFigureCheckTool(): SatiToolDefinition<PatentFigureCh
             path: svgPath,
           });
         }
+        // `kind` 是**占位**：SVG 里没有图型信息（回读只认 `<g>` 的 id/data-ref 与 `<text>`），
+        // 原图型与方向已不可知。占位为 flowchart 只影响 V19（"实用新型全为曲线图"不会误报）
+        // 与 V20/V21（曲线图专有规则保守跳过）——画幅判据则由下面传出的 skipLayoutFigureNos
+        // 明确排除，不靠这个占位来决定。
         figures.push({ figure_no: parsed.figureNo, kind: "flowchart", nodes: parsed.nodes, edges: [] });
+        readbackFigureNos.push(parsed.figureNo);
         if (parsed.numbered) numberedFigureNos.push(parsed.figureNo);
       }
       const imagePaths = input.image_paths ?? [];
@@ -259,6 +266,8 @@ export function createPatentFigureCheckTool(): SatiToolDefinition<PatentFigureCh
           jurisdiction: jurisdiction,
           figureCount: toFigureCount(input.figure_count, figures.length),
           ...(svgPaths.length === 0 ? {} : { numberedFigureNos }),
+          // 回读骨架逐图排除出 V7 画幅判据（结构化 figures 与 svg_paths 混给时，前者照判）。
+          ...(readbackFigureNos.length === 0 ? {} : { skipLayoutFigureNos: readbackFigureNos }),
           ...(sheet === undefined ? {} : { sheetIndex: sheet.index, sheetTotal: sheet.total }),
           ...(explicitFaces === undefined ? {} : { faces: explicitFaces }),
           ...(figures.length === 0 ? { skipTextRules: true, skipLayoutRules: true } : {}),
