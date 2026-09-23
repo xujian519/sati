@@ -132,3 +132,24 @@ test("A4 HTML：同文档统一缩放系数（含大图时小图同比例缩小�
   assert.ok(html.includes(`width: ${(smallSize.widthMm * zoom).toFixed(1)}mm`), "小图按统一系数缩放");
   assert.ok(html.includes(`width: ${(bigSize.widthMm * zoom).toFixed(1)}mm`), "大图按统一系数缩放");
 });
+
+test("A4 HTML：发明名称含 & 与标签时不破坏文档结构（title/h1 均转义）", () => {
+  const hostile = `一种装置</title><script>alert(1)</script> & <b>粗</b>`;
+  const html = renderFiguresHtml([SPEC], { title: hostile });
+
+  // 结构不变：`<title>` 只能由模板自己闭合一次，名称不得注入任何标签
+  assert.equal((html.match(/<\/title>/gu) ?? []).length, 1, "title 被名称提前闭合");
+  assert.ok(!html.includes("<script>"), "名称里的 script 标签进入了交付文档");
+  assert.ok(!html.includes("<b>"), "名称里的标签进入了交付文档");
+  // 文本按实体呈现：`&` 先行转义，故 `&lt;` 不会被二次展开成 `<`
+  assert.ok(html.includes("&lt;/title&gt;&lt;script&gt;"), "标签字符须转义为实体");
+  assert.ok(html.includes("&amp; "), "& 须转义（否则 &lt; 会被二次展开）");
+  // 两处插值（<title> 与 <h1>）都过转义，不能只修一处
+  assert.equal((html.match(/一种装置/g) ?? []).length, 2, "名称应出现在 title 与 h1 两处");
+});
+
+test("A4 HTML：正常发明名称输出与转义前一致（转义不改变常规文本）", () => {
+  const html = renderFiguresHtml([SPEC], { title: "一种处理装置" });
+  assert.ok(html.includes("<title>一种处理装置—说明书附图</title>"));
+  assert.ok(html.includes("<h1>一种处理装置—说明书附图</h1>"));
+});
