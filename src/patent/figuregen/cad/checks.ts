@@ -29,6 +29,7 @@
  */
 
 import type { FigureCheckSeverity } from "../check.js";
+import { boxesOverlap, boxWithin, type Box } from "../render-utils.js";
 import type { CadEdgeTable } from "./types.js";
 
 export type CadRuleId = "C1" | "C2" | "C3" | "C4" | "C5" | "C6" | "C7" | "C8" | "C9" | "C10" | "C11";
@@ -86,18 +87,14 @@ export type CadCheckInput = {
   hiddenLines: boolean;
 };
 
-/** 矩形（纸面毫米，SVG 坐标系：top < bottom）。 */
-export type CadBox = { left: number; top: number; right: number; bottom: number };
-
-/** 两个矩形是否相交（边界相切不算：标号贴着放不算重叠）。 */
-function boxesOverlap(a: CadBox, b: CadBox): boolean {
-  return a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
-}
-
-/** a 是否完全落在 b 内（边界含等号：正好贴边不算越界）。 */
-function boxWithin(a: CadBox, b: CadBox): boolean {
-  return a.left >= b.left - 1e-9 && a.right <= b.right + 1e-9 && a.top >= b.top - 1e-9 && a.bottom <= b.bottom + 1e-9;
-}
+/**
+ * 矩形（纸面毫米，SVG 坐标系：top < bottom）。
+ *
+ * 与择位引擎的 `LeaderBox` 同为轴对齐矩形，故判"压盖/越界"的谓词共用一个实现
+ * （`render-utils.ts`）——两处各写一份会让"算不算压盖"的口径分头演进，而两侧各有测试，
+ * 改一边不会让另一边变红。
+ */
+export type CadBox = Box;
 
 /** 几何级检查（纯函数）。 */
 export function checkCadProjection(input: CadCheckInput): CadFinding[] {

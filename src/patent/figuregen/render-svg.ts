@@ -16,22 +16,10 @@ import { layoutChart, renderChartBody } from "./chart.js";
 import { isSymbolShape, layoutFigure, type FigureLayout } from "./layout.js";
 import { FIGURE_FONT_SIZE } from "./metrics.js";
 import { FIGURE_NO_ATTRIBUTE } from "./readback.js";
+import { escapeXml, fmt } from "./render-utils.js";
 import type { FigureNode, FigureNodeShape, FigureSpec, Jurisdiction } from "./types.js";
 
 const EDGE_FONT_SIZE = 12;
-
-function fmt(n: number): string {
-  return String(Math.round(n * 10) / 10);
-}
-
-function escapeXml(text: string): string {
-  return text
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&apos;");
-}
 
 /** 节点 id → 合法 XML id 片段。 */
 function xmlId(nodeId: string): string {

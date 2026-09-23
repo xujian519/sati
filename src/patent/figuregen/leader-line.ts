@@ -30,8 +30,10 @@
  */
 
 import { measureTextWidth } from "./metrics.js";
+import { boxesOverlap, boxWithin, GEOMETRY_EPS, type Box } from "./render-utils.js";
 
-export type LeaderBox = { left: number; top: number; right: number; bottom: number };
+/** 标号文本框（与 CAD 的 `CadBox` 同构：同为轴对齐矩形，故几何谓词共用一份实现）。 */
+export type LeaderBox = Box;
 export type LeaderPoint = { x: number; y: number };
 export type LeaderSegment = { from: LeaderPoint; to: LeaderPoint };
 
@@ -131,7 +133,8 @@ export const LEADER_DIRECTIONS_DEG: readonly number[] = [0, 45, -45, 90, -90, 13
 /** 标号框在基线上方/下方的比例（合计 1.2 倍字号）。 */
 const LABEL_ASCENT_RATIO = 1;
 const LABEL_DESCENT_RATIO = 0.2;
-const EPS = 1e-9;
+/** 本模块的几何容差（与共享谓词同一取值：见 render-utils.ts 的 GEOMETRY_EPS）。 */
+const EPS = GEOMETRY_EPS;
 
 /** 标号文本框（纸面毫米）：宽按字符类别估算（与布局器同一度量），高按字号比例。 */
 export function labelBoxOf(text: string, fontSizeMm: number, labelPoint: LeaderPoint): LeaderBox {
@@ -146,16 +149,6 @@ export function labelBoxOf(text: string, fontSizeMm: number, labelPoint: LeaderP
 
 function expandBox(box: LeaderBox, by: number): LeaderBox {
   return { left: box.left - by, top: box.top - by, right: box.right + by, bottom: box.bottom + by };
-}
-
-/** 两框是否相交（边界相切不算：标号贴着放不算压盖）。 */
-function boxesOverlap(a: LeaderBox, b: LeaderBox): boolean {
-  return a.left < b.right - EPS && b.left < a.right - EPS && a.top < b.bottom - EPS && b.top < a.bottom - EPS;
-}
-
-/** a 是否完全落在 b 内（边界含等号：正好贴边不算越界）。 */
-function boxWithin(a: LeaderBox, b: LeaderBox): boolean {
-  return a.left >= b.left - EPS && a.right <= b.right + EPS && a.top >= b.top - EPS && a.bottom <= b.bottom + EPS;
 }
 
 function pointInBox(point: LeaderPoint, box: LeaderBox): boolean {

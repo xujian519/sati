@@ -21,6 +21,7 @@
 import { svgRootSizeMm } from "./html.js";
 import { officeProfile, printableArea, sheetNumberText, type TargetOffice } from "./office-profile.js";
 import { CSS_PX_PER_INCH, MM_PER_INCH, pxToMm } from "./page-contract.js";
+import { escapeXml, fmt as fmtShared } from "./render-utils.js";
 
 /** 图内文字的默认估算字高（毫米）：内置渲染器 FIGURE_FONT_SIZE=14px。 */
 const DEFAULT_SOURCE_CHAR_MM = (14 / CSS_PX_PER_INCH) * MM_PER_INCH;
@@ -117,9 +118,10 @@ function figureNoAttribute(drawingSvg: string): string {
   return match === null ? "" : `data-figure-no="${match[1]}" `;
 }
 
-function fmt(n: number): string {
-  return String(Math.round(n * 100) / 100);
-}
+/** 落版页坐标精度：2 位小数（纸面毫米；版心定位不需要 CAD 那样的微米级）。 */
+const SUBMISSION_COORD_DIGITS = 2;
+
+const fmt = (value: number): string => fmtShared(value, SUBMISSION_COORD_DIGITS);
 
 /**
  * 生成提交落版页（单页 A4，图形居中 + 图号在图下 + 页码在版心底）。
@@ -214,13 +216,4 @@ export function buildSubmissionPage(options: SubmissionPageOptions): SubmissionP
     },
     warnings,
   };
-}
-
-function escapeXml(text: string): string {
-  return text
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&apos;");
 }

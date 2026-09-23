@@ -18,6 +18,7 @@
  */
 
 import { FIGURE_FONT_SIZE, measureTextWidth } from "./metrics.js";
+import { escapeXml, fmt } from "./render-utils.js";
 import type { ChartAxis, ChartLineStyle, ChartMarker, ChartSeries, FigureChart } from "./types.js";
 
 export type Point = { x: number; y: number };
@@ -110,22 +111,12 @@ const CAPTION_H = 40;
 /** 空曲线图：`kind: "chart"` 但缺 `chart` 字段时出一张空坐标图（缺陷由工具校验与 V-规则报告，渲染不抛错）。 */
 const EMPTY_AXIS: ChartAxis = { title: "" };
 
-function fmt(n: number): string {
-  return String(Math.round(n * 10) / 10);
-}
-
-function escapeXml(text: string): string {
-  return text
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&apos;");
-}
+/** 刻度值文本的小数位：比坐标精度高得多——刻度要的是"数据本身"，不是版面取整。 */
+const TICK_DIGITS = 6;
 
 /** 刻度值文本：保留 6 位小数后去掉浮点噪声（0.30000000000000004 → 0.3）。 */
 function fmtTick(value: number): string {
-  return String(Math.round(value * 1e6) / 1e6);
+  return fmt(value, TICK_DIGITS);
 }
 
 function asFinite(value: unknown): number | undefined {
