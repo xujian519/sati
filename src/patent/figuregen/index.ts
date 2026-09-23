@@ -161,3 +161,8 @@ export {
 export * from "./cad/index.js";
 export { renderFiguresHtml, type FiguresHtmlOptions } from "./html.js";
 export { buildFigureBriefDraft, type FigureBriefOptions } from "./brief.js";
+export {
+  writeFigureSidecar,
+  writeSubmissionPageArtifact,
+  type SubmissionPageArtifact,
+} from "./deliverables.js";

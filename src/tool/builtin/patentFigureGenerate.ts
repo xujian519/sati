@@ -24,10 +24,8 @@ import { isAbsolute, resolve } from "node:path";
 import {
   buildFigureBriefDraft,
   buildFigureSidecar,
-  buildSubmissionPage,
   checkFigures,
   figureCaption,
-  figureSidecarFileName,
   MM_PER_INCH,
   profileForJurisdiction,
   pxToMm,
@@ -35,6 +33,8 @@ import {
   renderFiguresHtml,
   sheetNumberText,
   shouldRenderCaption,
+  writeFigureSidecar,
+  writeSubmissionPageArtifact,
   type DocumentKind,
   type FigureSidecarLayout,
   type FigureSidecarSheet,
@@ -298,50 +298,41 @@ export function createPatentFigureGenerateTool(): SatiToolDefinition<PatentFigur
           // 页面层不再画图号：图形自身已把图号画在标注带上（4.3「标注在相应附图的正下方」），
           // 而需要编号时图形必有图号、不需要编号时（pct/us 单幅）页面也不得出现 "Fig."。
           if (input.fit_to_page === true) {
-            const page = buildSubmissionPage({
+            // 落版页的装配（文件名形态 + sidecar 的 layout 字段）与 CAD 通路共用一份实现，
+            // 避免"新增附加产物要改两处、漏改则同一工具族给出不同 sidecar"。
+            const page = await writeSubmissionPageArtifact({
+              outputDir,
+              outputName: input.output_name,
+              figureNo: figure.figure_no,
               drawingSvg: svg,
               office: profile.office,
               ...(sheet === undefined || sheetText === undefined
                 ? {}
-                : { sheetIndex: sheet.index, sheetTotal: sheet.total }),
+                : { sheet: { index: sheet.index, total: sheet.total } }),
               sourceCharHeightMm: sourceCharMm,
             });
-            const pagePath = resolve(outputDir, `${input.output_name}-fig${figure.figure_no}-page.svg`);
-            await writeFile(pagePath, page.svg, "utf8");
-            pagePaths.push({ path: pagePath, figure_no: figure.figure_no });
-            entry.layout = {
-              file: `${input.output_name}-fig${figure.figure_no}-page.svg`,
-              page_scale: page.metrics.pageScale,
-              placed_width_mm: page.metrics.placedWidthMm,
-              placed_height_mm: page.metrics.placedHeightMm,
-              char_height_mm: page.metrics.charHeightMm,
-              ...(page.warnings.length === 0 ? {} : { warnings: page.warnings }),
-            };
+            pagePaths.push({ path: page.path, figure_no: figure.figure_no });
+            entry.layout = page.layout;
           }
           files.push(entry);
         }
 
         // 附图产物 sidecar（v1）：把 FigureSpec 完整落盘，供下游在**有说明书文本时**
         // 零信息损耗地重跑全部规则（figure-gate 的输入契约，见 figuregen/sidecar.ts）。
-        const sidecarPath = resolve(outputDir, figureSidecarFileName(input.output_name));
-        await writeFile(
-          sidecarPath,
-          `${JSON.stringify(
-            buildFigureSidecar({
-              outputName: input.output_name,
-              renderer,
-              jurisdiction,
-              documentKind,
-              files,
-              figures,
-              check,
-              skipTextRules: true,
-            }),
-            null,
-            2,
-          )}\n`,
-          "utf8",
-        );
+        const sidecarPath = await writeFigureSidecar({
+          outputDir,
+          outputName: input.output_name,
+          sidecar: buildFigureSidecar({
+            outputName: input.output_name,
+            renderer,
+            jurisdiction,
+            documentKind,
+            files,
+            figures,
+            check,
+            skipTextRules: true,
+          }),
+        });
 
         const format = input.format ?? "svg";
         if (!FORMATS.includes(format)) {

@@ -21,10 +21,8 @@ import { isAbsolute, resolve } from "node:path";
 import {
   CAD_VIEWS,
   buildFigureSidecar,
-  buildSubmissionPage,
   checkCadProjection,
   figureCaption,
-  figureSidecarFileName,
   isCadSectionView,
   isCadView,
   printableArea,
@@ -33,6 +31,8 @@ import {
   renderCadSvg,
   resolveFreecadCmd,
   sheetNumberText,
+  writeFigureSidecar,
+  writeSubmissionPageArtifact,
   type CadRefAnnotation,
   type CadRunner,
   type CadView,
@@ -377,22 +377,19 @@ export function createPatentFigureProjectTool(
         let layoutField: FigureSidecarLayout | undefined;
         let pagePath: string | undefined;
         if (input.fit_to_page === true) {
-          const page = buildSubmissionPage({
+          // 落版页的装配与内置渲染通路共用一份实现（文件名形态 + sidecar 的 layout 字段）。
+          // `sourceCharHeightMm` 传 3.5：CAD 图以 mm 为坐标单位，字高无需按 px 折算。
+          const page = await writeSubmissionPageArtifact({
+            outputDir,
+            outputName: input.output_name,
+            figureNo,
             drawingSvg: render.svg,
             office: profile.office,
-            ...(sheet === undefined ? {} : { sheetIndex: sheet.index, sheetTotal: sheet.total }),
+            ...(sheet === undefined ? {} : { sheet: { index: sheet.index, total: sheet.total } }),
             sourceCharHeightMm: 3.5,
           });
-          pagePath = resolve(outputDir, `${input.output_name}-fig${figureNo}-page.svg`);
-          await writeFile(pagePath, page.svg, "utf8");
-          layoutField = {
-            file: `${input.output_name}-fig${figureNo}-page.svg`,
-            page_scale: page.metrics.pageScale,
-            placed_width_mm: page.metrics.placedWidthMm,
-            placed_height_mm: page.metrics.placedHeightMm,
-            char_height_mm: page.metrics.charHeightMm,
-            ...(page.warnings.length === 0 ? {} : { warnings: page.warnings }),
-          };
+          pagePath = page.path;
+          layoutField = page.layout;
         }
 
         // 图号 + 标记骨架 spec：CAD 图的画幅由投影几何决定（不由本模块布局决定），但**标记**
@@ -407,57 +404,52 @@ export function createPatentFigureProjectTool(
           })),
           edges: [],
         };
-        const sidecarPath = resolve(outputDir, figureSidecarFileName(input.output_name));
-        await writeFile(
-          sidecarPath,
-          `${JSON.stringify(
-            buildFigureSidecar({
-              outputName: input.output_name,
-              renderer: "cad",
-              jurisdiction,
-              documentKind,
-              files: [
-                {
-                  figure_no: figureNo,
-                  path: svgPath,
-                  ...(caption === undefined ? {} : { caption }),
-                  ...(sheetField === undefined ? {} : { sheet: sheetField }),
-                  ...(layoutField === undefined ? {} : { layout: layoutField }),
-                  geometry: {
-                    source: "cad",
-                    view,
-                    scale: render.scale,
-                    width_mm: render.widthMm,
-                    height_mm: render.heightMm,
-                    hidden_lines: hiddenLines,
-                    ...(table.section === undefined
-                      ? {}
-                      : {
-                          section: {
-                            offset_mm: table.section.offset_mm,
-                            cut_faces: render.cutFaces,
-                            hatch_segments: render.hatchSegments,
-                          },
-                        }),
-                    ...(annotations.length === 0
-                      ? {}
-                      : {
-                          ref_numerals: annotations.map(annotation => annotation.ref),
-                        }),
-                    findings,
-                  },
+        const sidecarPath = await writeFigureSidecar({
+          outputDir,
+          outputName: input.output_name,
+          sidecar: buildFigureSidecar({
+            outputName: input.output_name,
+            renderer: "cad",
+            jurisdiction,
+            documentKind,
+            files: [
+              {
+                figure_no: figureNo,
+                path: svgPath,
+                ...(caption === undefined ? {} : { caption }),
+                ...(sheetField === undefined ? {} : { sheet: sheetField }),
+                ...(layoutField === undefined ? {} : { layout: layoutField }),
+                geometry: {
+                  source: "cad",
+                  view,
+                  scale: render.scale,
+                  width_mm: render.widthMm,
+                  height_mm: render.heightMm,
+                  hidden_lines: hiddenLines,
+                  ...(table.section === undefined
+                    ? {}
+                    : {
+                        section: {
+                          offset_mm: table.section.offset_mm,
+                          cut_faces: render.cutFaces,
+                          hatch_segments: render.hatchSegments,
+                        },
+                      }),
+                  ...(annotations.length === 0
+                    ? {}
+                    : {
+                        ref_numerals: annotations.map(annotation => annotation.ref),
+                      }),
+                  findings,
                 },
-              ],
-              figures: [skeleton],
-              check: { ok: true, findings: [], refsInFigures: [], refsInText: [] },
-              // 文本侧规则在投影期不适用（无说明书文本），核验由附图门在定稿期跑
-              skipTextRules: true,
-            }),
-            null,
-            2,
-          )}\n`,
-          "utf8",
-        );
+              },
+            ],
+            figures: [skeleton],
+            check: { ok: true, findings: [], refsInFigures: [], refsInText: [] },
+            // 文本侧规则在投影期不适用（无说明书文本），核验由附图门在定稿期跑
+            skipTextRules: true,
+          }),
+        });
 
         const lines: string[] = [
           `已投影 ${view} 视图（FreeCAD 无头，命令来源: ${cmdSource}）：`,
