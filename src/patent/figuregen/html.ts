@@ -16,6 +16,7 @@
 import { printableArea, profileForJurisdiction, type OfficeProfile } from "./office-profile.js";
 import { CSS_PX_PER_INCH, MM_PER_INCH, type FigurePaperSize, uniformFigureZoom } from "./page-contract.js";
 import { renderFigureSvg } from "./render-svg.js";
+import { escapeXml } from "./render-utils.js";
 import type { FigureSpec, Jurisdiction } from "./types.js";
 
 export type FiguresHtmlOptions = {
@@ -93,11 +94,16 @@ export function renderFiguresHtml(specs: readonly FigureSpec[], options: Figures
     })
     .join("\n");
 
+  // 标题来自案卷/模型（发明名称），必须转义后才能进交付文档：名称里的 `&`/`<` 原样插入
+  // 会提前闭合 `<title>`、把正文变成标签（XML 与 HTML 文本节点的转义要求一致，故与 SVG
+  // 侧共用一份 `escapeXml`）。
+  const safeTitle = escapeXml(title);
+
   return `<!doctype html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<title>${title}—说明书附图</title>
+<title>${safeTitle}—说明书附图</title>
 <style>
   @page { size: A4; margin: ${profile.margins.topMm}mm ${profile.margins.rightMm}mm ${profile.margins.bottomMm}mm ${profile.margins.leftMm}mm; }
   html, body { background: #FFFFFF; color: #000000; font-family: sans-serif; margin: 0; padding: 0; }
@@ -110,7 +116,7 @@ export function renderFiguresHtml(specs: readonly FigureSpec[], options: Figures
 </style>
 </head>
 <body>
-  <h1>${title}—说明书附图</h1>
+  <h1>${safeTitle}—说明书附图</h1>
 ${sections}
 </body>
 </html>
