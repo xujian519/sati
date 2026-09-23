@@ -122,10 +122,28 @@ export type FigureCheckOptions = {
   /**
    * 跳过画幅规则 V7（纸面尺寸 + 打印字高）。
    *
-   * 用于**非本模块渲染器产出**的附图骨架（如栅格图/扫描图的分析结果）：那类图的画幅
-   * 与字号由原图决定，用本模块布局结果判 V7 属错误归因（必然误报）。
+   * 用于**整批**附图都是非本模块渲染器产出的骨架（如只有栅格图/扫描图时）：那类图的画幅
+   * 与字号由原图决定，用本模块布局结果判 V7 属错误归因（必然误报）。只跳过其中几幅时用
+   * {@link FigureCheckOptions.skipLayoutFigureNos}。
    */
   skipLayoutRules?: boolean;
+  /**
+   * 画幅不由本模块布局决定的图号（逐图粒度，这些图不参与 V7 的纸面尺寸判据）。
+   *
+   * 与 `skipLayoutRules` 的分工：那个是"这批图都不可量"，这个是"这几幅图不可量、其余照判"。
+   * 场景是**混合核验**——结构化 `figures` 与 `svg_paths` 回读骨架同时给出时，前者照判 V7，
+   * 后者必须排除。
+   *
+   * 为什么回读骨架必须排除：`svg_paths` 的骨架来自**已交付 SVG**，有标记与文本但**没有
+   * 几何**（`readback.ts` 只认 `<g>` 的 id/data-ref 与 `<text>`）。拿它喂 `layoutFigure`
+   * 等于让核验器按另一种图型（且是没有原始方向/坐标的图型）重新排一张图，V7 量的是那张
+   * 重排图的画幅，不是交付画幅——实测一张 34.4×220.7mm 的合规横向框图会被重排成
+   * 282.0×37.3mm 并判 fail，代理师照报告去拆图/缩画幅，而报告里的 282mm 并不存在。
+   * 反向同样坏：曲线图回读时骨架 `nodes` 为空，V7 变成对一张空骨架的测量，属覆盖假象。
+   *
+   * 排除的只是 V7 的画幅判据：V1–V5、V15–V17（图号可见形态）等仍照常作用于这些图。
+   */
+  skipLayoutFigureNos?: readonly number[];
   /** 发明/实用新型（V9 仅对 utility 生效；非 cn 辖区无此规则）。 */
   documentKind?: DocumentKind;
   /**
@@ -577,12 +595,16 @@ export function checkFigures(
   const captionRendered = shouldRenderCaption(profile, figureCount);
   const area = printableArea(profile);
   const charHeight = minCharHeight(profile);
+  // 画幅不可量的图（回读骨架）逐图排除：见 skipLayoutFigureNos 的选项文档。
+  const skipLayoutNos = new Set(options.skipLayoutFigureNos ?? []);
   const paperSizes = options.skipLayoutRules
     ? []
-    : figures.map(figure => {
-        const { width, height } = figureCanvasPx(figure, captionRendered);
-        return { figure_no: figure.figure_no, widthMm: pxToMm(width), heightMm: pxToMm(height) };
-      });
+    : figures
+        .filter(figure => !skipLayoutNos.has(figure.figure_no))
+        .map(figure => {
+          const { width, height } = figureCanvasPx(figure, captionRendered);
+          return { figure_no: figure.figure_no, widthMm: pxToMm(width), heightMm: pxToMm(height) };
+        });
   const zoom = uniformFigureZoom(paperSizes, profile);
   const pageFitBasis = basis(jurisdiction, {
     cn: "指南一部一章 4.3：缩小到三分之二时仍应能清晰分辨图中各个细节",
