@@ -7,7 +7,7 @@
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1063 / 180251 |
+| src TS 文件 / 行数 | 1063 / 180287 |
 | src JS 文件 | 0 |
 | tests 文件 | 604 |
 | ui/src 文件 / 行数 | 576 / 92914 |
@@ -63,7 +63,7 @@
 | `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` | `(anonymous)` | 624 | arrow |
 | `ui/src/components/main-content/view/MainContent.tsx` | `SplitBody` | 573 | function |
 | `ui/src/components/chat/hooks/useSessionSubmit.ts` | `useSessionSubmit` | 528 | function |
-| `src/patent/figuregen/check.ts` | `checkFigures` | 507 | function |
+| `src/patent/figuregen/check.ts` | `checkFigures` | 522 | function |
 | `ui/src/components/main-content-v2/CronV2.tsx` | `CronFormView` | 476 | function |
 | `ui/src/components/chat/hooks/useChatComposerState.ts` | `useChatComposerState` | 467 | function |
 | `src/router/execution/executeRouterDecision.ts` | `executeRouterDecision` | 449 | function |

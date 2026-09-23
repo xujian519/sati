@@ -612,6 +612,21 @@ export function checkFigures(
     pct: "PCT Rule 11.6(c)：usable surface shall not exceed 26.2 cm x 17.0 cm",
   });
   for (const size of paperSizes) {
+    // 画幅算不出（NaN/Infinity）时判据恒为 false ⇒ 静默"通过"。核验器的职责是不假装通过，
+    // 故显式 fail：算不出的尺寸与超限的尺寸同样不可交付。（渲染期已保证不产 NaN——退化轴在
+    // `axisTicks` 里被撑开，入参层另有拒绝；这里是判据侧的最后一道。）
+    if (!Number.isFinite(size.widthMm) || !Number.isFinite(size.heightMm)) {
+      findings.push({
+        rule: "V7",
+        severity: "fail",
+        metric: "page_fit",
+        message:
+          `图${size.figure_no} 的画幅无法度量（宽 ${size.widthMm}、高 ${size.heightMm}）：` +
+          `核验器不对算不出的尺寸判通过（V7，${pageFitBasis}）——请检查该图的坐标数据`,
+        figure_nos: [size.figure_no],
+      });
+      continue;
+    }
     const oversize = size.widthMm > area.widthMm || size.heightMm > area.heightMm;
     if (oversize) {
       findings.push({
