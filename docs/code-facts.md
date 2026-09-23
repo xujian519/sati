@@ -13,7 +13,7 @@
 
 | claim | 事实 | 值 | 来源 |
 | --- | --- | --- | --- |
-| `app_version` | 应用版本（根 package.json） | `0.3.1` | package.json |
+| `app_version` | 应用版本（根 package.json） | `0.3.2` | package.json |
 | `node_engine` | Node 版本下限 | `>=22.13.0` | package.json engines.node |
 | `pnpm_version` | pnpm 版本 | `10.32.1` | package.json packageManager |
 | `typescript_version` | TypeScript 版本 | `6.0.3` | package.json devDependencies.typescript |
