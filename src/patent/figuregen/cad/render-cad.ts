@@ -22,6 +22,7 @@
 import { figureCaption, officeProfile, printableArea } from "../office-profile.js";
 import { planLeaderLines, type LeaderSegment } from "../leader-line.js";
 import { measureTextWidth } from "../metrics.js";
+import { escapeXml, fmt as fmtShared } from "../render-utils.js";
 import type { Jurisdiction } from "../types.js";
 import {
   projectModelPoints,
@@ -167,18 +168,15 @@ export function buildScreenTransform(
   };
 }
 
-function escapeXml(text: string): string {
-  return text
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&apos;");
-}
+/**
+ * CAD 投影坐标精度：3 位小数（纸面毫米，微米级）。
+ *
+ * 精密图形不能像流程图那样只留 1 位——投影边与剖面线的端点靠坐标本身表达，取整到 0.1mm
+ * 会让细结构的相对位置失真。
+ */
+const CAD_COORD_DIGITS = 3;
 
-function fmt(value: number): string {
-  return String(Math.round(value * 1000) / 1000);
-}
+const fmt = (value: number): string => fmtShared(value, CAD_COORD_DIGITS);
 
 /**
  * 多边形剖面线（45°，纸面毫米间距；扫描线 + 奇偶规则，纯函数）。
