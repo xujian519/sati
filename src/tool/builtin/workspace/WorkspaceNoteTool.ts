@@ -74,9 +74,14 @@ export function createWorkspaceNoteTool(): SatiToolDefinition<WorkspaceNoteInput
       const current = snapshot.state ?? emptyWorkspaceLedger();
       const result = applyWorkspaceNote(current, input);
       if (result.changed) {
+        // Pass the accepted note alongside the resulting state so the store can
+        // persist a compact delta between anchors instead of a full snapshot
+        // every time (#537). The store still anchors on the first write and
+        // periodically thereafter, so a single snapshot stays self-sufficient.
         await context.workspaceLedger.write(result.state, {
           sessionId: context.sessionId,
           turnId: context.turnId,
+          note: input,
         });
       }
       return {

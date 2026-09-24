@@ -540,8 +540,8 @@ pnpm test && (cd ui && pnpm test)              # 后端 + UI 测试（pnpm check
 |---|---|---|---|---|
 | **P1** | #520 · #530（口径） | ✅ **已交付**（CI 全绿） | [PR #557](https://github.com/xujian519/sati/pull/557) · `f04b23fc1` | `src/context` **316 → 98**；`undocumented` **12 → 17**（总计 671 → 678 · 已注释 659 → 661）；`ui/src` 576 / 92,914 → **589 / 94,379**；`vendored` 保持 49 / 16,682（边界未放宽） |
 | **P2** | #527 · #530（棘轮） | ✅ **已交付** | [PR #558](https://github.com/xujian519/sati/pull/558) · `110438f9` | `file-size` 棘轮首刷追认 **6 条 / 合计 +136 行**（`types.ts` +73 · `InProcessGateway.ts` +29 · `useChatRealtimeHandlers.ts` +20 · `sati.ts` +7 · `useSessionStore.ts` +5 · `AppShellV2.tsx` +2）；新增 `docs/technical-debt/thresholds.json`（`catchEmpty.total`=0 · `catchNoParam.undocumented`=17）；`check-architecture-boundaries.test.mjs` 10→**12** 例、`measure-techdebt.test.mjs` 35→**43** 例 |
-| **P3** | #536 | ✅ **已交付** | 见下方 commit · PR 号回填中 | 首 token 最坏阻塞 **30s → 注入预算 2s**（缺省，可配 `memory.injectionBudgetMs`）；`DefaultContextRuntime.ts` **902 → 953（+51）**——P2 file-size 棘轮上线后**第一次在真实功能 PR 上转红并被显式 `--update-baseline` 承认**（打印 Δ）；`src` TS 行数 180,729 → 180,846；新增测试 **8 例**（`memory-nonblocking.spec.ts` 3 + builder 超时/中止 2 + provider abort 竞速 3） |
-| **P4** | #537 | ⬜ 未开始 | | 200 次笔记累计 MiB |
+| **P3** | #536 | ✅ **已交付** | [PR #559](https://github.com/xujian519/sati/pull/559) · `4a42b15a6` | 首 token 最坏阻塞 **30s → 注入预算 2s**（缺省，可配 `memory.injectionBudgetMs`）；`DefaultContextRuntime.ts` **902 → 953（+51）**——P2 file-size 棘轮上线后**第一次在真实功能 PR 上转红并被显式 `--update-baseline` 承认**（打印 Δ）；`src` TS 行数 180,729 → 180,846；新增测试 **8 例**（`memory-nonblocking.spec.ts` 3 + builder 超时/中止 2 + provider abort 竞速 3） |
+| **P4** | #537 | 🔄 **在途**（本 PR · 合并即 `Closes #537`） | 本 PR（`refactor/537-workspace-ledger-anchor`） | 写侧从「每笔变更落全量快照」改为「**每 K=32 笔变更落一次自足锚点 + 其间落 O(1) 的 note 增量**」；累计增长由 **O(n²) → ~O(n²/K)**。实测：**N=100 笔笔记 → 4 个 `workspace_state` 锚点 + 96 条 `workspace_state_delta`**（`≤ ⌈N/K⌉+1`），冷读（新 store 全量重放）与热读（游标续扫）结果一致；**N=K+2=34 → 2 锚点 + 32 增量**跨过再锚点边界。读侧用**同一纯函数 `applyWorkspaceNote`** 重放增量，未新造重放语义（直接回应 PR #378「须定义重放语义」的关切）；保留「单条 `workspace_state` 即可重建」自足性、保序、不动 durable 边界。`src` TS 行数 180,846 → **181,005（+159）**；新增测试 **11 例**（`workspace-ledger-store.spec.ts` 9→19 例含 10 条 #537 用例 + `workspace-note.spec.ts` 6→7 例 note 透传）。**与计划的实施差异见下方「P4 的实施差异」** |
 | **P5** | #533① · #534 · #529 | ⬜ 未开始 | | 文件树节点/耗时、`/commits` 耗时 |
 | **P6** | #538 · #532 | ⬜ 未开始 | | 信任评估 ms、MCP 工具数 |
 | **P7** | #531 | ⬜ 未开始 | | `load()` 调用次数、面板 SQL 次数 |
@@ -562,9 +562,9 @@ pnpm test && (cd ui && pnpm test)              # 后端 + UI 测试（pnpm check
 
 | # | 520 | 527 | 528 | 529 | 530 | 531 | 532 | 533 | 534 | 535 | 536 | 537 | 538 | 541 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 状态 | ✅ | ✅ | ⬜ | ⬜ | ✅ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | 🔄 | ⬜ | ⬜ | ⬜ |
+| 状态 | ✅ | ✅ | ⬜ | ⬜ | ✅ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ✅ | 🔄 | ⬜ | ⬜ |
 
-> ✅ = 已合并关闭。🔄 = 已有在途交付。#520 由 [PR #557](https://github.com/xujian519/sati/pull/557) 交付并已合并（`Closes #520` 自动关闭）。#530 的**口径段**由 PR #557 交付、**棘轮段**由 P2（[PR #558](https://github.com/xujian519/sati/pull/558)）交付，该 PR 写 `Closes #530`，已合并关闭。#527 由 P2 同一 PR 写 `Closes #527`，已合并关闭。#536 由 P3 交付（`Closes #536`），在途。
+> ✅ = 已合并关闭。🔄 = 已有在途交付。#520 由 [PR #557](https://github.com/xujian519/sati/pull/557) 交付并已合并（`Closes #520` 自动关闭）。#530 的**口径段**由 PR #557 交付、**棘轮段**由 P2（[PR #558](https://github.com/xujian519/sati/pull/558)）交付，该 PR 写 `Closes #530`，已合并关闭。#527 由 P2 同一 PR 写 `Closes #527`，已合并关闭。#536 由 P3（[PR #559](https://github.com/xujian519/sati/pull/559) · `Closes #536`）交付并已合并关闭。#537 由 P4（本 PR · `Closes #537`）交付，在途。
 
 **P3 的实施差异（计划 vs 实际）**：
 
@@ -576,6 +576,16 @@ pnpm test && (cd ui && pnpm test)              # 后端 + UI 测试（pnpm check
 | §3.3 门禁联动：`pnpm measure:update`（`src/context/` 行数变化） | 跑了 `measure:update`，**并额外撞 P2 file-size 棘轮**：`DefaultContextRuntime.ts` 902 → 953（+51），按棘轮承认动作 `--update-baseline` 追认并打印 Δ | 计划未预料本批会触发**自己上一批刚立的棘轮**——这是棘轮上线后第一次在真实功能 PR 上转红，正好示范它期望的「合法增长须显式写进 PR」形态（详见决策记录 Consequences） |
 | （未列） | 连带 `pnpm gen:event-matrix`：`sessionDependencyAssembly.ts` 加 1 行配置透传使 `elicitation_requested` 的 `file:line` 从 `:242` → `:243` | AGENTS.md 铁律 5：跨行移动后事件矩阵须重生成（纯行号位移，无语义变化） |
 | （未列） | 新增配置项 `memory.injectionBudgetMs`（进 `KNOWN_FIELDS` + `readOptionalPositiveInteger` 解析 + `sessionDependencyAssembly` 透传） | 让预算成为可运维旋钮而非硬编码；计划只提「给检索加预算」未指定配置面 |
+
+**P4 的实施差异（计划 vs 实际）**：
+
+| 计划写的 | 实际做的 | 差在哪 |
+|---|---|---|
+| §2.3 / §3.4：#537 根因是「**缺少变更令牌去重**，同一 note 重复落全量快照」 | 核实为**前提过期**：变更令牌去重**早已存在且有测试**（`applyWorkspaceNote` 对无变化写入返回 `changed:false`，`WorkspaceNoteTool` 仅在 `changed` 时写）。真正未修的根因是 **`verified` append-only 使每份快照 O(n)、累计 O(n²)**，撞 `DEFAULT_MAX_TRANSCRIPT_READ_BYTES=50MB` 后账本永久 `unavailable` | 计划照抄了 issue 的旧诊断；实测去重已就位，故把范围重定到「**全量快照的二次增长**」这一真因——这是本批相对计划/issue 原文的主要增量 |
+| §3.4：修法方向「周期锚点 + 增量」，但增量载荷未定 | 增量载荷选 **note 本身**（`WorkspaceNoteInput`），读侧用**同一纯函数 `applyWorkspaceNote`** 重放 | 不新造重放语义（不复刻状态机、不引入 state-diff 合并规则），直接复用既有纯函数——**正面回应 PR #378「须定义重放语义」的关切**：语义就是既有那套 |
+| §3.4 硬约束（PR #378）：单条 `workspace_state` 须自足、不得只落增量、不得反向扫、不动 durable 边界 | 全部保留：锚点仍是**完整自足快照**（单条即可重建，有负控制用例）；增量**只在两锚点之间**、且锚点周期性刷新；仍**顺序正向扫**；增量走既有 `recordEntry` 批写路径，`flushCheckpoint` 语义不变 | 与硬约束一致；额外补「delta 在任何锚点之前出现 → 跳过并返回 undefined」的防御用例（冷启动态不臆造基座） |
+| §3.4 门禁联动：`pnpm measure:update` | 跑了 `measure:update`（`src` TS 180,846 → 181,005）；**未**触发 file-size 棘轮（改动分散在多个既有小文件，无单文件越过 800 行/基线） | 与 P3 不同：本批增量小且分散，棘轮无需承认动作 |
+| （未列） | 连带 `pnpm gen:event-matrix`：`InMemoryTranscriptWriter.ts` 新增方法使 `file_artifacts` 的 `file:line` 从 `:73` → `:79` | AGENTS.md 铁律 5：跨行移动后事件矩阵须重生成（纯行号位移，无语义变化） |
 
 **分诊动作（逐批次启动时做）**：批次启动时把该批议题改 `status: triage` → `status: in-progress`（`docs/issue-management.md` §3 的「推进」动作），并同时豁免 `stale.yml` 的自动归档。
 
