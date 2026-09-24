@@ -82,6 +82,58 @@ test("claim 值：与运行期独立测量一致（工具数不靠解析器自�
   }
 });
 
+/**
+ * 独立复算（不走被测解析器）：`src/<module>/` 里 **git 跟踪 ∪ 未跟踪未忽略**的 `.ts`/`.tsx`，
+ * 排除编译产物声明（`.d.ts`）与点开头目录段。这是「本机 = CI」的口径。
+ */
+function gitSourceCount(module: string): number {
+  const listing = spawnSync(
+    "git",
+    ["ls-files", "--cached", "--others", "--exclude-standard", "-z", "--", `src/${module}`],
+    { cwd: REPO_ROOT, encoding: "utf8", maxBuffer: 32 * 1024 * 1024 },
+  ).stdout;
+  return listing
+    .split("\0")
+    .filter(Boolean)
+    .filter(path => (path.endsWith(".ts") || path.endsWith(".tsx")) && !path.endsWith(".d.ts"))
+    .filter(path => !path.split("/").some(segment => segment.startsWith("."))).length;
+}
+
+test("src_module_list 逐模块等于 git 清单复算值（#520：事实层不得随环境漂移）", () => {
+  const list = resolveAllClaims().get("src_module_list") ?? "";
+  const rows = [...list.matchAll(/^\| `src\/([^/]+)\/` \| (\d+) \|/gm)].map(match => ({
+    module: match[1] ?? "",
+    count: Number(match[2]),
+  }));
+  assert.ok(rows.length >= 20, `模块行数异常（${rows.length}）——src_module_list 格式可能已变`);
+  for (const { module, count } of rows) {
+    assert.equal(
+      count,
+      gitSourceCount(module),
+      `src/${module}/ 的文件数与 git 清单不一致——口径可能退回了文件系统遍历（node_modules 与编译产物会被算进来）`,
+    );
+  }
+});
+
+test("【负控制】src/context 计数排除 node_modules 与子包编译产物 .d.ts（#520 的失真面）", () => {
+  // 失真面是可复现的：旧口径（`readdirSync` 递归 + `endsWith(".ts")`）在**本机已装依赖且
+  // 子包已 build** 的树上把 src/context 数成 316——其中 218 个是 `.d.ts`（node_modules 下第三方
+  // 声明 182 + 子包 `lib/**` 编译产物 36），真正属于本仓（含子包源码）的只有 98。
+  // 同一次 `pnpm lint` 在干净检出（两者都不存在）下却得 98 ⇒ 同一提交给出两个结论。
+  const list = resolveAllClaims().get("src_module_list") ?? "";
+  const matched = /^\| `src\/context\/` \| (\d+) \|/m.exec(list);
+  assert.ok(matched, "未在 src_module_list 中找到 src/context/ 行");
+  const count = Number(matched[1]);
+  assert.equal(count, gitSourceCount("context"));
+  // 上界断言把「98 而不是 316」钉进测试：若口径退回文件系统遍历，本机（有依赖 + 有 lib/）
+  // 会立刻越界——而在干净检出上它仍会通过，故这是**只在本机/CI 全装环境下**才响的护栏，
+  // 正好覆盖实际会给出假红的那种环境。
+  assert.ok(
+    count < 200,
+    `src/context 计数 ${count} 远高于 git 跟踪的源文件数（${gitSourceCount("context")}）——口径退回文件系统遍历`,
+  );
+});
+
 test("端到端：编译产物的 --check 在当前仓库为绿", t => {
   const compiled = join(REPO_ROOT, "dist", "scripts", "gen-doc-claims.js");
   if (!existsSync(compiled)) {

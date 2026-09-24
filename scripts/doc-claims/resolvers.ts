@@ -14,6 +14,7 @@
  *   - 新增 `src/` 模块若未在 `MODULE_NOTES` 登记，`src_module_list` 解析即抛错，
  *     迫使文档索引与代码同 PR 更新（这正是过去漏列 5 个模块的成因）。
  */
+import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -71,6 +72,41 @@ function filesWithSuffix(root: string, suffix: string): string[] {
   };
   walk(root);
   return out;
+}
+
+/**
+ * 按 **git 清单**列出 `root` 下的源文件（`git ls-files --cached --others --exclude-standard`）。
+ *
+ * 为什么文件系统遍历在这条 claim 上不可用（#520）：`readdirSync` 递归不会跳过忽略目录，
+ * 于是「`src/<模块>/` 的 .ts/.tsx 文件数」把**依赖类型声明**（`node_modules/**`）与
+ * **编译产物**（`*.d.ts`，如 vendored 子包的 `lib/**`）算成模块源码——同一份代码在
+ * 「干净检出 / 只装了依赖 / 子包也 build 过」三种环境分别算出 98 / 280 / 316。
+ * 事实层因此既不是模块规模，又随本机环境漂移；而「让门禁变绿」的顺手做法是把本机环境写回
+ * 仓库，下一个人再撞一次。
+ *
+ * 口径与 `scripts/measure-techdebt.mjs` 的 `listFiles()` **同源**（同一条 git 命令、同样排除
+ * `.d.ts`、同样跳过点开头目录段与忽略目录）：那边自 #340 起就是 git 感知的（本机 = CI），
+ * 这里把它对齐过来，也符合 AGENTS.md「按 `git ls-files` 统计」的既有声明。**刻意不 import
+ * 那个实现**——它是 `.mjs`（不进 `tsc` 产物），而本文件既可能从 `scripts/doc-claims/`（tsx 直跑）
+ * 也可能从 `dist/scripts/doc-claims/`（编译产物）加载，跨文件引用会在 dist 下解析失败。
+ *
+ * 注意：git 口径含「未跟踪但未被忽略」的文件 ⇒ 本地新增一个未 `git add` 的 `.ts` 会即时改变
+ * 计数。这与 `measure-techdebt` 的行为一致，是刻意对齐而非缺陷（见本 PR 的决策记录）。
+ */
+function gitListedFiles(root: string, suffixes: string[]): string[] {
+  const prefix = root.endsWith("/") ? root : `${root}/`;
+  const listing = execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "-z", "--", root], {
+    cwd: REPO_ROOT,
+    encoding: "utf8",
+    maxBuffer: 32 * 1024 * 1024,
+  });
+  return listing
+    .split("\0")
+    .filter(Boolean)
+    .filter(path => path.startsWith(prefix))
+    .filter(path => suffixes.some(suffix => path.endsWith(suffix)) && !path.endsWith(".d.ts"))
+    .filter(path => !path.split("/").some(segment => segment.startsWith(".")))
+    .sort();
 }
 
 function packageJson(): Record<string, unknown> {
@@ -134,7 +170,7 @@ function srcModuleList(): string {
           "请在登记后重新生成 docs/code-facts.md（模块索引不得漏列）",
       );
     }
-    const fileCount = filesWithSuffix(`src/${module}`, ".ts").length + filesWithSuffix(`src/${module}`, ".tsx").length;
+    const fileCount = gitListedFiles(`src/${module}`, [".ts", ".tsx"]).length;
     const barrel = existsSync(join(REPO_ROOT, "src", module, "index.ts")) ? "✓" : "—";
     return `| \`src/${module}/\` | ${fileCount} | ${barrel} | ${note} |`;
   });
@@ -144,6 +180,9 @@ function srcModuleList(): string {
     "| 模块 | .ts/.tsx 文件数 | barrel | 职责 |",
     "| --- | --- | --- | --- |",
     ...rows,
+    "",
+    "> 文件数按 **git 清单**统计（`git ls-files --cached --others --exclude-standard`，排除 `.d.ts`），",
+    "> 与 `docs/technical-debt/metrics.md` 同口径 ⇒ 装了依赖、编没编译子包都不改变它（#520）。",
   ].join("\n");
 }
 
