@@ -185,8 +185,10 @@ function readBaseline(baselinePath) {
   if (!Array.isArray(parsed?.exemptions)) {
     return { error: `${BASELINE_RELATIVE_PATH} 缺少 exemptions 数组` };
   }
-  const keys = new Set(parsed.exemptions.map(entry => baselineKey(entry)));
-  return { keys, entries: parsed.exemptions };
+  // 用 Map<key, entry> 而非 Set<key>：file-size 棘轮需要读回基线**记录的行数**作为上限，
+  // 光有键集合无法判断「存量文件是否又长了」（issue #527）。
+  const byKey = new Map(parsed.exemptions.map(entry => [baselineKey(entry), entry]));
+  return { byKey, entries: parsed.exemptions };
 }
 
 function renderBaseline(violations) {
@@ -212,8 +214,17 @@ function renderBaseline(violations) {
 
 function formatViolation(violation) {
   const where = violation.line === undefined ? violation.file : `${violation.file}:${violation.line}`;
-  const what =
-    violation.rule === "file-size" ? `${violation.lines} 行 > 上限` : `import ${JSON.stringify(violation.detail)}`;
+  let what;
+  if (violation.rule === "file-size") {
+    what =
+      violation.baselineLines !== undefined
+        ? `${violation.lines} 行 > 基线记录 ${violation.baselineLines} 行（+${
+            violation.lines - violation.baselineLines
+          } · 棘轮：存量豁免文件不得再增长）`
+        : `${violation.lines} 行 > 上限`;
+  } else {
+    what = `import ${JSON.stringify(violation.detail)}`;
+  }
   return `${violation.rule}  ${where}  （${what}）`;
 }
 
@@ -244,9 +255,30 @@ function main() {
 
   const baselinePath = join(root, BASELINE_RELATIVE_PATH);
   if (parsed.updateBaseline) {
+    // 先读旧基线，以便打印本次「追认」的行数 Δ——棘轮的第一手承认动作证据（issue #527）。
+    const previous = existsSync(baselinePath) ? readBaseline(baselinePath) : null;
+    const prevByKey = previous && !previous.error ? previous.byKey : new Map();
     mkdirSync(dirname(baselinePath), { recursive: true });
     writeFileSync(baselinePath, renderBaseline(violations));
     console.log(`${LABEL}: 已写入 ${BASELINE_RELATIVE_PATH}（${violations.length} 条存量豁免；改动须随 PR 评审）`);
+    const deltas = [];
+    for (const violation of violations) {
+      if (violation.rule !== "file-size") continue;
+      const before = prevByKey.get(baselineKey(violation));
+      if (before && typeof before.lines === "number" && violation.lines !== before.lines) {
+        deltas.push({ file: violation.file, before: before.lines, after: violation.lines });
+      }
+    }
+    if (deltas.length > 0) {
+      const total = deltas.reduce((sum, d) => sum + (d.after - d.before), 0);
+      console.log(
+        `${LABEL}: ⚠ 本次追认 ${deltas.length} 条 file-size 行数变化（合计 ${total >= 0 ? "+" : ""}${total} 行）——须在 PR 说明理由：`,
+      );
+      for (const d of deltas) {
+        const delta = d.after - d.before;
+        console.log(`  · ${d.file}: ${d.before} → ${d.after}（${delta >= 0 ? "+" : ""}${delta}）`);
+      }
+    }
     return 0;
   }
 
@@ -256,7 +288,18 @@ function main() {
     return 1;
   }
 
-  const fresh = violations.filter(violation => !baseline.keys.has(baselineKey(violation)));
+  // fresh = 新债（键不在基线）+ 棘轮违例（file-size 命中基线但当前行数 > 基线记录值）。
+  // 后者是 issue #527 的核心：基线此前只匹配「规则+文件」，记录的行数从不校验，
+  // 巨型文件因此可在豁免名义下无声增长（本仓实测 6 条累计 +136 行）。
+  const fresh = [];
+  for (const violation of violations) {
+    const entry = baseline.byKey.get(baselineKey(violation));
+    if (!entry) {
+      fresh.push(violation);
+    } else if (violation.rule === "file-size" && typeof entry.lines === "number" && violation.lines > entry.lines) {
+      fresh.push({ ...violation, baselineLines: entry.lines });
+    }
+  }
   // 基线里已消失的条目不是违规，但要报出来：否则基线会静默变成「永久许可清单」。
   const stale = baseline.entries.filter(entry => !violations.some(v => baselineKey(v) === baselineKey(entry)));
 
@@ -266,6 +309,12 @@ function main() {
     for (const violation of fresh) console.error(`  ✗ ${formatViolation(violation)}`);
     const rules = [...new Set(fresh.map(violation => RULE_GUIDANCE[violation.rule]))];
     for (const guidance of rules) console.error(`  → ${guidance}`);
+    const grown = fresh.filter(violation => violation.baselineLines !== undefined).length;
+    if (grown > 0) {
+      console.error(
+        `  → 其中 ${grown} 条是存量豁免文件增长（棘轮）：确属合法增长请 --update-baseline 显式追认（会打印 Δ）并在 PR 说明；否则请拆分`,
+      );
+    }
     console.error(`  存量豁免清单：${BASELINE_RELATIVE_PATH}`);
     return 1;
   }

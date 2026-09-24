@@ -5,7 +5,8 @@
  * 用法：
  *   node scripts/measure-techdebt.mjs --json          # 输出 JSON（默认）
  *   node scripts/measure-techdebt.mjs --update <path> # 写入/刷新 metrics.md
- *   node scripts/measure-techdebt.mjs --check [path]  # 校验基线新鲜度（不写文件；过期则非 0 退出）
+ *   node scripts/measure-techdebt.mjs --check [path]  # 校验基线新鲜度 + 棘轮上限（不写文件；过期/侵蚀则非 0 退出）
+ *   node scripts/measure-techdebt.mjs --update-thresholds [path] # 刷新「越少越好」指标的棘轮上限（打印 Δ）
  *
  * 覆盖指标：
  *   - 体积/复杂度：目录文件数/行数、Top 大文件、TS AST 单函数行数（god function）
@@ -846,6 +847,138 @@ export function checkFreshness(targetPath, renderedBody) {
   process.exitCode = 1;
 }
 
+/** 棘轮上限文件（「越少越好」类指标），与 metrics.md 同目录，独立于整篇基线比对。 */
+const DEFAULT_THRESHOLDS_PATH = "docs/technical-debt/thresholds.json";
+
+/** thresholds.json 缺失时用于引导生成的默认受管指标（越少越好、且是明确的治理目标）。 */
+const DEFAULT_RATCHET_KEYS = ["catchEmpty.total", "catchNoParam.undocumented"];
+
+const THRESHOLDS_COMMENT =
+  "「越少越好」类指标的棘轮上限（scripts/measure-techdebt.mjs 的 checkRatchets 读取）。" +
+  "命中上限=存量不阻塞；超过上限=侵蚀，check 非 0 退出，必须显式 --update-thresholds 承认（会打印本次追认的 Δ，须在 PR 说明理由）。" +
+  "指标改善（低于上限）后应 --update-thresholds 下调锁定收益。勿手改数值绕过——那正是 #530 棘轮要治的行为。";
+
+/**
+ * 按点路径从度量结果里取标量值（如 `catchNoParam.undocumented`）。
+ * 取不到（路径写错 / 指标改名）返回 undefined —— 调用方必须 fail-loud，否则棘轮会静默
+ * 退化为「恒通过」（阈值指向一个不存在的字段就再也不报警），比没有棘轮更糟。
+ */
+export function resolveMetricPath(metrics, dottedPath) {
+  let node = metrics;
+  for (const segment of dottedPath.split(".")) {
+    if (node === null || typeof node !== "object") return undefined;
+    node = node[segment];
+  }
+  return typeof node === "number" ? node : undefined;
+}
+
+function readThresholds(thresholdsPath) {
+  const full = thresholdsPath.startsWith("/") ? thresholdsPath : join(ROOT, thresholdsPath);
+  if (!existsSync(full)) {
+    return { error: `棘轮上限文件不存在：${thresholdsPath}（运行 --update-thresholds 生成）` };
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(readFileSync(full, "utf8"));
+  } catch (error) {
+    return { error: `${thresholdsPath} 不是合法 JSON：${error.message}` };
+  }
+  if (!parsed || typeof parsed.lowerIsBetter !== "object" || parsed.lowerIsBetter === null) {
+    return { error: `${thresholdsPath} 缺少 lowerIsBetter 对象` };
+  }
+  return { full, parsed, lowerIsBetter: parsed.lowerIsBetter };
+}
+
+/**
+ * 棘轮断言（issue #530）：「越少越好」类指标不得超过 thresholds.json 记录的上限。
+ *
+ * 为什么要在整篇基线比对（checkFreshness）之外另立一道：`metrics.md` 的比对只报「与磁盘不一致」，
+ * 而 `measure:update` 会把**任何**变化（含侵蚀）静默重写为合法——无注释无参 catch 0→12 正是这样
+ * 逐次爬升而无人察觉。棘轮把「上限」单列成一个**只能显式修改**的文件：超过即失败，承认增长必须
+ * `--update-thresholds`（打印 Δ、可 review），改善则可下调锁定收益。
+ *
+ * 纯函数：只返回结果，不打印、不改 process.exitCode（便于单测直接断言）。
+ * @returns {{ error?: string, violations: Array, improvements: Array, atLimit: number }}
+ */
+export function checkRatchets(metrics, thresholdsPath = DEFAULT_THRESHOLDS_PATH) {
+  const thresholds = readThresholds(thresholdsPath);
+  if (thresholds.error) return { error: thresholds.error, violations: [], improvements: [], atLimit: 0 };
+  const violations = [];
+  const improvements = [];
+  let atLimit = 0;
+  for (const [path, limit] of Object.entries(thresholds.lowerIsBetter)) {
+    const current = resolveMetricPath(metrics, path);
+    if (current === undefined) violations.push({ path, limit, current, unknown: true });
+    else if (current > limit) violations.push({ path, limit, current });
+    else if (current < limit) improvements.push({ path, limit, current });
+    else atLimit += 1;
+  }
+  return { violations, improvements, atLimit };
+}
+
+/** 把 checkRatchets 的结果打印到 stderr/stdout，违例时置 process.exitCode = 1。 */
+function printRatchetCheck(metrics, thresholdsPath) {
+  const { error, violations, improvements, atLimit } = checkRatchets(metrics, thresholdsPath);
+  if (error) {
+    console.error(`✗ 棘轮：${error}`);
+    process.exitCode = 1;
+    return;
+  }
+  if (violations.length > 0) {
+    console.error(`✗ 棘轮上限被突破（${thresholdsPath}）——「越少越好」的指标恶化了：`);
+    for (const v of violations) {
+      if (v.unknown) console.error(`  ✗ ${v.path}: 取不到当前值（指标改名？请同步 thresholds.json）`);
+      else console.error(`  ✗ ${v.path}: 当前 ${v.current} > 上限 ${v.limit}（+${v.current - v.limit}）`);
+    }
+    console.error("  → 要么修掉新增的债务让它回落，要么显式承认：");
+    console.error("    node scripts/measure-techdebt.mjs --update-thresholds   （打印本次追认的 Δ，须在 PR 说明理由）");
+    console.error(
+      "  说明：这正是 #530 要治的形态——基线被顺手刷新、侵蚀无声爬升；棘轮把「承认」变成一次可 review 的改动。",
+    );
+    process.exitCode = 1;
+    return;
+  }
+  const tracked = atLimit + improvements.length;
+  console.log(`✓ 棘轮：${tracked} 项「越少越好」指标均 ≤ 上限（${thresholdsPath}）`);
+  for (const imp of improvements) {
+    console.log(`  · ${imp.path}: 当前 ${imp.current} < 上限 ${imp.limit} —— 可 --update-thresholds 下调锁定收益`);
+  }
+}
+
+/**
+ * 用当前度量值重写棘轮上限，返回逐项 Δ（升 = 承认侵蚀，降 = 锁定改善）。
+ * 只刷新文件里**已有**的键（新增受管指标是一次有意的 thresholds.json 编辑，不自动扩张）。
+ */
+export function updateThresholds(metrics, thresholdsPath = DEFAULT_THRESHOLDS_PATH) {
+  const full = thresholdsPath.startsWith("/") ? thresholdsPath : join(ROOT, thresholdsPath);
+  const existingParsed = existsSync(full) ? JSON.parse(readFileSync(full, "utf8")) : {};
+  const existing =
+    existingParsed.lowerIsBetter && typeof existingParsed.lowerIsBetter === "object"
+      ? existingParsed.lowerIsBetter
+      : null;
+  const keys = existing ? Object.keys(existing) : DEFAULT_RATCHET_KEYS;
+  const next = {};
+  const deltas = [];
+  for (const path of keys) {
+    const current = resolveMetricPath(metrics, path);
+    if (current === undefined) {
+      return { error: `棘轮指标路径取不到值：${path}（指标改名了？请同步更新 ${thresholdsPath}）` };
+    }
+    next[path] = current;
+    const before = existing && typeof existing[path] === "number" ? existing[path] : undefined;
+    if (before !== undefined && before !== current) deltas.push({ path, before, after: current });
+  }
+  const sorted = Object.fromEntries(Object.entries(next).sort(([a], [b]) => a.localeCompare(b)));
+  const doc = {
+    $comment: typeof existingParsed.$comment === "string" ? existingParsed.$comment : THRESHOLDS_COMMENT,
+    version: typeof existingParsed.version === "number" ? existingParsed.version : 1,
+    lowerIsBetter: sorted,
+  };
+  mkdirSync(dirname(full), { recursive: true });
+  writeFileSync(full, `${JSON.stringify(doc, null, 2)}\n`, "utf8");
+  return { keys, deltas };
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const m = await measure();
@@ -858,7 +991,29 @@ async function main() {
 
   const checkIdx = args.indexOf("--check");
   if (checkIdx !== -1) {
-    checkFreshness(args[checkIdx + 1] ?? DEFAULT_METRICS_PATH, md);
+    const metricsPath = args[checkIdx + 1] ?? DEFAULT_METRICS_PATH;
+    checkFreshness(metricsPath, md);
+    // 棘轮上限与 metrics.md 同目录：整篇比对管「漂移」，棘轮管「侵蚀」，两者都要过。
+    printRatchetCheck(m, join(dirname(metricsPath), "thresholds.json"));
+    return;
+  }
+
+  const thresholdsIdx = args.indexOf("--update-thresholds");
+  if (thresholdsIdx !== -1) {
+    const next = args[thresholdsIdx + 1];
+    const thresholdsPath = next && !next.startsWith("--") ? next : DEFAULT_THRESHOLDS_PATH;
+    const result = updateThresholds(m, thresholdsPath);
+    if (result.error) {
+      console.error(`✗ ${result.error}`);
+      process.exitCode = 1;
+      return;
+    }
+    console.log(`✓ 棘轮上限已刷新：${thresholdsPath}（${result.keys.length} 项受管指标）`);
+    for (const d of result.deltas) {
+      const delta = d.after - d.before;
+      const tag = delta > 0 ? "⚠ 承认侵蚀，须在 PR 说明理由" : "✓ 锁定改善";
+      console.log(`  · ${d.path}: ${d.before} → ${d.after}（${delta >= 0 ? "+" : ""}${delta}） ${tag}`);
+    }
     return;
   }
 

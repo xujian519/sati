@@ -7,6 +7,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import {
+  checkRatchets,
   isDoubleAssertionThroughUnknown,
   isVendored,
   listFiles,
@@ -14,6 +15,8 @@ import {
   metricBodyDiff,
   normalizeForCheck,
   perModuleOf,
+  resolveMetricPath,
+  updateThresholds,
   VENDORED_SUBTREES,
 } from "./measure-techdebt.mjs";
 
@@ -366,4 +369,93 @@ test("【负控制】catch 口径含 ui/server（#341）", async () => {
   // `catchEmpty` 与 `catchNoParam` 由 measure() 里同一个文件集喂入，故钉住其一即可覆盖两者；
   // 一旦回退成「仅 src + ui/src」，ui/server 会从模块分布里整体消失，「空 catch {}」重新假报 0。
   assert.ok((m.catchNoParam.perModule["ui/server"] ?? 0) > 0, "ui/server 未进入 catch 口径");
+});
+
+// ── #530 棘轮：「越少越好」类指标不得超过 thresholds.json 记录的上限 ──────────────
+// checkRatchets / updateThresholds / resolveMetricPath 都是纯函数（不打印、不改 exitCode），
+// 用临时 thresholds 文件直测；这样断言的是**口径本身**而非某次运行的 stdout。
+
+function tempThresholds(t, lowerIsBetter) {
+  const dir = mkdtempSync(join(tmpdir(), "sati-ratchet-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const path = join(dir, "thresholds.json");
+  writeFileSync(path, `${JSON.stringify({ $comment: "test", version: 1, lowerIsBetter }, null, 2)}\n`);
+  return path;
+}
+
+test("resolveMetricPath 按点路径取标量；取不到返回 undefined", () => {
+  const m = { catchNoParam: { undocumented: 17 }, catchEmpty: { total: 0 } };
+  assert.equal(resolveMetricPath(m, "catchNoParam.undocumented"), 17);
+  assert.equal(resolveMetricPath(m, "catchEmpty.total"), 0);
+  assert.equal(resolveMetricPath(m, "catchNoParam.nope"), undefined);
+  assert.equal(resolveMetricPath(m, "missing.deep"), undefined);
+});
+
+test("checkRatchets：等于上限=放行，低于上限=改善，高于上限=违例", t => {
+  const path = tempThresholds(t, { "catchNoParam.undocumented": 12 });
+  const atLimit = checkRatchets({ catchNoParam: { undocumented: 12 } }, path);
+  assert.equal(atLimit.violations.length, 0);
+  assert.equal(atLimit.atLimit, 1);
+
+  const improved = checkRatchets({ catchNoParam: { undocumented: 11 } }, path);
+  assert.equal(improved.violations.length, 0);
+  assert.deepEqual(improved.improvements, [{ path: "catchNoParam.undocumented", limit: 12, current: 11 }]);
+
+  // 计划里的判据：「基线 12、树 13 → 非 0」
+  const eroded = checkRatchets({ catchNoParam: { undocumented: 13 } }, path);
+  assert.deepEqual(eroded.violations, [{ path: "catchNoParam.undocumented", limit: 12, current: 13 }]);
+});
+
+test("checkRatchets：阈值指向不存在的指标 → fail-loud（不静默恒通过）", t => {
+  const path = tempThresholds(t, { "renamed.metric": 5 });
+  const result = checkRatchets({ catchNoParam: { undocumented: 0 } }, path);
+  assert.equal(result.violations.length, 1);
+  assert.equal(result.violations[0].unknown, true);
+});
+
+test("checkRatchets：thresholds 文件缺失 → error（要求生成）", () => {
+  const result = checkRatchets({ catchNoParam: { undocumented: 0 } }, "/nonexistent/thresholds.json");
+  assert.match(result.error, /棘轮上限文件不存在/);
+});
+
+test("updateThresholds：刷新后放行，且返回逐项 Δ（升=侵蚀，降=改善）", t => {
+  const path = tempThresholds(t, { "catchNoParam.undocumented": 12, "catchEmpty.total": 0 });
+  // 树恶化到 13、空 catch 仍 0：先确认违例。
+  const metrics = { catchNoParam: { undocumented: 13 }, catchEmpty: { total: 0 } };
+  assert.equal(checkRatchets(metrics, path).violations.length, 1);
+
+  const result = updateThresholds(metrics, path);
+  assert.equal(result.error, undefined);
+  assert.deepEqual(result.deltas, [{ path: "catchNoParam.undocumented", before: 12, after: 13 }]);
+  // 刷新后同一棵树放行（承认动作生效）。
+  assert.equal(checkRatchets(metrics, path).violations.length, 0);
+  // 只重写已有键、保留 $comment/version、按键排序。
+  const written = JSON.parse(readFileSync(path, "utf8"));
+  assert.deepEqual(written.lowerIsBetter, { "catchEmpty.total": 0, "catchNoParam.undocumented": 13 });
+  assert.equal(written.$comment, "test");
+});
+
+test("updateThresholds：改善时下调上限锁定收益（Δ 记为负）", t => {
+  const path = tempThresholds(t, { "catchNoParam.undocumented": 17 });
+  const result = updateThresholds({ catchNoParam: { undocumented: 14 } }, path);
+  assert.deepEqual(result.deltas, [{ path: "catchNoParam.undocumented", before: 17, after: 14 }]);
+  assert.equal(JSON.parse(readFileSync(path, "utf8")).lowerIsBetter["catchNoParam.undocumented"], 14);
+});
+
+test("updateThresholds：文件缺失时按默认受管指标引导生成", t => {
+  const dir = mkdtempSync(join(tmpdir(), "sati-ratchet-boot-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const path = join(dir, "thresholds.json");
+  const result = updateThresholds({ catchEmpty: { total: 0 }, catchNoParam: { undocumented: 17 } }, path);
+  assert.equal(result.error, undefined);
+  assert.deepEqual(JSON.parse(readFileSync(path, "utf8")).lowerIsBetter, {
+    "catchEmpty.total": 0,
+    "catchNoParam.undocumented": 17,
+  });
+});
+
+test("updateThresholds：指标路径取不到值 → error（不写坏文件）", t => {
+  const path = tempThresholds(t, { "renamed.metric": 5 });
+  const result = updateThresholds({ catchNoParam: { undocumented: 0 } }, path);
+  assert.match(result.error, /取不到值：renamed\.metric/);
 });

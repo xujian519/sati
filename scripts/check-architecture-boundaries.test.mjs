@@ -189,3 +189,40 @@ test("--update-baseline 会移除已消失的条目（基线不变成永久许�
   assert.equal(updated.status, 0, updated.stderr);
   assert.deepEqual(JSON.parse(readFileSync(join(root, BASELINE), "utf8")).exemptions, []);
 });
+
+// #527 棘轮：基线记录的行数是**上限**，存量豁免文件再增长即视为新违规。
+test("R3 棘轮：存量豁免文件增长 → 失败并列 Δ；--update-baseline 追认后放行", t => {
+  const root = seedCleanTree(t, "ratchet");
+  write(root, "src/big.ts", bigFile(850));
+  run(root, ["--update-baseline"]); // 基线记录 850 行
+  assert.equal(run(root).status, 0, "登记后应当放行");
+
+  // 同一文件长到 900 行（仍命中「规则+文件」键，但超过基线记录值）。
+  write(root, "src/big.ts", bigFile(900));
+  const grown = run(root);
+  assert.equal(grown.status, 1, "存量文件增长必须被棘轮拦下");
+  assert.match(grown.stderr, /900 行 > 基线记录 850 行（\+50 · 棘轮/);
+  assert.match(grown.stderr, /其中 1 条是存量豁免文件增长/);
+
+  // --update-baseline 显式追认，并打印本次的 Δ。
+  const ack = run(root, ["--update-baseline"]);
+  assert.equal(ack.status, 0, ack.stderr);
+  assert.match(ack.stdout, /本次追认 1 条 file-size 行数变化（合计 \+50 行）/);
+  assert.match(ack.stdout, /src\/big\.ts: 850 → 900（\+50）/);
+  assert.equal(JSON.parse(readFileSync(join(root, BASELINE), "utf8")).exemptions[0].lines, 900);
+
+  // 追认后放行。
+  assert.equal(run(root).status, 0, "追认后应当放行");
+});
+
+// 负控制：把棘轮判据（当前行数 > 基线记录值）去掉，增长用例必须重新变绿——
+// 证明拦住增长的是棘轮，而不是别的规则。
+test("R3 棘轮负控制：文件缩小到基线以下不触发（判据是「超过记录值」而非「命中基线」）", t => {
+  const root = seedCleanTree(t, "ratchet-shrink");
+  write(root, "src/big.ts", bigFile(900));
+  run(root, ["--update-baseline"]); // 记录 900
+  write(root, "src/big.ts", bigFile(850)); // 缩到 850（仍 > 800 上限，但 ≤ 记录值）
+  const result = run(root);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /1 条已失效待清理|存量豁免 1 条/);
+});

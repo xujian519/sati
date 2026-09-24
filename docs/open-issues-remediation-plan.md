@@ -539,7 +539,7 @@ pnpm test && (cd ui && pnpm test)              # 后端 + UI 测试（pnpm check
 | 批次 | 议题 | 状态 | PR / commit | 实测数字（落地后填） |
 |---|---|---|---|---|
 | **P1** | #520 · #530（口径） | ✅ **已交付**（CI 全绿） | [PR #557](https://github.com/xujian519/sati/pull/557) · `f04b23fc1` | `src/context` **316 → 98**；`undocumented` **12 → 17**（总计 671 → 678 · 已注释 659 → 661）；`ui/src` 576 / 92,914 → **589 / 94,379**；`vendored` 保持 49 / 16,682（边界未放宽） |
-| **P2** | #527 · #530（棘轮） | ⬜ 未开始 | | 追认 Δ = ? |
+| **P2** | #527 · #530（棘轮） | ✅ **已交付** | [PR #558](https://github.com/xujian519/sati/pull/558) · `110438f9` | `file-size` 棘轮首刷追认 **6 条 / 合计 +136 行**（`types.ts` +73 · `InProcessGateway.ts` +29 · `useChatRealtimeHandlers.ts` +20 · `sati.ts` +7 · `useSessionStore.ts` +5 · `AppShellV2.tsx` +2）；新增 `docs/technical-debt/thresholds.json`（`catchEmpty.total`=0 · `catchNoParam.undocumented`=17）；`check-architecture-boundaries.test.mjs` 10→**12** 例、`measure-techdebt.test.mjs` 35→**43** 例 |
 | **P3** | #536 | ⬜ 未开始 | | 首 token 阻塞消除证据 |
 | **P4** | #537 | ⬜ 未开始 | | 200 次笔记累计 MiB |
 | **P5** | #533① · #534 · #529 | ⬜ 未开始 | | 文件树节点/耗时、`/commits` 耗时 |
@@ -562,10 +562,9 @@ pnpm test && (cd ui && pnpm test)              # 后端 + UI 测试（pnpm check
 
 | # | 520 | 527 | 528 | 529 | 530 | 531 | 532 | 533 | 534 | 535 | 536 | 537 | 538 | 541 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 状态 | 🔄 | ⬜ | ⬜ | ⬜ | 🔄 | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+| 状态 | ✅ | 🔄 | ⬜ | ⬜ | 🔄 | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
 
-> 🔄 = 已有在途交付。#520 与 #530 的**口径段**由 [PR #557](https://github.com/xujian519/sati/pull/557) 交付（CI 全绿，待合并）；#530 的**棘轮段**在 P2，届时由该 PR 写 `Closes #530`——本 PR 只写「关联 Issue: #530」。
-> 合并后：#520 由 `Closes #520` 自动关闭；#530 保持 open 直至 P2。
+> ✅ = 已合并关闭。🔄 = 已有在途交付。#520 由 [PR #557](https://github.com/xujian519/sati/pull/557) 交付并已合并（`Closes #520` 自动关闭）。#530 的**口径段**由 PR #557 交付、**棘轮段**由 P2（[PR #558](https://github.com/xujian519/sati/pull/558)）交付，该 PR 写 `Closes #530`。#527 由 P2 同一 PR 写 `Closes #527`。
 
 **分诊动作（逐批次启动时做）**：批次启动时把该批议题改 `status: triage` → `status: in-progress`（`docs/issue-management.md` §3 的「推进」动作），并同时豁免 `stale.yml` 的自动归档。
 
