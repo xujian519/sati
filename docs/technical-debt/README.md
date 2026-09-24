@@ -12,6 +12,8 @@
 |---|---|
 | `backlog.md` | 债务清单（活账本），按模块分节，每条含严重级/位置/影响/建议/状态 |
 | `metrics.md` | 可复现指标基线与趋势（由 `scripts/measure-techdebt.mjs` 生成） |
+| `thresholds.json` | 「越少越好」类指标的**棘轮上限**（由 `measure-techdebt.mjs --update-thresholds` 刷新；超过即门禁非 0） |
+| `architecture-baseline.json` | 架构边界门禁的存量豁免清单；`file-size` 条目记录的 `lines` 是**上限**（棘轮，超过即违规） |
 | `next-batches-schedule.md` | 后续批次专项排期建议（阶段化顺序、爆炸半径、浏览器验证、硬截止） |
 | `README.md` | 本文件：方法论、清分级规则、如何保持新鲜 |
 
@@ -114,6 +116,14 @@ pnpm typecheck && pnpm lint && pnpm format:check
    - 快照时间戳与「历史快照」段不计入比对（前者隔日必变、后者是历史记录）。
    - **口径变更须与基线刷新同 PR 落地**：改了 `SCOPE_DOC` / 指标定义却不同步刷新基线，会让门禁
      在下一个人的 PR 上才炸，届时难以定位。
+   - **棘轮（2026-09-24 起，issue #527 / #530）**：整篇比对只报「与磁盘不一致」，而 `measure:update`
+     会把**任何**变化（含侵蚀）静默重写为合法。棘轮在此之上单独拦住「变差」这个方向——
+     ① `metrics.md` 的「越少越好」类指标另有上限文件 `thresholds.json`，`--check` 在整篇比对之后追加断言，
+     当前值超过上限即非 0，承认增长必须 `measure-techdebt.mjs --update-thresholds`（打印逐项 Δ）；
+     ② `architecture-baseline.json` 的 `file-size` 条目记录的 `lines` 是**上限**，存量豁免文件再增长即违规，
+     承认增长必须 `check-architecture-boundaries.mjs --update-baseline`（打印本次追认的 Δ 与合计）。
+     两个刷新入口都强制打印 Δ，让「承认动作」在 PR diff 与 CI 日志里留痕——**顺手刷新正是棘轮要治的行为**。
+     决策见 `docs/notes/implemented/2026-09-24-gate-ratchet-file-size-and-lower-is-better.md`。
 2. 每季度或大版本重跑一次 `pnpm measure:update` 复核趋势（门禁已保证「不静默失真」，这一步是
    为了**留档趋势**而非防止失真）。
 3. 新功能引入新债时顺手在 `backlog.md` 加一条（或触发一次测量对比）。

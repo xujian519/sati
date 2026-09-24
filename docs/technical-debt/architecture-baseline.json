@@ -40,7 +40,7 @@
     {
       "rule": "file-size",
       "file": "src/cli/sati.ts",
-      "lines": 1028
+      "lines": 1035
     },
     {
       "rule": "file-size",
@@ -50,12 +50,12 @@
     {
       "rule": "file-size",
       "file": "src/gateway/client/InProcessGateway.ts",
-      "lines": 1489
+      "lines": 1518
     },
     {
       "rule": "file-size",
       "file": "src/gateway/protocol/types.ts",
-      "lines": 911
+      "lines": 984
     },
     {
       "rule": "file-size",
@@ -130,7 +130,7 @@
     {
       "rule": "file-size",
       "file": "ui/src/components/app-shell/AppShellV2.tsx",
-      "lines": 893
+      "lines": 895
     },
     {
       "rule": "file-size",
@@ -160,7 +160,7 @@
     {
       "rule": "file-size",
       "file": "ui/src/components/chat/hooks/useChatRealtimeHandlers.ts",
-      "lines": 1005
+      "lines": 1025
     },
     {
       "rule": "file-size",
@@ -205,7 +205,7 @@
     {
       "rule": "file-size",
       "file": "ui/src/stores/useSessionStore.ts",
-      "lines": 1347
+      "lines": 1352
     }
   ]
 }

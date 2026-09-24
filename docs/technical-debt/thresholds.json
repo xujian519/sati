@@ -1,0 +1,8 @@
+{
+  "$comment": "「越少越好」类指标的棘轮上限（scripts/measure-techdebt.mjs 的 checkRatchets 读取）。命中上限=存量不阻塞；超过上限=侵蚀，check 非 0 退出，必须显式 --update-thresholds 承认（会打印本次追认的 Δ，须在 PR 说明理由）。指标改善（低于上限）后应 --update-thresholds 下调锁定收益。勿手改数值绕过——那正是 #530 棘轮要治的行为。",
+  "version": 1,
+  "lowerIsBetter": {
+    "catchEmpty.total": 0,
+    "catchNoParam.undocumented": 17
+  }
+}
