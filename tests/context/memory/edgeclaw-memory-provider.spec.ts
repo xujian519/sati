@@ -243,3 +243,69 @@ describe("EdgeClawMemoryProvider retrieve 缓存", () => {
     assert.equal(r2.systemContext, "并发结果");
   });
 });
+
+describe("EdgeClawMemoryProvider abort 竞速（#536）", () => {
+  const baseInput = {
+    query: "同一问题",
+    sessionId: "s1",
+    projectRoot: "/tmp/p",
+    recentMessages: [] as CanonicalMessage[],
+  };
+
+  it("熔断后立即返回（不等内层幽灵调用），空结果不记错误诊断", async () => {
+    const deferred = makeDeferred<{ systemContext: string }>();
+    const controller = new AbortController();
+    const provider = new EdgeClawMemoryProvider({
+      service: makeService({ retrieveContext: async () => deferred.promise }),
+    });
+
+    const pending = provider.retrieve({ ...baseInput, signal: controller.signal });
+    controller.abort();
+    // 内层 deferred 仍未结算，retrieve 却应已返回 ⇒ 证明 abort 竞速生效、不再等 45s×3 幽灵调用。
+    const aborted = await pending;
+    assert.deepEqual(aborted.diagnostics, [], "中止是预期路径，不应记 memory_provider_error");
+    assert.equal(aborted.systemContext, undefined);
+  });
+
+  it("熔断后内层结果被丢弃、不写入缓存（陈旧结果不会注入后续回合）", async () => {
+    const deferred = makeDeferred<{ systemContext: string }>();
+    const controller = new AbortController();
+    let calls = 0;
+    const provider = new EdgeClawMemoryProvider({
+      service: makeService({
+        retrieveContext: async () => {
+          calls += 1;
+          return calls === 1 ? deferred.promise : { systemContext: "第二次新检索" };
+        },
+      }),
+    });
+
+    const pending = provider.retrieve({ ...baseInput, signal: controller.signal });
+    controller.abort();
+    await pending;
+    // 内层在 abort **之后**才结算：结果必须被丢弃，绝不能进 TTL 缓存。
+    deferred.resolve({ systemContext: "幽灵结果" });
+    await new Promise(resolve => setImmediate(resolve));
+
+    // 缓存未被污染 ⇒ 再次 retrieve 必须重新调用底层（calls=2），而非返回幽灵结果。
+    const second = await provider.retrieve(baseInput);
+    assert.equal(calls, 2, "abort 的结果不应入缓存，二次检索须重新调用底层");
+    assert.equal(second.systemContext, "第二次新检索");
+  });
+
+  it("内层在 abort 后 reject 不致 unhandledRejection（幽灵调用被吞掉）", async () => {
+    const deferred = makeDeferred<{ systemContext: string }>();
+    const controller = new AbortController();
+    const provider = new EdgeClawMemoryProvider({
+      service: makeService({ retrieveContext: async () => deferred.promise }),
+    });
+
+    const pending = provider.retrieve({ ...baseInput, signal: controller.signal });
+    controller.abort();
+    await pending;
+    // 内层迟到的 reject 必须被适配层的空 catch 吞掉（否则进程级 unhandledRejection）。
+    deferred.reject(new Error("ghost late failure"));
+    await new Promise(resolve => setImmediate(resolve));
+    assert.ok(true, "幽灵调用的迟到 reject 未冒泡");
+  });
+});

@@ -92,6 +92,13 @@ export type DefaultContextRuntimeOptions = {
   truncateFirstKeepRatio?: number;
   /** Timeout budget for MemoryResolver.retrieve during prepareForModel. */
   memoryRetrievalTimeoutMs?: number;
+  /**
+   * 记忆注入预算（毫秒，#536）：`prepareForModel` 等待检索的上限。预算内返回 → 本轮注入；
+   * 超预算 → 本轮空注入，但**不中止**检索（后台跑完预热 provider TTL 缓存，下一轮同 query
+   * 命中）。缺省 2000。`<= 0` 关闭非阻塞、退化为完整等待（旧行为）。与
+   * `memoryRetrievalTimeoutMs`（硬熔断：中止并丢弃内层结果）正交。
+   */
+  memoryInjectionBudgetMs?: number;
   /** 项目知识偏好（per-project knowledge profile），透传给 MemoryResolver.retrieve。 */
   knowledgeProfile?: KnowledgeProfile;
   /**
@@ -118,6 +125,12 @@ type PromptTimeState = {
 const DEFAULT_MAX_CONTEXT_TOKENS = 8192;
 const DEFAULT_TRUNCATE_FIRST_RATIO = 0.5;
 const DEFAULT_MEMORY_RETRIEVAL_TIMEOUT_MS = 30_000;
+/**
+ * 记忆注入预算缺省值（#536）。选 2s：覆盖 provider TTL 缓存命中、同步 FTS/DB 检索与多数
+ * 快响应，使「单轮问答」也能本轮注入；只有真正慢的冷检索（memory-gate LLM / 语义 embedding）
+ * 才退到后台预热、下一轮注入。可用 `memory.injectionBudgetMs` 配置覆盖。
+ */
+const DEFAULT_MEMORY_INJECTION_BUDGET_MS = 2_000;
 const RELAXED_FULL_COMPACTION_KEEP_TAIL_RATIO = 0.05;
 const FULL_COMPACTION_BLOCKING_COOLDOWN_MS = 30_000;
 const FULL_COMPACTION_MIN_EFFECTIVE_SAVINGS_RATIO = 0.1;
@@ -146,6 +159,7 @@ export class DefaultContextRuntime implements ContextRuntime {
   private readonly maxContextTokens: number;
   private readonly truncateFirstKeepRatio: number;
   private readonly memoryRetrievalTimeoutMs: number;
+  private readonly memoryInjectionBudgetMs: number;
   private readonly knowledgeProfile?: KnowledgeProfile;
   private readonly now: () => Date;
   /** 会话提示日期锚点与已追加的跨日通知；解析与提交规则见 `resolvePromptTime`。 */
@@ -185,6 +199,7 @@ export class DefaultContextRuntime implements ContextRuntime {
     this.maxContextTokens = options.maxContextTokens ?? DEFAULT_MAX_CONTEXT_TOKENS;
     this.truncateFirstKeepRatio = options.truncateFirstKeepRatio ?? DEFAULT_TRUNCATE_FIRST_RATIO;
     this.memoryRetrievalTimeoutMs = options.memoryRetrievalTimeoutMs ?? DEFAULT_MEMORY_RETRIEVAL_TIMEOUT_MS;
+    this.memoryInjectionBudgetMs = options.memoryInjectionBudgetMs ?? DEFAULT_MEMORY_INJECTION_BUDGET_MS;
     this.knowledgeProfile = options.knowledgeProfile;
     this.now = options.now ?? (() => new Date());
   }
@@ -244,21 +259,38 @@ export class DefaultContextRuntime implements ContextRuntime {
     // 检索 query 逐轮变化，放进 system prompt 会把它前面的整段缓存前缀一起作废。
     const tailInjections: InjectionRecord[] = [];
     if (memoryPromise) {
-      const memory = await memoryPromise;
-      for (const block of memory.attachments) {
-        for (const content of block.content) {
-          if (content.type === "text" && content.text.trim().length > 0) {
-            const record = { source: "memory", text: content.text };
-            injections.push(record);
-            tailInjections.push(record);
+      // 非阻塞注入（#536）：最多等待 memoryInjectionBudgetMs。预算内返回（provider TTL 缓存
+      // 命中 / 同步 FTS·DB / 快响应）→ 本轮照常注入，单轮问答不退化；超预算 → 本轮空注入，
+      // 但**不中止** memoryPromise，让它在后台跑完写入各 provider 的 TTL 缓存，下一轮同 query
+      // 即命中（「到期即有则注入、超时降级为空 + 后台预热」）。关键：预算到期只「停止等待」，
+      // 真正的取消仅来自硬熔断（memoryRetrievalTimeoutMs）或回合级 abortSignal——二者都在
+      // MemoryAttachmentBuilder 内驱动 controller.abort，会令 provider 丢弃在途结果（见
+      // EdgeClawMemoryProvider 的 raceAbort）。build() 内部已 fail-soft、永不 reject，故后台
+      // promise 无需额外 catch。budgetMs <= 0 时退化为完整等待（旧行为）。
+      const memory = await raceWithInjectionBudget(memoryPromise, this.memoryInjectionBudgetMs);
+      if (memory) {
+        for (const block of memory.attachments) {
+          for (const content of block.content) {
+            if (content.type === "text" && content.text.trim().length > 0) {
+              const record = { source: "memory", text: content.text };
+              injections.push(record);
+              tailInjections.push(record);
+            }
           }
         }
-      }
-      for (const diagnostic of memory.diagnostics) {
+        for (const diagnostic of memory.diagnostics) {
+          diagnostics.push({
+            code: diagnostic.code,
+            severity: diagnostic.severity,
+            message: diagnostic.message,
+          });
+        }
+      } else {
+        // 预算到期、检索仍在后台跑：本轮空注入，记 info 诊断（可观测，不静默丢弃）。
         diagnostics.push({
-          code: diagnostic.code,
-          severity: diagnostic.severity,
-          message: diagnostic.message,
+          code: "memory_retrieval_deferred",
+          severity: "info",
+          message: `Memory retrieval exceeded the ${this.memoryInjectionBudgetMs}ms injection budget; deferred to warm the cache for the next turn.`,
         });
       }
       if (input.abortSignal?.aborted) {
@@ -860,6 +892,25 @@ function extractRecentUserText(messages: CanonicalMessage[]): string | undefined
     }
   }
   return undefined;
+}
+
+/**
+ * 在注入预算内等待记忆检索（#536）。预算到期返回 `undefined`（停止等待），但**不中止**入参
+ * promise——让其在后台继续跑完，写入各 provider 的 TTL 缓存以供下一轮命中。`budgetMs <= 0`
+ * 或非有限值时退化为「完整等待」（旧行为）。返回的 `undefined` 与「检索完成但无内容」不同：
+ * 前者是本轮没等到（已记 `memory_retrieval_deferred`），后者是等到了空结果。
+ */
+async function raceWithInjectionBudget<T>(promise: Promise<T>, budgetMs: number): Promise<T | undefined> {
+  if (!Number.isFinite(budgetMs) || budgetMs <= 0) return promise;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const budget = new Promise<undefined>(resolve => {
+    timer = setTimeout(() => resolve(undefined), budgetMs);
+  });
+  try {
+    return await Promise.race([promise, budget]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 function shouldStopAfterPrePrune(

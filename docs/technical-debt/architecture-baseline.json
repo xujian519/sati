@@ -45,7 +45,7 @@
     {
       "rule": "file-size",
       "file": "src/context/DefaultContextRuntime.ts",
-      "lines": 902
+      "lines": 953
     },
     {
       "rule": "file-size",

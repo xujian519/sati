@@ -202,6 +202,7 @@ export function buildSessionDependencies(deps: SessionDependenciesInput): Sessio
       patentDomainEnabled: runtime.patentDomainEnabled,
       memoryResolver,
       memoryRetrievalTimeoutMs: runtime.snapshot.config.memory?.retrievalTimeoutMs,
+      memoryInjectionBudgetMs: runtime.snapshot.config.memory?.injectionBudgetMs,
       // 项目知识偏好透传：knowledge provider 据此强制注入/加权审查标准
       knowledgeProfile: runtime.snapshot.config.memory?.knowledgeProfile,
       instructionDiscovery,

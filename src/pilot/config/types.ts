@@ -160,6 +160,14 @@ export type PilotMemoryConfig = {
   includeAssistant: boolean;
   maxMessageChars?: number;
   retrievalTimeoutMs?: number;
+  /**
+   * 记忆注入预算（毫秒，#536）：`prepareForModel` 等待检索结果的**上限**。预算内返回
+   * （缓存命中 / 同步 FTS / 快响应）→ 本轮照常注入；超预算 → 本轮空注入，但检索在后台
+   * 跑完写入各 provider 的 TTL 缓存，下一轮同 query 即命中。缺省 2000。`<= 0` 关闭非阻塞、
+   * 退化为「完整等待 retrievalTimeoutMs」（旧行为）。这是「停止等待」预算，与
+   * `retrievalTimeoutMs`（中止内层、丢弃结果的硬熔断）正交。
+   */
+  injectionBudgetMs?: number;
   /** "provider/model" string referencing model.providers, e.g. "openai/gpt-4.1-mini" */
   model?: string;
   apiType?: PilotMemoryApiType;
