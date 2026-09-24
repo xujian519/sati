@@ -7,6 +7,7 @@
  * 不改变任何执行行为；未信任即不装载、以及审批交互属于 1.2b。
  */
 import type { SatiPluginSourceKind } from "../protocol/plugin.js";
+import type { HookBundleBlockedReason } from "./hookBundleDigest.js";
 
 /** 信任存储版本：未知版本一律按空表处理（读路径 fail-closed）。 */
 export const HOOK_TRUST_STORE_VERSION = 1;
@@ -46,6 +47,12 @@ export type HookTrustEntry = {
   status: HookTrustStatus;
   /** 证据缺失/失效的原因（`trusted` 之外才有：没有原因就无法人工复核）。 */
   detail?: string;
+  /**
+   * `blocked` 的结构化原因（#538）：`over_limit`（目录超出哈希上限，须瘦身）vs
+   * `unsafe_content`（含符号链接/越界声明/读盘失败，须人工评审）。仅 `status === "blocked"`
+   * 时有值；面板据此给出不同处置提示，而非只丢一句英文 `detail`。
+   */
+  blockedReason?: HookBundleBlockedReason;
   /** 本次看到的目录内容摘要；`blocked` 时缺省（算不出来）。 */
   digest?: string;
 };

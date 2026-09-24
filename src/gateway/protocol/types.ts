@@ -562,6 +562,12 @@ export type GatewayHookTrustEntry = {
   status: "trusted" | "pending" | "stale" | "revoked" | "blocked";
   /** 证据缺失/失效的原因（`trusted` 之外才有）。 */
   detail?: string;
+  /**
+   * `blocked` 的结构化原因（#538）：`over_limit`（目录超出哈希上限，须瘦身）vs
+   * `unsafe_content`（含符号链接/越界声明/读盘失败，须人工评审）。仅 `status === "blocked"`
+   * 时有值；面板据此本地化提示，而非只渲染英文 `detail`。值与 `HookBundleBlockedReason` 同口径。
+   */
+  blockedReason?: "over_limit" | "unsafe_content";
   /** 当前目录内容摘要（`blocked` 时缺省）。 */
   digest?: string;
   /** 该插件实际声明的 hook（人工评审据此决定是否授权）。 */
@@ -596,7 +602,12 @@ export type GatewayHookTrustDecideInput = {
 export type GatewayHookTrustDecideResult = {
   /** false = 未应用（插件不在该项目、来源非 project、或摘要无法建立）。 */
   applied: boolean;
-  reason?: "unknown_plugin" | "blocked" | "write_failed";
+  /**
+   * 未应用的原因。`blocked_*`（#538）区分摘要算不出来的两类形态：`blocked_over_limit`
+   * （目录超出哈希上限，须瘦身）vs `blocked_unsafe_content`（含符号链接/越界声明/读盘失败，
+   * 须人工评审）——两者处置不同，不再合并成一个 `blocked`。
+   */
+  reason?: "unknown_plugin" | "blocked_over_limit" | "blocked_unsafe_content" | "write_failed";
   /** 应用后的条目（授权/撤销后的最新状态）。 */
   entry?: GatewayHookTrustEntry;
 };

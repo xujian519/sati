@@ -10,7 +10,7 @@ import type { SatiHookEvent } from "../../hooks/protocol/events.js";
 import type { SatiHookMatcher, SatiHooksSettings } from "../../hooks/protocol/settings.js";
 import { findCanonicalProjectRoot } from "../../../shared/paths/findCanonicalProjectRoot.js";
 import type { SatiLoadedPlugin } from "../protocol/plugin.js";
-import { computeHookBundleDigest } from "./hookBundleDigest.js";
+import { computeHookBundleDigest, type HookBundleDigestComputer } from "./hookBundleDigest.js";
 import { hookTrustKey } from "./HookTrustStore.js";
 import type { HookTrustEntry, HookTrustEvaluation, HookTrustFile } from "./protocol.js";
 
@@ -34,11 +34,19 @@ export async function evaluateProjectHookTrust(input: {
   plugins: SatiLoadedPlugin[];
   workspaceIdentityKey: string;
   trustFile: HookTrustFile;
+  /**
+   * 摘要计算入口（#538）。默认 `computeHookBundleDigest`（纯内容哈希，**强制路径必须用
+   * 这个**：会话装配装载、授权决策）。报告/面板的**可见性**路径可注入
+   * `computeHookBundleDigestForReport`（进程内 memo）以跳过重复全量读盘——但 memo 按
+   * `(size, mtime)` 签名失效、不含内容，绝不可喂给强制路径（见 `hookBundleDigest.ts` 头注）。
+   */
+  computeDigest?: HookBundleDigestComputer;
 }): Promise<HookTrustEvaluation> {
+  const computeDigest = input.computeDigest ?? computeHookBundleDigest;
   const entries: HookTrustEntry[] = [];
   for (const plugin of input.plugins) {
     if (plugin.source !== "project" || !declaresHooks(plugin)) continue;
-    entries.push(await evaluatePlugin(plugin, input.workspaceIdentityKey, input.trustFile));
+    entries.push(await evaluatePlugin(plugin, input.workspaceIdentityKey, input.trustFile, computeDigest));
   }
   // 稳定顺序：报告签名按内容比对，顺序抖动不该造成「内容变了」的假象。
   entries.sort((a, b) => (a.pluginId < b.pluginId ? -1 : a.pluginId > b.pluginId ? 1 : 0));
@@ -49,12 +57,13 @@ async function evaluatePlugin(
   plugin: SatiLoadedPlugin,
   workspaceIdentityKey: string,
   trustFile: HookTrustFile,
+  computeDigest: HookBundleDigestComputer,
 ): Promise<HookTrustEntry> {
   const pluginId = `${plugin.name}@${plugin.source}`;
   const base = { pluginId, pluginName: plugin.name, source: plugin.source };
-  const bundle = await computeHookBundleDigest(plugin.path, plugin.manifest);
+  const bundle = await computeDigest(plugin.path, plugin.manifest);
   if (bundle.kind === "blocked") {
-    return { ...base, status: "blocked", detail: bundle.detail };
+    return { ...base, status: "blocked", detail: bundle.detail, blockedReason: bundle.reason };
   }
   const record = trustFile.entries[hookTrustKey(workspaceIdentityKey, pluginId)];
   if (record === undefined) {

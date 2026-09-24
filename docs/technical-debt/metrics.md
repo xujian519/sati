@@ -7,10 +7,10 @@
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1066 / 181001 |
+| src TS 文件 / 行数 | 1066 / 181193 |
 | src JS 文件 | 0 |
 | tests 文件 | 606 |
-| ui/src 文件 / 行数 | 589 / 94379 |
+| ui/src 文件 / 行数 | 589 / 94453 |
 | ui/server 文件 / 行数 | 115 / 32401 |
 
 ## 指标口径
@@ -33,8 +33,8 @@
 | 裸 `console.*` | 158 | cli(137) · telemetry(8) · ui/server(5) |
 | 空 `catch {}` | 0 | — |
 | 无参 `catch {`（总计） | 677 | ui/server(151) · ui/src(121) · adapters(70) |
-| ↳ **无注释**（隐患类，目标） | **17** | — |
-| ↳ 已带意图注释 | 660 | — |
+| ↳ **无注释**（隐患类，目标） | **15** | — |
+| ↳ 已带意图注释 | 662 | — |
 | `TODO/HACK/FIXME/XXX` | 11 | always-on(4) · tests(4) · ui/src(2) |
 | 分层违规 `ui/server→src` | 14 | — |
 | 分层违规 `src→ui` | 0 | — |
@@ -135,7 +135,7 @@
 | `src/cli/sati.ts` | 1035 |
 | `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` | 1025 |
 | `src/adapters/channel/protocol/ImLiveReplyController.ts` | 1017 |
-| `src/gateway/protocol/types.ts` | 984 |
+| `src/gateway/protocol/types.ts` | 995 |
 | `ui/src/components/main-content-v2/FilesV2.tsx` | 964 |
 | `src/context/DefaultContextRuntime.ts` | 953 |
 
@@ -205,7 +205,7 @@
 | chat | 375 | 375 | 0 | 0 |
 | codeEditor | 143 | 143 | 0 | 0 |
 | common | 435 | 435 | 0 | 0 |
-| hookTrust | 17 | 17 | 0 | 0 |
+| hookTrust | 19 | 19 | 0 | 0 |
 | kanban | 44 | 44 | 0 | 0 |
 | routing | 64 | 64 | 0 | 0 |
 | settings | 1060 | 1060 | 0 | 0 |

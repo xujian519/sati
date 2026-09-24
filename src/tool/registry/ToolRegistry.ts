@@ -19,8 +19,26 @@ export class ToolRegistry {
 
   constructor(private readonly options: ToolRegistryOptions = {}) {}
 
+  /**
+   * Read-only view of this registry's construction options, so *derived*
+   * registries (`clone()`, `filterAvailableTools()`, sub-agent scoped registries)
+   * can propagate the `requireOutputSchema` strict bit instead of silently
+   * dropping it (#532). Callers only forward this into `new ToolRegistry(...)`.
+   */
+  get registryOptions(): ToolRegistryOptions {
+    return this.options;
+  }
+
   register(tool: SatiToolDefinition): void {
-    if (this.options.requireOutputSchema === true && tool.outputSchema === undefined) {
+    // MCP tools are exempt from the outputSchema requirement: their result shape
+    // cannot be statically declared — `src/mcp/client/operations.ts` returns
+    // `content: unknown`, the server's `structuredContent` is dropped, and
+    // `toToolSpec` does not forward the server schema. Giving them a permissive
+    // `outputSchema` could only be vacuously true (our validation subset passes
+    // `{}` unconditionally), i.e. dressing "no contract" up as "has a contract".
+    // So we honestly exempt `kind === "mcp"` (#532); forwarding the server-side
+    // schema is a separate, later cut.
+    if (this.options.requireOutputSchema === true && tool.outputSchema === undefined && tool.kind !== "mcp") {
       throw new Error(
         `Tool ${tool.name} is missing its canonical outputSchema (phase 4 T9: new tools must declare one).`,
       );
@@ -107,7 +125,9 @@ export class ToolRegistry {
    * definitions are shared by reference — only the lookup maps are copied.
    */
   clone(): ToolRegistry {
-    const copy = new ToolRegistry();
+    // Forward `this.options` so the clone keeps the `requireOutputSchema` strict
+    // bit; constructing bare would silently drop it (#532).
+    const copy = new ToolRegistry(this.options);
     for (const [name, tool] of this.toolsByName) {
       copy.toolsByName.set(name, tool);
     }

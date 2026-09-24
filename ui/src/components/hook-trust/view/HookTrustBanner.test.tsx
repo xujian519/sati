@@ -121,4 +121,53 @@ describe("HookTrustBanner", () => {
     await waitFor(() => expect(list).toHaveBeenCalled());
     expect(screen.queryByTestId("hook-trust-banner")).toBeNull();
   });
+
+  it("blocked 条目按结构化原因渲染本地化提示，而非英文 detail（#538）", async () => {
+    list.mockResolvedValue(
+      snapshot([
+        {
+          pluginId: "big@project",
+          pluginName: "big",
+          pluginRoot: "/repo/.sati/plugins/big",
+          status: "blocked",
+          blockedReason: "over_limit",
+          detail: "plugin directory exceeds the content-hash limits",
+          hooks: [],
+        },
+        {
+          pluginId: "linked@project",
+          pluginName: "linked",
+          pluginRoot: "/repo/.sati/plugins/linked",
+          status: "blocked",
+          blockedReason: "unsafe_content",
+          hooks: [],
+        },
+      ]),
+    );
+    render(<HookTrustBanner projectPath="/repo" />);
+    fireEvent.click(await screen.findByRole("button", { name: "expand" }));
+    // 两类原因各自映射到本地化键。
+    expect(screen.getByText("blockedReason.over_limit")).toBeTruthy();
+    expect(screen.getByText("blockedReason.unsafe_content")).toBeTruthy();
+    // 英文 detail 不再直接渲染（被本地化提示取代）。
+    expect(screen.queryByText(/exceeds the content-hash limits/u)).toBeNull();
+  });
+
+  it("blocked 但无结构化原因时回退到 detail（向后兼容旧网关载荷）", async () => {
+    list.mockResolvedValue(
+      snapshot([
+        {
+          pluginId: "old@project",
+          pluginName: "old",
+          pluginRoot: "/repo/.sati/plugins/old",
+          status: "blocked",
+          detail: "legacy detail text",
+          hooks: [],
+        },
+      ]),
+    );
+    render(<HookTrustBanner projectPath="/repo" />);
+    fireEvent.click(await screen.findByRole("button", { name: "expand" }));
+    expect(screen.getByText("legacy detail text")).toBeTruthy();
+  });
 });
