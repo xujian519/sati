@@ -7,7 +7,13 @@ import test from "node:test";
 import { appendFileSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { TeamShare, type TeamShareEntry } from "../../../../src/agent/team/index.js";
+import {
+  TeamShare,
+  clearTeamShareCache,
+  getTeamShare,
+  writeTeamShare,
+  type TeamShareEntry,
+} from "../../../../src/agent/team/index.js";
 
 function boardPath(): string {
   return join(mkdtempSync(join(tmpdir(), "sati-team-share-")), "share.jsonl");
@@ -92,4 +98,56 @@ test("TeamShare：load 容忍坏行（追加写并发读到半行不崩）", () 
   appendFileSync(path, JSON.stringify({ key: 123 }) + "\n");
   const reloaded = new TeamShare(path);
   assert.equal(reloaded.size(), 1, "坏行/缺字段行跳过，好行保留");
+});
+
+/**
+ * #531 实例缓存：同路径在 (mtimeMs, size) 未变时复用同一 TeamShare 实例，避免每次派发/
+ * 面板读取都全量 readFileSync + 逐行 JSON.parse。负控制内建于「同一实例」断言：若 getTeamShare
+ * 退回每次 new TeamShare，引用相等断言即红。
+ */
+test("#531 getTeamShare：(mtime,size) 未变 → 复用同一实例（load 只跑一次）", () => {
+  clearTeamShareCache();
+  const path = boardPath();
+  const first = getTeamShare(path);
+  const second = getTeamShare(path);
+  assert.equal(first, second, "签名未变 → 缓存命中返回同一实例（未重新构造/load）");
+});
+
+test("#531 getTeamShare：文件 size 变化 → 签名失效 → 重建并读回新内容", () => {
+  clearTeamShareCache();
+  const path = boardPath();
+  const first = getTeamShare(path);
+  assert.equal(first.size(), 0, "前置：空黑板");
+  // 外部追加（绕过实例）→ size 变化 → 下次访问必须失配重建
+  appendFileSync(path, `${JSON.stringify(entry({ key: "外部", value: "v", writer: "m9" }))}\n`);
+  const second = getTeamShare(path);
+  assert.notEqual(first, second, "签名失配 → 重建新实例（负控制：缓存不失效则返回同一实例红）");
+  assert.equal(second.size(), 1, "新实例读回外部追加的条目");
+});
+
+test("#531 writeTeamShare：写后刷新签名 → 后续读命中热实例，键序保持首次出现序", () => {
+  clearTeamShareCache();
+  const path = boardPath();
+  writeTeamShare(path, entry({ key: "k1", value: "v1", writer: "m1" }));
+  const afterWrite = getTeamShare(path);
+  assert.equal(afterWrite.size(), 1, "写后读命中热实例（含新条目，未因签名失配重读盘）");
+
+  writeTeamShare(path, entry({ key: "k2", value: "v2", writer: "m2" }));
+  writeTeamShare(path, entry({ key: "k1", value: "v1b", writer: "m1", toolCallId: "c2" }));
+  const board = getTeamShare(path);
+  // 键序 = 首次出现序（k1 先写在前），与缓存前 summary()/keys() 逐字一致——反向扫会翻成末次序
+  assert.deepEqual(board.keys(), ["k1", "k2"], "键按首次出现序");
+  assert.equal(board.read("k1")?.value, "v1b", "同 key 取最新值");
+  const summary = board.summary();
+  assert.ok(summary.indexOf("k1") < summary.indexOf("k2"), "summary 键序为首次出现序（k1 在 k2 前）");
+});
+
+test("#531 writeTeamShare：去重写入不改文件 → 签名同值刷新无害，size 不增", () => {
+  clearTeamShareCache();
+  const path = boardPath();
+  const base = entry({ key: "k", value: "v", writer: "m1", toolCallId: "call-1" });
+  writeTeamShare(path, base);
+  writeTeamShare(path, base); // 完全重复 → 幂等丢弃，不追加
+  const board = getTeamShare(path);
+  assert.equal(board.size(), 1, "重复写入去重，黑板仍 1 条");
 });

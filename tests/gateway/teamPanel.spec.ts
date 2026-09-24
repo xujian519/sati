@@ -122,6 +122,48 @@ test("多团队聚合隔离：成员/任务互不串，status 与 archivedAt 透
   assert.equal(t1.archivedAt, undefined, "未归档团队不含 archivedAt");
 });
 
+test("#531 面板快照：retired 一次查回（listRetiredSessionKeys 1 次 / isRetired 0 次）且退休态判定正确", () => {
+  const { db } = setup();
+  // 再加两名成员（共 3 名）放大「逐成员一查」与「一次查回」的差异
+  createTeamMember(db, {
+    teamId: "t1",
+    memberId: "m2",
+    roleSlug: "researcher",
+    modelRoute: { provider: "p", model: "m" },
+  });
+  createTeamMember(db, {
+    teamId: "t1",
+    memberId: "m3",
+    roleSlug: "researcher",
+    modelRoute: { provider: "p", model: "m" },
+  });
+  db.insertRetired(db.getMember("m2")!.sessionKey, "m2", "test-retire");
+
+  let isRetiredCalls = 0;
+  let listRetiredCalls = 0;
+  const origIsRetired = db.isRetired.bind(db);
+  const origListRetired = db.listRetiredSessionKeys.bind(db);
+  db.isRetired = (sessionKey: string) => {
+    isRetiredCalls += 1;
+    return origIsRetired(sessionKey);
+  };
+  db.listRetiredSessionKeys = () => {
+    listRetiredCalls += 1;
+    return origListRetired();
+  };
+
+  const snap = buildTeamPanelSnapshot(db, new SessionPresence(), 1_000_000);
+  const members = snap.teams[0]!.members;
+  assert.equal(members.length, 3);
+  assert.equal(listRetiredCalls, 1, "退休集合一次查回（SQL 1 次）");
+  // 负控制：若 toMemberView 改回逐成员 db.isRetired，此断言 = 3 > 0 即红
+  assert.equal(isRetiredCalls, 0, "面板路径不再逐成员 isRetired");
+  const retiredByMember = new Map(members.map(m => [m.memberId, m.retired]));
+  assert.equal(retiredByMember.get("m2"), true, "退休成员 retired:true（Set 判定正确，非仅少查）");
+  assert.equal(retiredByMember.get("m1"), false, "未退休成员 retired:false");
+  assert.equal(retiredByMember.get("m3"), false);
+});
+
 test("teamToolCall 接线：前缀白名单 fail-closed + 未知工具 + SatiToolRuntimeError 透传 + 缺 sessionKey 需队长工具拒绝", async () => {
   const root = await mkdtemp(join(tmpdir(), "sati-panel-gw-"));
   // createLocalGateway 对空目录启动要求 config 含 agent/model 段（缺失为致命诊断），

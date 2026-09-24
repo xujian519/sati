@@ -18,8 +18,8 @@ import {
   TeamDb,
   type TeamEvent,
   TeamScheduler,
-  TeamShare,
   defaultTeamDbPath,
+  getTeamShare,
   invalidateTaskAttempt,
   scanStrandedTasks,
   scanTeamMembers,
@@ -163,7 +163,7 @@ export function buildTeamSubsystem(deps: TeamSubsystemDeps): TeamSubsystemRuntim
     // 空黑板返回 undefined 不注入注记——与 assignmentPrompt 的 sharedContext 空串跳过一致）。
     readSharedBoardSummary: teamId => {
       try {
-        const summary = new TeamShare(
+        const summary = getTeamShare(
           joinPath(deps.fallbackProjectRoot, ".sati", "team-workspace", teamId, "share.jsonl"),
         ).summary();
         return summary.length > 0 ? summary : undefined;

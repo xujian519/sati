@@ -21,6 +21,21 @@ export type PanelTeam = {
   tasks: TeamTaskView[];
 };
 
+/** 按 teamId 分组一次（保序：桶内顺序 = 原数组顺序，与逐队 filter 等价）。 */
+function groupByTeam<T>(rows: T[], teamIdOf: (row: T) => string): Map<string, T[]> {
+  const grouped = new Map<string, T[]>();
+  for (const row of rows) {
+    const teamId = teamIdOf(row);
+    const bucket = grouped.get(teamId);
+    if (bucket === undefined) {
+      grouped.set(teamId, [row]);
+    } else {
+      bucket.push(row);
+    }
+  }
+  return grouped;
+}
+
 /** 面板快照：团队 + 成员在线/角色 + 任务。 */
 export function buildTeamPanelSnapshot(
   db: TeamDb,
@@ -33,6 +48,12 @@ export function buildTeamPanelSnapshot(
   const members = db.listMembers();
   // TeamDb 无全量 listTasksAll/listMessagesAll（按团队查询）——聚合取每队数据。
   const tasks = teams.flatMap(team => db.listTasks(team.id));
+  // #531：退休集合一次查回（替代逐成员 isRetired 的 O(成员) 次同步 SQL）；成员/任务各按
+  // teamId 分组一次，替代 teams.map 内对两份全量数组逐队 filter（O(团队×成员) → O(团队+成员)）。
+  // 授权面行为不变（T6 评审取舍）：在线态仍逐队 presence.isActive，分组只省重复扫描。
+  const retired = db.listRetiredSessionKeys();
+  const membersByTeam = groupByTeam(members, member => member.teamId);
+  const tasksByTeam = groupByTeam(tasks, task => task.teamId);
   return {
     teams: teams.map(team => ({
       id: team.id,
@@ -41,8 +62,8 @@ export function buildTeamPanelSnapshot(
       createdAt: team.createdAt,
       ...(team.archivedAt !== undefined ? { archivedAt: team.archivedAt } : {}),
       captainOnline: presence.isActive(team.captainSessionKey, now),
-      members: members.filter(m => m.teamId === team.id).map(m => toMemberView(db, m)),
-      tasks: tasks.filter(t => t.teamId === team.id).map(toTaskView),
+      members: (membersByTeam.get(team.id) ?? []).map(member => toMemberView(member, retired)),
+      tasks: (tasksByTeam.get(team.id) ?? []).map(toTaskView),
     })),
   };
 }
