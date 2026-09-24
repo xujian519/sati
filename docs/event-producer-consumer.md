@@ -58,11 +58,11 @@ emit/dispatch/emitAgentEvent/emitEvent/emitForSession/sendNotification 字符串
 | stop_requested | src/agent/loop/AgentLoop.ts:666 | src/gateway/client/InProcessGateway.ts:582 |
 | structured_output | src/gateway/client/eventMapping.ts:521 | submitTurn 流 ×14 |
 | subagent_completed | src/agent/loop/toolContext.ts:306 | src/gateway/client/InProcessGateway.ts:582 |
-| subagent_model_event | src/agent/sub/SubAgentSession.ts:196 | src/gateway/client/InProcessGateway.ts:582 |
+| subagent_model_event | src/agent/sub/SubAgentSession.ts:201 | src/gateway/client/InProcessGateway.ts:582 |
 | subagent_started | src/agent/loop/toolContext.ts:194 | src/gateway/client/InProcessGateway.ts:582 |
 | subagent_status | src/agent/loop/subagentExecutor.ts:168 | src/gateway/client/InProcessGateway.ts:582 |
-| subagent_tool_calls_detected | src/agent/sub/SubAgentSession.ts:204 | src/gateway/client/InProcessGateway.ts:582 |
-| subagent_tool_result | src/agent/sub/SubAgentSession.ts:212 | src/gateway/client/InProcessGateway.ts:582 |
+| subagent_tool_calls_detected | src/agent/sub/SubAgentSession.ts:209 | src/gateway/client/InProcessGateway.ts:582 |
+| subagent_tool_result | src/agent/sub/SubAgentSession.ts:217 | src/gateway/client/InProcessGateway.ts:582 |
 | task_claimed | src/agent/team/scheduler/scheduler.ts:270 | - |
 | task_completed | src/tool/builtin/team/teamTasks.ts:363 | - |
 | task_created | src/tool/builtin/team/teamTasks.ts:215 | - |

@@ -170,8 +170,13 @@ export class SubAgentSession {
   }
 
   private buildScopedRegistry(): ToolRegistry {
-    const scoped = new ToolRegistry();
-    const tools = scopeToolsForDefinition(this.options.parentDependencies.tools.registry.list(), {
+    // Inherit the parent registry's options (notably `requireOutputSchema`) so the
+    // sub-agent's scoped registry stays strict instead of silently lax (#532).
+    // Re-registering copied MCP tool defs below is safe because `register()`
+    // exempts `kind === "mcp"`.
+    const parentRegistry = this.options.parentDependencies.tools.registry;
+    const scoped = new ToolRegistry(parentRegistry.registryOptions);
+    const tools = scopeToolsForDefinition(parentRegistry.list(), {
       allowedTools: this.options.definition.allowedTools,
       visibleDomains: this.options.definition.visibleDomains,
       hiddenDomains: this.options.definition.hiddenDomains,

@@ -258,9 +258,10 @@
   - 建议：按读取类型拆独立 handler（image/pdf/notebook/text）+ 共享工具函数。证据：`:43` 起 `:169` execute `:184` markRead `:503` shrinkToBudget `:551` 收尾。
   - 已做：`constants`/`types`/`kinds`/`validate`/`text`/`image`/`pdf`/`notebook` 八件拆分，入口路径与 `description`+`inputSchema` 逐字保持不变（llm-replay 请求键不受影响）；新旧实现 28 场景差分对拍结果完全一致；补 `tests/tool/read-file-kinds.spec.ts` 11 条（image/pdf/notebook 分支此前直接覆盖为零）。见 `docs/notes/implemented/2026-09-14-readfile-god-function-split.md`。
 - **TD-TOOL-002** · `ToolRegistry.clone()` 静默丢弃 `requireOutputSchema`
-  - 类别：B · 严重级：P2 · 工作量：S · 状态：new
-  - 位置：`src/tool/registry/ToolRegistry.ts:109-118`
-  - 影响：克隆体上注册未声明 outputSchema 的工具不再 fail-loud。建议：`new ToolRegistry(this.options)` 复制选项。
+  - 类别：B · 严重级：P2 · 工作量：S · 状态：done（#532）
+  - 位置：`src/tool/registry/ToolRegistry.ts`（`clone()`）、`src/tool/registry/filterAvailableTools.ts:19`、`src/agent/sub/SubAgentSession.ts`（`buildScopedRegistry`）
+  - 影响：① 派生注册表（clone / filter / 子代理 scoped）丢失严格位，会话作用域注册不再 fail-loud；② **现存功能缺陷**——项目级共享 MCP 工具（`createBuiltinRegistry.ts:286` 严格表）经 `registerToolsIfAbsent`（`ProjectRuntimeRegistry.ts:438`）注册即抛错，被 `:447` catch 降级 warn ⇒ 工具静默消失；per-session MCP 同理（`sessionToolSurface.ts:88`）。
+  - 已做：`register()` 对 `kind === "mcp"` 豁免严格位（MCP 结果形状不可静态声明，补宽松 schema 只能恒真=伪装契约）；新增 `registryOptions` getter，三处派生表透传 `this.options`（必须同批，否则 `sessionToolSurface.ts:135` 的 filter 会抵消 clone 的修复）。补 `tests/tool/output-schema-validation.spec.ts` 3 条（clone/filter 保严格位 + MCP 豁免），三条负控制（clone 无参、去 kind 豁免、filter 无参）逐一验证变红。`outputSchema` 不进 `toolSchemaDigest` ⇒ 不触发 llm-replay 重录。见 `docs/notes/implemented/2026-09-24-tool-registry-strict-bit-mcp-exemption.md`。
 - **TD-TOOL-003** · 模式白名单工具名两份手写重复
   - 类别：D · 严重级：P3 · 工作量：S · 状态：new
   - 位置：`planModeConstraints.ts:11-30` vs `askModeConstraints.ts:9-25`
@@ -2220,7 +2221,7 @@
 | `TD-UISERVER-N02` | `sessionState` / `pendingAgentToolCalls` 已被 #413（PR #425）修好；残留改为「同文件另 4 张 per-session 缓存无上限」 | **#529** |
 | `TD-UISERVER-N04` | 仍成立；行号更正为 `git.js:823-834`（原登记 `:788-795` 是路由声明与 limit 钳制）；实测默认 `limit=10` 为 **112 ms**、`limit=100` 约 **1.12 s** ⇒ 由 P2 降 **P3** | **#534** |
 | `TD-TEAM-N09` + `TD-TEAM-N10` | N09 成立（`scheduler.ts:253` 每次派发一次全量同步读）；N10 的 (a) 性能成立、(b) 授权面是 **T6 评审的刻意取舍**（`gatewayRuntimeOptions.ts:156-160`，单用户桌面可接受）⇒ 不主张改行为，仅登记「多用户化 / 共享 gateway 前必须升 P1」 | **#531** |
-| `TD-TOOL-002` | 仍成立；补两处**决定性事实**：① 同类第二处 `filterAvailableTools.ts:19`；② clone 上注册的 MCP 工具定义本就不产出 `outputSchema`（`PluginToToolBridge.ts:58-67`）⇒ 天真透传 options 会让 per-session MCP 注册立即抛错 ⇒ 由 P2 降 **P3** | **#532** |
+| `TD-TOOL-002` | 仍成立；补两处**决定性事实**：① 同类第二处 `filterAvailableTools.ts:19`；② clone 上注册的 MCP 工具定义本就不产出 `outputSchema`（`PluginToToolBridge.ts:58-67`）⇒ 天真透传 options 会让 per-session MCP 注册立即抛错 ⇒ 由 P2 降 **P3**。**#532 结案修正**：降级的依据（透传 options 会打断 MCP 注册）已被 `kind === "mcp"` 豁免消解；且「丢失的只是防护」的定级**不成立**——项目级共享 MCP 工具今天就已被 `:438`→`:447` 静默吞掉，是**现存功能缺陷**⇒ 实质 **P2**，已按 P2 修复结案 | **#532** |
 | `TD-WEB-N01` + `TD-GATEWAY-003` | 均成立但实测开销小（clone 9–16 ms / 次 miss、网关序列化 ~1.1 µs / 事件）⇒ 降 **P3**；`TD-GATEWAY-003` 的位置失效（实际 `:1268-1283`）且「维护可能无人读的重放缓冲」**与代码矛盾**（有完整消费链，照字面删除会破坏重连恢复），已更正 | **#535** |
 | `TD-CONTEXT-N03` | 仍成立（P2）；行号更正为 `:246-247` / `:120`；「每轮」应读作「**每个不同 query**」（缓存键 `sessionId\0query\0projectRoot` + 30s TTL）；**新发现** abort 未透传到 memory-core（熔断只解除 `await`，内层 45s×3 仍在跑）+ 超时路径无单测 | **#536** |
 | `TD-SESSION-N02` | 仍成立（P2，开关默认关）；实测 200 次笔记累计 **3.65 MiB** 且二次增长 ⇒ 约 1000+ 次即撞 50MB 硬顶，此后账本 `unavailable`、`workspace_note` **永久拒绝写入** | **#537** |

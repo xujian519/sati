@@ -16,7 +16,11 @@ export async function filterAvailableTools(
   registry: ToolRegistry,
   context: SatiToolAvailabilityContext,
 ): Promise<FilterAvailableToolsResult> {
-  const filtered = new ToolRegistry();
+  // Propagate the source registry's options (notably `requireOutputSchema`) so
+  // filtering does not silently downgrade a strict registry to a lax one (#532).
+  // Re-registering an MCP tool below is safe because `register()` exempts
+  // `kind === "mcp"` from the outputSchema requirement.
+  const filtered = new ToolRegistry(registry.registryOptions);
   const unavailable: SatiUnavailableToolDiagnostic[] = [];
   const checkCache = new Map<NonNullable<SatiToolDefinition["checkAvailability"]>, Promise<SatiToolAvailability>>();
 
