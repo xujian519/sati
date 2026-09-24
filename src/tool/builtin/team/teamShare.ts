@@ -17,7 +17,7 @@
  */
 import { join } from "node:path";
 import type { SatiToolDefinition, SatiToolExecutionOutput } from "../../protocol/types.js";
-import { TeamShare, type TeamShareEntry } from "../../../agent/team/index.js";
+import { getTeamShare, writeTeamShare, type TeamShareEntry } from "../../../agent/team/index.js";
 import { SatiToolRuntimeError } from "../../protocol/errors.js";
 import {
   assertActorParseable,
@@ -109,8 +109,9 @@ export function createTeamShareWriteTool(
         ...(context.turnId !== undefined ? { turnId: context.turnId } : {}),
         ...(context.currentToolCallId !== undefined ? { toolCallId: context.currentToolCallId } : {}),
       };
-      const board = new TeamShare(teamSharePath(context.cwd, input.teamId));
-      board.write(entry);
+      // 实例缓存（#531）：写路径走 writeTeamShare——复用热实例并在写后刷新缓存签名，
+      // 避免每次写入/派发都全量重读黑板（team_share_updated 仍由本写路径唯一发出）。
+      const board = writeTeamShare(teamSharePath(context.cwd, input.teamId), entry);
       emit(team.captainSessionKey, {
         type: "team_share_updated",
         teamId: input.teamId,
@@ -186,7 +187,7 @@ export function createTeamShareReadTool(
       if (team === undefined) {
         throw new SatiToolRuntimeError("team_not_found", `团队不存在：${input.teamId}`);
       }
-      const board = new TeamShare(teamSharePath(context.cwd, input.teamId));
+      const board = getTeamShare(teamSharePath(context.cwd, input.teamId));
       const limit = input.limit && input.limit > 0 ? input.limit : 20;
       let entries: TeamShareEntry[];
       if (input.key !== undefined) {

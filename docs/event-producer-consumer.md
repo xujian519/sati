@@ -73,7 +73,7 @@ emit/dispatch/emitAgentEvent/emitEvent/emitForSession/sendNotification 字符串
 | team_archived | src/tool/builtin/team/teamArchive.ts:67 | - |
 | team_created | src/tool/builtin/team/teamManagement.ts:94 | - |
 | team_event | - | submitTurn 流 ×14 |
-| team_share_updated | src/tool/builtin/team/teamShare.ts:114 | - |
+| team_share_updated | src/tool/builtin/team/teamShare.ts:115 | - |
 | token_cap_adjusted | src/agent/loop/modelErrorRecovery.ts:367, src/agent/loop/modelErrorRecovery.ts:407, src/agent/loop/modelErrorRecovery.ts:429, src/agent/loop/recoveryStrategies.ts:111 | src/gateway/client/InProcessGateway.ts:582 |
 | tool_call_finished | - | submitTurn 流 ×14 |
 | tool_call_started | - | submitTurn 流 ×14 |

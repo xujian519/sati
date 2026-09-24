@@ -108,10 +108,12 @@ export function createTeamStatusTool(options: TeamToolsOptions): SatiToolDefinit
       if (team === undefined) {
         throw new SatiToolRuntimeError("team_not_found", `团队不存在：${input.teamId}`);
       }
+      // #531：退休集合一次查回，替代 toMemberView 内逐成员 isRetired 的 O(成员) 次同步 SQL。
+      const retired = db.listRetiredSessionKeys();
       const members = db
         .listMembers()
         .filter(m => m.teamId === input.teamId)
-        .map(m => toMemberView(db, m));
+        .map(m => toMemberView(m, retired));
       const tasks = db.listTasks(input.teamId).map(toTaskView);
       return {
         content: [

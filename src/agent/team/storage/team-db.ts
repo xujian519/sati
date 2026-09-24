@@ -422,6 +422,19 @@ export class TeamDb {
     return row !== undefined;
   }
 
+  /**
+   * 一次性取回**全部**已退休成员的 session_key 集合（#531）。面板快照 / team_status 对
+   * 每个成员都问一次 `isRetired` ⇒ O(成员) 次同步预编译查询；改用本方法把整张
+   * `retired_members` 读成 Set，视图映射按 Set 命中判定，SQL 次数由 O(成员) 降为 1。
+   * 退休表只增不删、规模与成员数同阶，全量读入内存的代价远小于 N 次查询往返。
+   */
+  listRetiredSessionKeys(): Set<string> {
+    const rows = prepareCached(this.preparedCache, this.db, "SELECT session_key FROM retired_members").all() as Array<{
+      session_key: string;
+    }>;
+    return new Set(rows.map(row => row.session_key));
+  }
+
   listTasks(teamId: string): TeamTaskRow[] {
     const rows = prepareCached(
       this.preparedCache,

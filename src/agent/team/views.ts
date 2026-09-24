@@ -5,7 +5,7 @@
  * 放 agent/team 侧而非 tool/gateway 侧：tool 层依赖 agent/team，反向会循环。
  */
 import { parseModelRouteJson } from "./member/modelRouteJson.js";
-import type { TeamDb, TeamMemberRow, TeamTaskRow } from "./storage/team-db.js";
+import type { TeamMemberRow, TeamTaskRow } from "./storage/team-db.js";
 
 export type TeamMemberView = {
   memberId: string;
@@ -29,13 +29,17 @@ export type TeamTaskView = {
   output?: string;
 };
 
-export function toMemberView(db: TeamDb, member: TeamMemberRow): TeamMemberView {
+/**
+ * 成员行 → 视图。`retired` 由调用方**一次性**查回（`TeamDb.listRetiredSessionKeys()`，#531）
+ * 后传入，避免逐成员一次 `isRetired` 同步 SQL（面板快照 O(成员) 次查询 → 1 次）。
+ */
+export function toMemberView(member: TeamMemberRow, retired: Set<string>): TeamMemberView {
   return {
     memberId: member.id,
     roleSlug: member.roleSlug,
     status: member.status,
     modelRoute: parseModelRouteJson(member.modelRouteJson),
-    retired: db.isRetired(member.sessionKey),
+    retired: retired.has(member.sessionKey),
   };
 }
 

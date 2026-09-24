@@ -16,7 +16,7 @@
  * 消费风格：想要某键最新版用 read(key)；想要全史用 list()；成员 turn 0 开局注入用
  * summary()（键 + 各最新值前缀 + 写入者，防 prompt 膨胀）。
  */
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { dirname } from "node:path";
 import { createLogger } from "../../../telemetry/index.js";
 
@@ -158,4 +158,67 @@ export class TeamShare {
       }
     }
   }
+}
+
+/**
+ * 进程内**实例缓存**（#531）：同一 `share.jsonl` 路径在 `(mtimeMs, size)` 未变时复用同一个
+ * `TeamShare` 实例，避免每次派发 / 每次面板读取都 `readFileSync` + 逐行 `JSON.parse` 整份黑板
+ * （调度器 `kickMember` 派发路径经 `readSharedBoardSummary` 每派发一次就全量同步读一遍）。
+ *
+ * 为何用 `(mtimeMs, size)` 失效而非 issue 备选的「从文件尾部反向扫到 10 个 key 即止」：
+ * `load()` 除 `entries` 还要重建 `seenDedup` **全集**（`write()` 的 `(key, writer, toolCallId)`
+ * 幂等依赖它），提前停会让重放/重试重复落条目；且 `summary()` 的键序是**首次出现序**，反向扫
+ * 会翻成末次出现序——内容相同但注入成员 turn 0 的 prompt 文本次序漂移（见方案 §2.3 第 2 条）。
+ * 实例缓存保持「整份重建」语义不变，只是把「每次新建」降为「内容变了才新建」。
+ *
+ * 失效判据含 `size`：追加写必改字节数，故同进程/跨进程的追加都会被下次访问捕获；`mtimeMs`
+ * 兜住「同长度改写」（罕见但存在）。statSync 失败（文件被删）退回 `{0,0}`，与「不存在」同签名
+ * ⇒ 下次访问重建为空黑板，与 `load()` 的 `!existsSync` 早返回一致。
+ */
+const teamShareCache = new Map<string, { mtimeMs: number; size: number; inst: TeamShare }>();
+
+function statSignature(filePath: string): { mtimeMs: number; size: number } {
+  try {
+    const stats = statSync(filePath);
+    return { mtimeMs: stats.mtimeMs, size: stats.size };
+  } catch {
+    // 失败模式：文件不存在 / stat 竞态失败。回退语义：{0,0} 签名（与「不存在」同），
+    // 下次访问据此重建为空黑板——不抛错，黑板缺失不阻断派发。
+    return { mtimeMs: 0, size: 0 };
+  }
+}
+
+/** 取（或按 `(mtimeMs, size)` 失效后重建）该路径的共享 `TeamShare` 实例。读路径用这个。 */
+export function getTeamShare(filePath: string): TeamShare {
+  const signature = statSignature(filePath);
+  const cached = teamShareCache.get(filePath);
+  if (cached !== undefined && cached.mtimeMs === signature.mtimeMs && cached.size === signature.size) {
+    return cached.inst;
+  }
+  const inst = new TeamShare(filePath);
+  teamShareCache.set(filePath, { mtimeMs: signature.mtimeMs, size: signature.size, inst });
+  return inst;
+}
+
+/**
+ * 写路径专用：取实例 → `write(entry)` → 用**写后**的 stat 刷新缓存签名，让同进程的后续读
+ * 命中这个已含新条目的热实例（不必因签名失配而重读盘）。`write()` 幂等：重复条目不追加、
+ * 文件不变，刷新签名是无害的同值写。外部/并发进程的追加仍由下次 `getTeamShare` 的 statSync
+ * 失配捕获，故刷新签名不会掩盖跨进程变更。
+ */
+export function writeTeamShare(filePath: string, entry: TeamShareEntry): TeamShare {
+  const inst = getTeamShare(filePath);
+  inst.write(entry);
+  const cached = teamShareCache.get(filePath);
+  // 仅当缓存仍指向本实例时刷新（防与并发失效/重建交错写脏）。
+  if (cached !== undefined && cached.inst === inst) {
+    const signature = statSignature(filePath);
+    teamShareCache.set(filePath, { mtimeMs: signature.mtimeMs, size: signature.size, inst });
+  }
+  return inst;
+}
+
+/** 清空实例缓存（测试隔离 / 长进程手动失效用）。 */
+export function clearTeamShareCache(): void {
+  teamShareCache.clear();
 }
