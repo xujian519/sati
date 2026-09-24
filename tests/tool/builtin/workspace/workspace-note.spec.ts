@@ -11,12 +11,14 @@ import type {
   SatiWorkspaceLedgerProvider,
   WorkspaceLedgerReadResult,
 } from "../../../../src/session/workspace/WorkspaceLedgerStore.js";
-import type { WorkspaceLedgerState } from "../../../../src/session/workspace/WorkspaceLedger.js";
+import type { WorkspaceLedgerState, WorkspaceNoteInput } from "../../../../src/session/workspace/WorkspaceLedger.js";
 import type { SatiToolRuntimeContext } from "../../../../src/tool/protocol/types.js";
 
 class MemProvider implements SatiWorkspaceLedgerProvider {
   state: WorkspaceLedgerState | undefined;
   writes = 0;
+  /** note 透传（#537）：store 据此在锚点之间落增量而非全量快照。 */
+  lastNote: WorkspaceNoteInput | undefined;
   /** 置位后 read() 模拟「transcript 读不到」（如超 50MB）。 */
   unreadable = false;
   async read(): Promise<WorkspaceLedgerReadResult> {
@@ -25,8 +27,12 @@ class MemProvider implements SatiWorkspaceLedgerProvider {
     }
     return { status: "ok", state: this.state };
   }
-  async write(state: WorkspaceLedgerState, _ctx: { sessionId: string; turnId: string }): Promise<void> {
+  async write(
+    state: WorkspaceLedgerState,
+    ctx: { sessionId: string; turnId: string; note?: WorkspaceNoteInput },
+  ): Promise<void> {
     this.state = state;
+    this.lastNote = ctx.note;
     this.writes += 1;
   }
 }
@@ -59,6 +65,17 @@ test("workspace_note opens the ledger and persists", async () => {
   assert.equal(provider.state!.goal, "g");
   assert.equal(provider.state!.next, "n");
   assert.equal(provider.writes, 1);
+});
+
+test("workspace_note passes the accepted note through to the provider (#537 delta path)", async () => {
+  const provider = new MemProvider();
+  const tool = createWorkspaceNoteTool();
+  // 首笔写入必然落锚点（无基座可重放）；note 仍须透传，store 才能在其后落增量。
+  await tool.execute({ goal: "g", next: "n" }, context(provider));
+  assert.deepEqual(provider.lastNote, { goal: "g", next: "n" });
+  await tool.execute({ check: "parser holds", by: "all cases pass" }, context(provider));
+  assert.deepEqual(provider.lastNote, { check: "parser holds", by: "all cases pass" });
+  assert.equal(provider.writes, 2);
 });
 
 test("workspace_note applies valid edits and reports rejected ones", async () => {

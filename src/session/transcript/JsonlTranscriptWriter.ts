@@ -5,7 +5,7 @@ import type { CanonicalMessage } from "../../model/index.js";
 import type { AgentTurnResult } from "../../agent/protocol/result.js";
 import type { InjectionRecord } from "../../context/protocol/types.js";
 import type { FileArtifact } from "../artifacts/FileArtifact.js";
-import type { WorkspaceLedgerState } from "../workspace/WorkspaceLedger.js";
+import type { WorkspaceLedgerState, WorkspaceNoteInput } from "../workspace/WorkspaceLedger.js";
 import {
   classifyDurableMessageEntry,
   truncatePreview,
@@ -269,6 +269,19 @@ export class JsonlTranscriptWriter implements AgentTranscriptWriter {
       type: "workspace_state",
       ...this.baseEntry(sessionId, turnId),
       state,
+    });
+  }
+
+  /**
+   * 账本增量（#537）：只落一条 note，读取侧从最近锚点重放。走与全量快照**完全相同**
+   * 的 `recordEntry` 批写路径——durable 边界（pending 批写 / flushCheckpoint 语义）
+   * 一字未动，增量条与锚点条享受同一套落盘/ack/串行链保证。
+   */
+  recordWorkspaceStateDelta(sessionId: string, turnId: string, note: WorkspaceNoteInput): Promise<void> {
+    return this.recordEntry({
+      type: "workspace_state_delta",
+      ...this.baseEntry(sessionId, turnId),
+      note,
     });
   }
 

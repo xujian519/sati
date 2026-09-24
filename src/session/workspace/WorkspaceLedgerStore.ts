@@ -26,7 +26,7 @@ import type { AgentTranscriptWriter } from "../transcript/TranscriptWriter.js";
 import { readTranscript } from "../transcript/TranscriptReader.js";
 import { createLogger } from "../../telemetry/index.js";
 import { scanLatestWorkspaceState, type WorkspaceStateScanCursor } from "./WorkspaceLedgerReader.js";
-import { cloneWorkspaceLedgerState, type WorkspaceLedgerState } from "./WorkspaceLedger.js";
+import { cloneWorkspaceLedgerState, type WorkspaceLedgerState, type WorkspaceNoteInput } from "./WorkspaceLedger.js";
 
 /**
  * Outcome of a ledger read. `ok` means the transcript is authoritative and the
@@ -41,10 +41,30 @@ export type WorkspaceLedgerReadResult =
 /** Provider surface shared by the agent loop and the workspace tools. */
 export type SatiWorkspaceLedgerProvider = {
   read(): Promise<WorkspaceLedgerReadResult>;
-  write(state: WorkspaceLedgerState, ctx: { sessionId: string; turnId: string }): Promise<void>;
+  /**
+   * Persist the ledger after an accepted edit. `ctx.note` is the edit that
+   * produced `state`; when present (and the writer supports deltas) the store
+   * may persist it as a compact `workspace_state_delta` instead of a full
+   * snapshot. Omit `note` to force a full self-sufficient anchor (#537).
+   */
+  write(
+    state: WorkspaceLedgerState,
+    ctx: { sessionId: string; turnId: string; note?: WorkspaceNoteInput },
+  ): Promise<void>;
 };
 
 const ledgerLogger = createLogger("session");
+
+/**
+ * Write a full self-sufficient `workspace_state` anchor at least this often
+ * (#537). Between anchors only the accepted note is persisted as a
+ * `workspace_state_delta`, so a session that appends N checkpoints costs
+ * ~N/K full snapshots + N O(1) deltas instead of N full snapshots — turning the
+ * O(n²) transcript growth that hit the 50MB cap into ~O(n²/K). K bounds how many
+ * deltas a cold read replays; 32 keeps that replay trivial while cutting anchor
+ * bytes ~32×.
+ */
+export const WORKSPACE_LEDGER_ANCHOR_INTERVAL = 32;
 
 export class WorkspaceLedgerStore implements SatiWorkspaceLedgerProvider {
   private readonly path: string | undefined;
@@ -52,6 +72,14 @@ export class WorkspaceLedgerStore implements SatiWorkspaceLedgerProvider {
   private latest: WorkspaceLedgerState | undefined;
   /** Resume cursor of the previous transcript scan (invalidated by any read failure). */
   private cursor: WorkspaceStateScanCursor | undefined;
+  /** Deltas persisted since the last anchor; refreshed from every scan (#537). */
+  private sinceAnchor = 0;
+  /**
+   * True once a reconstructable ledger exists (an anchor is on disk or in
+   * memory). Gates the first write to a full anchor: a delta with no anchor to
+   * replay from is unreconstructable, so the ledger must open with a snapshot.
+   */
+  private haveBase = false;
   /** Diagnostic keys already reported, so a per-turn read does not log every turn. */
   private readonly reported = new Set<string>();
 
@@ -80,9 +108,13 @@ export class WorkspaceLedgerStore implements SatiWorkspaceLedgerProvider {
     }
     const scan = scanLatestWorkspaceState(entries, this.cursor);
     this.cursor = scan.cursor;
+    // Refresh the anchor cadence from the transcript itself, so the interval is
+    // global (survives resume) and a cold read never replays more than K deltas.
+    this.sinceAnchor = scan.deltasSinceAnchor;
     const authoritative = scan.state;
     if (authoritative !== undefined) {
       this.latest = authoritative;
+      this.haveBase = true;
     }
     // 内存态仅在 transcript 中确实没有账本条目时兜底：路径已声明但 writer 并不
     // 落盘的会话（如 InMemoryTranscriptWriter + storage.transcriptPath）。
@@ -90,9 +122,27 @@ export class WorkspaceLedgerStore implements SatiWorkspaceLedgerProvider {
     return { status: "ok", state: state === undefined ? undefined : cloneWorkspaceLedgerState(state) };
   }
 
-  async write(state: WorkspaceLedgerState, ctx: { sessionId: string; turnId: string }): Promise<void> {
-    if (this.transcript.recordWorkspaceState !== undefined) {
-      await this.transcript.recordWorkspaceState(ctx.sessionId ?? this.sessionId, ctx.turnId, state);
+  async write(
+    state: WorkspaceLedgerState,
+    ctx: { sessionId: string; turnId: string; note?: WorkspaceNoteInput },
+  ): Promise<void> {
+    const sessionId = ctx.sessionId ?? this.sessionId;
+    const note = ctx.note;
+    // 增量优先：仅当（a）调用方交回了产生该 state 的 note、（b）已存在可重放的
+    // 锚点基座、（c）距上个锚点未满 K 笔、（d）writer 支持增量时，才落 O(1) 增量；
+    // 否则落全量自足锚点（首笔写入 / 每 K 笔 / 内存 writer 不支持增量时的兜底）。
+    if (
+      note !== undefined &&
+      this.haveBase &&
+      this.sinceAnchor < WORKSPACE_LEDGER_ANCHOR_INTERVAL &&
+      this.transcript.recordWorkspaceStateDelta !== undefined
+    ) {
+      await this.transcript.recordWorkspaceStateDelta(sessionId, ctx.turnId, note);
+      this.sinceAnchor += 1;
+    } else if (this.transcript.recordWorkspaceState !== undefined) {
+      await this.transcript.recordWorkspaceState(sessionId, ctx.turnId, state);
+      this.sinceAnchor = 0;
+      this.haveBase = true;
     }
     this.latest = state;
   }

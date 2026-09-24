@@ -50,6 +50,15 @@ export type AgentTranscriptWriter = {
     turnId: string,
     state: import("../workspace/WorkspaceLedger.js").WorkspaceLedgerState,
   ): void | Promise<void>;
+  /**
+   * J-Space 工作区账本增量（#537）：锚点之间只落一条已接受的 note，读取侧从最近
+   * 锚点重放累积。未实现时调用方退回写全量锚点（`recordWorkspaceState`）。
+   */
+  recordWorkspaceStateDelta?(
+    sessionId: string,
+    turnId: string,
+    note: import("../workspace/WorkspaceLedger.js").WorkspaceNoteInput,
+  ): void | Promise<void>;
   /** durable 边界检查点（阶段四 T4.1）：确保此前全部条目已落盘。无缓冲写入的实现为 no-op。 */
   flushCheckpoint?(): void | Promise<void>;
   recordEntry?(entry: AgentTranscriptEntry): void | Promise<void>;

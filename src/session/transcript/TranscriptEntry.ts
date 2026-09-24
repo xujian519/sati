@@ -3,7 +3,7 @@ import type { RetrySchedule } from "../../model/streaming/retryState.js";
 import type { AgentTurnResult } from "../../agent/protocol/result.js";
 import type { InjectionRecord } from "../../context/protocol/types.js";
 import type { FileArtifact } from "../artifacts/FileArtifact.js";
-import type { WorkspaceLedgerState } from "../workspace/WorkspaceLedger.js";
+import type { WorkspaceLedgerState, WorkspaceNoteInput } from "../workspace/WorkspaceLedger.js";
 import type { CompactSnapshotPayload } from "./CompactSnapshot.js";
 
 export type AgentTranscriptEntryType =
@@ -22,6 +22,7 @@ export type AgentTranscriptEntryType =
   | "request_header"
   | "retry_schedule"
   | "workspace_state"
+  | "workspace_state_delta"
   | "turn_rewrite";
 
 export type AgentTranscriptEntryBase = {
@@ -263,6 +264,21 @@ export type AgentWorkspaceStateTranscriptEntry = AgentTranscriptEntryBase & {
 };
 
 /**
+ * 工作区账本增量（#537 / TD-SESSION-N02）。锚点（`workspace_state`）之间只落
+ * **一条已接受的 note**，读取侧从最近的锚点起用 `applyWorkspaceNote` 顺序重放
+ * 累积出当前账本。锚点始终自足（单条 `workspace_state` 即可重建该时刻的完整账本，
+ * 这是 PR #378 的硬前提），增量只压缩锚点之间的体积——把「每笔写入落全量快照」
+ * 的 O(n²) 累积降为「每 K 笔一个全量锚点 + 其间 O(1) 增量」。
+ *
+ * 与 `retry_schedule` 一样是 log/重放派生条目：不进入模型可见消息、不驱动 turn
+ * 判定（不在 `ACTIVITY_ENTRY_TYPES` 中），仅由 `WorkspaceLedgerReader` 消费。
+ */
+export type AgentWorkspaceStateDeltaTranscriptEntry = AgentTranscriptEntryBase & {
+  type: "workspace_state_delta";
+  note: WorkspaceNoteInput;
+};
+
+/**
  * 编辑/重新生成最后一条用户消息（遮蔽式 append-only，协议 1.7）：不修改
  * 历史条目，追加本条目宣告 shadowFromEntryIds 所列条目的投影被遮蔽——
  * 重放与 Web 投影跳过这些条目；新输入由随后的 accepted_input 接替。
@@ -293,6 +309,7 @@ export type AgentTranscriptEntry =
   | AgentRequestHeaderTranscriptEntry
   | AgentRetryScheduleTranscriptEntry
   | AgentWorkspaceStateTranscriptEntry
+  | AgentWorkspaceStateDeltaTranscriptEntry
   | AgentTurnRewriteTranscriptEntry;
 
 export function truncatePreview(input: string, byteCap: number): { preview: string; truncated: boolean } {
