@@ -7,9 +7,9 @@
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1066 / 181303 |
+| src TS 文件 / 行数 | 1066 / 181289 |
 | src JS 文件 | 0 |
-| tests 文件 | 606 |
+| tests 文件 | 607 |
 | ui/src 文件 / 行数 | 589 / 94453 |
 | ui/server 文件 / 行数 | 115 / 32401 |
 
@@ -167,7 +167,7 @@
 | knowledge | 38 |
 | context | 36 |
 | gateway | 34 |
-| model | 32 |
+| model | 33 |
 | session | 28 |
 | router | 18 |
 | always-on | 14 |
@@ -194,7 +194,7 @@
 | runtime | 1 |
 | status | 1 |
 
-| **合计** | **581** |
+| **合计** | **582** |
 
 ## i18n en/zh-CN 对齐
 

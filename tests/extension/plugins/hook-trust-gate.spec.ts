@@ -11,6 +11,7 @@ import {
   evaluateProjectHookTrust,
   HOOK_TRUST_STORE_VERSION,
   HookTrustStore,
+  hookTrustKey,
   hookTrustStorePath,
   parseHookTrustFile,
   retainTrustedHookMatchers,
@@ -184,7 +185,7 @@ test("1.2b：存储写路径往返（含撤销记录与父目录创建）", asyn
       grantedAt: "2026-09-21T00:00:00.000Z",
       sourcePath: "/p",
     });
-    assert.equal(new HookTrustStore(filePath).lookup("ws", "x@project")?.digest, "sha256:ab");
+    assert.equal(new HookTrustStore(filePath).read().entries[hookTrustKey("ws", "x@project")]?.digest, "sha256:ab");
 
     await store.record("ws", {
       pluginId: "x@project",
@@ -193,7 +194,7 @@ test("1.2b：存储写路径往返（含撤销记录与父目录创建）", asyn
       grantedAt: "2026-09-21T01:00:00.000Z",
       sourcePath: "/p",
     });
-    assert.equal(new HookTrustStore(filePath).lookup("ws", "x@project")?.decision, "revoked");
+    assert.equal(new HookTrustStore(filePath).read().entries[hookTrustKey("ws", "x@project")]?.decision, "revoked");
 
     const written = await readFile(filePath, "utf8");
     assert.deepEqual(

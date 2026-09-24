@@ -131,11 +131,6 @@ export class ModelWindowStore {
     }
   }
 
-  /** 单条查询（解析期热路径）。 */
-  lookup(provider: string, model: string): ModelWindowEntry | undefined {
-    return this.read().entries[modelWindowKey(provider, model)];
-  }
-
   /** 写入一条事实（与既有条目按冲突取小合并），返回合并后的条目。 */
   async record(provider: string, model: string, entry: ModelWindowEntry): Promise<ModelWindowEntry> {
     const file = this.read();

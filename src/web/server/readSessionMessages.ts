@@ -22,7 +22,7 @@
 import { stat } from "node:fs/promises";
 import type { Stats } from "node:fs";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
-import { type CanonicalMessage } from "../../model/index.js";
+import { cloneMessage, type CanonicalMessage } from "../../model/index.js";
 import { listProjectSessions, readTranscript, type SessionInfo } from "../../session/index.js";
 import type { AgentTranscriptEntry } from "../../session/transcript/TranscriptEntry.js";
 import { collectShadowedEntryIds } from "../../session/transcript/TranscriptReplay.js";
@@ -482,10 +482,6 @@ function extractSubagentExecutionMessages(entries: AgentTranscriptEntry[]): {
   }
 
   return { messages, timestamps, compactBoundaries };
-}
-
-function cloneMessage(message: CanonicalMessage): CanonicalMessage {
-  return JSON.parse(JSON.stringify(message)) as CanonicalMessage;
 }
 
 /**
