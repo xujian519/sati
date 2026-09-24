@@ -1317,18 +1317,20 @@
   - 建议：拆 `gateway-client.js`/`event-mapper.js`/`router-stats.js`。
   - 2026-08-27 复核：函数本体自审计以来原封未动（现 `:671-894`，+6 行漂移），文件 +73 行来自 kanban 溯源代码；债停滞未恶化。新增两条无条件日志 `:713,731`（每条用户消息触发，计入 TD-CONSOLE-001 的 ui/server 清单）。
 - **TD-UISERVER-N02** · bridge 内 4 个 per-session 内存缓存无 LRU/容量上限
-  - 类别：I · 严重级：P2 · 工作量：S · 状态：new
-  - 位置：`sati-bridge.js:1237`（`_sessionTitleCache`）、`:1319`（`_userQueriesCache`）、`:1435`（`_toolSequenceCache`）、`:1529`（`_subagentPromptCache`）
+  - 类别：I · 严重级：P2 · 工作量：S · 状态：**done（缓存容量上限，#529 / PR 交付 2026-09-24）**
+  - 位置：`sati-bridge.js:1470`（`_sessionTitleCache`）、`:1556`（`_userQueriesCache`）、`:1672`（`_toolSequenceCache`）、`:1756`（`_subagentPromptCache`）
   - 建议：为各缓存加 LRU/TTL 上限。
   - 2026-08-27 复核：缓存本体债未变，行号漂移至 `:1221/:1307/:1423/:1518`；同时确认四个缓存的「候选路径枚举」填充前奏（safeId 变体→项目 chats 目录→通用 workspace→全 `projectsDir` 扫描）被逐字复制 4 份（`:1249-1279, :1356-1386, :1443-1470, :1533-1559`），属未登记子债。建议把 remedy 合并为一批：共享 `resolveTranscriptCandidates(sessionId, projectKey)` helper + LRU 包装（工作量维持 S/M）。
+  - 2026-09-24 修复（#529）：新增零依赖叶子 `ui/server/utils/boundedMap.js` 的 `setBounded(map, key, value, limit)`（Map 插入序 FIFO 上限，**无默认值**），`sati-bridge.js` 导入并在 4 处 `set` **显式传 `MAX_ACTIVE_SESSIONS`**（复用 `sessionState` 已有的 500 常量）。抽叶子是为守住 file-size 棘轮（`sati-bridge.js` 是存量豁免文件，就地加 helper 会越线）——抽出后该文件对本特性净增仅 1 行 import（2347→2348，已 `--update-baseline` 追认）。**未做**「按 mtime 失效时顺带删键」——实测这 4 张缓存的唯一调用方是 `getRouterDashboardData()`，其 `sessionId` 取自落盘 router stats 的**历史会话**，不存在「会话结束」钩子（`cleanupSessionBookkeeping` 只清另三张），标题缓存更无 mtime 校验，故 FIFO 上限是唯一可行落点。行号已更正为当前 HEAD。**残留子债（未在本批处理）**：上面 2026-08-27 复核记的「候选路径枚举 4 份逐字复制」共享 helper 抽取仍未做，与容量上限正交，留待后续独立评估。
 - **TD-UISERVER-N03** · `routes/git.js` 错误响应状态码不一致（6 处返回 HTTP 200 + `{ error }`）
   - 类别：D · 严重级：P2 · 工作量：S · 状态：new
   - 位置：`routes/git.js:439,512,678,802,831,1117`
   - 建议：统一改 `res.status(4xx/5xx).json({ error })`（对照同文件其余 15+ 处已 `res.status(500)`）。
 - **TD-UISERVER-N04** · `routes/git.js /commits` 逐 commit 串行 spawn（N+1 子进程）
-  - 类别：I · 严重级：P2 · 工作量：M · 状态：new
-  - 位置：`routes/git.js:788-795`
+  - 类别：I · 严重级：P2 · 工作量：M · 状态：**done（#534 / PR 交付 2026-09-24）**
+  - 位置：`routes/git.js:841`（`/commits` 路由）
   - 影响：limit 上限 100 时最多 100 次串行 `git` 子进程。建议：改用单次 `git log --stat` 一次聚合。
+  - 2026-09-24 修复（#534）：合并为单次 `git log --pretty=format:%H|%an|%ae|%ad|%s --date=iso-strict --stat -n <limit>`，解析交给零依赖叶子 `ui/server/utils/gitCommitLog.js` 的纯函数 `parseCommitLogWithStats(stdout)`（`git.js` 导入），按 **header 正则**（`/^[0-9a-f]{40,64}\|/`）切块——**不按空行**，因为 merge commit 的 `--stat` 段完全缺失且其后无空行，按空行会把下一提交的 stat 串到 merge 上。块内取最后一个匹配 `/\d+ files? changed/` 的行，无匹配则 `""`（与旧实现对 merge 返回空串等价）。抽叶子使 `git.js` 净减 22 行（1529→1507，file-size 存量豁免，减行不触棘轮）。实测 `limit=10` 130ms → ~17ms、`limit=100` 1,140ms → ~43ms。旧路径 `.split("\n").pop()` 会残留一个前导空格，新实现按行 `trim()` 归一（唯一差异，纯外观）。
 - **TD-UISERVER-N05** · PRD 模板数据在同一文件内双份且内容漂移
   - 类别：F · 严重级：P2 · 工作量：M · 状态：**done（已修复 2026-08-23）**
   - 修复：把 4 个模板（web-app/api/mobile-app/data-analysis）收敛为唯一数据源——`/prd-templates` 路由改为 `const templates = await getAvailableTemplates();`，完整数组移入 `getAvailableTemplates()`；删除旧的单模板短数组。`/prd-templates` 与 `/apply-template` 现共用同一模板源，不再漂移。`node --check`/biome/ui-eslint 全绿。

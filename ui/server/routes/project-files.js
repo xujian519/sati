@@ -72,8 +72,11 @@ router.get("/api/browse-filesystem", authenticateToken, async (req, res) => {
       return res.status(404).json({ error: "Directory not accessible" });
     }
 
-    // Use existing getFileTree function with shallow depth (only direct children)
-    const fileTree = await getFileTree(resolvedPath, 1, 0, false); // maxDepth=1, showHidden=false
+    // Use existing getFileTree function with shallow depth (only direct children).
+    // NOTE: the 4th arg (`showHidden`) is currently inert — getFileTree never reads
+    // it, so dot-files are still returned apart from the skip-table entries (#533).
+    // Kept for signature compatibility; the real filtering is shouldSkipEntry().
+    const fileTree = await getFileTree(resolvedPath, 1, 0, false); // maxDepth=1
 
     // Filter only directories and format for suggestions
     const directories = fileTree
