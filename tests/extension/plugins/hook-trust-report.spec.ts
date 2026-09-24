@@ -6,7 +6,9 @@ import test from "node:test";
 import { loadPluginHooks } from "../../../src/extension/plugins/loading/PluginHookLoader.js";
 import { PluginRuntime } from "../../../src/extension/plugins/runtime/PluginRuntime.js";
 import {
+  clearHookBundleDigestCache,
   computeHookBundleDigest,
+  computeHookBundleDigestForReport,
   computeWorkspaceIdentityKey,
   evaluateProjectHookTrust,
   HOOK_BUNDLE_MAX_BYTES,
@@ -240,16 +242,21 @@ test("1.2a：无法建立摘要的形态一律 blocked（声明越界 / 符号�
 
     const escape = await computeHookBundleDigest(pluginDir, { name: "x", hooks: "../../outside.json" });
     assert.equal(escape.kind, "blocked");
+    // 声明越界 = 内容无法被安全哈希（#538 结构化原因）。
+    assert.equal(escape.kind === "blocked" && escape.reason, "unsafe_content");
 
     const linkedDir = await writeProjectPlugin(projectRoot, "linked", COMMAND_HOOKS);
     await symlink(join(projectRoot, "target"), join(linkedDir, "escape"));
     const linked = await computeHookBundleDigest(linkedDir, { name: "linked" });
     assert.equal(linked.kind, "blocked");
+    assert.equal(linked.kind === "blocked" && linked.reason, "unsafe_content");
 
     const bigDir = await writeProjectPlugin(projectRoot, "big", COMMAND_HOOKS);
     await writeFile(join(bigDir, "asset.bin"), "x".repeat(HOOK_BUNDLE_MAX_BYTES + 1), "utf8");
     const big = await computeHookBundleDigest(bigDir, { name: "big" });
     assert.equal(big.kind, "blocked");
+    // 超出上限是**另一类** blocked：处置是瘦身目录，而非人工评审内容。
+    assert.equal(big.kind === "blocked" && big.reason, "over_limit");
 
     const plugins = await projectPlugins(projectRoot, pilotHome);
     const evaluation = await evaluateProjectHookTrust({
@@ -261,6 +268,11 @@ test("1.2a：无法建立摘要的形态一律 blocked（声明越界 / 符号�
     assert.equal(statuses["x@project"], "pending");
     assert.equal(statuses["linked@project"], "blocked");
     assert.equal(statuses["big@project"], "blocked");
+    // 结构化原因透传到评估条目（面板据此本地化提示）。
+    const reasons = Object.fromEntries(evaluation.entries.map(entry => [entry.pluginId, entry.blockedReason]));
+    assert.equal(reasons["linked@project"], "unsafe_content");
+    assert.equal(reasons["big@project"], "over_limit");
+    assert.equal(reasons["x@project"], undefined);
   } finally {
     await rm(projectRoot, { recursive: true, force: true });
     await rm(pilotHome, { recursive: true, force: true });
@@ -360,4 +372,100 @@ test("1.2a：工作区身份键为 32 位 hex 摘要，且路径不同则键不�
   assert.match(a, /^[0-9a-f]{32}$/u);
   assert.notEqual(a, b);
   assert.equal(a, await computeWorkspaceIdentityKey("/tmp/sati-identity-a"));
+});
+
+// ── #538：报告路径的进程内 memo（按 walk 签名失效；强制路径不得用它）─────────────────
+//
+// memo 只服务面板/报告的**可见性**路径，按 `(rel+size+mtimeMs)` 签名失效、跳过昂贵的
+// readFile+哈希。签名**不含内容**，故「内容变但 size 与 mtime 都被回填」会命中陈旧摘要——
+// 这正好是「最容易被无声弱化的一条」：下面第一条用例同时证明 ① memo 命中跳过重读，
+// ② 纯哈希路径（强制路径用）仍识破改动。若有人把强制路径接到 memo 上，本用例即变红。
+
+/** 报告路径摘要（memo 版），非 hashed 直接抛错以便断言。 */
+async function reportDigestOf(pluginDir: string): Promise<string> {
+  const bundle = await computeHookBundleDigestForReport(pluginDir, { name: "x" });
+  if (bundle.kind !== "hashed") throw new Error(`expected a hashed bundle, got blocked: ${bundle.detail}`);
+  return bundle.digest;
+}
+
+/** 把声明里的 `echo hi` 换成等长的 `echo ho`：内容变、字节数不变。 */
+function sameLengthDifferentContent(original: string): string {
+  const swapped = original.replace("echo hi", "echo ho");
+  assert.equal(swapped.length, original.length);
+  assert.notEqual(swapped, original);
+  return swapped;
+}
+
+test("#538 memo：内容变但 size 与 mtime 都回填 → 报告路径命中陈旧摘要，纯哈希路径仍识破", async () => {
+  clearHookBundleDigestCache();
+  const projectRoot = await mkdtemp(join(tmpdir(), "sati-trust-memo-hit-"));
+  try {
+    const pluginDir = await writeProjectPlugin(projectRoot, "x", COMMAND_HOOKS);
+    const hooksPath = join(pluginDir, "hooks", "hooks.json");
+
+    // 固定一个整数秒 mtime，保证回填后 String(mtimeMs) 逐字相同（签名只认 size+mtime）。
+    const fixed = new Date(1_700_000_000_000);
+    await utimes(hooksPath, fixed, fixed);
+
+    const reportDigest1 = await reportDigestOf(pluginDir);
+
+    // 改写内容（等长 ⇒ size 不变），再把 mtime 回填到 fixed ⇒ walk 签名完全不变。
+    await writeFile(hooksPath, sameLengthDifferentContent(JSON.stringify(COMMAND_HOOKS)));
+    await utimes(hooksPath, fixed, fixed);
+
+    // 报告路径：签名未变 ⇒ memo 命中 ⇒ 跳过 readFile，返回**陈旧**摘要。
+    assert.equal(await reportDigestOf(pluginDir), reportDigest1);
+    // 纯哈希路径（强制路径用）：逐字节读当前内容 ⇒ 识破改动，摘要不同。
+    assert.notEqual(await digestOf(pluginDir), reportDigest1);
+  } finally {
+    clearHookBundleDigestCache();
+    await rm(projectRoot, { recursive: true, force: true });
+  }
+});
+
+test("#538 memo：size 或 mtime 真实变化 → 签名失效 → 重算", async () => {
+  clearHookBundleDigestCache();
+  const projectRoot = await mkdtemp(join(tmpdir(), "sati-trust-memo-inval-"));
+  try {
+    const pluginDir = await writeProjectPlugin(projectRoot, "x", COMMAND_HOOKS);
+    const hooksPath = join(pluginDir, "hooks", "hooks.json");
+    const digest1 = await reportDigestOf(pluginDir);
+
+    // (a) 仅 mtime 变（内容不变）：签名变 ⇒ 重算；内容哈希不变 ⇒ 摘要仍等于 digest1。
+    const bumped = new Date(Date.now() + 60_000);
+    await utimes(hooksPath, bumped, bumped);
+    assert.equal(await reportDigestOf(pluginDir), digest1);
+
+    // (b) 内容变（size 变）：签名变 ⇒ 重算 ⇒ 摘要变。
+    await writeFile(
+      hooksPath,
+      JSON.stringify({ PreToolUse: [{ hooks: [{ type: "command", command: "curl evil" }] }] }),
+    );
+    assert.notEqual(await reportDigestOf(pluginDir), digest1);
+  } finally {
+    clearHookBundleDigestCache();
+    await rm(projectRoot, { recursive: true, force: true });
+  }
+});
+
+test("#538 memo：blocked 不写缓存——目录恢复后立即重新算出 hashed", async () => {
+  clearHookBundleDigestCache();
+  const projectRoot = await mkdtemp(join(tmpdir(), "sati-trust-memo-blocked-"));
+  try {
+    const pluginDir = await writeProjectPlugin(projectRoot, "x", COMMAND_HOOKS);
+    const linkPath = join(pluginDir, "escape");
+
+    // 含符号链接 ⇒ blocked（unsafe_content）；blocked 结果**不得**写进 memo。
+    await symlink(join(projectRoot, "target"), linkPath);
+    const blocked = await computeHookBundleDigestForReport(pluginDir, { name: "x" });
+    assert.equal(blocked.kind, "blocked");
+
+    // 移除链接 ⇒ 同一目录现在可哈希；若 blocked 被缓存，reportDigestOf 会抛错（返回非 hashed）。
+    await rm(linkPath, { force: true });
+    const recovered = await computeHookBundleDigestForReport(pluginDir, { name: "x" });
+    assert.equal(recovered.kind, "hashed");
+  } finally {
+    clearHookBundleDigestCache();
+    await rm(projectRoot, { recursive: true, force: true });
+  }
 });

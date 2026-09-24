@@ -7,6 +7,9 @@
 
 export type HookTrustStatus = "trusted" | "pending" | "stale" | "revoked" | "blocked";
 
+/** `blocked` 的结构化原因（#538）：与 `GatewayHookTrustEntry.blockedReason` 同口径。 */
+export type HookTrustBlockedReason = "over_limit" | "unsafe_content";
+
 export type HookDeclaration = {
   event: string;
   matcher?: string;
@@ -21,6 +24,8 @@ export type HookTrustEntry = {
   pluginRoot: string;
   status: HookTrustStatus;
   detail?: string;
+  /** 仅 `status === "blocked"` 时有值；面板据此本地化提示（而非只渲染英文 `detail`）。 */
+  blockedReason?: HookTrustBlockedReason;
   digest?: string;
   hooks: HookDeclaration[];
 };

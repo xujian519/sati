@@ -8,10 +8,14 @@ export {
   type HookTrustStatus,
 } from "./protocol.js";
 export {
+  clearHookBundleDigestCache,
   computeHookBundleDigest,
+  computeHookBundleDigestForReport,
   HOOK_BUNDLE_MAX_BYTES,
   HOOK_BUNDLE_MAX_FILES,
+  type HookBundleBlockedReason,
   type HookBundleDigest,
+  type HookBundleDigestComputer,
 } from "./hookBundleDigest.js";
 export {
   HOOK_TRUST_STORE_FILENAME,

@@ -4,7 +4,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { PluginRuntime } from "../../src/extension/plugins/runtime/PluginRuntime.js";
-import { HookTrustStore, hookTrustStorePath, parseHookTrustFile } from "../../src/extension/plugins/trust/index.js";
+import {
+  HOOK_BUNDLE_MAX_BYTES,
+  HookTrustStore,
+  hookTrustStorePath,
+  parseHookTrustFile,
+} from "../../src/extension/plugins/trust/index.js";
 import { createHookTrustService } from "../../src/cli/hookTrustService.js";
 import { formatHookTrustList, runHookTrustCli } from "../../src/cli/commands/hookTrust.js";
 import type { TelemetryClient, TelemetryFeatureUsedInput } from "../../src/telemetry/index.js";
@@ -102,9 +107,34 @@ test("1.2b：decide 对未知插件与无法建立摘要的插件都不写记录
     );
     await writeFile(join(projectRoot, ".sati", "outside.json"), JSON.stringify(COMMAND_HOOKS), "utf8");
     const blocked = await service.decide({ projectKey: projectRoot, pluginId: "escape@project", verdict: "grant" });
-    assert.deepEqual(blocked, { applied: false, reason: "blocked" });
+    // 声明越界 = 内容无法被安全哈希 ⇒ 结构化原因 unsafe_content（#538），不再是笼统的 "blocked"。
+    assert.deepEqual(blocked, { applied: false, reason: "blocked_unsafe_content" });
     const store = new HookTrustStore(hookTrustStorePath(pilotHome));
     assert.deepEqual(parseHookTrustFile(JSON.stringify({ version: 1, entries: {} })), store.read());
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+    await rm(pilotHome, { recursive: true, force: true });
+  }
+});
+
+test("1.2b：超出哈希上限的插件 → decide 拒为 blocked_over_limit，list 标 over_limit（#538）", async () => {
+  const { projectRoot, pilotHome } = await makeProject();
+  try {
+    // 一个声明了 hook 但目录超出字节上限的插件：摘要算不动 ⇒ 授权无对象。
+    const bigDir = join(projectRoot, ".sati", "plugins", "big");
+    await mkdir(join(bigDir, "hooks"), { recursive: true });
+    await writeFile(join(bigDir, "plugin.json"), JSON.stringify({ name: "big", version: "1.0.0" }), "utf8");
+    await writeFile(join(bigDir, "hooks", "hooks.json"), JSON.stringify(COMMAND_HOOKS), "utf8");
+    await writeFile(join(bigDir, "asset.bin"), "x".repeat(HOOK_BUNDLE_MAX_BYTES + 1), "utf8");
+
+    const service = serviceFor(projectRoot, pilotHome);
+    const decided = await service.decide({ projectKey: projectRoot, pluginId: "big@project", verdict: "grant" });
+    assert.deepEqual(decided, { applied: false, reason: "blocked_over_limit" });
+
+    const listed = await service.list({ projectKey: projectRoot });
+    const big = listed.entries.find(entry => entry.pluginId === "big@project");
+    assert.equal(big?.status, "blocked");
+    assert.equal(big?.blockedReason, "over_limit");
   } finally {
     await rm(projectRoot, { recursive: true, force: true });
     await rm(pilotHome, { recursive: true, force: true });

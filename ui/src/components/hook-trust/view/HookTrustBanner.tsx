@@ -131,8 +131,13 @@ function HookTrustEntryCard({
         )}
       </ul>
 
-      {entry.status === "blocked" && entry.detail ? (
-        <p className="mt-1 text-xs text-amber-800 dark:text-amber-200">{entry.detail}</p>
+      {entry.status === "blocked" ? (
+        <p className="mt-1 text-xs text-amber-800 dark:text-amber-200">
+          {entry.blockedReason
+            ? // 结构化原因（#538）：本地化处置提示，而非只丢一句英文 detail。
+              t(`blockedReason.${entry.blockedReason}`)
+            : (entry.detail ?? t("status.blocked"))}
+        </p>
       ) : null}
     </div>
   );

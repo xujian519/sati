@@ -13,6 +13,10 @@
     "revoked": "rejected",
     "blocked": "cannot be verified"
   },
+  "blockedReason": {
+    "over_limit": "This plugin folder is too large to verify (too many files or bytes). Shrink it before it can be reviewed.",
+    "unsafe_content": "This plugin folder cannot be hashed safely (it contains a symlink, a declaration pointing outside the folder, or an unreadable file). Review its contents manually."
+  },
   "noHooks": "This plugin declares no hooks.",
   "digest": "content digest",
   "footer": "Unreviewed project hooks do not run. Editing the declaration — or any file in the plugin folder — invalidates an approval and asks again.",

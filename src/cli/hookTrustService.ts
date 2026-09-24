@@ -17,6 +17,7 @@ import type { PluginRuntime } from "../extension/plugins/runtime/PluginRuntime.j
 import type { SatiLoadedPlugin } from "../extension/plugins/protocol/plugin.js";
 import {
   computeHookBundleDigest,
+  computeHookBundleDigestForReport,
   computeWorkspaceIdentityKey,
   evaluateProjectHookTrust,
   HookTrustStore,
@@ -50,6 +51,10 @@ export function createHookTrustService(deps: {
       plugins,
       workspaceIdentityKey,
       trustFile: deps.store.read(),
+      // `list` 是面板的**可见性**路径（同一项目反复打开会重复全量读盘 166–189ms/次），
+      // 注入进程内 memo 跳过重复哈希（#538）。memo 按 (size, mtime) 签名失效、不含内容，
+      // 故**只**能用在这里：`decide`（授权）与会话装配（装载）是强制路径，仍走纯内容哈希。
+      computeDigest: computeHookBundleDigestForReport,
     });
     return { workspaceIdentityKey, plugins, evaluation };
   }
@@ -62,6 +67,7 @@ export function createHookTrustService(deps: {
       pluginRoot: plugin?.path ?? "",
       status: entry.status,
       ...(entry.detail === undefined ? {} : { detail: entry.detail }),
+      ...(entry.blockedReason === undefined ? {} : { blockedReason: entry.blockedReason }),
       ...(entry.digest === undefined ? {} : { digest: entry.digest }),
       hooks: plugin ? summarizeHookDeclarations(plugin) : [],
     };
@@ -118,7 +124,8 @@ export function createHookTrustService(deps: {
       const bundle = await computeHookBundleDigest(plugin.path, plugin.manifest);
       if (bundle.kind === "blocked") {
         // 无法建立摘要 ⇒ 授权无对象（授权的是摘要，不是路径），fail-closed 拒绝写入。
-        return rejected("blocked");
+        // 结构化原因（#538）：超限 vs 内容不安全，CLI/面板据此给出不同处置提示。
+        return rejected(bundle.reason === "over_limit" ? "blocked_over_limit" : "blocked_unsafe_content");
       }
       try {
         await deps.store.record(workspaceIdentityKey, {

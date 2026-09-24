@@ -55,7 +55,7 @@
     {
       "rule": "file-size",
       "file": "src/gateway/protocol/types.ts",
-      "lines": 984
+      "lines": 995
     },
     {
       "rule": "file-size",

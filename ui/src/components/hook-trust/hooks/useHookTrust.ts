@@ -1,8 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../../../utils/api";
-import type { HookTrustEntry, HookTrustSnapshot, HookTrustStatus, HookTrustVerdict } from "../types/types";
+import type {
+  HookTrustBlockedReason,
+  HookTrustEntry,
+  HookTrustSnapshot,
+  HookTrustStatus,
+  HookTrustVerdict,
+} from "../types/types";
 
 const STATUSES = new Set<HookTrustStatus>(["trusted", "pending", "stale", "revoked", "blocked"]);
+const BLOCKED_REASONS = new Set<HookTrustBlockedReason>(["over_limit", "unsafe_content"]);
+
+/** 收窄 `blockedReason`：只接受协议里的两个字面量，其余（含缺省）一律 undefined。 */
+function parseBlockedReason(value: unknown): HookTrustBlockedReason | undefined {
+  return typeof value === "string" && BLOCKED_REASONS.has(value as HookTrustBlockedReason)
+    ? (value as HookTrustBlockedReason)
+    : undefined;
+}
 
 /**
  * 网关载荷的形状收窄（与 kanban `parseBoardState` 同一纪律）：UI 类型是协议的手工镜像，
@@ -24,6 +38,7 @@ function parseHookTrustSnapshot(value: unknown): { snapshot?: HookTrustSnapshot;
       pluginRoot: typeof entry.pluginRoot === "string" ? entry.pluginRoot : "",
       status: entry.status,
       detail: typeof entry.detail === "string" ? entry.detail : undefined,
+      blockedReason: parseBlockedReason(entry.blockedReason),
       digest: typeof entry.digest === "string" ? entry.digest : undefined,
       hooks: Array.isArray(entry.hooks)
         ? entry.hooks.flatMap(hook =>
