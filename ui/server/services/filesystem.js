@@ -13,6 +13,7 @@ import crypto from "crypto";
 import mime from "mime-types";
 import { WORKSPACES_ROOT } from "../routes/projects.js";
 import { contentDispositionAttachment } from "../utils/downloadHeaders.js";
+import { shouldSkipEntry } from "./fileTreeSkip.js";
 
 const normalizeWindowsDriveRoot = inputPath => {
   if (process.platform !== "win32" || typeof inputPath !== "string") {
@@ -291,6 +292,12 @@ function permToRwx(perm) {
   return r + w + x;
 }
 
+/**
+ * Directories excluded from the eager project file-tree walk (#533) live in the
+ * dependency-free leaf module {@link ./fileTreeSkip.js} so the predicate can be
+ * unit-tested directly. `shouldSkipEntry` is re-exported below for callers.
+ */
+
 async function getFileTree(dirPath, maxDepth = 3, currentDepth = 0, showHidden = true) {
   // Using fsPromises from import
   const items = [];
@@ -301,19 +308,9 @@ async function getFileTree(dirPath, maxDepth = 3, currentDepth = 0, showHidden =
     for (const entry of entries) {
       // Debug: log all entries including hidden files
 
-      // Skip heavy build directories and VCS directories
-      if (
-        entry.name === "node_modules" ||
-        entry.name === "dist" ||
-        entry.name === "build" ||
-        entry.name.startsWith(".sati") ||
-        entry.name === ".tmp" ||
-        /^\.sati_build\.(?:c|m)?js$/i.test(entry.name) ||
-        entry.name === ".git" ||
-        entry.name === ".svn" ||
-        entry.name === ".hg"
-      )
-        continue;
+      // Skip heavy build directories, VCS directories, and package-manager
+      // caches (#533) — see shouldSkipEntry for the rationale.
+      if (shouldSkipEntry(entry.name)) continue;
 
       const itemPath = path.join(dirPath, entry.name);
       const item = {
@@ -390,4 +387,5 @@ export {
   validateFilename,
   permToRwx,
   getFileTree,
+  shouldSkipEntry,
 };

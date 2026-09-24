@@ -15,6 +15,8 @@ import { join } from "node:path";
 import express from "express";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { parseCommitLogWithStats } from "../utils/gitCommitLog.js";
+
 const nativeFetch = globalThis.fetch;
 const tempDirs = [];
 
@@ -181,3 +183,148 @@ async function createGitApp(projectDir) {
     },
   };
 }
+
+// ---------------------------------------------------------------------------
+// #534 — /commits collapses the per-commit `git show --stat` fan-out into one
+// `git log --stat` call, parsed by parseCommitLogWithStats.
+// ---------------------------------------------------------------------------
+
+/** Commit a new file so the repo has real, non-empty `--stat` output. */
+function commitFile(dir, runGit, name, content, message) {
+  writeFileSync(join(dir, name), content);
+  runGit(["add", name]);
+  runGit(["commit", "-q", "-m", message]);
+}
+
+/**
+ * The summary line the *old* implementation produced, for equivalence checks.
+ * The old path did `git show --stat --format=` → `.trim().split("\n").pop()`,
+ * which left a leading space on the popped line (`.trim()` only strips the outer
+ * edges of the whole blob). `parseCommitLogWithStats` trims each line, so we
+ * normalize here — the only difference is that cosmetic leading space.
+ */
+function legacyStatSummary(runGit, hash) {
+  return runGit(["show", "--stat", "--format=", hash]).trim().split("\n").pop().trim();
+}
+
+describe("parseCommitLogWithStats", () => {
+  it("splits by the 40-hex header, not by blank lines", () => {
+    const h1 = "a".repeat(40);
+    const h2 = "b".repeat(40);
+    const stdout = [
+      `${h1}|ann|ann@x.com|2026-09-24T10:00:00+08:00|first`,
+      "",
+      " a.txt | 2 +-",
+      " 1 file changed, 1 insertion(+), 1 deletion(-)",
+      "",
+      `${h2}|bob|bob@x.com|2026-09-24T11:00:00+08:00|second`,
+      "",
+      " b.txt | 3 +++",
+      " 1 file changed, 3 insertions(+)",
+      "",
+    ].join("\n");
+
+    const commits = parseCommitLogWithStats(stdout);
+    expect(commits).toHaveLength(2);
+    expect(commits[0]).toMatchObject({ hash: h1, author: "ann", message: "first" });
+    expect(commits[0].stats).toBe("1 file changed, 1 insertion(+), 1 deletion(-)");
+    expect(commits[1].stats).toBe("1 file changed, 3 insertions(+)");
+  });
+
+  it("keeps a `|` inside the subject intact", () => {
+    const h = "c".repeat(40);
+    const commits = parseCommitLogWithStats(`${h}|ann|ann@x.com|2026-09-24T10:00:00+08:00|fix: a | b | c`);
+    expect(commits[0].message).toBe("fix: a | b | c");
+  });
+
+  it("returns stats === '' for a merge commit (no --stat block, no trailing blank)", () => {
+    const hm = "d".repeat(40);
+    const h1 = "e".repeat(40);
+    // A merge header immediately followed by the next commit's header: the
+    // merge has no stat block AND no separating blank line — the exact shape
+    // that broke blank-line chunking.
+    const stdout = [
+      `${hm}|ann|ann@x.com|2026-09-24T12:00:00+08:00|Merge branch 'feature'`,
+      `${h1}|ann|ann@x.com|2026-09-24T10:00:00+08:00|first`,
+      "",
+      " a.txt | 2 +-",
+      " 1 file changed, 1 insertion(+), 1 deletion(-)",
+    ].join("\n");
+
+    const commits = parseCommitLogWithStats(stdout);
+    expect(commits).toHaveLength(2);
+    expect(commits[0].message).toBe("Merge branch 'feature'");
+    expect(commits[0].stats).toBe("");
+    expect(commits[1].stats).toBe("1 file changed, 1 insertion(+), 1 deletion(-)");
+  });
+
+  it("parses rename and binary summary lines", () => {
+    const h = "f".repeat(40);
+    const stdout = [
+      `${h}|ann|ann@x.com|2026-09-24T10:00:00+08:00|rename`,
+      "",
+      " old.txt => new.txt | 0",
+      " bin.dat | Bin 0 -> 1024 bytes",
+      " 2 files changed, 0 insertions(+), 0 deletions(-)",
+    ].join("\n");
+    expect(parseCommitLogWithStats(stdout)[0].stats).toBe("2 files changed, 0 insertions(+), 0 deletions(-)");
+  });
+
+  it("returns [] for empty output", () => {
+    expect(parseCommitLogWithStats("")).toEqual([]);
+  });
+});
+
+describe("GET /api/git/commits", () => {
+  it("matches the legacy per-commit `git show --stat` summary line for each commit", async () => {
+    const { dir, runGit } = createRepository(); // 1 commit: init
+    commitFile(dir, runGit, "b.txt", "second\n", "second commit");
+    commitFile(dir, runGit, "c.txt", "third\n", "third commit");
+
+    const { request } = await createGitApp(dir);
+    const { status, body } = await request("/api/git/commits?project=demo");
+
+    expect(status).toBe(200);
+    expect(body.commits).toHaveLength(3);
+    // Newest-first; every stats string must equal what the old N-spawn path gave.
+    for (const commit of body.commits) {
+      expect(commit.stats).toBe(legacyStatSummary(runGit, commit.hash));
+      expect(commit.stats).toMatch(/files? changed/);
+    }
+    expect(body.commits.map(c => c.message)).toEqual(["third commit", "second commit", "init"]);
+  });
+
+  it("returns stats === '' for a real merge commit", async () => {
+    const { dir, runGit } = createRepository();
+    const baseBranch = runGit(["branch", "--show-current"]).trim();
+    commitFile(dir, runGit, "main.txt", "on base\n", "base work");
+    runGit(["checkout", "-q", "-b", "feature"]);
+    commitFile(dir, runGit, "feature.txt", "on feature\n", "feature work");
+    runGit(["checkout", "-q", baseBranch]);
+    runGit(["merge", "--no-ff", "-m", "Merge feature into base", "feature"]);
+
+    const { request } = await createGitApp(dir);
+    const { body } = await request("/api/git/commits?project=demo");
+
+    const merge = body.commits.find(c => c.message.startsWith("Merge feature"));
+    expect(merge, "merge commit present").toBeDefined();
+    expect(merge.stats).toBe("");
+    // Non-merge commits still carry a real summary.
+    const base = body.commits.find(c => c.message === "base work");
+    expect(base.stats).toMatch(/files? changed/);
+  });
+
+  it("honours limit and falls back to 10 for invalid values", async () => {
+    const { dir, runGit } = createRepository();
+    commitFile(dir, runGit, "b.txt", "b\n", "second");
+    commitFile(dir, runGit, "c.txt", "c\n", "third");
+
+    const { request } = await createGitApp(dir);
+    expect((await request("/api/git/commits?project=demo&limit=2")).body.commits).toHaveLength(2);
+    // limit=0 and limit=abc are invalid → default 10 (repo has 3) → all 3.
+    expect((await request("/api/git/commits?project=demo&limit=0")).body.commits).toHaveLength(3);
+    expect((await request("/api/git/commits?project=demo&limit=abc")).body.commits).toHaveLength(3);
+    // A huge limit is clamped to 100; the repo only has 3 so all 3 come back.
+    expect((await request("/api/git/commits?project=demo&limit=999")).body.commits).toHaveLength(3);
+  });
+});

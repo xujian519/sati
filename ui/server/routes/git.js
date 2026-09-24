@@ -5,6 +5,7 @@ import path from "path";
 import { promises as fs } from "fs";
 import { extractProjectDirectory } from "../projects.js";
 import { runChatViaGateway } from "../sati-bridge.js";
+import { parseCommitLogWithStats } from "../utils/gitCommitLog.js";
 
 const router = express.Router();
 const COMMIT_DIFF_CHARACTER_LIMIT = 500_000;
@@ -799,39 +800,16 @@ router.get("/commits", async (req, res) => {
     const parsedLimit = Number.parseInt(String(limit), 10);
     const safeLimit = Number.isFinite(parsedLimit) && parsedLimit > 0 ? Math.min(parsedLimit, 100) : 10;
 
-    // Get commit log with stats
+    // Get commit log *and* per-commit stats in a single `git log --stat` call
+    // (#534). The previous implementation spawned one `git show --stat` per
+    // commit serially — 100 commits cost ~1,140ms vs ~43ms for the single call.
     const { stdout } = await spawnAsync(
       "git",
-      ["log", "--pretty=format:%H|%an|%ae|%ad|%s", "--date=iso-strict", "-n", String(safeLimit)],
+      ["log", "--pretty=format:%H|%an|%ae|%ad|%s", "--date=iso-strict", "--stat", "-n", String(safeLimit)],
       { cwd: projectPath },
     );
 
-    const commits = stdout
-      .split("\n")
-      .filter(line => line.trim())
-      .map(line => {
-        const [hash, author, email, date, ...messageParts] = line.split("|");
-        return {
-          hash,
-          author,
-          email,
-          date,
-          message: messageParts.join("|"),
-        };
-      });
-
-    // Get stats for each commit
-    for (const commit of commits) {
-      try {
-        const { stdout: stats } = await spawnAsync("git", ["show", "--stat", "--format=", commit.hash], {
-          cwd: projectPath,
-        });
-        commit.stats = stats.trim().split("\n").pop(); // Get the summary line
-      } catch {
-        // 该提交的对象取不到（git show 非零退出，如浅克隆缺对象）→ 只把 stats 置空串，/commits 仍返回整份列表，前端不会因缺摘要而整块置空。
-        commit.stats = "";
-      }
-    }
+    const commits = parseCommitLogWithStats(stdout);
 
     res.json({ commits });
   } catch (error) {

@@ -39,6 +39,7 @@
  */
 
 import { logger } from "./utils/consoleLogger.js";
+import { setBounded } from "./utils/boundedMap.js";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import fs from "node:fs";
@@ -1453,7 +1454,7 @@ function _formatPromptTitle(text) {
 function lookupSessionTitle(sessionId, projectKey) {
   if (_sessionTitleCache.has(sessionId)) return _sessionTitleCache.get(sessionId);
   const title = _readFirstPrompt(sessionId, projectKey);
-  _sessionTitleCache.set(sessionId, title);
+  setBounded(_sessionTitleCache, sessionId, title, MAX_ACTIVE_SESSIONS);
   return title;
 }
 
@@ -1533,7 +1534,7 @@ function extractUserQueries(sessionId, projectKey, limit = 20) {
 
   const queries = _readUserQueriesFromTranscript(sessionId, projectKey, limit);
   const mtime = _getTranscriptMtime(sessionId, projectKey);
-  _userQueriesCache.set(cacheKey, { queries, mtime });
+  setBounded(_userQueriesCache, cacheKey, { queries, mtime }, MAX_ACTIVE_SESSIONS);
   return queries;
 }
 
@@ -1649,7 +1650,7 @@ function _extractToolSequence(sessionId, projectKey) {
 
   const result = _readToolSequenceFromTranscript(sessionId, projectKey);
   const mtime = _getTranscriptMtime(sessionId, projectKey);
-  _toolSequenceCache.set(cacheKey, { result, mtime });
+  setBounded(_toolSequenceCache, cacheKey, { result, mtime }, MAX_ACTIVE_SESSIONS);
   return result;
 }
 
@@ -1732,7 +1733,7 @@ function _extractSubagentPrompts(sessionId, projectKey) {
   }
   const result = _readSubagentPromptsFromTranscript(sessionId, projectKey);
   const mtime = _getTranscriptMtime(sessionId, projectKey);
-  _subagentPromptCache.set(cacheKey, { result, mtime });
+  setBounded(_subagentPromptCache, cacheKey, { result, mtime }, MAX_ACTIVE_SESSIONS);
   return result;
 }
 

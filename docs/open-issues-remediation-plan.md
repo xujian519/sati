@@ -541,8 +541,8 @@ pnpm test && (cd ui && pnpm test)              # 后端 + UI 测试（pnpm check
 | **P1** | #520 · #530（口径） | ✅ **已交付**（CI 全绿） | [PR #557](https://github.com/xujian519/sati/pull/557) · `f04b23fc1` | `src/context` **316 → 98**；`undocumented` **12 → 17**（总计 671 → 678 · 已注释 659 → 661）；`ui/src` 576 / 92,914 → **589 / 94,379**；`vendored` 保持 49 / 16,682（边界未放宽） |
 | **P2** | #527 · #530（棘轮） | ✅ **已交付** | [PR #558](https://github.com/xujian519/sati/pull/558) · `110438f9` | `file-size` 棘轮首刷追认 **6 条 / 合计 +136 行**（`types.ts` +73 · `InProcessGateway.ts` +29 · `useChatRealtimeHandlers.ts` +20 · `sati.ts` +7 · `useSessionStore.ts` +5 · `AppShellV2.tsx` +2）；新增 `docs/technical-debt/thresholds.json`（`catchEmpty.total`=0 · `catchNoParam.undocumented`=17）；`check-architecture-boundaries.test.mjs` 10→**12** 例、`measure-techdebt.test.mjs` 35→**43** 例 |
 | **P3** | #536 | ✅ **已交付** | [PR #559](https://github.com/xujian519/sati/pull/559) · `4a42b15a6` | 首 token 最坏阻塞 **30s → 注入预算 2s**（缺省，可配 `memory.injectionBudgetMs`）；`DefaultContextRuntime.ts` **902 → 953（+51）**——P2 file-size 棘轮上线后**第一次在真实功能 PR 上转红并被显式 `--update-baseline` 承认**（打印 Δ）；`src` TS 行数 180,729 → 180,846；新增测试 **8 例**（`memory-nonblocking.spec.ts` 3 + builder 超时/中止 2 + provider abort 竞速 3） |
-| **P4** | #537 | 🔄 **在途**（本 PR · 合并即 `Closes #537`） | 本 PR（`refactor/537-workspace-ledger-anchor`） | 写侧从「每笔变更落全量快照」改为「**每 K=32 笔变更落一次自足锚点 + 其间落 O(1) 的 note 增量**」；累计增长由 **O(n²) → ~O(n²/K)**。实测：**N=100 笔笔记 → 4 个 `workspace_state` 锚点 + 96 条 `workspace_state_delta`**（`≤ ⌈N/K⌉+1`），冷读（新 store 全量重放）与热读（游标续扫）结果一致；**N=K+2=34 → 2 锚点 + 32 增量**跨过再锚点边界。读侧用**同一纯函数 `applyWorkspaceNote`** 重放增量，未新造重放语义（直接回应 PR #378「须定义重放语义」的关切）；保留「单条 `workspace_state` 即可重建」自足性、保序、不动 durable 边界。`src` TS 行数 180,846 → **181,005（+159）**；新增测试 **11 例**（`workspace-ledger-store.spec.ts` 9→19 例含 10 条 #537 用例 + `workspace-note.spec.ts` 6→7 例 note 透传）。**与计划的实施差异见下方「P4 的实施差异」** |
-| **P5** | #533① · #534 · #529 | ⬜ 未开始 | | 文件树节点/耗时、`/commits` 耗时 |
+| **P4** | #537 | ✅ **已交付** | [PR #560](https://github.com/xujian519/sati/pull/560) · `813a56523` | 写侧从「每笔变更落全量快照」改为「**每 K=32 笔变更落一次自足锚点 + 其间落 O(1) 的 note 增量**」；累计增长由 **O(n²) → ~O(n²/K)**。实测：**N=100 笔笔记 → 4 个 `workspace_state` 锚点 + 96 条 `workspace_state_delta`**（`≤ ⌈N/K⌉+1`），冷读（新 store 全量重放）与热读（游标续扫）结果一致；**N=K+2=34 → 2 锚点 + 32 增量**跨过再锚点边界。读侧用**同一纯函数 `applyWorkspaceNote`** 重放增量，未新造重放语义（直接回应 PR #378「须定义重放语义」的关切）；保留「单条 `workspace_state` 即可重建」自足性、保序、不动 durable 边界。`src` TS 行数 180,846 → **181,005（+159）**；新增测试 **11 例**（`workspace-ledger-store.spec.ts` 9→19 例含 10 条 #537 用例 + `workspace-note.spec.ts` 6→7 例 note 透传）。**与计划的实施差异见下方「P4 的实施差异」** |
+| **P5** | #533① · #534 · #529 | 🔄 **在途**（本 PR · 合并即 `Closes #533 #534 #529`） | 本 PR（`refactor/533-534-529-uiserver`） | **#533（层①）**：跳过表补 `.pnpm-store` + 点开头包管理器缓存通则，判据抽成零依赖叶子模块纯函数 `shouldSkipEntry`（直测真函数，避开 `filesystem.js`→`src/patent` 在 vitest/jsdom 下加载失败）；首屏 **621ms → 67ms**、节点 **59,297 → 6,658**（`.pnpm-store` 占 88.8%）。**#534**：`/commits` 由 per-commit 串行 `git show --stat`（N+1 子进程）合并为单次 `git log --stat` + 纯函数 `parseCommitLogWithStats`（**按 header 正则切块**，非空行——merge commit 的 stat 段缺失且无尾随空行）；**130ms → ~17ms**（limit=10）、**1,140ms → ~43ms**（limit=100）。**#529**：新增 `setBounded(map,key,value,limit=MAX_ACTIVE_SESSIONS)` FIFO 上限套用到 4 张 bridge 缓存（复用 `sessionState` 的 500 常量）；**未做** issue 原文的「mtime 失效删键」（唯一调用方取历史会话、无会话结束钩子）。新增测试 **19 例**（`fileTreeSkip` 6 + `git` +8=13 + `sati-bridge` +5=21，均含负控制）。`backlog.md` TD-UISERVER-N02 行号更正 `:1237/1319/1435/1529`→`:1470/1556/1672/1756` 并标 done、N04 标 done。**与计划的实施差异见下方「P5 的实施差异」** |
 | **P6** | #538 · #532 | ⬜ 未开始 | | 信任评估 ms、MCP 工具数 |
 | **P7** | #531 | ⬜ 未开始 | | `load()` 调用次数、面板 SQL 次数 |
 | **P8** | #535 · #541 | ⬜ 未开始 | | — |
@@ -562,9 +562,9 @@ pnpm test && (cd ui && pnpm test)              # 后端 + UI 测试（pnpm check
 
 | # | 520 | 527 | 528 | 529 | 530 | 531 | 532 | 533 | 534 | 535 | 536 | 537 | 538 | 541 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 状态 | ✅ | ✅ | ⬜ | ⬜ | ✅ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ✅ | 🔄 | ⬜ | ⬜ |
+| 状态 | ✅ | ✅ | ⬜ | 🔄 | ✅ | ⬜ | ⬜ | 🔄 | 🔄 | ⬜ | ✅ | ✅ | ⬜ | ⬜ |
 
-> ✅ = 已合并关闭。🔄 = 已有在途交付。#520 由 [PR #557](https://github.com/xujian519/sati/pull/557) 交付并已合并（`Closes #520` 自动关闭）。#530 的**口径段**由 PR #557 交付、**棘轮段**由 P2（[PR #558](https://github.com/xujian519/sati/pull/558)）交付，该 PR 写 `Closes #530`，已合并关闭。#527 由 P2 同一 PR 写 `Closes #527`，已合并关闭。#536 由 P3（[PR #559](https://github.com/xujian519/sati/pull/559) · `Closes #536`）交付并已合并关闭。#537 由 P4（本 PR · `Closes #537`）交付，在途。
+> ✅ = 已合并关闭。🔄 = 已有在途交付。#520 由 [PR #557](https://github.com/xujian519/sati/pull/557) 交付并已合并（`Closes #520` 自动关闭）。#530 的**口径段**由 PR #557 交付、**棘轮段**由 P2（[PR #558](https://github.com/xujian519/sati/pull/558)）交付，该 PR 写 `Closes #530`，已合并关闭。#527 由 P2 同一 PR 写 `Closes #527`，已合并关闭。#536 由 P3（[PR #559](https://github.com/xujian519/sati/pull/559) · `Closes #536`）交付并已合并关闭。#537 由 P4（[PR #560](https://github.com/xujian519/sati/pull/560) · `Closes #537`）交付并已合并关闭。#533（层①）· #534 · #529 由 P5（本 PR · `Closes #533 #534 #529`）交付，在途。
 
 **P3 的实施差异（计划 vs 实际）**：
 
@@ -586,6 +586,18 @@ pnpm test && (cd ui && pnpm test)              # 后端 + UI 测试（pnpm check
 | §3.4 硬约束（PR #378）：单条 `workspace_state` 须自足、不得只落增量、不得反向扫、不动 durable 边界 | 全部保留：锚点仍是**完整自足快照**（单条即可重建，有负控制用例）；增量**只在两锚点之间**、且锚点周期性刷新；仍**顺序正向扫**；增量走既有 `recordEntry` 批写路径，`flushCheckpoint` 语义不变 | 与硬约束一致；额外补「delta 在任何锚点之前出现 → 跳过并返回 undefined」的防御用例（冷启动态不臆造基座） |
 | §3.4 门禁联动：`pnpm measure:update` | 跑了 `measure:update`（`src` TS 180,846 → 181,005）；**未**触发 file-size 棘轮（改动分散在多个既有小文件，无单文件越过 800 行/基线） | 与 P3 不同：本批增量小且分散，棘轮无需承认动作 |
 | （未列） | 连带 `pnpm gen:event-matrix`：`InMemoryTranscriptWriter.ts` 新增方法使 `file_artifacts` 的 `file:line` 从 `:73` → `:79` | AGENTS.md 铁律 5：跨行移动后事件矩阵须重生成（纯行号位移，无语义变化） |
+
+**P5 的实施差异（计划 vs 实际）**：
+
+| 计划写的 | 实际做的 | 差在哪 |
+|---|---|---|
+| §3.5 表头：「三条同属 `ui/server`（JS，**`node --test`**）」 | 实测 `ui/server` 的 29 个 `*.test.js` **全部用 vitest**（`import { describe, expect, it, vi } from "vitest"`），`node:test` 命中数 = 0；由 `cd ui && pnpm test`（`vitest run`，默认 include 覆盖 `ui/server/**`）驱动 | 计划的「`node --test`」是**过期前提**（与 P4 的「缺去重」同型）；新测试一律写成 vitest，落 `ui/server/**` 既有测试面 |
+| §3.5 ①：把跳过判据抽成纯函数 `shouldSkipEntry(name)`「以便直测」 | 抽成**独立零依赖叶子模块** `ui/server/services/fileTreeSkip.js`，`filesystem.js` 导入并再导出 | 计划未料到 `filesystem.js` 的传递依赖链经 `routes/projects.js` 拉到 `src/patent/...`，在 vitest/jsdom 下 `import.meta.url` 解析失败（`The URL must be of scheme file`）而无法加载 ⇒ 判据必须落在**不 import 任何东西**的叶子文件里才能直测真函数（否则只能像 `isSatiSessionKey.test.js` 那样手抄副本、与实现漂移） |
+| §3.5 ②：`stats` 与旧实现「逐条等价」 | 逐条等价，**但归一了一个前导空格**：旧 `git show --stat --format=` 经 `.trim().split("\n").pop()` 会在摘要行残留一个前导空格，新 `parseCommitLogWithStats` 按行 `trim()`。解析器落在**零依赖叶子** `ui/server/utils/gitCommitLog.js`，`git.js` 导入之 | 唯一行为差异、纯外观（前端文本渲染折叠前导空白）；测试显式归一后断言内容等价，并在 note 记明。header 正则用 `{40,64}` 兼容 SHA-256（计划写 `{40}`）。抽叶子的动意见下方「file-size 棘轮」行 |
+| §3.5 ③：新增 `setBounded(map,key,value,limit=500)` 套用 4 处 | 落在**零依赖叶子** `ui/server/utils/boundedMap.js`，签名 `setBounded(map,key,value,limit)`（**无默认值**——上限是调用方策略），`sati-bridge.js` 导入并在 4 处**显式传 `MAX_ACTIVE_SESSIONS`**；单测移到叶子测试 `utils/boundedMap.test.js`（5 例），`sati-bridge.test.js` 回到 16 例 | **与计划有出入**：计划设想 `setBounded` 就地留在 `sati-bridge.js` 并导出作测试缝；实际因 file-size 棘轮（见下行）把它抽到叶子，`limit` 改为必传、由调用方显式给常量。`sati-bridge.js` 虽在 node 环境可导入，但抽叶子让它对本特性净增仅 1 行 import |
+| （未列）file-size 棘轮：`git.js`/`sati-bridge.js` 是 `architecture-baseline.json` 存量豁免文件（基线 1529 / 2347），规则「豁免文件不得再增长」 | 就地新增两个 helper 会让 `git.js` +29、`sati-bridge.js` +32 双双越线 ⇒ 改为把 `parseCommitLogWithStats`、`setBounded` 抽到零依赖叶子（`utils/gitCommitLog.js`、`utils/boundedMap.js`）。结果 `git.js` **净减 22 行**（1529→1507），`sati-bridge.js` 净增 **1 行 import**（2347→2348），仅这 1 行用 `--update-baseline` 追认 | 计划把 #534 记成「减少 `git.js` 行数、无冲突」，但未预见 #529 的 `setBounded` 会让 `sati-bridge.js` **增长**触棘轮。抽叶子既守住棘轮意图（不让两个最大文件膨胀），又让两个纯函数获得可直测的叶子测试——`--update-baseline` 只承认 1 行 import，而非 32 行就地膨胀 |
+| §3.5 ③附注：`backlog.md` TD-UISERVER-N02 行号更正 | 更正为当前 HEAD `:1470/1556/1672/1756` 并标 done；连带把 TD-UISERVER-N04（#534）也标 done | 计划只点了 N02；N04 同为本批交付，顺手一并回填（符合「交付即回填」）。2026-08-27 复核记的「候选路径枚举 4 份逐字复制」共享 helper 抽取**未做**，明确记为残留子债（与容量上限正交） |
+| §4.1：P5 应在 P2 之后（#534 减少 `git.js` 行数与 2 处无参 catch，与 #530 基线交叉） | 已满足：P5 在 P2（PR #558）合并后开工；本 PR 跑 `pnpm measure:update` 刷新基线 | 与计划的硬依赖一致 |
 
 **分诊动作（逐批次启动时做）**：批次启动时把该批议题改 `status: triage` → `status: in-progress`（`docs/issue-management.md` §3 的「推进」动作），并同时豁免 `stale.yml` 的自动归档。
 

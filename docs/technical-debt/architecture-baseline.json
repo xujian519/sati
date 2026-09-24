@@ -105,7 +105,7 @@
     {
       "rule": "file-size",
       "file": "ui/server/routes/git.js",
-      "lines": 1529
+      "lines": 1507
     },
     {
       "rule": "file-size",
@@ -115,7 +115,7 @@
     {
       "rule": "file-size",
       "file": "ui/server/sati-bridge.js",
-      "lines": 2347
+      "lines": 2348
     },
     {
       "rule": "file-size",

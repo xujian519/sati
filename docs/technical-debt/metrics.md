@@ -11,7 +11,7 @@
 | src JS 文件 | 0 |
 | tests 文件 | 606 |
 | ui/src 文件 / 行数 | 589 / 94379 |
-| ui/server 文件 / 行数 | 110 / 32001 |
+| ui/server 文件 / 行数 | 115 / 32401 |
 
 ## 指标口径
 
@@ -32,9 +32,9 @@
 | `as unknown as`（双重断言） | 31 | ui/src(24) · adapters(2) · tool(2) |
 | 裸 `console.*` | 158 | cli(137) · telemetry(8) · ui/server(5) |
 | 空 `catch {}` | 0 | — |
-| 无参 `catch {`（总计） | 678 | ui/server(152) · ui/src(121) · adapters(70) |
+| 无参 `catch {`（总计） | 677 | ui/server(151) · ui/src(121) · adapters(70) |
 | ↳ **无注释**（隐患类，目标） | **17** | — |
-| ↳ 已带意图注释 | 661 | — |
+| ↳ 已带意图注释 | 660 | — |
 | `TODO/HACK/FIXME/XXX` | 11 | always-on(4) · tests(4) · ui/src(2) |
 | 分层违规 `ui/server→src` | 14 | — |
 | 分层违规 `src→ui` | 0 | — |
@@ -108,11 +108,11 @@
 
 | 文件 | 行 |
 |---|---|
-| `ui/server/sati-bridge.js` | 2347 |
+| `ui/server/sati-bridge.js` | 2348 |
 | `src/adapters/channel/wecom/WeComChannel.ts` | 1764 |
 | `src/model/catalog/providers.ts` | 1593 |
-| `ui/server/routes/git.js` | 1529 |
 | `src/gateway/client/InProcessGateway.ts` | 1518 |
+| `ui/server/routes/git.js` | 1507 |
 | `src/adapters/channel/weixin/WeixinChannel.ts` | 1497 |
 | `ui/src/components/main-content-v2/SkillsV2.tsx` | 1441 |
 | `ui/src/stores/useSessionStore.ts` | 1352 |
