@@ -16,7 +16,7 @@ import {
   probeProviderModelWindows,
   warmModelWindowProbes,
 } from "../../../src/model/window/probe.js";
-import { ModelWindowStore } from "../../../src/model/window/store.js";
+import { ModelWindowStore, modelWindowKey } from "../../../src/model/window/store.js";
 
 const NOW = "2026-09-19T00:00:00.000Z";
 
@@ -76,7 +76,7 @@ test("探测成功：返回条目并可写入覆盖层（source: probe）", asyn
 
     assert.equal(result.recorded, 1);
     assert.equal(result.hits[0]?.maxContextTokens, 262144);
-    const entry = store.lookup("openrouter", "vendor/model-a");
+    const entry = store.read().entries[modelWindowKey("openrouter", "vendor/model-a")];
     assert.equal(entry?.maxContextTokens, 262144);
     assert.equal(entry?.maxOutputTokens, 64000);
     assert.equal(entry?.source, "probe");
@@ -217,14 +217,14 @@ test("开启后：非 ollama provider 被探测并写入覆盖层，ollama 跳�
     });
 
     const store = new ModelWindowStore(storePath);
-    for (let i = 0; i < 100 && store.lookup("relay", "m") === undefined; i += 1) {
+    for (let i = 0; i < 100 && store.read().entries[modelWindowKey("relay", "m")] === undefined; i += 1) {
       await new Promise(resolve => setTimeout(resolve, 5));
     }
 
     assert.equal(calls.length, 1, "只应探测一次（ollama 跳过）");
     assert.equal(calls[0]?.startsWith("https://relay.test"), true);
-    assert.equal(store.lookup("relay", "m")?.maxContextTokens, 131072);
-    assert.equal(store.lookup("relay", "m")?.source, "probe");
+    assert.equal(store.read().entries[modelWindowKey("relay", "m")]?.maxContextTokens, 131072);
+    assert.equal(store.read().entries[modelWindowKey("relay", "m")]?.source, "probe");
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

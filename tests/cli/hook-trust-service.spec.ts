@@ -7,6 +7,7 @@ import { PluginRuntime } from "../../src/extension/plugins/runtime/PluginRuntime
 import {
   HOOK_BUNDLE_MAX_BYTES,
   HookTrustStore,
+  hookTrustKey,
   hookTrustStorePath,
   parseHookTrustFile,
 } from "../../src/extension/plugins/trust/index.js";
@@ -80,10 +81,8 @@ test("1.2b：decide revoke 写撤销记录（状态 revoked，而非回到从未
     assert.equal(revoked.applied, true);
     assert.equal(revoked.entry?.status, "revoked");
     const file = new HookTrustStore(hookTrustStorePath(pilotHome));
-    assert.equal(
-      file.lookup((await service.list({ projectKey: projectRoot })).workspaceIdentityKey, "x@project")?.decision,
-      "revoked",
-    );
+    const workspaceIdentityKey = (await service.list({ projectKey: projectRoot })).workspaceIdentityKey;
+    assert.equal(file.read().entries[hookTrustKey(workspaceIdentityKey, "x@project")]?.decision, "revoked");
   } finally {
     await rm(projectRoot, { recursive: true, force: true });
     await rm(pilotHome, { recursive: true, force: true });

@@ -321,9 +321,9 @@
   - 待做：`frame.params` 来自 WS 线上 `JSON.parse`，仍是 `unknown` 未经运行时校验——按 method 建参数守卫（`isRecord`/typeof）在边界收窄并回结构化 `gateway_request_failed`，堵住"客户端畸形入参直通 gateway 方法内部"。属方案 B，另批排期。
   - **2026-08-27 复核（紧迫度上升）**：缺失校验现在有了具体受害者路径——新 god method `dispatchRequest :247-562`（316 行 switch ~90 case）仅 `kanban_subscribe/unsubscribe :533-557` 两处做 `typeof projectId!=="string"` 边界校验；其余 case 的 `frame.params as GatewayMethodParams<"...">` 纯编译期。远端发 `{method:"kanban_get",params:{}}` 即穿透全部守卫，至 `InProcessGateway.resolveKanbanProjectRoot :1164-1169` 触发对客户端不可诊断的裸 TypeError。建议与 TD-GATEWAY-006 合并为一个 PR：建 `METHOD_GUARDS: Record<WsMethod, Guard>` 表同时获得穷尽性检查（一表解两债）。
 - **TD-GATEWAY-003** · 热路径重复序列化（active-turn 重放缓冲）
-  - 类别：I · 严重级：P2 · 工作量：M · 状态：new
-  - 位置：`src/gateway/client/InProcessGateway.ts:1082-1095`
-  - 影响：每事件 `structuredClone` + 2 次 `JSON.stringify`（维护可能无人读的重放缓冲），叠加 WS 发送 1 次，长 text_delta 流下每事件约 3 次序列化。建议：惰性/近似字节估算，或仅在存在消费者时维护。
+  - 类别：I · 严重级：P3 · 工作量：M · 状态：new（2026-09-24 复核降级并更正登记）
+  - 位置：`src/gateway/client/InProcessGateway.ts:1268-1283`（`recordActiveTurnEvent`）
+  - 影响：每事件 `cloneGatewayEvent` + 1 次 `JSON.stringify`（仅用于字节计量；仅在缓冲截断丢弃头部事件时再 +1 次），叠加 WS 发送 1 次。**更正**：旧登记的位置 `:1082-1095` 已失效，且「维护可能无人读的重放缓冲」与代码矛盾——该缓冲有完整消费链（`getActiveTurn`/`activeTurnProjectionPayload :824-858` 服务断线重连的 active-turn 恢复），照字面「仅在存在消费者时维护」删除会破坏重连恢复。实测开销小（~1.1 µs/事件），故降 P3、仅更正登记不改行为；如需优化，方向是惰性/近似字节估算（避免每事件 `JSON.stringify`）而非删除缓冲。
 - **TD-GATEWAY-004** · 手写 WS 帧解析与 16MB DoS 守卫零直接单测
   - 类别：E · 严重级：P2 · 工作量：S · 状态：new
   - 位置：`src/gateway/server/websocket.ts:78-119,146-194`
@@ -1057,9 +1057,10 @@
 **模块概况**：12 文件；Web 消息投影三件套（webMessageFlatten/readSessionMessages/injectWebMessages）+ 客户端 reducer/帧映射 + server 工具（forkSession/listProjects/sessionTokenUsage）。
 
 - **TD-WEB-N01** · `cloneMessage` 用 JSON 序列化深拷贝 + `as CanonicalMessage` 裸断言，位于每请求历史重建热路径
-  - 类别：B · 严重级：P2 · 工作量：M · 状态：new
-  - 位置：`src/web/server/readSessionMessages.ts:477-479`
+  - 类别：B · 严重级：P2 · 工作量：M · 状态：done（2026-09-24 · #535）
+  - 位置：`src/web/server/readSessionMessages.ts`（原局部 `cloneMessage`）
   - 影响：缓存 miss 时对每条消息 `JSON.parse(JSON.stringify(...))`，丢弃 `undefined`、对 BigInt/循环引用抛错并拖慢长会话全量重建（O(N×M) 卡点）。建议：改成结构化浅/深拷贝。
+  - 处置：删除局部 JSON 深拷贝实现，改用仓内既有 `cloneMessage`（`src/model/protocol/clone.ts:35`，经 `src/model/index.ts:104` 导出）——按 content block 结构化克隆、`tool_call.input` 走 `structuredClone`、保留 `undefined` 语义且类型完备（无裸断言）。下游 `flattenCanonicalMessage` 仅读不改（`message.role`/`message.metadata?.compactReplacement`），共享 `metadata` 引用安全。测试见 `tests/web/read-session-messages-clone.spec.ts`。
 - **TD-WEB-N02** · live reducer 与帧映射各自维护一套重复的工具别名/错误归一/失败事件集/预览上限
   - 类别：F · 严重级：P2 · 工作量：M · 状态：new
   - 位置：`webMessage.ts:12-27,29-44,45-69,157-166,564-567` vs `eventMapping.ts:29-45,50-66,93-113`；`injectWebMessages.ts:249-252`
@@ -2201,7 +2202,7 @@
 | `TD-EXTENSION-N07` | P2 | 插件信任门每次会话装配 / 每次面板打开都把插件目录整树逐字节哈希，**无任何缓存**（实测 1990 文件 / 7.96 MB ⇒ 130 ms/次）；且 2000 文件上限使带 `node_modules/` 的插件永久 `blocked`。**已做（#538）**：① 报告/面板**可见性**路径加进程内 memo（按 walk 签名 `rel+size+mtimeMs` 失效，跳过 readFile+哈希）；**强制路径（会话装配装载 / 授权决策）仍走纯内容哈希、绕过 memo**——签名不含内容，「内容变但 size+mtime 回填」会命中陈旧摘要，喂给强制路径等于无声弱化信任门（违背 2026-09-21「mtime 不是信任判据」决策）。② `blocked` 原因结构化（`over_limit` vs `unsafe_content`）并透传到面板本地化提示 + decide reason。**不做**「跳过 `node_modules` 哈希」（会推翻「整树内容摘要=信任单位」决策，见方案 §6.1 分叉 6=b）。见 `docs/notes/implemented/2026-09-24-hook-trust-digest-memo.md` | **#538** | 2026-09-24 |
 | `TD-PATENT-N26` | P2 | `figuregen/check.ts` 754 行、`checkFigures` 单函数 **503 行**（21 条规则 × 3 法域 × 10 选项共用一个作用域，`skipLayoutRules` / `figureCount` / `zoom` 互相牵动）；三个制图工具 `execute` 各 163–335 行重复产物拼装 | **#539** | 2026-09-23 |
 | `TD-PATENT-N27` | P2 | `figuregen` 内 `escapeXml` ×4、`fmt` ×4（**精度已漂移出 1/2/3 位**）、几何谓词 `boxesOverlap` / `boxWithin` ×2（同容差、一份常量一份字面量） | **#540** | 2026-09-23 |
-| `TD-EXTENSION-N08` | P3 | `HookTrustStore` 与 `ModelWindowStore` 是同一份存储骨架的两份手抄；`lookup()` 零生产调用者却被注释为「解析期热路径」；附带 `figuregen` barrel 225 个导出中 92 个模块外零消费 | **#541** | 2026-09-23 |
+| `TD-EXTENSION-N08` | P3 | `HookTrustStore` 与 `ModelWindowStore` 是同一份存储骨架的两份手抄；`lookup()` 零生产调用者却被注释为「解析期热路径」；附带 `figuregen` barrel 196 个导出中 84 个模块外零消费（issue 原写 225/92，已更正）。**已做（#541）**：删除两处零消费的 `lookup()`（`store.ts` / `HookTrustStore.ts`）——每次调用整表 `readFileSync`+parse 的死方法 + 误导注释一并消灭，4 个测试文件 9 处调用点改为 `read().entries[key(...)]`。**不做**①抽共享存储层（issue 自设触发条件「下次改动这两个 store 之一或新增第三个」今天不满足；两段 diff 172 行、语义差异大，将来若触发方向是纯函数层 `versionedJsonFile.ts` 而非继承基类）；②barrel 收敛（公开面变更须决策记录、收益为 0 而成本最高）。见 `docs/notes/implemented/2026-09-24-clone-message-and-dead-lookup.md` | **#541** | 2026-09-24 |
 | `TD-TOOL-009` | P2 | 两个制图工具把 `invalid_tool_input` 折叠成 `tool_execution_failed`（第三个工具写法正确），破坏按错误码的恢复策略与熔断识别 | **#545** | 2026-09-23 |
 
 ### 37.2 本轮新发现的缺陷（4 条 `bug`，账本此前无载体）

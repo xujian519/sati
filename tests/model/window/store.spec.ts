@@ -27,14 +27,14 @@ async function withStore(run: (store: ModelWindowStore, dir: string) => Promise<
   }
 }
 
-test("文件缺失 → 空表，lookup 返回 undefined", async () => {
+test("文件缺失 → 空表，单条读取返回 undefined", async () => {
   await withStore(async store => {
     assert.deepEqual(store.read().entries, {});
-    assert.equal(store.lookup("deepseek", "deepseek-v4-flash"), undefined);
+    assert.equal(store.read().entries[modelWindowKey("deepseek", "deepseek-v4-flash")], undefined);
   });
 });
 
-test("record 落盘后 lookup 可同步取回", async () => {
+test("record 落盘后可同步读回", async () => {
   await withStore(async store => {
     await store.record("deepseek", "deepseek-v4-flash", {
       maxContextTokens: 131072,
@@ -43,7 +43,7 @@ test("record 落盘后 lookup 可同步取回", async () => {
       updatedAt: NOW,
       via: "context_length",
     });
-    const entry = store.lookup("deepseek", "deepseek-v4-flash");
+    const entry = store.read().entries[modelWindowKey("deepseek", "deepseek-v4-flash")];
     assert.equal(entry?.maxContextTokens, 131072);
     assert.equal(entry?.source, "probe");
     assert.equal(entry?.via, "context_length");

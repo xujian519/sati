@@ -74,11 +74,6 @@ export class HookTrustStore {
     }
   }
 
-  /** 单条查询。 */
-  lookup(workspaceIdentityKey: string, pluginId: string): HookTrustRecord | undefined {
-    return this.read().entries[hookTrustKey(workspaceIdentityKey, pluginId)];
-  }
-
   /**
    * 写入一条决定（同键覆盖）。写路径按「先读整表 → 覆盖该键 → 原子写」进行：
    * 信任表的写入频率是人工点击级，无需并发合并；原子写保证不会留下半截文件
