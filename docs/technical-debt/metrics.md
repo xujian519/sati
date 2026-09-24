@@ -1,15 +1,15 @@
 # Sati 技术债务指标基线与趋势
 
 > 由 `node scripts/measure-techdebt.mjs --update` 自动生成，谨防手工编辑。
-> 最近一次快照：**2026-09-23**
+> 最近一次快照：**2026-09-24**
 
 ## 规模
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1066 / 180729 |
+| src TS 文件 / 行数 | 1066 / 180846 |
 | src JS 文件 | 0 |
-| tests 文件 | 605 |
+| tests 文件 | 606 |
 | ui/src 文件 / 行数 | 589 / 94379 |
 | ui/server 文件 / 行数 | 110 / 32001 |
 
@@ -137,7 +137,7 @@
 | `src/adapters/channel/protocol/ImLiveReplyController.ts` | 1017 |
 | `src/gateway/protocol/types.ts` | 984 |
 | `ui/src/components/main-content-v2/FilesV2.tsx` | 964 |
-| `ui/server/routes/config.test.js` | 934 |
+| `src/context/DefaultContextRuntime.ts` | 953 |
 
 ## vendored 子包（单列，不计入上述规模与排名）
 
@@ -165,7 +165,7 @@
 | tool | 65 |
 | agent | 59 |
 | knowledge | 38 |
-| context | 35 |
+| context | 36 |
 | gateway | 34 |
 | model | 32 |
 | session | 28 |
@@ -194,7 +194,7 @@
 | runtime | 1 |
 | status | 1 |
 
-| **合计** | **580** |
+| **合计** | **581** |
 
 ## i18n en/zh-CN 对齐
 

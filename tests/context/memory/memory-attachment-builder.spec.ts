@@ -164,3 +164,50 @@ describe("MemoryAttachmentBuilder", () => {
     assert.ok(text?.type === "text" && text.text.includes("<memory-context>"));
   });
 });
+
+describe("MemoryAttachmentBuilder 超时 / 中止熔断（#536）", () => {
+  /** 永不结算的 resolver：模拟内层 memory-gate LLM 卡住（vendored 子包不消费 signal）。 */
+  function hangingResolver(): MemoryResolver {
+    return {
+      async retrieve(): Promise<MemoryRetrieveResult> {
+        return await new Promise<MemoryRetrieveResult>(() => {});
+      },
+      async captureTurn(): Promise<void> {},
+    };
+  }
+
+  it("超时熔断：fake timer 推进到 timeoutMs → 空注入、不抛、诊断 memory_provider_error", async t => {
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const builder = new MemoryAttachmentBuilder(hangingResolver());
+    const pending = builder.build({
+      query: "q",
+      sessionId: "s1",
+      projectRoot: "/tmp",
+      recentMessages: [],
+      timeoutMs: 30_000,
+    });
+    // 负控制锚点：若撤掉 build() 内的「超时即空注入」分支，pending 永不结算、本用例会挂起失败。
+    t.mock.timers.tick(30_000);
+    const result = await pending;
+    assert.equal(result.attachments.length, 0, "超时应空注入");
+    assert.equal(result.diagnostics[0]?.code, "memory_provider_error");
+    assert.equal(result.diagnostics[0]?.severity, "warning");
+    assert.match(result.diagnostics[0]?.message ?? "", /timed out after 30000ms/);
+  });
+
+  it("外部 abortSignal 取消：空注入、无诊断、不抛（区别于超时降级）", async () => {
+    const controller = new AbortController();
+    const builder = new MemoryAttachmentBuilder(hangingResolver());
+    const pending = builder.build({
+      query: "q",
+      sessionId: "s1",
+      projectRoot: "/tmp",
+      recentMessages: [],
+      signal: controller.signal,
+    });
+    controller.abort();
+    const result = await pending;
+    assert.equal(result.attachments.length, 0);
+    assert.deepEqual(result.diagnostics, [], "回合级取消是预期路径，不应记 warning 诊断");
+  });
+});

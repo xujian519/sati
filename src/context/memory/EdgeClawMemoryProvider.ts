@@ -144,55 +144,33 @@ export class EdgeClawMemoryProvider implements MemoryResolver {
     cacheKey: string,
     startedAt: string,
   ): Promise<MemoryRetrieveResult> {
-    try {
+    // 内层检索封装成 inner：memory-core 是 vendored 子包，其 retrieveContext **不消费
+    // AbortSignal**（`grep -rn AbortSignal memory-core/src` 计数 0），故外层熔断只是「不再等」，
+    // 内层会继续跑到自己的 45s×3 重试预算。为不让幽灵调用污染状态，这里在**仓内适配层**对
+    // inner 与 abort 竞速（raceAbort）：熔断/取消后丢弃内层结果，绝不写入 TTL 缓存（否则陈旧
+    // 结果会被注入后续回合），也不落 pendingRetrievals、不计错误遥测（中止非 provider 故障）。
+    // 不改子包（#536 / 计划 §2.3.3）。
+    const inner = (async (): Promise<EdgeClawRetrieveContextResult> => {
       const recentMessages = canonicalMessagesToMemoryMessages(input.recentMessages);
-      const result = await this.options.service.retrieveContext(input.query, {
+      return await this.options.service.retrieveContext(input.query, {
         recentMessages,
         workspaceHint: input.projectRoot,
         retrievalMode: this.options.retrievalMode ?? "auto",
         signal: input.signal,
       });
-      this.pendingRetrievals.set(input.sessionId, {
-        query: input.query,
-        startedAt,
-        result,
-      });
-      const systemContext = (result.systemContext ?? result.context ?? "").trim();
-      if (!systemContext) {
-        this.trackMemoryStage({
-          phase: "retrieve",
-          loopStage: "loop_end",
-          sessionId: input.sessionId,
-          metadata: { injected: false },
-        });
-        const empty: MemoryRetrieveResult = {
-          diagnostics: [
-            {
-              code: "memory_context_empty",
-              severity: "info",
-              message: "EdgeClaw memory returned no relevant context.",
-            },
-          ],
-          metadata: { trace: result.trace, debug: result.debug },
-        };
-        this.retrieveCache.set(cacheKey, empty);
-        return empty;
-      }
+    })();
 
-      this.trackMemoryStage({
-        phase: "retrieve",
-        loopStage: "loop_end",
-        sessionId: input.sessionId,
-        metadata: { injected: true },
-      });
-      const success: MemoryRetrieveResult = {
-        systemContext,
-        diagnostics: [],
-        metadata: { trace: result.trace, debug: result.debug },
-      };
-      this.retrieveCache.set(cacheKey, success);
-      return success;
+    let result: EdgeClawRetrieveContextResult;
+    try {
+      result = await raceAbort(inner, input.signal);
     } catch (error) {
+      // 竞速落败：abort（硬熔断 / 回合取消）或 inner 自身抛错。inner 仍可能在后台跑完——
+      // 挂空 catch 防 unhandledRejection，其结果一律丢弃（不缓存）。
+      inner.catch(() => {});
+      if (input.signal?.aborted) {
+        // fail-soft 空结果（与 MemoryAttachmentBuilder 的降级语义一致）；不缓存、不遥测。
+        return { diagnostics: [] };
+      }
       this.options.telemetry?.trackError(error, {
         module: "memory",
         ownerModule: "memory",
@@ -212,6 +190,48 @@ export class EdgeClawMemoryProvider implements MemoryResolver {
         ],
       };
     }
+
+    // inner 在未被中止时胜出：正常落 pendingRetrievals 与缓存（以下与历史逻辑逐字一致）。
+    this.pendingRetrievals.set(input.sessionId, {
+      query: input.query,
+      startedAt,
+      result,
+    });
+    const systemContext = (result.systemContext ?? result.context ?? "").trim();
+    if (!systemContext) {
+      this.trackMemoryStage({
+        phase: "retrieve",
+        loopStage: "loop_end",
+        sessionId: input.sessionId,
+        metadata: { injected: false },
+      });
+      const empty: MemoryRetrieveResult = {
+        diagnostics: [
+          {
+            code: "memory_context_empty",
+            severity: "info",
+            message: "EdgeClaw memory returned no relevant context.",
+          },
+        ],
+        metadata: { trace: result.trace, debug: result.debug },
+      };
+      this.retrieveCache.set(cacheKey, empty);
+      return empty;
+    }
+
+    this.trackMemoryStage({
+      phase: "retrieve",
+      loopStage: "loop_end",
+      sessionId: input.sessionId,
+      metadata: { injected: true },
+    });
+    const success: MemoryRetrieveResult = {
+      systemContext,
+      diagnostics: [],
+      metadata: { trace: result.trace, debug: result.debug },
+    };
+    this.retrieveCache.set(cacheKey, success);
+    return success;
   }
 
   /**
@@ -310,4 +330,39 @@ function extractLastAssistantText(messages: readonly ContextMemoryMessage[]): st
  */
 function buildRetrieveCacheKey(input: MemoryRetrieveInput): string {
   return `${input.sessionId}\u0000${input.query}\u0000${input.projectRoot ?? ""}`;
+}
+
+/**
+ * 对 `promise` 与 `signal` 竞速（#536）：signal 先中止则 reject（AbortError），否则透传
+ * `promise` 的结算。vendored memory-core 不消费 AbortSignal，故这是「停止等待并丢弃内层结果」
+ * 的唯一落点——内层调用本身无法被真正取消，只能不再采纳其结果。监听器在任一分支结算后摘除，
+ * 不留悬挂引用。
+ */
+async function raceAbort<T>(promise: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
+  if (!signal) return promise;
+  if (signal.aborted) throw createAbortError(signal.reason);
+  return await new Promise<T>((resolve, reject) => {
+    const onAbort = () => {
+      cleanup();
+      reject(createAbortError(signal.reason));
+    };
+    const cleanup = () => signal.removeEventListener("abort", onAbort);
+    signal.addEventListener("abort", onAbort, { once: true });
+    promise.then(
+      value => {
+        cleanup();
+        resolve(value);
+      },
+      error => {
+        cleanup();
+        reject(error);
+      },
+    );
+  });
+}
+
+function createAbortError(reason?: unknown): Error {
+  if (reason instanceof Error) return reason;
+  const message = typeof reason === "string" && reason ? reason : "Memory retrieval aborted.";
+  return new DOMException(message, "AbortError");
 }

@@ -540,7 +540,7 @@ pnpm test && (cd ui && pnpm test)              # 后端 + UI 测试（pnpm check
 |---|---|---|---|---|
 | **P1** | #520 · #530（口径） | ✅ **已交付**（CI 全绿） | [PR #557](https://github.com/xujian519/sati/pull/557) · `f04b23fc1` | `src/context` **316 → 98**；`undocumented` **12 → 17**（总计 671 → 678 · 已注释 659 → 661）；`ui/src` 576 / 92,914 → **589 / 94,379**；`vendored` 保持 49 / 16,682（边界未放宽） |
 | **P2** | #527 · #530（棘轮） | ✅ **已交付** | [PR #558](https://github.com/xujian519/sati/pull/558) · `110438f9` | `file-size` 棘轮首刷追认 **6 条 / 合计 +136 行**（`types.ts` +73 · `InProcessGateway.ts` +29 · `useChatRealtimeHandlers.ts` +20 · `sati.ts` +7 · `useSessionStore.ts` +5 · `AppShellV2.tsx` +2）；新增 `docs/technical-debt/thresholds.json`（`catchEmpty.total`=0 · `catchNoParam.undocumented`=17）；`check-architecture-boundaries.test.mjs` 10→**12** 例、`measure-techdebt.test.mjs` 35→**43** 例 |
-| **P3** | #536 | ⬜ 未开始 | | 首 token 阻塞消除证据 |
+| **P3** | #536 | ✅ **已交付** | 见下方 commit · PR 号回填中 | 首 token 最坏阻塞 **30s → 注入预算 2s**（缺省，可配 `memory.injectionBudgetMs`）；`DefaultContextRuntime.ts` **902 → 953（+51）**——P2 file-size 棘轮上线后**第一次在真实功能 PR 上转红并被显式 `--update-baseline` 承认**（打印 Δ）；`src` TS 行数 180,729 → 180,846；新增测试 **8 例**（`memory-nonblocking.spec.ts` 3 + builder 超时/中止 2 + provider abort 竞速 3） |
 | **P4** | #537 | ⬜ 未开始 | | 200 次笔记累计 MiB |
 | **P5** | #533① · #534 · #529 | ⬜ 未开始 | | 文件树节点/耗时、`/commits` 耗时 |
 | **P6** | #538 · #532 | ⬜ 未开始 | | 信任评估 ms、MCP 工具数 |
@@ -562,9 +562,20 @@ pnpm test && (cd ui && pnpm test)              # 后端 + UI 测试（pnpm check
 
 | # | 520 | 527 | 528 | 529 | 530 | 531 | 532 | 533 | 534 | 535 | 536 | 537 | 538 | 541 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 状态 | ✅ | 🔄 | ⬜ | ⬜ | 🔄 | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+| 状态 | ✅ | ✅ | ⬜ | ⬜ | ✅ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | 🔄 | ⬜ | ⬜ | ⬜ |
 
-> ✅ = 已合并关闭。🔄 = 已有在途交付。#520 由 [PR #557](https://github.com/xujian519/sati/pull/557) 交付并已合并（`Closes #520` 自动关闭）。#530 的**口径段**由 PR #557 交付、**棘轮段**由 P2（[PR #558](https://github.com/xujian519/sati/pull/558)）交付，该 PR 写 `Closes #530`。#527 由 P2 同一 PR 写 `Closes #527`。
+> ✅ = 已合并关闭。🔄 = 已有在途交付。#520 由 [PR #557](https://github.com/xujian519/sati/pull/557) 交付并已合并（`Closes #520` 自动关闭）。#530 的**口径段**由 PR #557 交付、**棘轮段**由 P2（[PR #558](https://github.com/xujian519/sati/pull/558)）交付，该 PR 写 `Closes #530`，已合并关闭。#527 由 P2 同一 PR 写 `Closes #527`，已合并关闭。#536 由 P3 交付（`Closes #536`），在途。
+
+**P3 的实施差异（计划 vs 实际）**：
+
+| 计划写的 | 实际做的 | 差在哪 |
+|---|---|---|
+| §2.3.3 / §3.3：非阻塞化选「**后台检索 + 下一轮注入**」 | 选「**注入预算（缺省 2s）+ 后台预热**」：预算内命中本轮即注入，超预算才退到下一轮 | 计划字面选项会让 composite 里**所有** provider 在某 query 首轮（且常是唯一一轮）一律空注入——单轮问答拿不到任何记忆/知识。注入预算保留「快路（缓存命中 / 同步 FTS·DB）本轮即注入」，只对真正慢的冷检索退后台，严格优于纯后台。已就地征询并采纳「预算 + 后台预热」 |
+| §2.3.3：「到期即有则注入」被否决（「需给检索加预算，会与 provider 30s TTL 缓存打架」） | 采纳其**收益**、去掉其**副作用**：预算到期只「停止等待」、**不 abort**，内层后台跑完写缓存供下一轮 | 「打架」只对**会 abort 的预算**成立（abort 丢弃结果 ⇒ 缓存永不暖）。把「停止等待」与「中止工作」解耦后二者不再冲突——这是本批的核心决定，详见决策记录 |
+| §3.3：abort「在 `EdgeClawMemoryProvider` 内做竞速并在熔断后丢弃内层结果」 | 逐字落地：新增 `raceAbort`，中止后 fail-soft 空结果、**不写缓存 / 不落 pendingRetrievals / 不计错误遥测**，幽灵 inner 迟到结算被空 catch 吞掉 | 与计划一致；额外补「不污染 TTL 缓存」的显式断言（陈旧结果注入后续回合是 issue 未点明的次生危害） |
+| §3.3 门禁联动：`pnpm measure:update`（`src/context/` 行数变化） | 跑了 `measure:update`，**并额外撞 P2 file-size 棘轮**：`DefaultContextRuntime.ts` 902 → 953（+51），按棘轮承认动作 `--update-baseline` 追认并打印 Δ | 计划未预料本批会触发**自己上一批刚立的棘轮**——这是棘轮上线后第一次在真实功能 PR 上转红，正好示范它期望的「合法增长须显式写进 PR」形态（详见决策记录 Consequences） |
+| （未列） | 连带 `pnpm gen:event-matrix`：`sessionDependencyAssembly.ts` 加 1 行配置透传使 `elicitation_requested` 的 `file:line` 从 `:242` → `:243` | AGENTS.md 铁律 5：跨行移动后事件矩阵须重生成（纯行号位移，无语义变化） |
+| （未列） | 新增配置项 `memory.injectionBudgetMs`（进 `KNOWN_FIELDS` + `readOptionalPositiveInteger` 解析 + `sessionDependencyAssembly` 透传） | 让预算成为可运维旋钮而非硬编码；计划只提「给检索加预算」未指定配置面 |
 
 **分诊动作（逐批次启动时做）**：批次启动时把该批议题改 `status: triage` → `status: in-progress`（`docs/issue-management.md` §3 的「推进」动作），并同时豁免 `stale.yml` 的自动归档。
 
