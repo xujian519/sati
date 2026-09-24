@@ -43,6 +43,7 @@
   - **2026-09-18 第一段交付（#353 · PR #432）**：`ui/server` 段 **72 → 0**（全仓无注释 114 → **42**）。72 处/28 文件各补一行「失败模式 → 回退语义」注释，**只增注释、零代码改动**（+74/−1 行，唯一非注释新增是 `utils/plugin-loader.js` 空体 `} catch {}` 的展开括号）。同 PR 用 AST 复核了度量判据的准确度：正则判「有注释」547 vs AST 判 545 ⇒ **假阳性 2 处**（`src/context/budget/ToolResultBudget.ts:203` 上一行注释属 try 体；`src/tool/builtin/executeCode.ts:700` 嵌套 catch 的注释被记到外层）、**假阴性 0 处**——后者说明「无注释」集合是准确的。114 处形态：静默 89 / 错误转译 21 / 已落日志 3 / 空体 1。指标副作用已披露：`空 catch {}` 1 → 0 系正则形态效应（补注释后不再匹配空体正则），非删除。决策见 `docs/notes/implemented/2026-09-18-catch-intent-comments.md`。
   - **2026-09-18 第二段交付（#353 · PR #433）**：`src` 36 处 + `ui/src` 6 处 = **42 处 / 30 文件**补齐，**只增注释、零代码改动**（+42/−0 行，无单行 catch 需展开）。至此全仓「无注释的无参 catch」**114 → 0**（`metrics.md`：无注释 114 → **0**、已注释 547 → **661**、总计 661 不变，+114/−114 闭合）。两道独立证明同段一：AST 叶子 token 比对 30/30 一致、`transpileModule({removeComments:true})` 编译产物 30/30 逐字节相同；`pnpm check:event-matrix` 为 fresh（段二文件中唯一在事件矩阵带 `file:line` 的 `src/model/providers/openai-responses/stream.ts` 矩阵记 `:131`，注释插在 `:209/:214`，不影响条目）。
   - **2026-09-18 载体收口**：`TD-SESSION-N12`（`TranscriptReader.ts` 两处）由段二注释直接还清；**`TD-TEAM-N11` 不属于本判据**——`src/cli/teamSubsystem.ts` 的 `runMemberScan` 外层是 **promise 链上的 `.catch()`** 而非 `catch {}` 子句，既不被「无注释的无参 catch」口径统计，补注释也修不了「整次启动扫描失败被静默吞掉 ⇒ 冷恢复失效而队长侧零信号」，故按 #353 的「场景 B：失败应被观测」单独补 `logger.error` 处置（PR #434），不混进纯注释变更。
+  - **2026-09-24 残留 + 棘轮（#530，跨 P1+P2）**：#353 之后又新引入 12 处无注释无参 catch（4 个 commit，逐处核验均非真隐患，语义在函数/文件 JSDoc 内）⇒ 暴露护栏缺位（门禁只比新鲜度无棘轮、#353 触发线 45 过高）。**P1**（PR #557·`f04b23fc1`）修口径：`measure-techdebt.mjs` 判据补回漏算的 5 处，`undocumented` **12→17**（总计 671→678），与 `docs/code-facts.md`/`metrics.md` 同刷；**P2**（PR #558·`110438f9`）加棘轮：新增 `docs/technical-debt/thresholds.json`（`catchEmpty.total`=0 · `catchNoParam.undocumented`=17），`check:techdebt-metrics` 超限即红，把当前值冻结为上限拦住回升。详见 §37.3「`TD-CATCH-001` 残留」行（#530 载体）。最后复核：2026-09-24。
 
 ### Arch/分层
 - **TD-BOUND-001** · `ui/server → src` 深层导入 14 处
@@ -358,9 +359,10 @@
   - 影响：账本每次模型调用前重新注入，长会话 O(entries) 重扫 + clone。建议：按尾部衔接键缓存最新 workspace_state。对应 `performance-review.md` B 类「每轮全量重建」。
   - **2026-09-15 处置（PR #378）**：`WorkspaceLedgerReader` 新增 `scanLatestWorkspaceState(entries, cursor?)`，游标记 `scanned`（上轮覆盖的前缀长度）+ `anchor`（该前缀最后一条 entry 的**对象引用**），下轮只扫新增尾部，常见路径 O(1)。失效判据用对象身份而非数组长度：`readTranscript` 返回元素共享数组，transcript 被替换/回滚时 `readFullAndCache` 会产出全新对象，锚必然不匹配 → 从头重扫；长度型守卫恰漏「等长覆盖」（`cp -p` / 同长度原地改写）这一 reader 自己专门设头部指纹兜底的场景（负控制已验证：去掉身份判据后 `workspace-ledger-store.spec.ts` 的等长重写用例返回旧值）。同批修掉 TD-WORKSPACE-N01 的克隆放大。决策见 `docs/notes/implemented/2026-09-15-workspace-ledger-read-path.md`。
 - **TD-SESSION-N02** · `recordWorkspaceState` 每笔写入附加账本全量快照，transcript 单调增长
-  - 类别：A · 严重级：P2 · 工作量：L · 状态：new
+  - 类别：A · 严重级：P2 · 工作量：L · 状态：**done（#537，PR #560 · `c9dcf9422`）**
   - 位置：`src/session/transcript/JsonlTranscriptWriter.ts:232-241`
   - 影响：Reader 只取最新一条，先前全量快照成为死重，transcript 无界增长。建议：只落增量/最新状态。
+  - 处置（#537，决策＝「周期锚点 + note 增量」）：写侧由「每笔变更落全量快照」改为「**每 K=32 笔变更落一次自足锚点 `workspace_state` + 其间落 O(1) 的 `workspace_state_delta` 增量**」，累计增长由 **O(n²) → ~O(n²/K)**。实测 N=100 笔笔记 → 4 锚点 + 96 增量（`≤ ⌈N/K⌉+1`），N=K+2=34 → 2 锚点 + 32 增量跨过再锚点边界；冷读（新 store 全量重放）与热读（游标续扫）结果一致。**未照搬 issue 原文的「只落增量」**——那会丢掉「单条 `workspace_state` 即可重建」的自足性（PR #378 既有结论）；读侧复用**同一纯函数 `applyWorkspaceNote`** 重放增量，未新造重放语义，保序、不动 durable 边界（`recordEntry` 批写 / `flushCheckpoint` 不变）。新增测试 11 例（`workspace-ledger-store.spec.ts` 9→19 + `workspace-note.spec.ts` 6→7）。见 `docs/notes/implemented/2026-09-24-workspace-ledger-anchor-delta.md`。最后复核：2026-09-24。
 - **TD-SESSION-N03** · `TaskResumeScanner.scan()` 空 catch 静默吞单会话失败，结果面无失败计数
   - 类别：C · 严重级：P2 · 工作量：S · 状态：new
   - 位置：`src/session/resume/TaskResumeScanner.ts:98-100`；`42-49`
@@ -401,9 +403,11 @@
   - 位置：`src/context/memory/edgeclaw-memory-core/src/core/review/dream-review.ts:521-1045`
   - 影响：Dream 主编排承担 snapshot/聚类/meta 合并/取舍/汇总，分支极多。建议：按 categoryDream/generalMerge/manifestReview 拆子方法。
 - **TD-CONTEXT-N03** · 检索链阻塞模型调用，缓存未命中时最高 30s
-  - 类别：I · 严重级：P2 · 工作量：M · 状态：new
-  - 位置：`src/context/DefaultContextRuntime.ts:199-201`（`await memoryPromise`）、`:95`（`DEFAULT_MEMORY_RETRIEVAL_TIMEOUT_MS = 30_000`）
+  - 类别：I · 严重级：P2 · 工作量：M · 状态：**done（#536，PR #559，`4a42b15a6`）**
+  - 位置：`src/context/DefaultContextRuntime.ts:229-270`（`memoryPromise` 构建 + `raceWithInjectionBudget` 注入）、`:133`（`DEFAULT_MEMORY_INJECTION_BUDGET_MS = 2_000`）、`:127`（`DEFAULT_MEMORY_RETRIEVAL_TIMEOUT_MS = 30_000`，现为**后台预热上限**而非首 token 阻塞）、`:903`（`raceWithInjectionBudget`）
   - 建议：memory 注入改「到期即有则注入、超时降级为空」非阻塞回退或降为 background + 下轮注入。
+  - 处置（#536，决策＝「注入预算 + 后台预热」）：首 token 最坏阻塞由 **30s 降到注入预算 2s**（缺省，可配 `memory.injectionBudgetMs`）。`raceWithInjectionBudget(memoryPromise, budgetMs)`（`:270`/`:903`）预算内返回则注入；超预算**不中止** `memoryPromise`，让其后台跑完写入各 provider 的 TTL 缓存、下一轮同 query 命中（`:262-264` 注释）。§37.3 的两点更正已落地：① **abort 透传**——`signal: input.abortSignal`（`:235`）已传入 builder，中止不再只解除 `await` 而让内层空跑；② **超时路径补单测**——`tests/context/memory-nonblocking.spec.ts`（3 例）+ builder 超时/中止 + provider abort 竞速共 8 例。最后复核：2026-09-24。
+  - 口径更正（原条目）：「每轮」应读作「**每个不同 query**」（缓存键 `sessionId\0query\0projectRoot` + 30s TTL）；原位置 `:199-201`/`:95` 经 #536 后为 `:229-270`/`:127`/`:133`。
 - **TD-CONTEXT-N04** · 性能文档与现状脱节
   - 类别：H · 严重级：P3 · 工作量：S · 状态：done（2026-08-23：`performance-review.md` 的「retrieve 无缓存」条目更正为已实现 TTL 缓存 + 并发去重，并注明 reasoning-loop ~828 行）
   - 位置：`src/context/memory/EdgeClawMemoryProvider.ts:80-138`；`src/context/projection/MessageProjector.ts:29`
@@ -543,9 +547,10 @@
   - 位置：`src/patent/data/nuo/mapper.ts:44-45,83-90`（`*_no_family` 与 `*_yes_family` 合并为单数组）；被 `tests/patent/data/nuo/mapper.spec.ts:150-160` 锁为契约
   - 影响：同族/非同族在 A22.2/A22.3 与 FTO 语境含义不同。建议由产品侧决定形状后再改（属跨模块契约变更）。
 - **TD-PATENT-N13** · 专利号归一化口径发散
-  - 类别：C · 严重级：P2 · 工作量：S · 状态：new
-  - 位置：`src/patent/data/nuo/egoSession.ts:257-263`（自建，剥 `-` `:`）vs vendor 同名导出（不剥，`vendor/nuo-patent/dist/index.d.ts:766`）；键口径见 `src/tool/builtin/patentPdfDownload.ts:653` 与 `src/patent/data/nuo/patentCache.ts:133`
+  - 类别：C · 严重级：P2 · 工作量：S · 状态：**done（口径已收敛为单一实现）**
+  - 位置：`src/patent/data/nuo/egoSession.ts:258`（`normalizePatentNumber`，剥 `[\s\-:/]`、转大写）；消费方 `src/tool/builtin/patent-pdf-download/outputPaths.ts:3`（import）/`:8`（`patents.map(normalizePatentNumber)`）
   - 影响：同号不同形会重复打源。建议先以日志确认是否已发生，再选「改用 vendor 实现」或「保留严格版 + 缓存键同归一化」。
+  - 处置：保留严格版并收敛为**单一实现**——`normalizePatentNumber` 现仅存于 `egoSession.ts:258`，`patent_pdf_download` 经 #152 按职责拆分后由 `outputPaths.ts` 统一 import 复用；缓存键路径不再各持一份归一化。最后复核：2026-09-24（全 `src/` grep `normalizePatentNumber` 仅 3 处命中：定义 + import + 调用，无第二份发散实现，vendor 同名导出未被 `src/` 引用 ⇒ 「同号不同形重复打源」的发散前提已消除）。位置引用同步更正（原记 `egoSession.ts:257-263` / `patentPdfDownload.ts:653` / `patentCache.ts:133`，拆分后实际为 `egoSession.ts:258` / `patent-pdf-download/outputPaths.ts:3,8`）。
 - **TD-PATENT-N14** · TTL 分层内嵌法律状态词表且语义过宽
   - 类别：D · 严重级：P3 · 工作量：S · 状态：new
   - 位置：`src/patent/data/nuo/patentCache.ts:137-138`（`无效` 同时命中「无效宣告」程序）
@@ -711,9 +716,10 @@
   - 位置：`legal/legal-search.ts:119-150`、`legal/knowledge-law-search.ts:166-196`、`case-law/case-law-search.ts:351-384`
   - 建议：抽共享 `runFtsThenLikeFallback` 编排原语，把 data-mapper/降级打点作策略参数传入。✅（2026-08-23：`src/knowledge/shared/fts.ts` 新增 `runFtsThenLikeFallback<T>`，三引擎 `search` 主体改调之；降级打点经 `onDegrade`、data-mapper 由调用方闭包注入。新增 `tests/knowledge/shared/fts-then-like.spec.ts`，knowledge 248 测全绿。）
 - **TD-KNOWLEDGE-N02** · `KnowledgeLawSearch`(knowledge.db 法规) 的 LIKE 降级仍走「每行 UDF 解压」单阶段，未移植 case-law 两阶段/扫描上限
-  - 类别：I · 严重级：P2 · 工作量：M · 状态：new
+  - 类别：I · 严重级：~~P2~~ → **不立项** · 工作量：M · 状态：**不立项（前提证伪，见 §37.4）**
   - 位置：`legal/knowledge-law-search.ts:98-107,303-317`
-  - 影响：FTS5 不可用（桌面端默认降级路径）时 LIKE 逐行 `sati_uncompress` 最长 chunk（~4ms/行 × 数千行，无命中最坏数十秒同步阻塞），正是 case-law 明确废弃的「分钟级卡点」模式。建议：把两阶段 + likeScanCap 信号移植过来，JS 层解压绕开 UDF。
+  - 影响（原文，已证伪）：FTS5 不可用（桌面端默认降级路径）时 LIKE 逐行 `sati_uncompress` 最长 chunk（~4ms/行 × 数千行，无命中最坏数十秒同步阻塞），正是 case-law 明确废弃的「分钟级卡点」模式。建议：把两阶段 + likeScanCap 信号移植过来，JS 层解压绕开 UDF。
+  - 更正（§37.4，2026-09-23 复核）：「最坏数十秒同步阻塞」**不成立**——法规语料仅 **96 部**（与项目事实层一致），LIKE 整查实测 **5.0–8.0 ms**；「~4ms/行 × 数千行」出自**判例**语料（8 万条、chunk 平均 2.7 KiB）被误平移到法规语料；「桌面端默认降级路径」前提过期（`apps/desktop/scripts/download-node.sh:5-8` 已固定带 FTS5 的 Node 22.23.2，法规检索默认走 FTS5 而非 LIKE 降级）。⇒ **不建票**，按原建议移植两阶段属过度工程。最后复核：2026-09-24。
 - **TD-KNOWLEDGE-N03** · SQLite 行结果 `as X` 强转遍布（29 处），无运行时 schema 校验
   - 类别：B · 严重级：P3 · 工作量：S · 状态：new
   - 位置：`shared/kg-store.ts:103`；`case-law-search.ts:163,308,400,470`；`legal-search.ts:59,162`；`knowledge-law-search.ts:208,242`；`shared/knowledge-embeddings.ts:123,203` 等
@@ -956,9 +962,10 @@
 **模块概况**：18 文件、五层结构（config/protocol/runtime/storage/tool）+ 4 个 `cron_*` 工具；9 个测试文件，覆盖相对扎实。
 
 - **TD-CRON-N01** · `CronTaskStore` 整文件写放大 + 读改写仍存在
-  - 类别：I · 严重级：P2 · 工作量：M · 状态：new
+  - 类别：I · 严重级：~~P2~~ → **不立项** · 工作量：M · 状态：**不立项（前提证伪，见 §37.4）**
   - 位置：`src/cron/storage/CronTaskStore.ts:159-196`（`writeTaskFile`/`mutateTaskFile`）
-  - 影响：每次 put/update/delete 都整文件读+全量序列化+temp+rename，一个 recurring 任务每跑一次触发 2 次整文件重写。建议：按 project 内存缓存任务数组，去掉美化序列化与「读回再用」。
+  - 影响（原文，已证伪）：每次 put/update/delete 都整文件读+全量序列化+temp+rename，一个 recurring 任务每跑一次触发 2 次整文件重写。建议：按 project 内存缓存任务数组，去掉美化序列化与「读回再用」。
+  - 更正（§37.4，2026-09-23 复核）：单次整文件重写实测 **0.29–0.81 ms**（2→200 任务），每 run 两次 ⇒ **不构成卡点**，「写放大」的量级前提不成立，不建票；按原建议引入内存缓存反增一致性风险。真正风险是**跨进程最后写入者覆盖**（多进程同时改 `tasks.json`），属另一议题（并发/锁），不在本条范围。最后复核：2026-09-24。
 - **TD-CRON-N02** · 损坏 tasks.json 被静默清空，store 无 logger
   - 类别：C · 严重级：P2 · 工作量：S · 状态：**done（已修复 2026-08-23）**
   - 修复：`readTaskFile` 解析/形状校验失败时把损坏文件 `rename` 为 `tasks.json.corrupt-<ts>` 并 `console.warn`（fail-closed，不再静默返回空数组留下被覆盖的隐患），随后按空任务表降级。新增 `tests/cron/storage/cron-task-store.spec.ts` 的「损坏的 tasks.json 备份为 .corrupt-<ts>，而非静默清空数据」用例（含后续 putTask 正常落盘 + 备份保留断言）。typecheck/lint/biome/测试全绿。
@@ -1081,9 +1088,10 @@
 **模块概况**：task 4 文件/2 spec · telemetry 5/2 · lifecycle 8/1 · fs 1/1 · browser 6/1 · network 2/1 · status 2/1 · test-support 7/4。类型卫生良好（无 `@ts-expect-error`），风险集中在**后台任务驻留**、**遥测故障不可观测**、**llm-replay 保真度**。
 
 - **TD-SMALL-N01** · `BackgroundTaskRuntime.entries` 永不回收 → 完成任务驻留内存（task）
-  - 类别：I · 严重级：P2 · 工作量：M · 状态：new
-  - 位置：`src/task/runtime/BackgroundTaskRuntime.ts:101`（`entries` Map）
+  - 类别：I · 严重级：P2 · 工作量：M · 状态：**done（完成路径已按 TTL evict）**
+  - 位置：`src/task/runtime/BackgroundTaskRuntime.ts:109`（`entries` Map）；回收实现 `:356`（`sweepFinishedTasks`）/`:362`（`entries.delete`）/`:105`（`DEFAULT_FINISHED_TASK_TTL_MS = 3_600_000`）
   - 影响：每次 `start` 的条目（含 TaskOutputStore，默认每任务至多驻留 1MB ring buffer）在完成后仍留在 Map，长驻 agent 下无界增长。建议：完成路径按需 evict + TTL。
+  - 处置：按建议落地「TTL + 惰性清扫」。新增 `sweepFinishedTasks()`（`:356`），在 `start`/`list` 入口惰性扫描，删除 `endedAt` 超过 `finishedTaskTtlMs`（默认 1 小时，`:105`，可配 `options.finishedTaskTtlMs`，`<=0` 关闭）的终态条目；`endedAt === undefined` 的 pending/running 任务永不清扫。不持有定时器、内存有界。最后复核：2026-09-24（`entries.delete` 在 `:362`，TTL 常量在 `:105`，无界增长前提已消除）。
 - **TD-SMALL-N02** · telemetry `TelemetrySender.flush` 上传失败静默吞没（telemetry）
   - 类别：C · 严重级：P2 · 工作量：S · 状态：new
   - 位置：`src/telemetry/sender.ts:84-99`（`sendBatch` 抛错 `:133`）
@@ -1269,9 +1277,10 @@
   - 位置：`git-panel/hooks/useGitPanelController.ts:309-465,565-630`
   - 影响：7 个操作函数同构；`handlePublish`/`discardChanges`/`deleteUntrackedFile` 仅 `console.error`，`handleFetch`/`handlePull`/`handlePush` `setOperationError`，`createInitialCommit` 直接 `throw`——契约不一致。建议：统一错误处理。
 - **TD-UI-APP-N06** · 文件树与会话树均未虚拟化，大项目/大会话列表存在 DOM 膨胀
-  - 类别：I · 严重级：P2 · 工作量：M · 状态：new
+  - 类别：I · 严重级：~~P2~~ → **P3** · 工作量：M · 状态：new（2026-09-24 复核降 P3，真卡点并入 `TD-UISERVER-N11`／#533）
   - 位置：`main-content-v2/FilesV2.tsx:54-85,718-839`；`app-shell/SidebarV2.tsx:323,697-908`
   - 建议：接入 `@tanstack/react-virtual`。
+  - 更正（§37.3，#533 复核）：**改写指向**——DOM 侧已被三重上限显著缓解（初始 5 / 每页 30 / 树缓存 500；本机真实规模仅 65–197 行），「DOM 膨胀」的量级前提不成立 ⇒ 降 **P3**、虚拟化非紧迫。真正的卡点在**服务端**：`getFileTree(depth=10)` 急切拉全树（`TD-UISERVER-N11`），已由 #533 层①（跳过表补 `.pnpm-store` + `shouldSkipEntry` 纯函数，首屏 621ms→67ms、节点 59,297→6,658）收敛；层②（首屏懒加载 / `maxDepth=1` + children 路由）属跨端重构，按方案 §5 另议。最后复核：2026-09-24。
 - **TD-UI-APP-N07** · `ThemeContext.jsx` 等 contexts 未类型化，消费端靠 `as { isDarkMode }` 兜底
   - 类别：B · 严重级：P2 · 工作量：S · 状态：new
   - 位置：`contexts/ThemeContext.jsx:6`；`main-content-v2/SkillsV2.tsx:122`
@@ -1627,15 +1636,17 @@
   - 影响：每个任务终态都要对每个任务调 `unsatisfiedDependencies(tasks, t.dependencies)`，而该函数每次 `new Map(tasks.map(...))` → n 任务即 n 次建 n 元素 Map。全程在 `withTeamLock` 临界区内（`:311-393`），阻塞同队全部并发认领/派发。
   - 建议：一次建 `Map<id,status>` 复用，或仅重算下游子集（增量）。
 - **TD-TEAM-N09** · `TeamShare` 无实例缓存：每次工具调用/每次派发全量重读重解析 JSONL
-  - 类别：I/G · 严重级：P2 · 工作量：M · 状态：new
+  - 类别：I/G · 严重级：P2 · 工作量：M · 状态：**done（#531，PR #563 · `e8c1b7919`）**
   - 位置：`src/agent/team/storage/team-share.ts:50-53,138-159`；消费点 `src/tool/builtin/team/teamShare.ts:112,189`、`src/cli/teamSubsystem.ts:154-164`
   - 影响：构造即 `load()` → `existsSync` + `readFileSync` 全文 + 逐行 `JSON.parse`。**调度器每次派发任务都 `readSharedBoardSummary` → `new TeamShare(...).summary()`**，即每任务派发 = 一次全量同步读；黑板随轮次单调增长，成本线性恶化，且 `readFileSync` 在调度路径上是同步阻塞。
   - 建议：进程内按 teamId 缓存实例（dispose 清理）；写路径内存 append 后落盘。
+  - 处置（#531①）：按建议落地**进程内实例缓存**——模块级 `Map<path,{mtimeMs,size,inst}>` + 工厂 `getTeamShare`（读路径）/`writeTeamShare`（写路径，写后刷新签名）/`clearTeamShareCache`（测试隔离）。失效判据用 `(mtimeMs, size)` 而非内容哈希（黑板非安全边界，statSync 远比 readFileSync+逐行 JSON.parse 便宜）或 TTL（时间窗会引入可见性延迟）。同一路径连续派发/读取 ⇒ `load()` 只跑一次、实例复用。**未照搬 issue 备选的「`summary()` 反向扫尾部取 10 key」**——反向扫会破坏 `seenDedup` 幂等全集与 `summary()` 首次出现键序两条既有契约（注入成员 turn 0 的 prompt 文本次序会无声漂移）。护栏：`team-share.spec.ts` 新增 4 例（含「退回每次 new 则红」内建负控制）。见 `docs/notes/implemented/2026-09-24-team-read-amplification.md`。最后复核：2026-09-24。
 - **TD-TEAM-N10** · 面板快照每轮 O(teams×members) 过滤 + 每成员一次同步 SQL，且不按 sessionKey 过滤
-  - 类别：I/G · 严重级：P2 · 工作量：M · 状态：new
+  - 类别：I/G · 严重级：P2 · 工作量：M · 状态：**partial（#531：(a) 性能已收敛；(b) 授权面刻意保留）**
   - 位置：`src/gateway/teamPanel.ts:32-46`（`toMemberView` 见 `src/agent/team/views.ts:32-40`）；路由 `ui/server/routes/teams.js:19-31`
   - 影响：(a) 性能：先 `listTeams()`+`listMembers()`，再对**每个团队**在两份全量数组上 `filter`；`toMemberView` 内 `db.isRetired(sessionKey)` 是每成员一次同步 SQL 往返。UI 每 10s 轮询，多客户端线性叠加。(b) 暴露面：`sessionKey` 入参被 `_input` 丢弃，任何持 token 的浏览器可见全部团队——已在 `gatewayRuntimeOptions.ts:150-155` 登记为信任边界，随多会话使用应复核。
   - 建议：快照按 `teamId` 预分组一次；批量取 retired 集合替代每成员 SQL；`sessionKey` 传入时按归属过滤。
+  - 处置（#531②，仅 (a)）：**性能面 (a) 已收敛**——`team-db.ts` 新增 `listRetiredSessionKeys(): Set<string>`（一条 `SELECT`），`toMemberView` 签名由 `(db, member)` 改为 `(member, retired: Set)`，两个调用方（`teamPanel.ts`/`teamStatus.ts`）各在映射前**一次**查回 ⇒ 退休判定 SQL 由 O(成员) 降为 **1**；`teamPanel.ts` 新增 `groupByTeam` 助手把 `members`/`tasks` 各按 `teamId` 分组**一次**（保序，与逐队 `filter` 等价）⇒ O(团队×成员) 降为 O(团队+成员)。护栏：`teamPanel.spec.ts` 新增 1 例（spy 断言 `listRetiredSessionKeys` 调 1 次、`isRetired` 调 **0** 次，负控制「改回逐成员一查则 =3>0 红」）。**(b) 授权面刻意不改**——面板在线态/可见性判定是 T6 评审的刻意取舍，`sessionKey` 归属过滤属信任边界议题（`gatewayRuntimeOptions.ts:150-155` 已登记），随多会话使用另行复核，不在 #531 的读放大范围。见 `docs/notes/implemented/2026-09-24-team-read-amplification.md`。最后复核：2026-09-24。
 - **TD-TEAM-N11** · `runMemberScan` 外层 `.catch` 静默吞掉整次启动扫描失败
   - 类别：C · 严重级：P2 · 工作量：S · 状态：done（2026-09-18，PR #434）
   - 位置：`src/cli/teamSubsystem.ts:121-124`（原登记写 `:118-121`）
@@ -1970,16 +1981,18 @@
 > **背景**：§31 为盲区补审。本节登记**全仓横切复扫**发现的一类不同性质的债务——不是某个模块的实现问题，而是**债务治理体系自身**的缺陷：度量口径漏项、基线失真、门禁空转。这类债的共同特征是「让前 31 节的优先级排序建立在不可信的数据上」。
 
 - **TD-METRIC-001** · `measure-techdebt.mjs` 漏统计 `as unknown as`（**329 处**最强类型逃逸隐形）
-  - 类别：B/H · 严重级：**P1** · 工作量：S · 状态：new
+  - 类别：B/H · 严重级：**P1** · 工作量：S · 状态：**done（#339，2026-09-15）**
   - 位置：`scripts/measure-techdebt.mjs:~208`（`scanTypeEscapes`）
   - 影响：`scanTypeEscapes` 只统计 TS AST 的 `AnyKeyword` 节点与 `@ts-*` 指令，完全漏掉 `as unknown as X` 双重断言——而它比 `any` **更强**（绕开全部类型检查，`any` 至少会传染且能被 lint 捕获）。后果是「类型纪律很好」的印象（`any` 仅 3 处）与「329 处绕开类型检查」的实际并存，**仪表盘在误导排期决策**。这也解释了为何 §1–§30 的类型债清单长期只有 TD-TYPE-002 一条。
   - 建议：在 `scanTypeEscapes` 增加 `AsExpression` → `TypeReference` 名为 `unknown` 的检测分支，计入**独立指标** `asUnknownAs`（不要与 `any` 合并——治理成本与语境不同）；同步更新 `README.md` §指标口径说明 与 `metrics.md` 表头。
+  - 处置（#339）：已按建议在 `scanTypeEscapes` 增加 `AsExpression` → `unknown` 双重断言检测，计入**独立指标 `asUnknownAs`**（`scripts/measure-techdebt.mjs:132-133` 指标声明、`:309-343` 扫描实现），未与 `any` 合并；`metrics.md` 表头与 `README.md` 口径说明同步。最后复核：2026-09-24（实扫 `asUnknownAs` 已在 `measure-techdebt.mjs` 产出并进入 `metrics.md`）。
   - 证据：实扫 `grep -rEn 'as unknown as' src/ ui/src/ --include='*.ts' --include='*.tsx' | wc -l` → **329**；分布 `tests/tool` 49、`tests/gateway` 46、`tests/agent` 38、`tests/knowledge` 24、`tests/patent` 21、`tests/context` 21、**`ui/src` 19（生产码）**、`tests/session` 16；生产码中值得警惕的是跨层类型未对齐（如 `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts:74` 的 `msg as unknown as NormalizedMessage`，会掩盖协议变更的编译期错误）。
 - **TD-METRIC-002** · 债务指标基线无新鲜度校验，`metrics.md` 可长期静默失真
-  - 类别：H · 严重级：**P1** · 工作量：M · 状态：new
+  - 类别：H · 严重级：**P1** · 工作量：M · 状态：**done（#340）**
   - 位置：`scripts/measure-techdebt.mjs`（`--update` 手工触发）；`README.md` §如何保持新鲜
   - 影响：基线由手工命令刷新，无机制保证与工作树同步。**2026-09-14 实证**：基线停在 09-11，而 09 月拆解运动已让报表严重失真——`createLocalGateway.ts` 记 **2696 行**（实测 **448**）、`AgentLoop.ts` 记 **2430 行**（实测 **1134**）、god-function 表中 `createLocalGateway`(607)/`prepareSessionRuntime`(517)/`createReadFileTool`(509)/`handleModelError`(364) **四条已全部不存在**。本次复扫已重跑基线修正（见 `metrics.md`），但不建机制下次仍会重演。
   - 建议：二选一——(a) `measure-techdebt.mjs --check` 模式，重算关键指标与快照比对，不一致非 0 退出，挂 `pnpm lint` 链尾（与 `check:event-matrix`、`check:issue-labels` 同构，仓库已有两个同形态门禁可复制）；(b) 在 `metrics.md` 顶部记录快照 commit SHA，比对「HEAD 之后是否改过 `src/`」并提示。**倾向 (a)**，(b) 的「提醒」在 CI 中容易被忽略。
+  - 处置（#340）：采纳方案 (a)。`measure-techdebt.mjs --check docs/technical-debt/metrics.md` 重算关键指标与快照比对、不一致非 0 退出，封装为 `package.json:44` 的 `check:techdebt-metrics` 脚本，并在 `package.json:52` 挂入 `lint` 链尾（与 `check:event-matrix`、`check:issue-labels` 同构）；CI 经 `pnpm check` → `lint` 强制。最后复核：2026-09-24（`check:techdebt-metrics` 已在 lint 链中，基线漂移会红）。
 - **TD-METRIC-003** · 指标口径缺口：空 catch 漏 `ui/server`；vendored 子包污染文件级排名
   - 类别：H/D · 严重级：P2 · 工作量：S · 状态：**done（#390）**
   - 位置：`scripts/measure-techdebt.mjs`（`productCatchFiles` / `SCOPE_DOC.catch` / 新增 `VENDORED_SUBTREES`·`isVendored`）；`src/context/memory/edgeclaw-memory-core/`
@@ -2024,11 +2037,12 @@
     故本项在补节前不会被任何门禁报警。附带建议的「契约影响」节则**至今无模板间校验**（它不产生标签、无下游消费者），
     三条模板的该节选项已漂移（4 项 vs 6 项）且不会红——是否给 `bug_report.md` 补齐两项未决。
 - **TD-PROCGATE-004** · stale 豁免清单与分诊目标**互相抵销**（`priority: p0/p1` 与 `triage` 议题 120 天后静默关闭）
-  - 类别：D · 严重级：P2 · 工作量：S · 状态：new
-  - 位置：`.github/workflows/stale.yml:35` × `docs/issue-management.md` §3/§5/§6
+  - 类别：D · 严重级：P2 · 工作量：S · 状态：**done（#336）**
+  - 位置：`.github/workflows/stale.yml:37`（`exempt-issue-labels`）× `docs/issue-management.md` §3/§5/§6
   - 影响：豁免清单 `status: in-progress,status: blocked,good first issue,help wanted,pinned` **不含 `status: triage`、不含 `priority: p0/p1`**。后果：一个从未被分诊的议题 90 天后标 `stale`、再 30 天**自动关闭**（无人看管的议题不是被提醒而是被归档）；更严重的是 `priority: p0`/`p1` 按定义是「堵塞/主链路明显受损」，**若未推进到 `in-progress` 也未挂 milestone，同样 120 天后被关**。这与规范 §3「不让任何议题停在 `triage` 无人看管」在机制上互相拆台。
   - 缓解关系：`exempt-all-milestones: true` 意味着**挂 milestone 的议题天然豁免**——所以本批债务 issue 挂 `v0.2.0` 即受保护，但未挂 milestone 的独立高优缺陷仍暴露。
   - 建议：优先考虑把 `priority: p0,priority: p1` 加入豁免（高级别议题不该因无人推进而消失）；或在规范 §6 明确写「`triage` 超 120 天会被归档，这是设计而非疏漏」，并让 §5/§6 不再逐字重复同一份豁免清单（重复导致一致性检查发现不了语义冲突）。
+  - 处置（#336）：采纳「把高优标签加入豁免」。`.github/workflows/stale.yml:37` 的 `exempt-issue-labels` 现为 `status: in-progress,status: blocked,good first issue,help wanted,pinned,priority: p0,priority: p1`——`priority: p0`/`p1` 议题不再因无人推进被静默关闭。位置引用同步更正（原记 `:35`，实际在 `:37`）。最后复核：2026-09-24。
 - **TD-PROCGATE-005** · `scope` 分类器与规范三处不符（摘掉会打回 / 与提交 scope 不同名 / 词表第三份）
   - 类别：D/H · 严重级：P2 · 工作量：M · 状态：**done（2026-09-16，PR #395）**
   - 位置：`scripts/classify-issue.mjs:22-24`；`scripts/open-pr.mjs` `KNOWN_SCOPES`；`.github/labels.yml`；`docs/issue-management.md` §5
@@ -2196,9 +2210,9 @@
 
 | 新 ID | 严重级 | 摘要 | issue | 最后复核 |
 |---|---|---|---|---|
-| `TD-PROCGATE-008` | P2 | 架构边界门禁的 `file-size` 存量豁免只按**文件名**匹配（`baselineKey` 不含行数），巨型文件可在豁免名义下持续增长——41 条豁免中 **6 条已超基线记录值**（合计 +136 行） | **#527** | 2026-09-23 |
-| `TD-PROCGATE-009` | P2 | 债务活账本的状态与影响描述均未随代码回填（状态滞后 ≥8 例 + 数量级失准 3 例），且 `backlog.md` 不在 §6.1 的回填载体清单内 | **#528** | 2026-09-23 |
-| `TD-UISERVER-N11` | P2 | 文件树 API 以 `maxDepth=10 + showHidden` 急切遍历整棵树且跳过表遗漏 `.pnpm-store`——实测 **59,287 节点 / 串行 stat 663 ms**，其中 52,639 节点（88.8%）来自 1.0G 的包管理器缓存 | **#533** | 2026-09-23 |
+| `TD-PROCGATE-008` | P2 | 架构边界门禁的 `file-size` 存量豁免只按**文件名**匹配（`baselineKey` 不含行数），巨型文件可在豁免名义下持续增长——41 条豁免中 **6 条已超基线记录值**（合计 +136 行）。**已做（#527，PR #558·`110438f9`）**：`baselineKey` 纳入行数 ⇒ 豁免文件再增长即转红，须显式 `--update-baseline` 追认并打印 Δ；首刷追认这 6 条 / +136 行（`types.ts` +73 · `InProcessGateway.ts` +29 · `useChatRealtimeHandlers.ts` +20 · `sati.ts` +7 · `useSessionStore.ts` +5 · `AppShellV2.tsx` +2），`check-architecture-boundaries.test.mjs` 10→12 例（含负控制）。P3 落地后 `DefaultContextRuntime.ts` 902→953 是棘轮上线后第一次在真实功能 PR 上转红并被显式追认 | **#527** | 2026-09-24 |
+| `TD-PROCGATE-009` | P2 | 债务活账本的状态与影响描述均未随代码回填（状态滞后 ≥8 例 + 数量级失准 3 例），且 `backlog.md` 不在 §6.1 的回填载体清单内。**已做（#528，本 PR）**：① 5 条状态滞后条目（`TD-METRIC-001`/`-002`、`TD-PROCGATE-004`、`TD-PATENT-N13`、`TD-SMALL-N01`）翻 done + 代码证据 + 最后复核；② 4 条描述失准（`TD-CONTEXT-N03`/`TD-KNOWLEDGE-N02`/`TD-CRON-N01`/`TD-GATEWAY-003`）在**原节正文**更正；③ 为 #520 新建载体 `TD-PROCGATE-010`；④ P1–P8 落地的 14 条对应条目全部翻 done/partial + PR/commit 证据。更正「8 条下界含 3 条误报」（`TD-SESSION-N01`/`TD-ROUTER-001`/`002` 在扫描基线时已 done）⇒ 真实下界 5 条 | **#528** | 2026-09-24 |
+| `TD-UISERVER-N11` | P2 | 文件树 API 以 `maxDepth=10 + showHidden` 急切遍历整棵树且跳过表遗漏 `.pnpm-store`——实测 **59,287 节点 / 串行 stat 663 ms**，其中 52,639 节点（88.8%）来自 1.0G 的包管理器缓存。**已做（#533 层①，PR #561·`2d49fd679`）**：跳过表补 `.pnpm-store` + 点开头包管理器缓存通则，判据抽成零依赖叶子纯函数 `shouldSkipEntry`（直测真函数，避开 `filesystem.js`→`src/patent` 在 vitest/jsdom 下加载失败）；首屏 **621ms→67ms**、节点 **59,297→6,658**，新增 `fileTreeSkip` 6 例（含负控制）。**层②**（首屏懒加载 / `maxDepth=1` + children 路由）属跨端重构，按方案 §5 另议 | **#533** | 2026-09-24 |
 | `TD-EXTENSION-N07` | P2 | 插件信任门每次会话装配 / 每次面板打开都把插件目录整树逐字节哈希，**无任何缓存**（实测 1990 文件 / 7.96 MB ⇒ 130 ms/次）；且 2000 文件上限使带 `node_modules/` 的插件永久 `blocked`。**已做（#538）**：① 报告/面板**可见性**路径加进程内 memo（按 walk 签名 `rel+size+mtimeMs` 失效，跳过 readFile+哈希）；**强制路径（会话装配装载 / 授权决策）仍走纯内容哈希、绕过 memo**——签名不含内容，「内容变但 size+mtime 回填」会命中陈旧摘要，喂给强制路径等于无声弱化信任门（违背 2026-09-21「mtime 不是信任判据」决策）。② `blocked` 原因结构化（`over_limit` vs `unsafe_content`）并透传到面板本地化提示 + decide reason。**不做**「跳过 `node_modules` 哈希」（会推翻「整树内容摘要=信任单位」决策，见方案 §6.1 分叉 6=b）。见 `docs/notes/implemented/2026-09-24-hook-trust-digest-memo.md` | **#538** | 2026-09-24 |
 | `TD-PATENT-N26` | P2 | `figuregen/check.ts` 754 行、`checkFigures` 单函数 **503 行**（21 条规则 × 3 法域 × 10 选项共用一个作用域，`skipLayoutRules` / `figureCount` / `zoom` 互相牵动）；三个制图工具 `execute` 各 163–335 行重复产物拼装 | **#539** | 2026-09-23 |
 | `TD-PATENT-N27` | P2 | `figuregen` 内 `escapeXml` ×4、`fmt` ×4（**精度已漂移出 1/2/3 位**）、几何谓词 `boxesOverlap` / `boxWithin` ×2（同容差、一份常量一份字面量） | **#540** | 2026-09-23 |
@@ -2218,21 +2232,23 @@
 
 | 台账条目 | 复核结论（2026-09-23） | issue |
 |---|---|---|
-| `TD-CATCH-001` 残留 | 12 处无注释无参 catch **全部是 #353 之后新引入**（4 个 commit，0 处遗漏）；逐处核验**均非真隐患**（语义在函数 / 文件 JSDoc 内，如 `proxyFallback.ts:54` 是 `catch { throw error; }` 抛原始错误）⇒ 实质是护栏缺位：门禁只比新鲜度无棘轮、#353 触发线 45 过高、无 lint 规则承载 | **#530** |
-| `TD-UISERVER-N02` | `sessionState` / `pendingAgentToolCalls` 已被 #413（PR #425）修好；残留改为「同文件另 4 张 per-session 缓存无上限」 | **#529** |
-| `TD-UISERVER-N04` | 仍成立；行号更正为 `git.js:823-834`（原登记 `:788-795` 是路由声明与 limit 钳制）；实测默认 `limit=10` 为 **112 ms**、`limit=100` 约 **1.12 s** ⇒ 由 P2 降 **P3** | **#534** |
+| `TD-CATCH-001` 残留 | 12 处无注释无参 catch **全部是 #353 之后新引入**（4 个 commit，0 处遗漏）；逐处核验**均非真隐患**（语义在函数 / 文件 JSDoc 内，如 `proxyFallback.ts:54` 是 `catch { throw error; }` 抛原始错误）⇒ 实质是护栏缺位：门禁只比新鲜度无棘轮、#353 触发线 45 过高、无 lint 规则承载。**已做（#530，跨 P1+P2）**：P1（PR #557·`f04b23fc1`）修口径——`measure-techdebt.mjs` 无注释无参 catch 判据补回漏算的 5 处（`undocumented` **12→17**，总计 671→678），与 `docs/code-facts.md`/`metrics.md` 同刷；P2（PR #558·`110438f9`）加棘轮——新增 `docs/technical-debt/thresholds.json`（`catchEmpty.total`=0 · `catchNoParam.undocumented`=17），`check:techdebt-metrics` 超限即红，把当前值冻结为上限拦住回升（补上 #353 触发线过高的护栏缺位）。最后复核 2026-09-24 | **#530** |
+| `TD-UISERVER-N02` | `sessionState` / `pendingAgentToolCalls` 已被 #413（PR #425）修好；残留改为「同文件另 4 张 per-session 缓存无上限」。**已做（#529，PR #561·`2d49fd679`）**：新增零依赖叶子 `setBounded(map,key,value,limit=MAX_ACTIVE_SESSIONS)` FIFO 上限，套用到 4 张 bridge 缓存（复用 `sessionState` 的 500 常量）；**未做** issue 原文的「mtime 失效删键」（唯一调用方取历史会话、无会话结束钩子）。正文条目 §22 已标 done。最后复核 2026-09-24 | **#529** |
+| `TD-UISERVER-N04` | 仍成立；行号更正为 `git.js:823-834`（原登记 `:788-795` 是路由声明与 limit 钳制）；实测默认 `limit=10` 为 **112 ms**、`limit=100` 约 **1.12 s** ⇒ 由 P2 降 **P3**。**已做（#534，PR #561·`2d49fd679`）**：`/commits` 由 per-commit 串行 `git show --stat`（N+1 子进程）合并为单次 `git log --stat` + 纯函数 `parseCommitLogWithStats`（按 header 正则切块，兼容 merge commit 缺 stat 段）；**130ms→~17ms**（limit=10）、**1,140ms→~43ms**（limit=100）。正文条目 §22 已标 done。最后复核 2026-09-24 | **#534** |
 | `TD-TEAM-N09` + `TD-TEAM-N10` | N09 成立（`scheduler.ts:253` 每次派发一次全量同步读）；N10 的 (a) 性能成立、(b) 授权面是 **T6 评审的刻意取舍**（`gatewayRuntimeOptions.ts:156-160`，单用户桌面可接受）⇒ 不主张改行为，仅登记「多用户化 / 共享 gateway 前必须升 P1」。**已做（#531）**：N09 加进程内**实例缓存**（`getTeamShare`/`writeTeamShare`，按 `(mtimeMs, size)` 失效；写后刷新签名让同进程读命中热实例）——**不用** issue 备选的「反向扫尾部取 10 key」（会破坏 `load()` 重建的 `seenDedup` 幂等全集与 `summary()` 首次出现键序两条契约）。N10(a) 退休判定改 `listRetiredSessionKeys()` 一次查回建 Set（SQL 由 O(成员)→1）+ 成员/任务按 teamId 分组一次（O(团队×成员)→O(团队+成员)）；N10(b) 授权面**不改**（T6 取舍保留）。见 `docs/notes/implemented/2026-09-24-team-read-amplification.md`（最后复核 2026-09-24） | **#531** |
 | `TD-TOOL-002` | 仍成立；补两处**决定性事实**：① 同类第二处 `filterAvailableTools.ts:19`；② clone 上注册的 MCP 工具定义本就不产出 `outputSchema`（`PluginToToolBridge.ts:58-67`）⇒ 天真透传 options 会让 per-session MCP 注册立即抛错 ⇒ 由 P2 降 **P3**。**#532 结案修正**：降级的依据（透传 options 会打断 MCP 注册）已被 `kind === "mcp"` 豁免消解；且「丢失的只是防护」的定级**不成立**——项目级共享 MCP 工具今天就已被 `:438`→`:447` 静默吞掉，是**现存功能缺陷**⇒ 实质 **P2**，已按 P2 修复结案 | **#532** |
-| `TD-WEB-N01` + `TD-GATEWAY-003` | 均成立但实测开销小（clone 9–16 ms / 次 miss、网关序列化 ~1.1 µs / 事件）⇒ 降 **P3**；`TD-GATEWAY-003` 的位置失效（实际 `:1268-1283`）且「维护可能无人读的重放缓冲」**与代码矛盾**（有完整消费链，照字面删除会破坏重连恢复），已更正 | **#535** |
-| `TD-CONTEXT-N03` | 仍成立（P2）；行号更正为 `:246-247` / `:120`；「每轮」应读作「**每个不同 query**」（缓存键 `sessionId\0query\0projectRoot` + 30s TTL）；**新发现** abort 未透传到 memory-core（熔断只解除 `await`，内层 45s×3 仍在跑）+ 超时路径无单测 | **#536** |
-| `TD-SESSION-N02` | 仍成立（P2，开关默认关）；实测 200 次笔记累计 **3.65 MiB** 且二次增长 ⇒ 约 1000+ 次即撞 50MB 硬顶，此后账本 `unavailable`、`workspace_note` **永久拒绝写入** | **#537** |
-| `TD-UI-APP-N06` | **改写指向**：DOM 侧被三重上限（初始 5 / 每页 30 / 树缓存 500）显著缓解（本机真实规模 65–197 行）⇒ 降 P3 并入服务端整树条目；真正的卡点是 `getFileTree(depth=10)` 急切拉全树 | **#533** |
+| `TD-WEB-N01` + `TD-GATEWAY-003` | 均成立但实测开销小（clone 9–16 ms / 次 miss、网关序列化 ~1.1 µs / 事件）⇒ 降 **P3**；`TD-GATEWAY-003` 的位置失效（实际 `:1268-1283`）且「维护可能无人读的重放缓冲」**与代码矛盾**（有完整消费链，照字面删除会破坏重连恢复），已更正。**已做（#535，PR #564·`d42ad2df5`）**：`TD-WEB-N01` 删除 `readSessionMessages.ts` 局部 `JSON.parse(JSON.stringify)` 版 `cloneMessage`，改 import 共享 `cloneMessage`（保留显式 undefined 字段、内容块逐块克隆，新增 `tests/model/protocol/clone.spec.ts` 7 例含负控制）；`TD-GATEWAY-003` 仅更正登记不改行为（开销小、缓冲有消费链）。正文条目 §22/§6 已同步。最后复核 2026-09-24 | **#535** |
+| `TD-CONTEXT-N03` | 仍成立（P2）；行号更正为 `:246-247` / `:120`；「每轮」应读作「**每个不同 query**」（缓存键 `sessionId\0query\0projectRoot` + 30s TTL）；**新发现** abort 未透传到 memory-core（熔断只解除 `await`，内层 45s×3 仍在跑）+ 超时路径无单测。**已做（#536，PR #559·`4a42b15a6`）**：决策「注入预算 + 后台预热」——首 token 最坏阻塞 30s→注入预算 2s（`raceWithInjectionBudget`，可配 `memory.injectionBudgetMs`），超预算不中止 `memoryPromise` 而让其后台预热 TTL 缓存供下轮命中；abort 透传（`signal: input.abortSignal`）+ 超时/中止补单测（`memory-nonblocking.spec.ts` 3 例，共 8 例）。正文条目 §6 已标 done。最后复核 2026-09-24 | **#536** |
+| `TD-SESSION-N02` | 仍成立（P2，开关默认关）；实测 200 次笔记累计 **3.65 MiB** 且二次增长 ⇒ 约 1000+ 次即撞 50MB 硬顶，此后账本 `unavailable`、`workspace_note` **永久拒绝写入**。**已做（#537，PR #560·`c9dcf9422`）**：写侧改「每 K=32 笔变更落一次自足锚点 + 其间 O(1) note 增量」，累计增长 O(n²)→~O(n²/K)；保留「单条 `workspace_state` 即可重建」自足性、读侧复用同一纯函数 `applyWorkspaceNote` 重放、不动 durable 边界（新增 11 例）。正文条目 §6 已标 done。最后复核 2026-09-24 | **#537** |
+| `TD-UI-APP-N06` | **改写指向**：DOM 侧被三重上限（初始 5 / 每页 30 / 树缓存 500）显著缓解（本机真实规模 65–197 行）⇒ 降 P3 并入服务端整树条目；真正的卡点是 `getFileTree(depth=10)` 急切拉全树。**已做（#533 层①，PR #561·`2d49fd679`）**：服务端跳过表补 `.pnpm-store` + 点开头包管理器缓存通则、判据抽成纯函数 `shouldSkipEntry`，首屏 621ms→67ms、节点 59,297→6,658；DOM 虚拟化（本条）降 P3 非紧迫，层②（首屏懒加载/`maxDepth=1`）属跨端重构按方案 §5 另议。正文条目 §17 已更正降级。最后复核 2026-09-24 | **#533** |
 
 ### 37.4 已修与登记失准（不建票，仅更正）
 
-**已修 / 已收敛（8 条，建票前经代码核实排除）**：`TD-METRIC-001`（#339 交付，PR #373）、`TD-METRIC-002`（#340 交付）、`TD-PROCGATE-004`（#336 交付，`stale.yml:35` 已含 `priority: p0,priority: p1`）、`TD-SESSION-N01`（#344 交付，`WorkspaceLedgerStore.read()` 已有游标增量扫描）、`TD-ROUTER-001`/`002`（#343 交付，PR #384）、`TD-PATENT-N13`（专利号归一化已收敛为单一实现：`outputPaths.ts:3` 从 `egoSession.js` 导入）、`TD-SMALL-N01`（`BackgroundTaskRuntime` 已有终态条目 TTL 回收，`:352-362`）、`TD-UISERVER-N02` 的主体（#413 交付）。
+**已修 / 已收敛（8 条，建票前经代码核实排除）**：`TD-METRIC-001`（#339 交付，PR #373）、`TD-METRIC-002`（#340 交付）、`TD-PROCGATE-004`（#336 交付，`.github/workflows/stale.yml:37` 已含 `priority: p0,priority: p1`）、`TD-SESSION-N01`（#344 交付，`WorkspaceLedgerStore.read()` 已有游标增量扫描）、`TD-ROUTER-001`/`002`（#343 交付，PR #384）、`TD-PATENT-N13`（专利号归一化已收敛为单一实现：`outputPaths.ts:3` 从 `egoSession.js` 导入）、`TD-SMALL-N01`（`BackgroundTaskRuntime` 已有终态条目 TTL 回收，`:352-362`）、`TD-UISERVER-N02` 的主体（#413 交付）。
 
-> ⚠️ 上述条目在本账本中**仍标 `new`**——这正是 `TD-PROCGATE-009`（#528）要治理的失效形态；本次不逐个改其状态字段（避免在未逐条复算全部 300 条的前提下制造"看起来都核过了"的假象），留待回填专项按「issue 关闭结论 + 代码证据」统一处理。
+> ✅ **回填已完成（#528 / `TD-PROCGATE-009`，2026-09-24）**：上述「已修 / 已收敛」中**真正状态滞后的 5 条**（`TD-METRIC-001`、`TD-METRIC-002`、`TD-PROCGATE-004`、`TD-PATENT-N13`、`TD-SMALL-N01`）已由本 PR 在各自正文条目翻为 `done`/`不立项` 并补代码证据 + 最后复核日期；`TD-UISERVER-N02` 残留的 4 张缓存上限由 #529 交付（§22 正文已标 done）。
+>
+> ⚠️ **更正原「8 条下界」**：其中 `TD-SESSION-N01`、`TD-ROUTER-001`/`002` **三条系误报**——它们在扫描基线 `5cba87d2a` 时刻账本**已是 `done`**（回填提交 `b3cf9ef4e`/`f114373f7` 早于基线 7 天），原文「上述条目仍标 `new`」对这三条不成立 ⇒ 真实状态滞后下界为 **5 条**（与方案 §0.3 第 3 条一致）。原「不逐个改状态字段、留待回填专项」的处理已由本 PR（即该专项）落地，故本注从「待办」改为「完成 + 误报更正」。
 
 **影响数字失准（3 条）**：
 - `TD-KNOWLEDGE-N02`：「最坏数十秒同步阻塞」不成立——法规语料仅 **96 部**（与项目事实层一致），LIKE 整查实测 **5.0–8.0 ms**；「~4ms/行 × 数千行」出自**判例**语料（8 万条、chunk 平均 2.7 KiB）被平移到法规语料；「桌面端默认降级路径」前提过期（`apps/desktop/scripts/download-node.sh:5-8` 已固定带 FTS5 的 Node 22.23.2）⇒ 不建票。
@@ -2246,3 +2262,13 @@
 理由：`backlog.md` 的失效形态不是「写错了」，而是「**没人知道它多久没被核过**」——`TD-PROCGATE-009`（#528）实证了这一点：≥8 条状态滞后、3 条数量级失准，而它们的滞留时长在账本上不可见，任何后续审计都无法区分「上周核过」与「半年前核过」。
 
 约定正文见 `README.md` §如何保持新鲜 第 6 条；决策记录见 `docs/notes/implemented/2026-09-23-techdebt-backlog-recheck.md`（含备选：全量补历史日期 / 只在 issue 侧跟踪 / 加独立复核日志文件）。
+
+### 37.6 补登载体：#520（`TD-PROCGATE-010`，2026-09-24 回填）
+
+> **为何此时补登**：#520 创建于 2026-09-22，**早于** 2026-09-23 全仓扫描，故既未进 §37.1 的「本轮新立 8 条」、也未进 §37.3 的复核更新——在账本中此前**无任何载体**（`grep "#520" docs/technical-debt/backlog.md` 曾零命中）。这是方案 `docs/open-issues-remediation-plan.md` §0.3 第 4 条发现的真实缺口：「账本是唯一事实源」在该条目上不成立。由 #528 回填专项（本 PR）补此载体。
+
+- **TD-PROCGATE-010** · `check:doc-claims` 的 `srcModuleList` 把 `node_modules`/编译产物算作模块源码 ⇒ `docs/code-facts.md` 模块文件数失真
+  - 类别：H/D · 严重级：P2 · 工作量：S · 状态：**done（#520，PR #557 · `f04b23fc1`）**
+  - 位置：`scripts/doc-claims/resolvers.ts:127`（`srcModuleList`）；产物 `docs/code-facts.md`（`src/context` 行）
+  - 影响：`srcModuleList` 以文件系统 walk 数 `.ts/.tsx`，把内嵌 vendored 子包的 `node_modules`（182 个）与编译产物 `.d.ts`/`lib/**`（36 个）一并计入 ⇒ `src/context` 记 **316**，而真实入库源码仅 **98**（`git ls-files src/context | grep -E '\.tsx?$'`），差 **218** 全为非本仓维护文件。`docs/code-facts.md` 是文档事实层唯一事实源，该行失真会误导「模块规模」判断。污染面**仅 `src/context` 一个模块**（内嵌 vendored 子包），另 30 个模块的现算值与 git 计数相等。与 #341（vendored 子包移出文件级指标，PR #390）同族——该先例已明确「`lib/` 是编译产物、应按目录名豁免」，#520 的现状与之矛盾。
+  - 处置（#520，P1，PR #557·`f04b23fc1`）：`resolvers.ts` 新增 `gitListedFiles(root, suffixes)`（复用 `measure-techdebt.mjs:150-161` 的同源实现 `git ls-files --cached --others --exclude-standard`，`cwd: REPO_ROOT`），`srcModuleList()`（`:127`）改调它；`filesWithSuffix` 保留给 SKILL.md 统计（`:262`/`:269`，不受影响）。`docs/code-facts.md` 的 `src/context` 行 **316 → 98**，同一提交在「干净检出 / 已装依赖 / 子包已 build」三态复算得**同一值**。**实现注记**：`gitListedFiles` 通过**不 import** `measure-techdebt.mjs` 实现（各自同源实现）——`.mjs` 不进 `tsc` 产物、`dist/` 下解析会失败。**口径注意**：git 口径含「未跟踪但未忽略」的文件 ⇒ 新增未 `git add` 的 `.ts` 会即时改数（与 `measure-techdebt` 一致）。决策见 `docs/notes/implemented/2026-09-24-metric-scope-git-and-path-prefix.md`。最后复核：2026-09-24。
