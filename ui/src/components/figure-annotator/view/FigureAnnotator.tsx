@@ -81,9 +81,16 @@ export default function FigureAnnotator({
 
   // 已保存的标注只灌一次：之后用户自己的编辑不会被再次覆盖。
   const seededRef = useRef(false);
+  const [seedSkipped, setSeedSkipped] = useState(0);
   useEffect(() => {
     if (seededRef.current || savedState.saved === null) return;
     seededRef.current = true;
+    // 读回是异步的：用户可能在它返回前就落了笔，此时灌入会把刚画的内容整体替换掉
+    // （不是合并）。这时不灌并如实告知；重新打开该图即可载入。
+    if (annotator.touched) {
+      setSeedSkipped(savedState.saved.marks.length);
+      return;
+    }
     annotator.seed(savedState.saved);
     setStale(savedState.stale);
   }, [annotator, savedState]);
@@ -197,6 +204,11 @@ export default function FigureAnnotator({
       {stale ? (
         <div className="shrink-0 bg-amber-50 px-2 py-1.5 text-[12px] text-amber-800 dark:bg-amber-950/50 dark:text-amber-200">
           {translate("stale")}
+        </div>
+      ) : null}
+      {seedSkipped > 0 ? (
+        <div className="shrink-0 bg-neutral-100 px-2 py-1.5 text-[12px] text-neutral-600 dark:bg-neutral-900 dark:text-neutral-300">
+          {translate("seedSkipped", { count: seedSkipped })}
         </div>
       ) : null}
       {submitStatus === null ? null : (

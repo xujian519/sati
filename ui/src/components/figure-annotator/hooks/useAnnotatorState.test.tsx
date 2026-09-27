@@ -108,6 +108,28 @@ describe("annotator state", () => {
     expect(result.current.marks[0]).not.toHaveProperty("figureFingerprint");
   });
 
+  it("flags the state as touched by any edit, and clears the flag when seeded", () => {
+    const { result } = renderHook(() => useAnnotatorState());
+    expect(result.current.touched).toBe(false);
+
+    act(() => result.current.addMark(mark("m1")));
+    expect(result.current.touched).toBe(true);
+
+    act(() => result.current.updateMarkText("m1", "改说明"));
+    expect(result.current.touched).toBe(true);
+
+    act(() => result.current.clearMarks());
+    expect(result.current.touched).toBe(true);
+
+    act(() => result.current.addMark(mark("m2")));
+    act(() => result.current.removeMark("m2"));
+    expect(result.current.touched).toBe(true);
+
+    // 灌入已保存的标注是基线，不是一步编辑：读回完成后才允许下一次灌入。
+    act(() => result.current.seed({ marks: [mark("s1")], createdAt: "2026-01-01T00:00:00.000Z" }));
+    expect(result.current.touched).toBe(false);
+  });
+
   it("keeps the first save time across later saves", () => {
     const { result } = renderHook(() => useAnnotatorState());
     act(() => result.current.markSaved("2026-01-01T00:00:00.000Z"));

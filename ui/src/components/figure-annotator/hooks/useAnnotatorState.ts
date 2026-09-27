@@ -29,6 +29,12 @@ export type AnnotatorState = {
   setSelectedId: (id: string | null) => void;
   summary: string;
   setSummary: (summary: string) => void;
+  /**
+   * 用户是否已经动过标注（画/删/改说明/清空）。
+   *
+   * 供"读回已保存的标注"判断能否安全灌入：读回是异步的，用户可能在它返回前就落了笔。
+   */
+  touched: boolean;
   /** 已在盘上的那份文档的创建时间（覆盖保存时保持首存时间）。 */
   createdAt: string | null;
   addMark: (mark: FigureAnnotationMark) => void;
@@ -71,6 +77,7 @@ export function useAnnotatorState({ figureFingerprint }: UseAnnotatorStateOption
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [summary, setSummary] = useState("");
   const [createdAt, setCreatedAt] = useState<string | null>(null);
+  const [touched, setTouched] = useState(false);
   const [history, setHistory] = useState<History>({ past: [], present: [], future: [] });
 
   const commit = useCallback((next: readonly FigureAnnotationMark[]) => {
@@ -85,6 +92,7 @@ export function useAnnotatorState({ figureFingerprint }: UseAnnotatorStateOption
     (mark: FigureAnnotationMark) => {
       // 唯一落章点：标注在哪一版图上画的，只有创建这一刻知道。
       const stamped: FigureAnnotationMark = figureFingerprint === undefined ? mark : { ...mark, figureFingerprint };
+      setTouched(true);
       setHistory(previous => ({
         past: [...previous.past, previous.present].slice(-MARK_HISTORY_LIMIT),
         present: [...previous.present, stamped],
@@ -96,6 +104,7 @@ export function useAnnotatorState({ figureFingerprint }: UseAnnotatorStateOption
 
   const removeMark = useCallback(
     (id: string) => {
+      setTouched(true);
       commit(history.present.filter(mark => mark.id !== id));
       setSelectedId(current => (current === id ? null : current));
     },
@@ -103,6 +112,7 @@ export function useAnnotatorState({ figureFingerprint }: UseAnnotatorStateOption
   );
 
   const updateMarkText = useCallback((id: string, text: string) => {
+    setTouched(true);
     setHistory(previous => ({
       ...previous,
       present: previous.present.map(mark => (mark.id === id ? { ...mark, text } : mark)),
@@ -110,6 +120,7 @@ export function useAnnotatorState({ figureFingerprint }: UseAnnotatorStateOption
   }, []);
 
   const clearMarks = useCallback(() => {
+    setTouched(true);
     commit([]);
     setSelectedId(null);
   }, [commit]);
@@ -140,6 +151,7 @@ export function useAnnotatorState({ figureFingerprint }: UseAnnotatorStateOption
 
   const seed = useCallback(
     (document: { marks: readonly FigureAnnotationMark[]; summary?: string; createdAt: string }) => {
+      setTouched(false);
       setHistory({ past: [], present: [...document.marks], future: [] });
       setSummary(document.summary ?? "");
       setCreatedAt(document.createdAt);
@@ -165,6 +177,7 @@ export function useAnnotatorState({ figureFingerprint }: UseAnnotatorStateOption
     setSelectedId,
     summary,
     setSummary,
+    touched,
     createdAt,
     addMark,
     removeMark,
