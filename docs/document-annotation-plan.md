@@ -12,7 +12,7 @@
 
 | 介质 | 预览器 | 能否画标记 | 能否圈选区 | 标注落盘 |
 |---|---|---|---|---|
-| `.svg` 附图 | `FigureAnnotator`（`ui/src/components/figure-annotator/`，20 文件 / 3430 行） | ✅ 5 种标记 + 逐条说明 + 图元锚定 | ✅（工具条「区域引用」） | ✅ `<图名>.annot.json` |
+| `.svg` 附图 | `FigureAnnotator`（`ui/src/components/figure-annotator/`，20 文件 / 3430 行） | ✅ 5 种标记 + 逐条说明 + 图元锚定 | ✅（工具条「区域引用」） | ✅ `<文件名>.annot.json`（v1 形态；v2 起带扩展名） |
 | 栅格图片 | `ImagePreview`（101 行） | ❌ | ✅ 仅 region | ❌ |
 | PDF | `PdfDocumentPreview`（305 行，自建查看器） | ❌ | ✅ 文本选区 + region | ❌ |
 | Office | `OfficeFilePreviewRouter`（多为 LibreOffice → PDF） | ❌ | ✅ 文本 / 单元格 / region | ❌ |
@@ -169,6 +169,8 @@ export type AnnotatableSurface = {
 ```
 
 **读旧写新**：v1（`version: 1`，`figure` + 逐条 `figureFingerprint`）在读取时迁移，不主动重写磁盘。迁移要容忍两类真实数据：v1 的 `relativePath` 在姊妹项目插件写下的 sidecar 里**不存在**（只有绝对 `path`），此时按 `path` 兜底——否则用户工作区里的既有标注会整体判废、静默消失。
+
+**磁盘上的位置**：v2 写入 `<文件名含扩展名>.annot.json`（`图3.svg.annot.json`、`图3.png.annot.json`），读回按「带扩展名 → v1 主名（`图3.annot.json`）」顺序找，且**只接受文档确实指向当前文件的那一份**（判据：目标文件名，含扩展名，大小写不敏感）。v1 只管主名，同目录的 `图3.svg` 与 `图3.png` 会共用一份文件——接管图片后这会变成"读到邻居的标注 + 保存覆盖邻居的标注"，所以主名形态只作只读回退、不再作为写入位置。审阅图附件名同理带扩展名（`图3.svg.annotated.png`）。
 
 **PDF 阶段才加入的字段（现在不加）**：多页承载的 `target.units[]` 与每条标记的 `unitId`、锚定的判别式（`element` 用于 SVG 图元 / `text` 用于 PDF 文本层引文）。它们只在 PDF 面有生产者，现在加入就是无人消费的死字段；届时作为 v2 的**可选字段扩展**加入，不必再升版本。
 

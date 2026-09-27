@@ -167,21 +167,54 @@ export type AnnotationReferenceData = {
   sidecarPath: string | null;
 };
 
-/** 目标文件同目录的 sidecar 绝对路径。 */
+/**
+ * 目标文件同目录的 sidecar 绝对路径（**带扩展名**）。
+ *
+ * 同目录下的 `图3.svg` 与 `图3.png` 是两份不同的标注，只按主名派生会让它们落到同一个文件上
+ * （v1 的形态，见 {@link legacyAnnotationSidecarPath}）：读回时会拿邻居的标注当自己的（锚点、
+ * 坐标都不成立），保存时覆盖邻居的标注。新写入一律走这里。
+ */
 export function annotationSidecarPath(targetPath: string): string {
+  return `${annotationDirectory(targetPath)}${annotationFileName(targetPath)}${ANNOTATION_SIDECAR_SUFFIX}`;
+}
+
+/** v1 的 sidecar 路径（只按主名派生）；只用于读回历史文件，不再作为写入位置。 */
+export function legacyAnnotationSidecarPath(targetPath: string): string {
   return `${annotationDirectory(targetPath)}${annotationBaseName(targetPath)}${ANNOTATION_SIDECAR_SUFFIX}`;
+}
+
+/** 读回顺序：新名优先，再回退 v1 主名名字（无扩展名的文件两者相同，去重）。 */
+export function annotationSidecarCandidates(targetPath: string): string[] {
+  return [...new Set([annotationSidecarPath(targetPath), legacyAnnotationSidecarPath(targetPath)])];
+}
+
+/**
+ * 这份 sidecar 文档是不是**这个文件**的标注。
+ *
+ * 判据就是文件名（含扩展名）：sidecar 与目标同目录，派生只可能在扩展名上撞车。大小写不敏感
+ * ——macOS / Windows 上 `图3.SVG` 与 `图3.svg` 是同一个文件。
+ */
+export function annotationTargetsFile(document: AnnotationDocument, targetPath: string): boolean {
+  return annotationFileName(document.target.path).toLowerCase() === annotationFileName(targetPath).toLowerCase();
 }
 
 /**
  * 审阅图（被标注面 + 标注，随后作为图片部分发给模型）的文件名。
  *
- * 不落盘——它只作为附件名出现，让智能体在消息里能指代这张图。
+ * 不落盘——它只作为附件名出现，让智能体在消息里能指代这张图。同样带扩展名：同目录的
+ * `图3.svg` 与 `图3.png` 各有各的审阅图，附件同名就分不出是哪一张。
  */
 export function annotationImageName(targetPath: string): string {
-  return `${annotationBaseName(targetPath)}.annotated.png`;
+  return `${annotationFileName(targetPath)}.annotated.png`;
 }
 
-/** 去掉扩展名的文件名。 */
+/** 含扩展名的文件名。 */
+function annotationFileName(targetPath: string): string {
+  const slash = Math.max(targetPath.lastIndexOf("/"), targetPath.lastIndexOf("\\"));
+  return slash < 0 ? targetPath : targetPath.slice(slash + 1);
+}
+
+/** 去掉扩展名的文件名（v1 派生用）。 */
 function annotationBaseName(targetPath: string): string {
   const slash = Math.max(targetPath.lastIndexOf("/"), targetPath.lastIndexOf("\\"));
   const name = slash < 0 ? targetPath : targetPath.slice(slash + 1);

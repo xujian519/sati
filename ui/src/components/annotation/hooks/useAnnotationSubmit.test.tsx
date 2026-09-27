@@ -81,7 +81,7 @@ function harness(overrides: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   saveAnnotation.mockReset();
-  saveAnnotation.mockResolvedValue("/w/project/figures/inv-fig1.annot.json");
+  saveAnnotation.mockResolvedValue("/w/project/figures/inv-fig1.svg.annot.json");
   rasterizePng.mockReset();
   rasterizePng.mockResolvedValue(new Blob([new Uint8Array([1, 2, 3])], { type: "image/png" }));
 });
@@ -109,7 +109,7 @@ describe("annotation submit", () => {
     expect(keys).toEqual(["saving", "saved"]);
     expect(hook.result.current.status).toEqual({
       tone: "ok",
-      text: "t:saved:/w/project/figures/inv-fig1.annot.json",
+      text: "t:saved:/w/project/figures/inv-fig1.svg.annot.json",
     });
     expect(onSaved).toHaveBeenCalledWith(document.createdAt);
     expect(hook.result.current.busy).toBeNull();
@@ -159,10 +159,10 @@ describe("annotation submit", () => {
     expect(references).toHaveLength(1);
     expect(references[0]).toMatchObject({
       selectionMode: "annotation",
-      image: { name: "inv-fig1.annotated.png", mimeType: "image/png" },
+      image: { name: "inv-fig1.svg.annotated.png", mimeType: "image/png" },
       annotation: {
         document: { target: { sha256: "c".repeat(64) } },
-        sidecarPath: "/w/project/figures/inv-fig1.annot.json",
+        sidecarPath: "/w/project/figures/inv-fig1.svg.annot.json",
       },
     });
     expect((references[0] as { image: { dataUrl: string } }).image.dataUrl).toBe("data:image/png;base64,AA");

@@ -39,7 +39,7 @@ const readAnnotation = vi.fn(
 
 vi.mock("../utils/sidecar", () => ({
   readAnnotation: () => readAnnotation(),
-  saveAnnotation: () => Promise.resolve("/w/project/figures/inv-fig1.annot.json"),
+  saveAnnotation: () => Promise.resolve("/w/project/figures/inv-fig1.svg.annot.json"),
 }));
 
 // 桩必须返回**同一个** Blob 实例：`useObjectUrl` 以 blob 身份为依赖，每次渲染都给新实例

@@ -2,13 +2,16 @@ import { describe, expect, it } from "vitest";
 import {
   ANNOTATION_DOCUMENT_VERSION,
   annotationImageName,
+  annotationSidecarCandidates,
   annotationSidecarPath,
   annotationSummary,
   annotationTargetFingerprint,
+  annotationTargetsFile,
   buildAnnotationDocument,
   describeAnnotationMarks,
   isAnnotationDocument,
   isAnnotationMark,
+  legacyAnnotationSidecarPath,
   normalizeAnnotationDocument,
   parseAnnotationDocument,
   type AnnotationDocument,
@@ -68,14 +71,36 @@ function legacyDocument(overrides: Record<string, unknown> = {}): Record<string,
 
 describe("annotation contract", () => {
   it("derives the sidecar and the review image beside the annotated file", () => {
-    expect(annotationSidecarPath("/w/outputs/inv-fig1.svg")).toBe("/w/outputs/inv-fig1.annot.json");
-    expect(annotationImageName("/w/outputs/inv-fig1.svg")).toBe("inv-fig1.annotated.png");
-    // 相对路径与大小写后缀同样成立。
-    expect(annotationSidecarPath("outputs/inv-fig1.SVG")).toBe("outputs/inv-fig1.annot.json");
-    expect(annotationSidecarPath("C:\\case\\fig1.svg")).toBe("C:\\case\\fig1.annot.json");
+    expect(annotationSidecarPath("/w/outputs/inv-fig1.svg")).toBe("/w/outputs/inv-fig1.svg.annot.json");
+    expect(annotationImageName("/w/outputs/inv-fig1.svg")).toBe("inv-fig1.svg.annotated.png");
+    // 相对路径与 Windows 分隔符同样成立；后缀大小写原样保留（派生自目标文件名）。
+    expect(annotationSidecarPath("outputs/inv-fig1.SVG")).toBe("outputs/inv-fig1.SVG.annot.json");
+    expect(annotationSidecarPath("C:\\case\\fig1.svg")).toBe("C:\\case\\fig1.svg.annot.json");
     // 栅格图与 SVG 走同一条派生规则。
-    expect(annotationSidecarPath("/w/scans/page-1.png")).toBe("/w/scans/page-1.annot.json");
-    expect(annotationImageName("/w/scans/page-1.png")).toBe("page-1.annotated.png");
+    expect(annotationSidecarPath("/w/scans/page-1.png")).toBe("/w/scans/page-1.png.annot.json");
+    expect(annotationImageName("/w/scans/page-1.png")).toBe("page-1.png.annotated.png");
+  });
+
+  it("keeps the v1 main-name sidecar as a read-only fallback", () => {
+    expect(legacyAnnotationSidecarPath("/w/outputs/inv-fig1.svg")).toBe("/w/outputs/inv-fig1.annot.json");
+    expect(annotationSidecarCandidates("/w/outputs/inv-fig1.svg")).toEqual([
+      "/w/outputs/inv-fig1.svg.annot.json",
+      "/w/outputs/inv-fig1.annot.json",
+    ]);
+    // 没有扩展名的文件，两个名字重合，只读一次。
+    expect(annotationSidecarCandidates("/w/Makefile")).toEqual(["/w/Makefile.annot.json"]);
+  });
+
+  it("only accepts a sidecar that targets this very file", () => {
+    const document = buildAnnotationDocument({ target, marks: [mark()] });
+
+    expect(annotationTargetsFile(document, target.path)).toBe(true);
+    // 编辑器给的形态可能是相对项目根，判据只看文件名，所以照样成立。
+    expect(annotationTargetsFile(document, "data/cases/c1/outputs/inv-fig1.svg")).toBe(true);
+    // macOS / Windows 上扩展名大小写不同仍是同一个文件。
+    expect(annotationTargetsFile(document, "/w/data/cases/c1/outputs/INV-FIG1.SVG")).toBe(true);
+    // 同目录同主名、只有扩展名不同：这是另一份文件，不能把它的标注读成自己的。
+    expect(annotationTargetsFile(document, "/w/data/cases/c1/outputs/inv-fig1.png")).toBe(false);
   });
 
   it("builds a document that validates and keeps the first save time", () => {
