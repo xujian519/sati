@@ -191,6 +191,7 @@
   "figureAnnotator": {
     "view": "查看",
     "annotate": "标注",
+    "regionReference": "区域引用",
     "toolSelect": "选择",
     "toolArrow": "箭头",
     "toolRect": "框选",

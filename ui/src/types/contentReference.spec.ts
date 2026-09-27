@@ -114,6 +114,26 @@ describe("contentReference", () => {
     expect(prompt).not.toContain("data:image/png");
   });
 
+  it("accepts a region reference anchored on the figure, and still rejects unknown surfaces", () => {
+    const reference = createImageRegionContentReference({
+      selectionMode: "region",
+      source,
+      renderer: { id: "image", backend: "builtin", locatorQuality: "visual" },
+      locator: { surface: "figure", rect: { x: 0, y: 0, width: 1, height: 1 } },
+      image: {
+        name: "reference-inv-fig1.svg.png",
+        mimeType: "image/png",
+        width: 10,
+        height: 10,
+        dataUrl: "data:image/png;base64,AAAA",
+      },
+    });
+    expect(isContentReference(reference)).toBe(true);
+
+    // 白名单只放开了 `figure`：其它未声明的落点面仍然拒绝。
+    expect(isContentReference({ ...reference, locator: { ...reference.locator, surface: "canvas" } })).toBe(false);
+  });
+
   it("keeps text quote context and normalized coordinates", () => {
     const reference = createTextContentReference({
       selectionMode: "text",

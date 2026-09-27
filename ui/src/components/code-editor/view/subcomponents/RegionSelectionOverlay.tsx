@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import type { ContentReferenceSurface, NormalizedRect } from "../../../../types/contentReference";
 import { floatingSelectionGroupClassName, getFloatingActionPosition } from "./floatingSelectionAction";
+import { regionCaptureOptions } from "./regionCapture";
 
 export type RegionCaptureTarget = {
   element: HTMLElement;
@@ -61,12 +62,7 @@ async function captureTargetRegion(target: RegionCaptureTarget, rect: ScreenRect
   const { default: html2canvas } = await import("html2canvas");
   const targetRect = target.element.getBoundingClientRect();
   const bounded = clampRect(rect, targetRect);
-  const canvas = await html2canvas(target.element, {
-    backgroundColor: "#ffffff",
-    logging: false,
-    useCORS: true,
-    scale: Math.min(2, Math.max(1, window.devicePixelRatio || 1)),
-  });
+  const canvas = await html2canvas(target.element, regionCaptureOptions(window.devicePixelRatio));
   const scaleX = canvas.width / Math.max(1, targetRect.width);
   const scaleY = canvas.height / Math.max(1, targetRect.height);
   const sourceX = Math.max(0, Math.round((bounded.left - targetRect.left) * scaleX));

@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { buildFigureAnnotationDocument, type FigureAnnotationDocument } from "../../../types/annotationReference";
+import { ADD_CONTENT_REFERENCE_EVENT, isContentReference } from "../../../types/contentReference";
 import FigureAnnotator from "./FigureAnnotator";
 
 const WIDTH = 100;
@@ -40,8 +41,12 @@ vi.mock("../utils/sidecar", () => ({
   saveFigureAnnotation: () => Promise.resolve("/w/project/figures/inv-fig1.annot.json"),
 }));
 
+// 桩必须返回**同一个** Blob 实例：`useObjectUrl` 以 blob 身份为依赖，每次渲染都给新实例
+// 会形成无限渲染循环（真实 `useFileBlob` 把它存在 state 里，引用稳定）。
+const FIGURE_BLOB = new Blob([FIGURE], { type: "image/svg+xml" });
+
 vi.mock("../../code-editor/view/binary-file/hooks/use-file-blob", () => ({
-  useFileBlob: () => ({ blob: new Blob([FIGURE], { type: "image/svg+xml" }), errorMessage: null, loading: false }),
+  useFileBlob: () => ({ blob: FIGURE_BLOB, errorMessage: null, loading: false }),
 }));
 
 // 与相邻组件测试同法：把 t 换成"原样回显键 + 计数"，从而能断言取的是哪个键。
@@ -50,6 +55,37 @@ vi.mock("react-i18next", () => ({
     t: (key: string, options?: { count?: number }) => (options?.count === undefined ? key : `${key}:${options.count}`),
   }),
 }));
+
+// 共享的选区覆盖层自带 html2canvas + 画布，jsdom 两样都没有：这里只留"选区提交"这一个契约，
+// 用桩把一次捕获直接交给面板，验证面板产出并派发的是合法 region 引用。
+vi.mock("../../code-editor/view/subcomponents/RegionSelectionOverlay", () => ({
+  default: ({ active, onCommit }: { active: boolean; onCommit: (capture: unknown) => void }) =>
+    active ? (
+      <button
+        type="button"
+        onClick={() =>
+          onCommit({
+            rect: { x: 0.25, y: 0.25, width: 0.5, height: 0.5 },
+            dataUrl: "data:image/png;base64,AAAA",
+            width: 40,
+            height: 40,
+          })
+        }
+      >
+        mock-region-commit
+      </button>
+    ) : null,
+}));
+
+// jsdom 不实现 Blob URL（`useObjectUrl` 依赖它）。
+beforeAll(() => {
+  if (typeof URL.createObjectURL !== "function") {
+    Object.defineProperty(URL, "createObjectURL", { configurable: true, value: () => "blob:mock" });
+  }
+  if (typeof URL.revokeObjectURL !== "function") {
+    Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: () => undefined });
+  }
+});
 
 // jsdom 没有 ResizeObserver，而图面就绪后的自适应宽度测量依赖它。
 vi.stubGlobal(
@@ -125,5 +161,45 @@ describe("figure annotator seeding", () => {
       expect(container.textContent).toContain("保存过的说明");
     });
     expect(screen.queryByText(/figureAnnotator.seedSkipped/)).toBeNull();
+  });
+
+  it("offers a region-reference exit that hands the composer a valid region payload", async () => {
+    const { container } = renderAnnotator();
+    await waitForOverlay(container);
+
+    fireEvent.click(screen.getByText("figureAnnotator.regionReference"));
+    // 区域模式：普通 `<img>` 顶上来，绘制覆盖层卸载（两套手势不抢同一块画布）。
+    await waitFor(() => {
+      expect(container.querySelector('img[alt="inv-fig1.svg"]')).not.toBeNull();
+    });
+    expect(container.querySelector("[data-figure-annotator-overlay]")).toBeNull();
+
+    const references: unknown[] = [];
+    const listener = (event: Event): void => {
+      references.push((event as CustomEvent).detail);
+    };
+    window.addEventListener(ADD_CONTENT_REFERENCE_EVENT, listener);
+    try {
+      fireEvent.click(screen.getByText("mock-region-commit"));
+    } finally {
+      window.removeEventListener(ADD_CONTENT_REFERENCE_EVENT, listener);
+    }
+
+    expect(references).toHaveLength(1);
+    const reference = references[0] as {
+      selectionMode: string;
+      locator: { surface: string; rect: unknown };
+      image: { width: number; mimeType: string };
+    };
+    // 产出的是区域引用（不是标注引用），且落点面是图本身。
+    expect(reference.selectionMode).toBe("region");
+    expect(reference.locator).toMatchObject({ surface: "figure", rect: { x: 0.25, y: 0.25, width: 0.5, height: 0.5 } });
+    expect(reference.image).toMatchObject({ mimeType: "image/png", width: 40 });
+    expect(isContentReference(reference)).toBe(true);
+    // 提交后退出区域模式，画布回到可绘制状态。
+    await waitFor(() => {
+      expect(container.querySelector('img[alt="inv-fig1.svg"]')).toBeNull();
+    });
+    expect(container.querySelector("[data-figure-annotator-overlay]")).not.toBeNull();
   });
 });

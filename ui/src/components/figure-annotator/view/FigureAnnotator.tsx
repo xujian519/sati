@@ -10,15 +10,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { annotationFigureFingerprint } from "../../../types/annotationReference";
+import { ADD_CONTENT_REFERENCE_EVENT } from "../../../types/contentReference";
 import type { CodeEditorFile } from "../../code-editor/types/types";
 import FallbackContent from "../../code-editor/view/binary-file/components/atoms/FallbackContent";
 import { useFileBlob } from "../../code-editor/view/binary-file/hooks/use-file-blob";
+import { useObjectUrl } from "../../code-editor/view/binary-file/hooks/use-object-url";
+import RegionSelectionOverlay, {
+  type CapturedRegion,
+} from "../../code-editor/view/subcomponents/RegionSelectionOverlay";
 import { useAnnotationSubmit } from "../hooks/useAnnotationSubmit";
 import { nextMarkId, useAnnotatorState } from "../hooks/useAnnotatorState";
 import { useFigureSource } from "../hooks/useFigureSource";
 import { useSavedAnnotation } from "../hooks/useSavedAnnotation";
 import type { FigureLayer } from "../utils/export";
 import { parseFigureSvg } from "../utils/figure-dom";
+import { buildFigureRegionReference } from "../utils/regionReference";
 import { isTypingTarget } from "../utils/shortcut";
 import AnnotationSidePanel from "./AnnotationSidePanel";
 import { AnnotatorCanvas } from "./AnnotatorCanvas";
@@ -68,8 +74,35 @@ export default function FigureAnnotator({
   const [stale, setStale] = useState(false);
   const [zoom, setZoom] = useState<number | "fit">("fit");
   const [fitWidth, setFitWidth] = useState(0);
+  /**
+   * 区域模式：在图上框选一块，作为既有的「图片区域」引用交给智能体。
+   *
+   * 这是 `.svg` 被标注器接管后丢掉的那条能力（原先由 `ImagePreview` 提供，见 2026-09-28
+   * 决策记录）。它与标注是两条不同的引用，所以入口显式分开，不同时抢指针手势。
+   */
+  const [regionMode, setRegionMode] = useState(false);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const figureHostRef = useRef<HTMLDivElement | null>(null);
+  const regionHostRef = useRef<HTMLDivElement | null>(null);
+  const regionImageRef = useRef<HTMLImageElement | null>(null);
+  // 区域模式下图面用普通 `<img>`：共享的选区捕获走 html2canvas，而它不认 shadow root。
+  const regionImageUrl = useObjectUrl(regionMode ? blob : null);
+
+  const commitRegion = useCallback(
+    (capture: CapturedRegion) => {
+      const reference = buildFigureRegionReference({
+        projectName,
+        relativePath: file.path,
+        fileName: file.name,
+        mimeType: "image/svg+xml",
+        fileSize: blob?.size,
+        capture,
+      });
+      window.dispatchEvent(new CustomEvent(ADD_CONTENT_REFERENCE_EVENT, { detail: reference }));
+      setRegionMode(false);
+    },
+    [blob, file.name, file.path, projectName],
+  );
 
   const savedState = useSavedAnnotation({
     projectName,
@@ -194,6 +227,8 @@ export default function FigureAnnotator({
         zoom={zoom}
         scale={scale}
         busy={submit.busy}
+        regionMode={regionMode}
+        onRegionReference={() => setRegionMode(mode => !mode)}
         onSubmit={deliver => {
           void runSubmit(deliver);
         }}
@@ -237,22 +272,52 @@ export default function FigureAnnotator({
             }}
           >
             <div ref={figureHostRef} />
-            <AnnotatorCanvas
-              width={size.width}
-              height={size.height}
-              marks={annotator.marks}
-              tool={drawing ? annotator.tool : "select"}
-              color={annotator.color}
-              containerRef={figureHostRef}
-              selectedId={annotator.selectedId}
-              onSelect={annotator.setSelectedId}
-              onAdd={annotator.addMark}
-              onRemove={annotator.removeMark}
-              nextId={nextMarkId}
-            />
+            {regionMode ? (
+              // 区域模式：普通 `<img>` 压在内联图之上（两者同一位置、同一缩放），
+              // 捕获引擎才拿得到像素；绘制覆盖层同时卸载，避免两套手势抢同一块画布。
+              <div ref={regionHostRef} className="absolute inset-0">
+                <img
+                  ref={regionImageRef}
+                  src={regionImageUrl ?? undefined}
+                  alt={file.name}
+                  width={size.width}
+                  height={size.height}
+                  className="block"
+                  draggable={false}
+                />
+              </div>
+            ) : (
+              <AnnotatorCanvas
+                width={size.width}
+                height={size.height}
+                marks={annotator.marks}
+                tool={drawing ? annotator.tool : "select"}
+                color={annotator.color}
+                containerRef={figureHostRef}
+                selectedId={annotator.selectedId}
+                onSelect={annotator.setSelectedId}
+                onAdd={annotator.addMark}
+                onRemove={annotator.removeMark}
+                nextId={nextMarkId}
+              />
+            )}
           </div>
         </div>
       </div>
+
+      {regionMode ? (
+        <RegionSelectionOverlay
+          active
+          hostRef={regionHostRef}
+          resolveTarget={element => {
+            const image = element?.closest<HTMLImageElement>("img");
+            if (!image || image !== regionImageRef.current) return null;
+            return { element: image, surface: "figure" };
+          }}
+          onCommit={commitRegion}
+          onCancel={() => setRegionMode(false)}
+        />
+      ) : null}
 
       {drawing ? <AnnotationSidePanel annotator={annotator} translate={translate} /> : null}
     </div>

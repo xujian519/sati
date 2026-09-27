@@ -191,6 +191,7 @@
   "figureAnnotator": {
     "view": "View",
     "annotate": "Annotate",
+    "regionReference": "Region",
     "toolSelect": "Select",
     "toolArrow": "Arrow",
     "toolRect": "Box",
