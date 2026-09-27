@@ -1,14 +1,14 @@
 /**
  * 由一次区域选区产出「图片区域」引用。
  *
- * 附图预览接管 `.svg` 后，原先 `ImagePreview` 提供的"框选一块发给智能体"随之消失
+ * 标注面板接管图片族预览后，原先 `ImagePreview` 提供的"框选一块发给智能体"随之消失
  * （见 2026-09-28 决策记录）。这里让面板复刻那条能力，并与 PdfPreview / 表格预览共用
  * 同一个 region 引用契约——不新增引用种类，也不动提示块。
  */
 import { createImageRegionContentReference, type ImageRegionContentReference } from "../../../types/contentReference";
 
 /** 一次区域选区捕获到的东西（与 `RegionSelectionOverlay` 的 `CapturedRegion` 同形）。 */
-export type FigureRegionCapture = {
+export type RegionCapture = {
   /** 相对图面的归一化矩形。 */
   rect: { x: number; y: number; width: number; height: number };
   /** 裁出的 PNG（composer 侧载荷）。 */
@@ -18,26 +18,29 @@ export type FigureRegionCapture = {
   height: number;
 };
 
-export type BuildFigureRegionReferenceArgs = {
+export type BuildRegionReferenceArgs = {
   projectName: string | undefined;
-  /** 图路径（编辑器给的形态，与标注引用同一来源）。 */
+  /** 目标文件路径（编辑器给的形态，与标注引用同一来源）。 */
   relativePath: string;
   fileName: string;
   mimeType: string;
-  /** 图文件字节数（引用的 revision，供同源比较；未知则省略）。 */
+  /** 文件字节数（引用的 revision，供同源比较；未知则省略）。 */
   fileSize: number | undefined;
-  capture: FigureRegionCapture;
+  /** 落点：SVG 附图自身，还是栅格图。 */
+  surface: "figure" | "image";
+  capture: RegionCapture;
 };
 
-/** 组装一条附图区域引用。 */
-export function buildFigureRegionReference({
+/** 组装一条图片区域引用。 */
+export function buildRegionReference({
   projectName,
   relativePath,
   fileName,
   mimeType,
   fileSize,
+  surface,
   capture,
-}: BuildFigureRegionReferenceArgs): ImageRegionContentReference {
+}: BuildRegionReferenceArgs): ImageRegionContentReference {
   return createImageRegionContentReference({
     selectionMode: "region",
     source: {
@@ -48,8 +51,7 @@ export function buildFigureRegionReference({
       ...(fileSize === undefined ? {} : { revision: { size: fileSize } }),
     },
     renderer: { id: "image", backend: "builtin", locatorQuality: "visual" },
-    // `surface: "figure"`：落点是附图本身，不是页/幻灯片/工作表。
-    locator: { surface: "figure", rect: capture.rect },
+    locator: { surface, rect: capture.rect },
     image: {
       name: `reference-${fileName}-${Date.now()}.png`,
       mimeType: "image/png",

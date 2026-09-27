@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildFigureAnnotationDocument, type FigureAnnotationMark } from "./annotationReference";
+import { buildAnnotationDocument, type AnnotationMark } from "./annotationReference";
 import { createDocumentSelectionReference } from "./documentSelection";
 import {
   contentReferenceImage,
   createCellRangeContentReference,
-  createFigureAnnotationContentReference,
+  createAnnotationContentReference,
   createImageRegionContentReference,
   createTextContentReference,
   formatContentReferencePromptBlock,
@@ -208,7 +208,7 @@ describe("contentReference", () => {
 });
 
 describe("figure annotation references", () => {
-  const figureMark: FigureAnnotationMark = {
+  const figureMark: AnnotationMark = {
     id: "m1",
     kind: "arrow",
     color: "#e03131",
@@ -220,9 +220,10 @@ describe("figure annotation references", () => {
     anchor: { tag: "g", id: "n-n3", nodeId: "n3", ref: "34", bbox: [10, 10, 40, 20] },
   };
 
-  function annotationReference(overrides: { marks?: readonly FigureAnnotationMark[]; summary?: string } = {}) {
-    const document = buildFigureAnnotationDocument({
-      figure: {
+  function annotationReference(overrides: { marks?: readonly AnnotationMark[]; summary?: string } = {}) {
+    const document = buildAnnotationDocument({
+      target: {
+        kind: "figure-svg",
         path: "/w/data/cases/c1/outputs/inv-fig1.svg",
         relativePath: "data/cases/c1/outputs/inv-fig1.svg",
         mediaType: "image/svg+xml",
@@ -233,7 +234,7 @@ describe("figure annotation references", () => {
       marks: overrides.marks ?? [figureMark],
       ...(overrides.summary === undefined ? {} : { summary: overrides.summary }),
     });
-    return createFigureAnnotationContentReference({
+    return createAnnotationContentReference({
       selectionMode: "annotation",
       source: { ...source, relativePath: "data/cases/c1/outputs/inv-fig1.svg", fileName: "inv-fig1.svg" },
       renderer: { id: "image", backend: "builtin", locatorQuality: "visual" },
@@ -256,6 +257,77 @@ describe("figure annotation references", () => {
     const normalized = normalizeContentReference(JSON.parse(JSON.stringify(reference)));
     expect(normalized?.selectionMode).toBe("annotation");
     expect(normalized && "annotation" in normalized ? normalized.annotation.document.marks : []).toHaveLength(1);
+  });
+
+  it("carries a raster annotation on the image surface and describes it as a review comment", () => {
+    const document = buildAnnotationDocument({
+      target: {
+        kind: "image",
+        path: "/w/data/cases/c1/scans/page-1.png",
+        relativePath: "data/cases/c1/scans/page-1.png",
+        mediaType: "image/png",
+        width: 1200,
+        height: 900,
+        sha256: "c".repeat(64),
+      },
+      marks: [figureMark],
+    });
+    const reference = createAnnotationContentReference({
+      selectionMode: "annotation",
+      source: { ...source, relativePath: "data/cases/c1/scans/page-1.png", fileName: "page-1.png" },
+      renderer: { id: "image", backend: "builtin", locatorQuality: "visual" },
+      locator: { surface: "image", width: 1200, height: 900 },
+      image: {
+        name: "page-1.annotated.png",
+        mimeType: "image/png",
+        width: 1200,
+        height: 900,
+        dataUrl: "data:image/png;base64,AAAA",
+      },
+      annotation: { document, sidecarPath: null },
+    });
+
+    expect(isContentReference(reference)).toBe(true);
+    expect(normalizeContentReference(JSON.parse(JSON.stringify(reference)))?.selectionMode).toBe("annotation");
+
+    const block = formatContentReferencePromptBlock([reference]);
+    expect(block).toContain("Annotated image: /w/data/cases/c1/scans/page-1.png");
+    expect(block).toContain("coordinates are image pixels");
+    // 位图没有生成源：绝不能给出"改生成源 / 别改导出图"那套附图纪律。
+    expect(block).not.toContain("Exported figure:");
+    expect(block).not.toContain("Change the figure's generating source");
+    expect(block).toContain("no generating source in the workspace");
+  });
+
+  it("accepts a v1 annotation document inside a historical reference and upgrades it", () => {
+    const legacy = {
+      ...annotationReference(),
+      annotation: {
+        sidecarPath: null,
+        document: {
+          version: 1,
+          figure: {
+            path: "/w/data/cases/c1/outputs/inv-fig1.svg",
+            relativePath: "data/cases/c1/outputs/inv-fig1.svg",
+            mediaType: "image/svg+xml",
+            width: 800,
+            height: 600,
+            sha256: "b".repeat(64),
+          },
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+          marks: [{ ...figureMark, targetFingerprint: undefined, figureFingerprint: "sha256:old" }],
+        },
+      },
+    };
+
+    // 历史消息里的引用必须仍能反解：读得进、算式合法、且内嵌文档已升到 v2。
+    expect(isContentReference(legacy)).toBe(true);
+    const normalized = normalizeContentReference(legacy);
+    expect(normalized && "annotation" in normalized ? normalized.annotation.document.version : null).toBe(2);
+    expect(normalized && "annotation" in normalized ? normalized.annotation.document.target.kind : null).toBe(
+      "figure-svg",
+    );
   });
 
   it("hands the flattened review image to the composer as a multimodal part", () => {
@@ -301,19 +373,19 @@ describe("figure annotation references", () => {
     );
   });
 
-  it("warns when some marks were drawn on an earlier version of the figure", () => {
-    const staleMark = { ...figureMark, id: "m2", figureFingerprint: "sha256:old" };
-    const freshMark = { ...figureMark, id: "m3", figureFingerprint: `sha256:${"b".repeat(64)}` };
+  it("warns when some marks were drawn on an earlier version of the file", () => {
+    const staleMark = { ...figureMark, id: "m2", targetFingerprint: "sha256:old" };
+    const freshMark = { ...figureMark, id: "m3", targetFingerprint: `sha256:${"b".repeat(64)}` };
 
     const block = formatContentReferencePromptBlock([annotationReference({ marks: [staleMark, freshMark] })]);
-    expect(block).toContain("1 of these marks were drawn on an earlier version of the figure");
+    expect(block).toContain("1 of these marks were drawn on an earlier version of the file");
     // 逐条后缀只加在旧版那条上。
-    expect(block.match(/\[drawn on an earlier figure version\]/g)).toHaveLength(1);
+    expect(block.match(/\[drawn on an earlier version of the annotated file\]/g)).toHaveLength(1);
 
     // 全部对应当前图时不加任何多余行（旧行为不变）。
     const fresh = formatContentReferencePromptBlock([annotationReference({ marks: [freshMark] })]);
-    expect(fresh).not.toContain("earlier version of the figure");
-    expect(fresh).not.toContain("[drawn on an earlier figure version]");
+    expect(fresh).not.toContain("earlier version of the file");
+    expect(fresh).not.toContain("[drawn on an earlier version of the annotated file]");
   });
 
   it("never lets the inline image bytes reach the prompt text", () => {

@@ -1,30 +1,31 @@
 /**
- * 把预览拿到的图字节变成标注器可用的图面层。
+ * 把预览拿到的 SVG 字节变成标注器可用的图面层。
  *
- * 三件事：字节 → 文本 → sanitize 后的 SVG 标记（内联用）、固有尺寸、内容哈希（识别"图已被重画"）。
+ * 三件事：字节 → 文本 → sanitize 后的 SVG 标记（内联用）、固有尺寸、内容哈希（识别"文件已被换过"）。
  */
 import { useEffect, useState } from "react";
-import type { FigureHashAlgo } from "../../../types/annotationReference";
-import { figureContentHash } from "../utils/export";
-import { figureSvgMarkup, parseFigureSvg, svgIntrinsicSize, type FigureIntrinsicSize } from "../utils/figure-dom";
+import type { AnnotationHashAlgo } from "../../../types/annotationReference";
+import type { SurfaceSize } from "../surfaces/types";
+import { annotationContentHash } from "../utils/export";
+import { figureSvgMarkup, parseFigureSvg, svgIntrinsicSize } from "../utils/svg-hit-test";
 
 /** 图面加载状态。 */
-export type FigureSourceState =
+export type SvgFigureSourceState =
   | { status: "loading" }
   | { status: "error"; message: string }
   | {
       status: "ready";
       /** 图面固有尺寸（像素），标注坐标的参照系。 */
-      size: FigureIntrinsicSize;
+      size: SurfaceSize;
       /** 已 sanitize 的 SVG 标记（根标签上带固有尺寸，内联与导出共用）。 */
       markup: string;
       /** 图内容哈希。 */
       sha256: string;
       /** 该哈希用的算法（非安全上下文退化为 FNV-1a 指纹）。 */
-      hashAlgo: FigureHashAlgo;
+      hashAlgo: AnnotationHashAlgo;
     };
 
-export type UseFigureSourceArgs = {
+export type UseSvgFigureSourceArgs = {
   blob: Blob | null;
   /** 读图失败的原因（来自预览的 blob 加载）。 */
   blobError: string | null;
@@ -32,6 +33,8 @@ export type UseFigureSourceArgs = {
   loading: boolean;
   /** 读图失败时的兜底文案。 */
   failureMessage: string;
+  /** 关掉时不做任何工作（另一种面在用时调用方仍会调用本钩子）。 */
+  enabled: boolean;
 };
 
 /**
@@ -39,10 +42,20 @@ export type UseFigureSourceArgs = {
  *
  * @returns 图面状态；图不是可用的 SVG 时给出错误态而不是空图。
  */
-export function useFigureSource({ blob, blobError, loading, failureMessage }: UseFigureSourceArgs): FigureSourceState {
-  const [state, setState] = useState<FigureSourceState>({ status: "loading" });
+export function useSvgFigureSource({
+  blob,
+  blobError,
+  loading,
+  failureMessage,
+  enabled,
+}: UseSvgFigureSourceArgs): SvgFigureSourceState {
+  const [state, setState] = useState<SvgFigureSourceState>({ status: "loading" });
 
   useEffect(() => {
+    if (!enabled) {
+      setState({ status: "loading" });
+      return;
+    }
     if (blobError !== null) {
       setState({ status: "error", message: blobError });
       return;
@@ -65,8 +78,8 @@ export function useFigureSource({ blob, blobError, loading, failureMessage }: Us
         // 固有尺寸写回根标签：内联渲染与审阅图（嵌套 `<svg>`）都以它为准。
         root.setAttribute("width", String(size.width));
         root.setAttribute("height", String(size.height));
-        const hash = await figureContentHash(bytes);
-        const result: FigureSourceState = {
+        const hash = await annotationContentHash(bytes);
+        const result: SvgFigureSourceState = {
           status: "ready",
           size,
           markup: figureSvgMarkup(root),
@@ -83,7 +96,7 @@ export function useFigureSource({ blob, blobError, loading, failureMessage }: Us
     return () => {
       cancelled = true;
     };
-  }, [blob, blobError, loading, failureMessage]);
+  }, [blob, blobError, enabled, failureMessage, loading]);
 
   return state;
 }

@@ -188,7 +188,7 @@
       "cellValue": "单元格值或公式"
     }
   },
-  "figureAnnotator": {
+  "annotator": {
     "view": "查看",
     "annotate": "标注",
     "regionReference": "区域引用",
@@ -219,13 +219,13 @@
     "saved": "已保存：{{path}}",
     "sent": "已加进输入框的引用，按发送键提交给智能体",
     "failed": "提交失败：",
-    "notReady": "附图还没准备好，请稍后重试",
-    "loading": "正在载入附图…",
-    "loadFailed": "读取附图失败",
-    "stale": "这张图在上次标注之后已经更新过，旧标注的坐标可能失准，请核对后再提交。",
-    "seedSkipped": "你已开始绘制，已保存的 {{count}} 条标注未载入；重新打开该图即可载入。",
-    "seedSkipped_one": "你已开始绘制，已保存的 1 条标注未载入；重新打开该图即可载入。",
-    "seedSkipped_other": "你已开始绘制，已保存的 {{count}} 条标注未载入；重新打开该图即可载入。",
+    "notReady": "文件还没准备好，请稍后重试",
+    "loading": "正在载入…",
+    "loadFailed": "读取失败",
+    "stale": "这个文件在上次标注之后已经更新过，旧标注的坐标可能失准，请核对后再提交。",
+    "seedSkipped": "你已开始绘制，已保存的 {{count}} 条标注未载入；重新打开该文件即可载入。",
+    "seedSkipped_one": "你已开始绘制，已保存的 1 条标注未载入；重新打开该文件即可载入。",
+    "seedSkipped_other": "你已开始绘制，已保存的 {{count}} 条标注未载入；重新打开该文件即可载入。",
     "referenceBadge": "标注",
     "referenceLocation": "{{count}} 处标注",
     "referenceMarks": "{{count}} 处标注",

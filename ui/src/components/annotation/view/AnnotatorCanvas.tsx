@@ -1,13 +1,13 @@
 /**
- * 绘制面：把标注画在图面上，并把指针输入变成标注。
+ * 绘制面：把标注画在被标注面上，并把指针输入变成标注。
  *
- * 每条画完的形状都上交给父组件持有，这里只保留"正在画的那一条"。坐标一律是**图面像素**，
- * 所以同一条标注在任何缩放与面板宽度下含义相同。
+ * 每条画完的形状都上交给父组件持有，这里只保留"正在画的那一条"。坐标一律是**面固有坐标**
+ * （SVG 图为 viewBox 像素，栅格图为自然像素），所以同一条标注在任何缩放与面板宽度下含义相同。
  */
 import { useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from "react";
-import type { FigureAnnotationMark, FigurePoint } from "../../../types/annotationReference";
+import type { AnnotationMark, AnnotationPoint } from "../../../types/annotationReference";
 import { MIN_DRAG_DISTANCE, PEN_SAMPLE_STEP, type AnnotatorTool } from "../constants/annotator";
-import { anchorAtPoint } from "../utils/figure-dom";
+import type { SurfaceHitTest } from "../surfaces/types";
 import {
   MARK_FONT_STACK,
   MARK_HALO_WIDTH,
@@ -26,19 +26,24 @@ export type AnnotatorCanvasProps = {
   /** 图面高度（像素）。 */
   height: number;
   /** 已提交的标注，按绘制顺序。 */
-  marks: readonly FigureAnnotationMark[];
+  marks: readonly AnnotationMark[];
   /** 当前工具。 */
   tool: AnnotatorTool;
   /** 新标注的描边色。 */
   color: string;
-  /** 承载内联图的容器（锚定命中以它为坐标原点）。 */
+  /** 承载被标注面的容器（锚定命中以它为坐标原点）。 */
   containerRef: RefObject<HTMLElement | null>;
+  /**
+   * 锚定命中：描述指针落在面的哪个部件上。栅格面没有图元层，不提供——于是新画的标注
+   * 恒不带锚定，定位完全依赖坐标与说明。
+   */
+  hitTest?: SurfaceHitTest;
   /** 当前选中的标注。 */
   selectedId: string | null;
   /** 选中一条标注（null 表示取消选中）。 */
   onSelect: (id: string | null) => void;
   /** 提交一条画完的标注。 */
-  onAdd: (mark: FigureAnnotationMark) => void;
+  onAdd: (mark: AnnotationMark) => void;
   /** 删除一条标注（双击）。 */
   onRemove: (id: string) => void;
   /** 由父组件提供的 id 生成器。 */
@@ -49,24 +54,26 @@ export type AnnotatorCanvasProps = {
 export function AnnotatorCanvas(props: AnnotatorCanvasProps): ReactNode {
   const { width, height, marks, tool, color, containerRef, selectedId } = props;
   const svgRef = useRef<SVGSVGElement | null>(null);
-  const [draft, setDraft] = useState<FigureAnnotationMark | null>(null);
+  const [draft, setDraft] = useState<AnnotationMark | null>(null);
   const drawing = useRef(false);
 
   /** 指针位置换算成图面像素。 */
-  const toFigure = (event: ReactPointerEvent<SVGSVGElement>): FigurePoint => {
+  const toFigure = (event: ReactPointerEvent<SVGSVGElement>): AnnotationPoint => {
     const svg = svgRef.current;
     if (svg === null) return [0, 0];
     const rect = svg.getBoundingClientRect();
     return [(event.clientX - rect.left) * (width / rect.width), (event.clientY - rect.top) * (height / rect.height)];
   };
 
-  /** 描述指针落在哪个图元上。 */
+  /** 描述指针落在哪个部件上（面不提供命中测试时恒为 undefined）。 */
   const anchorFor = (event: ReactPointerEvent<SVGSVGElement>) => {
+    const hitTest = props.hitTest;
+    if (hitTest === undefined) return undefined;
     const container = containerRef.current;
     if (container === null) return undefined;
     const rect = svgRef.current?.getBoundingClientRect();
     if (rect === undefined || rect.width === 0 || rect.height === 0) return undefined;
-    return anchorAtPoint(container, event.clientX, event.clientY, width / rect.width, height / rect.height);
+    return hitTest(container, event.clientX, event.clientY, width / rect.width, height / rect.height);
   };
 
   const start = (event: ReactPointerEvent<SVGSVGElement>): void => {
@@ -74,7 +81,7 @@ export function AnnotatorCanvas(props: AnnotatorCanvasProps): ReactNode {
     event.preventDefault();
     const point = toFigure(event);
     if (tool === "text") {
-      const mark: FigureAnnotationMark = { id: props.nextId(), kind: "text", color, points: [point], text: "" };
+      const mark: AnnotationMark = { id: props.nextId(), kind: "text", color, points: [point], text: "" };
       props.onAdd(mark);
       props.onSelect(mark.id);
       return;
@@ -84,7 +91,7 @@ export function AnnotatorCanvas(props: AnnotatorCanvasProps): ReactNode {
       event.currentTarget.setPointerCapture(event.pointerId);
     }
     // 拖拽类标注一开始就需要两个对角；手绘起始就是它的第一个采样点，不能重复入路径。
-    const seed: FigurePoint[] = tool === "pen" ? [point] : [point, point];
+    const seed: AnnotationPoint[] = tool === "pen" ? [point] : [point, point];
     setDraft({ id: props.nextId(), kind: tool, color, points: seed });
   };
 
@@ -97,7 +104,7 @@ export function AnnotatorCanvas(props: AnnotatorCanvasProps): ReactNode {
       setDraft({ ...draft, points: [...draft.points, point] });
       return;
     }
-    setDraft({ ...draft, points: [draft.points[0] as FigurePoint, point] });
+    setDraft({ ...draft, points: [draft.points[0] as AnnotationPoint, point] });
   };
 
   const finish = (event: ReactPointerEvent<SVGSVGElement>): void => {
@@ -117,13 +124,13 @@ export function AnnotatorCanvas(props: AnnotatorCanvasProps): ReactNode {
     if (first === undefined || last === undefined) return;
     if (draft.kind !== "pen" && Math.hypot(last[0] - first[0], last[1] - first[1]) < MIN_DRAG_DISTANCE) return;
     const anchor = anchorFor(event);
-    const mark: FigureAnnotationMark = { ...draft, ...(anchor === undefined ? {} : { anchor }) };
+    const mark: AnnotationMark = { ...draft, ...(anchor === undefined ? {} : { anchor }) };
     props.onAdd(mark);
     // 选中刚画的这条：说明框随即落到它身上，不必再点一次。
     props.onSelect(mark.id);
   };
 
-  const renderMark = (mark: FigureAnnotationMark, isDraft: boolean): ReactNode => {
+  const renderMark = (mark: AnnotationMark, isDraft: boolean): ReactNode => {
     const path = markPathData(mark);
     const box = markTextBox(mark);
     const selected = selectedId === mark.id;
@@ -278,7 +285,7 @@ export function AnnotatorCanvas(props: AnnotatorCanvasProps): ReactNode {
     <svg
       ref={svgRef}
       className={`absolute inset-0 touch-none ${tool === "select" ? "cursor-default" : "cursor-crosshair"}`}
-      data-figure-annotator-overlay=""
+      data-annotator-overlay=""
       width={width}
       height={height}
       viewBox={`0 0 ${width} ${height}`}

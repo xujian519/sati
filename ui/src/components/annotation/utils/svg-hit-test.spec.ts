@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { anchorAtPoint, figureSvgMarkup, parseFigureSvg, svgIntrinsicSize } from "./figure-dom";
+import { anchorAtPoint, figureSvgMarkup, parseFigureSvg, svgIntrinsicSize } from "./svg-hit-test";
 
 /** jsdom 不算布局，命中测试依赖的矩形必须自己打桩。 */
 function stubRect(element: Element, rect: { left: number; top: number; width: number; height: number }): void {

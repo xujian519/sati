@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { FigureAnnotationMark } from "../../../types/annotationReference";
-import { bytesToDataUrl, composeReviewSvg, figureContentHash, fnv1a64Hex } from "./export";
+import type { AnnotationMark } from "../../../types/annotationReference";
+import { bytesToDataUrl, composeReviewSvg, annotationContentHash, fnv1a64Hex } from "./export";
 
 const layer = {
   markup: '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10"/></svg>',
@@ -63,7 +63,7 @@ describe("review image", () => {
   });
 
   it("never embeds a mark's stroke colour as text content", () => {
-    const marks: FigureAnnotationMark[] = [
+    const marks: AnnotationMark[] = [
       {
         id: "p",
         kind: "pen",
@@ -99,7 +99,7 @@ describe("figure content hash", () => {
     vi.stubGlobal("crypto", {
       subtle: { digest: async () => new Uint8Array(32).fill(0xab).buffer },
     });
-    await expect(figureContentHash(new Uint8Array([1, 2, 3]))).resolves.toEqual({
+    await expect(annotationContentHash(new Uint8Array([1, 2, 3]))).resolves.toEqual({
       algo: "sha256",
       hex: "ab".repeat(32),
     });
@@ -108,7 +108,7 @@ describe("figure content hash", () => {
   it("falls back to the JS fingerprint instead of failing without Web Crypto", async () => {
     // 非安全上下文（局域网 http）没有 `crypto.subtle`：取哈希不得抛错，否则整块面板不可用。
     vi.stubGlobal("crypto", {});
-    await expect(figureContentHash(new TextEncoder().encode("foobar"))).resolves.toEqual({
+    await expect(annotationContentHash(new TextEncoder().encode("foobar"))).resolves.toEqual({
       algo: "fnv1a64",
       hex: "85944171f73967e8",
     });

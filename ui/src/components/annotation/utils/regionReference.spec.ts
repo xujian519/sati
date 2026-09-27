@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { isContentReference } from "../../../types/contentReference";
-import { buildFigureRegionReference } from "./regionReference";
+import { buildRegionReference } from "./regionReference";
 
 const base = {
   projectName: "demo",
@@ -8,11 +8,12 @@ const base = {
   fileName: "inv-fig1.svg",
   mimeType: "image/svg+xml",
   fileSize: 1234,
+  surface: "figure" as const,
 };
 
-describe("figure region reference", () => {
+describe("image region reference", () => {
   it("builds a region reference that validates, anchored on the figure surface", () => {
-    const reference = buildFigureRegionReference({
+    const reference = buildRegionReference({
       ...base,
       capture: {
         rect: { x: 0.25, y: 0.2, width: 0.5, height: 0.3 },
@@ -31,7 +32,7 @@ describe("figure region reference", () => {
   });
 
   it("clamps a region that runs outside the figure", () => {
-    const reference = buildFigureRegionReference({
+    const reference = buildRegionReference({
       ...base,
       capture: {
         rect: { x: -1, y: 0.8, width: 3, height: 3 },
@@ -50,12 +51,13 @@ describe("figure region reference", () => {
   });
 
   it("omits the revision and the project name when they are unknown", () => {
-    const reference = buildFigureRegionReference({
+    const reference = buildRegionReference({
       projectName: undefined,
       relativePath: "a.svg",
       fileName: "a.svg",
       mimeType: "image/svg+xml",
       fileSize: undefined,
+      surface: "figure",
       capture: {
         rect: { x: 0, y: 0, width: 1, height: 1 },
         dataUrl: "data:image/png;base64,AAAA",
@@ -66,6 +68,25 @@ describe("figure region reference", () => {
 
     expect(reference.source.revision).toBeUndefined();
     expect(reference.source.projectName).toBeUndefined();
+    expect(isContentReference(reference)).toBe(true);
+  });
+
+  it("anchors a raster region on the image surface, not on a figure", () => {
+    const reference = buildRegionReference({
+      ...base,
+      relativePath: "/w/project/scans/page-1.png",
+      fileName: "page-1.png",
+      mimeType: "image/png",
+      surface: "image",
+      capture: {
+        rect: { x: 0.1, y: 0.1, width: 0.2, height: 0.2 },
+        dataUrl: "data:image/png;base64,AAAA",
+        width: 20,
+        height: 20,
+      },
+    });
+
+    expect(reference.locator.surface).toBe("image");
     expect(isContentReference(reference)).toBe(true);
   });
 });

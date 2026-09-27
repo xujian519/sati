@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render } from "@testing-library/react";
 import { useRef } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { FigureAnnotationMark } from "../../../types/annotationReference";
+import type { AnnotationMark } from "../../../types/annotationReference";
 import { AnnotatorCanvas } from "./AnnotatorCanvas";
 
 const WIDTH = 100;
@@ -10,7 +10,7 @@ const HEIGHT = 50;
 
 /** 覆盖层的矩形按图面尺寸打桩（1 client 像素 = 1 图面像素），坐标换算才可断言。 */
 function stubOverlayRect(): SVGSVGElement {
-  const overlay = document.querySelector<SVGSVGElement>("[data-figure-annotator-overlay]");
+  const overlay = document.querySelector<SVGSVGElement>("[data-annotator-overlay]");
   if (!overlay) throw new Error("the overlay did not render");
   Object.defineProperty(overlay, "getBoundingClientRect", {
     configurable: true,
@@ -20,9 +20,9 @@ function stubOverlayRect(): SVGSVGElement {
 }
 
 function Harness(props: {
-  marks?: readonly FigureAnnotationMark[];
+  marks?: readonly AnnotationMark[];
   tool?: "select" | "arrow" | "text";
-  onAdd?: (mark: FigureAnnotationMark) => void;
+  onAdd?: (mark: AnnotationMark) => void;
   onSelect?: (id: string | null) => void;
   onRemove?: (id: string) => void;
 }) {
@@ -60,7 +60,7 @@ describe("annotator canvas", () => {
     fireEvent.pointerUp(overlay, { clientX: 80, clientY: 40 });
 
     expect(onAdd).toHaveBeenCalledTimes(1);
-    const mark = onAdd.mock.calls[0]?.[0] as FigureAnnotationMark;
+    const mark = onAdd.mock.calls[0]?.[0] as AnnotationMark;
     expect(mark).toMatchObject({ id: "m-new", kind: "arrow", color: "#e03131" });
     expect(mark.points).toEqual([
       [10, 5],
@@ -109,7 +109,7 @@ describe("annotator canvas", () => {
 
   it("draws a stored mark and deletes it on a double click", () => {
     const onRemove = vi.fn();
-    const stored: FigureAnnotationMark = {
+    const stored: AnnotationMark = {
       id: "m1",
       kind: "rect",
       color: "#1971c2",
@@ -130,7 +130,7 @@ describe("annotator canvas", () => {
 
   it("keeps a mark selected when the click that picked it bubbles out of the hit shape", () => {
     const onSelect = vi.fn();
-    const stored: FigureAnnotationMark = {
+    const stored: AnnotationMark = {
       id: "m1",
       kind: "rect",
       color: "#1971c2",
@@ -149,13 +149,13 @@ describe("annotator canvas", () => {
     expect(onSelect).toHaveBeenLastCalledWith("m1");
 
     // 点在空白图面上仍然取消选中。
-    const overlay = container.querySelector("[data-figure-annotator-overlay]");
+    const overlay = container.querySelector("[data-annotator-overlay]");
     fireEvent.click(overlay!);
     expect(onSelect).toHaveBeenLastCalledWith(null);
   });
 
   it("shows a placeholder for a text mark that has no label yet", () => {
-    const stored: FigureAnnotationMark = { id: "t1", kind: "text", color: "#2f9e44", points: [[5, 20]], text: "" };
+    const stored: AnnotationMark = { id: "t1", kind: "text", color: "#2f9e44", points: [[5, 20]], text: "" };
     const { container } = render(<Harness marks={[stored]} tool="select" />);
     expect(container.querySelector("text")?.textContent).toBe("T");
   });

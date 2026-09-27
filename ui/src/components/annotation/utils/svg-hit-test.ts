@@ -5,14 +5,15 @@
  * （可能被人工改过、也可能是外部 CAD/Graphviz 产物），所以先 sanitize 再进文档：脚本、
  * 外来内容元素、`on*` 事件属性、以及非 `#`/`data:` 的外部引用一律剥掉。
  *
- * 样式要单独洗：`<style>` 是**文档级**样式表（放进 shadow root 才关得住，见 FigureAnnotator），
+ * 样式要单独洗：`<style>` 是**文档级**样式表（放进 shadow root 才关得住，见 Annotator），
  * 而 CSS 里的 `url()` 会真的发请求——外部引用改 `none`，定位声明整条去掉（附图靠坐标画，
  * 定位只可能用来把界面盖住）。
  *
  * 锚定优先读**机器可用的身份**：内置渲染器把节点写成 `<g id="n-<nodeId>" data-ref="<标号>">`，
  * 这两样能直接映射回 FigureSpec 的节点，比靠 `<title>` 猜要稳。
  */
-import type { FigureAnnotationAnchor } from "../../../types/annotationReference";
+import type { AnnotationAnchor } from "../../../types/annotationReference";
+import type { SurfaceSize } from "../surfaces/types";
 
 /** 内联前整类删除的元素。 */
 const FORBIDDEN_ELEMENTS = ["script", "foreignObject", "iframe", "audio", "video", "use", "animate", "set"];
@@ -112,11 +113,6 @@ export function figureSvgMarkup(root: SVGSVGElement): string {
 }
 
 /** 图面固有尺寸。 */
-export type FigureIntrinsicSize = {
-  width: number;
-  height: number;
-};
-
 function positive(value: number): boolean {
   return Number.isFinite(value) && value > 0;
 }
@@ -143,7 +139,7 @@ function parsePixelLength(raw: string | null): number | undefined {
  * 带单位时不换算也不截取数值，而是整体回退 `viewBox`：附图靠自身的坐标系统绘制，
  * `viewBox` 才是与标注坐标自洽的参照系（`210mm` 换算成 794px 会得到一个与 `viewBox` 无关的尺寸）。
  */
-export function svgIntrinsicSize(root: SVGSVGElement): FigureIntrinsicSize {
+export function svgIntrinsicSize(root: SVGSVGElement): SurfaceSize {
   const attributeWidth = parsePixelLength(root.getAttribute("width"));
   const attributeHeight = parsePixelLength(root.getAttribute("height"));
   if (attributeWidth !== undefined && attributeHeight !== undefined) {
@@ -233,7 +229,7 @@ export function anchorAtPoint(
   clientY: number,
   scaleX: number,
   scaleY: number,
-): FigureAnnotationAnchor | undefined {
+): AnnotationAnchor | undefined {
   const root = (container.shadowRoot ?? container).querySelector("svg");
   if (root === null) return undefined;
   let hit: Element | undefined;
