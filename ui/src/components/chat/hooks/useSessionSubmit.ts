@@ -14,6 +14,7 @@ import {
   CONTENT_REFERENCE_ATTACHMENT_KIND,
   contentReferenceImage,
   formatContentReferencePromptBlock,
+  serializableReference,
   type ContentReference,
 } from "../../../types/contentReference";
 import { getEffectiveThinkingMode } from "../constants/thinkingModeAvailability";
@@ -692,13 +693,7 @@ function contentReferenceToAttachment(reference: ContentReference): ChatAttachme
     path: reference.source.relativePath,
     fileName: reference.source.fileName,
     filePath: reference.source.relativePath,
-    contentReference:
-      reference.selectionMode === "region"
-        ? {
-            ...reference,
-            image: { ...reference.image, dataUrl: undefined },
-          }
-        : reference,
+    contentReference: serializableReference(reference),
     createdAt: reference.createdAt,
     mimeType: "application/vnd.sati.content-reference+json",
   };

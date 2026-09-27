@@ -3,12 +3,36 @@ import {
   isDocumentSelectionReference,
   type DocumentSelectionReference,
 } from "./documentSelection";
+import {
+  describeFigureMarks,
+  figureAnnotationSummary,
+  isFigureAnnotationDocument,
+  type FigureAnnotationReferenceData,
+} from "./annotationReference";
 
 export const CONTENT_REFERENCE_ATTACHMENT_KIND = "content-reference";
 export const CONTENT_REFERENCE_PROMPT_MARKER = "[Content references selected by user:]";
 
+/**
+ * 把一条引用加进 composer 的窗口事件名。
+ *
+ * 预览面板（PDF 选区、表格选区、图片区域、以及附图标注）都靠它把引用交给 composer，
+ * composer 侧的唯一监听在 `useChatComposerState`。
+ */
+export const ADD_CONTENT_REFERENCE_EVENT = "sati:add-chat-reference";
+
+/**
+ * 用户可**发起**的选区模式（由各预览器的 capabilities 决定，见 `ReferenceCapabilities`）。
+ *
+ * 与 {@link ContentReferenceKind} 分开：附图标注也是一种引用，但它不是"选出来的选区"，
+ * 没有对应的选择适配器与能力位，把它塞进这个联合会污染选区菜单与能力表。
+ */
 export type ContentReferenceSelectionMode = "text" | "cells" | "region";
-export type ContentReferenceSurface = "document" | "page" | "slide" | "sheet" | "editor";
+
+/** 引用载荷的判别式（含标注这类非选区引用）。 */
+export type ContentReferenceKind = ContentReferenceSelectionMode | "annotation";
+
+export type ContentReferenceSurface = "document" | "page" | "slide" | "sheet" | "editor" | "figure";
 export type ContentReferenceRendererId = "pdf" | "office-pdf" | "docx" | "xlsx" | "pptx" | "text" | "html" | "image";
 export type ContentReferenceLocatorQuality = "semantic" | "approximate" | "visual";
 
@@ -46,7 +70,7 @@ export type ContentReferenceBase = {
   schemaVersion: 1;
   kind: typeof CONTENT_REFERENCE_ATTACHMENT_KIND;
   id: string;
-  selectionMode: ContentReferenceSelectionMode;
+  selectionMode: ContentReferenceKind;
   source: ContentReferenceSource;
   renderer: ContentReferenceRenderer;
   createdAt: string;
@@ -122,7 +146,38 @@ export type ImageRegionContentReference = ContentReferenceBase & {
   nearbyText?: string;
 };
 
-export type ContentReference = TextContentReference | CellRangeContentReference | ImageRegionContentReference;
+/**
+ * 附图标注引用：用户在附图预览里圈画（箭头/框选/圈选/手绘/文字）后提交的那一次标注。
+ *
+ * 与 region 引用的差别：region 是"一张图里的一个矩形"，这里是"整幅图 + 逐条标注"，
+ * 每条标注带自己的说明与图元锚定（内联 SVG 图才有锚定）。标注图（原图 + 标注）作为
+ * 普通多模态图片部分随消息发出，`dataUrl` 只是 composer 侧载荷，结构化附件里会剥掉。
+ */
+export type FigureAnnotationContentReference = ContentReferenceBase & {
+  selectionMode: "annotation";
+  locator: {
+    surface: "figure";
+    /** 图面固有宽度（像素）：标注坐标以此参照系为准。 */
+    width: number;
+    height: number;
+  };
+  image: {
+    name: string;
+    mimeType: "image/png";
+    width: number;
+    height: number;
+    sha256?: string;
+    /** 仅 composer 用的载荷，见上。 */
+    dataUrl?: string;
+  };
+  annotation: FigureAnnotationReferenceData;
+};
+
+export type ContentReference =
+  | TextContentReference
+  | CellRangeContentReference
+  | ImageRegionContentReference
+  | FigureAnnotationContentReference;
 
 export type ContentReferenceReasonCode =
   | "NO_TEXT_LAYER"
@@ -231,6 +286,12 @@ export function createImageRegionContentReference(
       rect: normalizeRect(input.locator.rect),
     },
   });
+}
+
+export function createFigureAnnotationContentReference(
+  input: CreateContentReferenceInput<FigureAnnotationContentReference>,
+): FigureAnnotationContentReference {
+  return createContentReference<FigureAnnotationContentReference>(input);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -381,11 +442,36 @@ function isImageRegionContentReference(candidate: Record<string, unknown>) {
   );
 }
 
+function isFigureAnnotationReference(candidate: Record<string, unknown>) {
+  if (!isRecord(candidate.locator) || !isRecord(candidate.image) || !isRecord(candidate.annotation)) return false;
+  const locator = candidate.locator;
+  const image = candidate.image;
+  const annotation = candidate.annotation;
+  return (
+    locator.surface === "figure" &&
+    isFiniteNumber(locator.width) &&
+    locator.width > 0 &&
+    isFiniteNumber(locator.height) &&
+    locator.height > 0 &&
+    isNonEmptyString(image.name) &&
+    image.mimeType === "image/png" &&
+    isFiniteNumber(image.width) &&
+    image.width > 0 &&
+    isFiniteNumber(image.height) &&
+    image.height > 0 &&
+    isOptionalString(image.sha256) &&
+    isOptionalString(image.dataUrl) &&
+    (annotation.sidecarPath === null || isNonEmptyString(annotation.sidecarPath)) &&
+    isFigureAnnotationDocument(annotation.document)
+  );
+}
+
 export function isContentReference(value: unknown): value is ContentReference {
   if (!isRecord(value) || !hasValidCommonFields(value)) return false;
   if (value.selectionMode === "text") return isTextContentReference(value);
   if (value.selectionMode === "cells") return isCellRangeContentReference(value);
   if (value.selectionMode === "region") return isImageRegionContentReference(value);
+  if (value.selectionMode === "annotation") return isFigureAnnotationReference(value);
   return false;
 }
 
@@ -443,8 +529,14 @@ function compactMatrix<T>(values: T[][] | undefined, maxRows = 30, maxColumns = 
   return values.slice(0, maxRows).map(row => row.slice(0, maxColumns));
 }
 
-function serializableReference(reference: ContentReference): ContentReference {
-  if (reference.selectionMode !== "region") return reference;
+/**
+ * 结构化序列化：剥掉 composer 侧才需要的内联图字节。
+ *
+ * 两个用途都要求剥掉：写进消息附件的 JSON（历史回放要能反解出引用）、以及写进提示块的
+ * `Reference JSON:` 行——把 base64 图片正文灌进提示文本会把上下文烧穿。
+ */
+export function serializableReference(reference: ContentReference): ContentReference {
+  if (reference.selectionMode !== "region" && reference.selectionMode !== "annotation") return reference;
   return {
     ...reference,
     image: {
@@ -497,6 +589,24 @@ export function formatContentReferencePromptBlock(references: ContentReference[]
       if (reference.surroundingValues?.length) {
         lines.push(`   Nearby cells: ${JSON.stringify(compactMatrix(reference.surroundingValues, 20, 30))}`);
       }
+    } else if (reference.selectionMode === "annotation") {
+      const { document, sidecarPath } = reference.annotation;
+      lines.push(`   Figure: ${document.figure.path} (${document.figure.width}x${document.figure.height})`);
+      lines.push(`   Annotation file: ${sidecarPath ?? "(not saved)"}`);
+      lines.push(`   Multimodal image attachment: ${reference.image.name}`);
+      lines.push("   The image is the figure with every mark drawn on it; each mark is listed below in draw order.");
+      lines.push("   Marks (coordinates are figure pixels, origin at the figure's top-left corner):");
+      for (const line of describeFigureMarks(document.marks)) lines.push(`   ${line}`);
+      if (document.summary) lines.push(`   Overall note: ${document.summary}`);
+      lines.push(
+        "   Discipline: answer mark by mark, numbered as above, and do not silently skip a mark you cannot honour.",
+      );
+      lines.push(
+        "   Change the figure's generating source (the FigureSpec or the drawing script/SVG source), never the exported image file;",
+      );
+      lines.push(
+        "   leave unmarked areas untouched, and after regenerating re-check every mark because its coordinates may have shifted.",
+      );
     } else {
       lines.push(`   Location: ${JSON.stringify(reference.locator)}`);
       lines.push(`   Multimodal image attachment: ${reference.image.name}`);
@@ -546,6 +656,8 @@ export function getContentReferenceSummary(
     summary = reference.selectedText;
   } else if (reference.selectionMode === "cells") {
     summary = `${reference.locator.sheetName}!${reference.locator.ranges.join(", ")}`;
+  } else if (reference.selectionMode === "annotation") {
+    summary = figureAnnotationSummary(reference.annotation.document);
   } else {
     summary = regionLabel;
   }
@@ -554,7 +666,8 @@ export function getContentReferenceSummary(
 }
 
 export function contentReferenceImage(reference: ContentReference) {
-  if (reference.selectionMode !== "region" || !reference.image.dataUrl) return null;
+  if (reference.selectionMode === "text" || reference.selectionMode === "cells") return null;
+  if (!reference.image.dataUrl) return null;
   return {
     data: reference.image.dataUrl,
     name: reference.image.name,

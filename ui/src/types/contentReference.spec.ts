@@ -1,13 +1,18 @@
 import { describe, expect, it } from "vitest";
+import { buildFigureAnnotationDocument, type FigureAnnotationMark } from "./annotationReference";
 import { createDocumentSelectionReference } from "./documentSelection";
 import {
+  contentReferenceImage,
   createCellRangeContentReference,
+  createFigureAnnotationContentReference,
   createImageRegionContentReference,
   createTextContentReference,
   formatContentReferencePromptBlock,
+  getContentReferenceSummary,
   isContentReference,
   normalizeContentReference,
   parseContentReferencePromptBlock,
+  serializableReference,
 } from "./contentReference";
 
 const source = {
@@ -179,5 +184,105 @@ describe("contentReference", () => {
       content: "Question",
       references: [],
     });
+  });
+});
+
+describe("figure annotation references", () => {
+  const figureMark: FigureAnnotationMark = {
+    id: "m1",
+    kind: "arrow",
+    color: "#e03131",
+    points: [
+      [10, 20],
+      [200, 150],
+    ],
+    text: "这个标号应指向滑套 34",
+    anchor: { tag: "g", id: "n-n3", nodeId: "n3", ref: "34", bbox: [10, 10, 40, 20] },
+  };
+
+  function annotationReference(overrides: { marks?: readonly FigureAnnotationMark[]; summary?: string } = {}) {
+    const document = buildFigureAnnotationDocument({
+      figure: {
+        path: "/w/data/cases/c1/outputs/inv-fig1.svg",
+        relativePath: "data/cases/c1/outputs/inv-fig1.svg",
+        mediaType: "image/svg+xml",
+        width: 800,
+        height: 600,
+        sha256: "b".repeat(64),
+      },
+      marks: overrides.marks ?? [figureMark],
+      ...(overrides.summary === undefined ? {} : { summary: overrides.summary }),
+    });
+    return createFigureAnnotationContentReference({
+      selectionMode: "annotation",
+      source: { ...source, relativePath: "data/cases/c1/outputs/inv-fig1.svg", fileName: "inv-fig1.svg" },
+      renderer: { id: "image", backend: "builtin", locatorQuality: "visual" },
+      locator: { surface: "figure", width: 800, height: 600 },
+      image: {
+        name: "inv-fig1.annotated.png",
+        mimeType: "image/png",
+        width: 1600,
+        height: 1200,
+        dataUrl: "data:image/png;base64,AAAA",
+      },
+      annotation: { document, sidecarPath: "/w/data/cases/c1/outputs/inv-fig1.annot.json" },
+    });
+  }
+
+  it("round-trips through validation and keeps the annotator's marks", () => {
+    const reference = annotationReference();
+    expect(isContentReference(reference)).toBe(true);
+
+    const normalized = normalizeContentReference(JSON.parse(JSON.stringify(reference)));
+    expect(normalized?.selectionMode).toBe("annotation");
+    expect(normalized && "annotation" in normalized ? normalized.annotation.document.marks : []).toHaveLength(1);
+  });
+
+  it("hands the flattened review image to the composer as a multimodal part", () => {
+    const image = contentReferenceImage(annotationReference());
+    expect(image).toMatchObject({ name: "inv-fig1.annotated.png", mimeType: "image/png" });
+    expect(image?.data.startsWith("data:image/png;base64,")).toBe(true);
+  });
+
+  it("never lets the inline image bytes reach the prompt text", () => {
+    const block = formatContentReferencePromptBlock([annotationReference({ summary: "把标号都对齐一遍" })]);
+    const serialized = serializableReference(annotationReference());
+
+    expect(block).toContain("ANNOTATION reference");
+    expect(block).toContain("Annotation file: /w/data/cases/c1/outputs/inv-fig1.annot.json");
+    expect(block).toContain("1. arrow (10,20) -> (200,150) (node=n3, ref=34): 这个标号应指向滑套 34");
+    expect(block).toContain("Overall note: 把标号都对齐一遍");
+    expect(block).toContain("Discipline: answer mark by mark");
+    expect(block).not.toContain("base64");
+    expect(serialized).not.toContain("base64");
+    const parsed = JSON.parse(block.split("Reference JSON: ")[1]!.split("\n")[0]!);
+    expect(parsed.image.dataUrl).toBeUndefined();
+  });
+
+  it("comes back as an annotation reference when a session is re-read", () => {
+    const block = formatContentReferencePromptBlock([annotationReference()]);
+    const parsed = parseContentReferencePromptBlock(`修一下标号${block}`);
+    expect(parsed.content).toBe("修一下标号");
+    expect(parsed.references).toHaveLength(1);
+    expect(parsed.references[0]?.selectionMode).toBe("annotation");
+  });
+
+  it("labels the chip with the user's first note", () => {
+    expect(getContentReferenceSummary(annotationReference(), 80)).toBe("这个标号应指向滑套 34");
+    expect(getContentReferenceSummary(annotationReference({ marks: [], summary: "" }), 80)).toBe("0 marks");
+  });
+
+  it("rejects a payload whose annotation document is unreadable", () => {
+    const reference = annotationReference();
+    const broken = { ...reference, annotation: { sidecarPath: null, document: { version: 1, marks: [] } } };
+    expect(isContentReference(broken)).toBe(false);
+    expect(normalizeContentReference(broken)).toBeNull();
+
+    const noGeometry = { ...reference, locator: { surface: "figure", width: 0, height: 600 } };
+    expect(isContentReference(noGeometry)).toBe(false);
+
+    // 未落盘的标注（sidecarPath 为 null）同样是合法载荷：标注仍随消息送达。
+    const unsaved = { ...reference, annotation: { sidecarPath: null, document: reference.annotation.document } };
+    expect(isContentReference(unsaved)).toBe(true);
   });
 });

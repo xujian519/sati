@@ -1,4 +1,4 @@
-import { File, FileSpreadsheet, FileText, Scan, X, type LucideIcon } from "lucide-react";
+import { File, FileSpreadsheet, FileText, PenLine, Scan, X, type LucideIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cn } from "../../lib/utils.js";
 import {
@@ -79,8 +79,12 @@ export default function DocumentReferenceChip({
   const { t } = useTranslation("codeEditor");
   const normalized = normalizeContentReference(reference);
   if (!normalized) return null;
+  const isAnnotation = normalized.selectionMode === "annotation";
   const meta = getDocumentReferenceFileMeta(normalized.source.fileName);
-  const ReferenceIcon = meta.Icon;
+  const ReferenceIcon = isAnnotation ? PenLine : meta.Icon;
+  const badgeLabel = isAnnotation
+    ? (t("figureAnnotator.referenceBadge", { defaultValue: "MARK" }) as string)
+    : meta.label;
   const summary = getContentReferenceSummary(normalized, summaryLength, t("contentReference.regionSummary"));
   const location =
     normalized.selectionMode === "text"
@@ -95,15 +99,20 @@ export default function DocumentReferenceChip({
           : null
       : normalized.selectionMode === "cells"
         ? normalized.locator.sheetName
-        : normalized.locator.pageNumber
-          ? t("contentReference.locations.page", {
-              numbers: normalized.locator.pageNumber,
+        : isAnnotation
+          ? t("figureAnnotator.referenceLocation", {
+              count: normalized.annotation.document.marks.length,
+              defaultValue: "{{count}} marks",
             })
-          : normalized.locator.slideNumber
-            ? t("contentReference.locations.slide", {
-                numbers: normalized.locator.slideNumber,
+          : normalized.locator.pageNumber
+            ? t("contentReference.locations.page", {
+                numbers: normalized.locator.pageNumber,
               })
-            : normalized.locator.sheetName || null;
+            : normalized.locator.slideNumber
+              ? t("contentReference.locations.slide", {
+                  numbers: normalized.locator.slideNumber,
+                })
+              : normalized.locator.sheetName || null;
   const title = [normalized.source.fileName, location, summary].filter(Boolean).join("\n");
 
   return (
@@ -133,7 +142,7 @@ export default function DocumentReferenceChip({
           ) : (
             <ReferenceIcon className="h-3 w-3" strokeWidth={2} />
           )}
-          {meta.label}
+          {badgeLabel}
         </span>
         <span className="min-w-0 flex-1 truncate text-[13px] leading-5 whitespace-nowrap">&quot;{summary}&quot;</span>
       </button>
