@@ -55,7 +55,16 @@ export function nextMarkId(): string {
 }
 
 /** 标注器的编辑状态。 */
-export function useAnnotatorState(): AnnotatorState {
+export type UseAnnotatorStateOptions = {
+  /**
+   * 当前图的指纹（`<algo>:<hex>`）。新画的标注会盖上它，作为"这一条对的是哪一版图"的基线；
+   * 图面未就绪时缺省，此时不加该字段。
+   */
+  figureFingerprint?: string;
+};
+
+/** 标注器的编辑状态。 */
+export function useAnnotatorState({ figureFingerprint }: UseAnnotatorStateOptions = {}): AnnotatorState {
   const [mode, setMode] = useState<"view" | "annotate">("view");
   const [tool, setTool] = useState<AnnotatorTool>("arrow");
   const [color, setColor] = useState<string>(ANNOTATOR_COLORS[0]);
@@ -72,13 +81,18 @@ export function useAnnotatorState(): AnnotatorState {
     }));
   }, []);
 
-  const addMark = useCallback((mark: FigureAnnotationMark) => {
-    setHistory(previous => ({
-      past: [...previous.past, previous.present].slice(-MARK_HISTORY_LIMIT),
-      present: [...previous.present, mark],
-      future: [],
-    }));
-  }, []);
+  const addMark = useCallback(
+    (mark: FigureAnnotationMark) => {
+      // 唯一落章点：标注在哪一版图上画的，只有创建这一刻知道。
+      const stamped: FigureAnnotationMark = figureFingerprint === undefined ? mark : { ...mark, figureFingerprint };
+      setHistory(previous => ({
+        past: [...previous.past, previous.present].slice(-MARK_HISTORY_LIMIT),
+        present: [...previous.present, stamped],
+        future: [],
+      }));
+    },
+    [figureFingerprint],
+  );
 
   const removeMark = useCallback(
     (id: string) => {

@@ -75,6 +75,14 @@ export type FigureAnnotationMark = {
   points: readonly FigurePoint[];
   /** 用户给这条标注写的说明。 */
   text?: string;
+  /**
+   * 画这条标注时，图是哪一版（`annotationFigureFingerprint` 的取值，形如 `"sha256:ab…"`）。
+   *
+   * 基线记在**每条标注**上而不是整篇文档上：同一个文档里可能既有从 sidecar 载入的旧版标注、
+   * 又有用户在图被重画后新画的标注，只有逐条才说得清"这一条对的是哪一版图"。缺省 = 未知
+   * 基线（本次变更之前写下的数据），一律不告警。
+   */
+  figureFingerprint?: string;
   /** 标注指向的图元。 */
   anchor?: FigureAnnotationAnchor;
 };
@@ -233,6 +241,7 @@ export function isFigureAnnotationMark(value: unknown): value is FigureAnnotatio
   if (typeof value.color !== "string") return false;
   if (!Array.isArray(value.points) || value.points.length === 0 || !value.points.every(isPoint)) return false;
   if (!isOptionalString(value.text)) return false;
+  if (!isOptionalString(value.figureFingerprint)) return false;
   const anchor = value.anchor;
   return anchor === undefined || anchor === null || readAnchor(anchor) !== undefined;
 }
@@ -348,20 +357,39 @@ function describeShape(mark: FigureAnnotationMark): string {
 const MARKER_INDEX = ["1.", "2.", "3.", "4.", "5.", "6.", "7.", "8.", "9.", "10."] as const;
 
 /**
+ * 这条标注是否画在与文档当前图**不同**的版本上。
+ *
+ * 缺省基线（本次变更前写下的数据）返回 false——不知道的事不告警。
+ */
+export function isMarkFromEarlierFigure(mark: FigureAnnotationMark, documentFingerprint: string): boolean {
+  return mark.figureFingerprint !== undefined && mark.figureFingerprint !== documentFingerprint;
+}
+
+/**
  * 把一条标注渲染成智能体读的一行。
  *
  * 智能体面向的文本固定用英文（与 `[Content references selected by user:]` 提示块同语言），
  * 用户自己的说明与总体说明原样带入，不做翻译。
+ *
+ * @param documentFingerprint - 文档当前图的指纹；给了才会标出"这一条画在旧版图上"。
  */
-export function describeFigureMark(mark: FigureAnnotationMark, index: number): string {
+export function describeFigureMark(mark: FigureAnnotationMark, index: number, documentFingerprint?: string): string {
   const marker = MARKER_INDEX[index] ?? `${index + 1}.`;
   const anchor = describeAnchor(mark.anchor);
   const note = (mark.text ?? "").trim();
   const head = [describeShape(mark), anchor === "" ? "" : `(${anchor})`].filter(part => part !== "").join(" ");
-  return `${marker} ${head}${note === "" ? " (no note)" : `: ${note}`}`;
+  const staleSuffix =
+    documentFingerprint !== undefined && isMarkFromEarlierFigure(mark, documentFingerprint)
+      ? " [drawn on an earlier figure version]"
+      : "";
+  return `${marker} ${head}${note === "" ? " (no note)" : `: ${note}`}${staleSuffix}`;
 }
 
-/** 逐条渲染全部标注。 */
-export function describeFigureMarks(marks: readonly FigureAnnotationMark[]): string[] {
-  return marks.map((mark, index) => describeFigureMark(mark, index));
+/**
+ * 逐条渲染全部标注。
+ *
+ * @param documentFingerprint - 文档当前图的指纹；给了才会逐条标出"画在旧版图上"。
+ */
+export function describeFigureMarks(marks: readonly FigureAnnotationMark[], documentFingerprint?: string): string[] {
+  return marks.map((mark, index) => describeFigureMark(mark, index, documentFingerprint));
 }

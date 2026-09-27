@@ -244,6 +244,21 @@ describe("figure annotation references", () => {
     expect(image?.data.startsWith("data:image/png;base64,")).toBe(true);
   });
 
+  it("warns when some marks were drawn on an earlier version of the figure", () => {
+    const staleMark = { ...figureMark, id: "m2", figureFingerprint: "sha256:old" };
+    const freshMark = { ...figureMark, id: "m3", figureFingerprint: `sha256:${"b".repeat(64)}` };
+
+    const block = formatContentReferencePromptBlock([annotationReference({ marks: [staleMark, freshMark] })]);
+    expect(block).toContain("1 of these marks were drawn on an earlier version of the figure");
+    // 逐条后缀只加在旧版那条上。
+    expect(block.match(/\[drawn on an earlier figure version\]/g)).toHaveLength(1);
+
+    // 全部对应当前图时不加任何多余行（旧行为不变）。
+    const fresh = formatContentReferencePromptBlock([annotationReference({ marks: [freshMark] })]);
+    expect(fresh).not.toContain("earlier version of the figure");
+    expect(fresh).not.toContain("[drawn on an earlier figure version]");
+  });
+
   it("never lets the inline image bytes reach the prompt text", () => {
     const block = formatContentReferencePromptBlock([annotationReference({ summary: "把标号都对齐一遍" })]);
     const serialized = serializableReference(annotationReference());

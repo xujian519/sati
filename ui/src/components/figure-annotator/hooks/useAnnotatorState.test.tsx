@@ -87,6 +87,27 @@ describe("annotator state", () => {
     expect(result.current.canUndo).toBe(false);
   });
 
+  it("stamps the drawn-on figure baseline on new marks, and leaves seeded ones alone", () => {
+    const { result } = renderHook(() => useAnnotatorState({ figureFingerprint: "sha256:new" }));
+    act(() => result.current.addMark(mark("m1")));
+    expect(result.current.marks[0]?.figureFingerprint).toBe("sha256:new");
+
+    act(() =>
+      result.current.seed({
+        marks: [mark("s1"), { ...mark("s2"), figureFingerprint: "sha256:old" }],
+        createdAt: "2026-01-01T00:00:00.000Z",
+      }),
+    );
+    // 载入的标注保留自己的基线：它画在哪一版图上不是本次会话能改写的。
+    expect(result.current.marks.map(item => item.figureFingerprint)).toEqual([undefined, "sha256:old"]);
+  });
+
+  it("adds no baseline before the figure hash is known", () => {
+    const { result } = renderHook(() => useAnnotatorState());
+    act(() => result.current.addMark(mark("m1")));
+    expect(result.current.marks[0]).not.toHaveProperty("figureFingerprint");
+  });
+
   it("keeps the first save time across later saves", () => {
     const { result } = renderHook(() => useAnnotatorState());
     act(() => result.current.markSaved("2026-01-01T00:00:00.000Z"));
