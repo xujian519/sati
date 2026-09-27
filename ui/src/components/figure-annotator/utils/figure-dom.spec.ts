@@ -151,6 +151,47 @@ describe("figure DOM", () => {
     expect(anchorAtPoint(container, 5, 95, 1, 1)).toBeUndefined();
   });
 
+  it("never anchors to an invisible element that would win on area", () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = parseFigureSvg(`<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
+      <g id="n-visible"><rect x="0" y="0" width="80" height="80"/></g>
+      <g id="n-ghost" style="opacity:0"><rect x="40" y="40" width="10" height="10"/></g>
+    </svg>`)!;
+    container.append(root);
+    stubRect(container, { left: 0, top: 0, width: 100, height: 100 });
+    stubRect(root, { left: 0, top: 0, width: 100, height: 100 });
+    const [visibleGroup, ghostGroup] = [...root.querySelectorAll("g")];
+    stubRect(visibleGroup!, { left: 0, top: 0, width: 80, height: 80 });
+    stubRect(visibleGroup!.querySelector("rect")!, { left: 0, top: 0, width: 80, height: 80 });
+    // 隐形图元更小且同样包含该点：修复前"最小包含盒"会选中它。
+    stubRect(ghostGroup!, { left: 40, top: 40, width: 10, height: 10 });
+    stubRect(ghostGroup!.querySelector("rect")!, { left: 40, top: 40, width: 10, height: 10 });
+
+    expect(anchorAtPoint(container, 45, 45, 1, 1)).toMatchObject({ id: "n-visible", nodeId: "visible" });
+  });
+
+  it.each([
+    ["visibility:hidden", "visibility:hidden"],
+    ["display:none", "display:none"],
+  ])("never anchors to an element hidden by %s", (_label, declaration) => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = parseFigureSvg(`<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
+      <g id="n-a"><rect x="0" y="0" width="80" height="80"/></g>
+      <rect id="n-hidden" style="${declaration}" x="40" y="40" width="10" height="10"/>
+    </svg>`)!;
+    container.append(root);
+    stubRect(container, { left: 0, top: 0, width: 100, height: 100 });
+    stubRect(root, { left: 0, top: 0, width: 100, height: 100 });
+    const group = root.querySelector("g")!;
+    stubRect(group, { left: 0, top: 0, width: 80, height: 80 });
+    stubRect(group.querySelector("rect")!, { left: 0, top: 0, width: 80, height: 80 });
+    stubRect(root.querySelector("#n-hidden")!, { left: 40, top: 40, width: 10, height: 10 });
+
+    expect(anchorAtPoint(container, 45, 45, 1, 1)).toMatchObject({ id: "n-a", nodeId: "a" });
+  });
+
   it("scales the reported box into figure pixels", () => {
     const container = document.createElement("div");
     document.body.append(container);

@@ -178,6 +178,36 @@ function nodeIdOf(element: Element): string | undefined {
     : undefined;
 }
 
+/**
+ * 图面上看得见的元素，按文档顺序（不含根元素自身）。
+ *
+ * 命中判定必须排除隐形图元：CAD / Inkscape 常留 `opacity:0` 或 `visibility:hidden` 的辅助
+ * 图元（参考线、被隐藏的层、占位框），它们的包围盒非零，会被"最小包含盒"选中——于是标号
+ * 锚到一个用户根本看不见的元素上。`display:none` 的元素没有盒（rect 为 0）本就被过滤，
+ * 这里同时剪掉它的整棵子树。
+ *
+ * `visibility` 只跳过元素自身、不剪子树：CSS 允许后代显式写 `visibility:visible` 重新显形，
+ * 而浏览器给出的 `getComputedStyle(...).visibility` 已含继承值，逐元素判定即可。`opacity`
+ * 不继承但沿树相乘，祖先透明时后代不可能"更可见"，故对有效透明度为 0 的分支剪枝。
+ *
+ * 遍历顺序 = 文档顺序，与 `querySelectorAll("*")` 一致，"最小面积、同面积取更深"的择优规则不变。
+ */
+function collectVisibleElements(root: Element): Element[] {
+  const visible: Element[] = [];
+  const walk = (element: Element, inheritedOpacity: number): void => {
+    const style = getComputedStyle(element);
+    if (style.display === "none") return;
+    const own = Number.parseFloat(style.opacity);
+    const opacity = Number.isFinite(own) ? inheritedOpacity * own : inheritedOpacity;
+    if (opacity <= 0) return;
+    const hidden = style.visibility === "hidden" || style.visibility === "collapse";
+    if (element !== root && !hidden) visible.push(element);
+    for (const child of element.children) walk(child, opacity);
+  };
+  walk(root, 1);
+  return visible;
+}
+
 /** 元素是否自己声明了身份（锚定要落在它身上）。 */
 function namesItself(element: Element): boolean {
   const id = element.getAttribute("id") ?? "";
@@ -191,7 +221,9 @@ function namesItself(element: Element): boolean {
  *
  * 命中判定遍历全部后代的包围盒，而不是问浏览器"指针下面是哪个元素"：专利附图大量是
  * `fill="none"` 的线条，无填充元素的内部不算命中，浏览器原生命中会对大面积图面答"根元素"。
- * 取**最小**的包含盒，再向上重指到最近一个"声明了自己身份"的祖先。
+ * 取**最小**的包含盒，再向上重指到最近一个"声明了自己身份"的祖先。隐形图元
+ * （`display:none` / `visibility:hidden` / 有效 `opacity` 为 0）不参与命中，见
+ * {@link collectVisibleElements}。
  *
  * 图是内联在 shadow root 里的（文档级样式才关得住），所以查找从 shadow root 开始。
  */
@@ -207,7 +239,7 @@ export function anchorAtPoint(
   let hit: Element | undefined;
   let hitArea = Number.POSITIVE_INFINITY;
   let hitDepth = -1;
-  for (const element of root.querySelectorAll("*")) {
+  for (const element of collectVisibleElements(root)) {
     if (NON_SHAPE_ELEMENTS.includes(element.tagName.toLowerCase())) continue;
     const rect = element.getBoundingClientRect();
     if (rect.width === 0 || rect.height === 0) continue;
