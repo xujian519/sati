@@ -244,6 +244,58 @@ describe("figure annotation references", () => {
     expect(image?.data.startsWith("data:image/png;base64,")).toBe(true);
   });
 
+  it("does not tell the model to edit the exported figure as if it were the source", () => {
+    const block = formatContentReferencePromptBlock([annotationReference()]);
+    // 通用行必须点出例外，否则与下方标注纪律（"改生成源、不改导出图"）互相矛盾。
+    expect(block).toContain("figure annotations are the exception");
+    expect(block).toContain("Exported figure: data/cases/c1/outputs/inv-fig1.svg (do not edit;");
+    expect(block).not.toContain("   Source: data/cases/c1/outputs/inv-fig1.svg");
+  });
+
+  it("keeps the plain source line for references whose source really is the edit target", () => {
+    const region = createImageRegionContentReference({
+      selectionMode: "region",
+      source,
+      renderer: { id: "xlsx", backend: "builtin", locatorQuality: "visual" },
+      locator: {
+        surface: "sheet",
+        sheetId: "sheet-0",
+        sheetName: "Sheet1",
+        rect: { x: 0, y: 0, width: 0.5, height: 0.5 },
+      },
+      image: {
+        name: "selection.png",
+        mimeType: "image/png",
+        width: 10,
+        height: 10,
+        dataUrl: "data:image/png;base64,AAAA",
+      },
+    });
+
+    const block = formatContentReferencePromptBlock([region]);
+    expect(block).toContain("   Source: reports/Q1.xlsx");
+    expect(block).not.toContain("figure annotations are the exception");
+    // 两类引用混在一起时，例外分句仍必须出现（标注纪律对整块生效）。
+    expect(formatContentReferencePromptBlock([region, annotationReference()])).toContain(
+      "figure annotations are the exception",
+    );
+  });
+
+  it("warns when some marks were drawn on an earlier version of the figure", () => {
+    const staleMark = { ...figureMark, id: "m2", figureFingerprint: "sha256:old" };
+    const freshMark = { ...figureMark, id: "m3", figureFingerprint: `sha256:${"b".repeat(64)}` };
+
+    const block = formatContentReferencePromptBlock([annotationReference({ marks: [staleMark, freshMark] })]);
+    expect(block).toContain("1 of these marks were drawn on an earlier version of the figure");
+    // 逐条后缀只加在旧版那条上。
+    expect(block.match(/\[drawn on an earlier figure version\]/g)).toHaveLength(1);
+
+    // 全部对应当前图时不加任何多余行（旧行为不变）。
+    const fresh = formatContentReferencePromptBlock([annotationReference({ marks: [freshMark] })]);
+    expect(fresh).not.toContain("earlier version of the figure");
+    expect(fresh).not.toContain("[drawn on an earlier figure version]");
+  });
+
   it("never lets the inline image bytes reach the prompt text", () => {
     const block = formatContentReferencePromptBlock([annotationReference({ summary: "把标号都对齐一遍" })]);
     const serialized = serializableReference(annotationReference());

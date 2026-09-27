@@ -48,9 +48,29 @@ describe("figure DOM", () => {
 
   it("reads the intrinsic size from attributes, then the viewBox, then defaults", () => {
     expect(svgIntrinsicSize(parseFigureSvg('<svg width="12" height="7"/>')!)).toEqual({ width: 12, height: 7 });
+    expect(svgIntrinsicSize(parseFigureSvg('<svg width="12px" height="7px"/>')!)).toEqual({ width: 12, height: 7 });
     expect(svgIntrinsicSize(parseFigureSvg('<svg viewBox="0 0 30 40"/>')!)).toEqual({ width: 30, height: 40 });
     expect(svgIntrinsicSize(parseFigureSvg("<svg/>")!)).toEqual({ width: 800, height: 600 });
     expect(svgIntrinsicSize(parseFigureSvg('<svg width="0" height="-4"/>')!)).toEqual({ width: 800, height: 600 });
+  });
+
+  it("never reads a unit-bearing width as pixels", () => {
+    // 带单位/百分比的属性整体回退 viewBox——`parseFloat` 会把数值部分当像素（100% → 100）。
+    const cases: readonly string[] = ["100%", "210mm", "8.5in", "12pt", "2em", "3rem", "50vw", "10cm", "96Q"];
+    for (const unit of cases) {
+      const root = parseFigureSvg(`<svg width="${unit}" height="${unit}" viewBox="0 0 640 480"/>`)!;
+      expect(svgIntrinsicSize(root)).toEqual({ width: 640, height: 480 });
+    }
+    // 一边带单位也整体回退：混用两种参照系会得到与 viewBox 不符的宽高比。
+    expect(svgIntrinsicSize(parseFigureSvg('<svg width="640" height="100%" viewBox="0 0 640 480"/>')!)).toEqual({
+      width: 640,
+      height: 480,
+    });
+    // 没有 viewBox 可回退时落到兜底尺寸，而不是把单位前的数字当像素。
+    expect(svgIntrinsicSize(parseFigureSvg('<svg width="100%" height="100%"/>')!)).toEqual({
+      width: 800,
+      height: 600,
+    });
   });
 
   it("scrubs the CSS surfaces that would reach outside the figure", () => {
@@ -129,6 +149,47 @@ describe("figure DOM", () => {
     expect(label?.nodeId).toBeUndefined();
     // 谁也没命中 → 无锚定。
     expect(anchorAtPoint(container, 5, 95, 1, 1)).toBeUndefined();
+  });
+
+  it("never anchors to an invisible element that would win on area", () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = parseFigureSvg(`<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
+      <g id="n-visible"><rect x="0" y="0" width="80" height="80"/></g>
+      <g id="n-ghost" style="opacity:0"><rect x="40" y="40" width="10" height="10"/></g>
+    </svg>`)!;
+    container.append(root);
+    stubRect(container, { left: 0, top: 0, width: 100, height: 100 });
+    stubRect(root, { left: 0, top: 0, width: 100, height: 100 });
+    const [visibleGroup, ghostGroup] = [...root.querySelectorAll("g")];
+    stubRect(visibleGroup!, { left: 0, top: 0, width: 80, height: 80 });
+    stubRect(visibleGroup!.querySelector("rect")!, { left: 0, top: 0, width: 80, height: 80 });
+    // 隐形图元更小且同样包含该点：修复前"最小包含盒"会选中它。
+    stubRect(ghostGroup!, { left: 40, top: 40, width: 10, height: 10 });
+    stubRect(ghostGroup!.querySelector("rect")!, { left: 40, top: 40, width: 10, height: 10 });
+
+    expect(anchorAtPoint(container, 45, 45, 1, 1)).toMatchObject({ id: "n-visible", nodeId: "visible" });
+  });
+
+  it.each([
+    ["visibility:hidden", "visibility:hidden"],
+    ["display:none", "display:none"],
+  ])("never anchors to an element hidden by %s", (_label, declaration) => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = parseFigureSvg(`<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
+      <g id="n-a"><rect x="0" y="0" width="80" height="80"/></g>
+      <rect id="n-hidden" style="${declaration}" x="40" y="40" width="10" height="10"/>
+    </svg>`)!;
+    container.append(root);
+    stubRect(container, { left: 0, top: 0, width: 100, height: 100 });
+    stubRect(root, { left: 0, top: 0, width: 100, height: 100 });
+    const group = root.querySelector("g")!;
+    stubRect(group, { left: 0, top: 0, width: 80, height: 80 });
+    stubRect(group.querySelector("rect")!, { left: 0, top: 0, width: 80, height: 80 });
+    stubRect(root.querySelector("#n-hidden")!, { left: 40, top: 40, width: 10, height: 10 });
+
+    expect(anchorAtPoint(container, 45, 45, 1, 1)).toMatchObject({ id: "n-a", nodeId: "a" });
   });
 
   it("scales the reported box into figure pixels", () => {

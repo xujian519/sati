@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FigureAnnotationMark } from "../../../types/annotationReference";
-import { bytesToDataUrl, composeReviewSvg } from "./export";
+import { bytesToDataUrl, composeReviewSvg, figureContentHash, fnv1a64Hex } from "./export";
 
 const layer = {
   markup: '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10"/></svg>',
@@ -76,5 +76,41 @@ describe("review image", () => {
       },
     ];
     expect(composeReviewSvg(layer, marks)).toContain(">#1971c2</text>");
+  });
+});
+
+describe("figure content hash", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("computes the documented FNV-1a 64 fingerprint", () => {
+    // 参考向量取自 FNV 规范（offset basis 与标准测试串）。
+    expect(fnv1a64Hex(new Uint8Array())).toBe("cbf29ce484222325");
+    expect(fnv1a64Hex(new TextEncoder().encode("a"))).toBe("af63dc4c8601ec8c");
+    expect(fnv1a64Hex(new TextEncoder().encode("foobar"))).toBe("85944171f73967e8");
+    // 恒 16 位十六进制，且同输入同结果、异输入异结果。
+    expect(fnv1a64Hex(new Uint8Array([0, 0, 0]))).toHaveLength(16);
+    expect(fnv1a64Hex(new TextEncoder().encode("figure"))).toBe(fnv1a64Hex(new TextEncoder().encode("figure")));
+    expect(fnv1a64Hex(new TextEncoder().encode("figure"))).not.toBe(fnv1a64Hex(new TextEncoder().encode("figurf")));
+  });
+
+  it("prefers Web Crypto SHA-256 when it is available", async () => {
+    vi.stubGlobal("crypto", {
+      subtle: { digest: async () => new Uint8Array(32).fill(0xab).buffer },
+    });
+    await expect(figureContentHash(new Uint8Array([1, 2, 3]))).resolves.toEqual({
+      algo: "sha256",
+      hex: "ab".repeat(32),
+    });
+  });
+
+  it("falls back to the JS fingerprint instead of failing without Web Crypto", async () => {
+    // 非安全上下文（局域网 http）没有 `crypto.subtle`：取哈希不得抛错，否则整块面板不可用。
+    vi.stubGlobal("crypto", {});
+    await expect(figureContentHash(new TextEncoder().encode("foobar"))).resolves.toEqual({
+      algo: "fnv1a64",
+      hex: "85944171f73967e8",
+    });
   });
 });

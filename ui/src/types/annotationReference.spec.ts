@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  annotationFigureFingerprint,
   buildFigureAnnotationDocument,
   describeFigureMarks,
   figureAnnotationImageName,
@@ -76,6 +77,56 @@ describe("figure annotation contract", () => {
     expect(isFigureAnnotationMark({ ...mark(), points: [[0, Number.NaN]] })).toBe(false);
     expect(isFigureAnnotationMark({ ...mark(), anchor: { tag: "g" } })).toBe(false);
     expect(isFigureAnnotationMark({ ...mark(), anchor: { tag: "g", bbox: [0, 0, 1, 1], ref: "34" } })).toBe(true);
+    expect(isFigureAnnotationMark({ ...mark(), figureFingerprint: "sha256:ab" })).toBe(true);
+    expect(isFigureAnnotationMark({ ...mark(), figureFingerprint: 7 })).toBe(false);
+  });
+
+  it("records which algorithm produced the figure digest", () => {
+    const document = (hashAlgo?: unknown) =>
+      isFigureAnnotationDocument({
+        version: 1,
+        figure: hashAlgo === undefined ? figure : { ...figure, hashAlgo },
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+        marks: [],
+      });
+
+    expect(document()).toBe(true);
+    expect(document("sha256")).toBe(true);
+    expect(document("fnv1a64")).toBe(true);
+    expect(document("md5")).toBe(false);
+    expect(document(1)).toBe(false);
+  });
+
+  it("builds a comparable fingerprint that reads a missing algorithm as sha256", () => {
+    expect(annotationFigureFingerprint({ sha256: "ab".repeat(32) })).toBe(`sha256:${"ab".repeat(32)}`);
+    expect(annotationFigureFingerprint({ sha256: "ab".repeat(8), hashAlgo: "fnv1a64" })).toBe(
+      `fnv1a64:${"ab".repeat(8)}`,
+    );
+    // 同一份摘要配不同算法不得被认成同一版图。
+    expect(annotationFigureFingerprint({ sha256: "ab".repeat(32) })).not.toBe(
+      annotationFigureFingerprint({ sha256: "ab".repeat(32), hashAlgo: "fnv1a64" }),
+    );
+  });
+
+  it("flags only the marks drawn on an earlier figure version, keeping the numbering", () => {
+    const marks: FigureAnnotationMark[] = [
+      mark({ id: "m1", figureFingerprint: "sha256:old" }),
+      mark({ id: "m2" }), // 无基线（本次变更前的数据）→ 不知道就不告警
+      mark({ id: "m3", figureFingerprint: "sha256:new" }),
+    ];
+
+    const lines = describeFigureMarks(marks, "sha256:new");
+    expect(lines[0]).toContain("[drawn on an earlier figure version]");
+    expect(lines[1]).not.toContain("[drawn on an earlier figure version]");
+    expect(lines[2]).not.toContain("[drawn on an earlier figure version]");
+    // 编号恒按绘制顺序，不因基线而错位。
+    expect(lines.map(line => line.slice(0, 3))).toEqual(["1. ", "2. ", "3. "]);
+
+    // 不传文档指纹的调用点（旧行为）一律不标记。
+    expect(describeFigureMarks(marks).some(line => line.includes("earlier"))).toBe(false);
+    // 指纹里算法不同也算不同版本（FNV 摘要与 SHA 摘要在字符串上就不可能相等）。
+    expect(describeFigureMarks([mark({ figureFingerprint: "sha256:new" })], "fnv1a64:new")[0]).toContain("earlier");
   });
 
   it("treats an unreadable sidecar as never annotated", () => {
