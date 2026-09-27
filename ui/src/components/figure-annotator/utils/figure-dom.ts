@@ -122,12 +122,31 @@ function positive(value: number): boolean {
 }
 
 /**
- * 读一张内联 SVG 自己的尺寸：`width`/`height` 属性 → `viewBox` → 兜底 800x600。
+ * 无单位或 `px` 的 CSS 长度：只有这两种写法能当像素读。
+ *
+ * `width="100%"`、`width="210mm"`、`width="8.5in"` 的数值部分都不是像素——`parseFloat`
+ * 会把它们读成 100 / 210 / 8.5 并当成图面尺寸，画布与导出尺寸随之失真。
+ */
+const PIXEL_LENGTH = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:px)?$/i;
+
+/** 把 `width`/`height` 属性读成像素；带单位（含 `%`）或非法时返回 undefined。 */
+function parsePixelLength(raw: string | null): number | undefined {
+  const trimmed = (raw ?? "").trim();
+  if (!PIXEL_LENGTH.test(trimmed)) return undefined;
+  const value = Number.parseFloat(trimmed);
+  return positive(value) ? value : undefined;
+}
+
+/**
+ * 读一张内联 SVG 自己的尺寸：`width`/`height` 属性（仅无单位或 `px`）→ `viewBox` → 兜底 800x600。
+ *
+ * 带单位时不换算也不截取数值，而是整体回退 `viewBox`：附图靠自身的坐标系统绘制，
+ * `viewBox` 才是与标注坐标自洽的参照系（`210mm` 换算成 794px 会得到一个与 `viewBox` 无关的尺寸）。
  */
 export function svgIntrinsicSize(root: SVGSVGElement): FigureIntrinsicSize {
-  const attributeWidth = Number.parseFloat(root.getAttribute("width") ?? "");
-  const attributeHeight = Number.parseFloat(root.getAttribute("height") ?? "");
-  if (positive(attributeWidth) && positive(attributeHeight)) {
+  const attributeWidth = parsePixelLength(root.getAttribute("width"));
+  const attributeHeight = parsePixelLength(root.getAttribute("height"));
+  if (attributeWidth !== undefined && attributeHeight !== undefined) {
     return { width: attributeWidth, height: attributeHeight };
   }
   const viewBox = (root.getAttribute("viewBox") ?? "").split(/[\s,]+/).map(Number);

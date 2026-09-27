@@ -48,9 +48,29 @@ describe("figure DOM", () => {
 
   it("reads the intrinsic size from attributes, then the viewBox, then defaults", () => {
     expect(svgIntrinsicSize(parseFigureSvg('<svg width="12" height="7"/>')!)).toEqual({ width: 12, height: 7 });
+    expect(svgIntrinsicSize(parseFigureSvg('<svg width="12px" height="7px"/>')!)).toEqual({ width: 12, height: 7 });
     expect(svgIntrinsicSize(parseFigureSvg('<svg viewBox="0 0 30 40"/>')!)).toEqual({ width: 30, height: 40 });
     expect(svgIntrinsicSize(parseFigureSvg("<svg/>")!)).toEqual({ width: 800, height: 600 });
     expect(svgIntrinsicSize(parseFigureSvg('<svg width="0" height="-4"/>')!)).toEqual({ width: 800, height: 600 });
+  });
+
+  it("never reads a unit-bearing width as pixels", () => {
+    // 带单位/百分比的属性整体回退 viewBox——`parseFloat` 会把数值部分当像素（100% → 100）。
+    const cases: readonly string[] = ["100%", "210mm", "8.5in", "12pt", "2em", "3rem", "50vw", "10cm", "96Q"];
+    for (const unit of cases) {
+      const root = parseFigureSvg(`<svg width="${unit}" height="${unit}" viewBox="0 0 640 480"/>`)!;
+      expect(svgIntrinsicSize(root)).toEqual({ width: 640, height: 480 });
+    }
+    // 一边带单位也整体回退：混用两种参照系会得到与 viewBox 不符的宽高比。
+    expect(svgIntrinsicSize(parseFigureSvg('<svg width="640" height="100%" viewBox="0 0 640 480"/>')!)).toEqual({
+      width: 640,
+      height: 480,
+    });
+    // 没有 viewBox 可回退时落到兜底尺寸，而不是把单位前的数字当像素。
+    expect(svgIntrinsicSize(parseFigureSvg('<svg width="100%" height="100%"/>')!)).toEqual({
+      width: 800,
+      height: 600,
+    });
   });
 
   it("scrubs the CSS surfaces that would reach outside the figure", () => {
