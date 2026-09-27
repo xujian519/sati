@@ -286,8 +286,10 @@ export function AnnotatorCanvas(props: AnnotatorCanvasProps): ReactNode {
       onPointerMove={move}
       onPointerUp={finish}
       onPointerCancel={finish}
-      onClick={() => {
-        if (tool === "select") props.onSelect(null);
+      onClick={event => {
+        // 只有点在空白图面上才取消选中：命中路径的 click 会照旧冒泡到这里（pointerdown 上的
+        // stopPropagation 拦不住 click），条件放宽就会把刚选中的那条立刻取消掉。
+        if (tool === "select" && event.target === event.currentTarget) props.onSelect(null);
       }}
     >
       {marks.map(mark => renderMark(mark, false))}

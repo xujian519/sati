@@ -18,6 +18,7 @@ import { useFigureSource } from "../hooks/useFigureSource";
 import { useSavedAnnotation } from "../hooks/useSavedAnnotation";
 import type { FigureLayer } from "../utils/export";
 import { parseFigureSvg } from "../utils/figure-dom";
+import { isTypingTarget } from "../utils/shortcut";
 import AnnotationSidePanel from "./AnnotationSidePanel";
 import { AnnotatorCanvas } from "./AnnotatorCanvas";
 import AnnotatorToolbar from "./AnnotatorToolbar";
@@ -86,7 +87,7 @@ export default function FigureAnnotator({
   const size = source.status === "ready" ? source.size : undefined;
   const layer = useMemo((): FigureLayer | undefined => {
     if (source.status !== "ready") return undefined;
-    return { markup: source.markup, viewBox: source.viewBox, width: source.size.width, height: source.size.height };
+    return { markup: source.markup, width: source.size.width, height: source.size.height };
   }, [source]);
 
   const markSaved = annotator.markSaved;
@@ -114,15 +115,17 @@ export default function FigureAnnotator({
   const runSubmit = submit.run;
 
   // 图上内联真实的 SVG 元素（而不是 <img>）：只有活的 DOM 才知道标注落在哪个图元上。
+  // 放进 shadow root：SVG 自带的 `<style>` 是**文档级**样式表，不隔离就能重排整个界面。
   useEffect(() => {
     const host = figureHostRef.current;
     if (host === null || source.status !== "ready") return;
+    const shadow = host.shadowRoot ?? host.attachShadow({ mode: "open" });
     const root = parseFigureSvg(source.markup);
     if (root === undefined) return;
-    root.setAttribute("width", String(source.size.width));
-    root.setAttribute("height", String(source.size.height));
-    root.classList.add("block", "select-none");
-    host.replaceChildren(root);
+    // shadow root 里没有 Tailwind 的样式，块级与禁选直接写成内联样式。
+    root.style.display = "block";
+    root.style.userSelect = "none";
+    shadow.replaceChildren(root);
   }, [source]);
 
   useEffect(() => {
@@ -139,11 +142,12 @@ export default function FigureAnnotator({
     };
   }, [source.status]);
 
-  // Ctrl/Cmd+Z 撤销（带 Shift 为重做）。
+  // Ctrl/Cmd+Z 撤销（带 Shift 为重做）。挂在 window 上，所以要避开正在打字的输入框。
   const undo = annotator.undo;
   const redo = annotator.redo;
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
+      if (isTypingTarget(event.target)) return;
       if ((event.key !== "z" && event.key !== "Z") || !(event.metaKey || event.ctrlKey)) return;
       event.preventDefault();
       if (event.shiftKey) redo();

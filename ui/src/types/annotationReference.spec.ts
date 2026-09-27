@@ -105,10 +105,11 @@ describe("figure annotation contract", () => {
     expect(lines[1]).toBe("2. rectangle (0,0)-(5,5) (node=3, ref=34) (no note)");
   });
 
-  it("summarizes a reference by its first note", () => {
+  it("summarizes a reference by its first note, then by the caller's label", () => {
+    const label = (count: number): string => `${count} 处标注`;
     const document = buildFigureAnnotationDocument({ figure, marks: [mark()] });
-    expect(figureAnnotationSummary(document)).toBe("这个标号应指向滑套 34");
+    expect(figureAnnotationSummary(document, label)).toBe("这个标号应指向滑套 34");
     const silent = buildFigureAnnotationDocument({ figure, marks: [mark({ text: "" })] });
-    expect(figureAnnotationSummary(silent)).toBe("1 marks");
+    expect(figureAnnotationSummary(silent, label)).toBe("1 处标注");
   });
 });

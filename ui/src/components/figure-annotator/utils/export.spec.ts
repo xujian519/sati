@@ -4,7 +4,6 @@ import { bytesToDataUrl, composeReviewSvg } from "./export";
 
 const layer = {
   markup: '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10"/></svg>',
-  viewBox: "0 0 10 10",
   width: 10,
   height: 10,
 };
@@ -36,6 +35,21 @@ describe("review image", () => {
     const svg = composeReviewSvg(layer, [{ id: "t", kind: "text", color: "#000", points: [[1, 2]], text: "x" }]);
     expect(svg).toContain('font-family="system-ui, -apple-system, PingFang SC');
     expect(svg).not.toContain('font-family="system-ui, -apple-system, "');
+  });
+
+  it("embeds the figure verbatim so prefixed namespaces stay declared", () => {
+    // 前缀声明长在根标签上：剥壳重包会留下未绑定的前缀，整张审阅图解码失败。
+    const prefixed = {
+      markup:
+        '<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"' +
+        ' width="10" height="10" viewBox="0 0 10 10"><g inkscape:label="sleeve"><rect width="10" height="10"/></g></svg>',
+      width: 10,
+      height: 10,
+    };
+    const svg = composeReviewSvg(prefixed, []);
+    expect(svg).toContain('xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"');
+    expect(svg).toContain('inkscape:label="sleeve"');
+    expect(new DOMParser().parseFromString(svg, "image/svg+xml").querySelector("parsererror")).toBeNull();
   });
 
   it("always paints a white background, including for an empty annotation", () => {

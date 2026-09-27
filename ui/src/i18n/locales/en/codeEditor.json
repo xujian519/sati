@@ -223,6 +223,9 @@
     "loadFailed": "Reading the figure failed",
     "stale": "This figure changed since it was annotated; old marks may be misplaced. Check them before sending.",
     "referenceBadge": "MARK",
-    "referenceLocation": "{{count}} marks"
+    "referenceLocation": "{{count}} marks",
+    "referenceMarks": "{{count}} marks",
+    "referenceMarks_one": "{{count}} mark",
+    "referenceMarks_other": "{{count}} marks"
   }
 }

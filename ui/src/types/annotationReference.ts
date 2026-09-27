@@ -255,10 +255,18 @@ export function parseFigureAnnotationDocument(text: string): FigureAnnotationDoc
   }
 }
 
-/** 标注引用的 UI 摘要（引用芯片上显示的那一句）。 */
-export function figureAnnotationSummary(document: FigureAnnotationDocument): string {
+/**
+ * 标注引用的 UI 摘要（引用芯片上显示的那一句）。
+ *
+ * @param marksLabel - 没有备注时用的条数文案；用户可见文案一律由调用方按 i18n 提供，这里不写死。
+ * @returns 摘要文本。
+ */
+export function figureAnnotationSummary(
+  document: FigureAnnotationDocument,
+  marksLabel: (count: number) => string,
+): string {
   const firstNote = document.marks.find(mark => (mark.text ?? "").trim().length > 0)?.text?.trim();
-  return firstNote ?? `${document.marks.length} marks`;
+  return firstNote ?? marksLabel(document.marks.length);
 }
 
 /** 锚定信息的可读描述（智能体据此定位到 FigureSpec 节点）。 */

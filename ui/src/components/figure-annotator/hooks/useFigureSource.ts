@@ -5,13 +5,7 @@
  */
 import { useEffect, useState } from "react";
 import { sha256Hex } from "../utils/export";
-import {
-  figureSvgMarkup,
-  parseFigureSvg,
-  svgIntrinsicSize,
-  svgViewBox,
-  type FigureIntrinsicSize,
-} from "../utils/figure-dom";
+import { figureSvgMarkup, parseFigureSvg, svgIntrinsicSize, type FigureIntrinsicSize } from "../utils/figure-dom";
 
 /** 图面加载状态。 */
 export type FigureSourceState =
@@ -21,10 +15,8 @@ export type FigureSourceState =
       status: "ready";
       /** 图面固有尺寸（像素），标注坐标的参照系。 */
       size: FigureIntrinsicSize;
-      /** 已 sanitize 的 SVG 标记。 */
+      /** 已 sanitize 的 SVG 标记（根标签上带固有尺寸，内联与导出共用）。 */
       markup: string;
-      /** 内联渲染用的 viewBox。 */
-      viewBox: string;
       /** 图内容哈希。 */
       sha256: string;
     };
@@ -67,11 +59,13 @@ export function useFigureSource({ blob, blobError, loading, failureMessage }: Us
           return;
         }
         const size = svgIntrinsicSize(root);
+        // 固有尺寸写回根标签：内联渲染与审阅图（嵌套 `<svg>`）都以它为准。
+        root.setAttribute("width", String(size.width));
+        root.setAttribute("height", String(size.height));
         const result: FigureSourceState = {
           status: "ready",
           size,
           markup: figureSvgMarkup(root),
-          viewBox: svgViewBox(root, size),
           sha256: await sha256Hex(bytes),
         };
         if (!cancelled) setState(result);

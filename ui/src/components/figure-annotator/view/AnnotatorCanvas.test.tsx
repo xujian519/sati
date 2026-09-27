@@ -128,6 +128,32 @@ describe("annotator canvas", () => {
     expect(onRemove).toHaveBeenCalledWith("m1");
   });
 
+  it("keeps a mark selected when the click that picked it bubbles out of the hit shape", () => {
+    const onSelect = vi.fn();
+    const stored: FigureAnnotationMark = {
+      id: "m1",
+      kind: "rect",
+      color: "#1971c2",
+      points: [
+        [0, 0],
+        [20, 20],
+      ],
+      text: "少一个件",
+    };
+    const { container } = render(<Harness marks={[stored]} tool="select" onSelect={onSelect} />);
+    const hit = container.querySelector('path[stroke="transparent"]');
+
+    // 真实点击是 pointerdown 之后再冒一个 click；覆盖层的 click 处理器不认目标就会把选中清掉。
+    fireEvent.pointerDown(hit!, { clientX: 10, clientY: 10 });
+    fireEvent.click(hit!, { clientX: 10, clientY: 10 });
+    expect(onSelect).toHaveBeenLastCalledWith("m1");
+
+    // 点在空白图面上仍然取消选中。
+    const overlay = container.querySelector("[data-figure-annotator-overlay]");
+    fireEvent.click(overlay!);
+    expect(onSelect).toHaveBeenLastCalledWith(null);
+  });
+
   it("shows a placeholder for a text mark that has no label yet", () => {
     const stored: FigureAnnotationMark = { id: "t1", kind: "text", color: "#2f9e44", points: [[5, 20]], text: "" };
     const { container } = render(<Harness marks={[stored]} tool="select" />);

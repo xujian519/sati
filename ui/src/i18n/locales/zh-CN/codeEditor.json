@@ -223,6 +223,9 @@
     "loadFailed": "读取附图失败",
     "stale": "这张图在上次标注之后已经更新过，旧标注的坐标可能失准，请核对后再提交。",
     "referenceBadge": "标注",
-    "referenceLocation": "{{count}} 处标注"
+    "referenceLocation": "{{count}} 处标注",
+    "referenceMarks": "{{count}} 处标注",
+    "referenceMarks_one": "{{count}} 处标注",
+    "referenceMarks_other": "{{count}} 处标注"
   }
 }

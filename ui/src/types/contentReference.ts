@@ -646,18 +646,30 @@ export function parseContentReferencePromptBlock(content: unknown): {
   return { content: visibleContent, references };
 }
 
+/** 引用摘要的可选项：兜底文案与截断长度（用户可见文案由调用方按 i18n 提供）。 */
+export type ContentReferenceSummaryOptions = {
+  maxLength?: number;
+  /** 区域引用的兜底文案。 */
+  regionLabel?: string;
+  /** 标注引用的条数文案；缺省退化为纯数字，不引入硬编码语种文案。 */
+  annotationCountLabel?: (count: number) => string;
+};
+
 export function getContentReferenceSummary(
   reference: ContentReference,
-  maxLength = 160,
-  regionLabel = "Region",
+  options: ContentReferenceSummaryOptions = {},
 ): string {
+  const { maxLength = 160, regionLabel = "Region" } = options;
   let summary = "";
   if (reference.selectionMode === "text") {
     summary = reference.selectedText;
   } else if (reference.selectionMode === "cells") {
     summary = `${reference.locator.sheetName}!${reference.locator.ranges.join(", ")}`;
   } else if (reference.selectionMode === "annotation") {
-    summary = figureAnnotationSummary(reference.annotation.document);
+    summary = figureAnnotationSummary(
+      reference.annotation.document,
+      options.annotationCountLabel ?? (count => String(count)),
+    );
   } else {
     summary = regionLabel;
   }

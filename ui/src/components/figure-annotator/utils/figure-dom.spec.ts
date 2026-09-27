@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { anchorAtPoint, figureSvgMarkup, parseFigureSvg, svgIntrinsicSize, svgViewBox } from "./figure-dom";
+import { anchorAtPoint, figureSvgMarkup, parseFigureSvg, svgIntrinsicSize } from "./figure-dom";
 
 /** jsdom 不算布局，命中测试依赖的矩形必须自己打桩。 */
 function stubRect(element: Element, rect: { left: number; top: number; width: number; height: number }): void {
@@ -53,9 +53,49 @@ describe("figure DOM", () => {
     expect(svgIntrinsicSize(parseFigureSvg('<svg width="0" height="-4"/>')!)).toEqual({ width: 800, height: 600 });
   });
 
-  it("keeps a declared viewBox and synthesizes one otherwise", () => {
-    expect(svgViewBox(parseFigureSvg('<svg viewBox="1 2 3 4"/>')!, { width: 1, height: 1 })).toBe("1 2 3 4");
-    expect(svgViewBox(parseFigureSvg("<svg/>")!, { width: 9, height: 8 })).toBe("0 0 9 8");
+  it("scrubs the CSS surfaces that would reach outside the figure", () => {
+    const root = parseFigureSvg(`<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">
+      <style>@import url("https://evil.example/x.css");
+        .a{fill:url(https://evil.example/y.svg#g);position:fixed;z-index:99;background-image:url(#keep)}</style>
+      <rect class="a" width="5" height="5"
+        style="fill:url('https://evil.example/z.svg#g');cursor:url(https://evil.example/c.svg), auto"
+        fill="url(https://evil.example/w.svg#g)" filter="url(#local)"/>
+    </svg>`);
+    expect(root).toBeDefined();
+    const markup = figureSvgMarkup(root!);
+    // 外联引用一律断掉（CSS 里的 url() 与 @import 会真的发请求）。
+    expect(markup).not.toContain("evil.example");
+    expect(markup).not.toContain("@import");
+    // 图内锚点不能误伤。
+    expect(markup).toContain("url(#keep)");
+    expect(markup).toContain("url(#local)");
+    // 定位声明整条去掉：附图靠坐标画，`position:fixed` 能把界面盖住。
+    expect(markup).not.toContain("position");
+    expect(markup).not.toContain("z-index");
+  });
+
+  it("keeps the inline bytes and the class rules the figure needs to render", () => {
+    const root = parseFigureSvg(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><style>.box{fill:#00ff00}</style><image href="data:image/png;base64,AA" width="1" height="1"/></svg>',
+    );
+    const markup = figureSvgMarkup(root!);
+    expect(markup).toContain("data:image/png;base64,AA");
+    expect(markup).toContain(".box{fill:#00ff00}");
+  });
+
+  it("anchors inside the shadow root the figure is inlined into", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const shadow = host.attachShadow({ mode: "open" });
+    const root = parseFigureSvg(FIGURE)!;
+    shadow.append(root);
+    const group = root.querySelector("g")!;
+    stubRect(host, { left: 0, top: 0, width: 100, height: 100 });
+    stubRect(root, { left: 0, top: 0, width: 100, height: 100 });
+    stubRect(group, { left: 10, top: 10, width: 40, height: 20 });
+    stubRect(group.querySelector("rect")!, { left: 10, top: 10, width: 40, height: 20 });
+
+    expect(anchorAtPoint(host, 30, 20, 1, 1)).toMatchObject({ nodeId: "n3", ref: "34", bbox: [10, 10, 40, 20] });
   });
 
   it("anchors a point to the machine-readable node identity", () => {

@@ -105,12 +105,6 @@ export function useAnnotationSubmit({
         const document = buildDocument();
         if (document === null || size === undefined) throw new Error(t("notReady"));
 
-        const scale = reviewScale(size);
-        const reviewBlob =
-          layer === undefined
-            ? undefined
-            : await rasterizePng(composeReviewSvg(layer, marks), size.width, size.height, scale);
-
         const sidecarPath =
           projectName !== undefined && figurePath !== undefined
             ? await saveFigureAnnotation(projectName, figurePath, document)
@@ -121,6 +115,12 @@ export function useAnnotationSubmit({
           setStatus({ tone: "ok", text: t("saved", { path: sidecarPath ?? "" }) });
           return;
         }
+        // 光栅化只为发送服务：仅保存时不做（它依赖画布解码，失败不该拖累落盘）。
+        const scale = reviewScale(size);
+        const reviewBlob =
+          layer === undefined
+            ? undefined
+            : await rasterizePng(composeReviewSvg(layer, marks), size.width, size.height, scale);
         if (reviewBlob === undefined) throw new Error(t("notReady"));
         if (projectName === undefined || relativePath === undefined || fileName === undefined) {
           throw new Error(t("notReady"));

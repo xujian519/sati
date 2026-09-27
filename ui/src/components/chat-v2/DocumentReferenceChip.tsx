@@ -85,7 +85,12 @@ export default function DocumentReferenceChip({
   const badgeLabel = isAnnotation
     ? (t("figureAnnotator.referenceBadge", { defaultValue: "MARK" }) as string)
     : meta.label;
-  const summary = getContentReferenceSummary(normalized, summaryLength, t("contentReference.regionSummary"));
+  const summary = getContentReferenceSummary(normalized, {
+    maxLength: summaryLength,
+    regionLabel: t("contentReference.regionSummary"),
+    annotationCountLabel: count =>
+      t("figureAnnotator.referenceMarks", { count, defaultValue: "{{count}} marks" }) as string,
+  });
   const location =
     normalized.selectionMode === "text"
       ? normalized.locator.pageNumbers?.length

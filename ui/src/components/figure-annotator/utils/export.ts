@@ -16,10 +16,13 @@ import {
 
 /** 垫在标注下面的图面层。 */
 export type FigureLayer = {
-  /** 已 sanitize 的 SVG 标记（内联进审阅图）。 */
+  /**
+   * 已 sanitize 的根元素标记，作为嵌套 `<svg>` 原样嵌入审阅图。
+   *
+   * **不能剥根标签**：`xmlns:*` 前缀声明长在根标签上，剥掉就会留下未绑定的前缀
+   * （Inkscape/CAD 导出的 `inkscape:label`、`sodipodi:*` 很常见），整张审阅图解码失败。
+   */
   markup: string;
-  /** 图自身的 viewBox（声明过才有）。 */
-  viewBox?: string;
   /** 固有宽度（像素）。 */
   width: number;
   /** 固有高度（像素）。 */
@@ -56,16 +59,16 @@ function markSvg(mark: FigureAnnotationMark): string {
   return parts.join("");
 }
 
-/** 图面层作为 SVG 元素（去掉原文档外壳后内联，保留自己的 viewBox）。 */
-function figureSvg(layer: FigureLayer): string {
-  const viewBox = layer.viewBox === undefined ? "" : ` viewBox="${layer.viewBox}"`;
-  const inner = layer.markup
-    .replace(/^<\?xml[^>]*\?>\s*/u, "")
-    .replace(/^<svg[^>]*>/iu, "")
-    .replace(/<\/svg>\s*$/iu, "");
+/** 组装独立的审阅 SVG。 */
+export function composeReviewSvg(layer: FigureLayer, marks: readonly FigureAnnotationMark[]): string {
   return (
-    `<svg x="0" y="0" width="${layer.width}" height="${layer.height}"${viewBox}` +
-    ` preserveAspectRatio="xMidYMid meet">${inner}</svg>`
+    '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"' +
+    ` width="${layer.width}" height="${layer.height}" viewBox="0 0 ${layer.width} ${layer.height}">` +
+    `<rect x="0" y="0" width="${layer.width}" height="${layer.height}" fill="#ffffff"/>` +
+    // 图面层原样嵌入成嵌套 `<svg>`（宽度、高度与 viewBox 都在它自己身上）。
+    layer.markup +
+    marks.map(markSvg).join("") +
+    "</svg>"
   );
 }
 
@@ -82,18 +85,6 @@ export function bytesToDataUrl(bytes: Uint8Array, mediaType: string): string {
     binary += String.fromCharCode(...bytes.subarray(offset, offset + chunk));
   }
   return `data:${mediaType};base64,${btoa(binary)}`;
-}
-
-/** 组装独立的审阅 SVG。 */
-export function composeReviewSvg(layer: FigureLayer, marks: readonly FigureAnnotationMark[]): string {
-  return (
-    '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"' +
-    ` width="${layer.width}" height="${layer.height}" viewBox="0 0 ${layer.width} ${layer.height}">` +
-    `<rect x="0" y="0" width="${layer.width}" height="${layer.height}" fill="#ffffff"/>` +
-    figureSvg(layer) +
-    marks.map(markSvg).join("") +
-    "</svg>"
-  );
 }
 
 /**

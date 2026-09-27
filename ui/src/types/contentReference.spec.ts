@@ -267,9 +267,12 @@ describe("figure annotation references", () => {
     expect(parsed.references[0]?.selectionMode).toBe("annotation");
   });
 
-  it("labels the chip with the user's first note", () => {
-    expect(getContentReferenceSummary(annotationReference(), 80)).toBe("这个标号应指向滑套 34");
-    expect(getContentReferenceSummary(annotationReference({ marks: [], summary: "" }), 80)).toBe("0 marks");
+  it("labels the chip with the user's first note, then with the caller's label", () => {
+    const options = { maxLength: 80, annotationCountLabel: (count: number): string => `${count} 处标注` };
+    expect(getContentReferenceSummary(annotationReference(), options)).toBe("这个标号应指向滑套 34");
+    expect(getContentReferenceSummary(annotationReference({ marks: [], summary: "" }), options)).toBe("0 处标注");
+    // 调用方不给条数文案时退化为纯数字，不回落成硬编码语种文案。
+    expect(getContentReferenceSummary(annotationReference({ marks: [], summary: "" }))).toBe("0");
   });
 
   it("rejects a payload whose annotation document is unreadable", () => {
