@@ -554,13 +554,22 @@ export function formatContentReferencePromptBlock(references: ContentReference[]
     .filter((reference): reference is ContentReference => Boolean(reference));
   if (valid.length === 0) return "";
 
+  // 标注引用的 `source.relativePath` 就是那张**导出的** .svg：通用行对它是错的，
+  // 与标注纪律（"改生成源、不改导出图"）直接冲突，所以含标注引用时把例外写进通用行。
+  const hasAnnotation = valid.some(reference => reference.selectionMode === "annotation");
   const lines = [
     CONTENT_REFERENCE_PROMPT_MARKER,
-    "These are immutable snapshots explicitly selected by the user. Use the source path as the default edit target when the request asks to modify the referenced content.",
+    hasAnnotation
+      ? "These are immutable snapshots explicitly selected by the user. Use the source path as the default edit target when the request asks to modify the referenced content; figure annotations are the exception - their source path is the exported figure, and their edit target is stated per reference."
+      : "These are immutable snapshots explicitly selected by the user. Use the source path as the default edit target when the request asks to modify the referenced content.",
   ];
   valid.forEach((reference, index) => {
     lines.push(`${index + 1}. ${reference.selectionMode.toUpperCase()} reference`);
-    lines.push(`   Source: ${reference.source.relativePath}`);
+    lines.push(
+      reference.selectionMode === "annotation"
+        ? `   Exported figure: ${reference.source.relativePath} (do not edit; regenerate from its generating source)`
+        : `   Source: ${reference.source.relativePath}`,
+    );
     lines.push(
       `   Renderer: ${reference.renderer.id}/${reference.renderer.backend}; locator=${reference.renderer.locatorQuality}`,
     );
