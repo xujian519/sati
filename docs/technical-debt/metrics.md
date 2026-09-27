@@ -10,7 +10,7 @@
 | src TS 文件 / 行数 | 1066 / 181289 |
 | src JS 文件 | 0 |
 | tests 文件 | 607 |
-| ui/src 文件 / 行数 | 618 / 98852 |
+| ui/src 文件 / 行数 | 621 / 99641 |
 | ui/server 文件 / 行数 | 115 / 32401 |
 
 ## 指标口径
@@ -32,9 +32,9 @@
 | `as unknown as`（双重断言） | 32 | ui/src(25) · adapters(2) · tool(2) |
 | 裸 `console.*` | 158 | cli(137) · telemetry(8) · ui/server(5) |
 | 空 `catch {}` | 0 | — |
-| 无参 `catch {`（总计） | 680 | ui/server(151) · ui/src(123) · adapters(70) |
+| 无参 `catch {`（总计） | 681 | ui/server(151) · ui/src(124) · adapters(70) |
 | ↳ **无注释**（隐患类，目标） | **15** | — |
-| ↳ 已带意图注释 | 665 | — |
+| ↳ 已带意图注释 | 666 | — |
 | `TODO/HACK/FIXME/XXX` | 11 | always-on(4) · tests(4) · ui/src(2) |
 | 分层违规 `ui/server→src` | 14 | — |
 | 分层违规 `src→ui` | 0 | — |
@@ -98,6 +98,7 @@
 | `ui/src/components/main-content-v2/DashboardV2.tsx` | `DashboardV2` | 332 | function |
 | `ui/src/hooks/useSatiConfig.ts` | `useSatiConfigState` | 332 | function |
 | `ui/src/components/chat/hooks/useSlashCommandExecute.ts` | `useSlashCommandExecute` | 331 | function |
+| `ui/src/components/annotation/view/Annotator.tsx` | `Annotator` | 322 | function |
 | `ui/src/components/code-editor/view/CodeEditor.tsx` | `CodeEditor` | 310 | function |
 | `ui/src/components/chat-v2/SubagentDetailMessageFlow.tsx` | `SubagentDetailMessageFlow` | 309 | function |
 | `src/cli/projectRuntimeFactory.ts` | `resolve` | 306 | function |

@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
-import { buildFigureAnnotationDocument, type FigureHashAlgo } from "../../../types/annotationReference";
+import { buildAnnotationDocument, type AnnotationHashAlgo } from "../../../types/annotationReference";
 import { isSavedAnnotationStale } from "./useSavedAnnotation";
 
-function savedDocument(sha256: string, hashAlgo?: FigureHashAlgo) {
-  return buildFigureAnnotationDocument({
-    figure: {
+function savedDocument(sha256: string, hashAlgo?: AnnotationHashAlgo) {
+  return buildAnnotationDocument({
+    target: {
+      kind: "figure-svg",
       path: "/w/project/figures/inv-fig1.svg",
       relativePath: "figures/inv-fig1.svg",
       mediaType: "image/svg+xml",

@@ -4,7 +4,7 @@
  * 清单里每一条都能点选（把说明框切到那条上）与删除；标注清单的编号与发给智能体的编号一致。
  */
 import type { ReactNode } from "react";
-import type { FigureAnnotationMark } from "../../../types/annotationReference";
+import type { AnnotationMark } from "../../../types/annotationReference";
 import type { AnnotatorState } from "../hooks/useAnnotatorState";
 import { MARK_FONT_STACK, markPathData, markTextBox } from "../utils/render";
 
@@ -14,7 +14,7 @@ const TEXTAREA =
   "text-neutral-700 disabled:opacity-60 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-200";
 
 /** 清单里那条标注的小图。 */
-function markGlyph(mark: FigureAnnotationMark): ReactNode {
+function markGlyph(mark: AnnotationMark): ReactNode {
   const path = markPathData(mark);
   const box = markTextBox(mark);
   return (

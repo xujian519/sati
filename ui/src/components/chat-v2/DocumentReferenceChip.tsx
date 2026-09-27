@@ -82,14 +82,11 @@ export default function DocumentReferenceChip({
   const isAnnotation = normalized.selectionMode === "annotation";
   const meta = getDocumentReferenceFileMeta(normalized.source.fileName);
   const ReferenceIcon = isAnnotation ? PenLine : meta.Icon;
-  const badgeLabel = isAnnotation
-    ? (t("figureAnnotator.referenceBadge", { defaultValue: "MARK" }) as string)
-    : meta.label;
+  const badgeLabel = isAnnotation ? (t("annotator.referenceBadge", { defaultValue: "MARK" }) as string) : meta.label;
   const summary = getContentReferenceSummary(normalized, {
     maxLength: summaryLength,
     regionLabel: t("contentReference.regionSummary"),
-    annotationCountLabel: count =>
-      t("figureAnnotator.referenceMarks", { count, defaultValue: "{{count}} marks" }) as string,
+    annotationCountLabel: count => t("annotator.referenceMarks", { count, defaultValue: "{{count}} marks" }) as string,
   });
   const location =
     normalized.selectionMode === "text"
@@ -105,7 +102,7 @@ export default function DocumentReferenceChip({
       : normalized.selectionMode === "cells"
         ? normalized.locator.sheetName
         : isAnnotation
-          ? t("figureAnnotator.referenceLocation", {
+          ? t("annotator.referenceLocation", {
               count: normalized.annotation.document.marks.length,
               defaultValue: "{{count}} marks",
             })

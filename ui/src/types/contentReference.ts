@@ -4,12 +4,13 @@ import {
   type DocumentSelectionReference,
 } from "./documentSelection";
 import {
-  annotationFigureFingerprint,
-  describeFigureMarks,
-  figureAnnotationSummary,
-  isFigureAnnotationDocument,
-  isMarkFromEarlierFigure,
-  type FigureAnnotationReferenceData,
+  annotationSummary,
+  annotationTargetFingerprint,
+  describeAnnotationMarks,
+  isMarkFromEarlierTarget,
+  isReadableAnnotationDocument,
+  normalizeAnnotationDocument,
+  type AnnotationReferenceData,
 } from "./annotationReference";
 
 export const CONTENT_REFERENCE_ATTACHMENT_KIND = "content-reference";
@@ -34,7 +35,7 @@ export type ContentReferenceSelectionMode = "text" | "cells" | "region";
 /** 引用载荷的判别式（含标注这类非选区引用）。 */
 export type ContentReferenceKind = ContentReferenceSelectionMode | "annotation";
 
-export type ContentReferenceSurface = "document" | "page" | "slide" | "sheet" | "editor" | "figure";
+export type ContentReferenceSurface = "document" | "page" | "slide" | "sheet" | "editor" | "figure" | "image";
 export type ContentReferenceRendererId = "pdf" | "office-pdf" | "docx" | "xlsx" | "pptx" | "text" | "html" | "image";
 export type ContentReferenceLocatorQuality = "semantic" | "approximate" | "visual";
 
@@ -149,16 +150,17 @@ export type ImageRegionContentReference = ContentReferenceBase & {
 };
 
 /**
- * 附图标注引用：用户在附图预览里圈画（箭头/框选/圈选/手绘/文字）后提交的那一次标注。
+ * 标注引用：用户在图片预览里圈画（箭头/框选/圈选/手绘/文字）后提交的那一次标注。
  *
- * 与 region 引用的差别：region 是"一张图里的一个矩形"，这里是"整幅图 + 逐条标注"，
- * 每条标注带自己的说明与图元锚定（内联 SVG 图才有锚定）。标注图（原图 + 标注）作为
+ * 两种面共用这一个判别式：`figure`（SVG 附图，标注可锚定到具体图元）与 `image`（栅格图，
+ * 没有图元层，定位只能靠坐标与用户写的说明）。与 region 引用的差别：region 是"一张图里的
+ * 一个矩形"，这里是"整幅图 + 逐条标注"，每条标注带自己的说明。标注图（原图 + 标注）作为
  * 普通多模态图片部分随消息发出，`dataUrl` 只是 composer 侧载荷，结构化附件里会剥掉。
  */
-export type FigureAnnotationContentReference = ContentReferenceBase & {
+export type AnnotationContentReference = ContentReferenceBase & {
   selectionMode: "annotation";
   locator: {
-    surface: "figure";
+    surface: Extract<ContentReferenceSurface, "figure" | "image">;
     /** 图面固有宽度（像素）：标注坐标以此参照系为准。 */
     width: number;
     height: number;
@@ -172,14 +174,14 @@ export type FigureAnnotationContentReference = ContentReferenceBase & {
     /** 仅 composer 用的载荷，见上。 */
     dataUrl?: string;
   };
-  annotation: FigureAnnotationReferenceData;
+  annotation: AnnotationReferenceData;
 };
 
 export type ContentReference =
   | TextContentReference
   | CellRangeContentReference
   | ImageRegionContentReference
-  | FigureAnnotationContentReference;
+  | AnnotationContentReference;
 
 export type ContentReferenceReasonCode =
   | "NO_TEXT_LAYER"
@@ -290,10 +292,10 @@ export function createImageRegionContentReference(
   });
 }
 
-export function createFigureAnnotationContentReference(
-  input: CreateContentReferenceInput<FigureAnnotationContentReference>,
-): FigureAnnotationContentReference {
-  return createContentReference<FigureAnnotationContentReference>(input);
+export function createAnnotationContentReference(
+  input: CreateContentReferenceInput<AnnotationContentReference>,
+): AnnotationContentReference {
+  return createContentReference<AnnotationContentReference>(input);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -425,8 +427,9 @@ function isImageRegionContentReference(candidate: Record<string, unknown>) {
   const locator = candidate.locator;
   const image = candidate.image;
   return (
-    // `figure` 与其余面并列：附图预览也提供"框选一块发给智能体"，它的落点不是页/幻灯片/工作表。
-    ["document", "page", "slide", "sheet", "editor", "figure"].includes(String(locator.surface)) &&
+    // `figure` 与 `image` 与其余面并列：图片预览也提供"框选一块发给智能体"，它的落点既可能是
+    // 附录的 SVG 附图（`figure`），也可能是栅格图本身（`image`），都不是页/幻灯片/工作表。
+    ["document", "page", "slide", "sheet", "editor", "figure", "image"].includes(String(locator.surface)) &&
     isNormalizedRect(locator.rect) &&
     isOptionalFiniteNumber(locator.pageNumber) &&
     isOptionalFiniteNumber(locator.slideNumber) &&
@@ -445,13 +448,13 @@ function isImageRegionContentReference(candidate: Record<string, unknown>) {
   );
 }
 
-function isFigureAnnotationReference(candidate: Record<string, unknown>) {
+function isAnnotationContentReference(candidate: Record<string, unknown>) {
   if (!isRecord(candidate.locator) || !isRecord(candidate.image) || !isRecord(candidate.annotation)) return false;
   const locator = candidate.locator;
   const image = candidate.image;
   const annotation = candidate.annotation;
   return (
-    locator.surface === "figure" &&
+    ["figure", "image"].includes(String(locator.surface)) &&
     isFiniteNumber(locator.width) &&
     locator.width > 0 &&
     isFiniteNumber(locator.height) &&
@@ -465,7 +468,8 @@ function isFigureAnnotationReference(candidate: Record<string, unknown>) {
     isOptionalString(image.sha256) &&
     isOptionalString(image.dataUrl) &&
     (annotation.sidecarPath === null || isNonEmptyString(annotation.sidecarPath)) &&
-    isFigureAnnotationDocument(annotation.document)
+    // v1 文档也是可读的：历史消息里的引用要在反解时仍能通过校验（归一化时再迁到 v2）。
+    isReadableAnnotationDocument(annotation.document)
   );
 }
 
@@ -474,7 +478,7 @@ export function isContentReference(value: unknown): value is ContentReference {
   if (value.selectionMode === "text") return isTextContentReference(value);
   if (value.selectionMode === "cells") return isCellRangeContentReference(value);
   if (value.selectionMode === "region") return isImageRegionContentReference(value);
-  if (value.selectionMode === "annotation") return isFigureAnnotationReference(value);
+  if (value.selectionMode === "annotation") return isAnnotationContentReference(value);
   return false;
 }
 
@@ -505,8 +509,22 @@ export function documentSelectionToContentReference(reference: DocumentSelection
   });
 }
 
+/**
+ * 把标注引用里内嵌的文档升到 v2。
+ *
+ * {@link isContentReference} 为了兼容历史消息接受 v1 文档，但 v1 与 v2 的形状不同
+ * （`figure` vs `target`），下游读的是 v2 字段——不在这里升一次，历史消息里的标注会以
+ * "文档缺 target"的形态崩在渲染层。升不动（结构损坏）时按引用无效处理。
+ */
+function upgradeAnnotationDocument(reference: ContentReference): ContentReference | null {
+  if (reference.selectionMode !== "annotation") return reference;
+  const document = normalizeAnnotationDocument(reference.annotation.document);
+  if (document === null) return null;
+  return { ...reference, annotation: { ...reference.annotation, document } };
+}
+
 export function normalizeContentReference(value: unknown): ContentReference | null {
-  if (isContentReference(value)) return value;
+  if (isContentReference(value)) return upgradeAnnotationDocument(value);
   if (isDocumentSelectionReference(value)) return documentSelectionToContentReference(value);
   return null;
 }
@@ -555,20 +573,29 @@ export function formatContentReferencePromptBlock(references: ContentReference[]
     .filter((reference): reference is ContentReference => Boolean(reference));
   if (valid.length === 0) return "";
 
-  // 标注引用的 `source.relativePath` 就是那张**导出的** .svg：通用行对它是错的，
-  // 与标注纪律（"改生成源、不改导出图"）直接冲突，所以含标注引用时把例外写进通用行。
+  // 附图标注引用的 `source.relativePath` 就是那张**导出的** .svg：通用行对它是错的，
+  // 与标注纪律（"改生成源、不改导出图"）直接冲突，所以含附图标注时把例外写进通用行。
+  // 图片标注则是"对文件本身的审阅意见"，没有生成源，另行陈述（逐条纪律仍以每个引用自己的
+  // Discipline 行为准）。
+  const hasSvgAnnotation = valid.some(
+    reference => reference.selectionMode === "annotation" && reference.locator.surface === "figure",
+  );
   const hasAnnotation = valid.some(reference => reference.selectionMode === "annotation");
   const lines = [
     CONTENT_REFERENCE_PROMPT_MARKER,
-    hasAnnotation
+    hasSvgAnnotation
       ? "These are immutable snapshots explicitly selected by the user. Use the source path as the default edit target when the request asks to modify the referenced content; figure annotations are the exception - their source path is the exported figure, and their edit target is stated per reference."
-      : "These are immutable snapshots explicitly selected by the user. Use the source path as the default edit target when the request asks to modify the referenced content.",
+      : hasAnnotation
+        ? "These are immutable snapshots explicitly selected by the user. Use the source path as the default edit target when the request asks to modify the referenced content; image annotations are review comments on the annotated file itself, and their discipline is stated per reference."
+        : "These are immutable snapshots explicitly selected by the user. Use the source path as the default edit target when the request asks to modify the referenced content.",
   ];
   valid.forEach((reference, index) => {
     lines.push(`${index + 1}. ${reference.selectionMode.toUpperCase()} reference`);
     lines.push(
       reference.selectionMode === "annotation"
-        ? `   Exported figure: ${reference.source.relativePath} (do not edit; regenerate from its generating source)`
+        ? reference.locator.surface === "figure"
+          ? `   Exported figure: ${reference.source.relativePath} (do not edit; regenerate from its generating source)`
+          : `   Annotated file: ${reference.source.relativePath} (read-only review target; it has no generating source to edit)`
         : `   Source: ${reference.source.relativePath}`,
     );
     lines.push(
@@ -603,30 +630,47 @@ export function formatContentReferencePromptBlock(references: ContentReference[]
       }
     } else if (reference.selectionMode === "annotation") {
       const { document, sidecarPath } = reference.annotation;
-      lines.push(`   Figure: ${document.figure.path} (${document.figure.width}x${document.figure.height})`);
+      // 面词决定坐标参照系与纪律：附图有生成源可改，栅格图没有，措辞不能混用。
+      const isFigure = document.target.kind === "figure-svg";
+      const surfaceWord = isFigure ? "figure" : "image";
+      lines.push(
+        `   Annotated ${surfaceWord}: ${document.target.path} (${document.target.width}x${document.target.height})`,
+      );
       lines.push(`   Annotation file: ${sidecarPath ?? "(not saved)"}`);
       lines.push(`   Multimodal image attachment: ${reference.image.name}`);
-      lines.push("   The image is the figure with every mark drawn on it; each mark is listed below in draw order.");
-      // 逐条基线比对：图被重画过后载入的标注，其坐标可能已经不对应当前图，必须让模型知道。
-      const figureFingerprint = annotationFigureFingerprint(document.figure);
-      const earlierCount = document.marks.filter(mark => isMarkFromEarlierFigure(mark, figureFingerprint)).length;
+      lines.push(
+        `   The image is the ${surfaceWord} with every mark drawn on it; each mark is listed below in draw order.`,
+      );
+      // 逐条基线比对：文件被换过后载入的标注，其坐标可能已经不对应当前文件，必须让模型知道。
+      const targetFingerprint = annotationTargetFingerprint(document.target);
+      const earlierCount = document.marks.filter(mark => isMarkFromEarlierTarget(mark, targetFingerprint)).length;
       if (earlierCount > 0) {
         lines.push(
-          `   Warning: ${earlierCount} of these marks were drawn on an earlier version of the figure, so their coordinates may no longer match the file. Verify each one against the attached image.`,
+          `   Warning: ${earlierCount} of these marks were drawn on an earlier version of the file, so their coordinates may no longer match it. Verify each one against the attached image.`,
         );
       }
-      lines.push("   Marks (coordinates are figure pixels, origin at the figure's top-left corner):");
-      for (const line of describeFigureMarks(document.marks, figureFingerprint)) lines.push(`   ${line}`);
+      lines.push(`   Marks (coordinates are ${surfaceWord} pixels, origin at its top-left corner):`);
+      for (const line of describeAnnotationMarks(document.marks, targetFingerprint)) lines.push(`   ${line}`);
       if (document.summary) lines.push(`   Overall note: ${document.summary}`);
       lines.push(
         "   Discipline: answer mark by mark, numbered as above, and do not silently skip a mark you cannot honour.",
       );
-      lines.push(
-        "   Change the figure's generating source (the FigureSpec or the drawing script/SVG source), never the exported image file;",
-      );
-      lines.push(
-        "   leave unmarked areas untouched, and after regenerating re-check every mark because its coordinates may have shifted.",
-      );
+      if (isFigure) {
+        lines.push(
+          "   Change the figure's generating source (the FigureSpec or the drawing script/SVG source), never the exported image file;",
+        );
+        lines.push(
+          "   leave unmarked areas untouched, and after regenerating re-check every mark because its coordinates may have shifted.",
+        );
+      } else {
+        // 栅格图没有生成源：沿用附图的"改生成源"纪律会诱使模型回报"已修改该图"，而位图根本没变。
+        lines.push(
+          "   This image has no generating source in the workspace: treat every mark as a review comment about it, not as an edit you can apply to the file;",
+        );
+        lines.push(
+          "   address what each mark points at using its coordinates and the attached image, leave unmarked areas untouched, and do not claim the image itself was modified.",
+        );
+      }
     } else {
       lines.push(`   Location: ${JSON.stringify(reference.locator)}`);
       lines.push(`   Multimodal image attachment: ${reference.image.name}`);
@@ -686,7 +730,7 @@ export function getContentReferenceSummary(
   } else if (reference.selectionMode === "cells") {
     summary = `${reference.locator.sheetName}!${reference.locator.ranges.join(", ")}`;
   } else if (reference.selectionMode === "annotation") {
-    summary = figureAnnotationSummary(
+    summary = annotationSummary(
       reference.annotation.document,
       options.annotationCountLabel ?? (count => String(count)),
     );

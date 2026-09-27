@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { buildFigureAnnotationDocument, type FigureAnnotationDocument } from "../../../types/annotationReference";
+import { buildAnnotationDocument, type AnnotationDocument } from "../../../types/annotationReference";
 import { ADD_CONTENT_REFERENCE_EVENT, isContentReference } from "../../../types/contentReference";
-import FigureAnnotator from "./FigureAnnotator";
+import Annotator from "./Annotator";
 
 const WIDTH = 100;
 const HEIGHT = 50;
@@ -13,9 +13,10 @@ const FIGURE = `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height=
 </svg>`;
 
 /** 已保存的标注（本测试只用它是否被灌入来判断竞态）。 */
-function savedDocument(): FigureAnnotationDocument {
-  return buildFigureAnnotationDocument({
-    figure: {
+function savedDocument(): AnnotationDocument {
+  return buildAnnotationDocument({
+    target: {
+      kind: "figure-svg",
       path: "/w/project/figures/inv-fig1.svg",
       relativePath: "figures/inv-fig1.svg",
       mediaType: "image/svg+xml",
@@ -28,17 +29,17 @@ function savedDocument(): FigureAnnotationDocument {
 }
 
 /** 由测试控制何时返回的 sidecar 读回。 */
-let settleRead: ((value: FigureAnnotationDocument | null) => void) | null = null;
-const readFigureAnnotation = vi.fn(
+let settleRead: ((value: AnnotationDocument | null) => void) | null = null;
+const readAnnotation = vi.fn(
   () =>
-    new Promise<FigureAnnotationDocument | null>(resolve => {
+    new Promise<AnnotationDocument | null>(resolve => {
       settleRead = resolve;
     }),
 );
 
 vi.mock("../utils/sidecar", () => ({
-  readFigureAnnotation: () => readFigureAnnotation(),
-  saveFigureAnnotation: () => Promise.resolve("/w/project/figures/inv-fig1.annot.json"),
+  readAnnotation: () => readAnnotation(),
+  saveAnnotation: () => Promise.resolve("/w/project/figures/inv-fig1.svg.annot.json"),
 }));
 
 // 桩必须返回**同一个** Blob 实例：`useObjectUrl` 以 blob 身份为依赖，每次渲染都给新实例
@@ -100,12 +101,12 @@ vi.stubGlobal(
 afterEach(() => {
   cleanup();
   settleRead = null;
-  readFigureAnnotation.mockClear();
+  readAnnotation.mockClear();
 });
 
 function renderAnnotator() {
   return render(
-    <FigureAnnotator
+    <Annotator
       projectName="demo"
       file={{ name: "inv-fig1.svg", path: "/w/project/figures/inv-fig1.svg" }}
       title="inv-fig1.svg"
@@ -118,7 +119,7 @@ function renderAnnotator() {
 /** 等图面渲染出来（覆盖层出现即代表 `source` 已就绪）。 */
 async function waitForOverlay(container: HTMLElement): Promise<SVGSVGElement> {
   const overlay = await waitFor(() => {
-    const element = container.querySelector<SVGSVGElement>("[data-figure-annotator-overlay]");
+    const element = container.querySelector<SVGSVGElement>("[data-annotator-overlay]");
     if (element === null) throw new Error("the annotator overlay did not render");
     return element;
   });
@@ -135,7 +136,7 @@ describe("figure annotator seeding", () => {
     const overlay = await waitForOverlay(container);
 
     // 用户抢在 sidecar 读回之前落笔。
-    fireEvent.click(screen.getByText("figureAnnotator.annotate"));
+    fireEvent.click(screen.getByText("annotator.annotate"));
     fireEvent.pointerDown(overlay, { clientX: 10, clientY: 5 });
     fireEvent.pointerMove(overlay, { clientX: 80, clientY: 40 });
     fireEvent.pointerUp(overlay, { clientX: 80, clientY: 40 });
@@ -144,7 +145,7 @@ describe("figure annotator seeding", () => {
     settleRead?.(savedDocument());
 
     await waitFor(() => {
-      expect(screen.getByText("figureAnnotator.seedSkipped:1")).toBeTruthy();
+      expect(screen.getByText("annotator.seedSkipped:1")).toBeTruthy();
     });
     // 刚画的那一笔还在，已保存的标注没有被灌进来。
     expect(container.querySelector('path[stroke="#e03131"]')).not.toBeNull();
@@ -160,19 +161,19 @@ describe("figure annotator seeding", () => {
     await waitFor(() => {
       expect(container.textContent).toContain("保存过的说明");
     });
-    expect(screen.queryByText(/figureAnnotator.seedSkipped/)).toBeNull();
+    expect(screen.queryByText(/annotator.seedSkipped/)).toBeNull();
   });
 
   it("offers a region-reference exit that hands the composer a valid region payload", async () => {
     const { container } = renderAnnotator();
     await waitForOverlay(container);
 
-    fireEvent.click(screen.getByText("figureAnnotator.regionReference"));
+    fireEvent.click(screen.getByText("annotator.regionReference"));
     // 区域模式：普通 `<img>` 顶上来，绘制覆盖层卸载（两套手势不抢同一块画布）。
     await waitFor(() => {
       expect(container.querySelector('img[alt="inv-fig1.svg"]')).not.toBeNull();
     });
-    expect(container.querySelector("[data-figure-annotator-overlay]")).toBeNull();
+    expect(container.querySelector("[data-annotator-overlay]")).toBeNull();
 
     const references: unknown[] = [];
     const listener = (event: Event): void => {
@@ -200,6 +201,6 @@ describe("figure annotator seeding", () => {
     await waitFor(() => {
       expect(container.querySelector('img[alt="inv-fig1.svg"]')).toBeNull();
     });
-    expect(container.querySelector("[data-figure-annotator-overlay]")).not.toBeNull();
+    expect(container.querySelector("[data-annotator-overlay]")).not.toBeNull();
   });
 });

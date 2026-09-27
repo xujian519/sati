@@ -1,10 +1,8 @@
 import { useTranslation } from "react-i18next";
 import { isImageFile, isOfficeFile, isPdfFile } from "../../utils/binaryFile";
-import { isSvgFigurePath } from "../../../figure-annotator/constants/annotator";
-import FigureAnnotator from "../../../figure-annotator/view/FigureAnnotator";
+import Annotator from "../../../annotation/view/Annotator";
 import FallbackContent from "../binary-file/components/atoms/FallbackContent";
 import FileTypeBadge from "../binary-file/components/atoms/FileTypeBadge";
-import ImagePreview from "../binary-file/components/ImagePreview";
 import PdfPreview from "../binary-file/components/PdfPreview";
 import OfficeFilePreviewRouter from "../binary-file/components/office/OfficeFilePreviewRouter";
 import type { CodeEditorBinaryFileProps } from "../binary-file/types";
@@ -28,7 +26,6 @@ export default function CodeEditorBinaryFile({
     "flex h-7 w-7 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100";
 
   const isImage = isImageFile(file.name);
-  const isSvgFigure = isSvgFigurePath(file.name);
   const isPdf = isPdfFile(file.name);
   const isOffice = isOfficeFile(file.name);
   const canPreview = isImage || isPdf || isOffice;
@@ -36,11 +33,10 @@ export default function CodeEditorBinaryFile({
   const documentIsFullscreen = isSidebar ? isExpanded : isFullscreen;
   const onToggleDocumentFullscreen = isSidebar ? onToggleExpand : onToggleFullscreen;
 
-  // SVG 附图交给标注器（只有内联 SVG 能解析出标注落在哪个图元上）；其余图片仍走图片预览。
-  const previewContent = isSvgFigure ? (
-    <FigureAnnotator projectName={projectName} file={file} title={title} message={message} onClose={onClose} />
-  ) : isImage ? (
-    <ImagePreview projectName={projectName} file={file} title={title} message={message} onClose={onClose} />
+  // 图片族（SVG 与栅格）统一进标注面板：同一文件类型只留一个入口，区域引用是面板内的一个模式。
+  // PDF 与 Office 仍走各自预览（它们的选区引用另有语义，标注面尚未接）。
+  const previewContent = isImage ? (
+    <Annotator projectName={projectName} file={file} title={title} message={message} onClose={onClose} />
   ) : isPdf ? (
     <PdfPreview
       projectName={projectName}

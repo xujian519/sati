@@ -9,44 +9,44 @@
  * `contentReferenceImage` 变成普通多模态图片部分；结构化附件与提示块里都会被剥掉。
  */
 import { useCallback, useState } from "react";
-import { ADD_CONTENT_REFERENCE_EVENT, createFigureAnnotationContentReference } from "../../../types/contentReference";
+import { ADD_CONTENT_REFERENCE_EVENT, createAnnotationContentReference } from "../../../types/contentReference";
 import {
-  buildFigureAnnotationDocument,
-  figureAnnotationImageName,
-  type FigureAnnotationDocument,
-  type FigureAnnotationMark,
-  type FigureHashAlgo,
+  annotationImageName,
+  buildAnnotationDocument,
+  type AnnotationDocument,
+  type AnnotationHashAlgo,
+  type AnnotationMark,
 } from "../../../types/annotationReference";
-import { blobToDataUrl, composeReviewSvg, rasterizePng, type FigureLayer } from "../utils/export";
-import { saveFigureAnnotation } from "../utils/sidecar";
-import type { FigureIntrinsicSize } from "../utils/figure-dom";
+import { referenceSurfaceOf, type AnnotatableSurface, type SurfaceSize } from "../surfaces/types";
+import { blobToDataUrl, composeReviewSvg, rasterizePng } from "../utils/export";
+import { saveAnnotation } from "../utils/sidecar";
 
 /** 提交状态（供界面显示一行提示）。 */
 export type AnnotationSubmitStatus = { tone: "info" | "ok" | "error"; text: string } | null;
 
 export type UseAnnotationSubmitArgs = {
   projectName: string | undefined;
-  /** 图路径（编辑器给的形态，绝对或相对项目根）。 */
-  figurePath: string | undefined;
-  /** 引用里登记的源路径（供"打开引用"回到这张图）。 */
+  /** 目标文件路径（编辑器给的形态，绝对或相对项目根）。 */
+  targetPath: string | undefined;
+  /** 引用里登记的源路径（供"打开引用"回到这个文件）。 */
   relativePath: string | undefined;
   fileName: string | undefined;
   mimeType: string;
-  size: FigureIntrinsicSize | undefined;
+  /** 已就绪的被标注面（提供种类、固有尺寸与审阅图底层）。 */
+  surface: AnnotatableSurface | undefined;
   sha256: string | undefined;
-  /** `sha256` 用的算法（非安全上下文退化为 FNV-1a 指纹）；随图哈希一起落盘。 */
-  hashAlgo: FigureHashAlgo | undefined;
-  layer: FigureLayer | undefined;
-  marks: readonly FigureAnnotationMark[];
+  /** `sha256` 用的算法（非安全上下文退化为 FNV-1a 指纹）；随内容哈希一起落盘。 */
+  hashAlgo: AnnotationHashAlgo | undefined;
+  marks: readonly AnnotationMark[];
   summary: string;
   createdAt: string | null;
   /**
-   * 文案翻译器。**键为 `figureAnnotator` 命名空间下的短键**（如 `"sent"`）——视图注入的实现
-   * 自带命名空间前缀，因此这里不能写全键，否则会得到 `figureAnnotator.figureAnnotator.sent`
+   * 文案翻译器。**键为 `annotator` 命名空间下的短键**（如 `"sent"`）——视图注入的实现
+   * 自带命名空间前缀，因此这里不能写全键，否则会得到 `annotator.annotator.sent`
    * 这种拼废的键（i18next 缺失键时原样回显键名，界面上就会显示键而不是文案）。
    */
   t: (key: string, options?: { path?: string }) => string;
-  /** 保存成功后的回调（视图据此记住首存时间并解除"图已重画"提示）。 */
+  /** 保存成功后的回调（视图据此记住首存时间并解除"文件已更新"提示）。 */
   onSaved: (createdAt: string) => void;
 };
 
@@ -57,21 +57,20 @@ export type AnnotationSubmit = {
 };
 
 /** 审阅图倍率：长边不超过 2400 像素，避免把上下文烧在一张图上。 */
-function reviewScale(size: FigureIntrinsicSize): number {
+function reviewScale(size: SurfaceSize): number {
   return Math.min(2, Math.max(1, 2400 / Math.max(size.width, size.height)));
 }
 
 /** 组装提交逻辑。 */
 export function useAnnotationSubmit({
   projectName,
-  figurePath,
+  targetPath,
   relativePath,
   fileName,
   mimeType,
-  size,
+  surface,
   sha256,
   hashAlgo,
-  layer,
   marks,
   summary,
   createdAt,
@@ -81,17 +80,18 @@ export function useAnnotationSubmit({
   const [busy, setBusy] = useState<"saving" | "sending" | null>(null);
   const [status, setStatus] = useState<AnnotationSubmitStatus>(null);
 
-  const buildDocument = useCallback((): FigureAnnotationDocument | null => {
-    if (size === undefined || sha256 === undefined || figurePath === undefined || relativePath === undefined) {
+  const buildDocument = useCallback((): AnnotationDocument | null => {
+    if (surface === undefined || sha256 === undefined || targetPath === undefined || relativePath === undefined) {
       return null;
     }
-    return buildFigureAnnotationDocument({
-      figure: {
-        path: figurePath,
+    return buildAnnotationDocument({
+      target: {
+        kind: surface.kind,
+        path: targetPath,
         relativePath,
         mediaType: mimeType,
-        width: size.width,
-        height: size.height,
+        width: surface.size.width,
+        height: surface.size.height,
         sha256,
         ...(hashAlgo === undefined ? {} : { hashAlgo }),
       },
@@ -99,7 +99,7 @@ export function useAnnotationSubmit({
       summary,
       ...(createdAt === null ? {} : { createdAt }),
     });
-  }, [createdAt, figurePath, hashAlgo, marks, mimeType, relativePath, sha256, size, summary]);
+  }, [createdAt, hashAlgo, marks, mimeType, relativePath, sha256, surface, summary, targetPath]);
 
   const run = useCallback(
     async (deliver: boolean) => {
@@ -108,11 +108,11 @@ export function useAnnotationSubmit({
       setStatus({ tone: "info", text: t(deliver ? "sending" : "saving") });
       try {
         const document = buildDocument();
-        if (document === null || size === undefined) throw new Error(t("notReady"));
+        if (document === null || surface === undefined) throw new Error(t("notReady"));
 
         const sidecarPath =
-          projectName !== undefined && figurePath !== undefined
-            ? await saveFigureAnnotation(projectName, figurePath, document)
+          projectName !== undefined && targetPath !== undefined
+            ? await saveAnnotation(projectName, targetPath, document)
             : null;
         onSaved(document.createdAt);
 
@@ -121,25 +121,33 @@ export function useAnnotationSubmit({
           return;
         }
         // 光栅化只为发送服务：仅保存时不做（它依赖画布解码，失败不该拖累落盘）。
-        const scale = reviewScale(size);
-        const reviewBlob =
-          layer === undefined
-            ? undefined
-            : await rasterizePng(composeReviewSvg(layer, marks), size.width, size.height, scale);
-        if (reviewBlob === undefined) throw new Error(t("notReady"));
+        const scale = reviewScale(surface.size);
+        const reviewBlob = await rasterizePng(
+          composeReviewSvg(
+            { markup: surface.reviewMarkup, width: surface.size.width, height: surface.size.height },
+            marks,
+          ),
+          surface.size.width,
+          surface.size.height,
+          scale,
+        );
         if (projectName === undefined || relativePath === undefined || fileName === undefined) {
           throw new Error(t("notReady"));
         }
-        const reference = createFigureAnnotationContentReference({
+        const reference = createAnnotationContentReference({
           selectionMode: "annotation",
           source: { projectName, relativePath, fileName, mimeType },
           renderer: { id: "image", backend: "builtin", locatorQuality: "visual" },
-          locator: { surface: "figure", width: size.width, height: size.height },
+          locator: {
+            surface: referenceSurfaceOf(surface.kind),
+            width: surface.size.width,
+            height: surface.size.height,
+          },
           image: {
-            name: figureAnnotationImageName(figurePath ?? fileName),
+            name: annotationImageName(targetPath ?? fileName),
             mimeType: "image/png",
-            width: Math.max(1, Math.round(size.width * scale)),
-            height: Math.max(1, Math.round(size.height * scale)),
+            width: Math.max(1, Math.round(surface.size.width * scale)),
+            height: Math.max(1, Math.round(surface.size.height * scale)),
             dataUrl: await blobToDataUrl(reviewBlob),
           },
           annotation: { document, sidecarPath },
@@ -153,7 +161,7 @@ export function useAnnotationSubmit({
         setBusy(null);
       }
     },
-    [buildDocument, figurePath, fileName, layer, marks, onSaved, projectName, relativePath, size, t, mimeType],
+    [buildDocument, fileName, marks, onSaved, projectName, relativePath, surface, t, mimeType, targetPath],
   );
 
   return { busy, status, run };

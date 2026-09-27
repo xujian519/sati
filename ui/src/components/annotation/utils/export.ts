@@ -4,7 +4,7 @@
  * 独立的意思是：不引用任何外部资源、只用系统字体，这样送进 `<img>` 解码不会因跨域或
  * 字体缺失而失败；智能体收到的就是用户确认过的那张图。
  */
-import type { FigureAnnotationMark, FigureHashAlgo } from "../../../types/annotationReference";
+import type { AnnotationMark, AnnotationHashAlgo } from "../../../types/annotationReference";
 import {
   MARK_FONT_STACK,
   MARK_HALO_WIDTH,
@@ -15,7 +15,7 @@ import {
 } from "./render";
 
 /** 垫在标注下面的图面层。 */
-export type FigureLayer = {
+export type AnnotationLayer = {
   /**
    * 已 sanitize 的根元素标记，作为嵌套 `<svg>` 原样嵌入审阅图。
    *
@@ -35,7 +35,7 @@ function escapeXml(value: string): string {
 }
 
 /** 一条标注的 SVG 元素（带白色底衬，保证压住黑色线条仍可辨）。 */
-function markSvg(mark: FigureAnnotationMark): string {
+function markSvg(mark: AnnotationMark): string {
   const path = markPathData(mark);
   const font = escapeXml(MARK_FONT_STACK);
   const parts: string[] = [];
@@ -60,7 +60,7 @@ function markSvg(mark: FigureAnnotationMark): string {
 }
 
 /** 组装独立的审阅 SVG。 */
-export function composeReviewSvg(layer: FigureLayer, marks: readonly FigureAnnotationMark[]): string {
+export function composeReviewSvg(layer: AnnotationLayer, marks: readonly AnnotationMark[]): string {
   return (
     '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"' +
     ` width="${layer.width}" height="${layer.height}" viewBox="0 0 ${layer.width} ${layer.height}">` +
@@ -127,6 +127,34 @@ export async function rasterizePng(svg: string, width: number, height: number, s
   }
 }
 
+/** 栅格图片扩展名 → 媒体类型（blob 未带 type 时按文件名补齐）。 */
+const RASTER_MEDIA_TYPES: Record<string, string> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+  bmp: "image/bmp",
+  ico: "image/x-icon",
+  tif: "image/tiff",
+  tiff: "image/tiff",
+  avif: "image/avif",
+};
+
+/**
+ * 栅格图的媒体类型。
+ *
+ * 优先用 blob 自带的 type；缺失或不是 `image/*` 时按扩展名补——data URL 上的类型错了，
+ * 审阅图里的 `<image>` 可能整条解码不出来。
+ */
+export function rasterMediaType(blobType: string, fileName: string): string {
+  if (blobType.startsWith("image/")) return blobType;
+  const name = fileName.split(/[\\/]/).pop() ?? fileName;
+  const dot = name.lastIndexOf(".");
+  const extension = dot <= 0 ? "" : name.slice(dot + 1).toLowerCase();
+  return RASTER_MEDIA_TYPES[extension] ?? "image/png";
+}
+
 /** Blob 转 data URL（走 FileReader，避免 base64 手工拼接的大字符串）。 */
 export function blobToDataUrl(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -146,8 +174,8 @@ export function blobToDataUrl(blob: Blob): Promise<string> {
 }
 
 /** 图内容哈希：算法与十六进制摘要（一起比较才能判定"是不是同一版图"）。 */
-export type FigureContentHash = {
-  algo: FigureHashAlgo;
+export type AnnotationContentHash = {
+  algo: AnnotationHashAlgo;
   hex: string;
 };
 
@@ -178,7 +206,7 @@ export function fnv1a64Hex(bytes: Uint8Array): string {
  * 局域网 http 访问下退化为 {@link fnv1a64Hex}。两条路径都会成功返回——取哈希是图面就绪的
  * 前提，抛错会让整块面板进入错误态（连不需要哈希的"仅保存"也一并不可用）。
  */
-export async function figureContentHash(bytes: Uint8Array): Promise<FigureContentHash> {
+export async function annotationContentHash(bytes: Uint8Array): Promise<AnnotationContentHash> {
   const subtle = globalThis.crypto?.subtle;
   if (subtle === undefined) return { algo: "fnv1a64", hex: fnv1a64Hex(bytes) };
   // 复制进新的 ArrayBuffer 后备数组：`digest` 只接受 ArrayBuffer 视图。

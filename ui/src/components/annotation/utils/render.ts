@@ -4,7 +4,7 @@
  * 实时覆盖层（React）与导出成审阅图（拼字符串后光栅化）都走这里，因此"用户看到的"与
  * "发给智能体的"不可能漂移。
  */
-import type { FigureAnnotationMark, FigurePoint } from "../../../types/annotationReference";
+import type { AnnotationMark, AnnotationPoint } from "../../../types/annotationReference";
 
 /** 标注描边宽度（图面像素）。 */
 export const MARK_STROKE_WIDTH = 2.5;
@@ -27,7 +27,10 @@ const ARROW_SPREAD = Math.PI / 7;
 export const MARK_FONT_STACK = "system-ui, -apple-system, PingFang SC, Microsoft YaHei, sans-serif";
 
 /** 两个对角归一化为左上原点加正尺寸。 */
-function bounds(first: FigurePoint, second: FigurePoint): { x: number; y: number; width: number; height: number } {
+function bounds(
+  first: AnnotationPoint,
+  second: AnnotationPoint,
+): { x: number; y: number; width: number; height: number } {
   return {
     x: Math.min(first[0], second[0]),
     y: Math.min(first[1], second[1]),
@@ -46,18 +49,18 @@ function n(value: number): string {
  *
  * @returns 路径数据；文字标注返回 undefined（它画成文字而非描边）。
  */
-export function markPathData(mark: FigureAnnotationMark): string | undefined {
+export function markPathData(mark: AnnotationMark): string | undefined {
   const [first, second] = mark.points;
   if (first === undefined) return undefined;
   switch (mark.kind) {
     case "arrow": {
       if (second === undefined) return undefined;
       const angle = Math.atan2(second[1] - first[1], second[0] - first[0]);
-      const left: FigurePoint = [
+      const left: AnnotationPoint = [
         second[0] - ARROW_HEAD * Math.cos(angle - ARROW_SPREAD),
         second[1] - ARROW_HEAD * Math.sin(angle - ARROW_SPREAD),
       ];
-      const right: FigurePoint = [
+      const right: AnnotationPoint = [
         second[0] - ARROW_HEAD * Math.cos(angle + ARROW_SPREAD),
         second[1] - ARROW_HEAD * Math.sin(angle + ARROW_SPREAD),
       ];
@@ -110,7 +113,7 @@ export type MarkTextBox = {
  *
  * @returns 盒；标注既无标签也无说明时返回 undefined。
  */
-export function markTextBox(mark: FigureAnnotationMark): MarkTextBox | undefined {
+export function markTextBox(mark: AnnotationMark): MarkTextBox | undefined {
   const anchor = mark.points[0];
   if (anchor === undefined) return undefined;
   const text = (mark.text ?? "").trim();

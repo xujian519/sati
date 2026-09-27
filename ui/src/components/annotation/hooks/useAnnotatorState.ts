@@ -6,14 +6,14 @@
  * 说明文字的编辑**不入撤销栈**（逐字入栈会让撤销变成退格键），与参考实现一致。
  */
 import { useCallback, useState } from "react";
-import type { FigureAnnotationMark } from "../../../types/annotationReference";
+import type { AnnotationMark } from "../../../types/annotationReference";
 import { MARK_HISTORY_LIMIT, type AnnotatorTool } from "../constants/annotator";
 import { ANNOTATOR_COLORS } from "../constants/annotator";
 
 type History = {
-  past: readonly (readonly FigureAnnotationMark[])[];
-  present: readonly FigureAnnotationMark[];
-  future: readonly (readonly FigureAnnotationMark[])[];
+  past: readonly (readonly AnnotationMark[])[];
+  present: readonly AnnotationMark[];
+  future: readonly (readonly AnnotationMark[])[];
 };
 
 /** 标注器可编辑状态。 */
@@ -24,7 +24,7 @@ export type AnnotatorState = {
   setTool: (tool: AnnotatorTool) => void;
   color: string;
   setColor: (color: string) => void;
-  marks: readonly FigureAnnotationMark[];
+  marks: readonly AnnotationMark[];
   selectedId: string | null;
   setSelectedId: (id: string | null) => void;
   summary: string;
@@ -37,7 +37,7 @@ export type AnnotatorState = {
   touched: boolean;
   /** 已在盘上的那份文档的创建时间（覆盖保存时保持首存时间）。 */
   createdAt: string | null;
-  addMark: (mark: FigureAnnotationMark) => void;
+  addMark: (mark: AnnotationMark) => void;
   removeMark: (id: string) => void;
   updateMarkText: (id: string, text: string) => void;
   clearMarks: () => void;
@@ -46,7 +46,7 @@ export type AnnotatorState = {
   canUndo: boolean;
   canRedo: boolean;
   /** 载入一份已保存的标注（原件状态，不进撤销栈）。 */
-  seed: (document: { marks: readonly FigureAnnotationMark[]; summary?: string; createdAt: string }) => void;
+  seed: (document: { marks: readonly AnnotationMark[]; summary?: string; createdAt: string }) => void;
   /** 记下这次保存的时间（覆盖保存时保持首存时间）。 */
   markSaved: (createdAt: string) => void;
 };
@@ -66,11 +66,11 @@ export type UseAnnotatorStateOptions = {
    * 当前图的指纹（`<algo>:<hex>`）。新画的标注会盖上它，作为"这一条对的是哪一版图"的基线；
    * 图面未就绪时缺省，此时不加该字段。
    */
-  figureFingerprint?: string;
+  targetFingerprint?: string;
 };
 
 /** 标注器的编辑状态。 */
-export function useAnnotatorState({ figureFingerprint }: UseAnnotatorStateOptions = {}): AnnotatorState {
+export function useAnnotatorState({ targetFingerprint }: UseAnnotatorStateOptions = {}): AnnotatorState {
   const [mode, setMode] = useState<"view" | "annotate">("view");
   const [tool, setTool] = useState<AnnotatorTool>("arrow");
   const [color, setColor] = useState<string>(ANNOTATOR_COLORS[0]);
@@ -80,7 +80,7 @@ export function useAnnotatorState({ figureFingerprint }: UseAnnotatorStateOption
   const [touched, setTouched] = useState(false);
   const [history, setHistory] = useState<History>({ past: [], present: [], future: [] });
 
-  const commit = useCallback((next: readonly FigureAnnotationMark[]) => {
+  const commit = useCallback((next: readonly AnnotationMark[]) => {
     setHistory(previous => ({
       past: [...previous.past, previous.present].slice(-MARK_HISTORY_LIMIT),
       present: next,
@@ -89,9 +89,9 @@ export function useAnnotatorState({ figureFingerprint }: UseAnnotatorStateOption
   }, []);
 
   const addMark = useCallback(
-    (mark: FigureAnnotationMark) => {
+    (mark: AnnotationMark) => {
       // 唯一落章点：标注在哪一版图上画的，只有创建这一刻知道。
-      const stamped: FigureAnnotationMark = figureFingerprint === undefined ? mark : { ...mark, figureFingerprint };
+      const stamped: AnnotationMark = targetFingerprint === undefined ? mark : { ...mark, targetFingerprint };
       setTouched(true);
       setHistory(previous => ({
         past: [...previous.past, previous.present].slice(-MARK_HISTORY_LIMIT),
@@ -99,7 +99,7 @@ export function useAnnotatorState({ figureFingerprint }: UseAnnotatorStateOption
         future: [],
       }));
     },
-    [figureFingerprint],
+    [targetFingerprint],
   );
 
   const removeMark = useCallback(
@@ -149,17 +149,14 @@ export function useAnnotatorState({ figureFingerprint }: UseAnnotatorStateOption
     });
   }, []);
 
-  const seed = useCallback(
-    (document: { marks: readonly FigureAnnotationMark[]; summary?: string; createdAt: string }) => {
-      setTouched(false);
-      setHistory({ past: [], present: [...document.marks], future: [] });
-      setSummary(document.summary ?? "");
-      setCreatedAt(document.createdAt);
-      setSelectedId(null);
-      if (document.marks.length > 0) setMode("annotate");
-    },
-    [],
-  );
+  const seed = useCallback((document: { marks: readonly AnnotationMark[]; summary?: string; createdAt: string }) => {
+    setTouched(false);
+    setHistory({ past: [], present: [...document.marks], future: [] });
+    setSummary(document.summary ?? "");
+    setCreatedAt(document.createdAt);
+    setSelectedId(null);
+    if (document.marks.length > 0) setMode("annotate");
+  }, []);
 
   const markSaved = useCallback((savedAt: string) => {
     setCreatedAt(current => current ?? savedAt);

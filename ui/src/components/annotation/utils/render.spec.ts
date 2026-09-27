@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { FigureAnnotationMark } from "../../../types/annotationReference";
+import type { AnnotationMark } from "../../../types/annotationReference";
 import { MARK_FONT_STACK, markPathData, markTextBox } from "./render";
 
-const arrow: FigureAnnotationMark = {
+const arrow: AnnotationMark = {
   id: "a",
   kind: "arrow",
   color: "#e03131",
@@ -11,7 +11,7 @@ const arrow: FigureAnnotationMark = {
     [10, 0],
   ],
 };
-const pen: FigureAnnotationMark = {
+const pen: AnnotationMark = {
   id: "p",
   kind: "pen",
   color: "#000",
