@@ -425,7 +425,8 @@ function isImageRegionContentReference(candidate: Record<string, unknown>) {
   const locator = candidate.locator;
   const image = candidate.image;
   return (
-    ["document", "page", "slide", "sheet", "editor"].includes(String(locator.surface)) &&
+    // `figure` 与其余面并列：附图预览也提供"框选一块发给智能体"，它的落点不是页/幻灯片/工作表。
+    ["document", "page", "slide", "sheet", "editor", "figure"].includes(String(locator.surface)) &&
     isNormalizedRect(locator.rect) &&
     isOptionalFiniteNumber(locator.pageNumber) &&
     isOptionalFiniteNumber(locator.slideNumber) &&

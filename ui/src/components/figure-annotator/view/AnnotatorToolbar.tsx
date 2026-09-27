@@ -29,6 +29,10 @@ export type AnnotatorToolbarProps = {
   scale: number;
   /** 正在保存/提交时禁用两个保存出口。 */
   busy: "saving" | "sending" | null;
+  /** 是否处于「区域引用」框选模式。 */
+  regionMode: boolean;
+  /** 切换「区域引用」框选模式。 */
+  onRegionReference: () => void;
   onSubmit: (deliver: boolean) => void;
   onZoomChange: (zoom: number | "fit") => void;
   translate: (key: string) => string;
@@ -40,6 +44,8 @@ export default function AnnotatorToolbar({
   zoom,
   scale,
   busy,
+  regionMode,
+  onRegionReference,
   onSubmit,
   onZoomChange,
   translate,
@@ -52,6 +58,10 @@ export default function AnnotatorToolbar({
       </button>
       <button type="button" className={BUTTON} aria-pressed={drawing} onClick={() => annotator.setMode("annotate")}>
         {translate("annotate")}
+      </button>
+      {/* 与标注并列的第二条引用入口：框选一块（region 引用），不是逐条标注。 */}
+      <button type="button" className={BUTTON} aria-pressed={regionMode} onClick={onRegionReference}>
+        {translate("regionReference")}
       </button>
       <span className="flex-1" />
       {drawing ? (
