@@ -14,6 +14,25 @@ export const FIGURE_ANNOTATION_VERSION = 1;
 /** sidecar 文件后缀（与图同目录同名）。 */
 export const FIGURE_ANNOTATION_SUFFIX = ".annot.json";
 
+/**
+ * 图内容哈希的算法。
+ *
+ * 安全上下文（https / localhost / 127.0.0.1）用 `crypto.subtle` 的 SHA-256；非安全上下文
+ * （局域网 http 访问）拿不到 `crypto.subtle`，退化为纯 JS 的非加密指纹 FNV-1a 64——否则
+ * 取哈希失败会让整个标注面板不可用。它只用于比较"图有没有被重画"，不是安全用途。
+ */
+export type FigureHashAlgo = "sha256" | "fnv1a64";
+
+/** 缺省算法：v1 sidecar 未记该字段，一律按 SHA-256 理解。 */
+export const DEFAULT_FIGURE_HASH_ALGO: FigureHashAlgo = "sha256";
+
+const FIGURE_HASH_ALGOS: readonly FigureHashAlgo[] = ["sha256", "fnv1a64"];
+
+/** 是否是受支持的哈希算法。 */
+export function isFigureHashAlgo(value: unknown): value is FigureHashAlgo {
+  return typeof value === "string" && (FIGURE_HASH_ALGOS as readonly string[]).includes(value);
+}
+
 /** 一条标注的形状。 */
 export type FigureAnnotationKind = "arrow" | "rect" | "ellipse" | "pen" | "text";
 
@@ -74,6 +93,13 @@ export type AnnotatedFigureInfo = {
   height: number;
   /** 标注时刻的图内容哈希，用于识别"图已被重画"。 */
   sha256: string;
+  /**
+   * `sha256` 是用哪种算法算出来的。缺省（v1 sidecar 未记该字段）= `"sha256"`。
+   *
+   * 记录它是为了让"算法不同"可判定：非安全上下文只能算 FNV-1a，与旧 sidecar 的 SHA-256
+   * 不可比，此时**不**判失配（见 `isSavedAnnotationStale`）。
+   */
+  hashAlgo?: FigureHashAlgo;
 };
 
 /** 与图同目录的 sidecar 文档。 */
@@ -225,8 +251,19 @@ function isFigureInfo(value: unknown): value is AnnotatedFigureInfo {
     value.width > 0 &&
     isFiniteNumber(value.height) &&
     value.height > 0 &&
-    isNonEmptyString(value.sha256)
+    isNonEmptyString(value.sha256) &&
+    (value.hashAlgo === undefined || isFigureHashAlgo(value.hashAlgo))
   );
+}
+
+/**
+ * 图内容指纹（`<algo>:<hex>`）。
+ *
+ * 把算法与摘要合成一个可比较的字符串：既有 sidecar 缺 `hashAlgo` 时按 SHA-256 补全，
+ * 跨算法比较也只会判为"不同"，不会把两种算法的摘要误判成同一版图。
+ */
+export function annotationFigureFingerprint(figure: Pick<AnnotatedFigureInfo, "sha256" | "hashAlgo">): string {
+  return `${figure.hashAlgo ?? DEFAULT_FIGURE_HASH_ALGO}:${figure.sha256}`;
 }
 
 /** 校验一份 from-wire 的标注文档。 */

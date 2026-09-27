@@ -15,6 +15,7 @@ import {
   figureAnnotationImageName,
   type FigureAnnotationDocument,
   type FigureAnnotationMark,
+  type FigureHashAlgo,
 } from "../../../types/annotationReference";
 import { blobToDataUrl, composeReviewSvg, rasterizePng, type FigureLayer } from "../utils/export";
 import { saveFigureAnnotation } from "../utils/sidecar";
@@ -33,6 +34,8 @@ export type UseAnnotationSubmitArgs = {
   mimeType: string;
   size: FigureIntrinsicSize | undefined;
   sha256: string | undefined;
+  /** `sha256` 用的算法（非安全上下文退化为 FNV-1a 指纹）；随图哈希一起落盘。 */
+  hashAlgo: FigureHashAlgo | undefined;
   layer: FigureLayer | undefined;
   marks: readonly FigureAnnotationMark[];
   summary: string;
@@ -67,6 +70,7 @@ export function useAnnotationSubmit({
   mimeType,
   size,
   sha256,
+  hashAlgo,
   layer,
   marks,
   summary,
@@ -89,12 +93,13 @@ export function useAnnotationSubmit({
         width: size.width,
         height: size.height,
         sha256,
+        ...(hashAlgo === undefined ? {} : { hashAlgo }),
       },
       marks,
       summary,
       ...(createdAt === null ? {} : { createdAt }),
     });
-  }, [createdAt, figurePath, marks, mimeType, relativePath, sha256, size, summary]);
+  }, [createdAt, figurePath, hashAlgo, marks, mimeType, relativePath, sha256, size, summary]);
 
   const run = useCallback(
     async (deliver: boolean) => {

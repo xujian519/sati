@@ -4,7 +4,8 @@
  * 三件事：字节 → 文本 → sanitize 后的 SVG 标记（内联用）、固有尺寸、内容哈希（识别"图已被重画"）。
  */
 import { useEffect, useState } from "react";
-import { sha256Hex } from "../utils/export";
+import type { FigureHashAlgo } from "../../../types/annotationReference";
+import { figureContentHash } from "../utils/export";
 import { figureSvgMarkup, parseFigureSvg, svgIntrinsicSize, type FigureIntrinsicSize } from "../utils/figure-dom";
 
 /** 图面加载状态。 */
@@ -19,6 +20,8 @@ export type FigureSourceState =
       markup: string;
       /** 图内容哈希。 */
       sha256: string;
+      /** 该哈希用的算法（非安全上下文退化为 FNV-1a 指纹）。 */
+      hashAlgo: FigureHashAlgo;
     };
 
 export type UseFigureSourceArgs = {
@@ -62,11 +65,13 @@ export function useFigureSource({ blob, blobError, loading, failureMessage }: Us
         // 固有尺寸写回根标签：内联渲染与审阅图（嵌套 `<svg>`）都以它为准。
         root.setAttribute("width", String(size.width));
         root.setAttribute("height", String(size.height));
+        const hash = await figureContentHash(bytes);
         const result: FigureSourceState = {
           status: "ready",
           size,
           markup: figureSvgMarkup(root),
-          sha256: await sha256Hex(bytes),
+          sha256: hash.hex,
+          hashAlgo: hash.algo,
         };
         if (!cancelled) setState(result);
       } catch (error) {

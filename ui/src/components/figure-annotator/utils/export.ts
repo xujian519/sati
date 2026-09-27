@@ -4,7 +4,7 @@
  * 独立的意思是：不引用任何外部资源、只用系统字体，这样送进 `<img>` 解码不会因跨域或
  * 字体缺失而失败；智能体收到的就是用户确认过的那张图。
  */
-import type { FigureAnnotationMark } from "../../../types/annotationReference";
+import type { FigureAnnotationMark, FigureHashAlgo } from "../../../types/annotationReference";
 import {
   MARK_FONT_STACK,
   MARK_HALO_WIDTH,
@@ -145,11 +145,48 @@ export function blobToDataUrl(blob: Blob): Promise<string> {
   });
 }
 
-/** 图的内容哈希（十六进制）。 */
-export async function sha256Hex(bytes: Uint8Array): Promise<string> {
+/** 图内容哈希：算法与十六进制摘要（一起比较才能判定"是不是同一版图"）。 */
+export type FigureContentHash = {
+  algo: FigureHashAlgo;
+  hex: string;
+};
+
+/** FNV-1a 64 的参数（64 位）。 */
+const FNV1A64_OFFSET_BASIS = 0xcbf29ce484222325n;
+const FNV1A64_PRIME = 0x100000001b3n;
+const FNV1A64_MASK = 0xffffffffffffffffn;
+
+/**
+ * FNV-1a 64 位指纹（十六进制，恒 16 位）。
+ *
+ * **不是密码学哈希**：它只回答"这份字节与上次是不是同一份"，用在没有 `crypto.subtle`
+ * 的非安全上下文里，避免整个标注面板因取哈希失败而不可用。已知向量（`""` → `cbf29ce484222325`、
+ * `"a"` → `af63dc4c8601ec8c`、`"foobar"` → `85944171f73967e8`）见 `export.spec.ts`。
+ */
+export function fnv1a64Hex(bytes: Uint8Array): string {
+  let hash = FNV1A64_OFFSET_BASIS;
+  for (const byte of bytes) {
+    hash = ((hash ^ BigInt(byte)) * FNV1A64_PRIME) & FNV1A64_MASK;
+  }
+  return hash.toString(16).padStart(16, "0");
+}
+
+/**
+ * 图的内容哈希（算法 + 十六进制摘要）。
+ *
+ * 优先用 `crypto.subtle` 的 SHA-256；它只存在于安全上下文（https / localhost / 127.0.0.1），
+ * 局域网 http 访问下退化为 {@link fnv1a64Hex}。两条路径都会成功返回——取哈希是图面就绪的
+ * 前提，抛错会让整块面板进入错误态（连不需要哈希的"仅保存"也一并不可用）。
+ */
+export async function figureContentHash(bytes: Uint8Array): Promise<FigureContentHash> {
   const subtle = globalThis.crypto?.subtle;
-  if (!subtle) throw new Error("this browser cannot hash the figure (Web Crypto unavailable)");
+  if (subtle === undefined) return { algo: "fnv1a64", hex: fnv1a64Hex(bytes) };
   // 复制进新的 ArrayBuffer 后备数组：`digest` 只接受 ArrayBuffer 视图。
   const digest = await subtle.digest("SHA-256", new Uint8Array(bytes).buffer);
-  return [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, "0")).join("");
+  return { algo: "sha256", hex: hexOf(new Uint8Array(digest)) };
+}
+
+/** 字节序列的十六进制表示。 */
+function hexOf(bytes: Uint8Array): string {
+  return [...bytes].map(byte => byte.toString(16).padStart(2, "0")).join("");
 }

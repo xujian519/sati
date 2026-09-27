@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  annotationFigureFingerprint,
   buildFigureAnnotationDocument,
   describeFigureMarks,
   figureAnnotationImageName,
@@ -76,6 +77,34 @@ describe("figure annotation contract", () => {
     expect(isFigureAnnotationMark({ ...mark(), points: [[0, Number.NaN]] })).toBe(false);
     expect(isFigureAnnotationMark({ ...mark(), anchor: { tag: "g" } })).toBe(false);
     expect(isFigureAnnotationMark({ ...mark(), anchor: { tag: "g", bbox: [0, 0, 1, 1], ref: "34" } })).toBe(true);
+  });
+
+  it("records which algorithm produced the figure digest", () => {
+    const document = (hashAlgo?: unknown) =>
+      isFigureAnnotationDocument({
+        version: 1,
+        figure: hashAlgo === undefined ? figure : { ...figure, hashAlgo },
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+        marks: [],
+      });
+
+    expect(document()).toBe(true);
+    expect(document("sha256")).toBe(true);
+    expect(document("fnv1a64")).toBe(true);
+    expect(document("md5")).toBe(false);
+    expect(document(1)).toBe(false);
+  });
+
+  it("builds a comparable fingerprint that reads a missing algorithm as sha256", () => {
+    expect(annotationFigureFingerprint({ sha256: "ab".repeat(32) })).toBe(`sha256:${"ab".repeat(32)}`);
+    expect(annotationFigureFingerprint({ sha256: "ab".repeat(8), hashAlgo: "fnv1a64" })).toBe(
+      `fnv1a64:${"ab".repeat(8)}`,
+    );
+    // 同一份摘要配不同算法不得被认成同一版图。
+    expect(annotationFigureFingerprint({ sha256: "ab".repeat(32) })).not.toBe(
+      annotationFigureFingerprint({ sha256: "ab".repeat(32), hashAlgo: "fnv1a64" }),
+    );
   });
 
   it("treats an unreadable sidecar as never annotated", () => {

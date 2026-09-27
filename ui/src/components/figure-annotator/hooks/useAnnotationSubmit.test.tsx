@@ -66,6 +66,7 @@ function harness(overrides: Record<string, unknown> = {}) {
       mimeType: "image/svg+xml",
       size: { width: 416, height: 141 },
       sha256: "c".repeat(64),
+      hashAlgo: "sha256",
       layer: undefined,
       marks,
       summary: "把标号都对齐一遍",
@@ -97,11 +98,13 @@ describe("annotation submit", () => {
     const [projectName, figurePath, document] = saveFigureAnnotation.mock.calls[0] as [
       string,
       string,
-      { marks: unknown[]; createdAt: string },
+      { marks: unknown[]; createdAt: string; figure: { sha256: string; hashAlgo?: string } },
     ];
     expect(projectName).toBe("demo");
     expect(figurePath).toBe("/w/project/figures/inv-fig1.svg");
     expect(document.marks).toHaveLength(1);
+    // 哈希算法随摘要一起落盘：非安全上下文的 FNV-1a 与 SHA-256 不可比，得能区分。
+    expect(document.figure).toMatchObject({ sha256: "c".repeat(64), hashAlgo: "sha256" });
     // 短键：全键会被视图注入的前缀再次前缀化，界面上就会显示键名而不是文案。
     expect(keys).toEqual(["saving", "saved"]);
     expect(hook.result.current.status).toEqual({

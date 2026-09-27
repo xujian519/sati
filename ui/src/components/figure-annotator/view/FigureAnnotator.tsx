@@ -72,6 +72,7 @@ export default function FigureAnnotator({
     projectName,
     figurePath: file.path,
     figureSha256: source.status === "ready" ? source.sha256 : undefined,
+    figureHashAlgo: source.status === "ready" ? source.hashAlgo : undefined,
     enabled: source.status === "ready",
   });
 
@@ -99,6 +100,7 @@ export default function FigureAnnotator({
     mimeType: "image/svg+xml",
     size,
     sha256: source.status === "ready" ? source.sha256 : undefined,
+    hashAlgo: source.status === "ready" ? source.hashAlgo : undefined,
     layer,
     marks: annotator.marks,
     summary: annotator.summary,
