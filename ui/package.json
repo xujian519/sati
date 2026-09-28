@@ -99,7 +99,7 @@
     "qrcode": "^1.5.4",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
-    "react-dropzone": "^20.1.0",
+    "react-dropzone": "^20.1.2",
     "react-error-boundary": "^6.1.2",
     "react-i18next": "^17.0.13",
     "react-markdown": "^10.1.0",
