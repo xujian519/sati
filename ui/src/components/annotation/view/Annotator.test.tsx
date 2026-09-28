@@ -78,14 +78,12 @@ vi.mock("../../code-editor/view/subcomponents/RegionSelectionOverlay", () => ({
     ) : null,
 }));
 
-// jsdom 不实现 Blob URL（`useObjectUrl` 依赖它）。
+// jsdom 30.1.x 起实现了 Blob URL，但其实现只接受 jsdom 内部的 Blob；本测试传入的 Blob
+// 来自运行环境，直接调用会抛 `Cannot read properties of undefined (reading '_buffer')`。
+// 这里与相邻用例一致，无条件打桩，不依赖 jsdom 的实现细节。
 beforeAll(() => {
-  if (typeof URL.createObjectURL !== "function") {
-    Object.defineProperty(URL, "createObjectURL", { configurable: true, value: () => "blob:mock" });
-  }
-  if (typeof URL.revokeObjectURL !== "function") {
-    Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: () => undefined });
-  }
+  Object.defineProperty(URL, "createObjectURL", { configurable: true, value: () => "blob:mock" });
+  Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: () => undefined });
 });
 
 // jsdom 没有 ResizeObserver，而图面就绪后的自适应宽度测量依赖它。
