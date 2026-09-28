@@ -92,8 +92,8 @@ importers:
         specifier: ^0.35.3
         version: 0.35.3(@types/node@22.19.19)
       slice-ansi:
-        specifier: ^9.0.0
-        version: 9.0.0
+        specifier: ^9.0.1
+        version: 9.0.1
       string-width:
         specifier: ^8.3.0
         version: 8.3.0
@@ -6118,8 +6118,8 @@ packages:
     resolution: {integrity: sha512-a2B9Y0KlNXl9u/vsW6sTIu9vGEpfKu2wRV6l1H3XEas/0gUIzGzBoP/IouTcUQbm9JWZLH3COxyn03TYlFax6w==}
     engines: {node: '>=10'}
 
-  slice-ansi@9.0.0:
-    resolution: {integrity: sha512-SO/3iYL5S3W57LLEniscOGPZgOqZUPCx6d3dB+52B80yJ0XstzsC/eV8gnA4tM3MHDrKz+OCFSLNjswdSC+/bA==}
+  slice-ansi@9.0.1:
+    resolution: {integrity: sha512-aBY19bn/XA+hKOKX0qL7Z0UfdBsbQvc9hn993U8ALUjzxCvDcuZqLoRXjGJrUARWAlwMnsRVD9sw2AFNOYvalA==}
     engines: {node: '>=22'}
 
   sonner@2.0.7:
@@ -9753,7 +9753,7 @@ snapshots:
 
   cli-truncate@6.0.0:
     dependencies:
-      slice-ansi: 9.0.0
+      slice-ansi: 9.0.1
       string-width: 8.3.0
 
   cliui@6.0.0:
@@ -11154,7 +11154,7 @@ snapshots:
       react-reconciler: 0.33.0(react@19.3.0)
       scheduler: 0.27.0
       signal-exit: 3.0.7
-      slice-ansi: 9.0.0
+      slice-ansi: 9.0.1
       stack-utils: 2.0.6
       string-width: 8.3.0
       terminal-size: 4.0.1
@@ -13186,7 +13186,7 @@ snapshots:
     dependencies:
       semver: 7.8.5
 
-  slice-ansi@9.0.0:
+  slice-ansi@9.0.1:
     dependencies:
       ansi-styles: 6.2.3
       is-fullwidth-code-point: 5.1.0
