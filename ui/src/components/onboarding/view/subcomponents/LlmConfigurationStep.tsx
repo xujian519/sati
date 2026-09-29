@@ -113,6 +113,9 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
       effectiveProviderId &&
       (!isCustomMode || effectiveUrl.trim()),
   );
+  // 连接测试是诊断手段，不是准入门槛：provider / 端点 / 凭证 / 模型齐备即可保存。
+  // 输入变化会把 testStatus 复位为 idle，所以"是否测试过"不影响可保存性。
+  const canSave = canTest && !saving;
 
   useEffect(() => {
     setApiModels(null);
@@ -629,8 +632,8 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
 
       {/* Actions */}
       <div className="flex flex-wrap items-center justify-end gap-3 border-t border-border pt-6">
-        {testStatus !== "success" && (
-          <span className="mr-auto text-xs text-muted-foreground">{t("llmSetup.testConnectionFirst")}</span>
+        {testStatus === "idle" && canTest && (
+          <span className="mr-auto text-xs text-muted-foreground">{t("llmSetup.testOptional")}</span>
         )}
         <button
           type="button"
@@ -650,7 +653,7 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
         <button
           type="button"
           onClick={handleSave}
-          disabled={testStatus !== "success" || saving}
+          disabled={!canSave}
           className="rounded-lg bg-foreground px-5 py-2.5 text-sm font-medium text-background transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-30"
         >
           {saving ? (

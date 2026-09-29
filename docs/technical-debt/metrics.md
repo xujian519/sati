@@ -10,8 +10,8 @@
 | src TS 文件 / 行数 | 1074 / 182822 |
 | src JS 文件 | 0 |
 | tests 文件 | 611 |
-| ui/src 文件 / 行数 | 621 / 99639 |
-| ui/server 文件 / 行数 | 116 / 32595 |
+| ui/src 文件 / 行数 | 621 / 99660 |
+| ui/server 文件 / 行数 | 115 / 32401 |
 
 ## 指标口径
 
@@ -32,9 +32,9 @@
 | `as unknown as`（双重断言） | 32 | ui/src(25) · adapters(2) · tool(2) |
 | 裸 `console.*` | 158 | cli(137) · telemetry(8) · ui/server(5) |
 | 空 `catch {}` | 0 | — |
-| 无参 `catch {`（总计） | 690 | ui/server(152) · ui/src(124) · adapters(70) |
+| 无参 `catch {`（总计） | 689 | ui/server(151) · ui/src(124) · adapters(70) |
 | ↳ **无注释**（隐患类，目标） | **15** | — |
-| ↳ 已带意图注释 | 675 | — |
+| ↳ 已带意图注释 | 674 | — |
 | `TODO/HACK/FIXME/XXX` | 11 | always-on(4) · tests(4) · ui/src(2) |
 | 分层违规 `ui/server→src` | 14 | — |
 | 分层违规 `src→ui` | 0 | — |
@@ -57,9 +57,9 @@
 | `ui/src/hooks/useProjectsState.ts` | `useProjectsState` | 647 | function |
 | `src/adapters/channel/tui/app/TuiApp.tsx` | `TuiApp` | 643 | function |
 | `src/cli/sati.ts` | `main` | 642 | function |
+| `ui/src/components/onboarding/view/subcomponents/LlmConfigurationStep.tsx` | `LlmConfigurationStep` | 633 | function |
 | `ui/src/components/app-shell/AppShellV2.tsx` | `AppShellV2` | 631 | function |
 | `ui/src/stores/useSessionStore.ts` | `createSessionActions` | 631 | function |
-| `ui/src/components/onboarding/view/subcomponents/LlmConfigurationStep.tsx` | `LlmConfigurationStep` | 630 | function |
 | `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` | `(anonymous)` | 624 | arrow |
 | `ui/src/components/main-content/view/MainContent.tsx` | `SplitBody` | 573 | function |
 | `ui/src/components/chat/hooks/useSessionSubmit.ts` | `useSessionSubmit` | 528 | function |
@@ -126,7 +126,7 @@
 | `ui/src/components/chat-v2/ComposerV2.tsx` | 1188 |
 | `ui/src/components/chat-v2/MessagesPaneV2.tsx` | 1183 |
 | `ui/server/routes/taskmaster.js` | 1179 |
-| `ui/server/routes/config.js` | 1171 |
+| `ui/server/routes/config.js` | 1173 |
 | `src/agent/loop/AgentLoop.ts` | 1150 |
 | `ui/src/components/main-content-v2/CronV2.tsx` | 1130 |
 | `ui/src/components/main-content/view/MainContent.tsx` | 1111 |
