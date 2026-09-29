@@ -4,6 +4,7 @@ import {
   applyOffPeakWindow,
   computeNextCronRunAt,
   computeNextRunAt,
+  cronDayFieldsUseOr,
   delayToMilliseconds,
 } from "../../../src/cron/runtime/CronSchedule.js";
 
@@ -93,6 +94,133 @@ describe("computeNextCronRunAt", () => {
     const afterLeap = computeNextCronRunAt("0 0 29 2 *", new Date("2028-03-01T00:00:00Z"), "UTC");
     assert.deepEqual(afterLeap, new Date("2032-02-29T00:00:00Z"));
   });
+});
+
+describe("cronDayFieldsUseOr", () => {
+  it("两个日字段都受限（含显式全范围与列表）→ OR", () => {
+    for (const expression of ["0 9 1 * 1", "0 9 1 * 0-6", "0 9 1-31 * 1", "0 9 1,* * 1"]) {
+      assert.equal(cronDayFieldsUseOr(expression), true, expression);
+    }
+  });
+
+  it("任一日字段以 * 开头（含 */n 与 *,1）→ 保持 AND", () => {
+    for (const expression of ["0 9 * * 1", "0 9 1 * *", "0 9 */2 * 1", "0 9 1 * */2", "0 9 *,1 * 1"]) {
+      assert.equal(cronDayFieldsUseOr(expression), false, expression);
+    }
+  });
+
+  it("表达式非法 → false", () => {
+    assert.equal(cronDayFieldsUseOr("not a cron"), false);
+    assert.equal(cronDayFieldsUseOr("* * * *"), false);
+  });
+});
+
+describe("computeNextCronRunAt 日字段 OR 语义（v3）", () => {
+  const cases: Array<{ name: string; expression: string; after: string; timezone?: string; expected: string }> = [
+    {
+      name: "两个日字段受限时命中星期几",
+      expression: "0 9 1 * 1",
+      after: "2026-06-02T00:00:00.000Z",
+      expected: "2026-06-08T09:00:00.000Z",
+    },
+    {
+      name: "两个日字段受限时命中月内日期",
+      expression: "0 9 1 * 1",
+      after: "2026-06-29T09:00:00.000Z",
+      expected: "2026-07-01T09:00:00.000Z",
+    },
+    {
+      name: "月、时、分仍须匹配",
+      expression: "15 10 1 7 1",
+      after: "2026-06-02T00:00:00.000Z",
+      expected: "2026-07-01T10:15:00.000Z",
+    },
+    {
+      name: "星期日的 7 归一化后参与任一字段匹配",
+      expression: "0 9 1 * 7",
+      after: "2026-06-02T00:00:00.000Z",
+      expected: "2026-06-07T09:00:00.000Z",
+    },
+    {
+      name: "列表与范围按 OR 匹配",
+      expression: "0 9 1,15 * 1-5",
+      after: "2026-07-31T09:00:00.000Z",
+      expected: "2026-08-01T09:00:00.000Z",
+    },
+    {
+      name: "通配月内日期不放过星期几约束",
+      expression: "0 9 * * 1",
+      after: "2026-06-02T00:00:00.000Z",
+      expected: "2026-06-08T09:00:00.000Z",
+    },
+    {
+      name: "通配星期不放过月内日期约束",
+      expression: "0 9 1 * *",
+      after: "2026-06-02T00:00:00.000Z",
+      expected: "2026-07-01T09:00:00.000Z",
+    },
+    {
+      name: "两个日字段都通配时每天都匹配",
+      expression: "0 9 * * *",
+      after: "2026-06-02T00:00:00.000Z",
+      expected: "2026-06-02T09:00:00.000Z",
+    },
+    {
+      name: "通配月内日期步进保持 AND",
+      expression: "0 9 */2 * 1",
+      after: "2026-06-02T00:00:00.000Z",
+      expected: "2026-06-15T09:00:00.000Z",
+    },
+    {
+      name: "通配星期步进保持 AND",
+      expression: "0 9 1 * */2",
+      after: "2026-06-02T00:00:00.000Z",
+      expected: "2026-08-01T09:00:00.000Z",
+    },
+    {
+      name: "显式全星期范围不算通配",
+      expression: "0 9 1 * 0-6",
+      after: "2026-06-02T00:00:00.000Z",
+      expected: "2026-06-02T09:00:00.000Z",
+    },
+    {
+      name: "显式全月内日期范围不算通配",
+      expression: "0 9 1-31 * 1",
+      after: "2026-06-02T00:00:00.000Z",
+      expected: "2026-06-02T09:00:00.000Z",
+    },
+    {
+      name: "通配星期保留闰日搜索捷径",
+      expression: "0 9 29 2 *",
+      after: "2026-01-30T00:00:00.000Z",
+      expected: "2028-02-29T09:00:00.000Z",
+    },
+    {
+      name: "显式全星期范围不用闰日捷径",
+      expression: "0 9 29 2 0-6",
+      after: "2026-01-30T00:00:00.000Z",
+      expected: "2026-02-01T09:00:00.000Z",
+    },
+    {
+      name: "非闰年的二月仍按星期几触发",
+      expression: "0 9 29 2 1",
+      after: "2026-01-30T00:00:00.000Z",
+      expected: "2026-02-02T09:00:00.000Z",
+    },
+    {
+      name: "按任务时区匹配任一日字段",
+      expression: "0 9 1 * 1",
+      after: "2026-06-07T20:00:00.000Z",
+      timezone: "Asia/Shanghai",
+      expected: "2026-06-08T01:00:00.000Z",
+    },
+  ];
+
+  for (const { name, expression, after, timezone, expected } of cases) {
+    it(name, () => {
+      assert.equal(computeNextCronRunAt(expression, new Date(after), timezone ?? "UTC")?.toISOString(), expected);
+    });
+  }
 });
 
 describe("applyOffPeakWindow", () => {

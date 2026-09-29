@@ -33,7 +33,7 @@ import { createCronListTool } from "../tool/CronListTool.js";
 import { createCronStopTool } from "../tool/CronStopTool.js";
 import type { TelemetryClient } from "../../telemetry/index.js";
 import { CronFire, type CronActiveRun, type CronTurnEventHandler } from "./CronFire.js";
-import { applyOffPeakWindow, computeNextRunAt } from "./CronSchedule.js";
+import { applyOffPeakWindow, computeNextRunAt, CRON_SCHEDULE_COMPUTATION_VERSION } from "./CronSchedule.js";
 import { CronScheduler } from "./CronScheduler.js";
 
 export type CronRuntimeLogger = {
@@ -239,7 +239,7 @@ export class CronRuntime {
       updatedAt: now.toISOString(),
       nextRunAt: effectiveNextRunAt.toISOString(),
       revision: 0,
-      scheduleComputationVersion: schedule.type === "cron" ? 2 : undefined,
+      scheduleComputationVersion: schedule.type === "cron" ? CRON_SCHEDULE_COMPUTATION_VERSION : undefined,
     };
     this.registerTaskSession(task);
     try {
@@ -306,7 +306,7 @@ export class CronRuntime {
         timezone,
         nextRunAt: nextRunAt.toISOString(),
         revision: (current.revision ?? 0) + 1,
-        scheduleComputationVersion: schedule.type === "cron" ? 2 : undefined,
+        scheduleComputationVersion: schedule.type === "cron" ? CRON_SCHEDULE_COMPUTATION_VERSION : undefined,
         updatedAt: now.toISOString(),
       };
     });
@@ -548,7 +548,7 @@ export class CronRuntime {
         timezone,
         status: "scheduled",
         nextRunAt: computeNextRunAt(schedule, now, timezone)?.toISOString(),
-        scheduleComputationVersion: 2,
+        scheduleComputationVersion: CRON_SCHEDULE_COMPUTATION_VERSION,
         updatedAt: now.toISOString(),
       });
     }

@@ -1,6 +1,14 @@
 import type { CronCreateSchedule } from "../protocol/types.js";
 import { isValidCronTimezone } from "../CronTimezone.js";
 
+/** 调度计算版本：v3 起两个受限日字段按 Unix cron 的 OR 语义匹配（v2 为 AND）。 */
+export const CRON_SCHEDULE_COMPUTATION_VERSION = 3;
+
+/** 该表达式是否适用 v3 的日字段 OR 规则；表达式非法时返回 false。 */
+export function cronDayFieldsUseOr(expression: string): boolean {
+  return parseCronExpression(expression)?.dayFieldsUseOr ?? false;
+}
+
 const MINUTE_MS = 60_000;
 const MAX_SEARCH_MINUTES = 366 * 24 * 60;
 const DELAY_UNIT_MS: Record<"second" | "minute" | "hour" | "day", number> = {
@@ -77,6 +85,8 @@ export function computeNextCronRunAt(expression: string, after: Date, timezone =
 
 function isLeapDayOnlySchedule(cron: ParsedCron): boolean {
   return (
+    // OR 语义下 2/29 还会被星期几命中（如 "0 0 29 2 1"），闰日捷径会漏掉这些触发点。
+    !cron.dayFieldsUseOr &&
     cron.daysOfMonth.size === 1 &&
     cron.daysOfMonth.has(29) &&
     cron.months.size === 1 &&
@@ -111,6 +121,7 @@ type ParsedCron = {
   daysOfMonth: Set<number>;
   months: Set<number>;
   daysOfWeek: Set<number>;
+  dayFieldsUseOr: boolean;
 };
 
 function parseCronExpression(expression: string): ParsedCron | undefined {
@@ -125,6 +136,8 @@ function parseCronExpression(expression: string): ParsedCron | undefined {
     daysOfMonth: parseField(dayOfMonth, 1, 31),
     months: parseField(month, 1, 12),
     daysOfWeek: parseField(dayOfWeek, 0, 7),
+    // 任一日字段以 * 开头（含 */n）时保持 AND，与 Unix cron 一致；显式全范围（0-6、1-31）不算通配。
+    dayFieldsUseOr: !dayOfMonth.startsWith("*") && !dayOfWeek.startsWith("*"),
   };
   if (!parsed.minutes || !parsed.hours || !parsed.daysOfMonth || !parsed.months || !parsed.daysOfWeek) {
     return undefined;
@@ -227,11 +240,10 @@ function readCronDateParts(date: Date, formatter: Intl.DateTimeFormat): CronDate
 function matchesCron(date: Date, cron: ParsedCron, formatter: Intl.DateTimeFormat): boolean {
   const parts = readCronDateParts(date, formatter);
   if (!parts) return false;
-  return (
-    cron.minutes.has(parts.minute) &&
-    cron.hours.has(parts.hour) &&
-    cron.daysOfMonth.has(parts.dayOfMonth) &&
-    cron.months.has(parts.month) &&
-    cron.daysOfWeek.has(parts.dayOfWeek)
-  );
+  const dayOfMonthMatches = cron.daysOfMonth.has(parts.dayOfMonth);
+  const dayOfWeekMatches = cron.daysOfWeek.has(parts.dayOfWeek);
+  const dayMatches = cron.dayFieldsUseOr
+    ? dayOfMonthMatches || dayOfWeekMatches
+    : dayOfMonthMatches && dayOfWeekMatches;
+  return cron.minutes.has(parts.minute) && cron.hours.has(parts.hour) && cron.months.has(parts.month) && dayMatches;
 }

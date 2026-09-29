@@ -2,7 +2,12 @@ import type { Gateway, GatewayEvent } from "../../gateway/index.js";
 import type { CronResultDeliveryHandler, CronRunRecord, CronRunOutcome, CronTask } from "../protocol/types.js";
 import type { CronTaskStore } from "../storage/CronTaskStore.js";
 import { resolveCronTimezone } from "../CronTimezone.js";
-import { applyOffPeakWindow, computeNextRunAt, type OffPeakWindow } from "./CronSchedule.js";
+import {
+  applyOffPeakWindow,
+  computeNextRunAt,
+  CRON_SCHEDULE_COMPUTATION_VERSION,
+  type OffPeakWindow,
+} from "./CronSchedule.js";
 
 export type CronActiveRun = {
   runId: string;
@@ -311,7 +316,7 @@ export class CronFire {
         retry: outcome === "completed" && current.retry ? { ...current.retry, attempts: 0 } : current.retry,
         lastError: failed ? error : undefined,
         revision: (current.revision ?? 0) + 1,
-        scheduleComputationVersion: 2,
+        scheduleComputationVersion: CRON_SCHEDULE_COMPUTATION_VERSION,
         updatedAt: finishedAt.toISOString(),
       };
     });
@@ -348,7 +353,7 @@ export class CronFire {
         },
         lastError: error,
         revision: (current.revision ?? 0) + 1,
-        scheduleComputationVersion: 2,
+        scheduleComputationVersion: CRON_SCHEDULE_COMPUTATION_VERSION,
         updatedAt: finishedAt.toISOString(),
       };
     });

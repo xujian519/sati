@@ -415,7 +415,7 @@ describe("CronFire.runTask", () => {
     assert.equal(state.runRecords[0]!.outcome, "completed");
   });
 
-  it("cron 任务完成后重算 nextRunAt（schedule v2）", async () => {
+  it("cron 任务完成后重算 nextRunAt（写入当前调度计算版本）", async () => {
     const task = makeTask();
     const { gateway } = makeFakeGateway([{ type: "turn_started", runId: "run-1" }]);
     const { store, state } = makeFakeStore(task);
@@ -427,7 +427,7 @@ describe("CronFire.runTask", () => {
     const updated = state.updateResults[1];
     assert.ok(updated);
     assert.equal(updated.status, "scheduled");
-    assert.equal(updated.scheduleComputationVersion, 2);
+    assert.equal(updated.scheduleComputationVersion, 3);
     // */5 * * * * 在 10:00 之后的下一次触发为 10:05
     assert.equal(updated.nextRunAt, "2026-08-05T10:05:00.000Z");
     assert.equal(updated.timezone, "UTC");

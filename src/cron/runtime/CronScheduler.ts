@@ -2,7 +2,7 @@ import type { CronConfig } from "../config/parseCronConfig.js";
 import type { CronTask } from "../protocol/types.js";
 import type { CronTaskStore } from "../storage/CronTaskStore.js";
 import { resolveCronTimezone } from "../CronTimezone.js";
-import { computeNextRunAt } from "./CronSchedule.js";
+import { computeNextRunAt, CRON_SCHEDULE_COMPUTATION_VERSION, cronDayFieldsUseOr } from "./CronSchedule.js";
 import type { CronFire } from "./CronFire.js";
 
 const DEFAULT_IDLE_POLL_MS = 60_000;
@@ -155,12 +155,24 @@ export class CronScheduler {
           return;
         }
 
-        if (task.scheduleComputationVersion === 2 && task.nextRunAt) {
+        if (task.scheduleComputationVersion === CRON_SCHEDULE_COMPUTATION_VERSION && task.nextRunAt) {
           return;
         }
         const timezone = resolveCronTimezone(task.schedule.timezone, task.timezone, this.deps.config.timezone);
         const schedule = { ...task.schedule, timezone };
-        const nextRunAt = computeNextRunAt(schedule, now, timezone)?.toISOString();
+        const cachedRunAt = task.nextRunAt ? Date.parse(task.nextRunAt) : Number.NaN;
+        const hasV2CachedRun = task.scheduleComputationVersion === 2 && Number.isFinite(cachedRunAt);
+        // 只有两个受限日字段的语义从 AND 变成 OR；其余表达式沿用旧缓存，
+        // 不走最坏一年的逐分钟搜索。
+        const reuseCachedRun =
+          hasV2CachedRun && (cachedRunAt <= now.getTime() || !cronDayFieldsUseOr(schedule.expression));
+        const computedRunAt = reuseCachedRun ? undefined : computeNextRunAt(schedule, now, timezone);
+        // OR 只会让触发提前，不会把 v2 已排定的触发推后；未来时间上的缓存
+        // 可能是被并发上限推迟的逾期触发，须保留。
+        const nextRunAt =
+          hasV2CachedRun && (!computedRunAt || cachedRunAt <= computedRunAt.getTime())
+            ? task.nextRunAt
+            : computedRunAt?.toISOString();
         await this.deps.store.updateTask(task.taskId, current => {
           if (!matchesTaskSnapshot(current, task)) return current;
           return {
@@ -170,7 +182,7 @@ export class CronScheduler {
             status: "scheduled",
             nextRunAt,
             revision: (current.revision ?? 0) + 1,
-            scheduleComputationVersion: 2,
+            scheduleComputationVersion: CRON_SCHEDULE_COMPUTATION_VERSION,
             updatedAt: now.toISOString(),
           };
         });
