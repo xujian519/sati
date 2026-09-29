@@ -382,6 +382,7 @@
     "newFolder": "新建文件夹 (Cmd+Shift+N)",
     "refresh": "刷新",
     "collapseAll": "全部折叠",
+    "uploadConflict": "以下文件已存在，未上传：{{names}}",
     "collapsePanel": "收起文件树",
     "context": {
       "rename": "重命名",

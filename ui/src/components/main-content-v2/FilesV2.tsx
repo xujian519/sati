@@ -31,6 +31,7 @@ import { api } from "../../utils/api";
 import { copyTextToClipboard } from "../../utils/clipboard";
 import { isImeEnterEvent } from "../../utils/ime";
 import { ADD_WORKSPACE_FILE_MENTION_EVENT, getWorkspaceRelativePath } from "../../utils/workspaceFileMention";
+import { applyWorkspaceUploadOutcome } from "./workspaceUploadOutcome";
 
 type FilesV2Props = {
   selectedProject: Project | null;
@@ -440,19 +441,17 @@ export default function FilesV2({
       try {
         setUploadingProject(true);
         setUploadMenuOpen(false);
-        const response = await api.uploadFiles(selectedProject.name, formData);
-        if (!response.ok) {
-          const errorText = await response.text().catch(() => "");
-          throw new Error(errorText || `Upload failed: ${response.status}`);
-        }
-        await refreshFiles();
+        await applyWorkspaceUploadOutcome(await api.uploadFiles(selectedProject.name, formData), {
+          refresh: refreshFiles,
+          translate: t,
+        });
       } catch (error) {
         logError("Failed to upload files:", error);
       } finally {
         setUploadingProject(false);
       }
     },
-    [refreshFiles, selectedProject?.name],
+    [refreshFiles, selectedProject?.name, t],
   );
 
   const handleDownloadProject = useCallback(async () => {

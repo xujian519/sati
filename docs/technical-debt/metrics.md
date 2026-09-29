@@ -10,8 +10,8 @@
 | src TS 文件 / 行数 | 1074 / 182831 |
 | src JS 文件 | 0 |
 | tests 文件 | 611 |
-| ui/src 文件 / 行数 | 621 / 99639 |
-| ui/server 文件 / 行数 | 115 / 32401 |
+| ui/src 文件 / 行数 | 623 / 99803 |
+| ui/server 文件 / 行数 | 116 / 32558 |
 
 ## 指标口径
 
@@ -47,7 +47,7 @@
 |---|---|---|---|
 | `ui/src/components/app-shell/SidebarV2.tsx` | `SidebarV2` | 1008 | function |
 | `ui/src/components/chat-v2/MessagesPaneV2.render.test.tsx` | `(anonymous)` | 943 | arrow |
-| `ui/src/components/main-content-v2/FilesV2.tsx` | `FilesV2` | 853 | function |
+| `ui/src/components/main-content-v2/FilesV2.tsx` | `FilesV2` | 851 | function |
 | `ui/src/components/chat-v2/MessagesPaneV2.tsx` | `MessagesPaneV2` | 824 | function |
 | `ui/src/components/chat-v2/ComposerV2.tsx` | `ComposerV2` | 741 | function |
 | `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` | `useChatRealtimeHandlers` | 721 | function |
@@ -137,7 +137,7 @@
 | `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` | 1025 |
 | `src/adapters/channel/protocol/ImLiveReplyController.ts` | 1017 |
 | `src/gateway/protocol/types.ts` | 995 |
-| `ui/src/components/main-content-v2/FilesV2.tsx` | 964 |
+| `ui/src/components/main-content-v2/FilesV2.tsx` | 963 |
 | `src/context/DefaultContextRuntime.ts` | 953 |
 
 ## vendored 子包（单列，不计入上述规模与排名）
@@ -205,7 +205,7 @@
 | auth | 23 | 23 | 0 | 0 |
 | chat | 375 | 375 | 0 | 0 |
 | codeEditor | 185 | 185 | 0 | 0 |
-| common | 435 | 435 | 0 | 0 |
+| common | 436 | 436 | 0 | 0 |
 | hookTrust | 19 | 19 | 0 | 0 |
 | kanban | 44 | 44 | 0 | 0 |
 | routing | 64 | 64 | 0 | 0 |
