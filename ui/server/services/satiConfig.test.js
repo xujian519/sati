@@ -1,4 +1,13 @@
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  lstatSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -621,7 +630,8 @@ describe("writeSatiConfig transactional save", () => {
     return writeSatiConfig(validConfig("a")).then(() => {
       const record = readSatiConfigFile();
       expect(record.parseError).toBeNull();
-      expect(existsSync(`${configPath}.sati-tmp`)).toBe(false);
+      // 目录里只该有配置文件本身：temp 一律在同目录创建，必须被清掉。
+      expect(readdirSync(join(configPath, ".."))).toEqual(["sati.yaml"]);
       expect(readFileSync(configPath, "utf8")).toBe(record.raw);
     });
   });
@@ -651,7 +661,7 @@ describe("writeSatiConfig transactional save", () => {
 
     // 原子写失败后磁盘仍是完整的旧配置，且无 temp 残留。
     expect(readFileSync(configPath, "utf8")).toBe(before);
-    expect(existsSync(`${configPath}.sati-tmp`)).toBe(false);
+    expect(readdirSync(join(configPath, ".."))).toEqual(["sati.yaml"]);
   });
 
   it("enforces the optimistic lock via previousRevision", async () => {
@@ -671,5 +681,64 @@ describe("writeSatiConfig transactional save", () => {
 
     await expect(writeSatiConfig(validConfig("v2"), { previousRevision: revision })).resolves.toBeTruthy();
     expect(readSatiConfigFile().config.model.providers.openai.apiKey).toBe("sk-test-v2");
+  });
+
+  it("follows a symlinked config path and keeps the symlink intact", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "sati-config-symlink-"));
+    tempDirs.push(dir);
+    const targetPath = join(dir, "real-config.yaml");
+    writeFileSync(targetPath, "schemaVersion: 1\n", "utf8");
+    const configPath = join(dir, "sati.yaml");
+    symlinkSync(targetPath, configPath);
+    process.env.SATI_CONFIG_PATH = configPath;
+
+    await writeSatiConfig(validConfig("sym"));
+
+    // rename 会把软链换成普通文件，所以必须写解析后的目标路径。
+    expect(lstatSync(configPath).isSymbolicLink()).toBe(true);
+    expect(readFileSync(targetPath, "utf8")).toContain("sk-test-sym");
+  });
+
+  it("calls onWriteCommitted only after a successful commit", async () => {
+    const configPath = useTempConfig(null);
+    const committed = [];
+    const onWriteCommitted = () => committed.push("committed");
+
+    await writeSatiConfig(validConfig("ok"), { onWriteCommitted });
+    expect(committed).toHaveLength(1);
+
+    // 校验失败：没提交，不该抑制 watcher（否则外部变更事件会被顺手吞掉）。
+    await expect(writeSatiConfig({ agent: { model: "ghost/ghost" } }, { onWriteCommitted })).rejects.toThrow();
+    expect(committed).toHaveLength(1);
+
+    // 落盘失败同理。
+    await chmodSync(join(configPath, ".."), 0o555);
+    try {
+      await expect(writeSatiConfig(validConfig("blocked"), { onWriteCommitted })).rejects.toThrow();
+    } finally {
+      await chmodSync(join(configPath, ".."), 0o755);
+    }
+    expect(committed).toHaveLength(1);
+  });
+
+  it("detects an external save that lands between the settle reads", async () => {
+    const configPath = useTempConfig(null);
+    await writeSatiConfig(validConfig("base"));
+    const baseRevision = configRevision(readSatiConfigFile().raw);
+
+    // 模拟外部编辑器在稳定读的间隔里落盘：单次读会漏掉这次变更并覆盖它。
+    const externalEdit = setTimeout(() => {
+      writeFileSync(configPath, `${readSatiConfigFile().raw}\n# external edit\n`, "utf8");
+    }, 120);
+
+    const outcome = await writeSatiConfig(validConfig("winner"), { previousRevision: baseRevision }).then(
+      () => "resolved",
+      error => error,
+    );
+    clearTimeout(externalEdit);
+
+    expect(outcome).toBeInstanceOf(Error);
+    expect(outcome.code).toBe("CONFIG_CONFLICT");
+    expect(readSatiConfigFile().raw).toContain("# external edit");
   });
 });
