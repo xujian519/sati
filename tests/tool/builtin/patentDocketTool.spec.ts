@@ -126,6 +126,35 @@ test("record_revision：缺 answered / 不匹配缺口 fail-closed", async () =>
   });
 });
 
+test("record_revision：越界产物路径（../）拒绝读取，按缺失降级不阻断记账", async () => {
+  await withTempDir(async (_ctx, root) => {
+    // 工作区取 mkdtemp 下的子目录；secret 放在其父目录 = 工作区外
+    const dir = join(root, "workspace");
+    await writeFile(join(root, "outside-secret.md"), "secret-outside", "utf8");
+    const ctx = makeToolContext({ cwd: dir });
+    const tool = createPatentDocketTool();
+    await tool.execute(
+      { action: "create", caseId: "d6", caseType: "drafting", gaps: [{ id: "g1", question: "缺少实验数据" }] },
+      ctx,
+    );
+    const recorded = await tool.execute(
+      {
+        action: "record_revision",
+        caseId: "d6",
+        answered: ["g1"],
+        artifacts: [{ name: "leak", path: "../outside-secret.md" }],
+      },
+      ctx,
+    );
+    const text = textOf(recorded);
+    // 记账本身成功（轮次 +1），但越界产物不读取不归档（对齐 read_file 的 workspace 守卫）
+    assert.match(text, /轮次: 1\/3/);
+    assert.doesNotMatch(text, /secret-outside/);
+    const archiveDir = join(dir, "data/cases/dockets/revisions/d6/round-1");
+    await assert.rejects(readFile(join(archiveDir, "leak.md"), "utf8"));
+  });
+});
+
 test("轮次上限：超限 record_revision 被拒，triage 转 escalate_human", async () => {
   await withTempDir(async ctx => {
     const tool = createPatentDocketTool();

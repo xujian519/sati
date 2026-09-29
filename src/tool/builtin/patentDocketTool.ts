@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import {
   abandonDocket,
   archiveRevision,
@@ -287,8 +287,16 @@ export function createPatentDocketTool(deps: PatentDocketToolDeps = {}): SatiToo
               const loaded: Array<{ name: string; content: string }> = [];
               const missing: string[] = [];
               for (const a of input.artifacts) {
+                // 产物读取限制在工作区内（对齐 read_file 的 workspace 守卫）：
+                // 含 ../ 或绝对路径的越界项按「读失败不阻断记账」降级为 missing。
+                const abs = resolve(cwd, a.path);
+                const rel = relative(cwd, abs);
+                if (rel === "" || rel.startsWith("..") || isAbsolute(rel)) {
+                  missing.push(a.name);
+                  continue;
+                }
                 try {
-                  loaded.push({ name: a.name, content: await readFile(join(cwd, a.path), "utf8") });
+                  loaded.push({ name: a.name, content: await readFile(abs, "utf8") });
                 } catch {
                   // 产物读取失败（缺失/权限）不阻断记账：降级为归档提示。
                   missing.push(a.name);
