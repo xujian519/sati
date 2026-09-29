@@ -55,6 +55,7 @@ import { createPatentFigureGenerateTool } from "../builtin/patentFigureGenerate.
 import { createPatentFigureProjectTool } from "../builtin/patentFigureProject.js";
 import { createFlexiblePlanTool } from "../builtin/patentFlexiblePlanTool.js";
 import { createPatentDocketTool } from "../builtin/patentDocketTool.js";
+import { createPatentCandidateRerankTool } from "../builtin/patentCandidateRerank.js";
 import { createPatentMetadataTool } from "../builtin/patentMetadata.js";
 import { createPatentLegalStatusTool } from "../builtin/patentLegalStatus.js";
 import { createPatentSearchTool } from "../builtin/patentSearch.js";
@@ -383,6 +384,8 @@ export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): T
     );
     // 案卷轮次状态机（P0-1）：纯文件读写无模型依赖，随 patent 域默认注册。
     registry.register(annotate(createPatentDocketTool(), "patent"));
+    // 检索候选 LLM 摘要精排（P0-3）：只读、会话模型不可用时自行降级，随 patent 域默认注册。
+    registry.register(annotate(createPatentCandidateRerankTool(), "patent"));
     // 多源检索（阶段 1b）：nuo 专利 + paper 论文并行；paper 禁用时仅 nuo 单源。
     const searchSources: Array<NonNullable<StageProvider["search"]>> = [];
     const nuoSearch = createNuoSearchProvider().search;

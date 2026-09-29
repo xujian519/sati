@@ -582,3 +582,17 @@ export {
   type RevisionRecord,
   type TriageNext,
 } from "./docket/index.js";
+// 检索链路增强（P0-3 LLM 摘要精排）。
+export {
+  DEFAULT_RERANK_MODEL,
+  DEFAULT_RERANK_PROVIDER,
+  MAX_RERANK_CANDIDATES,
+  MAX_SNIPPET_CHARS,
+  rerankCandidatesWithModel,
+  type LlmRerankOptions,
+  type LlmRerankResult,
+  type RankedCandidate,
+  type RerankCandidate,
+  type RerankModelClient,
+  type RelevanceTier,
+} from "./search/index.js";

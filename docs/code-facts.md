@@ -25,8 +25,8 @@
 
 | claim | 事实 | 值 | 来源 |
 | --- | --- | --- | --- |
-| `default_tool_count` | 默认注册工具数（无参 createBuiltinRegistry） | `50` | src/tool/registry/createBuiltinRegistry.ts（运行期实例化） |
-| `patent_tool_count` | 专利域工具数（domain === "patent"） | `26` | src/tool/registry/createBuiltinRegistry.ts（运行期实例化） |
+| `default_tool_count` | 默认注册工具数（无参 createBuiltinRegistry） | `52` | src/tool/registry/createBuiltinRegistry.ts（运行期实例化） |
+| `patent_tool_count` | 专利域工具数（domain === "patent"） | `28` | src/tool/registry/createBuiltinRegistry.ts（运行期实例化） |
 | `channel_adapter_count` | IM 渠道适配器数 | `21` | src/adapters/channel/（目录数，不含 protocol/） |
 | `skill_count` | 内置技能数（SKILL.md 总数） | `107` | skills/**/SKILL.md |
 | `role_skill_count` | 专家角色数（type: role） | `44` | skills/**/SKILL.md frontmatter |
@@ -64,7 +64,7 @@
 | `src/methodology/` | 14 | ✓ | 方法论注册表（five-whys/mece/triz/bridge-reencode 等） |
 | `src/model/` | 75 | ✓ | 模型抽象（providers/embedding/catalog/resolveModelInfo/streaming） |
 | `src/network/` | 3 | ✓ | 网络层（fetch 封装） |
-| `src/patent/` | 189 | ✓ | 专利执行管线（workflow/graph/atoms/evidence/figure/document 等） |
+| `src/patent/` | 195 | ✓ | 专利执行管线（workflow/graph/atoms/evidence/figure/document 等） |
 | `src/permission/` | 7 | ✓ | 权限（decision/PermissionRuntime + guard/ToolGuardRegistry） |
 | `src/pilot/` | 16 | ✓ | 配置（PilotConfigStore / lastGoodFacts / workspace 判定） |
 | `src/router/` | 33 | ✓ | 智能路由（含多模态媒体降级） |
@@ -76,7 +76,7 @@
 | `src/task/` | 4 | ✓ | 后台任务存储与运行时 |
 | `src/telemetry/` | 6 | ✓ | 遥测（analytics.v2 契约） |
 | `src/test-support/` | 7 | — | 测试基建（llm-replay 录制/重放 seam） |
-| `src/tool/` | 140 | ✓ | 工具系统（registry/execution/audit/builtin） |
+| `src/tool/` | 142 | ✓ | 工具系统（registry/execution/audit/builtin） |
 | `src/web/` | 13 | — | Web 服务端与浏览器客户端投影 |
 
 > 文件数按 **git 清单**统计（`git ls-files --cached --others --exclude-standard`，排除 `.d.ts`），
