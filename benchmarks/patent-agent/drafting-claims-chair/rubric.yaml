@@ -1,0 +1,18 @@
+maxScore: 100
+items:
+  - id: independent_broad
+    weight: 0.3
+    criterion: 独立权利要求是否只含必要技术特征（丝杆升降）而不写入电机/控制等可选特征
+    behavior: observable
+  - id: dependent_hierarchy
+    weight: 0.3
+    criterion: 是否给出逐项递限的从属权利要求（电动升降/角度可调/可拆卸脚踏/自动控制）
+    behavior: observable
+  - id: citation_relations
+    weight: 0.2
+    criterion: 从属权利要求引用关系是否正确清楚
+    behavior: observable
+  - id: cites_a264
+    weight: 0.2
+    criterion: 是否引用专利法第二十六条第四款（清楚简要）
+    behavior: observable

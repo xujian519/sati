@@ -1,0 +1,18 @@
+maxScore: 100
+items:
+  - id: three_step
+    weight: 0.3
+    criterion: 是否完整执行三步法（最接近现有技术→区别特征与技术问题→显而易见性）
+    behavior: observable
+  - id: cites_a223
+    weight: 0.25
+    criterion: 是否明确引用专利法第二十二条第三款
+    behavior: observable
+  - id: distinguishing_features
+    weight: 0.25
+    criterion: 是否识别出区别技术特征（PID 调节 + 蓝牙远程设定）
+    behavior: observable
+  - id: motivation_analysis
+    weight: 0.2
+    criterion: 是否论证 D2/D3 与 D1 结合的技术启示/动机是否存在
+    behavior: observable

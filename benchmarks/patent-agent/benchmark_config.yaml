@@ -1,0 +1,12 @@
+name: patent-agent-regression
+description: >-
+  专利代理 Agent 回归基准：查新/三性/OA 答复/撰写四轴的最小种子集，
+  用于 prompt/技能改动前后的确定性回归与模型档位对比（对齐 PatentBench 任务轴）。
+  目标执行走领域子图 + 规则门；未建图域走 provider 生成 + 规则门 fallback。
+target_role: patent-agent
+# eval_runtime 一经录制不得修改（分数跨版本可比的前提）；实际运行时脚本会
+# 以 --provider/--model 覆盖并回填本记录，这里的值是基准声明。
+eval_runtime:
+  provider: deepseek
+  model_id: deepseek-v4-flash
+  thinking_level: high

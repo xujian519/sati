@@ -1,0 +1,18 @@
+maxScore: 100
+items:
+  - id: cites_a222
+    weight: 0.3
+    criterion: 输出是否明确引用专利法第二十二条第二款（精确到条款号）
+    behavior: observable
+  - id: per_feature_table
+    weight: 0.3
+    criterion: 是否给出逐技术特征的新颖性对比（特征级，非整体判断）
+    behavior: observable
+  - id: correct_conclusion
+    weight: 0.25
+    criterion: 结论是否为"具备新颖性"（D1 未公开气凝胶隔热层特征）
+    behavior: observable
+  - id: confidence
+    weight: 0.15
+    criterion: 是否标注结论置信度
+    behavior: observable
