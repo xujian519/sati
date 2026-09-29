@@ -67,6 +67,41 @@ async function createInteractiveFixture(workbookPath) {
   await workbook.xlsx.writeFile(workbookPath);
 }
 
+const SPREADSHEET_DRAWING_NAMESPACE = "http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing";
+
+const TINY_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8AAAwAB/AGtE1RyAAAAAElFTkSuQmCC",
+  "base64",
+);
+
+/** 带绘图部件（图片）的工作簿：`xl/drawings/drawing1.xml` 由 ExcelJS 写成 `xdr:` 前缀。 */
+async function createDrawingFixture(workbookPath) {
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet("图片页");
+  sheet.getCell("A1").value = "带图表的表";
+  const imageId = workbook.addImage({ buffer: TINY_PNG, extension: "png" });
+  sheet.addImage(imageId, { tl: { col: 0, row: 2 }, ext: { width: 40, height: 40 } });
+  await workbook.xlsx.writeFile(workbookPath);
+}
+
+const DRAWING_PART = "xl/drawings/drawing1.xml";
+
+/** 按给定前缀（或默认命名空间）重写绘图部件，模拟导出方自选的书写方式。 */
+async function rewriteDrawingNamespace(workbookPath, { prefix, namespace = SPREADSHEET_DRAWING_NAMESPACE } = {}) {
+  const zip = await JSZip.loadAsync(await readFile(workbookPath));
+  const xml = await zip.file(DRAWING_PART).async("string");
+  const rewritten = prefix
+    ? xml
+        .replace(`xmlns:xdr="${SPREADSHEET_DRAWING_NAMESPACE}"`, `xmlns:${prefix}="${namespace}"`)
+        .replace(/<(\/?)(?:xdr):/g, `<$1${prefix}:`)
+    : xml
+        .replace(`xmlns:xdr="${SPREADSHEET_DRAWING_NAMESPACE}"`, `xmlns="${namespace}"`)
+        .replace(/<(\/?)(?:xdr):/g, "<$1");
+  zip.file(DRAWING_PART, rewritten);
+  await writeFile(workbookPath, await zip.generateAsync({ type: "nodebuffer" }));
+  return rewritten;
+}
+
 function prefixMainSpreadsheetNamespace(xml) {
   if (!xml.includes("http://schemas.openxmlformats.org/spreadsheetml/2006/main")) {
     return xml;
@@ -206,6 +241,63 @@ describe("spreadsheet workbook manifest parsing", () => {
 
       expect(preview.sheets.map(sheet => sheet.index)).toEqual([0, 2]);
       expect(preview.activeSheetIndex).toBe(0);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("spreadsheet drawing namespace normalization", () => {
+  it("accepts a drawing part written with a custom prefix", async () => {
+    const tempDir = await mkdtemp(path.join(tmpdir(), "sati-spreadsheet-drawing-prefix-"));
+    const workbookPath = path.join(tempDir, "workbook.xlsx");
+    try {
+      await createDrawingFixture(workbookPath);
+      const rewritten = await rewriteDrawingNamespace(workbookPath, { prefix: "d" });
+      expect(rewritten).toContain(`xmlns:d="${SPREADSHEET_DRAWING_NAMESPACE}"`);
+      expect(rewritten).toContain("<d:wsDr");
+
+      const preview = await getSpreadsheetInteractivePreview(workbookPath);
+
+      expect(preview.sheets).toEqual([{ index: 0, name: "图片页" }]);
+      expect(preview.workbook.sheets["sheet-0"].cellData[0][0].v).toBe("带图表的表");
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("accepts a drawing part written in the default namespace", async () => {
+    const tempDir = await mkdtemp(path.join(tmpdir(), "sati-spreadsheet-drawing-default-"));
+    const workbookPath = path.join(tempDir, "workbook.xlsx");
+    try {
+      await createDrawingFixture(workbookPath);
+      const rewritten = await rewriteDrawingNamespace(workbookPath, { prefix: "" });
+      expect(rewritten).toContain(`xmlns="${SPREADSHEET_DRAWING_NAMESPACE}"`);
+      expect(rewritten).toContain("<wsDr");
+
+      const preview = await getSpreadsheetInteractivePreview(workbookPath);
+
+      expect(preview.sheets).toEqual([{ index: 0, name: "图片页" }]);
+      expect(preview.workbook.sheets["sheet-0"].cellData[0][0].v).toBe("带图表的表");
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("leaves a foreign drawing namespace alone and reports a structured parse error", async () => {
+    const tempDir = await mkdtemp(path.join(tmpdir(), "sati-spreadsheet-drawing-foreign-"));
+    const workbookPath = path.join(tempDir, "workbook.xlsx");
+    try {
+      await createDrawingFixture(workbookPath);
+      await rewriteDrawingNamespace(workbookPath, {
+        prefix: "d",
+        namespace: "http://example.com/not-spreadsheet-drawing",
+      });
+
+      await expect(getSpreadsheetInteractivePreview(workbookPath)).rejects.toMatchObject({
+        statusCode: 422,
+        code: "SPREADSHEET_INTERACTIVE_PARSE_FAILED",
+      });
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }
