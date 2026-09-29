@@ -559,3 +559,40 @@ export {
 } from "./figure/index.js";
 export * from "./claim-chart/index.js";
 export * from "./document/index.js";
+// 案卷轮次状态机（docket）：显式命名导出，避免 finalize/setGaps 等泛用名经 barrel 泄漏。
+export {
+  abandonDocket,
+  archiveRevision,
+  createDocket,
+  DEFAULT_MAX_ROUNDS,
+  docketFromJSON,
+  docketToJSON,
+  DocketError,
+  finalizeDocket,
+  JsonFileDocketStore,
+  recordRevision,
+  setGapQuestions,
+  triageDocket,
+  type CreateDocketOptions,
+  type DocketPhase,
+  type DocketState,
+  type DocketStore,
+  type GapQuestion,
+  type RecordRevisionInput,
+  type RevisionRecord,
+  type TriageNext,
+} from "./docket/index.js";
+// 检索链路增强（P0-3 LLM 摘要精排）。
+export {
+  DEFAULT_RERANK_MODEL,
+  DEFAULT_RERANK_PROVIDER,
+  MAX_RERANK_CANDIDATES,
+  MAX_SNIPPET_CHARS,
+  rerankCandidatesWithModel,
+  type LlmRerankOptions,
+  type LlmRerankResult,
+  type RankedCandidate,
+  type RerankCandidate,
+  type RerankModelClient,
+  type RelevanceTier,
+} from "./search/index.js";

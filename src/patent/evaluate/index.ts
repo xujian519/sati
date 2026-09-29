@@ -82,6 +82,14 @@ export {
   type BenchmarkPaths,
 } from "./benchmark.js";
 export {
+  batchReportToScoreboardRecord,
+  createProviderFromModelRuntime,
+  createRegressionRunner,
+  loadRegressionCases,
+  type ProviderFromRuntimeOptions,
+  type RegressionCase,
+} from "./regression.js";
+export {
   packSnapshot,
   collectSnapshotFiles,
   isExcludedSnapshotEntry,

@@ -1,15 +1,15 @@
 # Sati 技术债务指标基线与趋势
 
 > 由 `node scripts/measure-techdebt.mjs --update` 自动生成，谨防手工编辑。
-> 最近一次快照：**2026-09-28**
+> 最近一次快照：**2026-09-29**
 
 ## 规模
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1066 / 181289 |
+| src TS 文件 / 行数 | 1074 / 182822 |
 | src JS 文件 | 0 |
-| tests 文件 | 607 |
+| tests 文件 | 611 |
 | ui/src 文件 / 行数 | 621 / 99639 |
 | ui/server 文件 / 行数 | 115 / 32401 |
 
@@ -32,9 +32,9 @@
 | `as unknown as`（双重断言） | 32 | ui/src(25) · adapters(2) · tool(2) |
 | 裸 `console.*` | 158 | cli(137) · telemetry(8) · ui/server(5) |
 | 空 `catch {}` | 0 | — |
-| 无参 `catch {`（总计） | 681 | ui/server(151) · ui/src(124) · adapters(70) |
+| 无参 `catch {`（总计） | 689 | ui/server(151) · ui/src(124) · adapters(70) |
 | ↳ **无注释**（隐患类，目标） | **15** | — |
-| ↳ 已带意图注释 | 666 | — |
+| ↳ 已带意图注释 | 674 | — |
 | `TODO/HACK/FIXME/XXX` | 11 | always-on(4) · tests(4) · ui/src(2) |
 | 分层违规 `ui/server→src` | 14 | — |
 | 分层违规 `src→ui` | 0 | — |
@@ -162,8 +162,8 @@
 
 | 模块 | 测试文件 |
 |---|---|
-| patent | 133 |
-| tool | 65 |
+| patent | 136 |
+| tool | 66 |
 | agent | 59 |
 | knowledge | 38 |
 | context | 36 |
@@ -195,7 +195,7 @@
 | runtime | 1 |
 | status | 1 |
 
-| **合计** | **582** |
+| **合计** | **586** |
 
 ## i18n en/zh-CN 对齐
 

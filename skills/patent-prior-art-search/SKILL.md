@@ -53,6 +53,7 @@ await completeTaskSpace(task.id, { keep: false });
 
 ## 第三步：筛选与排序
 
+- **LLM 摘要精排（候选 >10 条时必做）**：调用 `patent_candidate_rerank`（query=技术方案描述，candidates=检索原始结果去重后的 {id,title,snippet?,publicationDate?}），按模型打档排序：tier 3=高相关、2=中相关、≤1=低相关（丢弃但留痕）；输出保留每条判定理由。单次上限 20 条，超出取前 20；会话无模型/解析失败时工具自动降级原序（degraded=true），此时改人工初筛并在报告中注明
 - **高相关**：相似度 >80%（技术方案实质相同或高度相似）
 - **中相关**：相似度 50-80%
 - 优先近 5 年与高被引文献；标注每篇的公开日（须早于申请日/优先权日）

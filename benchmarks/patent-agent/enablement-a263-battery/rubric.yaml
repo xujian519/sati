@@ -1,0 +1,18 @@
+maxScore: 100
+items:
+  - id: cites_a263
+    weight: 0.3
+    criterion: 是否明确引用专利法第二十六条第三款
+    behavior: observable
+  - id: not_enabled_conclusion
+    weight: 0.3
+    criterion: 结论是否为"不符合充分公开"
+    behavior: observable
+  - id: missing_means
+    weight: 0.25
+    criterion: 是否指出缺失的具体实现手段（材料/参数/装配/实施例）
+    behavior: observable
+  - id: amendment_direction
+    weight: 0.15
+    criterion: 是否给出可操作的修改方向（补充实施例/参数）
+    behavior: observable

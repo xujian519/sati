@@ -29,6 +29,7 @@
     "test:patent-eval": "npm run build && node scripts/patent-eval.mjs --mode graph --suite tests/patent/benchmark/fixtures/patent-exam-real-a22.json --max-cases 1",
     "test:team-stress": "pnpm build && node scripts/team-stress-verify.mjs",
     "record:replay": "tsx scripts/record-llm-replay.ts",
+    "eval:patent-agent": "tsx scripts/run-patent-agent-eval.ts",
     "gen:event-matrix": "tsx scripts/gen-event-matrix.ts",
     "check:event-matrix": "tsx scripts/gen-event-matrix.ts --check",
     "gen:doc-claims": "tsx scripts/gen-doc-claims.ts",

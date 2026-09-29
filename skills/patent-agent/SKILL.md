@@ -33,7 +33,10 @@ description: "专利代理与知识产权分析：专利检索、权利要求分
 | `web_fetch` / `web_search` | 抓取专利全文、对比文件、审查指南 | 需要原文或补充资料时 |
 | `patent_kg_query` | 专利知识图谱主动查询（关键词/节点详情/相似与引用关系） | 需要沿引用关系追查判例、审查规则、法条节点时 |
 | `patent_case_search` | 本地专利判例全文检索（无效复审决定/专利判决，含决定号与论证片段） | 需要相似在先决定的理由论证、证据认定实例支撑时 |
+| `patent_candidate_rerank` | 检索候选 LLM 摘要精排（高/中/低相关性打档 + 判定理由，失败自动降级原序） | 查新/证据收集候选 >10 条需要筛选排序时 |
 | `patent_workflow_run` | 图形态自动执行（graph=inventiveness 三步法全图：检索反思回路 + D2 组合动机 + 引用真实性校验，retrievalRounds 可调） | 需要一步跑完整创造性/新颖性/充分公开分析时 |
+| `flexible_plan` | 阶段级计划 HITL：创建计划 → 原子执行 → 逐阶段确认/回退（按 caseId 跨调用持久化） | 多阶段撰写/分析需要逐阶段人工把关时 |
+| `patent_docket` | 案卷轮次状态机：缺口清单 → 分诊派工 → 修订轮次上限 → 定稿门控（版本留档） | 交底书→申请文件多轮迭代、需控制返工轮次与缺口闭环时 |
 | 交底书分析 | 技术交底书结构化分析（PFE 三元组） | 收到交底书时（见下方章节） |
 | 质量预检 | 专利产出的自动质量评估 | 撰写/分析完成后，提交复核前（见质量门禁） |
 
@@ -54,6 +57,19 @@ description: "专利代理与知识产权分析：专利检索、权利要求分
 | 质量评估 | `patent-quality-checker` | 保护范围/撰写质量/授权前景多维评分（只读） |
 
 角色已按 `domains` 裁剪工具（如检查类只读角色不可写文件），派发时遵循 HITL 强制确认点（事实/策略/定稿均须用户确认）。
+
+## 案卷迭代协议（多轮返工控制）
+
+当任务需要「交底书 → 申请文件」多轮迭代、且要控制返工轮次时，用 `patent_docket` 建立案卷并把阶段执行挂在 `flexible_plan` 上：
+
+1. **立案**：`patent_docket(action=create, caseId, caseType)`；`triage` 得到派工（`draft`/`revise`/`finalize_ready`/`escalate_human`）。
+2. **执行**：按派工用 `flexible_plan` 跑阶段（`create`→`run`→逐阶段 `confirm`）。发现上游缺陷时 `rollback` 到该阶段重做——即触发新一轮修订。
+3. **缺口闭环**：每轮把「无法确认的事实/待补材料」经 `set_gaps` 登记为缺口问题（`{id, question, source}`）。**不得为凑齐文件补造事实：不确定的一律进缺口清单，不写入正文**。
+4. **记账 + 留档**：`record_revision(answered=[缺口id或原文], artifacts=[{name,path}])` 记一轮并把阶段产物另存到 `revisions/round-N/`（旧稿不动，修订记录独立留档）。回答必须匹配已登记缺口。
+5. **轮次上限与升级**：修订轮次默认上限 3（`maxRounds` 可调）。达上限仍有未决缺口时 `triage → escalate_human`，**停止自动修订、转人工**，不得静默继续。
+6. **定稿门控**：`finalize` 在未决缺口清零前会被拒（fail-closed）；且必须至少记过一轮修订。
+
+案卷状态按 caseId 持久化于 `<工作区>/data/cases/dockets/`，跨会话可 `get`/`list` 续办。简单的一次性分析无需建案卷，直接走对应技能即可。缺口清单格式、轮次模板与三类示例案件见 `references/docket-workflow.md`。
 
 ## 质量门禁流程
 
