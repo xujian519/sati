@@ -23,6 +23,9 @@ export const MAX_RERANK_CANDIDATES = 20;
 
 /** 单条摘要送入 prompt 的截断长度（字符）。 */
 export const MAX_SNIPPET_CHARS = 400;
+/** 检索式与标题的输入上限（与摘要截断同一风格：显式截断，不静默拒收）。 */
+const MAX_QUERY_CHARS = 600;
+const MAX_TITLE_CHARS = 200;
 
 export type RerankCandidate = {
   /** 候选主键（公开号 / URL / 本地库 id，调用方保证唯一）。 */
@@ -74,12 +77,13 @@ function tierValue(value: unknown): RelevanceTier | undefined {
 
 function buildPrompt(query: string, candidates: RerankCandidate[]): string {
   const lines = candidates.map((c, i) => {
+    const title = c.title.length > MAX_TITLE_CHARS ? `${c.title.slice(0, MAX_TITLE_CHARS)}…` : c.title;
     const snippet =
       c.snippet !== undefined && c.snippet.trim() !== ""
         ? ` | 摘要：${c.snippet.trim().slice(0, MAX_SNIPPET_CHARS)}`
         : "";
     const date = c.publicationDate ? ` | 公开日：${c.publicationDate}` : "";
-    return `${i + 1}. id=${c.id} | 标题：${c.title}${date}${snippet}`;
+    return `${i + 1}. id=${c.id} | 标题：${title}${date}${snippet}`;
   });
   return [
     "你是专利查新检索的相关性精排专家。给定一个技术 query 和若干候选文献（专利/论文），",
@@ -89,7 +93,7 @@ function buildPrompt(query: string, candidates: RerankCandidate[]): string {
     "规则：只输出 JSON（不要代码围栏）；每条候选必须评级；reason 用一句中文给出判定依据（对应/缺失的技术特征）。",
     '[SCHEMA] {"results": [{"id": "候选id原样返回", "tier": 0-3, "reason": "…"}]}',
     "[QUERY]",
-    query,
+    query.slice(0, MAX_QUERY_CHARS),
     "[CANDIDATES]",
     ...lines,
   ].join("\n");

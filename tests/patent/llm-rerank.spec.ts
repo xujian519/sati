@@ -270,3 +270,14 @@ test("工具为只读（不写盘、不改候选集合）：isReadOnly 为 true"
   const tool = createPatentCandidateRerankTool();
   assert.equal(tool.isReadOnly({ query: "q", candidates: [] }), true);
 });
+
+test("超长 query / 标题显式截断，prompt 输入有界", async () => {
+  const { client, prompts } = stubModel(['{"results":[]}']);
+  const longQuery = "检索".repeat(2000); // 4000 字 > MAX_QUERY_CHARS
+  const longTitle = "标".repeat(2000);
+  await rerankCandidatesWithModel(client, longQuery, [{ id: "c1", title: longTitle }]);
+  const prompt = prompts[0] ?? "";
+  assert.ok(prompt.length < longQuery.length, `prompt 总长应小于未截断 query（实际 ${prompt.length}）`);
+  assert.ok(!prompt.includes(longQuery), "超长 query 应被截断");
+  assert.ok(!prompt.includes(longTitle), "超长标题应被截断");
+});
