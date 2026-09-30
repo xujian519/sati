@@ -2,6 +2,40 @@
 
 本文件按版本记录 Sati 的重要变更。桌面端版本号（`release(desktop)`）与根 `package.json` 由 `scripts/bump-version.mjs` 同步维护。
 
+## v0.3.4 - 2026-09-30
+
+> **版本目标（2026-09-30）**：专利代理链路补上「多轮返工」的硬约束与检索精排——案卷轮次状态机把缺口清单变成 triage 派工与有界修订轮次，检索候选接 LLM 摘要精排，并配一套回归评测集（`pnpm eval:patent-agent`）。同期并入上游同步批次（桌面退出保护、配置写盘加固、cron 日字段 / 插件 skills / 工作区上传等修复）与一批依赖升级。
+
+### Feat
+
+- feat(patent): 案卷轮次状态机 `patent_docket`——缺口清单 triage 派工、修订轮次上限（默认 3）、`escalate_human` 不静默继续、`finalize` 未决缺口 fail-closed（#591）
+- feat(patent): 检索候选摘要 LLM 精排 `patent_candidate_rerank`（≥10 条候选必做；终失败降级原序 + `degraded=true` 不阻断检索）（#591）
+- feat(desktop): 退出前确认（上游 #606 的退出保护切片）（#593）
+
+### Fix
+
+- fix(config): 配置写盘四点加固（软链目标 / fsync / 提交后抑制 watcher / 稳定读）（#593）
+- fix(cron): 日字段按 Unix cron 的 OR 语义匹配（计算版本 3）（#593）
+- fix(extension): 插件 skills/ 目录只把 SKILL.md 注册为技能（#593）
+- fix(ui): 工作区文件上传拒绝覆盖同名文件并回报冲突（#593）
+- fix(ui): 交互式表格预览前归一 xlsx 绘图的 XML 命名空间（#593）
+- fix(onboarding): 连接测试改为可选，保存只看表单是否齐备（#593）
+- fix(patent): `record_revision` 产物读取限制在工作区内、精排 prompt 的 query/标题输入显式截断（#591）
+
+### Test
+
+- test(patent): 专利代理回归评测集（四轴种子语料 + 私有 rubric）与 `pnpm eval:patent-agent --replay|--live` 入口，工具面扩到 28 后按铁律重录 llm-replay fixture（#591）
+- test(ui): jsdom 升级后修正 Annotator 用例的 Blob URL 打桩
+
+### Docs
+
+- docs(design-qa): 上游同步批次的视觉验证证据（#593）
+- docs(techdebt): 修正 `src` 行数基线并刷新指标基线
+
+### Chore
+
+- chore(deps): 升级 univerjs 组、react-error-boundary、@uiw/react-codemirror、react-i18next、@google/genai、slice-ansi、react-dropzone、@aiden0z/pptx-renderer、string-width、jsdom
+
 ## v0.3.3 - 2026-09-28
 
 > **版本目标（2026-09-28）**：附图标注从「一个面板」走向「通用标注面」——`.svg` 附图标注面板上线并把区域引用出口补回（顺带修好四条通路共用的截图引擎），随后把通用标注内核与 SVG 专有装配解耦，栅格图片也接管进标注器，标注契约升到 v2（sidecar 带扩展名、逐条记录绘制基线）。同期是四条热路径的读放大收敛（团队面板 / hook 信任门 / 文件树与 commits / 记忆检索）与债务账本实施台账回写。
