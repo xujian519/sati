@@ -6,12 +6,17 @@
  * 即毫米（Y 已由 `scale(1,-1)` 翻转，故**只需平移归一化、无需再翻一次**）；同输入两次
  * 结果一致（确定性）。
  *
- * 四类已实测的坑，本模块逐一处理：
+ * 六类已实测的坑，本模块逐一处理：
  * 1. `freecadcmd` 会向 stdout 打版本横幅与统计 ⇒ 解析**只认定界标记之间**的内容；
  * 2. 无 GUI 只能用函数式 API（`Part` / `TechDraw.project`），**不走** `TechDraw::DrawPage`
  *    文档对象；
  * 3. 投影后的孔边是 `BSplineCurve`（不是 `Circle`）⇒ 一律按容差离散化为折线；
- * 4. 依赖 2.6GB 应用 ⇒ **不捆绑**、本机可选、`SATI_FREECAD_CMD` 显式路径（同 graphviz 先例）。
+ * 4. 依赖 2.6GB 应用 ⇒ **不捆绑**、本机可选、`SATI_FREECAD_CMD` 显式路径（同 graphviz 先例）；
+ * 5. `raise SystemExit('…')` 的消息会被 `freecadcmd` **吞掉**（只剩退出码），而非 `SystemExit`
+ *    逃逸时**退出码反而是 0** ⇒ 脚本统一走 `_fail()`（stderr 标记 + `sys.exit(1)`），主流程收进
+ *    `_main()` 并由顶层兜底，使「失败 ⇒ 非零退出码 + 消息可达」成为契约；
+ * 6. 于是失败仍可能以「**退出码 0** + 真因只在 stderr」的形态到达 ⇒ 消费侧解析失败时**不得**
+ *    丢弃 stderr（`describeCadFailure`）：退出码不是成功的充分条件。
  *
  * 单测**不真跑 FreeCAD**：走注入的 `runner` + 录制的边表（与 dot 的注入先例一致）。
  */
@@ -43,6 +48,12 @@ export const CAD_MAX_EDGES = 20_000;
 /** 投影脚本输出边表的定界标记（stdout 混有横幅与统计，必须按标记截取）。 */
 export const CAD_JSON_BEGIN = "SATI_CAD_JSON_BEGIN";
 export const CAD_JSON_END = "SATI_CAD_JSON_END";
+/**
+ * 投影脚本的失败标记（`_fail` 写 stderr 的前缀）。
+ *
+ * 脚本侧与消费侧共用同一个常量 ⇒ 「脚本报了错」与「Sati 认得出这个错」不可能漂移。
+ */
+export const CAD_ERROR_MARKER = "SATI_CAD_ERROR:";
 
 /** 常见安装位置（macOS 官方 app 包内；Windows/Linux 走 PATH 探测）。 */
 const FREECAD_CANDIDATE_PATHS = [
@@ -110,6 +121,9 @@ export type ProjectionScriptOptions = {
  * 脚本只做三件事：导入 STEP → （可选）按半空间剖切 → `TechDraw.project` 并把可见/隐藏边
  * 离散化为 JSON 边表（打印在定界标记之间）。**不画图、不产 SVG、不投影剖切面**——画与
  * 投影都由 Sati 自己的契约负责（剖切面轮廓以模型坐标交给 Sati 侧投影）。
+ *
+ * **失败契约**（见文件头注 5/6）：任何失败都写 stderr（`CAD_ERROR_MARKER` 前缀）并以
+ * `sys.exit(1)` 结束；主流程收进 `_main()` 且由顶层兜底，使契约外的异常也不返回退出码 0。
  */
 export function buildProjectionScript(options: ProjectionScriptOptions): string {
   const direction = VIEW_DIRECTIONS[options.view];
@@ -120,27 +134,20 @@ export function buildProjectionScript(options: ProjectionScriptOptions): string 
   }
   const axisIndex = direction.findIndex(component => component !== 0);
   const sectionAxis = axisIndex === 0 ? "X" : axisIndex === 1 ? "Y" : "Z";
-  return [
-    "# 由 Sati 生成（src/patent/figuregen/cad/freecad.ts）——只输出 JSON 边表，不产出图形。",
-    "import json",
-    "import FreeCAD as App",
-    "import Part, TechDraw",
-    "",
-    `STEP_PATH = ${JSON.stringify(options.stepPath)}`,
-    `VIEW = ${JSON.stringify(options.view)}`,
-    `DIRECTION = App.Vector(${direction[0]}, ${direction[1]}, ${direction[2]})`,
-    `TOLERANCE = ${tolerance}`,
-    `SECTION_OFFSET = ${section === undefined ? "None" : String(section)}`,
+  // 生成物分两段：助手函数留在模块级，主流程收进 `_main()`（只有它的行要缩进一级）。
+  const helpers = [
+    "def _fail(message):",
+    "    # 不能用 raise SystemExit('…')：实测 freecadcmd 只传播退出码、吞掉消息；而非",
+    "    # SystemExit 逃逸时退出码反而是 0。写 stderr + sys.exit(1) 是本机实测唯一",
+    "    # 「消息与退出码同时成立」的形态；消费侧按 CAD_ERROR_MARKER 取真因。",
+    "    sys.stderr.write(CAD_ERROR_MARKER + ' ' + str(message) + '\\n')",
+    "    sys.stderr.flush()",
+    "    sys.exit(1)",
     "",
     "def _discretize(edge):",
     "    length = edge.Length",
     "    count = int(max(2, min(64, length / TOLERANCE + 2)))",
     "    return [[round(p.x, 4), round(p.y, 4)] for p in edge.discretize(count)]",
-    "",
-    "shape = Part.Shape()",
-    "shape.read(STEP_PATH)",
-    "if shape.isNull():",
-    "    raise SystemExit('STEP 读取失败或几何为空: ' + STEP_PATH)",
     "",
     "# 投影坐标系是 TechDraw 自己挑的（实测 front 视图里 u 对应 -Z）：用四个单位参考体",
     "# （原点 + 三轴）分别投影，得到模型原点与各轴在投影平面上的像。仅有轴像不足以定出",
@@ -150,7 +157,7 @@ export function buildProjectionScript(options: ProjectionScriptOptions): string 
     "    p0, p1, _, _ = TechDraw.project(probe, DIRECTION)",
     "    probe_edges = list(p0.Edges) + list(p1.Edges)",
     "    if not probe_edges:",
-    "        raise SystemExit('参考体投影为空，无法确定投影坐标系朝向')",
+    "        _fail('参考体投影为空，无法确定投影坐标系朝向')",
     "    point = probe_edges[0].discretize(2)[0]",
     "    return [round(point.x, 6), round(point.y, 6)]",
     "",
@@ -172,7 +179,7 @@ export function buildProjectionScript(options: ProjectionScriptOptions): string 
     "    half = Part.makeBox(high[0]-low[0], high[1]-low[1], high[2]-low[2], App.Vector(low[0], low[1], low[2]))",
     "    kept = shape.common(half)",
     "    if kept.isNull() or not kept.Faces:",
-    "        raise SystemExit('剖切后几何为空（剖切面在模型范围之外？offset=' + str(SECTION_OFFSET) + '）')",
+    "        _fail('剖切后几何为空（剖切面在模型范围之外？offset=' + str(SECTION_OFFSET) + '）')",
     "    unit = App.Vector(0, 0, 0)",
     "    if axis == 0:",
     "        unit = App.Vector(sign, 0, 0)",
@@ -205,7 +212,7 @@ export function buildProjectionScript(options: ProjectionScriptOptions): string 
     "    # （边的参数方向未必与环走向一致）。拼不成环即 fail-loud：宁可不输出，也不画错剖面线。",
     "    remaining = [list(e.discretize(int(max(2, min(64, e.Length / 0.2 + 2))))) for e in wire.Edges]",
     "    if not remaining:",
-    "        raise SystemExit('剖切面轮廓环为空')",
+    "        _fail('剖切面轮廓环为空')",
     "    current = remaining.pop(0)",
     "    points = list(current)",
     "    end = current[-1]",
@@ -216,15 +223,24 @@ export function buildProjectionScript(options: ProjectionScriptOptions): string 
     "                found = index",
     "                break",
     "        if found is None:",
-    "            raise SystemExit('剖切面轮廓环不闭合（边的端点接不上），拒绝输出可能错误的剖面线')",
+    "            _fail('剖切面轮廓环不闭合（边的端点接不上），拒绝输出可能错误的剖面线')",
     "        segment = remaining.pop(found)",
     "        if (segment[0] - end).Length > (segment[-1] - end).Length:",
     "            segment.reverse()",
     "        points.extend(segment)",
     "        end = points[-1]",
     "    if (points[0] - points[-1]).Length > 1e-3:",
-    "        raise SystemExit('剖切面轮廓环未回到起点（几何异常），拒绝输出可能错误的剖面线')",
+    "        _fail('剖切面轮廓环未回到起点（几何异常），拒绝输出可能错误的剖面线')",
     "    return points",
+  ];
+  const mainFlow = [
+    "shape = Part.Shape()",
+    "try:",
+    "    shape.read(STEP_PATH)",
+    "except Exception as exc:",
+    "    _fail('STEP 文件不可读（不存在或格式不支持）: ' + STEP_PATH + ' [' + type(exc).__name__ + ': ' + str(exc) + ']')",
+    "if shape.isNull():",
+    "    _fail('STEP 已解析但几何为空（无 B-rep）: ' + STEP_PATH + ' —— 若该文件由脚本导出，请改用 shape.exportStep(path)：Part.export([shape], path) 会静默写出无几何的空壳 STEP')",
     "",
     "cut_faces = []",
     "projected = shape",
@@ -244,7 +260,7 @@ export function buildProjectionScript(options: ProjectionScriptOptions): string 
     "        edges.append({'kind': kind, 'curve': curve, 'closed': bool(edge.isClosed()), 'points': points})",
     "",
     "if not edges:",
-    "    raise SystemExit('投影未产生任何边（几何不可见或方向错误）: ' + VIEW)",
+    "    _fail('投影未产生任何边（几何不可见或方向错误）: ' + VIEW)",
     "",
     "payload = {",
     `    'version': ${CAD_EDGE_TABLE_VERSION},`,
@@ -268,6 +284,30 @@ export function buildProjectionScript(options: ProjectionScriptOptions): string 
     `print(${JSON.stringify(CAD_JSON_BEGIN)})`,
     "print(json.dumps(payload, ensure_ascii=False))",
     `print(${JSON.stringify(CAD_JSON_END)})`,
+  ];
+  return [
+    "# 由 Sati 生成（src/patent/figuregen/cad/freecad.ts）——只输出 JSON 边表，不产出图形。",
+    "import json",
+    "import sys",
+    "import FreeCAD as App",
+    "import Part, TechDraw",
+    "",
+    `STEP_PATH = ${JSON.stringify(options.stepPath)}`,
+    `VIEW = ${JSON.stringify(options.view)}`,
+    `DIRECTION = App.Vector(${direction[0]}, ${direction[1]}, ${direction[2]})`,
+    `TOLERANCE = ${tolerance}`,
+    `SECTION_OFFSET = ${section === undefined ? "None" : String(section)}`,
+    `CAD_ERROR_MARKER = ${JSON.stringify(CAD_ERROR_MARKER)}`,
+    "",
+    ...helpers,
+    "",
+    "def _main():",
+    ...mainFlow.map(line => (line.length === 0 ? "" : `    ${line}`)),
+    "",
+    "try:",
+    "    _main()",
+    "except Exception as exc:",
+    "    _fail('未捕获异常（' + type(exc).__name__ + '）: ' + str(exc))",
     "",
   ].join("\n");
 }
@@ -486,6 +526,29 @@ function parseAxes(raw: unknown): CadAxisImages {
   return { origin: read("origin"), x: read("x"), y: read("y"), z: read("z") };
 }
 
+/**
+ * 从子进程输出里取失败真因（`projectStep` 的两条失败路径共用）。
+ *
+ * 顺序：脚本自写的标记行（`CAD_ERROR_MARKER`）→ stderr 尾部 → stdout 尾部。
+ * **不能只看退出码**：实测 freecadcmd 对未捕获的 Python 异常**退出码为 0**，真因只在 stderr
+ * ⇒ 输出不可解析时同样要走这里，否则用户拿到的是一句与真因无关的「缺少定界标记」。
+ */
+export function describeCadFailure(stdout: string, stderr: string): string {
+  const nonEmptyLines = (text: string) =>
+    text
+      .split("\n")
+      .map(line => line.trim())
+      .filter(line => line.length > 0);
+  const marked = nonEmptyLines(stderr)
+    .filter(line => line.startsWith(CAD_ERROR_MARKER))
+    .pop();
+  if (marked !== undefined) return marked;
+  const stderrTail = nonEmptyLines(stderr).slice(-6).join(" | ");
+  if (stderrTail.length > 0) return stderrTail;
+  const stdoutTail = nonEmptyLines(stdout).slice(-6).join(" | ");
+  return stdoutTail.length > 0 ? `stderr 为空；stdout 尾部：${stdoutTail}` : "子进程无任何输出";
+}
+
 export type ProjectStepOptions = {
   /** freecadcmd 路径（由 `resolveFreecadCmd` 得到）。 */
   cmd: string;
@@ -505,6 +568,9 @@ export type ProjectStepOptions = {
  * 脚本经**临时文件**交付：`freecadcmd` 的位置参数才是"要执行的脚本"，而 `-c` 是
  * "console 模式"开关（**不是** `python -c`）——把脚本内容当参数传会被当作文件名。
  * 临时目录随调用清理（含失败路径）。
+ *
+ * 两条失败路径（退出码非 0 / 输出不可解析）都经 `describeCadFailure` 带出真因——
+ * **不得**以退出码为 0 判定成功（文件头注 6）。
  */
 export async function projectStep(options: ProjectStepOptions): Promise<CadEdgeTable> {
   const runner = options.runner ?? defaultCadRunner;
@@ -525,10 +591,19 @@ export async function projectStep(options: ProjectStepOptions): Promise<CadEdgeT
       timeoutMs: options.timeoutMs ?? CAD_DEFAULT_TIMEOUT_MS,
     });
     if (code !== 0) {
-      const detail = (stderr.trim() || stdout.trim()).split("\n").slice(-6).join(" | ");
-      throw new Error(`freecadcmd 投影失败（退出码 ${String(code)}）：${detail}`);
+      throw new Error(`freecadcmd 投影失败（退出码 ${String(code)}）：${describeCadFailure(stdout, stderr)}`);
     }
-    const table = parseProjectionOutput(stdout);
+    let table: CadEdgeTable;
+    try {
+      table = parseProjectionOutput(stdout);
+    } catch (err) {
+      // 退出码 0 **不是**成功的充分条件：实测 freecadcmd 对未捕获的 Python 异常退出码为 0，
+      // 真因只在 stderr ⇒ 解析失败必须把两侧输出一并带出（见 `describeCadFailure`）。
+      const reason = err instanceof Error ? err.message : String(err);
+      throw new Error(
+        `freecadcmd 投影失败（退出码 0，输出不可解析：${reason}）：${describeCadFailure(stdout, stderr)}`,
+      );
+    }
     if (table.edges.length > CAD_MAX_EDGES) {
       throw new Error(`投影边数 ${table.edges.length} 超过上限 ${CAD_MAX_EDGES}——请改用更小的装配或分次投影`);
     }
