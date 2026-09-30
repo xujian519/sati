@@ -12,6 +12,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import test from "node:test";
 import {
+  CAD_ERROR_MARKER,
   CAD_HATCH_SPACING_MM,
   CAD_JSON_BEGIN,
   CAD_JSON_END,
@@ -20,6 +21,7 @@ import {
   buildProjectionScript,
   buildScreenTransform,
   checkCadProjection,
+  describeCadFailure,
   hatchPolylines,
   parseProjectionOutput,
   polylineLengthMm,
@@ -84,6 +86,47 @@ test("脚本：含视图方向、定界标记、原点探测与剖切；不产 S
   assert.match(section, /axis = 2/u, "top 视图的剖切轴为 Z");
   // 轴测图无语义上的"剖切面"⇒ 脚本生成即 fail-loud
   assert.throws(() => buildProjectionScript({ stepPath: "/tmp/x.step", view: "iso", sectionOffsetMm: 5 }), /不能剖切/u);
+});
+
+test("脚本：失败出口统一走 _fail（stderr 标记 + sys.exit(1)）——raise SystemExit 的消息会被 freecadcmd 吞掉", () => {
+  const script = buildProjectionScript({ stepPath: "/tmp/x.step", view: "front" });
+  // 实测（FreeCAD 1.1.3）：`raise SystemExit(3)` 只传退出码、stderr 为空；非 SystemExit 逃逸时
+  // 退出码反而是 0。故消息与退出码只能靠「写 stderr + sys.exit(1)」同时成立。
+  // 只看**可执行行**（注释里提到这个写法是解释，不是行为）。
+  const executableLines = script.split("\n").filter(line => !line.trimStart().startsWith("#"));
+  for (const line of executableLines) {
+    assert.doesNotMatch(line, /raise SystemExit/u, `SystemExit 的消息到不了调用方：${line.trim()}`);
+  }
+  assert.match(script, /sys\.stderr\.write\(CAD_ERROR_MARKER/u);
+  assert.match(script, /sys\.exit\(1\)/u);
+  // 主流程收进 `_main()` 并由顶层兜底：契约外的异常也不得返回退出码 0（否则会被当成成功）
+  assert.match(script, /^def _main\(\):/mu);
+  assert.match(script, /\ntry:\n {4}_main\(\)\nexcept Exception as exc:\n {4}_fail\(/u);
+  // 逐条失败分支都必须在，且都带真因文案（判据侧写死文案，不取自被测实现）
+  for (const message of [
+    "STEP 文件不可读",
+    "STEP 已解析但几何为空",
+    "参考体投影为空",
+    "剖切后几何为空",
+    "剖切面轮廓环为空",
+    "剖切面轮廓环不闭合",
+    "剖切面轮廓环未回到起点",
+    "投影未产生任何边",
+    "未捕获异常",
+  ]) {
+    assert.ok(script.includes(message), `失败分支缺少真因文案：${message}`);
+  }
+});
+
+test("脚本与消费侧的失败标记是同一个常量：脚本写出的那一行必须被 describeCadFailure 认出来", () => {
+  const script = buildProjectionScript({ stepPath: "/tmp/x.step", view: "front" });
+  const assignment = script.split("\n").find(line => line.startsWith("CAD_ERROR_MARKER = "));
+  assert.ok(assignment !== undefined, "脚本必须定义失败标记常量");
+  const markerValue = JSON.parse(assignment.slice("CAD_ERROR_MARKER = ".length)) as string;
+  assert.equal(markerValue, CAD_ERROR_MARKER, "两个常量不得漂移（同名常量是单点事实源）");
+  assert.ok(markerValue.length > 0);
+  // 判据侧手工构造「脚本会写到 stderr 的那一行」，喂给消费侧解析函数
+  assert.equal(describeCadFailure("", `${markerValue} BOOM`), `${markerValue} BOOM`);
 });
 
 test("解析：从含横幅/统计的 stdout 中按定界标记截取边表；标记缺失即报错", () => {
@@ -204,16 +247,57 @@ test("运行：脚本经临时文件交付（freecadcmd 的 -c 是 console 模�
   assert.match(calls[0].script ?? "", /STEP_PATH = "\/tmp\/x\.step"/u);
 });
 
-test("运行：非零退出码 → fail-closed 并带出 stderr 尾部", async () => {
+test("运行：非零退出码 → fail-closed 并带出脚本标记的真因", async () => {
   const runner: CadRunner = async () => ({
-    stdout: "banner",
-    stderr: "Traceback\nSystemExit: STEP 读取失败或几何为空",
+    stdout: "FreeCAD 1.1.3, Libs: 1.1.3R20260725 | (C) 2001-2026 FreeCAD contributors",
+    stderr:
+      `Traceback (most recent call last):\n${CAD_ERROR_MARKER} STEP 文件不可读（不存在或格式不支持）: ` +
+      "/tmp/missing.step [OSError: File to load not existing or not readable]",
     code: 1,
   });
   await assert.rejects(
     projectStep({ cmd: "/fake/freecadcmd", stepPath: "/tmp/missing.step", view: "front", runner }),
-    /freecadcmd 投影失败（退出码 1）.*STEP 读取失败/u,
+    /freecadcmd 投影失败（退出码 1）.*STEP 文件不可读.*\/tmp\/missing\.step/u,
   );
+});
+
+test("运行：退出码 0 但输出不可解析 → 不得丢弃 stderr（freecadcmd 对未捕获异常的退出码就是 0）", async () => {
+  const runner: CadRunner = async () => ({
+    stdout: "FreeCAD 1.1.3, Libs: 1.1.3R20260725",
+    stderr:
+      "Exception while processing file: /tmp/sati-cad-x/project.py [OSError: File to load not existing or not readable]",
+    code: 0,
+  });
+  const error = await projectStep({
+    cmd: "/fake/freecadcmd",
+    stepPath: "/tmp/missing.step",
+    view: "front",
+    runner,
+  }).then(
+    () => undefined,
+    (err: unknown) => (err instanceof Error ? err : new Error(String(err))),
+  );
+  assert.ok(error !== undefined, "退出码 0 但输出没有边表，必须失败（不得当成成功）");
+  assert.match(error.message, /退出码 0，输出不可解析：.*缺少定界标记/u);
+  // 关键：真因只写在 stderr 里，旧实现会把它整条丢掉，只剩一句「缺少定界标记」
+  assert.match(error.message, /File to load not existing or not readable/u, "真因必须一并带出");
+});
+
+test("失败真因的取值优先级：脚本标记行 → stderr 尾部 → stdout 尾部 → 无输出", () => {
+  assert.equal(describeCadFailure("", `${CAD_ERROR_MARKER} 真因从这里取`), `${CAD_ERROR_MARKER} 真因从这里取`);
+  // 标记行之后可能还有别的输出 ⇒ 取最后一条标记行
+  assert.equal(
+    describeCadFailure("", `${CAD_ERROR_MARKER} 先\n警告\n${CAD_ERROR_MARKER} 后`),
+    `${CAD_ERROR_MARKER} 后`,
+  );
+  // 无标记（未捕获异常时是 freecadcmd 自己写的形态）
+  assert.equal(
+    describeCadFailure("", "Exception while processing file: x.py [BOOM]"),
+    "Exception while processing file: x.py [BOOM]",
+  );
+  // stderr 空：必须如实标注「stderr 为空」，别把 FreeCAD 版本横幅当成真因
+  assert.equal(describeCadFailure("banner1\n\nbanner2", ""), "stderr 为空；stdout 尾部：banner1 | banner2");
+  assert.equal(describeCadFailure("", ""), "子进程无任何输出");
 });
 
 test("运行：边数超上限 → fail-closed（大装配不出图）", async () => {

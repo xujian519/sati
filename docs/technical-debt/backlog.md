@@ -2272,3 +2272,14 @@
   - 位置：`scripts/doc-claims/resolvers.ts:127`（`srcModuleList`）；产物 `docs/code-facts.md`（`src/context` 行）
   - 影响：`srcModuleList` 以文件系统 walk 数 `.ts/.tsx`，把内嵌 vendored 子包的 `node_modules`（182 个）与编译产物 `.d.ts`/`lib/**`（36 个）一并计入 ⇒ `src/context` 记 **316**，而真实入库源码仅 **98**（`git ls-files src/context | grep -E '\.tsx?$'`），差 **218** 全为非本仓维护文件。`docs/code-facts.md` 是文档事实层唯一事实源，该行失真会误导「模块规模」判断。污染面**仅 `src/context` 一个模块**（内嵌 vendored 子包），另 30 个模块的现算值与 git 计数相等。与 #341（vendored 子包移出文件级指标，PR #390）同族——该先例已明确「`lib/` 是编译产物、应按目录名豁免」，#520 的现状与之矛盾。
   - 处置（#520，P1，PR #557·`f04b23fc1`）：`resolvers.ts` 新增 `gitListedFiles(root, suffixes)`（复用 `measure-techdebt.mjs:150-161` 的同源实现 `git ls-files --cached --others --exclude-standard`，`cwd: REPO_ROOT`），`srcModuleList()`（`:127`）改调它；`filesWithSuffix` 保留给 SKILL.md 统计（`:262`/`:269`，不受影响）。`docs/code-facts.md` 的 `src/context` 行 **316 → 98**，同一提交在「干净检出 / 已装依赖 / 子包已 build」三态复算得**同一值**。**实现注记**：`gitListedFiles` 通过**不 import** `measure-techdebt.mjs` 实现（各自同源实现）——`.mjs` 不进 `tsc` 产物、`dist/` 下解析会失败。**口径注意**：git 口径含「未跟踪但未忽略」的文件 ⇒ 新增未 `git add` 的 `.ts` 会即时改数（与 `measure-techdebt` 一致）。决策见 `docs/notes/implemented/2026-09-24-metric-scope-git-and-path-prefix.md`。最后复核：2026-09-24。
+
+### 37.7 补登载体：#595 / #596（`TD-PATENT-N32` / `TD-PATENT-N33`，2026-09-30）
+
+> **为何补登**：两条都是核 CAD 投影链路（「Fasteners Workbench 对本项目制图是否有益」的调查）时**实测挖出的真实缺陷**，账本此前无载体。两者是同一失败面（**失败诊断不可观测**）的两个必要条件——只修任一条，用户在某些失败下仍拿不到真因——故同 PR 交付，但各自独立建票。
+> 实测环境：FreeCAD 1.1.3（`/Applications/FreeCAD.app/Contents/Resources/bin/freecadcmd`），macOS。
+
+| 新 ID | 严重级 | 摘要 | issue | 最后复核 |
+|---|---|---|---|---|
+| `TD-PATENT-N32` | P2 | 投影脚本用 `raise SystemExit('…')` 报错（`freecad.ts` 7 处）；实测 freecadcmd **只传播退出码、吞掉 `SystemExit` 的消息**，而非 `SystemExit` 逃逸时**退出码反而是 0** ⇒ 失败时 `projectStep` 只能拿 stderr 兜底，拼进报错的是 **FreeCAD 版本横幅**（端到端实测：「STEP 已解析但几何为空」被报成 `FreeCAD 1.1.3, Libs: … | (C) 2001-2026 FreeCAD contributors | …`）；主流程（`shape.read`/`common`/`TechDraw.project`）无顶层兜底。**已做（#595，PR #597）**：`_fail()`（stderr 标记 `SATI_CAD_ERROR:` + `sys.exit(1)`）收口九条失败分支，主流程收进 `_main()` + 顶层 `except Exception` 兜底；STEP 读入口区分「文件不可读（带路径）」与「已解析但无 B-rep」（后者直指 `exportStep` vs `Part.export([shape], path)` 的空壳陷阱）。见 `docs/notes/implemented/2026-09-30-cad-failure-diagnostics.md` | **#595** | 2026-09-30 |
+| `TD-PATENT-N33` | P2 | `projectStep` 把「退出码 0」当成功的**充分条件**（只在 `code !== 0` 时读 stderr）⇒ freecadcmd 对未捕获的 Python 异常退出码为 0，此时 `parseProjectionOutput` 抛的是与真因无关的「投影输出缺少定界标记」，**真因（只在 stderr）整条丢弃**；`step_path` 指向不存在的文件即命中（端到端实测：真因 `OSError: File to load not existing or not readable` 完全不可见）。**已做（#596，PR #597）**：`describeCadFailure(stdout, stderr)`（脚本标记行 → stderr 尾部 → stdout 尾部，后者如实标注「stderr 为空」）由**两条**失败路径共用，边数上限检查留在 try 之外 | **#596** | 2026-09-30 |
+

@@ -23,12 +23,14 @@ export {
 } from "./types.js";
 export {
   CAD_DEFAULT_TIMEOUT_MS,
+  CAD_ERROR_MARKER,
   CAD_JSON_BEGIN,
   CAD_JSON_END,
   CAD_MAX_EDGES,
   FREECAD_CMD_ENV,
   buildProjectionScript,
   defaultCadRunner,
+  describeCadFailure,
   parseProjectionOutput,
   projectStep,
   resolveFreecadCmd,
