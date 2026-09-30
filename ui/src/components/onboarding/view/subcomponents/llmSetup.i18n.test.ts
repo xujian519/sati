@@ -38,7 +38,7 @@ const KEYS = [
   "showAdvancedToggle",
   "hideAdvancedToggle",
   "apiBaseUrl",
-  "testConnectionFirst",
+  "testOptional",
   "testConnection",
   "testing",
   "saving",

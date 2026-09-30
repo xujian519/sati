@@ -174,6 +174,8 @@ const uploadFilesHandler = async (req, res) => {
 
       // Move uploaded files from temp to target directory
       const uploadedFiles = [];
+      const conflicts = [];
+      const failures = [];
       logger.info(
         "[DEBUG] Processing files:",
         req.files.map(f => ({ originalname: f.originalname, path: f.path })),
@@ -191,6 +193,7 @@ const uploadFilesHandler = async (req, res) => {
           logger.info("[DEBUG] Destination validation failed for:", destPath);
           // Clean up temp file
           await fsPromises.unlink(file.path).catch(() => {});
+          failures.push({ name: fileName, code: "INVALID_DESTINATION", message: destValidation.error });
           continue;
         }
 
@@ -203,8 +206,19 @@ const uploadFilesHandler = async (req, res) => {
           await fsPromises.mkdir(parentDir, { recursive: true });
         }
 
-        // Move file (copy + unlink to handle cross-device scenarios)
-        await fsPromises.copyFile(file.path, destPath);
+        // COPYFILE_EXCL：目标已存在时抛 EEXIST，既不静默覆盖工作区里的同名文件
+        // （案卷资料不可再生），也没有"先查后写"的竞态窗口。
+        try {
+          await fsPromises.copyFile(file.path, destPath, fsPromises.constants.COPYFILE_EXCL);
+        } catch (error) {
+          await fsPromises.unlink(file.path).catch(() => {});
+          if (error.code === "EEXIST") {
+            conflicts.push(fileName);
+          } else {
+            failures.push({ name: fileName, code: error.code || "UPLOAD_WRITE_FAILED", message: error.message });
+          }
+          continue;
+        }
         await fsPromises.unlink(file.path);
 
         uploadedFiles.push({
@@ -215,11 +229,25 @@ const uploadFilesHandler = async (req, res) => {
         });
       }
 
-      res.json({
-        success: true,
+      const skipped = [...conflicts, ...failures.map(failure => failure.name)];
+      if (skipped.length === 0) {
+        return res.json({
+          success: true,
+          files: uploadedFiles,
+          targetPath: resolvedTargetDir,
+          message: `Uploaded ${uploadedFiles.length} file(s) successfully`,
+        });
+      }
+
+      // 部分写入用 207、一个都没写用 409：两者都带上已写入/被拒明细，
+      // 让调用方能区分"落了盘"与"没落盘"，而不是把失败当成功。
+      return res.status(uploadedFiles.length > 0 ? 207 : 409).json({
+        success: false,
         files: uploadedFiles,
+        conflicts,
+        errors: failures,
         targetPath: resolvedTargetDir,
-        message: `Uploaded ${uploadedFiles.length} file(s) successfully`,
+        message: `Uploaded ${uploadedFiles.length} file(s), skipped ${skipped.length} file(s)`,
       });
     } catch (error) {
       logger.error("Error uploading files:", error);

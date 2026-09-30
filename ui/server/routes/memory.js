@@ -111,8 +111,10 @@ async function saveGlobalMemorySettings(partial = {}, { baseRevision } = {}) {
       ...next,
     },
   };
-  suppressNextWatchEvent();
-  const saved = await writeSatiConfig(nextConfig, { previousRevision: baseRevision });
+  const saved = await writeSatiConfig(nextConfig, {
+    previousRevision: baseRevision,
+    onWriteCommitted: suppressNextWatchEvent,
+  });
   await reloadSatiConfig(saved.config);
   return getGlobalMemorySettingsFromConfig(saved.config);
 }

@@ -32,6 +32,7 @@ import { ServerManager, getSatiDir } from "./server-manager.js";
 import { installRendererRecovery } from "./renderer-recovery.js";
 import { resolveSplashHtmlPath, showSplashWindow } from "./splash-window.js";
 import { resolveAppIconPath } from "./icon-path.js";
+import { buildQuitPrompt, resolveQuitAction } from "./quit-confirm.js";
 
 app.setName("Sati");
 
@@ -56,6 +57,11 @@ const serverManager = new ServerManager({
 let mainWindow: BrowserWindow | null = null;
 let isQuitting = false;
 let shutdownStarted = false;
+/** 退出确认（上游 #606 移植）：用户主动退出前先确认一次。 */
+let quitConfirmed = false;
+let quitPromptOpen = false;
+/** 程序化退出（启动失败、无托盘兜底）不弹确认。 */
+let skipQuitConfirmation = false;
 /** Windows 托盘（关窗最小化到托盘，兑现 always-on 常驻）；macOS 用 Dock，不建托盘。 */
 let tray: Tray | null = null;
 
@@ -449,10 +455,8 @@ function createTray(): void {
       { type: "separator" },
       {
         label: "退出",
-        click: () => {
-          isQuitting = true;
-          app.quit();
-        },
+        // 不预设 isQuitting：先走 before-quit 的退出确认，确认后才开始关停。
+        click: () => app.quit(),
       },
     ]),
   );
@@ -559,6 +563,9 @@ if (!gotLock) {
 
     const configured = await ensureConfigOrOnboard();
     if (!configured) {
+      // 启动期失败（配置不可用 / 用户取消引导）退出：用户已经看过解释性对话框，
+      // 这里再问一次"确定退出吗"是多余的（上游 #606 的 bypassConfirmation）。
+      skipQuitConfirmation = true;
       app.quit();
       return;
     }
@@ -665,12 +672,45 @@ if (!gotLock) {
   });
 }
 
+/**
+ * 用户主动退出的确认：确认框绑主窗口作父级（避免落到窗口后面），默认按钮是
+ * "取消"。用户确认后置 quitConfirmed 再 app.quit()，重新进入 before-quit 时
+ * 判定表会给出 shutdown。弹窗本身失败时直接关停——用户已经表达了退出意图。
+ */
+async function confirmQuit(): Promise<void> {
+  if (quitPromptOpen) return;
+  quitPromptOpen = true;
+  try {
+    const options = buildQuitPrompt(app.getLocale().toLowerCase().startsWith("zh"));
+    const parent = mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined;
+    const { response } = parent ? await dialog.showMessageBox(parent, options) : await dialog.showMessageBox(options);
+    if (response !== 0) return; // 取消：什么都不做，服务与任务继续跑
+    quitConfirmed = true;
+    app.quit();
+  } catch {
+    quitConfirmed = true;
+    app.quit();
+  } finally {
+    quitPromptOpen = false;
+  }
+}
+
 app.on("before-quit", e => {
   // 总是 preventDefault：shutdown() 进行中的第二次 quit 请求若放行，
   // Electron 会在 kill 子进程中途退出，把 server/gateway 变成孤儿。
   // 正常路径由 shutdown() 完成后的 app.exit(0) 退出（exit() 绕过 before-quit）。
   e.preventDefault();
-  if (shutdownStarted) return;
+  const action = resolveQuitAction({
+    shutdownStarted,
+    promptOpen: quitPromptOpen,
+    confirmed: quitConfirmed,
+    skipConfirmation: skipQuitConfirmation,
+  });
+  if (action === "ignore") return;
+  if (action === "confirm") {
+    void confirmQuit();
+    return;
+  }
   isQuitting = true;
   shutdownStarted = true;
   void shutdown().then(() => app.exit(0));
@@ -686,7 +726,12 @@ app.on("window-all-closed", () => {
   // 正常退出路径（before-quit → shutdown → app.exit）不会走到这里；此事件
   // 只在窗口被真正销毁时触发。Windows 有托盘时点 X 是 hide 而非 destroy，
   // 因此此处是兜底：无托盘（Linux / 托盘缺失）时保持"关窗即退出"。
-  if (process.platform !== "darwin" && mainWindow !== null && tray === null) app.quit();
+  if (process.platform !== "darwin" && mainWindow !== null && tray === null) {
+    // 无托盘时窗口已销毁、没有可恢复的界面：取消确认会把人留在"看不见又退不出"
+    // 的状态，故这条兜底路径直接退出，不弹确认。
+    skipQuitConfirmation = true;
+    app.quit();
+  }
 });
 
 app.on("web-contents-created", (_event, contents) => {

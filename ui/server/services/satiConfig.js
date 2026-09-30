@@ -1,5 +1,5 @@
 import fs from "fs";
-import fsPromises from "fs/promises";
+import { readStableConfigRecord, resolveConfigWritePath, writeConfigAtomically } from "./satiConfigFileIo.js";
 import os from "os";
 import path from "path";
 import { createHash } from "node:crypto";
@@ -794,10 +794,16 @@ async function withConfigWriteLock(job) {
 // 事务性（temp + rename 原子写 + 进程内串行 + 可选乐观锁）：
 // - 崩溃时磁盘要么是旧配置要么是新配置，不会出现半截 YAML；
 // - previousRevision 提供时，落盘前校验磁盘 revision，防止读改写丢更新。
-export async function writeSatiConfig(config, { previousRevision } = {}) {
+export async function writeSatiConfig(config, { previousRevision, onWriteCommitted } = {}) {
   return withConfigWriteLock(async () => {
     if (typeof previousRevision === "string" && previousRevision) {
-      const disk = readSatiConfigFile();
+      const disk = await readStableConfigRecord(readSatiConfigFile, {
+        makeUnstableError: previous =>
+          new ConfigConflictError(
+            "Config is still changing on disk. Retry after the external save finishes.",
+            configRevision(previous.raw ?? ""),
+          ),
+      });
       const currentRevision = configRevision(disk.raw ?? "");
       if (previousRevision !== currentRevision) {
         throw new ConfigConflictError(
@@ -819,7 +825,8 @@ export async function writeSatiConfig(config, { previousRevision } = {}) {
       throw error;
     }
     const configPath = getSatiConfigPath();
-    await fsPromises.mkdir(path.dirname(configPath), { recursive: true });
+    // 写软链的目标而不是软链本身：rename 会把软链替换成普通文件。
+    const writePath = await resolveConfigWritePath(configPath);
     const yamlObj = validation.config;
     if (isRecord(yamlObj.memory)) {
       const memModel = yamlObj.memory.model;
@@ -828,18 +835,7 @@ export async function writeSatiConfig(config, { previousRevision } = {}) {
       }
     }
     const raw = stringifyYaml(yamlObj, { lineWidth: 0 });
-    // 同目录 temp + rename：rename(2) 在同一文件系统上是原子的；失败时
-    // best-effort 清理 temp，磁盘保持旧配置。temp 文件名以 .sati- 开头
-    // 且不带 .yaml 后缀，satiConfigWatcher 的目录事件按配置文件名过滤，
-    // 不会误触发 reload。
-    const tmpPath = `${configPath}.sati-tmp`;
-    try {
-      await fsPromises.writeFile(tmpPath, raw, "utf8");
-      await fsPromises.rename(tmpPath, configPath);
-    } catch (error) {
-      await fsPromises.unlink(tmpPath).catch(() => undefined);
-      throw error;
-    }
+    await writeConfigAtomically({ writePath, raw, onWriteCommitted });
     return { configPath, raw, validation, config: yamlObj };
   });
 }

@@ -66,4 +66,22 @@ describe("LlmConfigurationStep", () => {
       expect(screen.getByText(/ECONNREFUSED/)).toBeTruthy();
     });
   });
+
+  it("enables Save once the form is complete, without requiring a connection test", async () => {
+    render(<LlmConfigurationStep onSaved={vi.fn()} />);
+
+    const saveButton = () => screen.getByRole("button", { name: "llmSetup.save" });
+    // 默认 provider（DeepSeek）需要 API key：表单未齐备时不可保存。
+    expect(saveButton().hasAttribute("disabled")).toBe(true);
+
+    fireEvent.change(screen.getByPlaceholderText("llmSetup.apiKeyPlaceholder"), {
+      target: { value: "sk-test" },
+    });
+
+    // 从未点过"测试连接"，表单齐备即可保存——连接测试是诊断手段，不是准入门槛。
+    await waitFor(() => {
+      expect(saveButton().hasAttribute("disabled")).toBe(false);
+    });
+    expect(screen.getByText("llmSetup.testOptional")).toBeTruthy();
+  });
 });

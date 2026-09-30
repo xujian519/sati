@@ -401,6 +401,7 @@
     "refresh": "Refresh",
     "collapseAll": "Collapse All",
     "collapsePanel": "Collapse file explorer",
+    "uploadConflict": "These files already exist and were not uploaded: {{names}}",
     "context": {
       "rename": "Rename",
       "delete": "Delete",

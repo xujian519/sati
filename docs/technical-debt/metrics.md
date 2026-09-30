@@ -7,11 +7,11 @@
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1074 / 182822 |
+| src TS 文件 / 行数 | 1074 / 182867 |
 | src JS 文件 | 0 |
-| tests 文件 | 611 |
-| ui/src 文件 / 行数 | 621 / 99639 |
-| ui/server 文件 / 行数 | 115 / 32401 |
+| tests 文件 | 613 |
+| ui/src 文件 / 行数 | 623 / 99824 |
+| ui/server 文件 / 行数 | 118 / 32911 |
 
 ## 指标口径
 
@@ -32,9 +32,9 @@
 | `as unknown as`（双重断言） | 32 | ui/src(25) · adapters(2) · tool(2) |
 | 裸 `console.*` | 158 | cli(137) · telemetry(8) · ui/server(5) |
 | 空 `catch {}` | 0 | — |
-| 无参 `catch {`（总计） | 689 | ui/server(151) · ui/src(124) · adapters(70) |
+| 无参 `catch {`（总计） | 690 | ui/server(152) · ui/src(124) · adapters(70) |
 | ↳ **无注释**（隐患类，目标） | **15** | — |
-| ↳ 已带意图注释 | 674 | — |
+| ↳ 已带意图注释 | 675 | — |
 | `TODO/HACK/FIXME/XXX` | 11 | always-on(4) · tests(4) · ui/src(2) |
 | 分层违规 `ui/server→src` | 14 | — |
 | 分层违规 `src→ui` | 0 | — |
@@ -47,7 +47,7 @@
 |---|---|---|---|
 | `ui/src/components/app-shell/SidebarV2.tsx` | `SidebarV2` | 1008 | function |
 | `ui/src/components/chat-v2/MessagesPaneV2.render.test.tsx` | `(anonymous)` | 943 | arrow |
-| `ui/src/components/main-content-v2/FilesV2.tsx` | `FilesV2` | 853 | function |
+| `ui/src/components/main-content-v2/FilesV2.tsx` | `FilesV2` | 851 | function |
 | `ui/src/components/chat-v2/MessagesPaneV2.tsx` | `MessagesPaneV2` | 824 | function |
 | `ui/src/components/chat-v2/ComposerV2.tsx` | `ComposerV2` | 741 | function |
 | `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` | `useChatRealtimeHandlers` | 721 | function |
@@ -57,9 +57,9 @@
 | `ui/src/hooks/useProjectsState.ts` | `useProjectsState` | 647 | function |
 | `src/adapters/channel/tui/app/TuiApp.tsx` | `TuiApp` | 643 | function |
 | `src/cli/sati.ts` | `main` | 642 | function |
+| `ui/src/components/onboarding/view/subcomponents/LlmConfigurationStep.tsx` | `LlmConfigurationStep` | 633 | function |
 | `ui/src/components/app-shell/AppShellV2.tsx` | `AppShellV2` | 631 | function |
 | `ui/src/stores/useSessionStore.ts` | `createSessionActions` | 631 | function |
-| `ui/src/components/onboarding/view/subcomponents/LlmConfigurationStep.tsx` | `LlmConfigurationStep` | 630 | function |
 | `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` | `(anonymous)` | 624 | arrow |
 | `ui/src/components/main-content/view/MainContent.tsx` | `SplitBody` | 573 | function |
 | `ui/src/components/chat/hooks/useSessionSubmit.ts` | `useSessionSubmit` | 528 | function |
@@ -126,7 +126,7 @@
 | `ui/src/components/chat-v2/ComposerV2.tsx` | 1188 |
 | `ui/src/components/chat-v2/MessagesPaneV2.tsx` | 1183 |
 | `ui/server/routes/taskmaster.js` | 1179 |
-| `ui/server/routes/config.js` | 1173 |
+| `ui/server/routes/config.js` | 1171 |
 | `src/agent/loop/AgentLoop.ts` | 1150 |
 | `ui/src/components/main-content-v2/CronV2.tsx` | 1130 |
 | `ui/src/components/main-content/view/MainContent.tsx` | 1111 |
@@ -137,7 +137,7 @@
 | `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` | 1025 |
 | `src/adapters/channel/protocol/ImLiveReplyController.ts` | 1017 |
 | `src/gateway/protocol/types.ts` | 995 |
-| `ui/src/components/main-content-v2/FilesV2.tsx` | 964 |
+| `ui/src/components/main-content-v2/FilesV2.tsx` | 963 |
 | `src/context/DefaultContextRuntime.ts` | 953 |
 
 ## vendored 子包（单列，不计入上述规模与排名）
@@ -175,8 +175,8 @@
 | extension | 13 |
 | mcp | 13 |
 | cli | 12 |
+| cron | 12 |
 | adapters | 11 |
-| cron | 11 |
 | pilot | 11 |
 | rule | 10 |
 | web | 9 |
@@ -195,7 +195,7 @@
 | runtime | 1 |
 | status | 1 |
 
-| **合计** | **586** |
+| **合计** | **587** |
 
 ## i18n en/zh-CN 对齐
 
@@ -205,7 +205,7 @@
 | auth | 23 | 23 | 0 | 0 |
 | chat | 375 | 375 | 0 | 0 |
 | codeEditor | 185 | 185 | 0 | 0 |
-| common | 435 | 435 | 0 | 0 |
+| common | 436 | 436 | 0 | 0 |
 | hookTrust | 19 | 19 | 0 | 0 |
 | kanban | 44 | 44 | 0 | 0 |
 | routing | 64 | 64 | 0 | 0 |

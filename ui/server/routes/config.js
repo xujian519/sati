@@ -543,8 +543,7 @@ router.put("/", async (req, res) => {
           error: "One or more masked secrets could not be restored. Enter those credentials again before saving.",
         });
       }
-      suppressNextWatchEvent();
-      saved = await writeRawSatiYaml(restored);
+      saved = await writeRawSatiYaml(restored, { onWriteCommitted: suppressNextWatchEvent });
     } else if (req.body?.config && typeof req.body.config === "object") {
       if (diskRecord.parseError) {
         return res.status(400).json({
@@ -577,8 +576,7 @@ router.put("/", async (req, res) => {
           error: "One or more masked secrets could not be restored. Enter those credentials again before saving.",
         });
       }
-      suppressNextWatchEvent();
-      saved = await writeSatiConfig(restored);
+      saved = await writeSatiConfig(restored, { onWriteCommitted: suppressNextWatchEvent });
     } else {
       return res.status(400).json({ error: "raw YAML or config object is required" });
     }

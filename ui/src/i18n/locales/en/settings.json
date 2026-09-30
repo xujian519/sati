@@ -1556,7 +1556,7 @@
     "apiBaseUrl": "API Base URL",
     "protocolLabel": "Protocol: ",
     "defaultUrlLabel": "Default URL: ",
-    "testConnectionFirst": "Test connection first.",
+    "testOptional": "Connection test is optional — you can save and continue.",
     "testConnection": "Test Connection",
     "testing": "Testing...",
     "saving": "Saving...",

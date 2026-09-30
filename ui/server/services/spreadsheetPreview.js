@@ -6,6 +6,7 @@ import { pathToFileURL } from "url";
 import { promisify } from "util";
 import ExcelJS from "exceljs";
 import JSZip from "jszip";
+import { normalizeSpreadsheetPackage } from "./spreadsheetPackageNormalizer.js";
 import {
   LIBREOFFICE_TIMEOUT_MS,
   OFFICE_PREVIEW_CACHE_DIR,
@@ -17,8 +18,6 @@ import {
 const execFileAsync = promisify(execFile);
 const spreadsheetPreviewLocks = new Map();
 const MAX_INTERACTIVE_CELL_AREA = 1_000_000;
-const SPREADSHEET_MAIN_NAMESPACE = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
-
 export const SPREADSHEET_PREVIEW_EXTENSIONS = new Set(["xls", "xlsx", "et", "ods"]);
 
 function createSpreadsheetPreviewError(message, statusCode, code) {
@@ -45,39 +44,6 @@ function decodeXmlEntities(value) {
       );
     },
   );
-}
-
-function escapeRegularExpression(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-async function normalizePrefixedSpreadsheetPackage(filePath) {
-  const zip = await JSZip.loadAsync(await fsPromises.readFile(filePath));
-  let changed = false;
-
-  for (const [entryName, entry] of Object.entries(zip.files)) {
-    if (entry.dir || !entryName.endsWith(".xml")) continue;
-    const xml = await entry.async("string");
-    const namespaceMatch = xml.match(
-      /xmlns:([A-Za-z_][\w.-]*)=(["'])http:\/\/schemas\.openxmlformats\.org\/spreadsheetml\/2006\/main\2/,
-    );
-    if (!namespaceMatch) continue;
-
-    const prefix = escapeRegularExpression(namespaceMatch[1]);
-    const quote = namespaceMatch[2];
-    let normalized = xml.replace(new RegExp(`(<\\/?)(?:${prefix}):`, "g"), "$1");
-    const defaultNamespace = `xmlns=${quote}${SPREADSHEET_MAIN_NAMESPACE}${quote}`;
-    normalized = normalized.includes(defaultNamespace)
-      ? normalized.replace(namespaceMatch[0], "")
-      : normalized.replace(namespaceMatch[0], defaultNamespace);
-
-    if (normalized !== xml) {
-      zip.file(entryName, normalized);
-      changed = true;
-    }
-  }
-
-  return changed ? zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" }) : null;
 }
 
 function readXmlAttribute(attributes, name) {
@@ -302,11 +268,25 @@ async function loadInteractiveWorkbook(workbookPath) {
     await workbook.xlsx.readFile(workbookPath);
     return workbook;
   } catch (error) {
-    const normalizedPackage = await normalizePrefixedSpreadsheetPackage(workbookPath);
-    if (!normalizedPackage) throw error;
-    const normalizedWorkbook = new ExcelJS.Workbook();
-    await normalizedWorkbook.xlsx.load(normalizedPackage);
-    return normalizedWorkbook;
+    const normalizedPackage = await normalizeSpreadsheetPackage(workbookPath);
+    let parseError = error;
+    if (normalizedPackage) {
+      try {
+        const normalizedWorkbook = new ExcelJS.Workbook();
+        await normalizedWorkbook.xlsx.load(normalizedPackage);
+        return normalizedWorkbook;
+      } catch (normalizedError) {
+        parseError = normalizedError;
+      }
+    }
+    // 归一后仍解析失败时给结构化错误，别把 ExcelJS 的内部异常抛给界面。
+    const previewError = createSpreadsheetPreviewError(
+      "This workbook could not be parsed for interactive preview.",
+      422,
+      "SPREADSHEET_INTERACTIVE_PARSE_FAILED",
+    );
+    previewError.cause = parseError;
+    throw previewError;
   }
 }
 

@@ -68,8 +68,17 @@ async function loadConfiguredMarkdown(
     dirs.map(dir => loadPluginCommands({ pluginName: "", baseDir: join(pluginPath, dir) }).catch(() => [])),
   );
   const pluginName = pluginPath.split(/[\\/]/u).at(-1) ?? "";
-  return loaded.flat().map(command => ({
-    ...command,
-    name: command.name.startsWith(":") ? `${pluginName}${command.name}` : command.name.replace(/^:/u, `${pluginName}:`),
-  }));
+  return (
+    loaded
+      .flat()
+      // skills/ 下只有 SKILL.md 是技能，README.md、references/*.md 等是技能素材，
+      // 注册成技能会污染技能列表（上游 #602 移植）。
+      .filter(command => fallbackDir !== "skills" || command.isSkill)
+      .map(command => ({
+        ...command,
+        name: command.name.startsWith(":")
+          ? `${pluginName}${command.name}`
+          : command.name.replace(/^:/u, `${pluginName}:`),
+      }))
+  );
 }
