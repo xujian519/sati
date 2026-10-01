@@ -40,7 +40,6 @@ export type PixelFinding = {
 export const PIXEL_MID_GRAY_FAIL_RATIO = 0.3;
 export const PIXEL_MID_GRAY_WARN_RATIO = 0.05;
 /** 中间灰判定区间（既非墨线也非纸白）：0-255 灰度。 */
-export const PIXEL_INK_MAX = 160;
 export const PIXEL_WHITE_MIN = 245;
 export const PIXEL_MID_GRAY_RANGE: readonly [number, number] = [50, 205];
 /** 最小可辨线宽（打印后毫米）与三分之二折算。 */

@@ -217,6 +217,23 @@ export function createPatentFigureCheckTool(): SatiToolDefinition<PatentFigureCh
       const jurisdiction: Jurisdiction = toJurisdiction(input.jurisdiction);
       const profile = profileForJurisdiction(jurisdiction);
       const sheet = toSheet({ sheet_index: input.sheet_index, sheet_total: input.sheet_total });
+      // 成对性校验与 `patent_figure_generate` / `patent_figure_project` 同规：此前本工具
+      // 对"只给一个"静默忽略，调用方以为声明了页码、实际 V17 未生效（假保证）。三个工具
+      // 对同一组入参必须给同一结论。
+      if (sheet === undefined && (input.sheet_index !== undefined || input.sheet_total !== undefined)) {
+        throw new SatiToolRuntimeError(
+          "invalid_tool_input",
+          "sheet_index 与 sheet_total 须成对给出且均 ≥1（附图页码体例由法域档案决定，缺一项无法判定）",
+          { tool: "patent_figure_check" },
+        );
+      }
+      if (sheet !== undefined && sheet.index > sheet.total) {
+        throw new SatiToolRuntimeError(
+          "invalid_tool_input",
+          `sheet_index ${sheet.index} 超出 sheet_total ${sheet.total}`,
+          { tool: "patent_figure_check" },
+        );
+      }
 
       const figures: FigureSpec[] = [...(input.figures ?? [])];
       // 结构性校验只针对**调用方给出的结构化附图**：svg_paths 回读的骨架没有 nodes/chart 载荷

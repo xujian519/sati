@@ -239,3 +239,27 @@ test("patent_figure_check：pct 报告如实声明未适用 CN 括号规则、�
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("patent_figure_check：sheet 入参与 generate 同规（成对 + 不越界），不再静默忽略", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "sati-offices-check-sheet-"));
+  try {
+    const tool = createPatentFigureCheckTool();
+    // 此前"只给一个"被静默忽略：调用方以为声明了页码，实际 V17 未生效（假保证）
+    await assert.rejects(
+      tool.execute({ figures: [FIG], spec_text: "处理模块(20)。", sheet_total: 3 }, makeContext(dir)),
+      /须成对给出/u,
+    );
+    await assert.rejects(
+      tool.execute({ figures: [FIG], spec_text: "处理模块(20)。", sheet_index: 5, sheet_total: 3 }, makeContext(dir)),
+      /超出 sheet_total/u,
+    );
+    // 成对且合法：正常核验
+    const ok = await tool.execute(
+      { figures: [FIG], spec_text: "处理模块(20)。", sheet_index: 1, sheet_total: 3 },
+      makeContext(dir),
+    );
+    assert.match(textOf(ok), /核验/u);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

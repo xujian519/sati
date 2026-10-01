@@ -13,6 +13,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { createPatentFigureCheckTool } from "../../../src/tool/builtin/patentFigureCheck.js";
 import { createPatentFigureGenerateTool } from "../../../src/tool/builtin/patentFigureGenerate.js";
+import { validateCanonicalOutput } from "../../../src/tool/execution/outputSchemaValidation.js";
 import type { SatiToolRuntimeContext } from "../../../src/tool/protocol/types.js";
 import { checkFigures } from "../../../src/patent/figuregen/check.js";
 import { parseFigureSidecar } from "../../../src/patent/figuregen/sidecar.js";
@@ -526,4 +527,56 @@ test("入参枚举与 ChartMarker/ChartLineStyle 同步（曲线图取值同源�
   assert.deepEqual(CHART_MARKERS, Object.keys(markers));
   assert.deepEqual(CHART_LINE_STYLES, Object.keys(lines));
   assert.deepEqual(FIGURE_KINDS, props.kind!.enum);
+});
+
+// ---------------------------------------------------------------------------
+// 输出契约（P0-7 缺口二）：三个工具的 outputSchema 此前是 `{type:"object",properties:{}}`
+// 空壳且 execute 不返回 data ⇒ ToolRuntime 的校验前置条件（output.data !== undefined）
+// 永不满足，契约从未生效过。本组用例用**真实校验器**跑**真实输出**：字段漂移即变红。
+// ---------------------------------------------------------------------------
+
+test("patent_figure_generate：返回 canonical data 且通过自身 outputSchema", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "sati-tools-outgen-"));
+  try {
+    const tool = createPatentFigureGenerateTool();
+    const result = await tool.execute({ figures: [FIG], output_name: "out", output_dir: dir }, makeContext(dir));
+    assert.ok(result.data !== undefined, "工具必须返回 canonical data，否则输出契约无从强制");
+    assert.deepEqual(validateCanonicalOutput(result.data, tool.outputSchema!), []);
+
+    const data = result.data as {
+      figures: { figure_no: number; path: string }[];
+      pages: unknown[];
+      sidecar_path: string;
+      check: { ok: boolean; findings: unknown[] };
+    };
+    assert.equal(data.figures[0]?.figure_no, 1);
+    assert.match(data.figures[0]!.path, /out-fig1\.svg$/u);
+    assert.match(data.sidecar_path, /out-figures\.json$/u);
+    assert.deepEqual(data.pages, [], "未开启 fit_to_page 时落版页为空数组");
+    assert.equal(typeof data.check.ok, "boolean");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("patent_figure_check：返回 canonical data 且通过自身 outputSchema", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "sati-tools-outcheck-"));
+  try {
+    const tool = createPatentFigureCheckTool();
+    const result = await tool.execute({ figures: [FIG], spec_text: "处理模块(20)执行处理。" }, makeContext(dir));
+    assert.ok(result.data !== undefined);
+    assert.deepEqual(validateCanonicalOutput(result.data, tool.outputSchema!), []);
+
+    const data = result.data as {
+      ok: boolean;
+      findings: unknown[];
+      refs_in_figures: number[];
+      pixel_images: unknown[];
+    };
+    assert.equal(typeof data.ok, "boolean");
+    assert.deepEqual(data.refs_in_figures, [20]);
+    assert.deepEqual(data.pixel_images, [], "未提供 image_paths 时栅格条目为空数组");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

@@ -16,6 +16,7 @@ import { CAD_JSON_BEGIN, CAD_JSON_END, type CadRunner } from "../../../src/paten
 import { parseFigureSidecar } from "../../../src/patent/figuregen/sidecar.js";
 import { parseFigureSvg } from "../../../src/patent/figuregen/readback.js";
 import { MAX_CAD_ANNOTATIONS, createPatentFigureProjectTool } from "../../../src/tool/builtin/patentFigureProject.js";
+import { validateCanonicalOutput } from "../../../src/tool/execution/outputSchemaValidation.js";
 import { SatiToolRuntimeError } from "../../../src/tool/protocol/errors.js";
 import type { SatiToolRuntimeContext } from "../../../src/tool/protocol/types.js";
 
@@ -370,6 +371,36 @@ test("附图门：CAD 图带标注时——标记与 sidecar 一致（无 drift�
       report.result.findings.some(finding => finding.rule === "V2" && finding.severity === "fail"),
       "须报 V2 fail",
     );
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("patent_figure_project：返回 canonical data 且通过自身 outputSchema", async () => {
+  const cwd = mkdtempSync(join(tmpdir(), "sati-cadtool-out-"));
+  try {
+    const tool = createPatentFigureProjectTool({ runner: okRunner, freecadCmd: "/fake/freecadcmd" });
+    const result = await tool.execute(
+      { step_path: "plate.step", output_name: "cad-out", view: "front", figure_no: 2, document_kind: "utility" },
+      context(cwd),
+    );
+    assert.ok(result.data !== undefined, "project 也应返回 canonical data（否则输出契约无从强制）");
+    assert.deepEqual(validateCanonicalOutput(result.data, tool.outputSchema!), []);
+
+    const data = result.data as {
+      figure_no: number;
+      view: string;
+      svg_path: string;
+      sidecar_path: string;
+      command_source: string;
+      geometry_findings: unknown[];
+    };
+    assert.equal(data.figure_no, 2);
+    assert.equal(data.view, "front");
+    assert.match(data.svg_path, /cad-out-fig2\.svg$/u);
+    assert.match(data.sidecar_path, /cad-out-figures\.json$/u);
+    assert.equal(typeof data.command_source, "string");
+    assert.ok(Array.isArray(data.geometry_findings), "几何级检查结论应随 data 暴露");
   } finally {
     rmSync(cwd, { recursive: true, force: true });
   }
