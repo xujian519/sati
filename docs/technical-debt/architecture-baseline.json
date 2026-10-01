@@ -74,6 +74,16 @@
     },
     {
       "rule": "file-size",
+      "file": "src/patent/figuregen/inkscape-renderer.ts",
+      "lines": 916
+    },
+    {
+      "rule": "file-size",
+      "file": "src/patent/figuregen/render-check.ts",
+      "lines": 1634
+    },
+    {
+      "rule": "file-size",
       "file": "src/pilot/config/loadPilotConfig.ts",
       "lines": 922
     },
@@ -95,7 +105,7 @@
     {
       "rule": "file-size",
       "file": "ui/server/routes/config.js",
-      "lines": 1173
+      "lines": 1171
     },
     {
       "rule": "file-size",
@@ -120,12 +130,7 @@
     {
       "rule": "file-size",
       "file": "ui/server/services/satiConfig.js",
-      "lines": 876
-    },
-    {
-      "rule": "file-size",
-      "file": "ui/server/services/spreadsheetPreview.js",
-      "lines": 813
+      "lines": 872
     },
     {
       "rule": "file-size",
@@ -180,7 +185,7 @@
     {
       "rule": "file-size",
       "file": "ui/src/components/main-content-v2/FilesV2.tsx",
-      "lines": 964
+      "lines": 963
     },
     {
       "rule": "file-size",

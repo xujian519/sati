@@ -6,7 +6,7 @@
  *
  * ⚠️ **当前无生产调用方**（2026-10-01 实测）：全 `src/` grep 只命中 `figure/index.ts` 的
  * barrel 导出与自身 spec，没有任何工具输出里出现本模块的产物。启用前需先确定消费方。
- * 技术债条目见 `docs/technical-debt/backlog.md` 的 TD-PATENT-N16。
+ * 技术债条目见 `docs/technical-debt/backlog.md` 的 TD-PATENT-N34。
  */
 
 import type { ElectricalAnalysis } from "./types.js";
