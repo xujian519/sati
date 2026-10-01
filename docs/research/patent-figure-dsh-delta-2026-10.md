@@ -108,6 +108,8 @@
 - **DSH 证据**：`packages/patent/patent-tools/src/figure/render-check.ts:1-70`（模块头列出五类与量测范围）；`glyph-box.ts`（275 行，字形盒/外扩/贯穿判定）、`svg-viewport.ts`（209 行，用户单位→毫米、嵌套 transform 继承）；工具面 `tool/verify-patent-figure.ts:1-25`。
 - **同样值得学的设计**：**「未量测」诚实清单**——CSS 类样式、`<use>`/`<image>`、嵌套 `<svg>`、marker、`<tspan>` 位移、百分比长度、曲线弦近似……各记一条 `not-measured` 发现；「报告里没有 `not-measured` 时，『未发现问题』才等于逐类量测过」。这与本仓 `pixel-gate` 的诚实降级、`readback.ts:1-30` 的契约声明同一气质。
 - **本仓落点**：新增 `src/patent/figuregen/render-check.ts`（纯函数）+ 在 `patent_figure_check` 的 `svg_paths` 分支内调用（**入参不变** ⇒ 零 schema 变更）；发现并入既有 `FigureCheckFinding` 结构（`rule`/`severity`/`message`/`evidence`）。
+  - ⚠️ **实施时实测到的边界（2026-10-01）**：`svg_paths` 通路只接受**本仓产出**的 SVG——`parseFigureSvg` 要求图号（`data-figure-no` 属性或"图N"文本），外部/第三方 SVG 在该通路会被直接拒绝。故渲染复核当前服务的是**交付前自检与渲染器回归护栏**，不是"外部图核验"；后者的入口需要新增工具（属批次 B）。
+  - ⚠️ **必须先处理的一处适配**（本报告初版未预见）：本仓内置渲染器把边标签放在连线中点上、用 `stroke="#FFFFFF" + paint-order="stroke"` 白描边把线在字周围挖空（`render-svg.ts` 的标签契约）。几何上线条确实穿过文字框 ⇒ 不豁免会把本仓**每一张带边标签的图**都报成"文字被贯穿"（实测 flowchart/state 必命中）。判据按样式特征（`paint-order` 含 stroke 且描边为白）豁免；DSH 是用 `data-dsh-role` 标注引线来豁免的，本仓无对应属性。
 - **成本**：移植约 2 000 行（glyph-box + svg-viewport + render-check）+ 单测。本仓已有 `svg-safety.ts`（`assertSafeSvg`）可复用，安全门前置已就位。
 - **风险**：低。纯函数、无 IO、不动产物契约。
 
@@ -276,11 +278,13 @@ DSH 在 2026-09-30 一天内有 9 个提交推进 CAD（`freecad-*` 新模块合
 
 1. **输出契约空壳**：三个制图工具的 `outputSchema` 是 `{type:"object",properties:{}}` 且 `execute` 不返回 `data` ⇒ 输出契约强制形同虚设（详见 P0-7 缺口二）。
 2. **像素门禁不参与阻断**：`pixel-gate` 的 PX1 fail 不挂 HITL（详见 P0-7 缺口一）。
-3. **一处自证式断言——「隐藏清单纪律」这条护栏名存实亡**：`tests/patent/figure-gate.spec.ts:82-91` 的用例标题声称校验「名称/类别/输入输出键（描述不含阈值数字）」，但测试体里 `atom` 是**测试内新建的本地字面量**，两处 `deepEqual` 是字面量比自己，**从未触碰真实的 `FigureGateHandler`**（定义在 `src/patent/atoms/handlers/builtin/figure.ts:68-69`）；同用例只有 `instanceof` 与 `category === "gate"` 是真断言 ⇒ **「阈值不进模型可见面」在代码里成立，但没有测试在守它**。这是 P0-4 的反面教材：绿灯不等于被验证过。
+3. **一处自证式断言（测试质量问题）**：`tests/patent/figure-gate.spec.ts:82-91` 的用例标题声称校验「名称/类别/输入输出键（描述不含阈值数字）」，但测试体里 `atom` 是**测试内新建的本地字面量**，两处 `deepEqual` 是字面量比自己，**从未触碰真实的 `FigureGateHandler`**（定义在 `src/patent/atoms/handlers/builtin/figure.ts`）；同用例只有 `instanceof` 与 `category === "gate"` 是真断言。
+   - ⚠️ **就地更正（2026-10-01 复核）**：本条原写「『阈值不进模型可见面』在代码里成立，**但没有测试在守它**」——**该结论不成立**。`tests/patent/drafting-sop.spec.ts:478-493` 的「隐藏清单」用例对**真实** `figureGateAtom.description` 与 manifest 阶段描述做 `NUMERIC_ASSERTION` 正则断言，那是真护栏。准确的问题是**测试质量**而非护栏缺失：figure-gate.spec 里多了一处看起来在守、实际零检测力的重复（已就地改为断言真实原子）。它仍是 P0-4 的好反面教材——绿灯不等于被验证过。
 4. **无 golden/snapshot 文件**：全部「逐字节确定性」断言都是**同一进程内两次调用**比较（`dot.spec.ts:37-39`、`render.spec.ts:184-188`、`chart.spec.ts:582-586`、`leader-line.spec.ts:290-304`）⇒ 能抓随机/时钟/Map 迭代序这类回归，**抓不到跨 graphviz 版本或跨平台的布局漂移**——而决策记录自己承认「跨 graphviz 版本布局可能有差异」。两者并不矛盾，但「有确定性测试」≠「有跨版本漂移护栏」。
 5. **两个已实现但生产不可达的模块**：`src/patent/figure/pdf-extract.ts`（mupdf 页面转图 + 候选附图页启发式打分）与 `netlist-viz.ts`（网表可视化 Mermaid/SVG/摘要）在全仓**只有 barrel 导出与 spec，没有任何工具调用方** ⇒ 目前不存在「PDF → 图 → 分析」的生产路径，网表可视化也不出现在任何工具输出里。
 6. **无测试入口的模块**：`src/patent/figure/preprocess.ts`（三级压缩级联 `1600px/q80 → 1200px/q55 → 800px/q40`、5 MiB 预算、MIME 探测分支均无断言，仅 happy path 被工具层 spec 间接跑到）与 `src/patent/figure/mime.ts`（5 条映射无断言）。
 7. **六处低风险瑕疵**（顺手项）：`V6` 不在规则联合类型里（属构造期不变量，非漏实现，但易被误读）；规则侧 `info` 级不可达（9 个 wording kind 全为 warn，`info` 实际只出现在 `pixel-gate`）；`PIXEL_INK_MAX` 定义后全仓无引用；**`format` 非法值在产物落盘之后才抛**（异常路径会留下半成品目录）；`sheet_index`/`sheet_total` 三工具处理不一致（generate/project 未成对即抛，check **静默忽略**）；`svg_paths` 回读的骨架用占位 `kind: "flowchart"` ⇒ V19/V20/V21 在回读通路不生效。
+   - ⚠️ **2026-10-01 复核更正**：`V6` 一项**不成立**——它已在 `check.ts:63` 与 `tests/patent/figuregen/check-rules.spec.ts:21` 明确注释为「渲染器构造期不变式，不在此重复」，读代码的人不会被误导。其余五项照旧；其中 `format` 落盘顺序、`PIXEL_INK_MAX` 零引用、`sheet` 三工具不一致三项本批已修（见 §7）。
 
 > 与之对照，DSH 的 `scripts/test-skip-baseline.json`（skip 数量基线，随 9-30 的 CAD 提交更新）说明它**同时在治理 skip 的总量**——本仓第 3、4 条正是「护栏存在但没守住」的两个具体形态。
 
@@ -298,6 +302,35 @@ DSH 在 2026-09-30 一天内有 9 个提交推进 CAD（`freecad-*` 新模块合
 2. 阈值/评分线不得写进 `Atom.description` 与 manifest 阶段描述（worker 可见面）。
 3. 新增法域/图型必须「未核验即不写成规则」——DSH 的数值只能作为**待核验线索**，不能作为依据。
 4. 决策记录：每批附 `docs/notes/implemented/` note，含 `## Alternatives considered`。
+
+---
+
+## 7. 实施记录（2026-10-01，批次 A）
+
+分支 `feat/patent-figure-batch-a`。**零 `inputSchema` 变更** ⇒ 未触发 llm-replay fixture 重录。
+
+| 项 | 状态 | 落点 | 决策记录 |
+|---|---|---|---|
+| P0-7 核验接进阻断 | ✅ 已落地 | `figure-gate` 接栅格像素门禁（PX fail 同权参与阻断）；三个工具补真实 `outputSchema` + canonical `data` | `2026-10-01-figure-gate-raster-and-output-contract.md` |
+| P0-1 矢量源渲染复核 | ✅ 已落地 | 移植 `glyph-box`/`svg-viewport`/`render-check`（约 2 100 行 + 47 用例）并接入 `svg_paths` 通路（规则族 `RC1`–`RC5` + `RC0`） | `2026-10-01-figure-render-check-port.md` |
+| P0-3 字体独立导出 | ✅ 已落地（默认关） | `inkscape-renderer.ts`（915 行）+ 接入 generate/project + sidecar 记 `text_to_path` | `2026-10-01-figure-text-to-path.md` |
+| P0-2 制图角色化 | 🔶 部分 | 角色化（`type: role` + 硬产出契约 + 越界禁令）、质量门第 6 项、三处责任归属已落地；**worker 契约（`defaultPatentWorkers`）与 manifest 组包未做** | 提交 `411f6ff1f` |
+| P0-4 测试信号守卫 | ✅ 已落地 | CI 装 graphviz（把 5 处 skip 兑现为真跑）+ `external-dependency-signal.spec.ts`（CI 断言 dot 可用）；**skip 总量基线未做**（理由见该提交） | 提交 `3836df0c7` |
+| P0-5 降级但不静默 | ✅ 已落地 | `AGENTS.md` 规则 11 + `docs/development-standards.md` §6 由三条扩为四条 | 提交 `d980c55a5` |
+| P0-6 规模护栏 | ✅ 已落地 | `WASM_MAX_DOT_CHARS`（64 000，在实例化**之前**生效） | 提交 `5178ca053` |
+| §5.5 本仓缺口 | ✅ 多数已修 | 输出契约空壳、像素门禁不阻断、自证式断言、`format` 落盘顺序、`PIXEL_INK_MAX` 零引用、`sheet` 三工具一致性、`preprocess`/`mime` 测试入口、两个不可达模块（模块头标注 + backlog 记账） | 见各提交 |
+
+**未做并如实记下**：① P0-2 的 worker/manifest 组包（要同步手册与工作流 yaml 快照，另开提交）；② P0-4 的 skip 总量基线；③ §5.5 第 5 条的**处置**（仅标注 + 记账，接线需扩工具入参 ⇒ 属批次 B）。
+
+### 7.1 实施中新增的发现（本报告初版未预见）
+
+1. **`svg_paths` 到不了外部 SVG**（§4 P0-1 落点已就地更正）——`parseFigureSvg` 要求图号，外部 SVG 在该通路被直接拒绝。渲染复核的实际定位从"外部图核验"校正为「交付前自检 + 渲染器回归护栏」。
+2. **边标签的 halo 契约**——本仓用 `stroke="#FFFFFF" + paint-order="stroke"` 白描边挖空连线实现标签可读性，与 DSH 的 `data-dsh-role` 豁免机制不同。不按特征豁免会让判据在自家产物上退化成噪音（实测 flowchart/state 必命中）。已加回归钉：本仓产物只报 `not-measured`。
+3. **文本转路径与图号回读的冲突**——`parseFigureSvg` 的 `numbered` 明确「属性不算」，转路径后必然读不到，会让 V15「多幅须编号」误报 fail。已用 sidecar 的 `text_to_path` 标记把回落限定在"确实转过路径"的产物上（未转路径时绝不回落，否则会蒙掉图号被删的漂移信号）。
+4. **`stroke-dasharray` 的单位换算被一度误判为缺陷**——移植过程中曾判定"换算两次"，复核后**否定**：`dashPatternUser` 返回用户单位、全链路只乘一次累计缩放，换算正确；同一属性值在 px 文档得 2.12mm、在 mm 文档得 8mm 正是换算链生效的证据。该条已由"待修"改为钉子用例。
+5. **§5.5 第 3 条原结论过重**（已就地更正）——「隐藏清单」纪律一直有真护栏（`drafting-sop.spec.ts:478-493`），问题只是 figure-gate.spec 里多了一处零检测力的重复。
+
+> 这五条的共同形态值得记下：**本轮实测到的问题几乎没有一条是"判据写错了"，全都是"判据没接上、没在守，或判据适用面被高估"**——这正是 P0-5（降级但不静默）与 P0-7（把已有核验接进阻断）被列为高价值项的原因。
 
 ---
 
