@@ -28,6 +28,19 @@ const loadVizModule: VizLoader = () => import("@viz-js/viz");
 /** 失败引导：WASM 不可用时用户的两条退路。 */
 const WASM_FAILURE_HINT = `请改用内置渲染器（${FIGURE_RENDERER_ENV}=builtin）或系统 graphviz（brew install graphviz）`;
 
+/**
+ * WASM 后端的规模上限（DOT 源长度，UTF-16 码元）。
+ *
+ * WASM 渲染是**主线程同步调用、不可中断**：规模直接决定事件循环被占用的最坏时长，期间连
+ * abort 信号都插不进去（子进程后端则有 deadline 与取消）。超过上限就**不交给它**，而是
+ * fail-loud 并给出改走子进程后端或拆图的指引——这比"静默把进程占住几分钟"更诚实。
+ *
+ * 取值沿用 deepseek-harness 的 `WASM_MAX_HIERARCHICAL_DOT_CHARS`（层级图 64 000 码元）。
+ * 本仓 `buildFigureDot` 只产层级图（dot 引擎），故取该档；**这不是本仓实测标定的值**，
+ * 若要按本仓硬件重新标定，用 `scripts/figure-benchmark/renderer-compare.ts` 实测后调整。
+ */
+export const WASM_MAX_DOT_CHARS = 64_000;
+
 function describeError(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
@@ -92,6 +105,13 @@ export function createWasmDotRunner(deps: { loadViz?: VizLoader } = {}): DotRunn
   return async (dot: string, signal?: AbortSignal) => {
     if (signal?.aborted === true) {
       throw new Error("WASM graphviz 渲染已取消（signal 已 abort）");
+    }
+    // 规模护栏先于实例化：大图不该走到布局阶段才发现无法取消（见 WASM_MAX_DOT_CHARS）。
+    if (dot.length > WASM_MAX_DOT_CHARS) {
+      throw new Error(
+        `DOT 源 ${dot.length} 个字符超过 WASM 渲染上限 ${WASM_MAX_DOT_CHARS}（WASM 布局在主线程同步执行、` +
+          `不可中断，大图会长时间占住事件循环且无法取消）；${WASM_FAILURE_HINT}，或把附图拆分为多幅`,
+      );
     }
     const viz = await getInstance();
     return viz.renderString(dot, { format: "svg" });
