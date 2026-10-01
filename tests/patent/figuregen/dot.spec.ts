@@ -2,7 +2,9 @@
  * src/patent/figuregen — Graphviz 可选渲染器测试（DOT 生成 + SVG 加工 + 回读）。
  *
  * DOT 生成与 SVG 加工为纯函数，无需 dot 二进制即可测；真机集成用例在缺 graphviz
- * 的环境自动 skip。黑白合规不变式（指南一部一章 4.3/4.6）与 data-ref 注入的
+ * 的环境自动 skip——**跳过表示「无信号」，不是「通过」**：CI 已安装 graphviz
+ * （`.github/workflows/ci.yml`），并由 `external-dependency-signal.spec.ts` 在 CI 上
+ * 断言 dot 真的可用。黑白合规不变式（指南一部一章 4.3/4.6）与 data-ref 注入的
  * fail-closed 行为在此固化。
  */
 
