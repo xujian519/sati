@@ -315,7 +315,7 @@ DSH 在 2026-09-30 一天内有 9 个提交推进 CAD（`freecad-*` 新模块合
 | P0-1 矢量源渲染复核 | ✅ 已落地 | 移植 `glyph-box`/`svg-viewport`/`render-check`（约 2 100 行 + 47 用例）并接入 `svg_paths` 通路（规则族 `RC1`–`RC5` + `RC0`） | `2026-10-01-figure-render-check-port.md` |
 | P0-3 字体独立导出 | ✅ 已落地（默认关） | `inkscape-renderer.ts`（915 行）+ 接入 generate/project + sidecar 记 `text_to_path` | `2026-10-01-figure-text-to-path.md` |
 | P0-2 制图角色化 | 🔶 部分 | 角色化（`type: role` + 硬产出契约 + 越界禁令）、质量门第 6 项、三处责任归属已落地；**worker 契约（`defaultPatentWorkers`）与 manifest 组包未做** | 提交 `411f6ff1f` |
-| P0-4 测试信号守卫 | ✅ 已落地 | CI 装 graphviz（把 5 处 skip 兑现为真跑）+ `external-dependency-signal.spec.ts`（CI 断言 dot 可用）；**skip 总量基线未做**（理由见该提交） | 提交 `3836df0c7` |
+| P0-4 测试信号守卫 | ✅ 已落地 | CI 装 graphviz（把 5 处 skip 兑现为真跑）+ `external-dependency-signal.spec.ts`（CI 断言 dot 可用）；**兑现出来的第一条就是真缺陷**（见 7.1 第 6 条）；**skip 总量基线未做**（理由见该提交） | 提交 `3836df0c7`、`2026-10-01-figure-graphviz-transparent-stroke.md` |
 | P0-5 降级但不静默 | ✅ 已落地 | `AGENTS.md` 规则 11 + `docs/development-standards.md` §6 由三条扩为四条 | 提交 `d980c55a5` |
 | P0-6 规模护栏 | ✅ 已落地 | `WASM_MAX_DOT_CHARS`（64 000，在实例化**之前**生效） | 提交 `5178ca053` |
 | §5.5 本仓缺口 | ✅ 多数已修 | 输出契约空壳、像素门禁不阻断、自证式断言、`format` 落盘顺序、`PIXEL_INK_MAX` 零引用、`sheet` 三工具一致性、`preprocess`/`mime` 测试入口、两个不可达模块（模块头标注 + backlog 记账） | 见各提交 |
@@ -329,6 +329,7 @@ DSH 在 2026-09-30 一天内有 9 个提交推进 CAD（`freecad-*` 新模块合
 3. **文本转路径与图号回读的冲突**——`parseFigureSvg` 的 `numbered` 明确「属性不算」，转路径后必然读不到，会让 V15「多幅须编号」误报 fail。已用 sidecar 的 `text_to_path` 标记把回落限定在"确实转过路径"的产物上（未转路径时绝不回落，否则会蒙掉图号被删的漂移信号）。
 4. **`stroke-dasharray` 的单位换算被一度误判为缺陷**——移植过程中曾判定"换算两次"，复核后**否定**：`dashPatternUser` 返回用户单位、全链路只乘一次累计缩放，换算正确；同一属性值在 px 文档得 2.12mm、在 mm 文档得 8mm 正是换算链生效的证据。该条已由"待修"改为钉子用例。
 5. **§5.5 第 3 条原结论过重**（已就地更正）——「隐藏清单」纪律一直有真护栏（`drafting-sop.spec.ts:478-493`），问题只是 figure-gate.spec 里多了一处零检测力的重复。
+6. **CI 装上 graphviz 后立刻兑现出一个跨版本兼容缺陷**（P0-4 的直接产出，也是本批次唯一由 CI 而非本机发现的问题）——CI 的 apt graphviz 是 **2.42.2**、本机 homebrew 是 **16.1.0**：旧版会给整图背景框加 `stroke="transparent"`（graphviz issue #1863），而黑白守卫只认 `none`/`#000000`/`#FFFFFF` ⇒ **graphviz ≤2.44 的部署（含 Ubuntu 22.04 默认包）整条附图通路在渲染阶段 fail-closed**。修法是把 `transparent` 归一化为 `none`（语义等价，且避免不认该关键字的渲染器把它回退成黑描边），守卫本身不放松。此前完全不可见的原因正是 P0-4 要治的病：CI 不装依赖 ⇒ 那 5 条真机用例整组 skip，日志读起来仍是绿的。
 
 > 这五条的共同形态值得记下：**本轮实测到的问题几乎没有一条是"判据写错了"，全都是"判据没接上、没在守，或判据适用面被高估"**——这正是 P0-5（降级但不静默）与 P0-7（把已有核验接进阻断）被列为高价值项的原因。
 

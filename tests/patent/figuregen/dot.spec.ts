@@ -136,6 +136,43 @@ test("加工：fail-closed——分组缺 title、title 非首子元素、或 ti
   assert.throws(() => postProcessGraphvizSvg(otherId, new Map([["step", 20]])), /title.*fail-closed/u);
 });
 
+test('加工：旧版 graphviz 的 stroke="transparent"（≤2.44 背景框）归一化为 none，真实彩色照旧 fail-closed', () => {
+  // graphviz ≤2.44（Ubuntu 22.04 自带的 2.42.2 即是）给整图背景框加 stroke="transparent"
+  // （graphviz issue #1863）。它不是 SVG 1.1 的合法涂料值：原样留着会让不认识该关键字的
+  // 渲染器回退成黑描边，交付图上凭空多一圈黑框。语义等价于 none，故归一化。
+  // homebrew 的新版 dot（16.x）不吐这个值，所以本仓在 macOS 上一直看不到该差异。
+  const legacy = [
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0.00 0.00 220.00 403.00">',
+    '<g id="graph0" class="graph">',
+    "<title>图1</title>",
+    '<polygon fill="white" stroke="transparent" points="-4,4 -4,-403 220,-403 220,4 -4,4"/>',
+    '<g id="node1" class="node">',
+    "<title>step</title>",
+    '<polygon fill="#FFFFFF" stroke="transparent" points="27,-18 27,-54 141,-54 141,-18 27,-18"/>',
+    '<text text-anchor="middle" x="84" y="-32" font-size="14.00" fill="#000000">处理模块(20)</text>',
+    "</g>",
+    "</g>",
+    "</svg>",
+  ].join("\n");
+
+  const svg = postProcessGraphvizSvg(legacy, new Map([["step", 20]]));
+  assert.ok(!svg.includes("transparent"), "transparent 不得留在交付物里");
+  assert.ok(svg.includes('stroke="none"'), "transparent 应归一化为 none（语义等价，且不会回退成黑描边）");
+  assert.ok(svg.includes('fill="#FFFFFF"'), "关键字色名 white 仍归一化为十六进制");
+  assert.ok(/<g id="node1" class="node" data-ref="20">/u.test(svg), "归一化不影响 data-ref 注入");
+
+  // 守卫未被放松：真实彩色（如 graphviz 集群默认用的 lightgrey）照旧 fail-closed
+  assert.throws(
+    () =>
+      postProcessGraphvizSvg(legacy.replace('stroke="transparent"', 'stroke="lightgrey"'), new Map<string, number>()),
+    /非黑白颜色/u,
+  );
+  assert.throws(
+    () => postProcessGraphvizSvg(legacy.replace('fill="white"', 'fill="#FEFECD"'), new Map<string, number>()),
+    /非黑白颜色/u,
+  );
+});
+
 test("加工：节点 id 含连字符（graphviz 把 - 转义为 &#45;）仍能注入 data-ref 并回读原 id", () => {
   // graphviz 为避免 `--` 破坏 XML 注释，把 title 里的 `-` 写成 `&#45;`；
   // 生产 id 形态是 `f1-n1`（gen-cases.ts / 工作流原子），按未转义字面量匹配会一律 fail-closed。

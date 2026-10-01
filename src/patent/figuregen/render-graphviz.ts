@@ -126,12 +126,30 @@ export function createSubprocessDotRunner(dotPath: string, timeoutMs: number = D
   };
 }
 
-/** 颜色关键字 → 十六进制（dot 会把 bgcolor 等按原样输出为关键字色名）。 */
+/**
+ * 归一化 dot 输出的涂料值，使产物与 dot 版本无关。
+ *
+ * 1. **关键字色名 → 十六进制**：dot 会把 `bgcolor="#FFFFFF"` 按原样输出成
+ *    `fill="white"`，而守卫只认十六进制。
+ * 2. **`transparent` → `none`**：旧版 graphviz（≤2.44；Ubuntu 22.04 自带的
+ *    2.42.2 即是）会给**整图背景框**加 `stroke="transparent"`
+ *    （graphviz issue #1863，实测产物形如
+ *    `<polygon fill="white" stroke="transparent" points="-4,4 -4,-403 220,-403 220,4 -4,4"/>`）。
+ *    `transparent` 不是 SVG 1.1 的合法涂料值：留着它会让**不认识该关键字**的渲染器
+ *    回退成黑色描边——交付图上凭空多出一圈黑框（graphviz 官方 issue 里最初就是这么
+ *    被报出来的）。它语义上「无涂料」，与 `none` 等价，改写成 `none` 既消除该风险，
+ *    又让同一份 DOT 在不同 dot 版本下产出同一份 SVG。
+ *
+ * 只处理属性形态（dot 的颜色都走属性，不走内联 `style`）；未覆盖的形态不会被静默
+ * 放过——`assertBlackWhite` 紧随其后，遇到它不认的值一律 fail-closed。
+ */
 function normalizeColors(svg: string): string {
-  return svg.replaceAll(
-    /\b(fill|stroke|color)="(black|white)"/giu,
-    (_match, attr: string, name: string) => `${attr}="${name.toLowerCase() === "black" ? "#000000" : "#FFFFFF"}"`,
-  );
+  return svg
+    .replaceAll(
+      /\b(fill|stroke|color)="(black|white)"/giu,
+      (_match, attr: string, name: string) => `${attr}="${name.toLowerCase() === "black" ? "#000000" : "#FFFFFF"}"`,
+    )
+    .replaceAll(/\b(fill|stroke|color)="transparent"/giu, (_match, attr: string) => `${attr}="none"`);
 }
 
 /** 黑白不变式：所有 fill/stroke/color 取值仅允许 none/#000000/#FFFFFF。 */
