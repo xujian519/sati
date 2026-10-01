@@ -53,6 +53,8 @@ import { SatiToolRuntimeError } from "../protocol/errors.js";
 import type { SatiToolDefinition, SatiToolRuntimeContext } from "../protocol/types.js";
 import {
   assertFigurePayloads,
+  FIGURE_ARTIFACT_SCHEMA,
+  FIGURE_FINDING_SCHEMA,
   FIGURE_INPUT_SCHEMA_REF,
   JURISDICTIONS,
   toFigureCount,
@@ -106,7 +108,31 @@ function resolveFigureRenderer(env: NodeJS.ProcessEnv = process.env): FigureRend
 export function createPatentFigureGenerateTool(): SatiToolDefinition<PatentFigureGenerateInput> {
   return {
     name: "patent_figure_generate",
-    outputSchema: { type: "object", properties: {} },
+    outputSchema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["output_name", "jurisdiction", "office", "renderer", "figures", "sidecar_path", "check"],
+      properties: {
+        output_name: { type: "string" },
+        jurisdiction: { type: "string", enum: JURISDICTIONS },
+        office: { type: "string", description: "法域档案键（决定纸面常数与编号体例）" },
+        renderer: { type: "string", enum: ["builtin", "graphviz", "graphviz-wasm"] },
+        figures: { type: "array", items: FIGURE_ARTIFACT_SCHEMA, description: "图形 SVG（主产物）" },
+        pages: { type: "array", items: FIGURE_ARTIFACT_SCHEMA, description: "提交落版页（fit_to_page 时非空）" },
+        html_path: { type: "string", description: "A4 打印版式 HTML（format=html/both 时出现）" },
+        sidecar_path: { type: "string", description: "sidecar（FigureSpec + 生成期核验）留痕路径" },
+        check: {
+          type: "object",
+          additionalProperties: false,
+          required: ["ok", "findings"],
+          properties: {
+            ok: { type: "boolean", description: "生成期核验无 fail（文本侧规则未参与）" },
+            findings: { type: "array", items: FIGURE_FINDING_SCHEMA },
+          },
+          description: "生成期结构核验（V2/V3 需说明书文本，以 patent_figure_check 为准）",
+        },
+      },
+    },
     aliases: ["PatentFigureGenerate", "figure_generate"],
     title: "Generate Patent Figures",
     description:
@@ -185,6 +211,15 @@ export function createPatentFigureGenerateTool(): SatiToolDefinition<PatentFigur
         });
       }
       assertFigurePayloads(figures, "patent_figure_generate");
+      // `format` 此前在 SVGs 与 sidecar 都已落盘**之后**才校验：非法值会先写出一个半成品
+      // 输出目录、再抛错。入参校验集中到落盘之前。
+      const format = input.format ?? "svg";
+      if (!FORMATS.includes(format)) {
+        throw new SatiToolRuntimeError("invalid_tool_input", `非法 format "${format}"（可用: ${FORMATS.join(", ")}）`, {
+          tool: "patent_figure_generate",
+          format,
+        });
+      }
       if (!/^[A-Za-z0-9._\-\u4e00-\u9fa5]{1,100}$/u.test(input.output_name)) {
         throw new SatiToolRuntimeError("invalid_tool_input", `非法 output_name: ${JSON.stringify(input.output_name)}`, {
           tool: "patent_figure_generate",
@@ -334,17 +369,6 @@ export function createPatentFigureGenerateTool(): SatiToolDefinition<PatentFigur
           }),
         });
 
-        const format = input.format ?? "svg";
-        if (!FORMATS.includes(format)) {
-          throw new SatiToolRuntimeError(
-            "invalid_tool_input",
-            `非法 format "${format}"（可用: ${FORMATS.join(", ")}）`,
-            {
-              tool: "patent_figure_generate",
-              format,
-            },
-          );
-        }
         let htmlPath: string | undefined;
         if (format === "html" || format === "both") {
           htmlPath = resolve(outputDir, `${input.output_name}-figures.html`);
@@ -394,7 +418,25 @@ export function createPatentFigureGenerateTool(): SatiToolDefinition<PatentFigur
           lines.push("", "--- 附图说明草稿（可直接并入说明书） ---", briefDraft);
         }
 
+        const data = {
+          output_name: input.output_name,
+          jurisdiction,
+          office: profile.office,
+          renderer,
+          figures: files.map(file => ({
+            figure_no: file.figure_no,
+            path: file.path,
+            ...(file.caption === undefined ? {} : { caption: file.caption }),
+            ...(file.sheet === undefined ? {} : { sheet: file.sheet.text }),
+          })),
+          pages: pagePaths.map(page => ({ figure_no: page.figure_no, path: page.path })),
+          ...(htmlPath === undefined ? {} : { html_path: htmlPath }),
+          sidecar_path: sidecarPath,
+          check: { ok: check.ok, findings: check.findings },
+        };
+
         return {
+          data,
           content: [
             { type: "text", text: lines.join("\n") },
             ...files.map(file => ({

@@ -45,7 +45,7 @@ import {
 import { caseOutputsDir } from "../../patent/paths.js";
 import { SatiToolRuntimeError } from "../protocol/errors.js";
 import type { SatiToolDefinition, SatiToolRuntimeContext } from "../protocol/types.js";
-import { JURISDICTIONS, toFigureCount, toJurisdiction, toSheet } from "./patentFigureSchema.js";
+import { FIGURE_FINDING_SCHEMA, JURISDICTIONS, toFigureCount, toJurisdiction, toSheet } from "./patentFigureSchema.js";
 
 /** 附图标记标注入参（模型坐标锚点 + 可选图面偏移）。 */
 export type PatentFigureProjectAnnotation = {
@@ -90,7 +90,51 @@ export function createPatentFigureProjectTool(
 ): SatiToolDefinition<PatentFigureProjectInput> {
   return {
     name: "patent_figure_project",
-    outputSchema: { type: "object", properties: {} },
+    outputSchema: {
+      type: "object",
+      additionalProperties: false,
+      required: [
+        "figure_no",
+        "output_name",
+        "view",
+        "svg_path",
+        "sidecar_path",
+        "command_source",
+        "scale",
+        "width_mm",
+        "height_mm",
+        "geometry_findings",
+      ],
+      properties: {
+        figure_no: { type: "integer" },
+        output_name: { type: "string" },
+        view: { type: "string", enum: [...CAD_VIEWS] },
+        svg_path: { type: "string" },
+        page_path: { type: "string", description: "提交落版页（开启时出现）" },
+        sidecar_path: { type: "string" },
+        command_source: { type: "string", description: "FreeCAD 可执行来源（env 覆盖 / 平台候选）" },
+        scale: { type: "number", description: "适配 A4 可印区的缩放系数" },
+        width_mm: { type: "number" },
+        height_mm: { type: "number" },
+        visible_edges: { type: "integer" },
+        hidden_edges: { type: "integer" },
+        hidden_lines: { type: "boolean" },
+        caption: { type: "string", description: "图号标注（单幅且 pct/us 时不出现）" },
+        section: {
+          type: "object",
+          additionalProperties: false,
+          required: ["offset_mm", "cut_faces", "hatch_segments"],
+          properties: {
+            offset_mm: { type: "number" },
+            cut_faces: { type: "integer" },
+            hatch_segments: { type: "integer" },
+          },
+          description: "全剖视图剖切参数（非剖视时缺省）",
+        },
+        ref_numerals: { type: "array", items: { type: "integer" }, description: "图面已标注的附图标记" },
+        geometry_findings: { type: "array", items: FIGURE_FINDING_SCHEMA, description: "几何级检查（C1–C11）" },
+      },
+    },
     aliases: ["PatentFigureProject", "figure_project"],
     title: "Project 3D Model to Patent Figure",
     description:
@@ -486,7 +530,36 @@ export function createPatentFigureProjectTool(
             "附图标记的锚点由调用方按模型坐标给出，图面标号位置可经 label_offset_mm 指定。",
         ];
 
+        const data = {
+          figure_no: figureNo,
+          output_name: input.output_name,
+          view,
+          svg_path: svgPath,
+          ...(pagePath === undefined ? {} : { page_path: pagePath }),
+          sidecar_path: sidecarPath,
+          command_source: cmdSource,
+          scale: render.scale,
+          width_mm: render.widthMm,
+          height_mm: render.heightMm,
+          visible_edges: render.visibleEdges,
+          hidden_edges: render.hiddenEdges,
+          hidden_lines: hiddenLines,
+          ...(caption === undefined ? {} : { caption }),
+          ...(table.section === undefined
+            ? {}
+            : {
+                section: {
+                  offset_mm: table.section.offset_mm,
+                  cut_faces: render.cutFaces,
+                  hatch_segments: render.hatchSegments,
+                },
+              }),
+          ...(annotations.length === 0 ? {} : { ref_numerals: annotations.map(annotation => annotation.ref) }),
+          geometry_findings: findings,
+        };
+
         return {
+          data,
           content: [
             { type: "text", text: lines.join("\n") },
             {

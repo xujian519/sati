@@ -29,8 +29,10 @@ import { SatiToolRuntimeError } from "../protocol/errors.js";
 import type { SatiToolDefinition, SatiToolRuntimeContext } from "../protocol/types.js";
 import {
   assertFigurePayloads,
+  FIGURE_FINDING_SCHEMA,
   FIGURE_INPUT_SCHEMA_REF,
   JURISDICTIONS,
+  PIXEL_IMAGE_SCHEMA,
   toFigureCount,
   toJurisdiction,
   toSheet,
@@ -95,7 +97,32 @@ async function runPixelGateForPaths(
 export function createPatentFigureCheckTool(): SatiToolDefinition<PatentFigureCheckInput> {
   return {
     name: "patent_figure_check",
-    outputSchema: { type: "object", properties: {} },
+    outputSchema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["ok", "findings", "refs_in_figures", "refs_in_text"],
+      properties: {
+        ok: { type: "boolean", description: "无 fail 级发现（结构规则 + 栅格像素门禁合并判定）" },
+        findings: { type: "array", items: FIGURE_FINDING_SCHEMA, description: "结构规则（V*）发现" },
+        refs_in_figures: { type: "array", items: { type: "integer" }, description: "图内出现的附图标记" },
+        refs_in_text: { type: "array", items: { type: "integer" }, description: "文字部分以括号出现的标记" },
+        pixel_images: {
+          type: "array",
+          items: PIXEL_IMAGE_SCHEMA,
+          description: "栅格附图的像素级核查指标与发现（未提供 image_paths 时为空数组）",
+        },
+        multi_figure_consistency: {
+          type: "object",
+          additionalProperties: false,
+          required: ["summary", "warnings"],
+          properties: {
+            summary: { type: "string" },
+            warnings: { type: "array", items: { type: "string" } },
+          },
+          description: "≥2 幅时跑的多图一致性结论（单幅时不出现）",
+        },
+      },
+    },
     aliases: ["PatentFigureCheck", "figure_check"],
     title: "Check Patent Figures",
     description:
@@ -330,8 +357,10 @@ export function createPatentFigureCheckTool(): SatiToolDefinition<PatentFigureCh
         // 多图一致性（≥2 幅时自动跑，复用既有纯函数）：跨图标记/名称冲突 +
         // 图文对齐（电学档 R1/C2 与机械档 壳体(10) 分别对齐，见 figure/bridge.ts）。
         // 单图无"跨图"可言，不跑（避免制造噪音）。
+        let multiFigureConsistency: { summary: string; warnings: string[] } | undefined;
         if (figures.length >= 2) {
           const consistency = checkFigureConsistency(figureSpecsToAnalysis(figures), input.spec_text);
+          multiFigureConsistency = { summary: consistency.summary, warnings: [...consistency.warnings] };
           lines.push("", "多图一致性检查：", `- ${consistency.summary}`);
           for (const warning of consistency.warnings) {
             lines.push(`- ${warning}`);
@@ -348,6 +377,30 @@ export function createPatentFigureCheckTool(): SatiToolDefinition<PatentFigureCh
         );
         return {
           content: [{ type: "text", text: lines.join("\n") }],
+          data: {
+            ok: result.ok && pixelFail === 0,
+            findings: result.findings,
+            refs_in_figures: result.refsInFigures,
+            refs_in_text: result.refsInText,
+            pixel_images: pixelResults.map(entry => ({
+              name: entry.name,
+              width: entry.width,
+              height: entry.height,
+              dpi: entry.dpi,
+              dpiEstimated: entry.dpiEstimated,
+              inkRatio: entry.inkRatio,
+              midGrayRatio: entry.midGrayRatio,
+              ...(entry.linePx === undefined ? {} : { linePx: entry.linePx }),
+              ...(entry.medianLinePx === undefined ? {} : { medianLinePx: entry.medianLinePx }),
+              ...(entry.printedWidthMm === undefined ? {} : { printedWidthMm: entry.printedWidthMm }),
+              ...(entry.printedHeightMm === undefined ? {} : { printedHeightMm: entry.printedHeightMm }),
+              ...(entry.printedLineMm === undefined ? {} : { printedLineMm: entry.printedLineMm }),
+              ...(entry.printedLineShrunkMm === undefined ? {} : { printedLineShrunkMm: entry.printedLineShrunkMm }),
+              ...(entry.declaredFigureNo === undefined ? {} : { declaredFigureNo: entry.declaredFigureNo }),
+              findings: entry.findings,
+            })),
+            ...(multiFigureConsistency === undefined ? {} : { multi_figure_consistency: multiFigureConsistency }),
+          },
         };
       } catch (err) {
         // 与 patent_figure_generate/project 同法：`SatiToolRuntimeError` 原样透传，保住 `code`
