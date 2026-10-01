@@ -15,6 +15,7 @@
 8. **测试**：改核心模块（`agent/` `router/` `tool/` `session/` 等）必须附测试；单测 mock 外部网络；LLM 回路走重放 seam。→ `CONTRIBUTING.md`
 9. **验证顺序**：先跑聚合门禁 `pnpm check`；完整门禁清单（含 `pnpm test`）见 `docs/development-standards.md` 附录 A。
 10. **议题治理**：标签集合的唯一权威是 `.github/labels.yml`（改标签须过 `pnpm check:issue-labels`）；关闭议题必须留一句结论（根本原因 / 处置），设计使然的取舍落成 `docs/notes/` 决策记录。→ `docs/issue-management.md`
+11. **降级但不静默**：跳过 / 降级 / 未量测必须回答「谁因此漏了什么」，不得把"没跑"呈现成"通过"（缺依赖整组 skip 的测试、运行时降级、门禁的「未核验」与「已核验且无问题」都必须可区分）。→ `docs/development-standards.md` §6
 
 ## 关键环境事实（每会话记住）
 

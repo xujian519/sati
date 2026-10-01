@@ -561,6 +561,20 @@
   - 建议：移至 `src/browser/`；7 个深引调用点同步改路径（无事件面变更）。
 - **复核证伪一条疑似缺陷**：`patentCache.ts:117-120` 的缓存判据对取消路径**已正确处理**（取消落入 vendor 的 `检索失败: <message>` 分支并被既有正则覆盖），本次未改动该文件。
 
+### 2026-10-01 复核追加（附图域，与 deepseek-harness 差异分析同批）
+
+- **TD-PATENT-N16** · 两个已实现但**生产不可达**的附图模块
+  - 类别：D · 严重级：P3 · 工作量：M · 状态：new
+  - 位置：`src/patent/figure/pdf-extract.ts`（mupdf 页面转图 + 候选附图页启发式打分）、`src/patent/figure/netlist-viz.ts`（网表可视化 Mermaid/SVG/摘要）
+  - 实测：全 `src/` grep 两条路径，除自身外**只有 `src/patent/figure/index.ts` 的 barrel 导出**命中；即当前**不存在**「PDF → 图 → 分析」的生产路径，网表可视化也不出现在任何工具输出里（两者各有 spec，故"有测试"掩盖了"无调用方"）。
+  - 影响：能力清单上看似具备、实际不可用；且持久占用注意力（读者会以为有这条通路）。
+  - 处置选项：(a) 接线——`pdf-extract` 可挂到 `analyze_patent_figure` 的 PDF 输入（需扩该工具的入参描述 ⇒ 触发 llm-replay 重录，属批次 B）；`netlist-viz` 需先确定消费方（当前无产品位）。(b) 删除（git 历史可回溯）。**本轮未处置**——两个模块头已如实标注「当前无生产调用方」，避免继续误导。
+- **TD-PATENT-N17** · `sheet_index`/`sheet_total` 三工具处理不一致
+  - 类别：B · 严重级：P3 · 工作量：S · 状态：**done（2026-10-01）**
+  - 位置：`src/tool/builtin/patentFigureCheck.ts`
+  - 实测：generate/project 对「只给一个」抛 `invalid_tool_input`，check **静默忽略**（调用方以为声明了页码、实际 V17 未生效）。
+  - 处置：check 改为与另两个工具同规（成对性 + 序号不越界），并在 `tools-offices.spec.ts` 补三条断言。
+
 ## 9. adapters（B3 ✅）
 
 **模块概况**：102 文件；`channel/` 21 渠道（Channel+SessionMapper+render 模板）+ `protocol/` 共享层 + `web/` 桥；`protocol/` 已抽渲染/交付/交互/命令共享组件（组合复用方向正确）。渠道类间脚手架重复高，负载集中在 wecom(1761)/weixin(1492)/feishu(1333) 与 TUI。
