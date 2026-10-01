@@ -48,11 +48,22 @@ import {
   type DotRunner,
 } from "../../patent/figuregen/render-graphviz.js";
 import { createWasmDotRunner } from "../../patent/figuregen/render-viz-wasm.js";
+import {
+  FIGURE_TEXT_TO_PATH_ENV,
+  INKSCAPE_CMD_ENV,
+  exportSvgTextToPath,
+  inkscapeInstallHint,
+  isFigureTextToPathEnabled,
+  resolveInkscapeCmd,
+  type InkscapeProbe,
+} from "../../patent/figuregen/inkscape-renderer.js";
 import { caseOutputsDir } from "../../patent/paths.js";
 import { SatiToolRuntimeError } from "../protocol/errors.js";
 import type { SatiToolDefinition, SatiToolRuntimeContext } from "../protocol/types.js";
 import {
   assertFigurePayloads,
+  FIGURE_ARTIFACT_SCHEMA,
+  FIGURE_FINDING_SCHEMA,
   FIGURE_INPUT_SCHEMA_REF,
   JURISDICTIONS,
   toFigureCount,
@@ -106,7 +117,31 @@ function resolveFigureRenderer(env: NodeJS.ProcessEnv = process.env): FigureRend
 export function createPatentFigureGenerateTool(): SatiToolDefinition<PatentFigureGenerateInput> {
   return {
     name: "patent_figure_generate",
-    outputSchema: { type: "object", properties: {} },
+    outputSchema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["output_name", "jurisdiction", "office", "renderer", "figures", "sidecar_path", "check"],
+      properties: {
+        output_name: { type: "string" },
+        jurisdiction: { type: "string", enum: JURISDICTIONS },
+        office: { type: "string", description: "法域档案键（决定纸面常数与编号体例）" },
+        renderer: { type: "string", enum: ["builtin", "graphviz", "graphviz-wasm"] },
+        figures: { type: "array", items: FIGURE_ARTIFACT_SCHEMA, description: "图形 SVG（主产物）" },
+        pages: { type: "array", items: FIGURE_ARTIFACT_SCHEMA, description: "提交落版页（fit_to_page 时非空）" },
+        html_path: { type: "string", description: "A4 打印版式 HTML（format=html/both 时出现）" },
+        sidecar_path: { type: "string", description: "sidecar（FigureSpec + 生成期核验）留痕路径" },
+        check: {
+          type: "object",
+          additionalProperties: false,
+          required: ["ok", "findings"],
+          properties: {
+            ok: { type: "boolean", description: "生成期核验无 fail（文本侧规则未参与）" },
+            findings: { type: "array", items: FIGURE_FINDING_SCHEMA },
+          },
+          description: "生成期结构核验（V2/V3 需说明书文本，以 patent_figure_check 为准）",
+        },
+      },
+    },
     aliases: ["PatentFigureGenerate", "figure_generate"],
     title: "Generate Patent Figures",
     description:
@@ -185,6 +220,40 @@ export function createPatentFigureGenerateTool(): SatiToolDefinition<PatentFigur
         });
       }
       assertFigurePayloads(figures, "patent_figure_generate");
+      // 字体独立导出（`SATI_FIGURE_TEXT_TO_PATH`，默认关）：**先探测、后落盘**——若开关
+      // 开了却没有 Inkscape，必须在写出任何产物之前 fail-loud，否则会留下"图形已落盘但
+      // 没转路径"的半成品目录（调用方拿到的产物与声明不符）。
+      const textToPath = isFigureTextToPathEnabled();
+      let inkscape: InkscapeProbe | undefined;
+      if (textToPath) {
+        try {
+          inkscape = resolveInkscapeCmd();
+        } catch (err) {
+          throw new SatiToolRuntimeError(
+            "invalid_tool_input",
+            `${FIGURE_TEXT_TO_PATH_ENV} 已开启，但 ${INKSCAPE_CMD_ENV} 指向的可执行文件不可用：${
+              err instanceof Error ? err.message : String(err)
+            }`,
+            { tool: "patent_figure_generate" },
+          );
+        }
+        if (inkscape === undefined) {
+          throw new SatiToolRuntimeError(
+            "tool_execution_failed",
+            `${FIGURE_TEXT_TO_PATH_ENV} 已开启但未找到 Inkscape：${inkscapeInstallHint()}`,
+            { tool: "patent_figure_generate" },
+          );
+        }
+      }
+      // `format` 此前在 SVGs 与 sidecar 都已落盘**之后**才校验：非法值会先写出一个半成品
+      // 输出目录、再抛错。入参校验集中到落盘之前。
+      const format = input.format ?? "svg";
+      if (!FORMATS.includes(format)) {
+        throw new SatiToolRuntimeError("invalid_tool_input", `非法 format "${format}"（可用: ${FORMATS.join(", ")}）`, {
+          tool: "patent_figure_generate",
+          format,
+        });
+      }
       if (!/^[A-Za-z0-9._\-\u4e00-\u9fa5]{1,100}$/u.test(input.output_name)) {
         throw new SatiToolRuntimeError("invalid_tool_input", `非法 output_name: ${JSON.stringify(input.output_name)}`, {
           tool: "patent_figure_generate",
@@ -317,6 +386,25 @@ export function createPatentFigureGenerateTool(): SatiToolDefinition<PatentFigur
           files.push(entry);
         }
 
+        // 字体独立导出（可选收尾，最后一步）：把字形换成轮廓路径，使交付物不依赖读者机器
+        // 上的字体。放在**全部 SVG 落盘之后、sidecar 落盘之前**——此后不再有模块解析这些
+        // 文件的文本，而 sidecar 需要记录"产物已转路径"这一事实（回读语义见 sidecar.ts
+        // 的 text_to_path：转路径后图面上的文字不再是 `<text>`，"可见图号"读不到不等于没有）。
+        if (inkscape !== undefined) {
+          for (const svgPath of [...files.map(file => file.path), ...pagePaths.map(page => page.path)]) {
+            const outcome = await exportSvgTextToPath({ path: svgPath, cmd: inkscape.cmd });
+            if (!outcome.ok) {
+              throw new SatiToolRuntimeError(
+                "tool_execution_failed",
+                `文本转路径失败（${svgPath}）：${outcome.error}${
+                  outcome.installHint === undefined ? "" : `——${outcome.installHint}`
+                }`,
+                { tool: "patent_figure_generate", path: svgPath, reason: outcome.reason },
+              );
+            }
+          }
+        }
+
         // 附图产物 sidecar（v1）：把 FigureSpec 完整落盘，供下游在**有说明书文本时**
         // 零信息损耗地重跑全部规则（figure-gate 的输入契约，见 figuregen/sidecar.ts）。
         const sidecarPath = await writeFigureSidecar({
@@ -331,20 +419,10 @@ export function createPatentFigureGenerateTool(): SatiToolDefinition<PatentFigur
             figures,
             check,
             skipTextRules: true,
+            ...(inkscape === undefined ? {} : { textToPath: true }),
           }),
         });
 
-        const format = input.format ?? "svg";
-        if (!FORMATS.includes(format)) {
-          throw new SatiToolRuntimeError(
-            "invalid_tool_input",
-            `非法 format "${format}"（可用: ${FORMATS.join(", ")}）`,
-            {
-              tool: "patent_figure_generate",
-              format,
-            },
-          );
-        }
         let htmlPath: string | undefined;
         if (format === "html" || format === "both") {
           htmlPath = resolve(outputDir, `${input.output_name}-figures.html`);
@@ -394,7 +472,25 @@ export function createPatentFigureGenerateTool(): SatiToolDefinition<PatentFigur
           lines.push("", "--- 附图说明草稿（可直接并入说明书） ---", briefDraft);
         }
 
+        const data = {
+          output_name: input.output_name,
+          jurisdiction,
+          office: profile.office,
+          renderer,
+          figures: files.map(file => ({
+            figure_no: file.figure_no,
+            path: file.path,
+            ...(file.caption === undefined ? {} : { caption: file.caption }),
+            ...(file.sheet === undefined ? {} : { sheet: file.sheet.text }),
+          })),
+          pages: pagePaths.map(page => ({ figure_no: page.figure_no, path: page.path })),
+          ...(htmlPath === undefined ? {} : { html_path: htmlPath }),
+          sidecar_path: sidecarPath,
+          check: { ok: check.ok, findings: check.findings },
+        };
+
         return {
+          data,
           content: [
             { type: "text", text: lines.join("\n") },
             ...files.map(file => ({

@@ -61,6 +61,13 @@ jobs:
           npm_config_fetch_retry_maxtimeout: "60000"
         run: pnpm install --frozen-lockfile
 
+      # 附图模块的真机用例依赖系统 graphviz：缺它时那几条会整组 skip，而日志读起来
+      # 仍然是绿的（「跳过」被误当成「通过」）。装上依赖，CI 守卫
+      # （tests/patent/figuregen/external-dependency-signal.spec.ts）才有意义——
+      # 依赖不可用时它会红，而不是让整条链路长期无信号。
+      - name: Install graphviz (real-render figure tests)
+        run: sudo apt-get update && sudo apt-get install -y graphviz
+
       # 议题/PR 工具链与标签门禁的负控制测试。整体挂载（而非逐个单文件）：
       # 新增脚本测试文件会自动进 CI，不再出现「测试写了但从不执行」。
       # 必须排在 install 之后 —— measure-techdebt.test.mjs 依赖 typescript。

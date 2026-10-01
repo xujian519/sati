@@ -269,3 +269,70 @@ export const FIGURE_INPUT_SCHEMA_REF: SatiJsonSchema = {
     },
   },
 };
+
+/**
+ * 附图核验发现（`V*` 结构规则、`PX*` 像素规则、`C*` CAD 几何规则共用同一形状）：
+ * 三个制图工具 **outputSchema** 的单点定义。
+ *
+ * 为什么单点：同一份发现会在 generate 的 `check`、check 的 `findings`、project 的
+ * `geometry_findings` 三处出现；字段或 severity 枚举各自漂移会让消费方无法用同一段代码
+ * 读三处数据（DSH 的 `figure-schemas.ts` 出于同一理由把输出片段集中定义）。
+ *
+ * ⚠️ 本常量只被 `outputSchema` 引用，**不入**任何 `inputSchema` ⇒ 不影响 llm-replay 的
+ * `toolSchemaDigest`，改它不需要重录 fixture（改 inputSchema 才需要）。
+ */
+export const FIGURE_FINDING_SCHEMA: SatiJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["rule", "severity", "message"],
+  properties: {
+    rule: { type: "string", description: "规则号（V1–V21 结构 / PX1–PX4 像素 / C1–C11 CAD 几何）" },
+    severity: { type: "string", enum: ["fail", "warn", "info"] },
+    message: { type: "string" },
+    figure_nos: { type: "array", items: { type: "integer" }, description: "涉及的图号（集合级判定）" },
+    evidence: { type: "array", items: { type: "string" } },
+    metric: { type: "string", enum: ["page_fit", "font_size"], description: "V7 判定维度" },
+  },
+};
+
+/** 附图产物的 canonical 输出片段（三工具 outputSchema 共用）。 */
+export const FIGURE_ARTIFACT_SCHEMA: SatiJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["figure_no", "path"],
+  properties: {
+    figure_no: { type: "integer" },
+    path: { type: "string" },
+    caption: { type: "string" },
+    sheet: { type: "string" },
+  },
+};
+
+/**
+ * 栅格附图像素门禁条目（`patent_figure_check` 的 `pixel_images`）。
+ *
+ * 指标字段与 `pixel-gate.ts` 的 `PixelMetrics` 一一对应（全为可选者按存在才给），
+ * 故这里逐个声明而非用 `additionalProperties: true`：契约要能挡住字段漂移。
+ */
+export const PIXEL_IMAGE_SCHEMA: SatiJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["name", "width", "height", "dpi", "dpiEstimated", "inkRatio", "midGrayRatio", "findings"],
+  properties: {
+    name: { type: "string" },
+    width: { type: "integer" },
+    height: { type: "integer" },
+    dpi: { type: "number" },
+    dpiEstimated: { type: "boolean" },
+    inkRatio: { type: "number" },
+    midGrayRatio: { type: "number" },
+    linePx: { type: "number" },
+    medianLinePx: { type: "number" },
+    printedWidthMm: { type: "number" },
+    printedHeightMm: { type: "number" },
+    printedLineMm: { type: "number" },
+    printedLineShrunkMm: { type: "number" },
+    declaredFigureNo: { type: "integer" },
+    findings: { type: "array", items: FIGURE_FINDING_SCHEMA },
+  },
+};

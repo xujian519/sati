@@ -18,8 +18,12 @@ import {
   FigureGateHandler,
   InterruptStageError,
   LookupStageHandler,
+  figureGateAtom,
   isInterruptStageError,
+  rasterAttachmentNames,
+  rasterFailCount,
   registerBuiltinAtoms,
+  runRasterGate,
   runWorkflow,
   type PipelineState,
   type StageProvider,
@@ -84,10 +88,15 @@ test("figure-gate 原子契约：名称/类别/输入输出键（描述不含阈
   const handler = LookupStageHandler("figure-gate");
   assert.ok(handler instanceof FigureGateHandler);
   assert.equal(handler.category, "gate");
-  // 隐藏清单纪律：worker 可见面（阶段描述/原子描述）不出现阈值数字
-  const atom = { inputSchema: ["figure_dir", "claims_draft", "spec_draft"], outputSchema: ["figure_report"] };
-  assert.deepEqual(atom.inputSchema, ["figure_dir", "claims_draft", "spec_draft"]);
-  assert.deepEqual(atom.outputSchema, ["figure_report"]);
+  assert.equal(handler.name, figureGateAtom.name, "注册的 handler 与原子定义须同名（防两处漂移）");
+  // 断言对象是**真实原子**：本用例原先把本地新建的字面量与自身 deepEqual（零检测力——
+  // 改坏 figureGateAtom 也不会红）。真实键位从这里取，改原子即红。
+  assert.deepEqual(figureGateAtom.inputSchema, ["figure_dir", "claims_draft", "spec_draft"]);
+  assert.deepEqual(figureGateAtom.outputSchema, ["figure_report"]);
+  // 隐藏清单纪律：worker 可见面（原子描述）不出现阈值数字。纪律的完整护栏（各评分原子 +
+  // manifest 阶段描述）在 tests/patent/drafting-sop.spec.ts 的「隐藏清单」用例，本处补
+  // 附图门自身的可见面断言。
+  assert.doesNotMatch(figureGateAtom.description, /[0-9]|≥|≤|通过线/u);
 });
 
 test("figure-gate：无 sidecar → 降级并说明已探查的目录（不假装已核验）", async () => {
@@ -331,6 +340,109 @@ test("figure-gate：warn 级发现透传不阻断（V8 多图未指定摘要附�
     });
     assert.ok(outcome.interrupted === undefined, "warn 不应中断");
     assert.match(outcome.report, /\[WARN\] V8/u);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// 栅格附图附件的像素门禁接进阻断（P0-7 缺口一）
+//
+// 此前 `pixel-gate` 只被 `patent_figure_check` 按需调用，PX1 这类 fail 级缺陷从不参与
+// 阻断；本组用例锁定「本门是最后一道自动门」这一契约。
+// ---------------------------------------------------------------------------
+
+test("栅格附件发现：只认本案命名体例（不卷进无关图片）", () => {
+  const entries = [
+    "case-g-fig1.svg",
+    "case-g-fig1.png",
+    "case-g-figures.json",
+    "case-g-fig2.JPG",
+    "case-g-figx.png",
+    "case-g-fig3",
+    "other-fig1.png",
+    "照片.png",
+  ];
+  assert.deepEqual(rasterAttachmentNames(entries, "case-g"), ["case-g-fig1.png", "case-g-fig2.JPG"]);
+  // 前缀须整体匹配：`case-g` 不得把 `case-g2-fig1.png` 认成自己的附件
+  assert.deepEqual(rasterAttachmentNames(["case-g2-fig1.png"], "case-g"), []);
+});
+
+test("栅格门禁：目录内无附件即 none（PX 不适用，而非静默跳过）", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "sati-gate-raster-none-"));
+  try {
+    writeFileSync(join(dir, "case-g-fig1.svg"), "<svg/>", "utf8");
+    const observation = await runRasterGate({ dir, outputName: "case-g", office: "cnipa" });
+    assert.deepEqual(observation, { status: "none" });
+    assert.equal(rasterFailCount(observation), 0);
+    // 目录不存在同样按"无附件"处理（不抛错）
+    const missing = await runRasterGate({
+      dir: join(dir, "nope"),
+      outputName: "case-g",
+      office: "cnipa",
+    });
+    assert.deepEqual(missing, { status: "none" });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("figure-gate：栅格附件中间灰超限（PX1）→ fail 挂 HITL（核验接进阻断）", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "sati-gate-raster-fail-"));
+  try {
+    await generateFigures(dir);
+    // 大面积中间灰 = 灰度/着色渲染代理；PX1 判 fail
+    const sharp = (await import("sharp")).default;
+    const png = await sharp({
+      create: { width: 240, height: 180, channels: 3, background: { r: 128, g: 128, b: 128 } },
+    })
+      .png()
+      .toBuffer();
+    writeFileSync(join(dir, "case-g-fig1.png"), png);
+
+    const outcome = await runGate({ figure_dir: dir, claims_draft: "处理模块(20)。", spec_draft: "" });
+    assert.ok(outcome.interrupted, "PX1 fail 应挂 HITL");
+    assert.match(String(outcome.interrupted.data.figure_report), /\[FAIL\] PX1/u);
+    assert.match(String(outcome.interrupted.data.review_context), /栅格附件黑白性与线宽/u);
+    // 栅格观测随结论落盘（审计"当时量到什么"）
+    assert.equal((readCheckReport(dir).raster as { status: string }).status, "ran");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("figure-gate：栅格附件解码失败 → 说明少了哪类核验，且不阻断交付", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "sati-gate-raster-broken-"));
+  try {
+    await generateFigures(dir);
+    // 内容不是图片的 .png：解码必然失败（等价于本机 sharp 不可用/格式不支持）
+    writeFileSync(join(dir, "case-g-fig1.png"), "not an image", "utf8");
+    const outcome = await runGate({ figure_dir: dir, claims_draft: "处理模块(20)。", spec_draft: "" });
+    assert.ok(outcome.interrupted === undefined, "解码失败不是附图违规，不该阻断交付");
+    assert.match(outcome.report, /未执行像素核验/u);
+    assert.match(outcome.report, /缺少黑白性\/线宽\/DPI 核验/u);
+    assert.match(outcome.report, /未核验栅格=1/u);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("figure-gate：栅格附件并入 inputs_hash（无附件时保持既有契约）", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "sati-gate-raster-hash-"));
+  try {
+    await generateFigures(dir);
+    await runGate({ figure_dir: dir, claims_draft: "处理模块(20)。", spec_draft: "" });
+    const withoutRaster = String(readCheckReport(dir).inputs_hash);
+    assert.match(withoutRaster, /^[0-9a-f]{64}$/u);
+
+    const sharp = (await import("sharp")).default;
+    const png = await sharp({ create: { width: 40, height: 30, channels: 3, background: { r: 255, g: 255, b: 255 } } })
+      .png()
+      .toBuffer();
+    writeFileSync(join(dir, "case-g-fig1.png"), png);
+    await runGate({ figure_dir: dir, claims_draft: "处理模块(20)。", spec_draft: "" });
+    const withRaster = String(readCheckReport(dir).inputs_hash);
+    assert.notEqual(withoutRaster, withRaster, "新增栅格附件应改变 inputs_hash（结论也由这些字节决定）");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

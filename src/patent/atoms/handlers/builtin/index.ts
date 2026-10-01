@@ -68,8 +68,13 @@ export {
   figureDirCandidates,
   figureGateAtom,
   figureInputsHash,
+  rasterAttachmentNames,
+  rasterFailCount,
+  runRasterGate,
   type FigureCheckReport,
   type FigureDirCandidate,
+  type RasterGateEntry,
+  type RasterGateObservation,
 } from "./figure.js";
 export { claimChartAtom, ClaimChartHandler } from "./chart.js";
 export { claimEmbodimentMapperAtom, ClaimEmbodimentMapperHandler } from "./mapper.js";

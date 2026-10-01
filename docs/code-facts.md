@@ -29,7 +29,7 @@
 | `patent_tool_count` | 专利域工具数（domain === "patent"） | `28` | src/tool/registry/createBuiltinRegistry.ts（运行期实例化） |
 | `channel_adapter_count` | IM 渠道适配器数 | `21` | src/adapters/channel/（目录数，不含 protocol/） |
 | `skill_count` | 内置技能数（SKILL.md 总数） | `107` | skills/**/SKILL.md |
-| `role_skill_count` | 专家角色数（type: role） | `44` | skills/**/SKILL.md frontmatter |
+| `role_skill_count` | 专家角色数（type: role） | `45` | skills/**/SKILL.md frontmatter |
 | `patent_skill_count` | 专利相关技能数（patent-* 与 provision-* 技能目录） | `52` | skills/ 目录命名 |
 | `src_module_count` | src/ 模块数 | `32` | src/ 顶层目录 |
 | `loop_module_count` | agent/loop 模块数（.ts 文件） | `28` | src/agent/loop/ |
@@ -64,7 +64,7 @@
 | `src/methodology/` | 14 | ✓ | 方法论注册表（five-whys/mece/triz/bridge-reencode 等） |
 | `src/model/` | 75 | ✓ | 模型抽象（providers/embedding/catalog/resolveModelInfo/streaming） |
 | `src/network/` | 3 | ✓ | 网络层（fetch 封装） |
-| `src/patent/` | 195 | ✓ | 专利执行管线（workflow/graph/atoms/evidence/figure/document 等） |
+| `src/patent/` | 199 | ✓ | 专利执行管线（workflow/graph/atoms/evidence/figure/document 等） |
 | `src/permission/` | 7 | ✓ | 权限（decision/PermissionRuntime + guard/ToolGuardRegistry） |
 | `src/pilot/` | 16 | ✓ | 配置（PilotConfigStore / lastGoodFacts / workspace 判定） |
 | `src/router/` | 33 | ✓ | 智能路由（含多模态媒体降级） |

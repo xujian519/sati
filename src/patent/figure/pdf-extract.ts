@@ -7,6 +7,11 @@
  * 注意：本层不做完整矢量路径解析（需专用 CAD/PDF 矢量化库），
  * 而是利用 PDF 矢量渲染无失真的优势，把页面转成高分辨率位图后
  * 复用现有 VLM 两步法识别电路图。文本坐标用于后续图文对齐。
+ *
+ * ⚠️ **当前无生产调用方**（2026-10-01 实测）：全 `src/` grep 只命中 `figure/index.ts` 的
+ * barrel 导出与自身 spec，没有任何工具或流程消费它 ⇒ 目前**不存在**「PDF → 图 → 分析」的
+ * 生产路径。接入需扩 `analyze_patent_figure` 的入参描述（会触发 llm-replay 重录，属批次 B）。
+ * 技术债条目见 `docs/technical-debt/backlog.md` 的 TD-PATENT-N34。
  */
 
 import { readFile } from "node:fs/promises";

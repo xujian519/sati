@@ -42,10 +42,19 @@ import {
   type FigureSpec,
   type Jurisdiction,
 } from "../../patent/figuregen/index.js";
+import {
+  FIGURE_TEXT_TO_PATH_ENV,
+  INKSCAPE_CMD_ENV,
+  exportSvgTextToPath,
+  inkscapeInstallHint,
+  isFigureTextToPathEnabled,
+  resolveInkscapeCmd,
+  type InkscapeProbe,
+} from "../../patent/figuregen/inkscape-renderer.js";
 import { caseOutputsDir } from "../../patent/paths.js";
 import { SatiToolRuntimeError } from "../protocol/errors.js";
 import type { SatiToolDefinition, SatiToolRuntimeContext } from "../protocol/types.js";
-import { JURISDICTIONS, toFigureCount, toJurisdiction, toSheet } from "./patentFigureSchema.js";
+import { FIGURE_FINDING_SCHEMA, JURISDICTIONS, toFigureCount, toJurisdiction, toSheet } from "./patentFigureSchema.js";
 
 /** 附图标记标注入参（模型坐标锚点 + 可选图面偏移）。 */
 export type PatentFigureProjectAnnotation = {
@@ -90,7 +99,51 @@ export function createPatentFigureProjectTool(
 ): SatiToolDefinition<PatentFigureProjectInput> {
   return {
     name: "patent_figure_project",
-    outputSchema: { type: "object", properties: {} },
+    outputSchema: {
+      type: "object",
+      additionalProperties: false,
+      required: [
+        "figure_no",
+        "output_name",
+        "view",
+        "svg_path",
+        "sidecar_path",
+        "command_source",
+        "scale",
+        "width_mm",
+        "height_mm",
+        "geometry_findings",
+      ],
+      properties: {
+        figure_no: { type: "integer" },
+        output_name: { type: "string" },
+        view: { type: "string", enum: [...CAD_VIEWS] },
+        svg_path: { type: "string" },
+        page_path: { type: "string", description: "提交落版页（开启时出现）" },
+        sidecar_path: { type: "string" },
+        command_source: { type: "string", description: "FreeCAD 可执行来源（env 覆盖 / 平台候选）" },
+        scale: { type: "number", description: "适配 A4 可印区的缩放系数" },
+        width_mm: { type: "number" },
+        height_mm: { type: "number" },
+        visible_edges: { type: "integer" },
+        hidden_edges: { type: "integer" },
+        hidden_lines: { type: "boolean" },
+        caption: { type: "string", description: "图号标注（单幅且 pct/us 时不出现）" },
+        section: {
+          type: "object",
+          additionalProperties: false,
+          required: ["offset_mm", "cut_faces", "hatch_segments"],
+          properties: {
+            offset_mm: { type: "number" },
+            cut_faces: { type: "integer" },
+            hatch_segments: { type: "integer" },
+          },
+          description: "全剖视图剖切参数（非剖视时缺省）",
+        },
+        ref_numerals: { type: "array", items: { type: "integer" }, description: "图面已标注的附图标记" },
+        geometry_findings: { type: "array", items: FIGURE_FINDING_SCHEMA, description: "几何级检查（C1–C11）" },
+      },
+    },
     aliases: ["PatentFigureProject", "figure_project"],
     title: "Project 3D Model to Patent Figure",
     description:
@@ -212,6 +265,30 @@ export function createPatentFigureProjectTool(
       }
       const documentKind: DocumentKind | undefined =
         input.document_kind === "utility" ? "utility" : input.document_kind === "invention" ? "invention" : undefined;
+      // 字体独立导出（默认关）：与内置渲染通路同规——**先探测、后落盘**，开关开了却没有
+      // Inkscape 就在写出任何产物之前 fail-loud，避免留下"图形已落盘但没转路径"的半成品。
+      const textToPath = isFigureTextToPathEnabled();
+      let inkscape: InkscapeProbe | undefined;
+      if (textToPath) {
+        try {
+          inkscape = resolveInkscapeCmd();
+        } catch (err) {
+          throw new SatiToolRuntimeError(
+            "invalid_tool_input",
+            `${FIGURE_TEXT_TO_PATH_ENV} 已开启，但 ${INKSCAPE_CMD_ENV} 指向的可执行文件不可用：${
+              err instanceof Error ? err.message : String(err)
+            }`,
+            { tool: "patent_figure_project" },
+          );
+        }
+        if (inkscape === undefined) {
+          throw new SatiToolRuntimeError(
+            "tool_execution_failed",
+            `${FIGURE_TEXT_TO_PATH_ENV} 已开启但未找到 Inkscape：${inkscapeInstallHint()}`,
+            { tool: "patent_figure_project" },
+          );
+        }
+      }
       const hiddenLines = input.hidden_lines === true;
 
       // 剖切：仅轴对齐视图可剖（rotate/stepped/local section 不做）
@@ -392,6 +469,23 @@ export function createPatentFigureProjectTool(
           layoutField = page.layout;
         }
 
+        // 字体独立导出（可选收尾，最后一步）：同内置渲染通路——放在图形与落版页都落盘之后、
+        // sidecar 之前（此后不再解析这些文件的文本；sidecar 记录已转路径这一事实）。
+        if (inkscape !== undefined) {
+          for (const target of [svgPath, ...(pagePath === undefined ? [] : [pagePath])]) {
+            const outcome = await exportSvgTextToPath({ path: target, cmd: inkscape.cmd });
+            if (!outcome.ok) {
+              throw new SatiToolRuntimeError(
+                "tool_execution_failed",
+                `文本转路径失败（${target}）：${outcome.error}${
+                  outcome.installHint === undefined ? "" : `——${outcome.installHint}`
+                }`,
+                { tool: "patent_figure_project", path: target, reason: outcome.reason },
+              );
+            }
+          }
+        }
+
         // 图号 + 标记骨架 spec：CAD 图的画幅由投影几何决定（不由本模块布局决定），但**标记**
         // 是真实存在的图面内容 ⇒ 落进 nodes（label=标号、ref=标记），使 V2/V4 在定稿期可用
         const skeleton: FigureSpec = {
@@ -448,6 +542,7 @@ export function createPatentFigureProjectTool(
             check: { ok: true, findings: [], refsInFigures: [], refsInText: [] },
             // 文本侧规则在投影期不适用（无说明书文本），核验由附图门在定稿期跑
             skipTextRules: true,
+            ...(inkscape === undefined ? {} : { textToPath: true }),
           }),
         });
 
@@ -486,7 +581,36 @@ export function createPatentFigureProjectTool(
             "附图标记的锚点由调用方按模型坐标给出，图面标号位置可经 label_offset_mm 指定。",
         ];
 
+        const data = {
+          figure_no: figureNo,
+          output_name: input.output_name,
+          view,
+          svg_path: svgPath,
+          ...(pagePath === undefined ? {} : { page_path: pagePath }),
+          sidecar_path: sidecarPath,
+          command_source: cmdSource,
+          scale: render.scale,
+          width_mm: render.widthMm,
+          height_mm: render.heightMm,
+          visible_edges: render.visibleEdges,
+          hidden_edges: render.hiddenEdges,
+          hidden_lines: hiddenLines,
+          ...(caption === undefined ? {} : { caption }),
+          ...(table.section === undefined
+            ? {}
+            : {
+                section: {
+                  offset_mm: table.section.offset_mm,
+                  cut_faces: render.cutFaces,
+                  hatch_segments: render.hatchSegments,
+                },
+              }),
+          ...(annotations.length === 0 ? {} : { ref_numerals: annotations.map(annotation => annotation.ref) }),
+          geometry_findings: findings,
+        };
+
         return {
+          data,
           content: [
             { type: "text", text: lines.join("\n") },
             {

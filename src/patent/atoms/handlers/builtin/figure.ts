@@ -29,7 +29,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { readFile, writeFile } from "node:fs/promises";
+import { readdir, readFile, writeFile } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
 import { type Atom } from "../../atom.js";
 import {
@@ -43,6 +43,7 @@ import {
   assertSafeSvg,
   checkFigures,
   findFigureSidecar,
+  officeForJurisdiction,
   parseFigureSvg,
   readFigureSidecar,
   type DocumentKind,
@@ -51,7 +52,9 @@ import {
   type FigureSidecarGeometry,
   type FigureSpec,
   type Jurisdiction,
+  type TargetOffice,
 } from "../../../figuregen/index.js";
+import { analyzeImageBuffer, type PixelFinding, type PixelMetrics } from "../../../figuregen/pixel-gate.js";
 import { caseOutputsDir } from "../../../paths.js";
 import { APPROVAL_GRANTED_KEY } from "./gate.js";
 import { degraded } from "./llm.js";
@@ -166,7 +169,13 @@ export async function detectFigureDrift(inputs: LocatedInputs): Promise<{
     if (parsed.figureNo !== figure.spec.figure_no) {
       drifts.push(`图${figure.figure_no}: 图内图号标注为 ${parsed.figureNo}，与 sidecar 不一致`);
     }
-    if (parsed.numbered) numberedFigureNos.push(figure.spec.figure_no);
+    // 图号的**可见形态**优先以回读为准（V15/V16 判的就是可见形态）；但产物若已做文本
+    // 转路径（文字变轮廓），回读不到 `<text>图N</text>` 不等于图号不存在——那时以生成期
+    // sidecar 记录的 caption 为准。**未转路径时绝不回落**：那种情况下"回读不到"正是图号
+    // 被删的漂移信号，回落会把它蒙掉。
+    if (parsed.numbered || (inputs.sidecar.text_to_path === true && figure.caption !== undefined)) {
+      numberedFigureNos.push(figure.spec.figure_no);
+    }
     const expected = figure.spec.nodes
       .filter(node => node.ref !== undefined)
       .map(node => `${node.id}:${node.ref}`)
@@ -185,13 +194,99 @@ export async function detectFigureDrift(inputs: LocatedInputs): Promise<{
   return { drifts, numberedFigureNos };
 }
 
-/** 输入内容哈希：spec 集合 + 说明书文本 + 辖区/文种（结论与输入的对应关系可审计）。 */
+/** 栅格附图扩展名（`pixel-gate` 经 sharp 解码的格式）。 */
+const RASTER_FIGURE_EXTENSIONS: readonly string[] = ["png", "jpg", "jpeg", "webp", "gif", "tif", "tiff"];
+
+/**
+ * 本案的栅格附图附件：与 SVG 同目录、同命名体例 `<output_name>-fig<N>.<ext>`。
+ *
+ * 按命名体例发现而非"目录下全部图片"：案卷目录里常有与本案无关的图片（客户对比材料、
+ * 其他案卷的扫描件），卷进本门禁会制造误报与错误的阻断。
+ */
+export function rasterAttachmentNames(entries: readonly string[], outputName: string): string[] {
+  const escaped = outputName.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  const pattern = new RegExp(`^${escaped}-fig\\d+\\.(?:${RASTER_FIGURE_EXTENSIONS.join("|")})$`, "iu");
+  return entries.filter(name => pattern.test(name)).sort((a, b) => a.localeCompare(b));
+}
+
+/** 单张栅格附图的像素门禁结果；解码失败时**不静默**，记下该图少了哪类核验。 */
+export type RasterGateEntry =
+  | { name: string; digest: string; measured: true; metrics: PixelMetrics; findings: PixelFinding[] }
+  | { name: string; digest: string; measured: false; error: string };
+
+/** 栅格附件整体观测：`none` = 本案无栅格附件（PX 不适用），不是"跳过了核验"。 */
+export type RasterGateObservation = { status: "none" } | { status: "ran"; entries: readonly RasterGateEntry[] };
+
+function sha256Hex(buffer: Buffer): string {
+  return createHash("sha256").update(buffer).digest("hex");
+}
+
+/**
+ * 对目录内的栅格附图附件跑像素门禁（黑白性 / 线宽 / DPI / 图号声明）。
+ *
+ * 为什么接进门禁而不是只留给 `patent_figure_check`：本门是交付前最后一道自动门，而 PX1
+ * 这类 fail 级缺陷（大面积中间灰 = 灰度/着色渲染）此前只在按需调用的核验报告里出现、
+ * 从不参与阻断 —— 与"核验接成门禁"的设计意图相悖。
+ *
+ * 解码不可用（sharp 未安装 / 格式不支持）时**逐图记录失败原因**而不抛错：本地缺解码器
+ * 不是申请人的过错，不该阻断交付；但必须说清"这几张图因此少了哪类核验"。
+ */
+export async function runRasterGate(input: {
+  dir: string;
+  outputName: string;
+  office: TargetOffice;
+}): Promise<RasterGateObservation> {
+  let entries: string[];
+  try {
+    entries = await readdir(input.dir);
+  } catch {
+    return { status: "none" };
+  }
+  const names = rasterAttachmentNames(entries, input.outputName);
+  if (names.length === 0) return { status: "none" };
+
+  const results: RasterGateEntry[] = [];
+  for (const name of names) {
+    try {
+      const buffer = await readFile(join(input.dir, name));
+      const digest = sha256Hex(buffer);
+      const { metrics, findings } = await analyzeImageBuffer(buffer, { name, office: input.office });
+      results.push({ name, digest, measured: true, metrics, findings });
+    } catch (err) {
+      results.push({
+        name,
+        digest: "",
+        measured: false,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+  return { status: "ran", entries: results };
+}
+
+/** 栅格附件的 fail 级发现数（参与本门的 fail 判定）。 */
+export function rasterFailCount(observation: RasterGateObservation): number {
+  if (observation.status === "none") return 0;
+  return observation.entries.reduce(
+    (total, entry) => total + (entry.measured ? entry.findings.filter(f => f.severity === "fail").length : 0),
+    0,
+  );
+}
+
+/**
+ * 输入内容哈希：spec 集合 + 说明书文本 + 辖区/文种（结论与输入的对应关系可审计）。
+ *
+ * `raster` 为本案栅格附图附件的内容哈希：**无栅格附件时不并入载荷**，使纯矢量案件的
+ * 哈希值与既有契约逐字节一致；有附件时并入，因为此时 PX 级结论也由这些字节决定。
+ */
 export function figureInputsHash(input: {
   specs: readonly FigureSpec[];
   specText: string;
   documentKind?: DocumentKind;
   jurisdiction: Jurisdiction;
+  raster?: readonly { name: string; digest: string }[];
 }): string {
+  const raster = (input.raster ?? []).filter(entry => entry.digest.length > 0);
   return createHash("sha256")
     .update(
       JSON.stringify({
@@ -199,9 +294,42 @@ export function figureInputsHash(input: {
         spec_text: input.specText,
         document_kind: input.documentKind ?? null,
         jurisdiction: input.jurisdiction,
+        ...(raster.length === 0 ? {} : { raster }),
       }),
     )
     .digest("hex");
+}
+
+/** 栅格附件的报告段（无附件时一行说明；有附件时逐张列指标与发现）。 */
+function rasterSection(raster: RasterGateObservation): string[] {
+  if (raster.status === "none") {
+    return ["", "- 栅格附件: 无（未附栅格图，PX 黑白性/线宽/DPI 判据不适用）"];
+  }
+  const lines = ["", "栅格附图像素级核验（不做 OCR：图号须由文件名声明）："];
+  for (const entry of raster.entries) {
+    if (!entry.measured) {
+      lines.push(
+        `- ${entry.name}: 未执行像素核验 —— ${entry.error}` +
+          "（该图因此缺少黑白性/线宽/DPI 核验；请确认 sharp 解码依赖是否就绪）",
+      );
+      continue;
+    }
+    const { metrics } = entry;
+    lines.push(
+      `- ${entry.name}: ${metrics.width}×${metrics.height}px，${metrics.dpi}DPI${
+        metrics.dpiEstimated ? "（估算）" : ""
+      }，非白占比 ${(metrics.inkRatio * 100).toFixed(2)}%，中间灰占比 ${(metrics.midGrayRatio * 100).toFixed(1)}%` +
+        (metrics.linePx === undefined ? "" : `，最细线宽约 ${metrics.linePx}px`) +
+        ` —— ${entry.findings.length === 0 ? "无发现" : `${entry.findings.length} 项发现`}`,
+    );
+    for (const finding of entry.findings) {
+      lines.push(
+        `  [${finding.severity.toUpperCase()}] ${finding.rule}: ${finding.message}` +
+          (finding.evidence ? `\n  ${finding.evidence.join("\n  ")}` : ""),
+      );
+    }
+  }
+  return lines;
 }
 
 function renderReport(input: {
@@ -209,6 +337,7 @@ function renderReport(input: {
   dir: string;
   sidecar: FigureSidecar;
   result: FigureCheckResult;
+  raster: RasterGateObservation;
   textFaces: string;
   skippedTextRules: boolean;
   numberedFigureNos: readonly number[];
@@ -216,8 +345,21 @@ function renderReport(input: {
 }): string {
   const fails = input.result.findings.filter(f => f.severity === "fail");
   const warns = input.result.findings.filter(f => f.severity === "warn");
+  // 栅格附件的发现与结构规则的发现同权：PX1 这类 fail 级缺陷此前只在按需核验的报告里
+  // 出现，本门把它一并计入判定（本仓的规则号分列 PX*/V*，报告里也分列）。
+  const rasterEntries = input.raster.status === "ran" ? input.raster.entries : [];
+  const rasterFails = rasterEntries.flatMap(entry =>
+    entry.measured ? entry.findings.filter(f => f.severity === "fail") : [],
+  );
+  const rasterWarns = rasterEntries.flatMap(entry =>
+    entry.measured ? entry.findings.filter(f => f.severity === "warn") : [],
+  );
+  const degradedRaster = rasterEntries.filter(entry => !entry.measured).length;
+  const passed = input.result.ok && rasterFails.length === 0;
   const lines = [
-    `附图门: ${input.result.ok ? "✅ 通过" : "⚠️ 未通过"}（fail=${fails.length}, warn=${warns.length}）${input.forced ? "【人工强制放行】" : ""}`,
+    `附图门: ${passed ? "✅ 通过" : "⚠️ 未通过"}（fail=${fails.length + rasterFails.length}, warn=${
+      warns.length + rasterWarns.length
+    }${degradedRaster === 0 ? "" : `, 未核验栅格=${degradedRaster}`}）${input.forced ? "【人工强制放行】" : ""}`,
     `- 附图来源: ${input.source}（${input.dir}）`,
     `- 附图: ${input.sidecar.figures.map(f => `图${f.figure_no} ${f.file}`).join("；")}（渲染器 ${input.sidecar.renderer}）`,
     `- 生成期核验: ${input.sidecar.check.ok ? "通过" : "有发现"}（文本侧规则未参与）`,
@@ -233,6 +375,7 @@ function renderReport(input: {
           `- 文字面分节: ${input.result.specFaces.sectioned ? "已分节" : "未分节"}（${input.result.specFaces.reason}）`,
         ]),
     ...(input.result.bracketRules === undefined ? [] : [`- 括号规则: ${input.result.bracketRules.reason}`]),
+    ...rasterSection(input.raster),
   ];
   if (input.result.findings.length > 0) {
     lines.push("", "发现：");
@@ -245,7 +388,7 @@ function renderReport(input: {
   }
   lines.push(
     "",
-    input.result.ok
+    passed
       ? "- 结论: 附图通过确定性核验，可随说明书定稿。"
       : "- 结论: 存在 fail 级发现，附图不得定稿——请修正后重新生成，或在 HITL 确认放行。",
   );
@@ -291,11 +434,20 @@ export class FigureGateHandler implements StageHandler {
       numberedFigureNos,
     });
 
+    // 栅格附图附件（同目录、同命名体例 `<output_name>-fig<N>.<ext>`）：本门是交付前最后
+    // 一道自动门，PX 级 fail（灰度/着色渲染、线宽不可辨）与结构规则同权参与阻断。
+    const raster = await runRasterGate({
+      dir,
+      outputName: sidecar.output_name,
+      office: sidecar.office ?? officeForJurisdiction(jurisdiction),
+    });
+
     const report = renderReport({
       source,
       dir,
       sidecar,
       result,
+      raster,
       textFaces: textFaces.length > 0 ? textFaces : "（无）",
       skippedTextRules,
       numberedFigureNos,
@@ -303,11 +455,20 @@ export class FigureGateHandler implements StageHandler {
     });
 
     // 留痕（无论通过与否）：结论与输入的对应关系可审计（含 renderer 与 CAD 投影参数）。
-    const inputsHash = figureInputsHash({ specs, specText, documentKind, jurisdiction });
+    const inputsHash = figureInputsHash({
+      specs,
+      specText,
+      documentKind,
+      jurisdiction,
+      ...(raster.status === "ran"
+        ? { raster: raster.entries.map(entry => ({ name: entry.name, digest: entry.digest })) }
+        : {}),
+    });
     const reportPath = join(dir, "figure-check.json");
     await writeReport(reportPath, {
       inputsHash,
       result,
+      raster,
       renderer: sidecar.renderer,
       figures: sidecar.figures,
     });
@@ -325,12 +486,13 @@ export class FigureGateHandler implements StageHandler {
     }
 
     const fails = result.findings.filter(f => f.severity === "fail");
-    if (fails.length > 0 && !state[APPROVAL_GRANTED_KEY]) {
+    const rasterFails = rasterFailCount(raster);
+    if ((fails.length > 0 || rasterFails > 0) && !state[APPROVAL_GRANTED_KEY]) {
       throw new InterruptStageError("figure-gate", "附图未通过确定性核验，请决策放行/重做或退回", {
         guardrail_level: "medium",
-        review_context:
-          `附图存在 ${fails.length} 项 fail 级发现（图号连续性/图文标记一致/画幅可印性）。` +
-          "编号选择：1=确认放行（强制） / 2=重新生成附图 / 3=退回",
+        review_context: `附图存在 ${fails.length + rasterFails} 项 fail 级发现（图号连续性/图文标记一致/画幅可印性${
+          rasterFails === 0 ? "" : "/栅格附件黑白性与线宽"
+        }）。编号选择：1=确认放行（强制） / 2=重新生成附图 / 3=退回`,
         figure_report: report,
         figure_check_report: reportPath,
       });
@@ -351,6 +513,8 @@ export type FigureCheckReport = {
   checked_at: string;
   inputs_hash: string;
   result: FigureCheckResult;
+  /** 栅格附图附件的像素门禁观测（`none` 表示本案无栅格附件，非"未核验"）。 */
+  raster?: RasterGateObservation;
   renderer?: string;
   geometry?: readonly (FigureSidecarGeometry & { figure_no: number })[];
 };
@@ -358,6 +522,8 @@ export type FigureCheckReport = {
 export type FigureCheckReportInput = {
   inputsHash: string;
   result: FigureCheckResult;
+  /** 栅格附图附件的像素门禁观测（未附栅格图时可缺省）。 */
+  raster?: RasterGateObservation;
   /** sidecar.renderer（builtin / graphviz / cad）。 */
   renderer?: string;
   /** sidecar 各图的几何来源（仅 CAD 图有）。 */
@@ -374,6 +540,7 @@ export function buildFigureCheckReport(input: FigureCheckReportInput): FigureChe
     checked_at: input.checkedAt ?? new Date().toISOString(),
     inputs_hash: input.inputsHash,
     result: input.result,
+    ...(input.raster === undefined ? {} : { raster: input.raster }),
     ...(input.renderer === undefined ? {} : { renderer: input.renderer }),
     ...(geometry.length === 0 ? {} : { geometry }),
   };

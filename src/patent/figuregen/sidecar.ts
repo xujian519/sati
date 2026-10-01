@@ -89,6 +89,15 @@ export type FigureSidecar = {
   /** 法域档案键（与 jurisdiction 同源，显式落盘便于审计"按哪套纸面常数出的图"）。 */
   office?: TargetOffice;
   document_kind?: DocumentKind;
+  /**
+   * 产物是否已做「文本转路径」（字形换成轮廓路径，交付物不再依赖读者机器上的字体）。
+   *
+   * 记录它是为了**回读语义**：转路径后图面上的文字不再是 `<text>`，`parseFigureSvg` 的
+   * 「可见图号」观测（`numbered`，属性不算）会读不到——那**不等于**图号不存在。下游
+   * （`figure-gate`）据此以生成期事实（`figures[].caption`）替代该观测，而不是把"读不到"
+   * 当成"没有"、进而让 V15「多幅须编号」误报。
+   */
+  text_to_path?: boolean;
   check: FigureSidecarCheck;
   figures: FigureSidecarFigure[];
 };
@@ -116,6 +125,8 @@ export type BuildFigureSidecarInput = {
   check: FigureCheckResult;
   /** 生成期核验是否跳过文本侧规则（生成期恒为 true）。 */
   skipTextRules: boolean;
+  /** 产物是否已做文本转路径（缺省 false；转路径的产物文字不可回读，见 FigureSidecar.text_to_path）。 */
+  textToPath?: boolean;
   /** 落盘时刻；缺省取当前时间（调用方注入可测性）。 */
   generatedAt?: string;
 };
@@ -144,6 +155,7 @@ export function buildFigureSidecar(input: BuildFigureSidecarInput): FigureSideca
     jurisdiction: input.jurisdiction,
     office: officeForJurisdiction(input.jurisdiction),
     ...(input.documentKind === undefined ? {} : { document_kind: input.documentKind }),
+    ...(input.textToPath === true ? { text_to_path: true } : {}),
     check: {
       stage: "generation",
       skip_text_rules: input.skipTextRules,

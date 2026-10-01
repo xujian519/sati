@@ -1,15 +1,15 @@
 # Sati 技术债务指标基线与趋势
 
 > 由 `node scripts/measure-techdebt.mjs --update` 自动生成，谨防手工编辑。
-> 最近一次快照：**2026-09-30**
+> 最近一次快照：**2026-10-01**
 
 ## 规模
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1074 / 182944 |
+| src TS 文件 / 行数 | 1078 / 186727 |
 | src JS 文件 | 0 |
-| tests 文件 | 613 |
+| tests 文件 | 618 |
 | ui/src 文件 / 行数 | 623 / 99824 |
 | ui/server 文件 / 行数 | 118 / 32911 |
 
@@ -32,8 +32,8 @@
 | `as unknown as`（双重断言） | 32 | ui/src(25) · adapters(2) · tool(2) |
 | 裸 `console.*` | 158 | cli(137) · telemetry(8) · ui/server(5) |
 | 空 `catch {}` | 0 | — |
-| 无参 `catch {`（总计） | 690 | ui/server(152) · ui/src(124) · adapters(70) |
-| ↳ **无注释**（隐患类，目标） | **15** | — |
+| 无参 `catch {`（总计） | 691 | ui/server(152) · ui/src(124) · adapters(70) |
+| ↳ **无注释**（隐患类，目标） | **16** | — |
 | ↳ 已带意图注释 | 675 | — |
 | `TODO/HACK/FIXME/XXX` | 11 | always-on(4) · tests(4) · ui/src(2) |
 | 分层违规 `ui/server→src` | 14 | — |
@@ -62,21 +62,24 @@
 | `ui/src/stores/useSessionStore.ts` | `createSessionActions` | 631 | function |
 | `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` | `(anonymous)` | 624 | arrow |
 | `ui/src/components/main-content/view/MainContent.tsx` | `SplitBody` | 573 | function |
+| `src/tool/builtin/patentFigureProject.ts` | `createPatentFigureProjectTool` | 554 | function |
 | `ui/src/components/chat/hooks/useSessionSubmit.ts` | `useSessionSubmit` | 528 | function |
 | `ui/src/components/main-content-v2/CronV2.tsx` | `CronFormView` | 476 | function |
 | `ui/src/components/chat/hooks/useChatComposerState.ts` | `useChatComposerState` | 467 | function |
 | `src/router/execution/executeRouterDecision.ts` | `executeRouterDecision` | 449 | function |
 | `ui/src/components/settings/view/modelPool/components/ProviderCard.tsx` | `ProviderCard` | 447 | function |
-| `src/tool/builtin/patentFigureProject.ts` | `createPatentFigureProjectTool` | 439 | function |
 | `ui/src/components/chat-v2/MessageRowV2.tsx` | `MessageRowV2` | 429 | function |
+| `src/tool/builtin/patentFigureGenerate.ts` | `createPatentFigureGenerateTool` | 422 | function |
 | `ui/src/components/code-editor/view/subcomponents/DocxBuiltinPreview.tsx` | `DocxBuiltinPreview` | 421 | function |
 | `src/gateway/client/eventMapping.ts` | `mapAgentEventForTurn` | 417 | function |
 | `src/cli/projectRuntimeFactory.ts` | `createProjectRuntimeResolver` | 414 | function |
+| `src/tool/builtin/patentFigureProject.ts` | `execute` | 411 | method |
 | `ui/src/components/chat-v2/processGrouping.test.ts` | `(anonymous)` | 409 | arrow |
 | `ui/src/components/code-editor/view/subcomponents/SpreadsheetInteractivePreview.tsx` | `SpreadsheetInteractivePreview` | 407 | function |
 | `ui/src/components/settings/view/integrations/im/components/WeComChannelSection.tsx` | `WeComChannelSection` | 398 | function |
 | `ui/src/components/chat/hooks/useSlashCommands.ts` | `useSlashCommands` | 395 | function |
 | `src/tool/execution/ToolRuntime.ts` | `execute` | 388 | method |
+| `src/tool/builtin/patentFigureCheck.ts` | `createPatentFigureCheckTool` | 384 | function |
 | `ui/src/components/main-content-v2/CronV2.test.tsx` | `(anonymous)` | 384 | arrow |
 | `src/web/client/webMessage.ts` | `applyWebGatewayEvent` | 383 | function |
 | `ui/src/components/app-shell/MainAreaV2.tsx` | `MainAreaV2Content` | 381 | function |
@@ -90,14 +93,13 @@
 | `src/gateway/server/GatewayWsConnection.ts` | `dispatchRequest` | 353 | method |
 | `ui/src/components/main-content/view/MainContent.tsx` | `MainContent` | 346 | function |
 | `src/patent/graph/domains/inventiveness.ts` | `buildInventivenessGraph` | 342 | function |
-| `src/tool/builtin/patentFigureProject.ts` | `execute` | 340 | method |
-| `src/tool/builtin/patentFigureGenerate.ts` | `createPatentFigureGenerateTool` | 337 | function |
 | `ui/src/components/chat/view/subcomponents/MessageComponent.tsx` | `(anonymous)` | 335 | arrow |
 | `ui/src/components/main-content-v2/PlansAndCronJobs.tsx` | `PlansAndCronJobs` | 334 | function |
 | `src/gateway/client/telemetry.ts` | `emitSessionTelemetry` | 333 | function |
 | `ui/src/components/main-content-v2/DashboardV2.tsx` | `DashboardV2` | 332 | function |
 | `ui/src/hooks/useSatiConfig.ts` | `useSatiConfigState` | 332 | function |
 | `ui/src/components/chat/hooks/useSlashCommandExecute.ts` | `useSlashCommandExecute` | 331 | function |
+| `src/tool/builtin/patentFigureGenerate.ts` | `execute` | 322 | method |
 | `ui/src/components/annotation/view/Annotator.tsx` | `Annotator` | 322 | function |
 | `ui/src/components/code-editor/view/CodeEditor.tsx` | `CodeEditor` | 310 | function |
 | `ui/src/components/chat-v2/SubagentDetailMessageFlow.tsx` | `SubagentDetailMessageFlow` | 309 | function |
@@ -111,6 +113,7 @@
 |---|---|
 | `ui/server/sati-bridge.js` | 2348 |
 | `src/adapters/channel/wecom/WeComChannel.ts` | 1764 |
+| `src/patent/figuregen/render-check.ts` | 1634 |
 | `src/model/catalog/providers.ts` | 1593 |
 | `src/gateway/client/InProcessGateway.ts` | 1518 |
 | `ui/server/routes/git.js` | 1507 |
@@ -138,7 +141,6 @@
 | `src/adapters/channel/protocol/ImLiveReplyController.ts` | 1017 |
 | `src/gateway/protocol/types.ts` | 995 |
 | `ui/src/components/main-content-v2/FilesV2.tsx` | 963 |
-| `src/context/DefaultContextRuntime.ts` | 953 |
 
 ## vendored 子包（单列，不计入上述规模与排名）
 
@@ -162,7 +164,7 @@
 
 | 模块 | 测试文件 |
 |---|---|
-| patent | 136 |
+| patent | 141 |
 | tool | 66 |
 | agent | 59 |
 | knowledge | 38 |
@@ -195,7 +197,7 @@
 | runtime | 1 |
 | status | 1 |
 
-| **合计** | **587** |
+| **合计** | **592** |
 
 ## i18n en/zh-CN 对齐
 

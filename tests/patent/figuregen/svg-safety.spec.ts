@@ -7,6 +7,9 @@
  *
  * 接线点两处：`patent_figure_check` 的 `svg_paths`（工具层，本文件）与 `figure-gate` 的
  * 漂移检测（原子层，见 figure-gate.spec.ts）。
+ *
+ * ⚠️ 依赖 graphviz 的那条用例在缺 dot 时 `skip`——**跳过表示「无信号」，不是「通过」**；
+ * CI 装了 graphviz 并由 `external-dependency-signal.spec.ts` 断言其可用（跳过即 CI 红）。
  */
 
 import assert from "node:assert/strict";

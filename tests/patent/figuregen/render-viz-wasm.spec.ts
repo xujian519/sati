@@ -13,7 +13,11 @@ import test from "node:test";
 import { parseFigureSvg } from "../../../src/patent/figuregen/readback.js";
 import { renderFigureSvg } from "../../../src/patent/figuregen/render-svg.js";
 import { renderFigureSvgWithGraphviz } from "../../../src/patent/figuregen/render-graphviz.js";
-import { createWasmDotRunner, type VizLoader } from "../../../src/patent/figuregen/render-viz-wasm.js";
+import {
+  WASM_MAX_DOT_CHARS,
+  createWasmDotRunner,
+  type VizLoader,
+} from "../../../src/patent/figuregen/render-viz-wasm.js";
 import type { FigureSpec } from "../../../src/patent/figuregen/types.js";
 
 const SPEC: FigureSpec = {
@@ -240,4 +244,27 @@ test("真机 WASM：builtin 与 graphviz-wasm 同 spec 出图，均黑白合规�
       label,
     );
   }
+});
+
+test("规模护栏：超过上限的 DOT 在实例化之前被拒（WASM 不可中断，不能占住主线程）", async () => {
+  let loads = 0;
+  const loader: VizLoader = async () => {
+    loads += 1;
+    return { instance: async () => ({ renderString: () => "<svg/>" }) };
+  };
+  const runner = createWasmDotRunner({ loadViz: loader });
+
+  await assert.rejects(runner("x".repeat(WASM_MAX_DOT_CHARS + 1)), /超过 WASM 渲染上限/u);
+  assert.equal(loads, 0, "护栏必须先于实例化生效（大图不该走到布局阶段才发现无法取消）");
+
+  // 上限之内不因护栏被拒：假 loader 正常返回，渲染成功
+  await runner("digraph { a }");
+  assert.equal(loads, 1);
+});
+
+test("规模护栏：恰好等于上限的 DOT 不被拒（边界不多不少）", async () => {
+  const runner = createWasmDotRunner({
+    loadViz: async () => ({ instance: async () => ({ renderString: () => "<svg/>" }) }),
+  });
+  await assert.doesNotReject(runner("x".repeat(WASM_MAX_DOT_CHARS)));
 });
