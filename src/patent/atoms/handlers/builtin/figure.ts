@@ -169,7 +169,13 @@ export async function detectFigureDrift(inputs: LocatedInputs): Promise<{
     if (parsed.figureNo !== figure.spec.figure_no) {
       drifts.push(`图${figure.figure_no}: 图内图号标注为 ${parsed.figureNo}，与 sidecar 不一致`);
     }
-    if (parsed.numbered) numberedFigureNos.push(figure.spec.figure_no);
+    // 图号的**可见形态**优先以回读为准（V15/V16 判的就是可见形态）；但产物若已做文本
+    // 转路径（文字变轮廓），回读不到 `<text>图N</text>` 不等于图号不存在——那时以生成期
+    // sidecar 记录的 caption 为准。**未转路径时绝不回落**：那种情况下"回读不到"正是图号
+    // 被删的漂移信号，回落会把它蒙掉。
+    if (parsed.numbered || (inputs.sidecar.text_to_path === true && figure.caption !== undefined)) {
+      numberedFigureNos.push(figure.spec.figure_no);
+    }
     const expected = figure.spec.nodes
       .filter(node => node.ref !== undefined)
       .map(node => `${node.id}:${node.ref}`)

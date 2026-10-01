@@ -42,6 +42,15 @@ import {
   type FigureSpec,
   type Jurisdiction,
 } from "../../patent/figuregen/index.js";
+import {
+  FIGURE_TEXT_TO_PATH_ENV,
+  INKSCAPE_CMD_ENV,
+  exportSvgTextToPath,
+  inkscapeInstallHint,
+  isFigureTextToPathEnabled,
+  resolveInkscapeCmd,
+  type InkscapeProbe,
+} from "../../patent/figuregen/inkscape-renderer.js";
 import { caseOutputsDir } from "../../patent/paths.js";
 import { SatiToolRuntimeError } from "../protocol/errors.js";
 import type { SatiToolDefinition, SatiToolRuntimeContext } from "../protocol/types.js";
@@ -256,6 +265,30 @@ export function createPatentFigureProjectTool(
       }
       const documentKind: DocumentKind | undefined =
         input.document_kind === "utility" ? "utility" : input.document_kind === "invention" ? "invention" : undefined;
+      // 字体独立导出（默认关）：与内置渲染通路同规——**先探测、后落盘**，开关开了却没有
+      // Inkscape 就在写出任何产物之前 fail-loud，避免留下"图形已落盘但没转路径"的半成品。
+      const textToPath = isFigureTextToPathEnabled();
+      let inkscape: InkscapeProbe | undefined;
+      if (textToPath) {
+        try {
+          inkscape = resolveInkscapeCmd();
+        } catch (err) {
+          throw new SatiToolRuntimeError(
+            "invalid_tool_input",
+            `${FIGURE_TEXT_TO_PATH_ENV} 已开启，但 ${INKSCAPE_CMD_ENV} 指向的可执行文件不可用：${
+              err instanceof Error ? err.message : String(err)
+            }`,
+            { tool: "patent_figure_project" },
+          );
+        }
+        if (inkscape === undefined) {
+          throw new SatiToolRuntimeError(
+            "tool_execution_failed",
+            `${FIGURE_TEXT_TO_PATH_ENV} 已开启但未找到 Inkscape：${inkscapeInstallHint()}`,
+            { tool: "patent_figure_project" },
+          );
+        }
+      }
       const hiddenLines = input.hidden_lines === true;
 
       // 剖切：仅轴对齐视图可剖（rotate/stepped/local section 不做）
@@ -436,6 +469,23 @@ export function createPatentFigureProjectTool(
           layoutField = page.layout;
         }
 
+        // 字体独立导出（可选收尾，最后一步）：同内置渲染通路——放在图形与落版页都落盘之后、
+        // sidecar 之前（此后不再解析这些文件的文本；sidecar 记录已转路径这一事实）。
+        if (inkscape !== undefined) {
+          for (const target of [svgPath, ...(pagePath === undefined ? [] : [pagePath])]) {
+            const outcome = await exportSvgTextToPath({ path: target, cmd: inkscape.cmd });
+            if (!outcome.ok) {
+              throw new SatiToolRuntimeError(
+                "tool_execution_failed",
+                `文本转路径失败（${target}）：${outcome.error}${
+                  outcome.installHint === undefined ? "" : `——${outcome.installHint}`
+                }`,
+                { tool: "patent_figure_project", path: target, reason: outcome.reason },
+              );
+            }
+          }
+        }
+
         // 图号 + 标记骨架 spec：CAD 图的画幅由投影几何决定（不由本模块布局决定），但**标记**
         // 是真实存在的图面内容 ⇒ 落进 nodes（label=标号、ref=标记），使 V2/V4 在定稿期可用
         const skeleton: FigureSpec = {
@@ -492,6 +542,7 @@ export function createPatentFigureProjectTool(
             check: { ok: true, findings: [], refsInFigures: [], refsInText: [] },
             // 文本侧规则在投影期不适用（无说明书文本），核验由附图门在定稿期跑
             skipTextRules: true,
+            ...(inkscape === undefined ? {} : { textToPath: true }),
           }),
         });
 

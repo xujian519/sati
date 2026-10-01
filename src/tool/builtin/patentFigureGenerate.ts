@@ -48,6 +48,15 @@ import {
   type DotRunner,
 } from "../../patent/figuregen/render-graphviz.js";
 import { createWasmDotRunner } from "../../patent/figuregen/render-viz-wasm.js";
+import {
+  FIGURE_TEXT_TO_PATH_ENV,
+  INKSCAPE_CMD_ENV,
+  exportSvgTextToPath,
+  inkscapeInstallHint,
+  isFigureTextToPathEnabled,
+  resolveInkscapeCmd,
+  type InkscapeProbe,
+} from "../../patent/figuregen/inkscape-renderer.js";
 import { caseOutputsDir } from "../../patent/paths.js";
 import { SatiToolRuntimeError } from "../protocol/errors.js";
 import type { SatiToolDefinition, SatiToolRuntimeContext } from "../protocol/types.js";
@@ -211,6 +220,31 @@ export function createPatentFigureGenerateTool(): SatiToolDefinition<PatentFigur
         });
       }
       assertFigurePayloads(figures, "patent_figure_generate");
+      // 字体独立导出（`SATI_FIGURE_TEXT_TO_PATH`，默认关）：**先探测、后落盘**——若开关
+      // 开了却没有 Inkscape，必须在写出任何产物之前 fail-loud，否则会留下"图形已落盘但
+      // 没转路径"的半成品目录（调用方拿到的产物与声明不符）。
+      const textToPath = isFigureTextToPathEnabled();
+      let inkscape: InkscapeProbe | undefined;
+      if (textToPath) {
+        try {
+          inkscape = resolveInkscapeCmd();
+        } catch (err) {
+          throw new SatiToolRuntimeError(
+            "invalid_tool_input",
+            `${FIGURE_TEXT_TO_PATH_ENV} 已开启，但 ${INKSCAPE_CMD_ENV} 指向的可执行文件不可用：${
+              err instanceof Error ? err.message : String(err)
+            }`,
+            { tool: "patent_figure_generate" },
+          );
+        }
+        if (inkscape === undefined) {
+          throw new SatiToolRuntimeError(
+            "tool_execution_failed",
+            `${FIGURE_TEXT_TO_PATH_ENV} 已开启但未找到 Inkscape：${inkscapeInstallHint()}`,
+            { tool: "patent_figure_generate" },
+          );
+        }
+      }
       // `format` 此前在 SVGs 与 sidecar 都已落盘**之后**才校验：非法值会先写出一个半成品
       // 输出目录、再抛错。入参校验集中到落盘之前。
       const format = input.format ?? "svg";
@@ -352,6 +386,25 @@ export function createPatentFigureGenerateTool(): SatiToolDefinition<PatentFigur
           files.push(entry);
         }
 
+        // 字体独立导出（可选收尾，最后一步）：把字形换成轮廓路径，使交付物不依赖读者机器
+        // 上的字体。放在**全部 SVG 落盘之后、sidecar 落盘之前**——此后不再有模块解析这些
+        // 文件的文本，而 sidecar 需要记录"产物已转路径"这一事实（回读语义见 sidecar.ts
+        // 的 text_to_path：转路径后图面上的文字不再是 `<text>`，"可见图号"读不到不等于没有）。
+        if (inkscape !== undefined) {
+          for (const svgPath of [...files.map(file => file.path), ...pagePaths.map(page => page.path)]) {
+            const outcome = await exportSvgTextToPath({ path: svgPath, cmd: inkscape.cmd });
+            if (!outcome.ok) {
+              throw new SatiToolRuntimeError(
+                "tool_execution_failed",
+                `文本转路径失败（${svgPath}）：${outcome.error}${
+                  outcome.installHint === undefined ? "" : `——${outcome.installHint}`
+                }`,
+                { tool: "patent_figure_generate", path: svgPath, reason: outcome.reason },
+              );
+            }
+          }
+        }
+
         // 附图产物 sidecar（v1）：把 FigureSpec 完整落盘，供下游在**有说明书文本时**
         // 零信息损耗地重跑全部规则（figure-gate 的输入契约，见 figuregen/sidecar.ts）。
         const sidecarPath = await writeFigureSidecar({
@@ -366,6 +419,7 @@ export function createPatentFigureGenerateTool(): SatiToolDefinition<PatentFigur
             figures,
             check,
             skipTextRules: true,
+            ...(inkscape === undefined ? {} : { textToPath: true }),
           }),
         });
 

@@ -166,3 +166,48 @@ export {
   writeSubmissionPageArtifact,
   type SubmissionPageArtifact,
 } from "./deliverables.js";
+export {
+  FIGURE_TEXT_TO_PATH_ENV,
+  INKSCAPE_CMD_ENV,
+  INKSCAPE_DEFAULT_TIMEOUT_MS,
+  exportSvgTextToPath,
+  inkscapeInstallHint,
+  isFigureTextToPathEnabled,
+  isSvgTarget,
+  resolveInkscapeCmd,
+  type InkscapeProbe,
+  type SvgTextToPathFailure,
+  type SvgTextToPathOutcome,
+} from "./inkscape-renderer.js";
+export {
+  GLYPH_BOX_TOLERANCE_MM,
+  GLYPH_DESCENT_RATIO,
+  GLYPH_ASCENT_RATIO,
+  GLYPH_WIDTH_RATIO,
+  FULL_WIDTH_RATIO,
+  UPPER_WIDTH_RATIO,
+  boxQuad,
+  glyphBox,
+  inflateQuad,
+  leaderEnd,
+  quadCrossedBySegment,
+  textWidthMm,
+  type GlyphBox,
+  type GlyphQuad,
+  type GlyphTextAnchor,
+} from "./glyph-box.js";
+export {
+  MM_PER_USER_UNIT,
+  parseLengthMm,
+  resolveSvgViewport,
+  type SvgViewBox,
+  type SvgViewport,
+} from "./svg-viewport.js";
+export {
+  checkFigureRendering,
+  measureInkBounds,
+  type InkBounds,
+  type RenderCheckFinding,
+  type RenderCheckKind,
+  type RenderCheckReport,
+} from "./render-check.js";
