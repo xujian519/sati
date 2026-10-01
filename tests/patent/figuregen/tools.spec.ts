@@ -7,7 +7,7 @@
  */
 
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -576,6 +576,137 @@ test("patent_figure_check：返回 canonical data 且通过自身 outputSchema",
     assert.equal(typeof data.ok, "boolean");
     assert.deepEqual(data.refs_in_figures, [20]);
     assert.deepEqual(data.pixel_images, [], "未提供 image_paths 时栅格条目为空数组");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// 矢量源渲染复核的接线（P0-1）：RC1/RC5 是 fail、RC0 是 info
+// ---------------------------------------------------------------------------
+
+test("patent_figure_check：已交付 SVG 被注入几何缺陷 → RC1 fail，data.ok 为 false", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "sati-tools-rendercheck-ext-"));
+  try {
+    // 走真实生成再人工改写（模拟"图交出去之后被人改坏"）：插入一条穿过普通文字框的线。
+    // 该文字**不带** paint-order 白描边，故不适用 halo 豁免——是真正的贯穿缺陷。
+    const generate = createPatentFigureGenerateTool();
+    await generate.execute(
+      {
+        figures: [
+          {
+            figure_no: 1,
+            kind: "flowchart",
+            nodes: [
+              { id: "a", label: "开始", shape: "ellipse" },
+              { id: "b", label: "处理模块(20)", ref: 20 },
+            ],
+            edges: [{ from: "a", to: "b" }],
+          },
+        ],
+        output_name: "injected",
+        output_dir: dir,
+      },
+      makeContext(dir),
+    );
+    const svgPath = join(dir, "injected-fig1.svg");
+    writeFileSync(
+      svgPath,
+      readFileSync(svgPath, "utf8").replace(
+        "</svg>",
+        '<line x1="0" y1="60" x2="200" y2="60" stroke="#000000"/>' +
+          '<text x="60" y="60" fill="#000000">外部标注</text></svg>',
+      ),
+      "utf8",
+    );
+
+    const tool = createPatentFigureCheckTool();
+    const result = await tool.execute({ svg_paths: [svgPath], spec_text: "处理模块(20)。" }, makeContext(dir));
+    const text = result.content[0]?.type === "text" ? result.content[0].text : "";
+    assert.match(text, /\[FAIL\] RC1/u);
+    assert.match(text, /被线条贯穿/u);
+
+    const data = result.data as {
+      ok: boolean;
+      render_check: { path: string; findings: { rule: string; severity: string }[] }[];
+    };
+    assert.equal(data.ok, false, "RC1 是 fail，data.ok 必须为 false");
+    assert.ok(
+      data.render_check[0]?.findings.some(finding => finding.rule === "RC1" && finding.severity === "fail"),
+      JSON.stringify(data.render_check[0]?.findings),
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("patent_figure_check：svg_paths 只接受本仓产出的图（外部 SVG 在此通路被拒）", async () => {
+  // 这条钉住的是**当前边界**而非期望行为：`parseFigureSvg` 要求图号（data-figure-no 或
+  // 「图N」标注），故 svg_paths 通路到不了外部/第三方 SVG——渲染复核因此只服务本仓产物
+  // 的交付前自检与回归护栏。外部 SVG 的几何复核需要独立入口（见差异分析报告的批次 B）。
+  const dir = mkdtempSync(join(tmpdir(), "sati-tools-rendercheck-bound-"));
+  try {
+    writeFileSync(
+      join(dir, "ext.svg"),
+      '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200">' +
+        '<line x1="0" y1="100" x2="200" y2="100"/><text x="90" y="100" fill="#000000">标签</text></svg>',
+      "utf8",
+    );
+    const tool = createPatentFigureCheckTool();
+    await assert.rejects(
+      tool.execute({ svg_paths: ["ext.svg"], spec_text: "标签。" }, makeContext(dir)),
+      /解析附图失败/u,
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("patent_figure_check：本仓自产图只报「未量测」清单（边标签 halo 使 RC1 不误报）", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "sati-tools-rendercheck-own-"));
+  try {
+    // 带边标签的流程图：标签落在连线中点上，正是 halo 豁免要守住的场景
+    const generate = createPatentFigureGenerateTool();
+    await generate.execute(
+      {
+        figures: [
+          {
+            figure_no: 1,
+            kind: "flowchart",
+            nodes: [
+              { id: "a", label: "开始", shape: "ellipse" },
+              { id: "b", label: "处理模块(20)", ref: 20 },
+              { id: "c", label: "结束", shape: "ellipse" },
+            ],
+            edges: [
+              { from: "a", to: "b" },
+              { from: "b", to: "c", label: "是" },
+            ],
+          },
+        ],
+        output_name: "own",
+        output_dir: dir,
+      },
+      makeContext(dir),
+    );
+
+    const check = createPatentFigureCheckTool();
+    const result = await check.execute(
+      { svg_paths: [join(dir, "own-fig1.svg")], spec_text: "处理模块(20)执行处理。" },
+      makeContext(dir),
+    );
+    const data = result.data as {
+      ok: boolean;
+      render_check: { findings: { rule: string; severity: string }[] }[];
+    };
+    const findings = data.render_check[0]?.findings ?? [];
+    assert.deepEqual(
+      findings.map(finding => finding.rule),
+      ["RC0"],
+      `本仓产物不应触发 RC1–RC5，实际 ${JSON.stringify(findings)}`,
+    );
+    assert.equal(findings[0]?.severity, "info", "「未量测」是清单而不是缺陷");
+    assert.equal(data.ok, true, "RC0 不得阻断");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

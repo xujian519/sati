@@ -18,10 +18,16 @@ import {
   parseFigureSvg,
   profileForJurisdiction,
   type DocumentKind,
+  type FigureCheckSeverity,
   type FigureSpec,
   type Jurisdiction,
   type OfficeProfile,
 } from "../../patent/figuregen/index.js";
+import {
+  checkFigureRendering,
+  type RenderCheckFinding,
+  type RenderCheckKind,
+} from "../../patent/figuregen/render-check.js";
 import { figureSpecsToAnalysis } from "../../patent/figure/bridge.js";
 import { checkFigureConsistency } from "../../patent/figure/multi-figure-consistency.js";
 import { analyzeImageBuffer, type PixelFinding, type PixelMetrics } from "../../patent/figuregen/pixel-gate.js";
@@ -54,6 +60,41 @@ export type PatentFigureCheckInput = {
 
 /** 栅格图核查条目（报告面：文件名 + 指标 + 发现）。 */
 type PixelGateEntry = PixelMetrics & { name: string; findings: PixelFinding[] };
+
+/**
+ * 矢量源渲染复核的发现 → 本仓的规则号与级别。
+ *
+ * 规则号自成一族 `RC*`（与 `V*` 结构规则、`PX*` 像素规则分列）：这三族吃的是**不同的输入**
+ * ——`V*` 吃 FigureSpec、`PX*` 吃栅格像素、`RC*` 吃已生成/外部 SVG 的几何。混进
+ * `FigureCheckRuleId` 会让「注册表覆盖全部 V 规则号」那类不变量测试失去意义。
+ *
+ * 级别取「图面读不出来」与「可读性/制图瑕疵」的界线：
+ * - `RC1` 文字被线条贯穿、`RC5` 内容越出画布 ⇒ **fail**（前者标号读不出、后者内容根本没渲染）；
+ * - `RC2` 净距不足、`RC3` 点划线被实线覆盖、`RC4` 相邻零件剖面线难区分 ⇒ warn（能读但不清）；
+ * - `RC0` 未量测 ⇒ info（不是缺陷，是"这份报告没覆盖到哪些结构"的清单）。
+ *
+ * 判据与阈值（净距默认 1.5mm、方向差/间距比上限、长划 3mm 等）全部沿用
+ * deepseek-harness 的默认值，**非本仓条文核验过的法条数值**；`RC1` 对本仓边标签有一处
+ * 适配豁免（见渲染复核模块的 halo 说明）。
+ */
+const RENDER_CHECK_RULE: Record<RenderCheckKind, { rule: string; severity: FigureCheckSeverity }> = {
+  "text-crossed-by-line": { rule: "RC1", severity: "fail" },
+  "ink-outside-canvas": { rule: "RC5", severity: "fail" },
+  "text-clearance": { rule: "RC2", severity: "warn" },
+  "centerline-covered": { rule: "RC3", severity: "warn" },
+  "hatch-orientation-collision": { rule: "RC4", severity: "warn" },
+  "not-measured": { rule: "RC0", severity: "info" },
+};
+
+/** 一张已交付 SVG 的渲染复核结果（报告面：文件 + 发现）。 */
+type RenderCheckEntry = {
+  path: string;
+  findings: { rule: string; severity: FigureCheckSeverity; message: string }[];
+};
+
+function toRenderCheckFindings(findings: readonly RenderCheckFinding[]): RenderCheckEntry["findings"] {
+  return findings.map(finding => ({ ...RENDER_CHECK_RULE[finding.check], message: finding.message }));
+}
 
 /**
  * 栅格附图逐张做像素级核查（sharp 动态导入在 `analyzeImageBuffer` 内）。
@@ -110,6 +151,21 @@ export function createPatentFigureCheckTool(): SatiToolDefinition<PatentFigureCh
           type: "array",
           items: PIXEL_IMAGE_SCHEMA,
           description: "栅格附图的像素级核查指标与发现（未提供 image_paths 时为空数组）",
+        },
+        render_check: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["path", "findings"],
+            properties: {
+              path: { type: "string" },
+              findings: { type: "array", items: FIGURE_FINDING_SCHEMA },
+            },
+          },
+          description:
+            "已交付 SVG 的矢量源渲染复核（RC0–RC5；未提供 svg_paths 时为空数组）。" +
+            "RC0「未量测」不是缺陷，是这份报告未覆盖到的结构清单——没有它时「未发现问题」才等于逐类量测过",
         },
         multi_figure_consistency: {
           type: "object",
@@ -241,6 +297,8 @@ export function createPatentFigureCheckTool(): SatiToolDefinition<PatentFigureCh
       assertFigurePayloads(input.figures ?? [], "patent_figure_check");
       // 已交付 SVG 的图号观测（V15/V16 的判据：图号的**可见形态**只在交付文件里可观测）。
       const numberedFigureNos: number[] = [];
+      // 矢量源渲染复核（`RC*`）：在 SVG 源上量测几何事实，与吃 FigureSpec 的 V* 规则互补。
+      const renderChecks: RenderCheckEntry[] = [];
       // 回读骨架的图号：画幅不由本模块布局决定，须逐图排除出 V7 的画幅判据。
       const readbackFigureNos: number[] = [];
       const svgPaths = input.svg_paths ?? [];
@@ -284,6 +342,9 @@ export function createPatentFigureCheckTool(): SatiToolDefinition<PatentFigureCh
         figures.push({ figure_no: parsed.figureNo, kind: "flowchart", nodes: parsed.nodes, edges: [] });
         readbackFigureNos.push(parsed.figureNo);
         if (parsed.numbered) numberedFigureNos.push(parsed.figureNo);
+        // 几何量测在矢量源上做：线段位置/线宽/字号即渲染输入，不需要栅格化器。这一条覆盖
+        // `V*` 结构规则**判不到**的面（回读骨架没有图型、方向与布局，看不出"画出来是什么样"）。
+        renderChecks.push({ path: svgPath, findings: toRenderCheckFindings(checkFigureRendering(svg).findings) });
       }
       const imagePaths = input.image_paths ?? [];
       if (figures.length === 0 && imagePaths.length === 0) {
@@ -319,10 +380,18 @@ export function createPatentFigureCheckTool(): SatiToolDefinition<PatentFigureCh
         const pixelResults = await runPixelGateForPaths(imagePaths, context.cwd, profile.office);
         const pixelFail = pixelResults.flatMap(r => r.findings.filter(f => f.severity === "fail")).length;
         const pixelWarn = pixelResults.flatMap(r => r.findings.filter(f => f.severity === "warn")).length;
+        // 渲染复核的 fail 与结构规则、像素门禁同权：RC1（文字被线贯穿）与 RC5（内容越出画布）
+        // 都是"交付出去就读不出/看不到"的缺陷，不得只躺在报告里。
+        const renderCheckFail = renderChecks
+          .flatMap(entry => entry.findings)
+          .filter(finding => finding.severity === "fail").length;
+        const renderCheckWarn = renderChecks
+          .flatMap(entry => entry.findings)
+          .filter(finding => finding.severity === "warn").length;
         const lines: string[] = [
-          `核验${result.ok && pixelFail === 0 ? "通过" : "未通过"}（fail=` +
-            `${result.findings.filter(f => f.severity === "fail").length + pixelFail}, ` +
-            `warn=${result.findings.filter(f => f.severity === "warn").length + pixelWarn}）：`,
+          `核验${result.ok && pixelFail === 0 && renderCheckFail === 0 ? "通过" : "未通过"}（fail=` +
+            `${result.findings.filter(f => f.severity === "fail").length + pixelFail + renderCheckFail}, ` +
+            `warn=${result.findings.filter(f => f.severity === "warn").length + pixelWarn + renderCheckWarn}）：`,
           figures.length === 0
             ? "结构规则：未提供结构化附图（仅栅格图，本次不适用）"
             : `图内标记：${result.refsInFigures.join(", ") || "（无）"}`,
@@ -371,6 +440,24 @@ export function createPatentFigureCheckTool(): SatiToolDefinition<PatentFigureCh
           }
         }
 
+        if (renderChecks.length > 0) {
+          lines.push(
+            "",
+            "已交付 SVG 的渲染复核（矢量源几何量测：文字是否被线条贯穿、文字与图线净距、点划线是否被同位置实线覆盖、相邻零件剖面线可否区分、内容是否越出画布）：",
+          );
+          for (const entry of renderChecks) {
+            const fails = entry.findings.filter(finding => finding.severity === "fail").length;
+            lines.push(
+              `- ${entry.path}：${
+                entry.findings.length === 0 ? "无发现" : `${entry.findings.length} 项（fail=${fails}）`
+              }`,
+            );
+            for (const finding of entry.findings) {
+              lines.push(`  [${finding.severity.toUpperCase()}] ${finding.rule}: ${finding.message}`);
+            }
+          }
+        }
+
         // 多图一致性（≥2 幅时自动跑，复用既有纯函数）：跨图标记/名称冲突 +
         // 图文对齐（电学档 R1/C2 与机械档 壳体(10) 分别对齐，见 figure/bridge.ts）。
         // 单图无"跨图"可言，不跑（避免制造噪音）。
@@ -395,7 +482,7 @@ export function createPatentFigureCheckTool(): SatiToolDefinition<PatentFigureCh
         return {
           content: [{ type: "text", text: lines.join("\n") }],
           data: {
-            ok: result.ok && pixelFail === 0,
+            ok: result.ok && pixelFail === 0 && renderCheckFail === 0,
             findings: result.findings,
             refs_in_figures: result.refsInFigures,
             refs_in_text: result.refsInText,
@@ -416,6 +503,7 @@ export function createPatentFigureCheckTool(): SatiToolDefinition<PatentFigureCh
               ...(entry.declaredFigureNo === undefined ? {} : { declaredFigureNo: entry.declaredFigureNo }),
               findings: entry.findings,
             })),
+            render_check: renderChecks,
             ...(multiFigureConsistency === undefined ? {} : { multi_figure_consistency: multiFigureConsistency }),
           },
         };
