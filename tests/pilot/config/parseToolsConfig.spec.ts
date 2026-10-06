@@ -212,3 +212,51 @@ test("patentDomain 在已知字段白名单内（不产生未知字段告警）"
     ["TOOLS_UNKNOWN_FIELD"],
   );
 });
+
+test("accepts every supplementary web search provider without diagnostics", () => {
+  for (const provider of ["serper", "brave", "baidu", "bocha", "exa", "serpapi"]) {
+    const diagnostics: PilotConfigDiagnostic[] = [];
+
+    const config = parseToolsConfig({ webSearch: { enabled: true, provider, apiKey: "k" } }, diagnostics);
+
+    assert.equal(config?.webSearch?.provider, provider, provider);
+    assert.deepEqual(diagnostics, [], provider);
+  }
+});
+
+test("rejects an unsupported web search provider", () => {
+  const diagnostics: PilotConfigDiagnostic[] = [];
+
+  const config = parseToolsConfig({ webSearch: { enabled: true, provider: "altavista" } }, diagnostics);
+
+  assert.equal(config?.webSearch?.provider, undefined);
+  assert.equal(diagnostics[0]?.code, "TOOLS_WEB_SEARCH_PROVIDER_INVALID");
+});
+
+test("parses the serpapi searchEngine and rejects an unknown engine", () => {
+  const accepted: PilotConfigDiagnostic[] = [];
+  const config = parseToolsConfig(
+    { webSearch: { enabled: true, provider: "serpapi", searchEngine: "baidu" } },
+    accepted,
+  );
+  assert.equal(config?.webSearch?.searchEngine, "baidu");
+  assert.deepEqual(accepted, []);
+
+  const rejected: PilotConfigDiagnostic[] = [];
+  parseToolsConfig({ webSearch: { enabled: true, provider: "serpapi", searchEngine: "altavista" } }, rejected);
+  assert.equal(
+    rejected.some(item => item.code === "TOOLS_WEB_SEARCH_ENGINE_INVALID"),
+    true,
+  );
+});
+
+test("does not flag searchEngine as an unknown web search field", () => {
+  const diagnostics: PilotConfigDiagnostic[] = [];
+
+  parseToolsConfig({ webSearch: { enabled: true, provider: "serpapi", searchEngine: "google" } }, diagnostics);
+
+  assert.equal(
+    diagnostics.some(item => item.code === "TOOLS_WEB_SEARCH_UNKNOWN_FIELD"),
+    false,
+  );
+});
