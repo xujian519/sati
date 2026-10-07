@@ -1,4 +1,5 @@
 import { isRecord } from "../../model/config/schema.js";
+import { SERPAPI_ENGINES, isWebSearchProvider, type SerpApiEngine } from "./webSearchProviders.js";
 import type {
   PilotConfigDiagnostic,
   PilotPaperSearchConfig,
@@ -7,7 +8,6 @@ import type {
   PilotWebSearchConfig,
   PilotWebSearchCustomAuth,
   PilotWebSearchCustomMethod,
-  PilotWebSearchProvider,
 } from "./types.js";
 
 /**
@@ -256,18 +256,29 @@ function parseWebSearch(raw: unknown, diagnostics: PilotConfigDiagnostic[]): Pil
   if (enabled !== undefined) result.enabled = enabled;
 
   if (raw.provider !== undefined) {
-    if (raw.provider !== "glm" && raw.provider !== "tavily" && raw.provider !== "custom") {
+    // 枚举以 webSearchProviders.ts 为唯一事实源：设置页、YAML 校验与工具实现
+    // 共用一份，避免三处各写一遍后漂移。
+    if (!isWebSearchProvider(raw.provider)) {
       diagnostics.push({
         code: "TOOLS_WEB_SEARCH_PROVIDER_INVALID",
         severity: "fatal",
-        message: 'tools.webSearch.provider must be "glm", "tavily", or "custom".',
+        message: "tools.webSearch.provider must be a supported search provider.",
         path: "tools.webSearch.provider",
         recoverable: false,
       });
     } else {
-      result.provider = raw.provider as PilotWebSearchProvider;
+      result.provider = raw.provider;
     }
   }
+
+  const searchEngine = parseEnumField<SerpApiEngine>(
+    raw.searchEngine,
+    [...SERPAPI_ENGINES],
+    "tools.webSearch.searchEngine",
+    "TOOLS_WEB_SEARCH_ENGINE_INVALID",
+    diagnostics,
+  );
+  if (searchEngine) result.searchEngine = searchEngine;
 
   if (raw.apiKey !== undefined) {
     if (typeof raw.apiKey !== "string" || raw.apiKey.trim().length === 0) {
@@ -328,6 +339,7 @@ function parseWebSearch(raw: unknown, diagnostics: PilotConfigDiagnostic[]): Pil
     if (
       key !== "enabled" &&
       key !== "provider" &&
+      key !== "searchEngine" &&
       key !== "apiKey" &&
       key !== "endpoint" &&
       key !== "customProvider" &&

@@ -1,8 +1,14 @@
 import fs from "fs";
-import { readStableConfigRecord, resolveConfigWritePath, writeConfigAtomically } from "./satiConfigFileIo.js";
+import {
+  ConfigConflictError,
+  configRevision,
+  readStableConfigRecord,
+  resolveConfigWritePath,
+  withConfigWriteLock,
+  writeConfigAtomically,
+} from "./satiConfigFileIo.js";
 import os from "os";
 import path from "path";
-import { createHash } from "node:crypto";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import { parseGatewayConfig } from "../../../src/pilot/index.js";
 
@@ -754,37 +760,8 @@ function purgeBootstrapPlaceholder(config) {
   return config;
 }
 
-/** 配置内容 revision（sha256 of raw YAML）；乐观锁与变更检测共用。 */
-export function configRevision(raw) {
-  return createHash("sha256")
-    .update(String(raw ?? ""))
-    .digest("hex");
-}
-
-/** 乐观锁冲突：磁盘 revision 已不同于调用方读到的版本（409 语义）。 */
-class ConfigConflictError extends Error {
-  constructor(message, currentRevision) {
-    super(message);
-    this.name = "ConfigConflictError";
-    this.code = "CONFIG_CONFLICT";
-    this.currentRevision = currentRevision;
-  }
-}
-
-// 进程内写互斥：所有落盘入口（writeSatiConfig/writeRawSatiYaml）串行化，
-// 防止并发写交错（config.js 路由层的队列只覆盖自己的调用方，service 层
-// 兜住 memory.js 等其余入口）。
-let configWriteChain = Promise.resolve();
-
-async function withConfigWriteLock(job) {
-  const run = configWriteChain.then(job, job);
-  // 链尾吞错：失败的 job 不阻塞后续写。
-  configWriteChain = run.then(
-    () => undefined,
-    () => undefined,
-  );
-  return run;
-}
+/** 配置内容 revision、冲突错误与写互斥定义见 satiConfigFileIo.js（I/O 层共用）。 */
+export { ConfigConflictError, configRevision };
 
 // Lossless writer — config object is the V2 disk shape, written verbatim
 // after running through validation. UI-internal === disk schema, so
@@ -796,6 +773,10 @@ async function withConfigWriteLock(job) {
 // - previousRevision 提供时，落盘前校验磁盘 revision，防止读改写丢更新。
 export async function writeSatiConfig(config, { previousRevision, onWriteCommitted } = {}) {
   return withConfigWriteLock(async () => {
+    // 锁内比对只挡"读草稿 → 进锁"之间的外部编辑；写盘本身（mkdir/stat/open/
+    // write/fsync）同样是耗时窗口，故把这次比对的 revision 继续下传给
+    // writeConfigAtomically 作为 CAS，由它在 rename 前再确认一次。
+    let expectedRevision;
     if (typeof previousRevision === "string" && previousRevision) {
       const disk = await readStableConfigRecord(readSatiConfigFile, {
         makeUnstableError: previous =>
@@ -804,11 +785,11 @@ export async function writeSatiConfig(config, { previousRevision, onWriteCommitt
             configRevision(previous.raw ?? ""),
           ),
       });
-      const currentRevision = configRevision(disk.raw ?? "");
-      if (previousRevision !== currentRevision) {
+      expectedRevision = configRevision(disk.raw ?? "");
+      if (previousRevision !== expectedRevision) {
         throw new ConfigConflictError(
           "Config changed since this settings draft was loaded. Refresh and apply the change again.",
-          currentRevision,
+          expectedRevision,
         );
       }
     }
@@ -835,7 +816,7 @@ export async function writeSatiConfig(config, { previousRevision, onWriteCommitt
       }
     }
     const raw = stringifyYaml(yamlObj, { lineWidth: 0 });
-    await writeConfigAtomically({ writePath, raw, onWriteCommitted });
+    await writeConfigAtomically({ writePath, raw, expectedRevision, onWriteCommitted });
     return { configPath, raw, validation, config: yamlObj };
   });
 }
@@ -846,6 +827,11 @@ export async function writeSatiConfig(config, { previousRevision, onWriteCommitt
 export async function writeRawSatiYaml(yamlObj, options = {}) {
   return writeSatiConfig(yamlObj, options);
 }
+
+// 外科写（path-scoped update）单列在 satiConfigUpdate.js：本文件已触 file-size 棘轮
+// （见 docs/technical-debt/architecture-baseline.json），且该能力只依赖 I/O 原语、
+// 与配置 schema / 校验无关。
+export { updateSatiConfig } from "./satiConfigUpdate.js";
 
 function expandTilde(value) {
   const text = normalizeString(value);

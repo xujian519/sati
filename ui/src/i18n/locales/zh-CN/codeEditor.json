@@ -60,6 +60,7 @@
     "converting": "正在加载...",
     "refreshing": "文件已更新，正在刷新预览...",
     "refresh": "刷新预览",
+    "retry": "重试",
     "configureService": "配置 Office 预览服务",
     "loadingBuiltin": "正在加载内置预览...",
     "unsupportedBuiltinTitle": "内置预览不支持此格式",
@@ -85,6 +86,13 @@
     "failedMessage": "未能生成工作表预览。",
     "printViewUnavailable": "打印布局需要启用 LibreOffice。",
     "interactiveFailedMessage": "未能加载交互式表格预览。",
+    "errors": {
+      "invalidFile": "这个工作簿文件已损坏或格式不受支持。",
+      "cannotParse": "无法解析这个工作簿。文件可能已损坏，或使用了暂不支持的格式。",
+      "tooLarge": "工作簿太大，无法预览。可下载后使用系统应用打开。",
+      "noVisibleSheets": "这个工作簿没有可见的工作表。",
+      "fileMissing": "文件已不在磁盘上，可能已被移动或删除。"
+    },
     "loadingInteractive": "正在加载交互式表格...",
     "fellBackToPrint": "交互式预览不可用，Sati 已切换到打印布局。",
     "worksheets": "工作表",

@@ -1,12 +1,12 @@
 import express from "express";
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
-import { dirname, join } from "path";
+import { existsSync, readFileSync } from "fs";
+import { join } from "path";
 import { homedir } from "os";
 import qrcode from "qrcode";
-import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
+import { parse as parseYaml } from "yaml";
 import { suppressNextWatchEvent } from "../services/satiConfigWatcher.js";
 import { reloadSatiConfig } from "../services/satiConfigReloader.js";
-import { readSatiConfigFile } from "../services/satiConfig.js";
+import { readSatiConfigFile, updateSatiConfig } from "../services/satiConfig.js";
 import { getSatiGateway } from "../sati-bridge.js";
 import { SERVER_TIMEOUTS } from "../utils/timeouts.js";
 
@@ -72,12 +72,6 @@ function loadWeixinCredentials() {
   }
 }
 
-function saveYaml(config) {
-  mkdirSync(dirname(SATI_YAML), { recursive: true });
-  suppressNextWatchEvent();
-  writeFileSync(SATI_YAML, stringifyYaml(config, { lineWidth: 0 }), "utf-8");
-}
-
 function maskValue(value) {
   if (!value || value.length <= 8) return value || "";
   return `${value.slice(0, 4)}…${value.slice(-4)}`;
@@ -97,14 +91,25 @@ function normalizeList(value) {
   return [];
 }
 
-function writeWeComConfig(config, input) {
+/**
+ * 就地写入 WeCom 适配器配置。凭据缺失（本次未提供且磁盘上也没有）时返回 false，
+ * 由调用方按 400 处理——校验必须发生在拿到磁盘最新内容的 mutate 内，
+ * 否则读与写之间的外部改动会让"沿用旧凭据"的分支读到过期值。
+ */
+function applyWeComConfig(config, input) {
   if (!config.adapters) config.adapters = {};
   const previous = config.adapters.wecom ?? {};
   const previousExtra = previous.extra ?? {};
+  // 存 trim 后的值：粘贴 botId/secret 常带尾随空格或换行，原样落盘会让 WeCom
+  // 握手报不透明的鉴权错误，而 UI 显示"已保存"。本次输入为空（含纯空白）时
+  // 回落到已存值，与置换前的行为一致。
+  const token = String(input.botId || "").trim() || String(previous.token || "").trim();
+  const secret = String(input.secret || "").trim() || String(previousExtra.secret || "").trim();
+  if (!token || !secret) return false;
   const dmPolicy = normalizeAccessPolicy(input.dmPolicy, "open");
   const groupPolicy = normalizeAccessPolicy(input.groupPolicy, "disabled");
   const extra = {
-    secret: input.secret || previousExtra.secret || "",
+    secret,
     websocket_url:
       input.websocketUrl || previousExtra.websocket_url || previousExtra.websocketUrl || WECOM_DEFAULT_WS_URL,
     dm_policy: dmPolicy,
@@ -116,16 +121,22 @@ function writeWeComConfig(config, input) {
   );
   if (dmPolicy === "allowlist") extra.allow_from = allowFrom;
   if (groupPolicy === "allowlist") extra.group_allow_from = groupAllowFrom;
-  config.adapters.wecom = {
-    enabled: true,
-    token: input.botId || previous.token || "",
-    extra,
-  };
-  return config;
+  config.adapters.wecom = { enabled: true, token, extra };
+  return true;
 }
 
-async function persistConfigAndReload(config) {
-  saveYaml(config);
+/**
+ * 落盘适配器配置并让 gateway 重载。
+ *
+ * 走 updateSatiConfig 外科写而非整份重写：只改动 `paths` 指到的键，用户手写的
+ * 注释、行尾注释与键序都保住；也不会把 buildDefaultSatiConfig 的默认值物化进
+ * 用户文件。落盘仍然原子（temp + rename + fsync + 进程内串行）。
+ *
+ * @param mutate 收到磁盘最新配置，就地修改；返回 false 表示无需落盘。
+ * @param paths 本次容许变更的键路径（如 `[["adapters","feishu"]]`）。
+ */
+async function persistConfigAndReload(mutate, paths) {
+  await updateSatiConfig(mutate, { paths, onWriteCommitted: suppressNextWatchEvent });
   const record = readSatiConfigFile();
   await reloadSatiConfig(record.config);
   void notifyGatewayReload();
@@ -328,22 +339,22 @@ router.get("/feishu/qr-poll", async (req, res) => {
       const domain = state.domain;
 
       // Auto-save to config
-      const config = loadYaml();
-      if (!config.adapters) config.adapters = {};
-      const previous = config.adapters.feishu ?? {};
-      config.adapters.feishu = {
-        ...previous,
-        enabled: true,
-        appId,
-        appSecret,
-        connectionMode: previous.connectionMode || "stream",
-        domainName: domain,
-      };
-      saveYaml(config);
-
-      const record = readSatiConfigFile();
-      await reloadSatiConfig(record.config);
-      void notifyGatewayReload();
+      await persistConfigAndReload(
+        next => {
+          if (!next.adapters) next.adapters = {};
+          const previous = next.adapters.feishu ?? {};
+          next.adapters.feishu = {
+            ...previous,
+            enabled: true,
+            appId,
+            appSecret,
+            connectionMode: previous.connectionMode || "stream",
+            domainName: domain,
+          };
+          return true;
+        },
+        [["adapters", "feishu"]],
+      );
 
       return res.json({
         ok: true,
@@ -380,22 +391,22 @@ router.post("/feishu/save", async (req, res) => {
   }
 
   try {
-    const config = loadYaml();
-    if (!config.adapters) config.adapters = {};
-    const previous = config.adapters.feishu ?? {};
-    config.adapters.feishu = {
-      ...previous,
-      enabled: true,
-      appId,
-      appSecret,
-      connectionMode: connectionMode || previous.connectionMode || "stream",
-      domainName: domainName || previous.domainName || "feishu",
-    };
-    saveYaml(config);
-
-    const record = readSatiConfigFile();
-    await reloadSatiConfig(record.config);
-    void notifyGatewayReload();
+    await persistConfigAndReload(
+      next => {
+        if (!next.adapters) next.adapters = {};
+        const previous = next.adapters.feishu ?? {};
+        next.adapters.feishu = {
+          ...previous,
+          enabled: true,
+          appId,
+          appSecret,
+          connectionMode: connectionMode || previous.connectionMode || "stream",
+          domainName: domainName || previous.domainName || "feishu",
+        };
+        return true;
+      },
+      [["adapters", "feishu"]],
+    );
 
     res.json({ ok: true, message: "飞书配置已保存，重启后生效" });
   } catch (error) {
@@ -405,15 +416,14 @@ router.post("/feishu/save", async (req, res) => {
 
 router.post("/feishu/disable", async (_req, res) => {
   try {
-    const config = loadYaml();
-    if (config.adapters?.feishu) {
-      config.adapters.feishu.enabled = false;
-    }
-    saveYaml(config);
-
-    const record = readSatiConfigFile();
-    await reloadSatiConfig(record.config);
-    void notifyGatewayReload();
+    await persistConfigAndReload(
+      next => {
+        if (!next.adapters?.feishu) return false;
+        next.adapters.feishu.enabled = false;
+        return true;
+      },
+      [["adapters", "feishu"]],
+    );
 
     res.json({ ok: true });
   } catch (error) {
@@ -426,12 +436,17 @@ router.post("/feishu/disable", async (_req, res) => {
 router.post("/weixin/qr-begin", async (_req, res) => {
   const requestedAt = new Date().toISOString();
   try {
-    const config = loadYaml();
-    if (!config.adapters) config.adapters = {};
-    const previous = config.adapters.weixin ?? {};
-    if (previous.enabled !== true) {
-      config.adapters.weixin = { ...previous, enabled: true };
-      saveYaml(config);
+    const outcome = await updateSatiConfig(
+      next => {
+        if (!next.adapters) next.adapters = {};
+        const previous = next.adapters.weixin ?? {};
+        if (previous.enabled === true) return false;
+        next.adapters.weixin = { ...previous, enabled: true };
+        return true;
+      },
+      { paths: [["adapters", "weixin"]], onWriteCommitted: suppressNextWatchEvent },
+    );
+    if (outcome.changed) {
       const record = readSatiConfigFile();
       await reloadSatiConfig(record.config);
     }
@@ -526,15 +541,14 @@ router.get("/weixin/qr-poll", (_req, res) => {
 
 router.post("/weixin/disable", async (_req, res) => {
   try {
-    const config = loadYaml();
-    if (config.adapters?.weixin) {
-      config.adapters.weixin.enabled = false;
-    }
-    saveYaml(config);
-
-    const record = readSatiConfigFile();
-    await reloadSatiConfig(record.config);
-    void notifyGatewayReload();
+    await persistConfigAndReload(
+      next => {
+        if (!next.adapters?.weixin) return false;
+        next.adapters.weixin.enabled = false;
+        return true;
+      },
+      [["adapters", "weixin"]],
+    );
 
     res.json({ ok: true });
   } catch (error) {
@@ -599,14 +613,17 @@ router.get("/wecom/qr-poll", async (req, res) => {
     }
 
     req.app.locals._wecomQr = null;
-    const config = writeWeComConfig(loadYaml(), {
-      botId,
-      secret,
-      websocketUrl: WECOM_DEFAULT_WS_URL,
-      dmPolicy: "open",
-      groupPolicy: "disabled",
-    });
-    await persistConfigAndReload(config);
+    await persistConfigAndReload(
+      next =>
+        applyWeComConfig(next, {
+          botId,
+          secret,
+          websocketUrl: WECOM_DEFAULT_WS_URL,
+          dmPolicy: "open",
+          groupPolicy: "disabled",
+        }),
+      [["adapters", "wecom"]],
+    );
 
     res.json({ ok: true, botId: maskValue(botId) });
   } catch {
@@ -622,41 +639,45 @@ router.post("/wecom/qr-cancel", (req, res) => {
 
 router.post("/wecom/save", async (req, res) => {
   const { botId, secret, websocketUrl, dmPolicy, groupPolicy, allowFrom, groupAllowFrom } = req.body || {};
-  const existing = loadYaml();
-  const existingWeCom = existing.adapters?.wecom ?? {};
-  const existingExtra = existingWeCom.extra ?? {};
-  const normalizedBotId = String(botId || "").trim();
-  const normalizedSecret = String(secret || "").trim();
-  const resolvedBotId = normalizedBotId || String(existingWeCom.token || "").trim();
-  const resolvedSecret = normalizedSecret || String(existingExtra.secret || "").trim();
-  if (!resolvedBotId || !resolvedSecret) {
-    return res.status(400).json({ ok: false, error: "botId and secret are required" });
-  }
+  let missingCredentials = false;
 
   try {
-    const config = writeWeComConfig(existing, {
-      botId: resolvedBotId,
-      secret: resolvedSecret,
-      websocketUrl: String(websocketUrl || "").trim() || WECOM_DEFAULT_WS_URL,
-      dmPolicy,
-      groupPolicy,
-      allowFrom,
-      groupAllowFrom,
-    });
-    await persistConfigAndReload(config);
-    res.json({ ok: true, message: "WeCom config saved" });
+    await persistConfigAndReload(
+      next => {
+        const applied = applyWeComConfig(next, {
+          botId,
+          secret,
+          websocketUrl: String(websocketUrl || "").trim() || WECOM_DEFAULT_WS_URL,
+          dmPolicy,
+          groupPolicy,
+          allowFrom,
+          groupAllowFrom,
+        });
+        if (!applied) missingCredentials = true;
+        return applied;
+      },
+      [["adapters", "wecom"]],
+    );
   } catch (error) {
-    res.status(500).json({ ok: false, error: error.message });
+    return res.status(500).json({ ok: false, error: error.message });
   }
+
+  if (missingCredentials) {
+    return res.status(400).json({ ok: false, error: "botId and secret are required" });
+  }
+  res.json({ ok: true, message: "WeCom config saved" });
 });
 
 router.post("/wecom/disable", async (_req, res) => {
   try {
-    const config = loadYaml();
-    if (config.adapters?.wecom) {
-      config.adapters.wecom.enabled = false;
-    }
-    await persistConfigAndReload(config);
+    await persistConfigAndReload(
+      next => {
+        if (!next.adapters?.wecom) return false;
+        next.adapters.wecom.enabled = false;
+        return true;
+      },
+      [["adapters", "wecom"]],
+    );
     res.json({ ok: true });
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message });

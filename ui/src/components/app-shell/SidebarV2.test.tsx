@@ -133,3 +133,40 @@ describe("SidebarV2 team panel entry", () => {
     expect(onOpenTeamPanel).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("SidebarV2 resize handle", () => {
+  /** 拖拽期间的全屏遮罩（`fixed inset-0 z-[60]`）——它盖住分隔条，双击事件到不了。 */
+  const dragOverlay = () => document.querySelector(".z-\\[60\\]");
+
+  it("does not enter drag mode until the pointer actually moves", async () => {
+    renderSidebar(project);
+    const handle = screen.getByRole("separator", { name: /resize sidebar/i });
+
+    // 按下但不移动：不能进入拖拽态。一进入就挂全屏遮罩，分隔条收不到双击，
+    // 「双击复位宽度」就失效了。
+    fireEvent.mouseDown(handle, { clientX: 300 });
+    expect(dragOverlay()).toBeNull();
+    fireEvent.mouseUp(document);
+
+    // 真的拖动（超过阈值）后才进入拖拽态。
+    fireEvent.mouseDown(handle, { clientX: 300 });
+    fireEvent.mouseMove(document, { clientX: 340 });
+    await waitFor(() => expect(dragOverlay()).not.toBeNull());
+    fireEvent.mouseUp(document);
+
+    await waitFor(() => expect(dragOverlay()).toBeNull());
+  });
+
+  it("ignores pointer jitter below the drag threshold", async () => {
+    renderSidebar(project);
+    const handle = screen.getByRole("separator", { name: /resize sidebar/i });
+
+    fireEvent.mouseDown(handle, { clientX: 300 });
+    // 1px 抖动（双击时手抖的常见幅度）不应被当成拖拽。
+    fireEvent.mouseMove(document, { clientX: 301 });
+    await Promise.resolve();
+    expect(dragOverlay()).toBeNull();
+
+    fireEvent.mouseUp(document);
+  });
+});

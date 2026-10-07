@@ -1,17 +1,17 @@
 # Sati 技术债务指标基线与趋势
 
 > 由 `node scripts/measure-techdebt.mjs --update` 自动生成，谨防手工编辑。
-> 最近一次快照：**2026-10-01**
+> 最近一次快照：**2026-10-06**
 
 ## 规模
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1078 / 186727 |
+| src TS 文件 / 行数 | 1081 / 187210 |
 | src JS 文件 | 0 |
-| tests 文件 | 618 |
-| ui/src 文件 / 行数 | 623 / 99824 |
-| ui/server 文件 / 行数 | 118 / 32911 |
+| tests 文件 | 620 |
+| ui/src 文件 / 行数 | 625 / 100143 |
+| ui/server 文件 / 行数 | 122 / 33870 |
 
 ## 指标口径
 
@@ -32,11 +32,11 @@
 | `as unknown as`（双重断言） | 32 | ui/src(25) · adapters(2) · tool(2) |
 | 裸 `console.*` | 158 | cli(137) · telemetry(8) · ui/server(5) |
 | 空 `catch {}` | 0 | — |
-| 无参 `catch {`（总计） | 691 | ui/server(152) · ui/src(124) · adapters(70) |
+| 无参 `catch {`（总计） | 692 | ui/server(153) · ui/src(124) · adapters(70) |
 | ↳ **无注释**（隐患类，目标） | **16** | — |
-| ↳ 已带意图注释 | 675 | — |
+| ↳ 已带意图注释 | 676 | — |
 | `TODO/HACK/FIXME/XXX` | 11 | always-on(4) · tests(4) · ui/src(2) |
-| 分层违规 `ui/server→src` | 14 | — |
+| 分层违规 `ui/server→src` | 15 | — |
 | 分层违规 `src→ui` | 0 | — |
 | edgeclaw `lib` 编译产物直连 | 1 | — |
 | 知识卡逐字节重复（组 / 冗余文件 / 冗余字节） | 70 组 · 90 文件 · 527689 B | — |
@@ -45,7 +45,7 @@
 
 | 文件 | 函数 | 行 | 类型 |
 |---|---|---|---|
-| `ui/src/components/app-shell/SidebarV2.tsx` | `SidebarV2` | 1008 | function |
+| `ui/src/components/app-shell/SidebarV2.tsx` | `SidebarV2` | 1014 | function |
 | `ui/src/components/chat-v2/MessagesPaneV2.render.test.tsx` | `(anonymous)` | 943 | arrow |
 | `ui/src/components/main-content-v2/FilesV2.tsx` | `FilesV2` | 851 | function |
 | `ui/src/components/chat-v2/MessagesPaneV2.tsx` | `MessagesPaneV2` | 824 | function |
@@ -70,12 +70,13 @@
 | `ui/src/components/settings/view/modelPool/components/ProviderCard.tsx` | `ProviderCard` | 447 | function |
 | `ui/src/components/chat-v2/MessageRowV2.tsx` | `MessageRowV2` | 429 | function |
 | `src/tool/builtin/patentFigureGenerate.ts` | `createPatentFigureGenerateTool` | 422 | function |
-| `ui/src/components/code-editor/view/subcomponents/DocxBuiltinPreview.tsx` | `DocxBuiltinPreview` | 421 | function |
+| `ui/src/components/code-editor/view/subcomponents/DocxBuiltinPreview.tsx` | `DocxBuiltinPreview` | 422 | function |
 | `src/gateway/client/eventMapping.ts` | `mapAgentEventForTurn` | 417 | function |
-| `src/cli/projectRuntimeFactory.ts` | `createProjectRuntimeResolver` | 414 | function |
+| `src/cli/projectRuntimeFactory.ts` | `createProjectRuntimeResolver` | 415 | function |
 | `src/tool/builtin/patentFigureProject.ts` | `execute` | 411 | method |
 | `ui/src/components/chat-v2/processGrouping.test.ts` | `(anonymous)` | 409 | arrow |
 | `ui/src/components/code-editor/view/subcomponents/SpreadsheetInteractivePreview.tsx` | `SpreadsheetInteractivePreview` | 407 | function |
+| `ui/src/components/settings/view/agentSearch/components/ToolsSection.tsx` | `ToolsSection` | 399 | function |
 | `ui/src/components/settings/view/integrations/im/components/WeComChannelSection.tsx` | `WeComChannelSection` | 398 | function |
 | `ui/src/components/chat/hooks/useSlashCommands.ts` | `useSlashCommands` | 395 | function |
 | `src/tool/execution/ToolRuntime.ts` | `execute` | 388 | method |
@@ -85,7 +86,6 @@
 | `ui/src/components/app-shell/MainAreaV2.tsx` | `MainAreaV2Content` | 381 | function |
 | `ui/src/components/settings/view/integrations/im/components/FeishuChannelSection.tsx` | `FeishuChannelSection` | 381 | function |
 | `ui/src/components/chat/tools/components/InteractiveRenderers/AskUserQuestionPanel.tsx` | `AskUserQuestionPanel` | 378 | arrow |
-| `ui/src/components/settings/view/agentSearch/components/ToolsSection.tsx` | `ToolsSection` | 378 | function |
 | `ui/src/components/kanban/hooks/useBoardState.ts` | `useBoardState` | 368 | function |
 | `ui/src/components/chat/hooks/useFileMentions.tsx` | `useFileMentions` | 366 | function |
 | `ui/src/components/settings/view/agentRoute/components/RouterSection.tsx` | `RouterSection` | 357 | function |
@@ -103,7 +103,7 @@
 | `ui/src/components/annotation/view/Annotator.tsx` | `Annotator` | 322 | function |
 | `ui/src/components/code-editor/view/CodeEditor.tsx` | `CodeEditor` | 310 | function |
 | `ui/src/components/chat-v2/SubagentDetailMessageFlow.tsx` | `SubagentDetailMessageFlow` | 309 | function |
-| `src/cli/projectRuntimeFactory.ts` | `resolve` | 306 | function |
+| `src/cli/projectRuntimeFactory.ts` | `resolve` | 307 | function |
 | `ui/src/components/settings/view/integrations/im/components/WeixinChannelSection.tsx` | `WeixinChannelSection` | 303 | function |
 | `src/gateway/client/InProcessGateway.ts` | `submitTurn` | 301 | method |
 
@@ -122,15 +122,16 @@
 | `ui/src/stores/useSessionStore.ts` | 1352 |
 | `ui/src/components/main-content-v2/DashboardV2.tsx` | 1345 |
 | `src/adapters/channel/feishu/FeishuChannel.ts` | 1337 |
-| `ui/src/components/app-shell/SidebarV2.tsx` | 1310 |
+| `ui/src/components/app-shell/SidebarV2.tsx` | 1323 |
 | `ui/src/components/chat-v2/processGrouping.ts` | 1294 |
 | `ui/src/components/chat-v2/MessagesPaneV2.render.test.tsx` | 1234 |
+| `ui/server/routes/config.js` | 1234 |
 | `ui/server/routes/agent.js` | 1224 |
 | `ui/src/components/chat-v2/ComposerV2.tsx` | 1188 |
 | `ui/src/components/chat-v2/MessagesPaneV2.tsx` | 1183 |
 | `ui/server/routes/taskmaster.js` | 1179 |
-| `ui/server/routes/config.js` | 1171 |
 | `src/agent/loop/AgentLoop.ts` | 1150 |
+| `ui/server/routes/config.test.js` | 1138 |
 | `ui/src/components/main-content-v2/CronV2.tsx` | 1130 |
 | `ui/src/components/main-content/view/MainContent.tsx` | 1111 |
 | `src/model/streaming/streamModel.ts` | 1085 |
@@ -140,7 +141,6 @@
 | `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` | 1025 |
 | `src/adapters/channel/protocol/ImLiveReplyController.ts` | 1017 |
 | `src/gateway/protocol/types.ts` | 995 |
-| `ui/src/components/main-content-v2/FilesV2.tsx` | 963 |
 
 ## vendored 子包（单列，不计入上述规模与排名）
 
@@ -174,12 +174,12 @@
 | session | 28 |
 | router | 18 |
 | always-on | 14 |
+| cli | 13 |
 | extension | 13 |
 | mcp | 13 |
-| cli | 12 |
 | cron | 12 |
+| pilot | 12 |
 | adapters | 11 |
-| pilot | 11 |
 | rule | 10 |
 | web | 9 |
 | literature | 8 |
@@ -197,7 +197,7 @@
 | runtime | 1 |
 | status | 1 |
 
-| **合计** | **592** |
+| **合计** | **594** |
 
 ## i18n en/zh-CN 对齐
 
@@ -206,12 +206,12 @@
 | alwaysOn | 156 | 156 | 0 | 0 |
 | auth | 23 | 23 | 0 | 0 |
 | chat | 375 | 375 | 0 | 0 |
-| codeEditor | 185 | 185 | 0 | 0 |
+| codeEditor | 191 | 191 | 0 | 0 |
 | common | 436 | 436 | 0 | 0 |
 | hookTrust | 19 | 19 | 0 | 0 |
 | kanban | 44 | 44 | 0 | 0 |
 | routing | 64 | 64 | 0 | 0 |
-| settings | 1060 | 1060 | 0 | 0 |
+| settings | 1074 | 1074 | 0 | 0 |
 | sidebar | 125 | 125 | 0 | 0 |
 | stylePanel | 56 | 56 | 0 | 0 |
 | tasks | 94 | 94 | 0 | 0 |
