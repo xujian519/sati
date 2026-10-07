@@ -21,8 +21,13 @@ import {
   sanitizeAttachmentFilename,
   uploadFilesHandler,
 } from "../services/uploads.js";
+import { publicUploadLimits } from "../services/uploadLimits.js";
 
 const router = Router();
+
+router.get("/api/upload/limits", authenticateToken, (_req, res) => {
+  res.json(publicUploadLimits());
+});
 
 router.post("/api/projects/:projectName/files/upload", authenticateToken, uploadFilesHandler);
 
