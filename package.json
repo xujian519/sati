@@ -87,7 +87,7 @@
   },
   "dependencies": {
     "@google/genai": "^2.24.0",
-    "@larksuiteoapi/node-sdk": "^1.72.0",
+    "@larksuiteoapi/node-sdk": "^1.74.0",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@rdkit/rdkit": "2026.3.6",
     "@viz-js/viz": "^3.29.0",
