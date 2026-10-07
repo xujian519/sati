@@ -135,7 +135,7 @@ function createGeneratorWithMock(respond: (systemPrompt: string | undefined) => 
         return respond(request.systemPrompt);
       },
     },
-    agentModel: { id: "test", provider: "test-provider", model: "test-model" },
+    agentModel: { provider: "test-provider", model: "test-model" },
   });
   return { generator, captured };
 }
@@ -201,7 +201,7 @@ test("createSessionTitleGenerator returns null when the model throws", async () 
         throw new Error("provider down");
       },
     },
-    agentModel: { id: "test", provider: "test-provider", model: "test-model" },
+    agentModel: { provider: "test-provider", model: "test-model" },
   });
 
   const title = await generator({
@@ -212,4 +212,35 @@ test("createSessionTitleGenerator returns null when the model throws", async () 
   });
 
   assert.equal(title, null);
+});
+
+test("createSessionTitleGenerator asks the model it was created with for the title", async () => {
+  const captured: { provider?: string; model?: string } = {};
+  const generator = createSessionTitleGenerator({
+    modelRuntime: {
+      complete: async (request: CanonicalModelRequest) => {
+        captured.provider = request.provider;
+        captured.model = request.model;
+        return {
+          role: "assistant",
+          content: [{ type: "text", text: '{"title": "Routed title"}' }],
+          finishReason: "stop",
+        };
+      },
+    },
+    // 会话级路由结果（团队成员唤醒传 modelRoute）。标题必须与正文出自同一个模型，
+    // 否则走路由的会话会由项目默认模型生成标题。
+    agentModel: { provider: "routed-provider", model: "routed-model" },
+  });
+
+  const title = await generator({
+    text: "帮我配置 Alacritty",
+    sessionId: "s1",
+    turnId: "t1",
+    signal: new AbortController().signal,
+  });
+
+  assert.equal(title, "Routed title");
+  assert.equal(captured.provider, "routed-provider");
+  assert.equal(captured.model, "routed-model");
 });

@@ -11,8 +11,14 @@ import { patch } from "../../modelPool/utils/patch";
 import { hasUsableSecret, isMaskedSecret } from "../../modelPool/utils/providerRefs";
 import { isOptionalFeatureEnabled } from "../../../shared/utils/optionalFeature";
 import {
+  SERPAPI_ENGINES,
+  WEB_SEARCH_ENDPOINTS,
+  WEB_SEARCH_PROVIDERS,
+  isSerpApiEngine,
   isWebSearchApiKeyRequired,
+  isWebSearchProvider,
   webSearchConfigForProvider,
+  type SerpApiEngine,
   type WebSearchProvider,
 } from "../utils/webSearchConfig";
 
@@ -37,19 +43,14 @@ export default function ToolsSection({ config, onChange }: ToolsSectionProps) {
   // GLM_WEB_SEARCH_API_KEY / TAVILY_API_KEY 推断），面板必须同判据。
   const enabled = isOptionalFeatureEnabled(config.tools?.webSearch);
   const paperSearchEnabled = isOptionalFeatureEnabled(config.tools?.paperSearch);
-  const provider: WebSearchProvider = ws.provider === "tavily" || ws.provider === "custom" ? ws.provider : "glm";
+  const provider: WebSearchProvider = isWebSearchProvider(ws.provider) ? ws.provider : "glm";
   const apiKey = typeof ws.apiKey === "string" ? ws.apiKey : "";
   const endpoint = typeof ws.endpoint === "string" ? ws.endpoint : "";
   const custom = ws.customProvider ?? {};
   const apiKeyRequired = isWebSearchApiKeyRequired(ws);
   const hasConfiguredApiKey = hasUsableSecret(apiKey) || isMaskedSecret(apiKey);
-  const endpointValue = endpoint || (provider === "glm" ? glmDefaultEndpoint : "");
-  const endpointPlaceholder =
-    provider === "custom"
-      ? "https://example.com/search"
-      : provider === "tavily"
-        ? "https://api.tavily.com/search"
-        : glmDefaultEndpoint;
+  const endpointValue = endpoint || (provider === "custom" ? "" : WEB_SEARCH_ENDPOINTS[provider]);
+  const endpointPlaceholder = provider === "custom" ? "https://example.com/search" : WEB_SEARCH_ENDPOINTS[provider];
 
   const patentDomainValue: PatentDomainChoice =
     config.tools?.patentDomain === true ? "on" : config.tools?.patentDomain === false ? "off" : "auto";
@@ -98,6 +99,13 @@ export default function ToolsSection({ config, onChange }: ToolsSectionProps) {
     resetTest();
   };
 
+  /** serpapi 专用：底层搜索引擎（其余 provider 忽略该键）。 */
+  const setSearchEngine = (value: SerpApiEngine) => {
+    const nextWs: WebSearchConfig = { ...ws, provider, searchEngine: value };
+    onChange(patch(config, ["tools", "webSearch"], nextWs));
+    resetTest();
+  };
+
   const setCustomField = (field: keyof CustomProviderConfig, value: string) => {
     const nextWs: WebSearchConfig = {
       ...ws,
@@ -136,6 +144,7 @@ export default function ToolsSection({ config, onChange }: ToolsSectionProps) {
           provider,
           apiKey: trimmedKey,
           endpoint: endpointValue.trim(),
+          ...(provider === "serpapi" ? { searchEngine: ws.searchEngine ?? "google" } : {}),
           customProvider: custom,
         }),
       });
@@ -192,14 +201,32 @@ export default function ToolsSection({ config, onChange }: ToolsSectionProps) {
             >
               <Select
                 value={provider}
-                options={[
-                  { value: "glm", label: t("satiConfig.panels.tools.provider.glm") },
-                  { value: "tavily", label: t("satiConfig.panels.tools.provider.tavily") },
-                  { value: "custom", label: t("satiConfig.panels.tools.provider.custom") },
-                ]}
-                onChange={value => setProvider(value === "custom" ? "custom" : value === "tavily" ? "tavily" : "glm")}
+                options={WEB_SEARCH_PROVIDERS.map(value => ({
+                  value,
+                  label: t(`satiConfig.panels.tools.provider.${value}`),
+                }))}
+                onChange={value => {
+                  if (isWebSearchProvider(value)) setProvider(value);
+                }}
               />
             </FormRow>
+            {provider === "serpapi" && (
+              <FormRow
+                label={t("satiConfig.panels.tools.engine.label")}
+                description={t("satiConfig.panels.tools.engine.description")}
+              >
+                <Select
+                  value={ws.searchEngine ?? "google"}
+                  options={SERPAPI_ENGINES.map(value => ({
+                    value,
+                    label: t(`satiConfig.panels.tools.engine.${value}`),
+                  }))}
+                  onChange={value => {
+                    if (isSerpApiEngine(value)) setSearchEngine(value);
+                  }}
+                />
+              </FormRow>
+            )}
             <FormRow
               label={t("satiConfig.panels.tools.apiKey.label")}
               description={t("satiConfig.panels.tools.apiKey.description")}
