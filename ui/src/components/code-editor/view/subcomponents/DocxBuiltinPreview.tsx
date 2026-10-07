@@ -138,7 +138,8 @@ export default function DocxBuiltinPreview({
   const onErrorRef = useRef(onError);
   const [rendered, setRendered] = useState(false);
   const [outline, setOutline] = useState<OutlineItem[]>([]);
-  const [navigationVisible, setNavigationVisible] = useState(true);
+  // 默认折叠：大纲面板展开会挤压正文，窄窗口下尤其明显；用户点工具栏按钮即可展开。
+  const [navigationVisible, setNavigationVisible] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [pages, setPages] = useState<HTMLElement[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
