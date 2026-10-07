@@ -60,7 +60,11 @@ export type SessionTitleGenerator = (input: SessionTitleGeneratorInput) => Promi
 
 export type CreateSessionTitleGeneratorOptions = {
   modelRuntime: Pick<ModelRuntime, "complete">;
-  agentModel: PilotAgentModelSelection;
+  /**
+   * 生成标题所用的模型。只消费 provider/model，故不要求完整 selection（不需要 id），
+   * 以便直接传会话级路由（`resolveRoutedModel`）的结果。
+   */
+  agentModel: Pick<PilotAgentModelSelection, "provider" | "model">;
   timeoutMs?: number;
   /** 无法判断用户输入语言时的兜底语言（BCP-47 或英文名，如 "zh-CN"/"en"）。 */
   systemLanguage?: string;

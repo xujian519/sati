@@ -91,7 +91,10 @@ export type SatiConfig = {
   tools?: {
     webSearch?: {
       enabled?: boolean;
-      provider?: "glm" | "tavily" | "custom";
+      /** 与 src/pilot/config/webSearchProviders.ts 的 WEB_SEARCH_PROVIDERS 同集合。 */
+      provider?: "glm" | "tavily" | "serper" | "brave" | "baidu" | "bocha" | "exa" | "serpapi" | "custom";
+      /** serpapi 专用：底层搜索引擎（缺省 google）。 */
+      searchEngine?: "google" | "bing" | "baidu" | "duckduckgo" | "yahoo" | "yandex";
       apiKey?: string;
       endpoint?: string;
       customProvider?: {

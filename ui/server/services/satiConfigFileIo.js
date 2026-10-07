@@ -6,9 +6,42 @@
  * 与稳定读，不必先构造一份合法配置。
  */
 
+import fs from "fs";
 import fsPromises from "fs/promises";
 import path from "path";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+
+/** 配置内容 revision（sha256 of raw YAML）；乐观锁与变更检测共用。 */
+export function configRevision(raw) {
+  return createHash("sha256")
+    .update(String(raw ?? ""))
+    .digest("hex");
+}
+
+/** 乐观锁冲突：磁盘 revision 已不同于调用方读到的版本（409 语义）。 */
+export class ConfigConflictError extends Error {
+  constructor(message, currentRevision) {
+    super(message);
+    this.name = "ConfigConflictError";
+    this.code = "CONFIG_CONFLICT";
+    this.currentRevision = currentRevision;
+  }
+}
+
+// 进程内写互斥：所有落盘入口串行化，防止并发写交错（config.js 路由层的队列只覆盖
+// 自己的调用方，service 层兜住 memory.js / gateway.js 等其余入口）。放在 I/O 层是因为
+// "互斥"与"原子写"是同一件事的两半：writeSatiConfig 与 updateSatiConfig 共用同一把锁。
+let configWriteChain = Promise.resolve();
+
+export async function withConfigWriteLock(job) {
+  const run = configWriteChain.then(job, job);
+  // 链尾吞错：失败的 job 不阻塞后续写。
+  configWriteChain = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
 
 /** 稳定读的间隔与次数：读到"两次一致"才认账，避开外部编辑器正在写的那一瞬。 */
 export const CONFIG_SETTLE_MS = 250;
@@ -84,9 +117,13 @@ export async function resolveConfigWritePath(configPath) {
  *   精确过滤，不会因为 temp 而误触发 reload；
  * - 先 fsync 数据再 rename，否则崩溃后可能留下"名字换了、内容没落"的空文件；
  * - 失败时清理 temp，磁盘保持旧内容；
- * - `onWriteCommitted` 在 rename 之后才调用：失败的保存不该顺手吞掉外部变更事件。
+ * - `onWriteCommitted` 在 rename 之后才调用：失败的保存不该顺手吞掉外部变更事件；
+ * - `expectedRevision` 提供时，在落盘前紧邻处再校验一次磁盘 revision（乐观锁）：
+ *   "稳定读 → 落盘"之间外部编辑器仍可能改写文件，只比读锁内的 revision 不够。
+ *   校验与原子替换之间不让出事件循环（readFileSync + renameSync），否则排队的
+ *   本地写入会盖掉刚侦测到的外部变更。
  */
-export async function writeConfigAtomically({ writePath, raw, onWriteCommitted }) {
+export async function writeConfigAtomically({ writePath, raw, expectedRevision, onWriteCommitted }) {
   const configDir = path.dirname(writePath);
   await fsPromises.mkdir(configDir, { recursive: true });
 
@@ -106,7 +143,21 @@ export async function writeConfigAtomically({ writePath, raw, onWriteCommitted }
     await handle.sync();
     await handle.close();
     handle = null;
-    await fsPromises.rename(tmpPath, writePath);
+
+    if (typeof expectedRevision === "string" && expectedRevision) {
+      let currentRaw = "";
+      try {
+        currentRaw = fs.readFileSync(writePath, "utf8");
+      } catch (error) {
+        if (error?.code !== "ENOENT") throw error;
+      }
+      const currentRevision = configRevision(currentRaw);
+      if (currentRevision !== expectedRevision) {
+        throw new ConfigConflictError("Config changed while this update was being saved.", currentRevision);
+      }
+    }
+
+    fs.renameSync(tmpPath, writePath);
     if (typeof onWriteCommitted === "function") {
       onWriteCommitted();
     }

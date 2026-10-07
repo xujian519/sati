@@ -14,6 +14,7 @@ import DownloadButton from "../atoms/DownloadButton";
 import FallbackContent from "../atoms/FallbackContent";
 import OfficePreviewSettingsButton from "../atoms/OfficePreviewSettingsButton";
 import PreviewSpinner from "../atoms/PreviewSpinner";
+import RetryPreviewButton from "../atoms/RetryPreviewButton";
 import SpreadsheetPreviewToolbar from "./SpreadsheetPreviewToolbar";
 
 const SpreadsheetInteractivePreview = lazy(() => import("../../../subcomponents/SpreadsheetInteractivePreview"));
@@ -43,6 +44,7 @@ export default function SpreadsheetPreview({
   const {
     data: interactiveData,
     errorMessage: interactiveError,
+    errorCode: interactiveErrorCode,
     loading: interactiveLoading,
     reload: reloadInteractive,
   } = useSpreadsheetInteractivePreview(projectName, file.path, interactiveEnabled);
@@ -68,6 +70,37 @@ export default function SpreadsheetPreview({
   );
 
   useOfficeAutoRefresh(projectName, file.path, reload);
+
+  /**
+   * 服务端错误码 → 用户可读提示。
+   *
+   * 失败态此前直接把服务端下发的原始异常文本当正文（`Error: ... at ...`），用户既读不懂
+   * 也无法据此行动。错误码是既有契约，按码给可操作的话。
+   *
+   * 无错误码时**不能**直接丢给通用文案——hook 的 `!projectName`（"Project is not
+   * available."）与客户端侧失败（"Interactive workbook data is incomplete."）都是
+   * `errorCode === null` 但 message 有实义，故 fallback 由调用方传入原始 message。
+   */
+  const failureMessageFor = useCallback(
+    (code: string | null, fallback: string) => {
+      switch (code) {
+        case "SPREADSHEET_PACKAGE_INVALID":
+        case "SPREADSHEET_WORKBOOK_XML_MISSING":
+          return t("spreadsheetPreview.errors.invalidFile");
+        case "SPREADSHEET_INTERACTIVE_PARSE_FAILED":
+          return t("spreadsheetPreview.errors.cannotParse");
+        case "SPREADSHEET_INTERACTIVE_TOO_LARGE":
+          return t("spreadsheetPreview.errors.tooLarge");
+        case "SPREADSHEET_VISIBLE_SHEET_MISSING":
+          return t("spreadsheetPreview.errors.noVisibleSheets");
+        case "SPREADSHEET_PREVIEW_SOURCE_NOT_FOUND":
+          return t("spreadsheetPreview.errors.fileMissing");
+        default:
+          return fallback;
+      }
+    },
+    [t],
+  );
 
   useEffect(() => {
     setZoom(1);
@@ -110,10 +143,14 @@ export default function SpreadsheetPreview({
       sheetContent = (
         <FallbackContent
           title={title}
-          message={interactiveFailure || t("spreadsheetPreview.interactiveFailedMessage")}
+          message={failureMessageFor(
+            interactiveErrorCode,
+            interactiveFailure || t("spreadsheetPreview.interactiveFailedMessage"),
+          )}
           onClose={onClose}
           actions={
             <>
+              <RetryPreviewButton onRetry={() => reload()} />
               <DownloadButton projectName={projectName} file={file} />
               <OfficePreviewSettingsButton />
             </>
@@ -148,11 +185,12 @@ export default function SpreadsheetPreview({
         message={
           needsLibreOffice
             ? t("officePreview.libreOfficeUnavailableMessage")
-            : manifestError || t("spreadsheetPreview.failedMessage")
+            : failureMessageFor(manifestErrorCode, manifestError || t("spreadsheetPreview.failedMessage"))
         }
         onClose={onClose}
         actions={
           <>
+            <RetryPreviewButton onRetry={() => reload()} />
             <DownloadButton projectName={projectName} file={file} />
             {needsLibreOffice && <OfficePreviewSettingsButton />}
           </>
@@ -170,11 +208,12 @@ export default function SpreadsheetPreview({
           message={
             needsLibreOffice
               ? t("officePreview.libreOfficeUnavailableMessage")
-              : sheetError || t("spreadsheetPreview.failedMessage")
+              : failureMessageFor(sheetErrorCode, sheetError || t("spreadsheetPreview.failedMessage"))
           }
           onClose={onClose}
           actions={
             <>
+              <RetryPreviewButton onRetry={() => reload()} />
               <DownloadButton projectName={projectName} file={file} />
               {needsLibreOffice && <OfficePreviewSettingsButton />}
             </>
