@@ -12,13 +12,14 @@ import {
   validateSatiConfig,
 } from "./satiConfig.js";
 import { reloadSatiConfig } from "./satiConfigReloader.js";
+import { resolveConfigWritePath } from "./satiConfigFileIo.js";
 
 // Watches ~/.sati/sati.yaml for external edits (vim, Cursor, other IDEs)
 // and triggers the same reload path the UI uses on save, so *any* edit takes
 // effect live. When the UI itself writes the file it calls
 // suppressNextWatchEvent() first to avoid a redundant second reload.
 
-let watcher = null;
+const watchers = [];
 let debounceTimer = null;
 let suppressCount = 0;
 let lastSignature = "";
@@ -132,49 +133,77 @@ async function handleChange(configPath) {
   });
 }
 
+/**
+ * 需要 watch 的 (目录, 文件名) 组合。
+ *
+ * 配置是软链时（`~/.sati/sati.yaml` → 别处的真实文件），写入走的是 `resolveConfigWritePath`
+ * 解析出的目标，读事件也必须跟到目标所在目录——只盯软链所在目录的话，外部编辑器改目标
+ * 文件不会产生任何事件，热重载静默失效（写路径支持软链、读路径不跟，读写不对称）。
+ * 软链本身也要留一个（它可能被替换指向别处）。
+ */
+async function collectWatchTargets(configPath) {
+  const targets = [configPath];
+  try {
+    const resolved = await resolveConfigWritePath(configPath);
+    if (resolved !== path.resolve(configPath)) targets.push(resolved);
+  } catch {
+    // 软链解析失败（循环软链等）→ 只盯软链本身，退回原行为。
+  }
+  return targets;
+}
+
+function scheduleChange(configPath) {
+  if (debounceTimer) clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(() => {
+    debounceTimer = null;
+    void handleChange(configPath);
+  }, SERVER_TIMEOUTS.CONFIG_WATCH_DEBOUNCE_MS);
+}
+
 export async function startSatiConfigWatcher({ onEvent } = {}) {
   stopSatiConfigWatcher();
   onEventHandler = typeof onEvent === "function" ? onEvent : null;
 
   const configPath = getSatiConfigPath();
-  const configDir = path.dirname(configPath);
-  const configBase = path.basename(configPath);
-
-  try {
-    await fsPromises.mkdir(configDir, { recursive: true });
-  } catch (error) {
-    logger.warn("[sati-config-watcher] failed to ensure config dir:", error?.message || error);
-    return;
-  }
-
   lastSignature = signatureForFile(configPath);
 
-  try {
-    watcher = fs.watch(configDir, { persistent: false }, (eventType, filename) => {
-      if (filename && filename !== configBase) return;
-      if (debounceTimer) clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(() => {
-        debounceTimer = null;
-        void handleChange(configPath);
-      }, SERVER_TIMEOUTS.CONFIG_WATCH_DEBOUNCE_MS);
-    });
-    watcher.on("error", error => {
-      logger.warn("[sati-config-watcher] watch error:", error?.message || error);
-    });
-    logger.info(`[sati-config-watcher] watching ${configPath}`);
-  } catch (error) {
-    logger.warn("[sati-config-watcher] failed to start:", error?.message || error);
+  const seen = new Set();
+  const watchedDirs = new Set();
+  for (const target of await collectWatchTargets(configPath)) {
+    const configDir = path.dirname(target);
+    const configBase = path.basename(target);
+    const key = `${configDir}\u0000${configBase}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    try {
+      await fsPromises.mkdir(configDir, { recursive: true });
+      const current = fs.watch(configDir, { persistent: false }, (_eventType, filename) => {
+        if (filename && filename !== configBase) return;
+        scheduleChange(configPath);
+      });
+      current.on("error", error => {
+        logger.warn("[sati-config-watcher] watch error:", error?.message || error);
+      });
+      watchers.push(current);
+      watchedDirs.add(configDir);
+    } catch (error) {
+      logger.warn(`[sati-config-watcher] failed to watch ${configDir}:`, error?.message || error);
+    }
+  }
+
+  if (watchers.length > 0) {
+    logger.info(`[sati-config-watcher] watching ${[...watchedDirs].join(", ")}`);
   }
 }
 
 export function stopSatiConfigWatcher() {
-  if (watcher) {
+  for (const current of watchers.splice(0)) {
     try {
-      watcher.close();
+      current.close();
     } catch {
       // noop
     }
-    watcher = null;
   }
   if (debounceTimer) {
     clearTimeout(debounceTimer);

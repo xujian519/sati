@@ -59,7 +59,7 @@ import {
 import { mergeSessionDependencies, syncRoleDefinitions } from "./gatewaySupport.js";
 import { registerMcpAuxTools, registerToolsIfAbsent } from "./mcpToolRegistration.js";
 import { provisionSessionTools } from "./sessionToolSurface.js";
-import { buildAgentSessionConfig } from "./agentSessionConfig.js";
+import { buildAgentSessionConfig, resolveRoutedModel } from "./agentSessionConfig.js";
 import { buildPatentOutputGate } from "./patentOutputGateFactory.js";
 import { buildSessionLifecycle } from "./sessionLifecycle.js";
 import { buildSessionDependencies } from "./sessionDependencyAssembly.js";
@@ -637,7 +637,9 @@ export class ProjectRuntimeRegistry {
     });
     const sessionTitleGenerator = createSessionTitleGenerator({
       modelRuntime: runtime.model,
-      agentModel: runtime.snapshot.config.agent.model,
+      // 会话级路由（团队成员唤醒传 modelRoute）下 agent 用路由模型作答，标题也必须
+      // 用同一个模型；否则标题由项目默认模型生成，与正文不是同一个模型。
+      agentModel: resolveRoutedModel(context.modelRoute, runtime.snapshot.config.agent.model),
     });
     const outputGate = buildPatentOutputGate({
       sessionKey: context.sessionKey,

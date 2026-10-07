@@ -84,6 +84,23 @@ describe("gateway WeCom routes", () => {
     });
   });
 
+  it("trims whitespace pasted around the WeCom bot id and secret", async () => {
+    // 粘贴来的凭据常带尾随空格或换行。非空校验用的是 trim 后的值，落盘也必须
+    // 一致——否则存进去的是 " bot-9f2c "，WeCom 握手报不透明的鉴权错误，
+    // 而设置页显示「已保存」。
+    const { request, configPath } = await createGatewayApp({});
+
+    const result = await request("/api/gateway/wecom/save", {
+      method: "POST",
+      body: JSON.stringify({ botId: " bot-9f2c ", secret: "s3cret\n" }),
+    });
+
+    expect(result.ok).toBe(true);
+    const config = parseYaml(readFileSync(configPath, "utf-8"));
+    expect(config.adapters.wecom.token).toBe("bot-9f2c");
+    expect(config.adapters.wecom.extra.secret).toBe("s3cret");
+  });
+
   it("preserves existing WeCom credentials on settings-only saves", async () => {
     const { request, configPath } = await createGatewayApp({
       adapters: {
@@ -266,9 +283,12 @@ async function createGatewayApp(initialConfig) {
   vi.doMock("../services/satiConfigReloader.js", () => ({
     reloadSatiConfig: vi.fn(async () => undefined),
   }));
-  vi.doMock("../services/satiConfig.js", () => ({
-    readSatiConfigFile: vi.fn(() => ({ config: {} })),
-  }));
+  // 只 stub 读取（gateway 落盘后拿它喂 reload）；写入必须走真实实现——
+  // 本套用例验证的正是"落盘后文件内容正确"，mock 掉写入会让这些断言失去意义。
+  vi.doMock("../services/satiConfig.js", async importOriginal => {
+    const actual = await importOriginal();
+    return { ...actual, readSatiConfigFile: vi.fn(() => ({ config: {} })) };
+  });
   vi.doMock("../sati-bridge.js", () => ({
     getSatiGateway: vi.fn(async () => ({ reloadConfig: vi.fn(async () => undefined) })),
   }));

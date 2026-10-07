@@ -56,6 +56,30 @@ export type AgentSessionConfigInput = {
   methodologyRegistry: MethodologyRegistry;
 };
 
+/**
+ * 会话级模型路由（M4）解析：provider/model **双字段非空**才算有效路由，任一缺失
+ * 整体回落项目默认。
+ *
+ * 不做单纯的 `route ?? fallback`：WS 线协议可以直传部分字段（编译期约束管不到线
+ * 协议），只判 undefined 会让空串路由盖掉默认模型，拼出 provider 与 model 不对应
+ * 的模型对。所有消费 modelRoute 的地方共用本函数，避免各自实现出不同口径。
+ */
+export function resolveRoutedModel(
+  route: { provider?: unknown; model?: unknown } | undefined,
+  fallback: { provider: string; model: string },
+): { provider: string; model: string } {
+  if (
+    route !== undefined &&
+    typeof route.provider === "string" &&
+    route.provider.length > 0 &&
+    typeof route.model === "string" &&
+    route.model.length > 0
+  ) {
+    return { provider: route.provider, model: route.model };
+  }
+  return fallback;
+}
+
 export function buildAgentSessionConfig(deps: AgentSessionConfigInput): CreateAgentSessionOptions["config"] {
   const { runtime } = deps;
 
@@ -64,22 +88,8 @@ export function buildAgentSessionConfig(deps: AgentSessionConfigInput): CreateAg
   const permissionMode = override?.permissionMode ?? deps.permissionMode;
   const cwd = override?.cwd ?? runtime.projectRoot;
   // M4：会话级模型路由覆盖（团队成员唤醒传快照 modelRoute）——仅覆盖本次会话的
-  // provider/model，不改全局配置、不动 PilotConfigStore。整体应用（质量评审 M3）：
-  // provider/model 双字段非空才覆盖——WS 线协议可直传部分字段（编译期约束管不到
-  // 线协议），任一缺失整体回落项目默认，避免 provider 与 model 拼错对。
-  let provider = agent.model.provider;
-  let model = agent.model.model;
-  const modelRoute = deps.modelRoute;
-  if (
-    modelRoute !== undefined &&
-    typeof modelRoute.provider === "string" &&
-    modelRoute.provider.length > 0 &&
-    typeof modelRoute.model === "string" &&
-    modelRoute.model.length > 0
-  ) {
-    provider = modelRoute.provider;
-    model = modelRoute.model;
-  }
+  // provider/model，不改全局配置、不动 PilotConfigStore。
+  const { provider, model } = resolveRoutedModel(deps.modelRoute, agent.model);
   // Hand `PermissionContext` the same live rule-set reference the
   // gateway permission hook owns (see `getLiveRuleSet`). With this
   // shared reference, an "allow + remember" decision pushed by the

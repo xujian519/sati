@@ -21,7 +21,18 @@ import {
   writeSatiConfig,
   writeRawSatiYaml,
 } from "../services/satiConfig.js";
+import { connectionTestRateLimiter, webSearchTestRateLimiter } from "../services/rate-limit.js";
 import { reloadSatiConfig } from "../services/satiConfigReloader.js";
+import {
+  WEB_SEARCH_ENDPOINTS,
+  additionalSearchRequest,
+  additionalSearchResults,
+  isAdditionalSearchProvider,
+  isSerpApiEngine,
+  isWebSearchProvider,
+  redactSearchError,
+} from "../../../src/pilot/index.js";
+import { resolveConfigWritePath, writeConfigAtomically } from "../services/satiConfigFileIo.js";
 import { suppressNextWatchEvent } from "../services/satiConfigWatcher.js";
 import { getSatiGateway } from "../sati-bridge.js";
 import {
@@ -53,8 +64,6 @@ const router = express.Router();
 let configWriteQueue = Promise.resolve();
 
 const MASKED_SECRET = "********";
-const DEFAULT_GLM_WEB_SEARCH_ENDPOINT = "https://api.z.ai/api/paas/v4/web_search";
-const DEFAULT_TAVILY_WEB_SEARCH_ENDPOINT = "https://api.tavily.com/search";
 
 /**
  * True when a value is the settings-page mask rather than a real secret.
@@ -105,7 +114,7 @@ function resolveProviderProbeApiKey(providerId, requestedApiKey) {
 }
 
 function normalizeWebSearchProvider(provider) {
-  return provider === "tavily" || provider === "custom" ? provider : "glm";
+  return isWebSearchProvider(provider) ? provider : "glm";
 }
 
 function normalizeWebSearchCustomAuth(auth) {
@@ -114,13 +123,9 @@ function normalizeWebSearchCustomAuth(auth) {
 
 function normalizeWebSearchEndpoint(provider, endpoint) {
   const trimmed = typeof endpoint === "string" ? endpoint.trim() : "";
-  const effective =
-    trimmed ||
-    (provider === "tavily"
-      ? DEFAULT_TAVILY_WEB_SEARCH_ENDPOINT
-      : provider === "glm"
-        ? DEFAULT_GLM_WEB_SEARCH_ENDPOINT
-        : "");
+  // 端点表以 src/pilot/config/webSearchProviders.ts 为唯一事实源（YAML 校验、
+  // 工具实现与设置页共用），此处不再各写一份默认端点。
+  const effective = trimmed || WEB_SEARCH_ENDPOINTS[provider] || "";
   if (!effective) return "";
   try {
     return new URL(effective).toString();
@@ -270,7 +275,10 @@ function serializeConfigResponse(record, reloadResult = null) {
     exists: record.exists,
     path: record.configPath,
     raw,
-    revision: configRevision(raw),
+    // revision 必须取磁盘原文，不能取上面这份 mask 过的 raw：密钥被掩码后与磁盘
+    // 字节不再一一对应，外部只改密钥的编辑就不会让客户端草稿失效（乐观锁失明），
+    // 且与 writeSatiConfig/updateSatiConfig 内部的 configRevision(disk.raw) 对不上。
+    revision: configRevision(record.raw),
     config: maskedConfig,
     validation: {
       valid: validation.valid,
@@ -543,7 +551,12 @@ router.put("/", async (req, res) => {
           error: "One or more masked secrets could not be restored. Enter those credentials again before saving.",
         });
       }
-      saved = await writeRawSatiYaml(restored, { onWriteCommitted: suppressNextWatchEvent });
+      // previousRevision 让写锁内再做一次 CAS：上面那次预检与落盘之间仍可能
+      // 被外部编辑插入（TOCTOU），只在锁外比一次不够。
+      saved = await writeRawSatiYaml(restored, {
+        previousRevision: baseRevision || undefined,
+        onWriteCommitted: suppressNextWatchEvent,
+      });
     } else if (req.body?.config && typeof req.body.config === "object") {
       if (diskRecord.parseError) {
         return res.status(400).json({
@@ -576,7 +589,10 @@ router.put("/", async (req, res) => {
           error: "One or more masked secrets could not be restored. Enter those credentials again before saving.",
         });
       }
-      saved = await writeSatiConfig(restored, { onWriteCommitted: suppressNextWatchEvent });
+      saved = await writeSatiConfig(restored, {
+        previousRevision: baseRevision || undefined,
+        onWriteCommitted: suppressNextWatchEvent,
+      });
     } else {
       return res.status(400).json({ error: "raw YAML or config object is required" });
     }
@@ -593,6 +609,16 @@ router.put("/", async (req, res) => {
   } catch (error) {
     if (error?.validation) {
       return res.status(400).json({ error: error.message, validation: error.validation });
+    }
+    // 写盘锁内 CAS 失败（落盘那一刻磁盘已被外部编辑）与"文件持续变动"两条路径
+    // 都抛 ConfigConflictError；客户端按 `code` 走「刷新后重放本地改动」流程，
+    // 与 memory.js 保持同一响应形状。
+    if (error?.code === "CONFIG_CONFLICT") {
+      return res.status(409).json({
+        error: error instanceof Error ? error.message : "Config conflict",
+        code: "CONFIG_CONFLICT",
+        currentRevision: error.currentRevision,
+      });
     }
     res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
   } finally {
@@ -771,7 +797,7 @@ router.post("/models", async (req, res) => {
   }
 });
 
-router.post("/test-connection", async (req, res) => {
+router.post("/test-connection", connectionTestRateLimiter, async (req, res) => {
   const { providerId, providerType, baseUrl, apiKey, model } = req.body || {};
   const normalizedProviderId = String(providerId || "")
     .trim()
@@ -957,8 +983,14 @@ router.post("/test-connection", async (req, res) => {
  * `{ ok, error?, latencyMs?, organicCount? }` to match the convention
  * established by `/test-connection`.
  */
-router.post("/test-web-search", async (req, res) => {
-  const { provider, apiKey, endpoint, customProvider } = req.body || {};
+router.post("/test-web-search", webSearchTestRateLimiter, async (req, res) => {
+  const { provider, apiKey, endpoint, customProvider, searchEngine } = req.body || {};
+  if (provider !== undefined && !isWebSearchProvider(provider)) {
+    return res.status(400).json({ ok: false, error: "Unsupported web search provider." });
+  }
+  if (searchEngine !== undefined && !isSerpApiEngine(searchEngine)) {
+    return res.status(400).json({ ok: false, error: "Unsupported SerpAPI search engine." });
+  }
   const selectedProvider = normalizeWebSearchProvider(provider);
   const custom = customProvider && typeof customProvider === "object" ? customProvider : {};
   const customAuth = normalizeWebSearchCustomAuth(custom.auth);
@@ -1010,7 +1042,18 @@ router.post("/test-web-search", async (req, res) => {
   let requestInit;
   try {
     const url = new URL(effectiveEndpoint);
-    if (selectedProvider === "tavily") {
+    if (isAdditionalSearchProvider(selectedProvider)) {
+      // 与 `web_search` 工具走同一套请求构造：设置页测通即代表工具能搜通。
+      const request = additionalSearchRequest(selectedProvider, {
+        endpoint: effectiveEndpoint,
+        apiKey: trimmedKey,
+        query: "hello",
+        limit: 3,
+        searchEngine,
+      });
+      requestUrl = request.url;
+      requestInit = request.init;
+    } else if (selectedProvider === "tavily") {
       requestUrl = effectiveEndpoint;
       requestInit = {
         method: "POST",
@@ -1112,6 +1155,20 @@ router.post("/test-web-search", async (req, res) => {
     if (raw && typeof raw.error === "string" && raw.error.length > 0) {
       return res.json({ ok: false, error: raw.error, latencyMs });
     }
+
+    if (isAdditionalSearchProvider(selectedProvider)) {
+      // 复用工具侧的响应归一化：结果路径各家不同（baidu references / bocha
+      // data.webPages.value / exa results / serpapi organic_results），且 bocha
+      // 成功时 code 是 200 而非 0，下面的通用 code 检查会误判为失败。
+      try {
+        const results = additionalSearchResults(selectedProvider, raw, 10);
+        return res.json({ ok: true, latencyMs, organicCount: results.length });
+      } catch (error) {
+        // 结果归一化失败时错误文本可能带出响应片段；统一走脱敏，与工具侧一致。
+        return res.json({ ok: false, error: redactSearchError(error, trimmedKey), latencyMs });
+      }
+    }
+
     if (raw && typeof raw.code === "number" && raw.code !== 0) {
       const msg = typeof raw.msg === "string" ? raw.msg : "proxy error";
       return res.json({ ok: false, error: `code=${raw.code}: ${msg}`, latencyMs });
@@ -1130,7 +1187,9 @@ router.post("/test-web-search", async (req, res) => {
     if (isNetworkTimeout(err)) {
       return res.json({ ok: false, error: `Connection timed out after ${timeout / 1000}s.` });
     }
-    return res.json({ ok: false, error: err.message || String(err) });
+    // serpapi 与 custom 的 queryApiKey 把密钥放在请求 URL 上，传输层错误消息常
+    // 原样回显 URL——不脱敏就会把活密钥显示在设置页、截图与服务端日志里。
+    return res.json({ ok: false, error: redactSearchError(err, trimmedKey) });
   }
 });
 
@@ -1144,12 +1203,16 @@ function readPath(value, pathValue) {
 router.post("/open", async (_req, res) => {
   const configPath = getSatiConfigPath();
   try {
-    await fsPromises.mkdir(path.dirname(configPath), { recursive: true });
     try {
       await fsPromises.access(configPath);
     } catch {
       // 配置文件尚未创建（access 抛 ENOENT）→ 先落盘一份默认配置再打开，前端 openFile 照常显示配置文件路径而非报错。
-      await fsPromises.writeFile(configPath, configToYaml(buildDefaultSatiConfig()), "utf8");
+      // 走原子写（内部已 mkdir）：裸 writeFile 崩溃/断电会留下半截 sati.yaml，
+      // 下一次读取会把它当成 parseError 的损坏配置。
+      await writeConfigAtomically({
+        writePath: await resolveConfigWritePath(configPath),
+        raw: configToYaml(buildDefaultSatiConfig()),
+      });
     }
 
     const command = process.platform === "darwin" ? "open" : process.platform === "win32" ? "cmd" : "xdg-open";

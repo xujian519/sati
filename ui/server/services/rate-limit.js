@@ -47,4 +47,26 @@ const officePreviewPdfRateLimiter = createRouteRateLimiter({
   message: "Too many Office preview conversion requests",
 });
 
-export { createRouteRateLimiter, officePreviewStatusRateLimiter, officePreviewPdfRateLimiter };
+// 连接性探测会向上游发真实请求（出网 + 按量计费），必须限流：
+// 无限流时可被反复触发刷出网/计费。10 次/分钟 ≈ 逐个试模型的正常节奏。
+const connectionTestRateLimiter = createRouteRateLimiter({
+  windowMs: 60 * 1000,
+  maxRequests: 10,
+  keyPrefix: "config-test-connection",
+  message: "Too many connection test requests",
+});
+
+const webSearchTestRateLimiter = createRouteRateLimiter({
+  windowMs: 60 * 1000,
+  maxRequests: 10,
+  keyPrefix: "config-test-web-search",
+  message: "Too many web search test requests",
+});
+
+export {
+  createRouteRateLimiter,
+  officePreviewStatusRateLimiter,
+  officePreviewPdfRateLimiter,
+  connectionTestRateLimiter,
+  webSearchTestRateLimiter,
+};
