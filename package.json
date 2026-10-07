@@ -75,7 +75,7 @@
     "simple-git-hooks": "^2.13.1",
     "tsx": "^4.23.13",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.70.0"
+    "typescript-eslint": "^8.71.0"
   },
   "simple-git-hooks": {
     "pre-commit": "npx lint-staged",
