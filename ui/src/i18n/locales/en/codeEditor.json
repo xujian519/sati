@@ -60,6 +60,7 @@
     "converting": "Loading...",
     "refreshing": "File updated. Refreshing preview...",
     "refresh": "Refresh preview",
+    "retry": "Try again",
     "configureService": "Configure Office preview",
     "loadingBuiltin": "Loading built-in preview...",
     "unsupportedBuiltinTitle": "This format is not supported by built-in preview",
@@ -85,6 +86,13 @@
     "failedMessage": "Failed to generate worksheet preview.",
     "printViewUnavailable": "Print layout requires LibreOffice to be enabled.",
     "interactiveFailedMessage": "Failed to load the interactive spreadsheet preview.",
+    "errors": {
+      "invalidFile": "This workbook is damaged or in an unsupported format.",
+      "cannotParse": "This workbook could not be parsed. The file may be damaged or use a format that is not supported yet.",
+      "tooLarge": "This workbook is too large to preview. Download it and open it in a desktop app.",
+      "noVisibleSheets": "This workbook has no visible worksheets.",
+      "fileMissing": "The file is no longer on disk; it may have been moved or deleted."
+    },
     "loadingInteractive": "Loading interactive spreadsheet...",
     "fellBackToPrint": "Interactive preview was unavailable, so Sati switched to print layout.",
     "worksheets": "Worksheets",

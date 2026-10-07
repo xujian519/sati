@@ -105,12 +105,12 @@
     {
       "rule": "file-size",
       "file": "ui/server/routes/config.js",
-      "lines": 1171
+      "lines": 1234
     },
     {
       "rule": "file-size",
       "file": "ui/server/routes/config.test.js",
-      "lines": 934
+      "lines": 1138
     },
     {
       "rule": "file-size",
@@ -130,7 +130,7 @@
     {
       "rule": "file-size",
       "file": "ui/server/services/satiConfig.js",
-      "lines": 872
+      "lines": 858
     },
     {
       "rule": "file-size",
@@ -140,7 +140,7 @@
     {
       "rule": "file-size",
       "file": "ui/src/components/app-shell/SidebarV2.tsx",
-      "lines": 1310
+      "lines": 1323
     },
     {
       "rule": "file-size",

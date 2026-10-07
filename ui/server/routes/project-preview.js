@@ -218,8 +218,11 @@ router.get(
       return res.json(preview);
     } catch (error) {
       logger.error("Error generating interactive spreadsheet preview:", error);
+      // 只有有意构造的错误（带 statusCode）才把 message 透给前端；未预期的异常
+      // （无 statusCode）一律用通用文案——否则原始异常文本会被当成用户可见提示，
+      // 既读不懂也没法据此行动。前端按 `code` 映射成可操作的话。
       return res.status(error.statusCode || 500).json({
-        error: error.message || "Failed to generate interactive spreadsheet preview",
+        error: error.statusCode ? error.message : "Unable to generate spreadsheet preview. Please retry.",
         code: error.code || "SPREADSHEET_INTERACTIVE_PREVIEW_FAILED",
       });
     }

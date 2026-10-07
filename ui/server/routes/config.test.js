@@ -45,6 +45,31 @@ describe("config test-connection route", () => {
     expect(calls).toEqual(["https://api.openai.com/v1/chat/completions"]);
   });
 
+  it("rate-limits connection probes so a paid upstream cannot be hammered", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonResponse({ choices: [{ message: { content: "ok" } }] })),
+    );
+
+    const { request } = await createConfigApp();
+    const body = JSON.stringify({
+      providerType: "openai",
+      baseUrl: "https://api.openai.com",
+      apiKey: "sk-test",
+      model: "gpt-test",
+    });
+
+    const responses = [];
+    for (let index = 0; index < 11; index += 1) {
+      responses.push(await request("/api/config/test-connection", { method: "POST", body }));
+    }
+
+    // 该端点每次都会向上游发真实请求（出网 + 按量计费），前 10 次走正常探测路径，
+    // 第 11 次必须被限流拦下。
+    expect(responses.slice(0, 10).some(item => item?.code === "RATE_LIMITED")).toBe(false);
+    expect(responses[10]?.code).toBe("RATE_LIMITED");
+  });
+
   it("falls back to unversioned chat completions when protocol-versioned probing misses", async () => {
     const calls = [];
     vi.stubGlobal(
@@ -536,6 +561,76 @@ describe("config test-web-search route", () => {
     expect(data.error).toContain("Enter the Web Search API key again");
     expect(writeSatiConfig).not.toHaveBeenCalled();
   });
+
+  it("probes Serper against its own endpoint with its own auth header", async () => {
+    // 回归防护：serper / brave 曾落到探测末尾的 GLM 兜底分支，把它们的 key 当
+    // GLM token 打 api.z.ai——设置页永远测不通，而测试结果是用户判断"配好了没"
+    // 的唯一依据。
+    const calls = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url, init) => {
+        calls.push({ url: String(url), headers: init?.headers ?? {} });
+        return jsonResponse({ organic: [{ title: "r", link: "https://r.test" }] });
+      }),
+    );
+
+    const { request } = await createConfigApp({ config: {} });
+    const data = await request("/api/config/test-web-search", {
+      method: "POST",
+      body: JSON.stringify({ provider: "serper", apiKey: "serper-key" }),
+    });
+
+    expect(data.ok).toBe(true);
+    expect(data.organicCount).toBe(1);
+    expect(calls[0].url).toBe("https://google.serper.dev/search");
+    expect(calls[0].headers["X-API-KEY"]).toBe("serper-key");
+    expect(calls[0].headers.Authorization).toBeUndefined();
+  });
+
+  it("probes Brave against its own endpoint with its own auth header", async () => {
+    const calls = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url, init) => {
+        calls.push({ url: String(url), headers: init?.headers ?? {} });
+        return jsonResponse({ web: { results: [{ title: "b", url: "https://b.test" }] } });
+      }),
+    );
+
+    const { request } = await createConfigApp({ config: {} });
+    const data = await request("/api/config/test-web-search", {
+      method: "POST",
+      body: JSON.stringify({ provider: "brave", apiKey: "brave-key" }),
+    });
+
+    expect(data.ok).toBe(true);
+    expect(data.organicCount).toBe(1);
+    expect(calls[0].url.startsWith("https://api.search.brave.com/res/v1/web/search")).toBe(true);
+    expect(calls[0].headers["X-Subscription-Token"]).toBe("brave-key");
+    expect(calls[0].headers.Authorization).toBeUndefined();
+  });
+
+  it("redacts the API key from a probe transport error", async () => {
+    // serpapi 把密钥放在请求 URL 上，传输层错误很容易整条回显；设置页会把它
+    // 直接渲染给用户，进而进截图与服务端日志。工具路径已脱敏，探测必须一致。
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async url => {
+        throw new Error(`connect failed for ${String(url)}`);
+      }),
+    );
+
+    const { request } = await createConfigApp({ config: {} });
+    const data = await request("/api/config/test-web-search", {
+      method: "POST",
+      body: JSON.stringify({ provider: "serpapi", apiKey: "sp-secret" }),
+    });
+
+    expect(data.ok).toBe(false);
+    expect(data.error).not.toContain("sp-secret");
+    expect(data.error).toContain("[redacted]");
+  });
 });
 
 describe("config provider rename secret preservation", () => {
@@ -678,6 +773,100 @@ describe("config write revisions", () => {
     expect(staleWrite.body.code).toBe("CONFIG_CONFLICT");
     expect(parseYaml(readFileSync(configPath, "utf8")).customEnv.SAVE_VERSION).toBe("first");
   });
+
+  it("invalidates the draft revision when an external edit only touches a secret", async () => {
+    const withKey = key =>
+      stringifyYaml({ schemaVersion: 1, model: { providers: { openai: { apiKey: key, models: ["gpt-4o"] } } } });
+    const { request, configPath } = await createDiskConfigApp(withKey("sk-first-secret"));
+    const loaded = await request("/api/config");
+    expect(loaded.body.revision).toEqual(expect.any(String));
+
+    // 外部编辑器只换了一处密钥。掩码后的 raw 视图两次都是 "********"，
+    // 若 revision 取自掩码结果，这次变更对乐观锁完全不可见。
+    writeFileSync(configPath, withKey("sk-second-secret"), "utf8");
+
+    const reloaded = await request("/api/config");
+    expect(reloaded.body.revision).not.toBe(loaded.body.revision);
+
+    const staleWrite = await request("/api/config", {
+      method: "PUT",
+      body: JSON.stringify({ raw: withKey("sk-third-secret"), baseRevision: loaded.body.revision }),
+    });
+    expect(staleWrite.status).toBe(409);
+    expect(staleWrite.body.code).toBe("CONFIG_CONFLICT");
+  });
+});
+
+describe("write-lock conflict surfacing", () => {
+  it("maps a write-lock CAS failure to 409 + CONFIG_CONFLICT instead of a bare 500", async () => {
+    // 预检之后的第二次 CAS 落在写盘那一刻，是唯一能挡住「读草稿 → 落盘」之间
+    // 插入的外部编辑的关卡。它抛出的 ConfigConflictError 必须与预检同形状——
+    // 客户端按 `code` 走「刷新后重放」，退化成无 code 的 500 会显示成英文裸错。
+    const { requestWithStatus, writeSatiConfig } = await createConfigApp({ config: { schemaVersion: 1 } });
+    writeSatiConfig.mockRejectedValueOnce(
+      Object.assign(new Error("Config changed since this settings draft was loaded."), {
+        code: "CONFIG_CONFLICT",
+        currentRevision: "rev-9",
+      }),
+    );
+
+    const response = await requestWithStatus("/api/config", {
+      method: "PUT",
+      body: JSON.stringify({ config: { schemaVersion: 1 } }),
+    });
+
+    expect(response.status).toBe(409);
+    expect(response.body.code).toBe("CONFIG_CONFLICT");
+    expect(response.body.currentRevision).toBe("rev-9");
+  });
+});
+
+describe("dangling model references", () => {
+  const providerWith = models =>
+    stringifyYaml({
+      schemaVersion: 1,
+      agent: { model: "openai/gpt-4o" },
+      model: {
+        providers: {
+          openai: { protocol: "openai", url: "https://api.openai.com/v1", apiKey: "sk-x", models },
+        },
+      },
+    });
+
+  it("rejects a save whose agent.model no longer resolves after the model is deleted", async () => {
+    const { request } = await createDiskConfigApp(providerWith(["gpt-4o"]));
+
+    const response = await request("/api/config", {
+      method: "PUT",
+      body: JSON.stringify({ raw: providerWith(["gpt-4o-mini"]) }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(String(response.body.validation?.errors?.join(" "))).toContain("agent.model");
+  });
+
+  it("rejects a save whose router reference no longer resolves after the model is deleted", async () => {
+    const withRouter = models =>
+      stringifyYaml({
+        schemaVersion: 1,
+        agent: { model: "openai/gpt-4o" },
+        model: {
+          providers: {
+            openai: { protocol: "openai", url: "https://api.openai.com/v1", apiKey: "sk-x", models },
+          },
+        },
+        router: { enabled: true, scenarios: { cheap: "openai/gpt-4o-mini" } },
+      });
+    const { request } = await createDiskConfigApp(withRouter(["gpt-4o", "gpt-4o-mini"]));
+
+    const response = await request("/api/config", {
+      method: "PUT",
+      body: JSON.stringify({ raw: withRouter(["gpt-4o"]) }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(String(response.body.validation?.errors?.join(" "))).toContain("router.scenarios.cheap");
+  });
 });
 
 describe("config routes invalid YAML fallback", () => {
@@ -783,9 +972,24 @@ async function createConfigApp({ config = {} } = {}) {
 
   return {
     request: (path, init) => requestBodyJson(app, path, init),
+    requestWithStatus: (path, init) => requestWithJsonStatus(app, path, init),
     writeSatiConfig,
     writeRawSatiYaml,
   };
+}
+
+async function requestWithJsonStatus(app, path, init = {}) {
+  const server = app.listen(0);
+  try {
+    const { port } = server.address();
+    const response = await nativeFetch(`http://127.0.0.1:${port}${path}`, {
+      headers: { "Content-Type": "application/json", ...(init.headers || {}) },
+      ...init,
+    });
+    return { status: response.status, body: await response.json() };
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
 }
 
 async function requestBodyJson(app, path, init = {}) {

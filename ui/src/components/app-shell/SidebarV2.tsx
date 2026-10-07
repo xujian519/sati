@@ -289,6 +289,13 @@ const SIDEBAR_MIN_WIDTH = 200;
 const SIDEBAR_MAX_WIDTH = 480;
 const SIDEBAR_DEFAULT_WIDTH = 248;
 const SIDEBAR_WIDTH_STORAGE_KEY = "sidebar-v2-width";
+/**
+ * 拖拽阈值：指针移动超过这么多像素才算真的在拖拽。
+ *
+ * 按下即进入拖拽态会立刻挂上全屏遮罩（见下方的 `fixed inset-0 z-[60]` 覆盖层），
+ * 分隔条的 onDoubleClick 从此再也收不到事件——双击复位宽度会失效。
+ */
+const RESIZE_DRAG_THRESHOLD_PX = 3;
 
 const contextMenuPosition = (event: MouseEvent) => {
   const maxX = window.innerWidth - CONTEXT_MENU_WIDTH - CONTEXT_MENU_MARGIN;
@@ -382,11 +389,17 @@ export default function SidebarV2({
       const startX = event.clientX;
       const startWidth = sidebarWidth;
       let latestWidth = startWidth;
-      setIsResizing(true);
+      let dragStarted = false;
 
       // 指针采样按帧合并：拖拽期间不落盘，也不让每次 mousemove 都触发
       // 一次 React 渲染（上游 #568）。
       const moveBatch = createFrameBatcher((e: globalThis.MouseEvent) => {
+        // 超过阈值才进入拖拽态：否则遮罩会盖住分隔条，双击复位失效。
+        if (!dragStarted) {
+          if (Math.abs(e.clientX - startX) < RESIZE_DRAG_THRESHOLD_PX) return;
+          dragStarted = true;
+          setIsResizing(true);
+        }
         latestWidth = Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, startWidth + (e.clientX - startX)));
         setSidebarWidth(latestWidth);
       });
