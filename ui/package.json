@@ -95,7 +95,7 @@
     "mime-types": "^3.0.1",
     "multer": "^2.3.0",
     "node-pty": "^1.1.0-beta34",
-    "pdfjs-dist": "^6.2.108",
+    "pdfjs-dist": "^6.3.289",
     "qrcode": "^1.5.4",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
