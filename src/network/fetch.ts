@@ -184,6 +184,9 @@ async function performFetch(
   // 唯一例外是代理**连不上**时的一次直连重试（`withDirectProxyFallback`）：那条
   // 路径由代理层经 `registerProxyConnectionFallback` 显式注册后才生效，且只在连接
   // 建立阶段失败时触发。
+  //
+  // `as unknown as`：独立 undici 包的 Response 与全局 Response 是两套类型
+  // （@types/node 26 起不再结构兼容），运行时靠鸭子类型互用，故显式中转。
   return withDirectProxyFallback(
     dispatcher =>
       undiciFetch(
@@ -192,7 +195,7 @@ async function performFetch(
           ...(init as Parameters<typeof undiciFetch>[1]),
           ...(dispatcher ? { dispatcher } : {}),
         } as Parameters<typeof undiciFetch>[1],
-      ) as Promise<Response>,
+      ) as unknown as Promise<Response>,
   );
 }
 
