@@ -12,6 +12,7 @@ import path from "path";
 import mime from "mime-types";
 import { extractProjectDirectory } from "../projects.js";
 import { validatePathInProject } from "./filesystem.js";
+import { UPLOAD_LIMITS, UPLOAD_LIMIT_MESSAGES } from "./uploadLimits.js";
 
 const CHAT_ATTACHMENT_IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp", "image/svg+xml"]);
 
@@ -90,20 +91,20 @@ const uploadFilesHandler = async (req, res) => {
       },
     }),
     limits: {
-      fileSize: 50 * 1024 * 1024, // 50MB limit
-      files: 20, // Max 20 files at once
+      fileSize: UPLOAD_LIMITS.maxFileBytes,
+      files: UPLOAD_LIMITS.maxFileCount,
     },
   });
 
   // Use multer middleware
-  uploadMiddleware.array("files", 20)(req, res, async err => {
+  uploadMiddleware.array("files", UPLOAD_LIMITS.maxFileCount)(req, res, async err => {
     if (err) {
       logger.error("Multer error:", err);
       if (err.code === "LIMIT_FILE_SIZE") {
-        return res.status(400).json({ error: "File too large. Maximum size is 50MB." });
+        return res.status(400).json({ error: UPLOAD_LIMIT_MESSAGES.fileTooLarge });
       }
       if (err.code === "LIMIT_FILE_COUNT") {
-        return res.status(400).json({ error: "Too many files. Maximum is 20 files." });
+        return res.status(400).json({ error: UPLOAD_LIMIT_MESSAGES.tooManyFiles });
       }
       return res.status(500).json({ error: err.message });
     }

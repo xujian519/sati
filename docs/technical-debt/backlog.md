@@ -1505,6 +1505,16 @@
   - 类别：H · 严重级：P3 · 工作量：S · 状态：new
   - 位置：`scripts/release.sh:341`；`src/preload.ts:13-22`
   - 建议：删除或改写该注释，或若确需补 `getBuildInfo` 桥。
+- **TD-DESKTOP-N08** · macOS 全屏 Space 下关闭-隐藏路径不区分是否全屏
+  - 类别：C · 严重级：P3 · 工作量：S · 状态：new（**待复现**；2026-10-07 上游同步分析登记）
+  - 位置：`apps/desktop/src/main.ts:505-508`（`if (isQuitting) return; … win.hide();`，无全屏分支）
+  - 影响：上游 #606 用约 20 行状态机（`pendingHides` WeakSet + `enter-full-screen` → `setFullScreen(false)` + `leave-full-screen` → `hide()` 的时序）规避 macOS 全屏 Space 下 `win.hide()` 的竞态；Sati 缺失该处理。
+  - **未复现**：不能凭上游存在该修复就断言 Sati 有缺陷——上游可能是在规避其自身更复杂的 lifecycle。**触发条件**：在 macOS 上手工验证一次（全屏 → Cmd+W → 观察 Dock 唤回与 Space 状态），确认症状后再引入，避免盲改引入未经验证的状态机。
+- **TD-DESKTOP-N09** · arm64 安装包内嵌 win32-x64 原生预编译件，且无 ARM64 冒烟覆盖
+  - 类别：E · 严重级：P2 · 工作量：M · 状态：new（2026-10-07 上游同步分析登记）
+  - 位置：`apps/desktop/scripts/build-win.bat:191-192`（注释载明 `better-sqlite3@13` 提供 `prebuilds/win32-x64.node`、`node-pty@1.1` 提供 `prebuilds/win32-x64/pty.node`）
+  - 影响：`build-win.bat --arm64` 产出的安装器装入的是 **x64 原生依赖**，在 Windows ARM64 上依赖 x64 仿真运行，性能与稳定性均无保证；现有验证脚本（`release-l2c-electron-smoke-win.mjs`、`release-l2d-cold-start-win.mjs`）不区分架构，故该组合从未被覆盖。
+  - 建议：复用既有 Windows 冒烟脚本加 arch 参数，把 ARM64 的 Electron 启动与冷启动纳入验证；若上游/依赖已提供 arm64 预编译件则改为正确取用。
 
 ---
 

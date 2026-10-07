@@ -1149,7 +1149,23 @@
           "description": "当前启用的搜索服务。",
           "glm": "GLM / Z.AI Web Search",
           "tavily": "Tavily",
-          "custom": "自定义"
+          "custom": "自定义",
+          "serper": "Serper（Google）",
+          "brave": "Brave Search",
+          "baidu": "百度 AI 搜索（千帆）",
+          "bocha": "博查 Bocha",
+          "exa": "Exa",
+          "serpapi": "SerpAPI"
+        },
+        "engine": {
+          "label": "搜索引擎",
+          "description": "SerpAPI 实际聚合结果的底层搜索引擎。",
+          "google": "Google",
+          "bing": "Bing",
+          "baidu": "百度",
+          "duckduckgo": "DuckDuckGo",
+          "yahoo": "Yahoo",
+          "yandex": "Yandex"
         },
         "apiKey": {
           "label": "API 密钥",

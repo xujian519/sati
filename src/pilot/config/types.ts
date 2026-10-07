@@ -194,7 +194,8 @@ export type PilotGatewayConfig = {
   maxPerSessionMcpInstances?: number;
 };
 
-export type PilotWebSearchProvider = "glm" | "tavily" | "custom";
+/** provider 清单以 webSearchProviders.ts 为唯一事实源（YAML 校验 / 工具 / 设置页共用）。 */
+export type PilotWebSearchProvider = import("./webSearchProviders.js").WebSearchProvider;
 export type PilotWebSearchCustomAuth = "bearer" | "bodyApiKey" | "queryApiKey" | "none";
 export type PilotWebSearchCustomMethod = "GET" | "POST";
 
@@ -220,6 +221,8 @@ export type PilotWebSearchConfig = {
   /** Missing webSearch section is off; legacy sections without this flag remain enabled（上游 #588）。 */
   enabled?: boolean;
   provider?: PilotWebSearchProvider;
+  /** serpapi 专用：底层搜索引擎（缺省 google）。 */
+  searchEngine?: import("./webSearchProviders.js").SerpApiEngine;
   apiKey?: string;
   endpoint?: string;
   customProvider?: PilotWebSearchCustomProviderConfig;

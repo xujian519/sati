@@ -1,19 +1,28 @@
 import type { PermissionResult } from "../../permission/index.js";
-import { NetworkFetchError, networkFetch } from "../../network/fetch.js";
+import {
+  WEB_SEARCH_ENDPOINTS,
+  WEB_SEARCH_PROVIDERS,
+  type SerpApiEngine,
+  type WebSearchProvider,
+} from "../../pilot/config/webSearchProviders.js";
 import { SatiToolRuntimeError } from "../protocol/errors.js";
-import type {
-  SatiToolAvailabilityContext,
-  SatiToolDefinition,
-  SatiToolExecutionOutput,
-  SatiToolRuntimeContext,
-} from "../protocol/types.js";
-
+import type { SatiToolAvailabilityContext, SatiToolDefinition, SatiToolRuntimeContext } from "../protocol/types.js";
+import { isAdditionalSearchProvider, type WebSearchOrganicResult } from "../../pilot/config/webSearchAdapter.js";
+import {
+  performAdditionalSearch,
+  performCustomSearch,
+  performGlmSearch,
+  performTavilySearch,
+} from "./webSearchPerformers.js";
 /**
  * `web_search` is a local Sati tool backed by exactly one configured
  * provider. The model still sees one stable tool surface; provider-specific
  * request/response shapes stay behind this adapter.
+ *
+ * provider 清单、端点表与文档链接见 `pilot/config/webSearchProviders.ts`
+ * （YAML 校验与设置页共用同一份，避免枚举漂移）。
  */
-export type WebSearchProvider = "glm" | "tavily" | "custom";
+export type { WebSearchProvider };
 export type WebSearchCustomAuth = "bearer" | "bodyApiKey" | "queryApiKey" | "none";
 export type WebSearchCustomMethod = "GET" | "POST";
 
@@ -34,7 +43,9 @@ export type WebSearchCustomProviderConfig = {
 export type CreateWebSearchToolOptions = {
   provider?: WebSearchProvider;
   apiKey?: string;
-  /** Override provider endpoint. GLM defaults to Z.AI web_search; Tavily defaults to api.tavily.com. */
+  /** serpapi 专用：底层搜索引擎（缺省 google）。 */
+  searchEngine?: SerpApiEngine;
+  /** Override provider endpoint. 缺省取 webSearchProviders.ts 的端点表。 */
   endpoint?: string;
   customProvider?: WebSearchCustomProviderConfig;
   /** Override fetch (testing). */
@@ -54,13 +65,7 @@ export type WebSearchInput = {
   gl?: string;
 };
 
-export type WebSearchOrganicResult = {
-  title?: string;
-  link?: string;
-  snippet?: string;
-  source?: string;
-  publishedAt?: string;
-};
+export type { WebSearchOrganicResult };
 
 export type WebSearchOutput = {
   query: string;
@@ -94,16 +99,16 @@ export function createWebSearchTool(
       },
     },
     aliases: ["WebSearch"],
-    description: `- **Recommended general web search tool.** Backed by a cloud search API (Tavily/GLM/Z.AI), returns real results in ~1-3 seconds with structured organic results. Prefer this tool over locally-provided meta-search tools (e.g. MCP \`web_search\` backed by a local SearXNG instance), whose general web engines may be unavailable or slow.
-- Searches the web for current information using the configured GLM/Z.AI, Tavily, or custom provider
+    description: `- **Recommended general web search tool.** Backed by a cloud search API, returns real results in ~1-3 seconds with structured organic results. Prefer this tool over locally-provided meta-search tools (e.g. MCP \`web_search\` backed by a local SearXNG instance), whose general web engines may be unavailable or slow.
+- Searches the web for current information using the configured search provider
 - Takes a search query and optional country code (\`gl\`) as input
 - Returns structured search data including organic results and, when available, answer box content
 - Use this tool for current events, recent documentation, and information beyond the model's knowledge cutoff
 - Use this tool when API/SDK/framework usage is unknown, version-sensitive, or likely changed since training. Search with package/service name, version, framework, and the specific method/option/error.
 
 Usage notes:
-  - Configure \`tools.webSearch.provider\` as \`glm\`, \`tavily\`, or \`custom\` in \`sati.yaml\`
-  - Requires \`tools.webSearch.apiKey\`, \`GLM_WEB_SEARCH_API_KEY\`/\`ZAI_API_KEY\`, \`TAVILY_API_KEY\`, or \`CUSTOM_WEB_SEARCH_API_KEY\` unless custom auth is \`none\`
+  - Configure \`tools.webSearch.provider\` in \`sati.yaml\` as one of \`glm\`, \`tavily\`, \`serper\`, \`brave\`, \`baidu\`, \`bocha\`, \`exa\`, \`serpapi\`, or \`custom\`
+  - Requires \`tools.webSearch.apiKey\`, the provider's API key environment variable, or \`CUSTOM_WEB_SEARCH_API_KEY\` unless custom auth is \`none\`
   - The optional \`gl\` parameter is forwarded only by providers that support localization
   - This tool is read-only and does not modify files`,
     kind: "network",
@@ -181,6 +186,19 @@ Usage notes:
           custom,
         });
       }
+      if (isAdditionalSearchProvider(provider)) {
+        return performAdditionalSearch({
+          input,
+          context,
+          apiKey: apiKey ?? "",
+          provider,
+          endpoint: options.endpoint ?? WEB_SEARCH_ENDPOINTS[provider],
+          searchEngine: options.searchEngine,
+          fetchImpl,
+          timeoutMs,
+          organicLimit,
+        });
+      }
       if (provider === "tavily") {
         return performTavilySearch({
           input,
@@ -232,6 +250,23 @@ function checkWebSearchAvailability(options: CreateWebSearchToolOptions, context
   return { ok: true as const };
 }
 
+/**
+ * provider → 该 provider 的 API key 环境变量（按优先级）。
+ * `resolveProvider`（无显式配置时按 key 推断）与 `resolveApiKey` 共用同一张表，
+ * 避免两处各写一份映射后漂移。
+ */
+const PROVIDER_API_KEY_ENV: Partial<Record<WebSearchProvider, string[]>> = {
+  glm: ["GLM_WEB_SEARCH_API_KEY", "ZAI_API_KEY"],
+  tavily: ["TAVILY_API_KEY"],
+  serper: ["SERPER_API_KEY"],
+  brave: ["BRAVE_API_KEY"],
+  baidu: ["BAIDU_WEB_SEARCH_API_KEY"],
+  bocha: ["BOCHA_API_KEY"],
+  exa: ["EXA_API_KEY"],
+  serpapi: ["SERPAPI_API_KEY"],
+  custom: ["CUSTOM_WEB_SEARCH_API_KEY"],
+};
+
 function resolveProvider(
   optionProvider: WebSearchProvider | undefined,
   optionApiKey: string | undefined,
@@ -239,7 +274,11 @@ function resolveProvider(
 ): WebSearchProvider {
   if (optionProvider) return optionProvider;
   if (optionApiKey?.trim()) return "glm";
-  if (readEnv(context, "TAVILY_API_KEY")) return "tavily";
+  // 无显式配置时按环境变量推断（GLM 是兜底默认，custom 必须显式配置端点，故二者不参与探测）。
+  for (const provider of WEB_SEARCH_PROVIDERS) {
+    if (provider === "glm" || provider === "custom") continue;
+    if ((PROVIDER_API_KEY_ENV[provider] ?? []).some(name => readEnv(context, name))) return provider;
+  }
   return "glm";
 }
 
@@ -252,9 +291,11 @@ function resolveApiKey(
   if (fromOption) {
     return fromOption;
   }
-  if (provider === "tavily") return readEnv(context, "TAVILY_API_KEY");
-  if (provider === "custom") return readEnv(context, "CUSTOM_WEB_SEARCH_API_KEY");
-  return readEnv(context, "GLM_WEB_SEARCH_API_KEY") ?? readEnv(context, "ZAI_API_KEY");
+  for (const name of PROVIDER_API_KEY_ENV[provider] ?? []) {
+    const value = readEnv(context, name);
+    if (value) return value;
+  }
+  return undefined;
 }
 
 function normalizeCustomProviderConfig(
@@ -278,445 +319,4 @@ function normalizeCustomProviderConfig(
 function readEnv(context: SatiToolRuntimeContext, name: string): string | undefined {
   const value = (context.env ?? process.env)[name]?.trim();
   return value && value.length > 0 ? value : undefined;
-}
-
-type PerformTavilySearchInput = {
-  input: WebSearchInput;
-  context: SatiToolRuntimeContext;
-  apiKey: string;
-  endpoint: string;
-  fetchImpl: typeof fetch;
-  timeoutMs: number;
-  organicLimit: number;
-};
-
-async function performTavilySearch(args: PerformTavilySearchInput): Promise<SatiToolExecutionOutput<WebSearchOutput>> {
-  const { input, context, apiKey, endpoint, fetchImpl, timeoutMs, organicLimit } = args;
-  const query = input.query.trim();
-  if (!query) {
-    throw new SatiToolRuntimeError("invalid_tool_input", "web_search requires a non-empty `query`.");
-  }
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  const detachAbort = forwardAbort(context.abortSignal, controller);
-
-  const body: Record<string, unknown> = {
-    api_key: apiKey,
-    query,
-    max_results: organicLimit,
-    include_answer: true,
-    search_depth: "basic",
-  };
-
-  let response: Response;
-  try {
-    response = await networkFetch(
-      endpoint,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        body: JSON.stringify(body),
-        signal: controller.signal,
-      },
-      {
-        timeoutMs,
-        signal: controller.signal,
-        fetchImpl,
-        retry: { maxRetries: 2, baseDelayMs: 500, maxDelayMs: 5_000, retryOnPost: true },
-      },
-    );
-  } catch (error) {
-    if (isLocalTimeout(error, controller.signal, context.abortSignal)) {
-      throw new SatiToolRuntimeError("tool_timeout", `web_search (tavily) timed out after ${timeoutMs}ms.`);
-    }
-    throw new SatiToolRuntimeError(
-      "tool_execution_failed",
-      `web_search (tavily) request failed: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  } finally {
-    clearTimeout(timeout);
-    detachAbort?.();
-  }
-
-  if (!response.ok) {
-    const detail = await response.text().catch(() => response.statusText);
-    throw new SatiToolRuntimeError(
-      "tool_execution_failed",
-      `Tavily API error (${response.status}): ${truncate(detail, 500)}`,
-    );
-  }
-
-  const raw = (await response.json()) as Record<string, unknown>;
-
-  const organic: WebSearchOrganicResult[] = [];
-  if (Array.isArray(raw.results)) {
-    for (const r of (raw.results as Array<Record<string, unknown>>).slice(0, organicLimit)) {
-      organic.push({
-        title: readString(r.title),
-        link: readString(r.url),
-        snippet: readString(r.content),
-        source: readString(r.url),
-      });
-    }
-  }
-
-  const output: WebSearchOutput = { query, organic };
-  if (typeof raw.answer === "string" && raw.answer.length > 0) {
-    output.answerBox = { answer: raw.answer };
-  }
-
-  return {
-    content: [
-      { type: "text", text: formatTextSummary(output) },
-      { type: "json", value: output },
-    ],
-    data: output,
-    metadata: {
-      provider: "tavily",
-      endpoint,
-      engine: "tavily",
-      organicCount: organic.length,
-    },
-  };
-}
-
-type PerformGlmSearchInput = {
-  input: WebSearchInput;
-  context: SatiToolRuntimeContext;
-  apiKey: string;
-  endpoint: string;
-  fetchImpl: typeof fetch;
-  timeoutMs: number;
-  organicLimit: number;
-};
-
-async function performGlmSearch(args: PerformGlmSearchInput): Promise<SatiToolExecutionOutput<WebSearchOutput>> {
-  const { input, context, apiKey, endpoint, fetchImpl, timeoutMs, organicLimit } = args;
-  const query = input.query.trim();
-  if (!query) {
-    throw new SatiToolRuntimeError("invalid_tool_input", "web_search requires a non-empty `query`.");
-  }
-
-  const body: Record<string, unknown> = {
-    search_engine: "search-prime",
-    search_query: query,
-    count: Math.max(1, Math.min(organicLimit, 50)),
-    search_recency_filter: "noLimit",
-  };
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  const detachAbort = forwardAbort(context.abortSignal, controller);
-
-  let response: Response;
-  try {
-    response = await networkFetch(
-      endpoint,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        body: JSON.stringify(body),
-        signal: controller.signal,
-      },
-      {
-        timeoutMs,
-        signal: controller.signal,
-        fetchImpl,
-        retry: { maxRetries: 2, baseDelayMs: 500, maxDelayMs: 5_000, retryOnPost: true },
-      },
-    );
-  } catch (error) {
-    if (isLocalTimeout(error, controller.signal, context.abortSignal)) {
-      throw new SatiToolRuntimeError("tool_timeout", `web_search timed out after ${timeoutMs}ms.`);
-    }
-    throw new SatiToolRuntimeError(
-      "tool_execution_failed",
-      `web_search (glm) request failed: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  } finally {
-    clearTimeout(timeout);
-    detachAbort?.();
-  }
-
-  if (!response.ok) {
-    const detail = await response.text().catch(() => response.statusText);
-    throw new SatiToolRuntimeError(
-      "tool_execution_failed",
-      `GLM web search error (${response.status}): ${truncate(detail, 500)}`,
-    );
-  }
-
-  const raw = (await response.json()) as Record<string, unknown>;
-  if (typeof raw.error === "string" && raw.error.length > 0) {
-    throw new SatiToolRuntimeError("tool_execution_failed", `GLM web search error: ${raw.error}`);
-  }
-  const proxyCode = raw.code;
-  if (typeof proxyCode === "number" && proxyCode !== 0) {
-    const message = typeof raw.msg === "string" ? raw.msg : "search proxy error";
-    throw new SatiToolRuntimeError("tool_execution_failed", `GLM web search error code=${proxyCode}: ${message}`);
-  }
-  const organic = parseGlmResults(extractResultItems(raw), organicLimit);
-  const output: WebSearchOutput = { query, organic };
-
-  return {
-    content: [
-      { type: "text", text: formatTextSummary(output) },
-      { type: "json", value: output },
-    ],
-    data: output,
-    metadata: {
-      provider: "glm",
-      endpoint,
-      organicCount: organic.length,
-    },
-  };
-}
-
-type PerformCustomSearchInput = {
-  input: WebSearchInput;
-  context: SatiToolRuntimeContext;
-  apiKey: string | undefined;
-  endpoint: string;
-  fetchImpl: typeof fetch;
-  timeoutMs: number;
-  organicLimit: number;
-  custom: Required<WebSearchCustomProviderConfig>;
-};
-
-async function performCustomSearch(args: PerformCustomSearchInput): Promise<SatiToolExecutionOutput<WebSearchOutput>> {
-  const { input, context, apiKey, endpoint, fetchImpl, timeoutMs, organicLimit, custom } = args;
-  const query = input.query.trim();
-  if (!query) {
-    throw new SatiToolRuntimeError("invalid_tool_input", "web_search requires a non-empty `query`.");
-  }
-
-  let url: URL;
-  try {
-    url = new URL(endpoint);
-  } catch {
-    // 自定义 provider endpoint 不是合法 URL（new URL 抛 TypeError）→ 抛 invalid_tool_input 暴露配置错误，不静默改用默认端点。
-    throw new SatiToolRuntimeError(
-      "invalid_tool_input",
-      `web_search custom provider endpoint is not a valid URL: ${endpoint}`,
-    );
-  }
-  const headers: Record<string, string> = { Accept: "application/json" };
-  const body: Record<string, unknown> = {};
-  const method = custom.method;
-
-  if (method === "GET") {
-    url.searchParams.set(custom.queryParam, query);
-    if (input.gl?.trim()) url.searchParams.set("gl", input.gl.trim());
-  } else {
-    headers["Content-Type"] = "application/json";
-    body[custom.queryParam] = query;
-    if (input.gl?.trim()) body.gl = input.gl.trim();
-  }
-
-  if (custom.auth === "bearer" && apiKey) {
-    headers.Authorization = `Bearer ${apiKey}`;
-  } else if (custom.auth === "queryApiKey" && apiKey) {
-    url.searchParams.set(custom.apiKeyParam, apiKey);
-  } else if (custom.auth === "bodyApiKey" && apiKey) {
-    if (method === "GET") {
-      url.searchParams.set(custom.apiKeyParam, apiKey);
-    } else {
-      body[custom.apiKeyParam] = apiKey;
-    }
-  }
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  const detachAbort = forwardAbort(context.abortSignal, controller);
-
-  let response: Response;
-  try {
-    response = await networkFetch(
-      url.toString(),
-      {
-        method,
-        headers,
-        ...(method === "POST" ? { body: JSON.stringify(body) } : {}),
-        signal: controller.signal,
-      },
-      {
-        timeoutMs,
-        signal: controller.signal,
-        fetchImpl,
-        retry: { maxRetries: 2, baseDelayMs: 500, maxDelayMs: 5_000, retryOnPost: method === "POST" },
-      },
-    );
-  } catch (error) {
-    if (isLocalTimeout(error, controller.signal, context.abortSignal)) {
-      throw new SatiToolRuntimeError("tool_timeout", `web_search (custom) timed out after ${timeoutMs}ms.`);
-    }
-    throw new SatiToolRuntimeError(
-      "tool_execution_failed",
-      `web_search (custom) request failed: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  } finally {
-    clearTimeout(timeout);
-    detachAbort?.();
-  }
-
-  if (!response.ok) {
-    const detail = await response.text().catch(() => response.statusText);
-    throw new SatiToolRuntimeError(
-      "tool_execution_failed",
-      `Custom web search error (${response.status}): ${truncate(detail, 500)}`,
-    );
-  }
-
-  const raw = (await response.json()) as Record<string, unknown>;
-  if (typeof raw.error === "string" && raw.error.length > 0) {
-    throw new SatiToolRuntimeError("tool_execution_failed", `Custom web search error: ${raw.error}`);
-  }
-  const proxyCode = raw.code;
-  if (typeof proxyCode === "number" && proxyCode !== 0) {
-    const message = typeof raw.msg === "string" ? raw.msg : "search provider error";
-    throw new SatiToolRuntimeError("tool_execution_failed", `Custom web search error code=${proxyCode}: ${message}`);
-  }
-
-  const resultValue = custom.resultsPath ? readPath(raw, custom.resultsPath) : extractResultItems(raw);
-  const organic = parseMappedResults(resultValue, organicLimit, custom);
-  const output: WebSearchOutput = { query, organic };
-
-  return {
-    content: [
-      { type: "text", text: formatTextSummary(output) },
-      { type: "json", value: output },
-    ],
-    data: output,
-    metadata: {
-      provider: "custom",
-      providerName: custom.name,
-      endpoint,
-      organicCount: organic.length,
-    },
-  };
-}
-
-function extractResultItems(value: unknown): unknown[] {
-  if (Array.isArray(value)) return value;
-  if (!isRecord(value)) return [];
-  for (const key of ["search_result", "results", "items", "webPages", "data"]) {
-    const child = value[key];
-    if (Array.isArray(child)) return child;
-    if (isRecord(child)) {
-      const nested = extractResultItems(child);
-      if (nested.length > 0) return nested;
-    }
-  }
-  return [];
-}
-
-function parseGlmResults(value: unknown, limit: number): WebSearchOrganicResult[] {
-  if (!Array.isArray(value)) return [];
-  return (value as Array<Record<string, unknown>>).slice(0, limit).map(entry => ({
-    title: readString(entry.title) ?? readString(entry.name),
-    link: readString(entry.url) ?? readString(entry.link) ?? readString(entry.href),
-    snippet:
-      readString(entry.snippet) ?? readString(entry.summary) ?? readString(entry.content) ?? readString(entry.text),
-    source: readString(entry.source) ?? readString(entry.site) ?? readString(entry.media),
-    publishedAt:
-      readString(entry.publishedAt) ??
-      readString(entry.published_at) ??
-      readString(entry.publish_date) ??
-      readString(entry.date),
-  }));
-}
-
-function parseMappedResults(
-  value: unknown,
-  limit: number,
-  mapping: Required<WebSearchCustomProviderConfig>,
-): WebSearchOrganicResult[] {
-  if (!Array.isArray(value)) return [];
-  return (value as Array<Record<string, unknown>>).slice(0, limit).map(entry => ({
-    title: readString(readPath(entry, mapping.titleField)),
-    link: readString(readPath(entry, mapping.urlField)),
-    snippet: readString(readPath(entry, mapping.snippetField)),
-    source: readString(readPath(entry, mapping.sourceField)),
-    publishedAt: readString(readPath(entry, mapping.publishedAtField)),
-  }));
-}
-
-function readPath(value: unknown, path: string): unknown {
-  const trimmed = path.trim();
-  if (!trimmed) return undefined;
-  return trimmed.split(".").reduce<unknown>((current, segment) => {
-    if (!isRecord(current)) return undefined;
-    return current[segment];
-  }, value);
-}
-
-function readString(value: unknown): string | undefined {
-  return typeof value === "string" && value.length > 0 ? value : undefined;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function truncate(text: string, max: number): string {
-  return text.length > max ? `${text.slice(0, max)}…` : text;
-}
-
-function formatTextSummary(output: WebSearchOutput): string {
-  const lines: string[] = [`Web search results for: ${output.query}`];
-  if (output.answerBox) {
-    lines.push("", "Answer box:", JSON.stringify(output.answerBox));
-  }
-  if (output.knowledgeGraph) {
-    lines.push("", "Knowledge graph:", JSON.stringify(output.knowledgeGraph));
-  }
-  if (output.organic.length > 0) {
-    lines.push("", "Organic results:");
-    for (const entry of output.organic) {
-      lines.push(`- ${entry.title ?? "(no title)"} — ${entry.link ?? ""}`);
-      if (entry.snippet) lines.push(`  ${entry.snippet}`);
-    }
-  } else {
-    lines.push("", "No organic results.");
-  }
-  if (output.topStories && output.topStories.length > 0) {
-    lines.push("", `Top stories (${output.topStories.length}):`);
-    for (const story of output.topStories) {
-      const title = readString(story.title);
-      const link = readString(story.link);
-      lines.push(`- ${title ?? "(no title)"} — ${link ?? ""}`);
-    }
-  }
-  return lines.join("\n");
-}
-
-function forwardAbort(source: AbortSignal | undefined, target: AbortController): (() => void) | undefined {
-  if (!source) return undefined;
-  if (source.aborted) {
-    target.abort(source.reason);
-    return () => {};
-  }
-  const onAbort = () => target.abort(source.reason);
-  source.addEventListener("abort", onAbort, { once: true });
-  return () => source.removeEventListener("abort", onAbort);
-}
-
-function isLocalTimeout(error: unknown, localSignal: AbortSignal, parentSignal: AbortSignal | undefined): boolean {
-  if (parentSignal?.aborted) return false;
-  return localSignal.aborted || isNetworkTimeoutError(error);
-}
-
-function isNetworkTimeoutError(error: unknown): boolean {
-  return (
-    (error instanceof NetworkFetchError && error.code === "network_timeout") ||
-    (typeof error === "object" && error !== null && (error as { code?: unknown }).code === "network_timeout")
-  );
 }
