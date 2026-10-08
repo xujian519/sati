@@ -1,6 +1,6 @@
 # HTML 标注能力 —— 计划（参照 dsh-annotator）
 
-> 状态：**计划 v2 已获裁定；P0/H0/H1 已合入 main（PR #615/#617/#618）；H2 已实现（本 PR）；#1 回退方案定案为候选 A（预览 cookie）；H3–H5 未开工**
+> 状态：**计划 v2 已获裁定；P0/H0/H1/H2 已合入 main；H3 已实现（本 PR）；H3 全链路点击验收与 H4/H5 未完成**
 > 裁定记录（2026-10-08，用户）：D0 先独立修复 P0；D1 允许沙箱内脚本；D5 固定 1024×768 视口；D4 Sati 侧修、dsh 侧另议。D2、D3、D6 沿用推荐项，未单独裁定。
 > 参照实现：`/Users/xujian/projects/dsh-annotator`（DSH 插件，已实现 HTML 标注）
 > 上游方案：`docs/document-annotation-plan.md`（图片族 + sidecar v2，已落地）
@@ -345,6 +345,17 @@ DoD：#0 与 #1 必须先于其他项；每项记录命令或工具、时间、�
 
 ### H3 — UI 接入（查看 | 标注）
 
+**状态：已实现（本 PR）**。落地说明：
+
+- 双模式容器落在 `HtmlDocumentPreview`（查看 = 既有 iframe；标注 = 固定 1024×768 面 + 桥接）；标注模式沙箱收紧为仅 `allow-scripts`，「标注」标签缺项目上下文时禁用。
+- 运行时封装为 `useHtmlAnnotator`：nonce 注入、`source + nonce` 校验、源解析复核、滚动同步。
+- **协议增量**（H2 桥接的扩展）：快照带 `scroll`；新增轻量 `scroll` 消息与父页→框架的 `scrollBy` 命令（不透明源下父页不能直接滚动 iframe）。
+- `AnnotatorCanvas` 增加 `scrollX/scrollY`（文档坐标 = 视口坐标 + scroll）；`AnnotatorToolbar` 增加 `showModeToggle/showRegionReference` 供 HTML 外壳复用；HTML 侧不使用区域框选（html2canvas 不适用于不透明源 iframe）。
+- 无审阅图提交：`AnnotatableSurface.reviewMarkup` 与引用 `image` 变可选（不造假图）；提示块给出 HTML 纪律（改 HTML/生成源、复核 selector）与「无标注图」声明。
+- 提示态：测量中 / 快照截断 / 运行时节点 / 无 crypto.subtle（禁写）/ 外部资源漂移。
+- 验证：全量 vitest 180 文件 / 1277 用例通过；`pnpm check` 通过；真实浏览器协议级 E2E（真实服务端 + 同源父页）：快照 13 元素、selector 13/13 源解析命中、`scrollBy` 生效且滚动不重发重快照。**完整点击链路（打开 → 切标注 → 画 → 保存 → 重开）待人工/下一阶段验收**。
+- 未做（归 H4）：提示块的 `(untrusted document text)` 标注与历史消息反解测试。
+
 - `CodeEditorSurface` 的 HTML 预览分支改为双模式容器；查看模式保持现行为。
 - 标注模式：覆盖层 `AnnotatorCanvas`；`hitTest` 为快照命中（未覆盖即无锚点）；标注模式 sandbox 收紧；框内滚动处理（D5-b）；「重新测量」按钮；「外部资源未加载 / 锚定可能不完整 / 运行时节点无法定位」提示。
 - `useAnnotationSubmit` 支持无审阅图的面（显式分支，不造假图）。
@@ -442,5 +453,5 @@ DoD：#0 与 #1 必须先于其他项；每项记录命令或工具、时间、�
 2. ✅ P0 独立 PR：`fix/preview-credential-sandbox`（PR #615，含决策记录），CI 全绿。
 3. ✅ H0 spike（#0、#1 优先）：结论已回写本文件 §6 与 §10（2026-10-08）。
 4. ✅ HTML 标注决策记录（proposed）：`docs/notes/proposed/2026-10-08-html-annotation.md`（PR #617）。
-5. ✅ H1 契约层（PR #618）；✅ H2 渲染面与桥接（本 PR，回退方案定案 A）。
-6. H3 → H5 按序推进；每阶段结束时更新本文件状态行（H5 时将决策记录转 `implemented/`）。
+5. ✅ H1 契约层（PR #618）；✅ H2 渲染面与桥接（PR #619，回退方案定案 A）；✅ H3 UI 接入（本 PR）。
+6. H4（发送通路与纪律）→ H5（互通与收尾）按序推进；每阶段结束时更新本文件状态行（H5 时将决策记录转 `implemented/`）。

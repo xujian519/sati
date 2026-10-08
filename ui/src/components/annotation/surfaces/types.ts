@@ -35,9 +35,10 @@ export type AnnotatableSurface = {
    * 审阅图的底层标记：SVG 面是 sanitize 过的整棵图，栅格面是一条 `<image>`。
    *
    * 两者都原样嵌进 `composeReviewSvg` 的嵌套 `<svg>`——**不剥根标签**，因为 `xmlns:*`
-   * 前缀声明长在根标签上（见 `export.ts`）。
+   * 前缀声明长在根标签上（见 `export.ts`）。HTML 面不提供：它不产审阅图，定位靠
+   * `selector` 与坐标（`useAnnotationSubmit` 据此跳过光栅化）。
    */
-  reviewMarkup: string;
+  reviewMarkup?: string;
   /** 锚定命中；栅格面缺省。 */
   hitTest?: SurfaceHitTest;
 };

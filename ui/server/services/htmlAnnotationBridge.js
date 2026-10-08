@@ -34,6 +34,7 @@ export function bridgeMain(params) {
   var doc = document;
   var revision = 0;
   var timer = null;
+  var scrollTimer = null;
 
   function safeId(id) {
     return /^[A-Za-z][\w-]*$/.test(id);
@@ -112,6 +113,7 @@ export function bridgeMain(params) {
       revision: revision,
       type: "snapshot",
       height: doc.documentElement ? doc.documentElement.scrollHeight : 0,
+      scroll: [window.scrollX, window.scrollY],
       truncated: truncated,
       elements: elements,
     };
@@ -141,6 +143,28 @@ export function bridgeMain(params) {
     schedule();
   }
 
+  /** Lightweight scroll updates: full snapshots are too heavy to post while scrolling. */
+  function postScroll() {
+    if (scrollTimer !== null) return;
+    scrollTimer = window.setTimeout(function () {
+      scrollTimer = null;
+      try {
+        (window.parent || window).postMessage(
+          {
+            channel: params.channel,
+            nonce: params.nonce,
+            type: "scroll",
+            revision: revision,
+            scroll: [window.scrollX, window.scrollY],
+          },
+          "*",
+        );
+      } catch {
+        /* Scrolling updates are best-effort. */
+      }
+    }, 50);
+  }
+
   try {
     var observer = new MutationObserver(bump);
     observer.observe(doc, { subtree: true, childList: true, attributes: true });
@@ -151,9 +175,17 @@ export function bridgeMain(params) {
   window.addEventListener("message", function (event) {
     var data = event && event.data;
     if (!data || data.channel !== params.channel || data.nonce !== params.nonce) return;
-    if (data.type !== "remeasure") return;
-    bump();
+    if (data.type === "remeasure") {
+      bump();
+      return;
+    }
+    if (data.type === "scrollBy" && typeof data.dx === "number" && typeof data.dy === "number") {
+      var dx = Math.max(-10000, Math.min(10000, data.dx));
+      var dy = Math.max(-10000, Math.min(10000, data.dy));
+      window.scrollBy(dx, dy);
+    }
   });
+  window.addEventListener("scroll", postScroll, { passive: true });
   window.addEventListener("resize", bump);
   window.addEventListener("load", schedule);
 

@@ -7,6 +7,7 @@
  *
  * 校验不过的消息不进入定位流程：宁可没有锚点，也不落一个源文件里不存在的 selector。
  */
+import type { AnnotationAnchor } from "../../../types/annotationReference";
 import {
   HTML_ANNOTATION_MAX_ANCHOR_ID_CHARS,
   HTML_ANNOTATION_MAX_ANCHOR_TEXT_CHARS,
@@ -36,8 +37,16 @@ export type HtmlSnapshotElement = {
 export type HtmlSnapshot = {
   revision: number;
   height: number;
+  /** 快照时刻框架窗口的滚动偏移（文档坐标 = 视口坐标 + scroll）。 */
+  scroll: readonly [number, number];
   truncated: boolean;
   elements: HtmlSnapshotElement[];
+};
+
+/** 轻量的滚动更新（完整快照在滚动时太重，桥接用独立消息报告偏移）。 */
+export type HtmlScrollUpdate = {
+  revision: number;
+  scroll: readonly [number, number];
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -64,6 +73,7 @@ export function readHtmlSnapshotMessage(
   if (data.type !== "snapshot") return null;
   if (!isFiniteNumber(data.revision) || data.revision < 0) return null;
   if (!isFiniteNumber(data.height) || data.height < 0 || data.height > HTML_ANNOTATION_MAX_HEIGHT_PX) return null;
+  if (!isScrollTuple(data.scroll)) return null;
   if (typeof data.truncated !== "boolean") return null;
   if (!Array.isArray(data.elements) || data.elements.length > HTML_ANNOTATION_MAX_ELEMENTS) return null;
 
@@ -73,7 +83,32 @@ export function readHtmlSnapshotMessage(
     if (element === null) return null;
     elements.push(element);
   }
-  return { revision: data.revision, height: data.height, truncated: data.truncated, elements };
+  return {
+    revision: data.revision,
+    height: data.height,
+    scroll: data.scroll,
+    truncated: data.truncated,
+    elements,
+  };
+}
+
+/**
+ * 读取一条滚动更新消息（与快照同一 channel/nonce；字段越界即拒绝）。
+ *
+ * @param data - `message` 事件的 `data`。
+ * @param expected - 本挂载点生成并注入 URL 的频道与 nonce。
+ * @returns 通过校验的滚动更新，或 `null`。
+ */
+export function readHtmlScrollMessage(
+  data: unknown,
+  expected: { channel: string; nonce: string },
+): HtmlScrollUpdate | null {
+  if (!isRecord(data)) return null;
+  if (data.channel !== expected.channel || data.nonce !== expected.nonce) return null;
+  if (data.type !== "scroll") return null;
+  if (!isFiniteNumber(data.revision) || data.revision < 0) return null;
+  if (!isScrollTuple(data.scroll)) return null;
+  return { revision: data.revision, scroll: data.scroll };
 }
 
 function readSnapshotElement(value: unknown): HtmlSnapshotElement | null {
@@ -114,6 +149,14 @@ function isBoundingBox(value: unknown): value is readonly [number, number, numbe
     Array.isArray(value) &&
     value.length === 4 &&
     value.every(entry => isFiniteNumber(entry) && Math.abs(entry) <= HTML_ANNOTATION_MAX_BBOX_PX)
+  );
+}
+
+function isScrollTuple(value: unknown): value is readonly [number, number] {
+  return (
+    Array.isArray(value) &&
+    value.length === 2 &&
+    value.every(entry => isFiniteNumber(entry) && Math.abs(entry) <= HTML_ANNOTATION_MAX_HEIGHT_PX)
   );
 }
 
@@ -165,4 +208,38 @@ export function validateSnapshotAgainstSource(snapshot: HtmlSnapshot, source: st
     return { ...element, origin: "static" as const };
   });
   return { ...snapshot, elements };
+}
+
+/**
+ * 快照命中：文档坐标点上最小的包围盒。
+ *
+ * **未覆盖即无锚点**——不在快照里的区域（截断丢弃的、或文档在该点没有可命名元素）
+ * 不返回祖先近似值。只有源解析复核为 `static` 的元素才带 `selector`；运行时节点
+ * （`origin: "runtime"`）仍可被标注，但定位只靠坐标与说明。
+ *
+ * @param snapshot - 已通过消息校验与源解析复核的快照。
+ * @param x - 文档坐标 x（视口坐标 + scroll）。
+ * @param y - 文档坐标 y。
+ * @returns 锚点，或 `undefined`。
+ */
+export function anchorAtSnapshotPoint(snapshot: HtmlSnapshot, x: number, y: number): AnnotationAnchor | undefined {
+  let best: HtmlSnapshotElement | null = null;
+  let bestArea = Number.POSITIVE_INFINITY;
+  for (const element of snapshot.elements) {
+    const [left, top, width, height] = element.bbox;
+    if (x < left || x > left + width || y < top || y > top + height) continue;
+    const area = width * height;
+    if (area < bestArea) {
+      best = element;
+      bestArea = area;
+    }
+  }
+  if (best === null) return undefined;
+  return {
+    tag: best.tag,
+    bbox: [best.bbox[0], best.bbox[1], best.bbox[2], best.bbox[3]],
+    ...(best.id === undefined ? {} : { id: best.id }),
+    ...(best.text === undefined ? {} : { text: best.text }),
+    ...(best.selector === undefined ? {} : { selector: best.selector }),
+  };
 }

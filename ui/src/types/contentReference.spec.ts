@@ -333,6 +333,69 @@ describe("figure annotation references", () => {
     expect(normalized && "annotation" in normalized ? normalized.locator.surface : null).toBe("html");
   });
 
+  it("carries an html annotation without a review image and states the html discipline", () => {
+    const document = buildAnnotationDocument({
+      target: {
+        kind: "html",
+        path: "/w/reports/monthly.html",
+        relativePath: "reports/monthly.html",
+        mediaType: "text/html",
+        width: 1024,
+        height: 768,
+        sha256: "e".repeat(64),
+      },
+      marks: [
+        {
+          ...figureMark,
+          anchor: { tag: "canvas", bbox: [10, 10, 200, 120], selector: "body > canvas:nth-of-type(1)" },
+        },
+      ],
+    });
+    const reference = createAnnotationContentReference({
+      selectionMode: "annotation",
+      source: { ...source, relativePath: "reports/monthly.html", fileName: "monthly.html", mimeType: "text/html" },
+      renderer: { id: "image", backend: "builtin", locatorQuality: "visual" },
+      locator: { surface: "html", width: 1024, height: 768 },
+      annotation: { document, sidecarPath: "/w/reports/monthly.html.annot.json" },
+    });
+
+    expect(isContentReference(reference)).toBe(true);
+    const block = formatContentReferencePromptBlock([reference]);
+    expect(block).toContain("Annotated document: /w/reports/monthly.html");
+    expect(block).toContain("No flattened review image is attached");
+    expect(block).not.toContain("Multimodal image attachment");
+    expect(block).toContain("Change this HTML file itself");
+    expect(block).toContain("selector=body > canvas:nth-of-type(1)");
+  });
+
+  it("keeps a review-image-less html reference readable after serialization", () => {
+    const document = buildAnnotationDocument({
+      target: {
+        kind: "html",
+        path: "/w/reports/monthly.html",
+        relativePath: "reports/monthly.html",
+        mediaType: "text/html",
+        width: 1024,
+        height: 768,
+        sha256: "e".repeat(64),
+      },
+      marks: [figureMark],
+    });
+    const reference = createAnnotationContentReference({
+      selectionMode: "annotation",
+      source: { ...source, relativePath: "reports/monthly.html", fileName: "monthly.html", mimeType: "text/html" },
+      renderer: { id: "image", backend: "builtin", locatorQuality: "visual" },
+      locator: { surface: "html", width: 1024, height: 768 },
+      annotation: { document, sidecarPath: null },
+    });
+
+    // 序列化剥 dataUrl 时不得凭空造出 `image: {}`（否则历史反解会把引用判废）。
+    const serialized = serializableReference(reference);
+    expect(serialized.selectionMode === "annotation" ? serialized.image : "n/a").toBeUndefined();
+    const roundTripped = normalizeContentReference(JSON.parse(JSON.stringify(serialized)));
+    expect(roundTripped?.selectionMode).toBe("annotation");
+  });
+
   it("accepts a v1 annotation document inside a historical reference and upgrades it", () => {
     const legacy = {
       ...annotationReference(),
