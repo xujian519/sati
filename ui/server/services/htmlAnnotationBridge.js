@@ -132,10 +132,18 @@ export function bridgeMain(params) {
 
   function schedule() {
     if (timer !== null) return;
-    timer = window.setTimeout(function () {
-      timer = null;
-      post();
-    }, params.throttleMs);
+    try {
+      timer = window.setTimeout(function () {
+        timer = null;
+        try {
+          post();
+        } catch {
+          /* The frame may already be gone (navigation or teardown); nothing to report. */
+        }
+      }, params.throttleMs);
+    } catch {
+      /* The window itself may already be gone. */
+    }
   }
 
   function bump() {
@@ -146,23 +154,27 @@ export function bridgeMain(params) {
   /** Lightweight scroll updates: full snapshots are too heavy to post while scrolling. */
   function postScroll() {
     if (scrollTimer !== null) return;
-    scrollTimer = window.setTimeout(function () {
-      scrollTimer = null;
-      try {
-        (window.parent || window).postMessage(
-          {
-            channel: params.channel,
-            nonce: params.nonce,
-            type: "scroll",
-            revision: revision,
-            scroll: [window.scrollX, window.scrollY],
-          },
-          "*",
-        );
-      } catch {
-        /* Scrolling updates are best-effort. */
-      }
-    }, 50);
+    try {
+      scrollTimer = window.setTimeout(function () {
+        scrollTimer = null;
+        try {
+          (window.parent || window).postMessage(
+            {
+              channel: params.channel,
+              nonce: params.nonce,
+              type: "scroll",
+              revision: revision,
+              scroll: [window.scrollX, window.scrollY],
+            },
+            "*",
+          );
+        } catch {
+          /* Scrolling updates are best-effort. */
+        }
+      }, 50);
+    } catch {
+      /* The window itself may already be gone. */
+    }
   }
 
   try {
