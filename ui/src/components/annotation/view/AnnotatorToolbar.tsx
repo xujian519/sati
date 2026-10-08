@@ -36,6 +36,10 @@ export type AnnotatorToolbarProps = {
   onSubmit: (deliver: boolean) => void;
   onZoomChange: (zoom: number | "fit") => void;
   translate: (key: string) => string;
+  /** 是否显示「查看 | 标注」切换（HTML 外壳自带标签时隐藏，避免两处切换）。 */
+  showModeToggle?: boolean;
+  /** 是否显示「区域引用」（HTML 面不支持框选）。 */
+  showRegionReference?: boolean;
 };
 
 /** 标注器工具条。 */
@@ -49,20 +53,28 @@ export default function AnnotatorToolbar({
   onSubmit,
   onZoomChange,
   translate,
+  showModeToggle = true,
+  showRegionReference = true,
 }: AnnotatorToolbarProps): ReactNode {
   const drawing = annotator.mode === "annotate";
   return (
     <div className="flex shrink-0 flex-nowrap items-center gap-1.5 overflow-x-auto border-b border-neutral-200 bg-neutral-50 px-2 py-1.5 dark:border-neutral-800 dark:bg-neutral-900">
-      <button type="button" className={BUTTON} aria-pressed={!drawing} onClick={() => annotator.setMode("view")}>
-        {translate("view")}
-      </button>
-      <button type="button" className={BUTTON} aria-pressed={drawing} onClick={() => annotator.setMode("annotate")}>
-        {translate("annotate")}
-      </button>
+      {showModeToggle ? (
+        <>
+          <button type="button" className={BUTTON} aria-pressed={!drawing} onClick={() => annotator.setMode("view")}>
+            {translate("view")}
+          </button>
+          <button type="button" className={BUTTON} aria-pressed={drawing} onClick={() => annotator.setMode("annotate")}>
+            {translate("annotate")}
+          </button>
+        </>
+      ) : null}
       {/* 与标注并列的第二条引用入口：框选一块（region 引用），不是逐条标注。 */}
-      <button type="button" className={BUTTON} aria-pressed={regionMode} onClick={onRegionReference}>
-        {translate("regionReference")}
-      </button>
+      {showRegionReference ? (
+        <button type="button" className={BUTTON} aria-pressed={regionMode} onClick={onRegionReference}>
+          {translate("regionReference")}
+        </button>
+      ) : null}
       <span className="flex-1" />
       {drawing ? (
         <>

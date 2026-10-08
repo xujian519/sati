@@ -25,6 +25,8 @@ function Harness(props: {
   onAdd?: (mark: AnnotationMark) => void;
   onSelect?: (id: string | null) => void;
   onRemove?: (id: string) => void;
+  scrollX?: number;
+  scrollY?: number;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   return (
@@ -41,6 +43,8 @@ function Harness(props: {
         onAdd={props.onAdd ?? (() => undefined)}
         onRemove={props.onRemove ?? (() => undefined)}
         nextId={() => "m-new"}
+        scrollX={props.scrollX}
+        scrollY={props.scrollY}
       />
     </div>
   );
@@ -49,6 +53,28 @@ function Harness(props: {
 afterEach(cleanup);
 
 describe("annotator canvas", () => {
+  it("maps pointer input and draws marks in document coordinates when the surface is scrolled", () => {
+    const onAdd = vi.fn();
+    const { container } = render(<Harness scrollY={100} onAdd={onAdd} />);
+    const overlay = stubOverlayRect();
+
+    fireEvent.pointerDown(overlay, { clientX: 10, clientY: 5 });
+    fireEvent.pointerMove(overlay, { clientX: 80, clientY: 40 });
+    fireEvent.pointerUp(overlay, { clientX: 80, clientY: 40 });
+
+    // 文档坐标 = 视口坐标 + scroll（y 方向 100）。
+    expect(onAdd).toHaveBeenCalledWith(
+      expect.objectContaining({
+        points: [
+          [10, 105],
+          [80, 140],
+        ],
+      }),
+    );
+    // 绘制层把已有标注整体平移 -scroll，使其与文档内容对齐。
+    expect(container.querySelector("svg > g")?.getAttribute("transform")).toBe("translate(0 -100)");
+  });
+
   it("commits a dragged mark in figure pixels", () => {
     const onAdd = vi.fn();
     const onSelect = vi.fn();

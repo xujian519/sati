@@ -10,8 +10,8 @@
 | src TS 文件 / 行数 | 1081 / 187213 |
 | src JS 文件 | 0 |
 | tests 文件 | 620 |
-| ui/src 文件 / 行数 | 635 / 101142 |
-| ui/server 文件 / 行数 | 128 / 35037 |
+| ui/src 文件 / 行数 | 638 / 102078 |
+| ui/server 文件 / 行数 | 128 / 35113 |
 
 ## 指标口径
 
@@ -32,9 +32,9 @@
 | `as unknown as`（双重断言） | 37 | ui/src(29) · adapters(2) · tool(2) |
 | 裸 `console.*` | 158 | cli(137) · telemetry(8) · ui/server(5) |
 | 空 `catch {}` | 0 | — |
-| 无参 `catch {`（总计） | 696 | ui/server(156) · ui/src(125) · adapters(70) |
+| 无参 `catch {`（总计） | 697 | ui/server(157) · ui/src(125) · adapters(70) |
 | ↳ **无注释**（隐患类，目标） | **17** | — |
-| ↳ 已带意图注释 | 679 | — |
+| ↳ 已带意图注释 | 680 | — |
 | `TODO/HACK/FIXME/XXX` | 11 | always-on(4) · tests(4) · ui/src(2) |
 | 分层违规 `ui/server→src` | 15 | — |
 | 分层违规 `src→ui` | 0 | — |
@@ -99,7 +99,8 @@
 | `ui/src/components/main-content-v2/DashboardV2.tsx` | `DashboardV2` | 332 | function |
 | `ui/src/hooks/useSatiConfig.ts` | `useSatiConfigState` | 332 | function |
 | `ui/src/components/chat/hooks/useSlashCommandExecute.ts` | `useSlashCommandExecute` | 331 | function |
-| `ui/src/components/code-editor/view/CodeEditor.tsx` | `CodeEditor` | 324 | function |
+| `ui/src/components/code-editor/view/CodeEditor.tsx` | `CodeEditor` | 326 | function |
+| `ui/src/types/contentReference.spec.ts` | `(anonymous)` | 323 | arrow |
 | `src/tool/builtin/patentFigureGenerate.ts` | `execute` | 322 | method |
 | `ui/src/components/annotation/view/Annotator.tsx` | `Annotator` | 322 | function |
 | `ui/src/components/chat-v2/SubagentDetailMessageFlow.tsx` | `SubagentDetailMessageFlow` | 309 | function |
@@ -207,7 +208,7 @@
 | alwaysOn | 156 | 156 | 0 | 0 |
 | auth | 23 | 23 | 0 | 0 |
 | chat | 375 | 375 | 0 | 0 |
-| codeEditor | 191 | 191 | 0 | 0 |
+| codeEditor | 196 | 196 | 0 | 0 |
 | common | 436 | 436 | 0 | 0 |
 | hookTrust | 19 | 19 | 0 | 0 |
 | kanban | 44 | 44 | 0 | 0 |

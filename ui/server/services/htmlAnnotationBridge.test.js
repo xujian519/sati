@@ -111,6 +111,8 @@ describe("bridge snapshots", () => {
       expect(message.nonce).toBe(bridge.nonce);
       expect(message.type).toBe("snapshot");
       expect(message.truncated).toBe(false);
+      // 文档坐标基准：快照带滚动偏移（jsdom 里为 0）。
+      expect(message.scroll).toEqual([0, 0]);
 
       const p = message.elements.find(element => element.tag === "p");
       expect(p.selector).toBe("#top > p:nth-of-type(1)");
@@ -201,6 +203,48 @@ describe("bridge snapshots", () => {
       const message = bridge.mine().at(-1);
       expect(message.truncated).toBe(true);
       expect(message.elements.length).toBe(2000);
+    } finally {
+      bridge.restore();
+    }
+  });
+
+  it("posts a lightweight scroll update on scroll events (与快照分开，滚动时不重发元素表)", async () => {
+    const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+    document.body.innerHTML = "<p>x</p>";
+    const bridge = runBridge();
+    try {
+      await wait(40);
+      window.dispatchEvent(new Event("scroll"));
+      await wait(140);
+      const scrollMessages = bridge.mine().filter(message => message.type === "scroll");
+      expect(scrollMessages.length).toBeGreaterThan(0);
+      expect(scrollMessages.at(-1).scroll).toEqual([0, 0]);
+      // 快照消息不因滚动重复发送（只有轻量 scroll 消息）。
+      const snapshots = bridge.mine().filter(message => message.type === "snapshot");
+      expect(snapshots.length).toBe(1);
+    } finally {
+      bridge.restore();
+    }
+  });
+
+  it("clamps scrollBy to its own nonce and to the shared step limit", () => {
+    document.body.innerHTML = "<p>x</p>";
+    const bridge = runBridge();
+    const scrollBy = vi.spyOn(window, "scrollBy").mockImplementation(() => {});
+    try {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: { channel: HTML_ANNOTATION_CHANNEL, nonce: "other", type: "scrollBy", dx: 10, dy: 20 },
+        }),
+      );
+      expect(scrollBy).not.toHaveBeenCalled();
+
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: { channel: HTML_ANNOTATION_CHANNEL, nonce: bridge.nonce, type: "scrollBy", dx: 999999, dy: -999999 },
+        }),
+      );
+      expect(scrollBy).toHaveBeenCalledWith(10000, -10000);
     } finally {
       bridge.restore();
     }

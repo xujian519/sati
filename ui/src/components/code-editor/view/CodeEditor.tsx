@@ -344,6 +344,8 @@ export default function CodeEditor({
               isHtmlFile={isHtmlFile}
               htmlPreviewUrl={htmlPreviewUrl}
               fileName={file.name}
+              projectName={projectName}
+              filePath={file.path}
               isDarkMode={isDarkMode}
               fontSize={fontSize}
               showLineNumbers={showLineNumbers}

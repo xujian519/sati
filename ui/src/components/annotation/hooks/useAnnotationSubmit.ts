@@ -9,7 +9,11 @@
  * `contentReferenceImage` 变成普通多模态图片部分；结构化附件与提示块里都会被剥掉。
  */
 import { useCallback, useState } from "react";
-import { ADD_CONTENT_REFERENCE_EVENT, createAnnotationContentReference } from "../../../types/contentReference";
+import {
+  ADD_CONTENT_REFERENCE_EVENT,
+  createAnnotationContentReference,
+  type AnnotationReviewImage,
+} from "../../../types/contentReference";
 import {
   annotationImageName,
   buildAnnotationDocument,
@@ -59,6 +63,37 @@ export type AnnotationSubmit = {
 /** 审阅图倍率：长边不超过 2400 像素，避免把上下文烧在一张图上。 */
 function reviewScale(size: SurfaceSize): number {
   return Math.min(2, Math.max(1, 2400 / Math.max(size.width, size.height)));
+}
+
+/**
+ * 组装审阅图。
+ *
+ * @param surface - 已就绪的面。
+ * @param marks - 全部标注。
+ * @param name - 附件名（由目标路径派生，与既有命名一致）。
+ * @returns 审阅图；面不提供底层标记（HTML 面）时返回 `undefined`。
+ */
+async function buildReviewImage(
+  surface: AnnotatableSurface,
+  marks: readonly AnnotationMark[],
+  name: string,
+): Promise<AnnotationReviewImage | undefined> {
+  const markup = surface.reviewMarkup;
+  if (markup === undefined) return undefined;
+  const scale = reviewScale(surface.size);
+  const reviewBlob = await rasterizePng(
+    composeReviewSvg({ markup, width: surface.size.width, height: surface.size.height }, marks),
+    surface.size.width,
+    surface.size.height,
+    scale,
+  );
+  return {
+    name,
+    mimeType: "image/png",
+    width: Math.max(1, Math.round(surface.size.width * scale)),
+    height: Math.max(1, Math.round(surface.size.height * scale)),
+    dataUrl: await blobToDataUrl(reviewBlob),
+  };
 }
 
 /** 组装提交逻辑。 */
@@ -120,20 +155,12 @@ export function useAnnotationSubmit({
           setStatus({ tone: "ok", text: t("saved", { path: sidecarPath ?? "" }) });
           return;
         }
-        // 光栅化只为发送服务：仅保存时不做（它依赖画布解码，失败不该拖累落盘）。
-        const scale = reviewScale(surface.size);
-        const reviewBlob = await rasterizePng(
-          composeReviewSvg(
-            { markup: surface.reviewMarkup, width: surface.size.width, height: surface.size.height },
-            marks,
-          ),
-          surface.size.width,
-          surface.size.height,
-          scale,
-        );
         if (projectName === undefined || relativePath === undefined || fileName === undefined) {
           throw new Error(t("notReady"));
         }
+        // 审阅图只为发送服务：仅保存时不做（它依赖画布解码，失败不该拖累落盘）。
+        // 面不提供底层标记（HTML 面）时不产图——不造假图，定位靠 selector 与坐标。
+        const reviewImage = await buildReviewImage(surface, marks, annotationImageName(targetPath ?? fileName));
         const reference = createAnnotationContentReference({
           selectionMode: "annotation",
           source: { projectName, relativePath, fileName, mimeType },
@@ -143,13 +170,7 @@ export function useAnnotationSubmit({
             width: surface.size.width,
             height: surface.size.height,
           },
-          image: {
-            name: annotationImageName(targetPath ?? fileName),
-            mimeType: "image/png",
-            width: Math.max(1, Math.round(surface.size.width * scale)),
-            height: Math.max(1, Math.round(surface.size.height * scale)),
-            dataUrl: await blobToDataUrl(reviewBlob),
-          },
+          ...(reviewImage === undefined ? {} : { image: reviewImage }),
           annotation: { document, sidecarPath },
         });
         window.dispatchEvent(new CustomEvent(ADD_CONTENT_REFERENCE_EVENT, { detail: reference }));

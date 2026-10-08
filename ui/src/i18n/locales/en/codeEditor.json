@@ -238,6 +238,11 @@
     "referenceLocation": "{{count}} marks",
     "referenceMarks": "{{count}} marks",
     "referenceMarks_one": "{{count}} mark",
-    "referenceMarks_other": "{{count}} marks"
+    "referenceMarks_other": "{{count}} marks",
+    "htmlWaiting": "Measuring the document…",
+    "htmlTruncated": "Some elements are beyond the snapshot limit; anchoring may be incomplete.",
+    "htmlRuntime": "Some elements were inserted at runtime; their marks are located by coordinates only.",
+    "htmlNoCrypto": "This context cannot compute SHA-256, so HTML annotations cannot be saved here (use https or localhost).",
+    "htmlExternal": "Anchoring is based on the current rendering; external resources that failed to load may shift positions."
   }
 }

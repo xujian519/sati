@@ -30,6 +30,12 @@ const figureSurface = {
     '<svg xmlns="http://www.w3.org/2000/svg" width="416" height="141"><rect width="416" height="141"/></svg>',
 };
 
+/** HTML 面：没有审阅图底层（reviewMarkup 缺省），提交时必须显式跳过光栅化。 */
+const htmlSurface = {
+  kind: "html" as const,
+  size: { width: 1024, height: 768 },
+};
+
 const marks: readonly AnnotationMark[] = [
   {
     id: "m1",
@@ -196,6 +202,40 @@ describe("annotation submit", () => {
       locator: { surface: "image", width: 1200, height: 900 },
       annotation: { document: { target: { kind: "image" } } },
     });
+  });
+
+  it("sends an html reference without fabricating a review image", async () => {
+    const { hook } = harness({
+      surface: htmlSurface,
+      mimeType: "text/html",
+      targetPath: "/w/project/reports/monthly.html",
+      relativePath: "reports/monthly.html",
+      fileName: "monthly.html",
+    });
+    const dispatched: unknown[] = [];
+    const listener = (event: Event): void => {
+      dispatched.push((event as CustomEvent).detail);
+    };
+    window.addEventListener(ADD_CONTENT_REFERENCE_EVENT, listener);
+    try {
+      await act(async () => {
+        await hook.result.current.run(true);
+      });
+    } finally {
+      window.removeEventListener(ADD_CONTENT_REFERENCE_EVENT, listener);
+    }
+
+    // HTML 面不产审阅图：不触碰画布、引用里没有 image 字段。
+    expect(rasterizePng).not.toHaveBeenCalled();
+    expect(dispatched).toHaveLength(1);
+    const reference = dispatched[0] as {
+      locator: { surface: string; width: number; height: number };
+      image?: unknown;
+      annotation: { document: { target: { kind: string } } };
+    };
+    expect(reference.locator.surface).toBe("html");
+    expect(reference.image).toBeUndefined();
+    expect(reference.annotation.document.target.kind).toBe("html");
   });
 
   it("surfaces a save failure instead of dropping the annotation silently", async () => {

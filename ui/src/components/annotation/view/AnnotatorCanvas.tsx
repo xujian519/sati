@@ -48,11 +48,17 @@ export type AnnotatorCanvasProps = {
   onRemove: (id: string) => void;
   /** 由父组件提供的 id 生成器。 */
   nextId: () => string;
+  /**
+   * 面内滚动偏移（仅 HTML 面提供）：文档坐标 = 视口坐标 + scroll。
+   * 渲染时把整组标注平移 `-scroll`，指针换算时加上 `scroll`。
+   */
+  scrollX?: number;
+  scrollY?: number;
 };
 
 /** 画标注并收集指针输入。 */
 export function AnnotatorCanvas(props: AnnotatorCanvasProps): ReactNode {
-  const { width, height, marks, tool, color, containerRef, selectedId } = props;
+  const { width, height, marks, tool, color, containerRef, selectedId, scrollX = 0, scrollY = 0 } = props;
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [draft, setDraft] = useState<AnnotationMark | null>(null);
   const drawing = useRef(false);
@@ -62,7 +68,10 @@ export function AnnotatorCanvas(props: AnnotatorCanvasProps): ReactNode {
     const svg = svgRef.current;
     if (svg === null) return [0, 0];
     const rect = svg.getBoundingClientRect();
-    return [(event.clientX - rect.left) * (width / rect.width), (event.clientY - rect.top) * (height / rect.height)];
+    return [
+      (event.clientX - rect.left) * (width / rect.width) + scrollX,
+      (event.clientY - rect.top) * (height / rect.height) + scrollY,
+    ];
   };
 
   /** 描述指针落在哪个部件上（面不提供命中测试时恒为 undefined）。 */
@@ -299,8 +308,10 @@ export function AnnotatorCanvas(props: AnnotatorCanvasProps): ReactNode {
         if (tool === "select" && event.target === event.currentTarget) props.onSelect(null);
       }}
     >
-      {marks.map(mark => renderMark(mark, false))}
-      {draft === null ? null : renderMark(draft, true)}
+      <g transform={`translate(${-scrollX} ${-scrollY})`}>
+        {marks.map(mark => renderMark(mark, false))}
+        {draft === null ? null : renderMark(draft, true)}
+      </g>
     </svg>
   );
 }

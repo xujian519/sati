@@ -13,6 +13,9 @@ type CodeEditorSurfaceProps = {
   isHtmlFile?: boolean;
   htmlPreviewUrl?: string | null;
   fileName?: string;
+  /** 标注模式所需的项目上下文（HTML 预览的「标注」标签）。 */
+  projectName?: string;
+  filePath?: string;
   isDarkMode: boolean;
   fontSize: number;
   showLineNumbers: boolean;
@@ -30,6 +33,8 @@ export default function CodeEditorSurface({
   isHtmlFile = false,
   htmlPreviewUrl = null,
   fileName = "",
+  projectName,
+  filePath,
   isDarkMode,
   fontSize,
   showLineNumbers,
@@ -38,7 +43,15 @@ export default function CodeEditorSurface({
   onFileOpen,
 }: CodeEditorSurfaceProps) {
   if (htmlPreview && isHtmlFile && htmlPreviewUrl) {
-    return <HtmlDocumentPreview url={htmlPreviewUrl} title={`Preview: ${fileName}`} />;
+    return (
+      <HtmlDocumentPreview
+        url={htmlPreviewUrl}
+        title={`Preview: ${fileName}`}
+        projectName={projectName}
+        filePath={filePath}
+        fileName={fileName}
+      />
+    );
   }
 
   if (markdownPreview && isMarkdownFile) {

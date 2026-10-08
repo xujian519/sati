@@ -157,6 +157,17 @@ export type ImageRegionContentReference = ContentReferenceBase & {
  * 一个矩形"，这里是"整幅图 + 逐条标注"，每条标注带自己的说明。标注图（原图 + 标注）作为
  * 普通多模态图片部分随消息发出，`dataUrl` 只是 composer 侧载荷，结构化附件里会剥掉。
  */
+/** 审阅图：被标注面加标注之后的栅格图（composer 侧作为多模态图片部分发出）。 */
+export type AnnotationReviewImage = {
+  name: string;
+  mimeType: "image/png";
+  width: number;
+  height: number;
+  sha256?: string;
+  /** 仅 composer 用的载荷，见上。 */
+  dataUrl?: string;
+};
+
 export type AnnotationContentReference = ContentReferenceBase & {
   selectionMode: "annotation";
   locator: {
@@ -165,15 +176,11 @@ export type AnnotationContentReference = ContentReferenceBase & {
     width: number;
     height: number;
   };
-  image: {
-    name: string;
-    mimeType: "image/png";
-    width: number;
-    height: number;
-    sha256?: string;
-    /** 仅 composer 用的载荷，见上。 */
-    dataUrl?: string;
-  };
+  /**
+   * 审阅图。**HTML 面没有它**——定位靠每条锚点的 selector 与坐标，不产"标注图"；
+   * 附图与栅格图仍然提供（于是提示块与现有引用行为不变）。
+   */
+  image?: AnnotationReviewImage;
   annotation: AnnotationReferenceData;
 };
 
@@ -448,10 +455,24 @@ function isImageRegionContentReference(candidate: Record<string, unknown>) {
   );
 }
 
+/** 审阅图（可选字段：HTML 面不产生它）。 */
+function isAnnotationReviewImage(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  return (
+    isNonEmptyString(value.name) &&
+    value.mimeType === "image/png" &&
+    isFiniteNumber(value.width) &&
+    value.width > 0 &&
+    isFiniteNumber(value.height) &&
+    value.height > 0 &&
+    isOptionalString(value.sha256) &&
+    isOptionalString(value.dataUrl)
+  );
+}
+
 function isAnnotationContentReference(candidate: Record<string, unknown>) {
-  if (!isRecord(candidate.locator) || !isRecord(candidate.image) || !isRecord(candidate.annotation)) return false;
+  if (!isRecord(candidate.locator) || !isRecord(candidate.annotation)) return false;
   const locator = candidate.locator;
-  const image = candidate.image;
   const annotation = candidate.annotation;
   return (
     ["figure", "image", "html"].includes(String(locator.surface)) &&
@@ -459,14 +480,7 @@ function isAnnotationContentReference(candidate: Record<string, unknown>) {
     locator.width > 0 &&
     isFiniteNumber(locator.height) &&
     locator.height > 0 &&
-    isNonEmptyString(image.name) &&
-    image.mimeType === "image/png" &&
-    isFiniteNumber(image.width) &&
-    image.width > 0 &&
-    isFiniteNumber(image.height) &&
-    image.height > 0 &&
-    isOptionalString(image.sha256) &&
-    isOptionalString(image.dataUrl) &&
+    (candidate.image === undefined || isAnnotationReviewImage(candidate.image)) &&
     (annotation.sidecarPath === null || isNonEmptyString(annotation.sidecarPath)) &&
     // v1 文档也是可读的：历史消息里的引用要在反解时仍能通过校验（归一化时再迁到 v2）。
     isReadableAnnotationDocument(annotation.document)
@@ -558,6 +572,7 @@ function compactMatrix<T>(values: T[][] | undefined, maxRows = 30, maxColumns = 
  */
 export function serializableReference(reference: ContentReference): ContentReference {
   if (reference.selectionMode !== "region" && reference.selectionMode !== "annotation") return reference;
+  if (reference.image === undefined) return reference;
   return {
     ...reference,
     image: {
@@ -580,14 +595,19 @@ export function formatContentReferencePromptBlock(references: ContentReference[]
   const hasSvgAnnotation = valid.some(
     reference => reference.selectionMode === "annotation" && reference.locator.surface === "figure",
   );
+  const hasHtmlAnnotation = valid.some(
+    reference => reference.selectionMode === "annotation" && reference.locator.surface === "html",
+  );
   const hasAnnotation = valid.some(reference => reference.selectionMode === "annotation");
   const lines = [
     CONTENT_REFERENCE_PROMPT_MARKER,
     hasSvgAnnotation
       ? "These are immutable snapshots explicitly selected by the user. Use the source path as the default edit target when the request asks to modify the referenced content; figure annotations are the exception - their source path is the exported figure, and their edit target is stated per reference."
-      : hasAnnotation
-        ? "These are immutable snapshots explicitly selected by the user. Use the source path as the default edit target when the request asks to modify the referenced content; image annotations are review comments on the annotated file itself, and their discipline is stated per reference."
-        : "These are immutable snapshots explicitly selected by the user. Use the source path as the default edit target when the request asks to modify the referenced content.",
+      : hasHtmlAnnotation
+        ? "These are immutable snapshots explicitly selected by the user. Use the source path as the default edit target when the request asks to modify the referenced content; HTML annotations target the HTML file itself (or the template/script that generates it), and their discipline is stated per reference."
+        : hasAnnotation
+          ? "These are immutable snapshots explicitly selected by the user. Use the source path as the default edit target when the request asks to modify the referenced content; image annotations are review comments on the annotated file itself, and their discipline is stated per reference."
+          : "These are immutable snapshots explicitly selected by the user. Use the source path as the default edit target when the request asks to modify the referenced content.",
   ];
   valid.forEach((reference, index) => {
     lines.push(`${index + 1}. ${reference.selectionMode.toUpperCase()} reference`);
@@ -632,15 +652,22 @@ export function formatContentReferencePromptBlock(references: ContentReference[]
       const { document, sidecarPath } = reference.annotation;
       // 面词决定坐标参照系与纪律：附图有生成源可改，栅格图没有，措辞不能混用。
       const isFigure = document.target.kind === "figure-svg";
-      const surfaceWord = isFigure ? "figure" : "image";
+      const isHtml = document.target.kind === "html";
+      const surfaceWord = isFigure ? "figure" : isHtml ? "document" : "image";
       lines.push(
         `   Annotated ${surfaceWord}: ${document.target.path} (${document.target.width}x${document.target.height})`,
       );
       lines.push(`   Annotation file: ${sidecarPath ?? "(not saved)"}`);
-      lines.push(`   Multimodal image attachment: ${reference.image.name}`);
-      lines.push(
-        `   The image is the ${surfaceWord} with every mark drawn on it; each mark is listed below in draw order.`,
-      );
+      if (reference.image === undefined) {
+        lines.push(
+          "   No flattened review image is attached; each mark below is located by its selector and coordinates.",
+        );
+      } else {
+        lines.push(`   Multimodal image attachment: ${reference.image.name}`);
+        lines.push(
+          `   The image is the ${surfaceWord} with every mark drawn on it; each mark is listed below in draw order.`,
+        );
+      }
       // 逐条基线比对：文件被换过后载入的标注，其坐标可能已经不对应当前文件，必须让模型知道。
       const targetFingerprint = annotationTargetFingerprint(document.target);
       const earlierCount = document.marks.filter(mark => isMarkFromEarlierTarget(mark, targetFingerprint)).length;
@@ -662,6 +689,12 @@ export function formatContentReferencePromptBlock(references: ContentReference[]
         lines.push(
           "   leave unmarked areas untouched, and after regenerating re-check every mark because its coordinates may have shifted.",
         );
+      } else if (isHtml) {
+        // HTML 文件本身就是生成源：纪律是"改这份 HTML（或生成它的模板/脚本）"，并且改完复核 selector。
+        lines.push(
+          "   Change this HTML file itself (or the template/script that generates it), never the rendered preview;",
+        );
+        lines.push("   after editing, re-check every mark's selector because the DOM structure may have changed.");
       } else {
         // 栅格图没有生成源：沿用附图的"改生成源"纪律会诱使模型回报"已修改该图"，而位图根本没变。
         lines.push(
@@ -743,11 +776,12 @@ export function getContentReferenceSummary(
 
 export function contentReferenceImage(reference: ContentReference) {
   if (reference.selectionMode === "text" || reference.selectionMode === "cells") return null;
-  if (!reference.image.dataUrl) return null;
+  const image = reference.image;
+  if (image?.dataUrl === undefined || image.dataUrl === "") return null;
   return {
-    data: reference.image.dataUrl,
-    name: reference.image.name,
-    mimeType: reference.image.mimeType,
-    size: Math.ceil(reference.image.dataUrl.length * 0.75),
+    data: image.dataUrl,
+    name: image.name,
+    mimeType: image.mimeType,
+    size: Math.ceil(image.dataUrl.length * 0.75),
   };
 }

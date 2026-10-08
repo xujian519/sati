@@ -238,6 +238,11 @@
     "referenceLocation": "{{count}} 处标注",
     "referenceMarks": "{{count}} 处标注",
     "referenceMarks_one": "{{count}} 处标注",
-    "referenceMarks_other": "{{count}} 处标注"
+    "referenceMarks_other": "{{count}} 处标注",
+    "htmlWaiting": "正在测量文档…",
+    "htmlTruncated": "部分元素超出快照上限，锚定可能不完整。",
+    "htmlRuntime": "部分元素由脚本运行时插入，这些标注只能靠坐标定位。",
+    "htmlNoCrypto": "当前环境无法计算 SHA-256，HTML 标注无法保存（请在 https 或 localhost 下使用）。",
+    "htmlExternal": "锚定基于当前渲染；外部资源未加载可能造成点位漂移。"
   }
 }
