@@ -35,7 +35,7 @@ export type ContentReferenceSelectionMode = "text" | "cells" | "region";
 /** 引用载荷的判别式（含标注这类非选区引用）。 */
 export type ContentReferenceKind = ContentReferenceSelectionMode | "annotation";
 
-export type ContentReferenceSurface = "document" | "page" | "slide" | "sheet" | "editor" | "figure" | "image";
+export type ContentReferenceSurface = "document" | "page" | "slide" | "sheet" | "editor" | "figure" | "image" | "html";
 export type ContentReferenceRendererId = "pdf" | "office-pdf" | "docx" | "xlsx" | "pptx" | "text" | "html" | "image";
 export type ContentReferenceLocatorQuality = "semantic" | "approximate" | "visual";
 
@@ -160,7 +160,7 @@ export type ImageRegionContentReference = ContentReferenceBase & {
 export type AnnotationContentReference = ContentReferenceBase & {
   selectionMode: "annotation";
   locator: {
-    surface: Extract<ContentReferenceSurface, "figure" | "image">;
+    surface: Extract<ContentReferenceSurface, "figure" | "image" | "html">;
     /** 图面固有宽度（像素）：标注坐标以此参照系为准。 */
     width: number;
     height: number;
@@ -454,7 +454,7 @@ function isAnnotationContentReference(candidate: Record<string, unknown>) {
   const image = candidate.image;
   const annotation = candidate.annotation;
   return (
-    ["figure", "image"].includes(String(locator.surface)) &&
+    ["figure", "image", "html"].includes(String(locator.surface)) &&
     isFiniteNumber(locator.width) &&
     locator.width > 0 &&
     isFiniteNumber(locator.height) &&

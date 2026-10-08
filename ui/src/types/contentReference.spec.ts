@@ -299,6 +299,40 @@ describe("figure annotation references", () => {
     expect(block).toContain("no generating source in the workspace");
   });
 
+  it("carries an html annotation on the html surface and round-trips through validation", () => {
+    const document = buildAnnotationDocument({
+      target: {
+        kind: "html",
+        path: "/w/reports/monthly.html",
+        relativePath: "reports/monthly.html",
+        mediaType: "text/html",
+        width: 1024,
+        height: 768,
+        sha256: "d".repeat(64),
+      },
+      marks: [figureMark],
+    });
+    const reference = createAnnotationContentReference({
+      selectionMode: "annotation",
+      source: { ...source, relativePath: "reports/monthly.html", fileName: "monthly.html", mimeType: "text/html" },
+      renderer: { id: "image", backend: "builtin", locatorQuality: "visual" },
+      locator: { surface: "html", width: 1024, height: 768 },
+      image: {
+        name: "monthly.html.annotated.png",
+        mimeType: "image/png",
+        width: 1024,
+        height: 768,
+        dataUrl: "data:image/png;base64,AAAA",
+      },
+      annotation: { document, sidecarPath: "/w/reports/monthly.html.annot.json" },
+    });
+
+    expect(isContentReference(reference)).toBe(true);
+    const normalized = normalizeContentReference(JSON.parse(JSON.stringify(reference)));
+    expect(normalized?.selectionMode).toBe("annotation");
+    expect(normalized && "annotation" in normalized ? normalized.locator.surface : null).toBe("html");
+  });
+
   it("accepts a v1 annotation document inside a historical reference and upgrades it", () => {
     const legacy = {
       ...annotationReference(),

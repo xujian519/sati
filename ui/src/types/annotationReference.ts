@@ -66,6 +66,13 @@ export type AnnotationAnchor = {
   title?: string;
   /** 元素自身文字（截断）。 */
   text?: string;
+  /**
+   * HTML 面的源文件定位路径（`body > p:nth-of-type(1)` 语法，见 dsh 的 `selectorFor`）。
+   *
+   * 只在**源解析 DOM**（不执行脚本）中能命中同一结构位置时才输出；运行时插入的节点没有
+   * selector。上限 400 字符，超出即不输出并告警（与 dsh 的读取截断不会静默分叉）。
+   */
+  selector?: string;
   /** 该元素在被标注面固有坐标下的包围盒。 */
   bbox: AnnotationBox;
 };
@@ -101,11 +108,12 @@ export type AnnotationMark = {
  * 被标注面的种类。
  *
  * `figure-svg` 与 `image` 的差别不只是介质类型：只有前者能内联成活 DOM，从而解析出标注
- * 落在哪个图元上（见 {@link AnnotationAnchor}）。
+ * 落在哪个图元上（见 {@link AnnotationAnchor}）。`html` 是 HTML 交付物面：脚本在沙箱中执行，
+ * 锚点按 `selector` 在源文件中定位（见 docs/html-annotation-plan.md）。
  */
-export type AnnotationTargetKind = "figure-svg" | "image";
+export type AnnotationTargetKind = "figure-svg" | "image" | "html";
 
-const ANNOTATION_TARGET_KINDS: readonly AnnotationTargetKind[] = ["figure-svg", "image"];
+const ANNOTATION_TARGET_KINDS: readonly AnnotationTargetKind[] = ["figure-svg", "image", "html"];
 
 /** 是否是受支持的被标注面种类。 */
 export function isAnnotationTargetKind(value: unknown): value is AnnotationTargetKind {
@@ -283,6 +291,7 @@ function readAnchor(value: unknown): AnnotationAnchor | undefined {
   if (!isOptionalString(value.ref)) return undefined;
   if (!isOptionalString(value.title)) return undefined;
   if (!isOptionalString(value.text)) return undefined;
+  if (!isOptionalString(value.selector)) return undefined;
   return {
     tag: value.tag,
     bbox: value.bbox,
@@ -291,6 +300,7 @@ function readAnchor(value: unknown): AnnotationAnchor | undefined {
     ...(value.ref === undefined ? {} : { ref: value.ref }),
     ...(value.title === undefined ? {} : { title: value.title }),
     ...(value.text === undefined ? {} : { text: value.text }),
+    ...(value.selector === undefined ? {} : { selector: value.selector }),
   };
 }
 
@@ -317,6 +327,7 @@ function isTargetInfo(value: unknown): value is AnnotatedTargetInfo {
     isNonEmptyString(value.path) &&
     isNonEmptyString(value.relativePath) &&
     isNonEmptyString(value.mediaType) &&
+    isKindMediaTypeConsistent(value.kind, value.mediaType) &&
     isFiniteNumber(value.width) &&
     value.width > 0 &&
     isFiniteNumber(value.height) &&
@@ -349,7 +360,8 @@ export function isAnnotationDocument(value: unknown): value is AnnotationDocumen
 /**
  * v1 的 `figure` 字段（v2 起改由 `target` 承载）。
  *
- * 单独读而不是复用 {@link isTargetInfo}：v1 没有 `kind`，而这一层存在的意义正是补上它。
+ * 单独读而不是复用 {@link isTargetInfo}：v1 没有 `kind`，而这一层存在的意义正是补上它——
+ * 按 `mediaType` 推导，而不是硬编码附图（硬编码会把姊妹项目写下的 HTML 侧车误读成 SVG 面）。
  *
  * `relativePath` 在 v1 里**不是必有字段**：姊妹项目插件写下的 sidecar 只记绝对 `path`
  * （外加一个 Sati 不认的 `address`）。这类文件在用户工作区里真实存在，缺它就整体判废会
@@ -365,7 +377,7 @@ function readLegacyFigure(value: unknown): AnnotatedTargetInfo | undefined {
   if (!isNonEmptyString(value.sha256)) return undefined;
   if (value.hashAlgo !== undefined && !isAnnotationHashAlgo(value.hashAlgo)) return undefined;
   return {
-    kind: "figure-svg",
+    kind: kindForMediaType(value.mediaType),
     path: value.path,
     relativePath,
     mediaType: value.mediaType,
@@ -374,6 +386,29 @@ function readLegacyFigure(value: unknown): AnnotatedTargetInfo | undefined {
     sha256: value.sha256,
     ...(value.hashAlgo === undefined ? {} : { hashAlgo: value.hashAlgo }),
   };
+}
+
+/**
+ * 按媒体类型推导面种类（v1 文档没有 `kind` 字段时的补全口径，与 v2 的一致性校验同源）。
+ *
+ * - `text/html` → `html`
+ * - `image/svg+xml` → `figure-svg`
+ * - 其余 → `image`
+ */
+function kindForMediaType(mediaType: string): AnnotationTargetKind {
+  if (mediaType === "text/html") return "html";
+  if (mediaType === "image/svg+xml") return "figure-svg";
+  return "image";
+}
+
+/**
+ * `kind` 与 `mediaType` 必须成对一致：`html` 只配 `text/html`，反之亦然（A8）。
+ *
+ * 不成对的文档会让读者在"用什么方式锚定"上猜错（例如 HTML 面被按栅格图处理），故直接拒绝；
+ * 调用方保证 `mediaType` 已是非空字符串。
+ */
+function isKindMediaTypeConsistent(kind: AnnotationTargetKind, mediaType: string): boolean {
+  return kind === "html" ? mediaType === "text/html" : mediaType !== "text/html";
 }
 
 /** 把 v1 文档迁移成 v2；结构读不懂时返回 null。 */
@@ -448,15 +483,47 @@ export function annotationSummary(document: AnnotationDocument, marksLabel: (cou
   return firstNote ?? marksLabel(document.marks.length);
 }
 
-/** 锚定信息的可读描述（智能体据此定位到 FigureSpec 节点）。 */
+/** 锚点字段限长（B6）：selector ≤ 400、id/title ≤ 200、text ≤ 80。 */
+const ANCHOR_SELECTOR_LIMIT = 400;
+const ANCHOR_NAME_LIMIT = 200;
+const ANCHOR_TEXT_LIMIT = 80;
+
+/**
+ * 锚点字段来自被标注文档本身（不可信）：去换行、去首尾空白、限长，并转义反斜杠与引号，
+ * 防止其中的文字破坏提示块结构或改变指令语义（B6）。
+ */
+function sanitizeAnchorField(value: string, limit: number): string {
+  return value
+    .replace(/[\r\n]+/g, " ")
+    .trim()
+    .slice(0, limit)
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, '\\"');
+}
+
+/**
+ * 锚定信息的可读描述（智能体据此定位：HTML 面用 `selector`，附图用节点信息）。
+ *
+ * `selector` 优先级最高——它是 HTML 面在源文件中的定位路径。各字段都是文档内容，
+ * 一律按不可信文本限长转义（B6）。
+ */
 export function describeAnchor(anchor: AnnotationAnchor | undefined): string {
   if (anchor === undefined) return "";
   const parts: string[] = [];
+  if (anchor.selector !== undefined && anchor.selector !== "") {
+    parts.push(`selector=${sanitizeAnchorField(anchor.selector, ANCHOR_SELECTOR_LIMIT)}`);
+  }
   if (anchor.nodeId !== undefined && anchor.nodeId !== "") parts.push(`node=${anchor.nodeId}`);
   if (anchor.ref !== undefined && anchor.ref !== "") parts.push(`ref=${anchor.ref}`);
-  if (anchor.title !== undefined && anchor.title !== "") parts.push(`title="${anchor.title}"`);
-  if (anchor.id !== undefined && anchor.id !== "" && anchor.nodeId === undefined) parts.push(`id=${anchor.id}`);
-  if (parts.length === 0 && anchor.text !== undefined && anchor.text !== "") parts.push(`text="${anchor.text}"`);
+  if (anchor.title !== undefined && anchor.title !== "") {
+    parts.push(`title="${sanitizeAnchorField(anchor.title, ANCHOR_NAME_LIMIT)}"`);
+  }
+  if (anchor.id !== undefined && anchor.id !== "" && anchor.nodeId === undefined) {
+    parts.push(`id=${sanitizeAnchorField(anchor.id, ANCHOR_NAME_LIMIT)}`);
+  }
+  if (parts.length === 0 && anchor.text !== undefined && anchor.text !== "") {
+    parts.push(`text="${sanitizeAnchorField(anchor.text, ANCHOR_TEXT_LIMIT)}"`);
+  }
   if (parts.length === 0) parts.push(`<${anchor.tag}>`);
   return parts.join(", ");
 }

@@ -8,12 +8,14 @@ import {
   annotationTargetFingerprint,
   annotationTargetsFile,
   buildAnnotationDocument,
+  describeAnchor,
   describeAnnotationMarks,
   isAnnotationDocument,
   isAnnotationMark,
   legacyAnnotationSidecarPath,
   normalizeAnnotationDocument,
   parseAnnotationDocument,
+  type AnnotatedTargetInfo,
   type AnnotationDocument,
   type AnnotationMark,
 } from "./annotationReference";
@@ -248,6 +250,82 @@ describe("annotation contract", () => {
     expect(isAnnotationDocument(migrated)).toBe(true);
   });
 
+  it("derives the target kind from mediaType when migrating a v1 sidecar", () => {
+    const html = normalizeAnnotationDocument(
+      legacyDocument({
+        figure: {
+          path: "/w/reports/monthly.html",
+          relativePath: "reports/monthly.html",
+          mediaType: "text/html",
+          width: 1024,
+          height: 768,
+          sha256: "b".repeat(64),
+        },
+      }),
+    );
+    // 姊妹项目（dsh）写下的 HTML 侧车没有 kind：按 mediaType 推导成 html 面，
+    // 而不是硬编码的附图（否则会被误读为 SVG）。
+    expect(html?.target.kind).toBe("html");
+
+    const raster = normalizeAnnotationDocument(
+      legacyDocument({
+        figure: {
+          path: "/w/scans/page-1.png",
+          relativePath: "scans/page-1.png",
+          mediaType: "image/png",
+          width: 1200,
+          height: 900,
+          sha256: "c".repeat(64),
+        },
+      }),
+    );
+    expect(raster?.target.kind).toBe("image");
+    // SVG 的既有推导保持不变（回归）。
+    expect(normalizeAnnotationDocument(legacyDocument())?.target.kind).toBe("figure-svg");
+  });
+
+  it("accepts a v2 html target and keeps its selector anchor", () => {
+    const document = buildAnnotationDocument({
+      target: {
+        kind: "html",
+        path: "/w/reports/monthly.html",
+        relativePath: "reports/monthly.html",
+        mediaType: "text/html",
+        width: 1024,
+        height: 768,
+        sha256: "d".repeat(64),
+      },
+      marks: [mark({ anchor: { tag: "p", bbox: [0, 0, 10, 10], selector: "body > p:nth-of-type(1)" } })],
+    });
+
+    expect(isAnnotationDocument(document)).toBe(true);
+    const roundTripped = normalizeAnnotationDocument(JSON.parse(JSON.stringify(document)));
+    expect(roundTripped?.target.kind).toBe("html");
+    expect(roundTripped?.marks[0]?.anchor?.selector).toBe("body > p:nth-of-type(1)");
+  });
+
+  it("rejects a target whose kind contradicts its mediaType, and only that pairing", () => {
+    const htmlTarget: AnnotatedTargetInfo = {
+      kind: "html",
+      path: "/w/reports/monthly.html",
+      relativePath: "reports/monthly.html",
+      mediaType: "text/html",
+      // 非 1024：只告警、不拒绝（A8），因此这里必须仍可读。
+      width: 800,
+      height: 600,
+      sha256: "d".repeat(64),
+    };
+    const withTarget = (target: AnnotatedTargetInfo) => buildAnnotationDocument({ target, marks: [mark()] });
+
+    expect(isAnnotationDocument(withTarget(htmlTarget))).toBe(true);
+    expect(isAnnotationDocument(withTarget({ ...htmlTarget, mediaType: "image/png" }))).toBe(false);
+    expect(isAnnotationDocument(withTarget({ ...htmlTarget, kind: "image" }))).toBe(false);
+    // 附图与控制组不受影响。
+    expect(isAnnotationDocument(withTarget({ ...htmlTarget, kind: "figure-svg", mediaType: "image/svg+xml" }))).toBe(
+      true,
+    );
+  });
+
   it("reads a v2 document as itself, so a second pass is a no-op", () => {
     const document: AnnotationDocument = buildAnnotationDocument({ target: rasterTarget, marks: [mark()] });
     expect(normalizeAnnotationDocument(document)).toEqual(document);
@@ -270,6 +348,20 @@ describe("annotation contract", () => {
 
     expect(lines[0]).toBe("1. arrow (10,20) -> (200,150): 这个标号应指向滑套 34");
     expect(lines[1]).toBe("2. rectangle (0,0)-(5,5) (node=3, ref=34) (no note)");
+  });
+
+  it("leads with the selector and confines untrusted anchor fields to bounded, escaped text", () => {
+    // selector 优先级最高；同一条锚点的 text 不再出现在输出里。
+    expect(describeAnchor({ tag: "p", bbox: [0, 0, 1, 1], selector: "body > p", text: "hello" })).toBe(
+      "selector=body > p",
+    );
+    // 限长：selector 截到 400，去换行，转义引号——不能让文档文字改变提示块结构。
+    expect(describeAnchor({ tag: "p", bbox: [0, 0, 1, 1], selector: "s".repeat(500) })).toBe(
+      `selector=${"s".repeat(400)}`,
+    );
+    const escaped = describeAnchor({ tag: "p", bbox: [0, 0, 1, 1], title: `a"b\nc` });
+    expect(escaped).toBe('title="a\\"b c"');
+    expect(escaped).not.toContain("\n");
   });
 
   it("summarizes a reference by its first note, then by the caller's label", () => {
