@@ -10,7 +10,7 @@
 | src TS 文件 / 行数 | 1081 / 187213 |
 | src JS 文件 | 0 |
 | tests 文件 | 620 |
-| ui/src 文件 / 行数 | 638 / 102078 |
+| ui/src 文件 / 行数 | 638 / 102167 |
 | ui/server 文件 / 行数 | 128 / 35113 |
 
 ## 指标口径
@@ -75,6 +75,7 @@
 | `src/cli/projectRuntimeFactory.ts` | `createProjectRuntimeResolver` | 415 | function |
 | `src/tool/builtin/patentFigureProject.ts` | `execute` | 411 | method |
 | `ui/src/components/chat-v2/processGrouping.test.ts` | `(anonymous)` | 409 | arrow |
+| `ui/src/types/contentReference.spec.ts` | `(anonymous)` | 408 | arrow |
 | `ui/src/components/code-editor/view/subcomponents/SpreadsheetInteractivePreview.tsx` | `SpreadsheetInteractivePreview` | 407 | function |
 | `ui/src/components/settings/view/agentSearch/components/ToolsSection.tsx` | `ToolsSection` | 399 | function |
 | `ui/src/components/settings/view/integrations/im/components/WeComChannelSection.tsx` | `WeComChannelSection` | 398 | function |
@@ -100,7 +101,6 @@
 | `ui/src/hooks/useSatiConfig.ts` | `useSatiConfigState` | 332 | function |
 | `ui/src/components/chat/hooks/useSlashCommandExecute.ts` | `useSlashCommandExecute` | 331 | function |
 | `ui/src/components/code-editor/view/CodeEditor.tsx` | `CodeEditor` | 326 | function |
-| `ui/src/types/contentReference.spec.ts` | `(anonymous)` | 323 | arrow |
 | `src/tool/builtin/patentFigureGenerate.ts` | `execute` | 322 | method |
 | `ui/src/components/annotation/view/Annotator.tsx` | `Annotator` | 322 | function |
 | `ui/src/components/chat-v2/SubagentDetailMessageFlow.tsx` | `SubagentDetailMessageFlow` | 309 | function |
