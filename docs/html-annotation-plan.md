@@ -353,7 +353,8 @@ DoD：#0 与 #1 必须先于其他项；每项记录命令或工具、时间、�
 - `AnnotatorCanvas` 增加 `scrollX/scrollY`（文档坐标 = 视口坐标 + scroll）；`AnnotatorToolbar` 增加 `showModeToggle/showRegionReference` 供 HTML 外壳复用；HTML 侧不使用区域框选（html2canvas 不适用于不透明源 iframe）。
 - 无审阅图提交：`AnnotatableSurface.reviewMarkup` 与引用 `image` 变可选（不造假图）；提示块给出 HTML 纪律（改 HTML/生成源、复核 selector）与「无标注图」声明。
 - 提示态：测量中 / 快照截断 / 运行时节点 / 无 crypto.subtle（禁写）/ 外部资源漂移。
-- 验证：全量 vitest 180 文件 / 1277 用例通过；`pnpm check` 通过；真实浏览器协议级 E2E（真实服务端 + 同源父页）：快照 13 元素、selector 13/13 源解析命中、`scrollBy` 生效且滚动不重发重快照。**完整点击链路（打开 → 切标注 → 画 → 保存 → 重开）待人工/下一阶段验收**。
+- 验证：全量 vitest 180 文件 / 1277 用例通过；`pnpm check` 通过；真实浏览器协议级 E2E（真实服务端 + 同源父页）：快照 13 元素、selector 13/13 源解析命中、`scrollBy` 生效且滚动不重发重快照。
+- **完整点击链路已实测**（2026-10-08，真实应用：Vite dev + 真实服务端 + 网关 + `html-finance-report` 模板）：登录 → 打开 `report.html` → 切「标注」→ 画箭头**命中 Chart.js canvas**（侧车 `anchor.selector="#trendChart"`、`tag=canvas`）→ 仅保存 → 侧车落盘 `version:2`、`target.kind:"html"`、1 条标注 → 切回「查看」图表仍渲染 → 重开文件载回 `Marks (1)`。发布门控按设计在未开启时拒绝写入（开启 `VITE_ENABLE_HTML_ANNOTATION=true` 后通过）。
 - 未做（归 H4）：提示块的 `(untrusted document text)` 标注与历史消息反解测试。
 
 - `CodeEditorSurface` 的 HTML 预览分支改为双模式容器；查看模式保持现行为。
