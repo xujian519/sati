@@ -12,6 +12,7 @@ import path from "path";
 import mime from "mime-types";
 import JSZip from "jszip";
 import { authenticateToken } from "../middleware/auth.js";
+import { applyProjectFileSecurityHeaders, shouldForceAttachment } from "../middleware/projectPreviewSecurity.js";
 import {
   addDirectoryToZip,
   expandWorkspacePath,
@@ -250,12 +251,16 @@ router.get("/api/projects/:projectName/files/content", authenticateToken, async 
     }
 
     const mimeType = mime.lookup(resolved) || "application/octet-stream";
+    // 同源可渲染的文档（HTML/SVG/XML）必须带沙箱策略，否则顶层导航即可在应用源中执行。
+    applyProjectFileSecurityHeaders(res, mimeType);
+    // MHTML 等不纳入沙箱集合的类型改为强制下载，从渲染面移除。
+    const forceDownload = shouldForceAttachment(mimeType);
     if (req.method === "HEAD" && (req.query.sha256 === "1" || req.query.sha256 === "true")) {
       res.setHeader("X-Sati-Content-SHA256", await sha256File(resolved));
     }
     await streamFileWithRange(req, res, resolved, {
       mimeType,
-      downloadFilename: req.query.download ? path.basename(resolved) : null,
+      downloadFilename: req.query.download || forceDownload ? path.basename(resolved) : null,
     });
   } catch (error) {
     logger.error("Error serving binary file:", error);

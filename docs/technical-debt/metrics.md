@@ -1,7 +1,7 @@
 # Sati 技术债务指标基线与趋势
 
 > 由 `node scripts/measure-techdebt.mjs --update` 自动生成，谨防手工编辑。
-> 最近一次快照：**2026-10-07**
+> 最近一次快照：**2026-10-08**
 
 ## 规模
 
@@ -10,8 +10,8 @@
 | src TS 文件 / 行数 | 1081 / 187213 |
 | src JS 文件 | 0 |
 | tests 文件 | 620 |
-| ui/src 文件 / 行数 | 625 / 100143 |
-| ui/server 文件 / 行数 | 122 / 33870 |
+| ui/src 文件 / 行数 | 628 / 100323 |
+| ui/server 文件 / 行数 | 126 / 34449 |
 
 ## 指标口径
 
@@ -29,7 +29,7 @@
 | 指标 | 总量 | 热点模块 |
 |---|---|---|
 | `any`/`@ts-expect-error`/`@ts-ignore` | 3 | ui/src(3) |
-| `as unknown as`（双重断言） | 33 | ui/src(25) · adapters(2) · tool(2) |
+| `as unknown as`（双重断言） | 37 | ui/src(29) · adapters(2) · tool(2) |
 | 裸 `console.*` | 158 | cli(137) · telemetry(8) · ui/server(5) |
 | 空 `catch {}` | 0 | — |
 | 无参 `catch {`（总计） | 692 | ui/server(153) · ui/src(124) · adapters(70) |
@@ -47,7 +47,7 @@
 |---|---|---|---|
 | `ui/src/components/app-shell/SidebarV2.tsx` | `SidebarV2` | 1014 | function |
 | `ui/src/components/chat-v2/MessagesPaneV2.render.test.tsx` | `(anonymous)` | 943 | arrow |
-| `ui/src/components/main-content-v2/FilesV2.tsx` | `FilesV2` | 851 | function |
+| `ui/src/components/main-content-v2/FilesV2.tsx` | `FilesV2` | 849 | function |
 | `ui/src/components/chat-v2/MessagesPaneV2.tsx` | `MessagesPaneV2` | 824 | function |
 | `ui/src/components/chat-v2/ComposerV2.tsx` | `ComposerV2` | 741 | function |
 | `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` | `useChatRealtimeHandlers` | 721 | function |
@@ -99,9 +99,9 @@
 | `ui/src/components/main-content-v2/DashboardV2.tsx` | `DashboardV2` | 332 | function |
 | `ui/src/hooks/useSatiConfig.ts` | `useSatiConfigState` | 332 | function |
 | `ui/src/components/chat/hooks/useSlashCommandExecute.ts` | `useSlashCommandExecute` | 331 | function |
+| `ui/src/components/code-editor/view/CodeEditor.tsx` | `CodeEditor` | 324 | function |
 | `src/tool/builtin/patentFigureGenerate.ts` | `execute` | 322 | method |
 | `ui/src/components/annotation/view/Annotator.tsx` | `Annotator` | 322 | function |
-| `ui/src/components/code-editor/view/CodeEditor.tsx` | `CodeEditor` | 310 | function |
 | `ui/src/components/chat-v2/SubagentDetailMessageFlow.tsx` | `SubagentDetailMessageFlow` | 309 | function |
 | `src/cli/projectRuntimeFactory.ts` | `resolve` | 307 | function |
 | `ui/src/components/settings/view/integrations/im/components/WeixinChannelSection.tsx` | `WeixinChannelSection` | 303 | function |

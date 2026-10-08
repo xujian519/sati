@@ -107,10 +107,24 @@ export default function CodeEditor({
     setHtmlPreview(false);
   }, [file.path]);
 
-  const htmlPreviewUrl = useMemo(() => {
-    if (!isHtmlFile || !projectName) return null;
-    return api.projectPreviewUrl(projectName, file.path, projectPath);
-  }, [file.path, isHtmlFile, projectName, projectPath]);
+  // 预览 URL 需要先申请一份仅限预览的短期凭据，因此异步解析；只有进入预览时才申请。
+  const [htmlPreviewUrl, setHtmlPreviewUrl] = useState<string | null>(null);
+  useEffect(() => {
+    setHtmlPreviewUrl(null);
+    if (!htmlPreview || !isHtmlFile || !projectName) return;
+    let cancelled = false;
+    api
+      .projectPreviewUrl(projectName, file.path, projectPath)
+      .then(url => {
+        if (!cancelled) setHtmlPreviewUrl(url);
+      })
+      .catch(() => {
+        if (!cancelled) setHtmlPreviewUrl(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [file.path, htmlPreview, isHtmlFile, projectName, projectPath]);
 
   const minimapExtension = useMemo(
     () =>
