@@ -2,6 +2,39 @@
 
 本文件按版本记录 Sati 的重要变更。桌面端版本号（`release(desktop)`）与根 `package.json` 由 `scripts/bump-version.mjs` 同步维护。
 
+## v0.3.5 - 2026-10-08
+
+> **版本目标（2026-10-08）**：HTML 交付物补上「可标注」这一块——HTML 标注面（沙箱内脚本 + 注入桥接快照锚定）从契约、桥接到发送通路全链路落地，前置的预览凭据收窄与项目文档 CSP 沙箱化修掉 P0 凭据外泄；同期并入专利附图工具链批次 A（核验阻断 / 矢量源复核 / 字体导路径 / 所有者角色化）与上游 PilotDeck 增量移植批次。
+
+### Feat
+
+- feat(ui): HTML 标注全链路——契约层（`kind:"html"` + `selector` + 发布门控，默认关闭）→ 沙箱桥接注入与预览 cookie 回退（H2）→ 标注面（双模式 + 快照锚定 + 滚动同步）→ 发送通路与提示纪律；父页不信任桥接输出、`selector` 由源文件字节复核（#618 #619 #620 #622 #623）
+- feat(patent): 附图工具链批次 A——栅格像素门禁参与核验阻断、矢量源渲染复核（RC 规则族）、字体独立导出（Inkscape 文本转路径，默认关）、`patent-illustrator` 成为可调度角色、WASM 渲染后端规模护栏（#598）
+- feat: 上游 PilotDeck 增量移植——配置写盘原子化 + CAS 收口、`web_search` 补齐 6 家 provider 并与设置页对齐、上传限额单一事实源、CLI 会话标题采用会话路由模型（#610）
+
+### Fix
+
+- fix(ui): 预览凭据收窄与项目文档沙箱化——项目预览专用凭据（scope 绑定项目、15 分钟过期）、预览响应 CSP/sandbox 头、文档类响应统一策略（P0 凭据外泄修复）（#615）
+- fix(ui): 标注桥定时器在窗口销毁后不再触发（#623）
+- fix(ui): 预览与侧栏三处交互缺陷（#610）
+- fix(patent): CAD 投影失败带出真因（脚本失败出口 + 消费侧诊断）（#597）
+- fix(patent): 旧版 graphviz 的 `stroke="transparent"` 归一化为 `none`（#598）
+
+### Test
+
+- test(patent): 附图预处理补测试入口、三工具 sheet 入参一致、输出契约用例（#598）
+- ci: CI 安装 graphviz 并加外部依赖信号守卫——缺依赖整组 skip 不再被误读为通过（#598）
+
+### Docs
+
+- docs(notes): 七份决策记录（CAD 失败诊断、栅格门禁与输出契约、graphviz 透明描边、矢量源渲染复核、字体文本转路径、HTML 标注、预览凭据与 CSP）
+- docs(html-annotation): 实施计划与 H0–H5 实测、验收与收尾记录（#615 #617 #619 #621 #623）
+- docs: 立「降级但不静默」为根级纪律；回填技术债台账、架构基线、度量基线与文档事实层
+
+### Chore
+
+- chore(deps): 升级 univerjs 组（13 项）、electron 44.5.1、pdfjs-dist 6.3.289、@biomejs/biome 2.5.15、typescript-eslint 8.71.0、@larksuiteoapi/node-sdk 1.74.0、ws 8.22.0 + @types/ws 8.18.2、@codemirror/state 6.7.6、@types/node 26.6.4、shell-quote 1.11.0
+
 ## v0.3.4 - 2026-09-30
 
 > **版本目标（2026-09-30）**：专利代理链路补上「多轮返工」的硬约束与检索精排——案卷轮次状态机把缺口清单变成 triage 派工与有界修订轮次，检索候选接 LLM 摘要精排，并配一套回归评测集（`pnpm eval:patent-agent`）。同期并入上游同步批次（桌面退出保护、配置写盘加固、cron 日字段 / 插件 skills / 工作区上传等修复）与一批依赖升级。
