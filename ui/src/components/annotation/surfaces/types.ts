@@ -43,6 +43,8 @@ export type AnnotatableSurface = {
 };
 
 /** 面种类 → 引用载荷里的 `locator.surface` 取值。 */
-export function referenceSurfaceOf(kind: AnnotationTargetKind): "figure" | "image" {
-  return kind === "figure-svg" ? "figure" : "image";
+export function referenceSurfaceOf(kind: AnnotationTargetKind): "figure" | "image" | "html" {
+  if (kind === "figure-svg") return "figure";
+  if (kind === "html") return "html";
+  return "image";
 }

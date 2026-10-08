@@ -14,6 +14,7 @@ import {
   parseAnnotationDocument,
   type AnnotationDocument,
 } from "../../../types/annotationReference";
+import { isHtmlAnnotationKindWriteEnabled } from "../../../constants/config";
 import { api } from "../../../utils/api";
 
 /**
@@ -56,6 +57,11 @@ export async function saveAnnotation(
   targetPath: string,
   document: AnnotationDocument,
 ): Promise<string> {
+  // 发布门控（D6）：所有读者升级前不写 `kind:"html"`——旧版读者会把未知 kind 视为
+  // 「从未标注」，并在下一次保存时静默覆盖这份侧车（H0 #6 实测）。
+  if (document.target.kind === "html" && !isHtmlAnnotationKindWriteEnabled()) {
+    throw new Error("HTML annotations cannot be saved yet: the HTML annotation gate is not enabled");
+  }
   const sidecarPath = annotationSidecarPath(targetPath);
   const response = await api.saveFile(projectName, sidecarPath, `${JSON.stringify(document, null, 2)}\n`);
   if (!response.ok) {

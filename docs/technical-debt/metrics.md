@@ -10,7 +10,7 @@
 | src TS 文件 / 行数 | 1081 / 187213 |
 | src JS 文件 | 0 |
 | tests 文件 | 620 |
-| ui/src 文件 / 行数 | 628 / 100323 |
+| ui/src 文件 / 行数 | 630 / 100625 |
 | ui/server 文件 / 行数 | 126 / 34449 |
 
 ## 指标口径
@@ -106,6 +106,7 @@
 | `src/cli/projectRuntimeFactory.ts` | `resolve` | 307 | function |
 | `ui/src/components/settings/view/integrations/im/components/WeixinChannelSection.tsx` | `WeixinChannelSection` | 303 | function |
 | `src/gateway/client/InProcessGateway.ts` | `submitTurn` | 301 | method |
+| `ui/src/types/annotationReference.spec.ts` | `(anonymous)` | 301 | arrow |
 
 ## Top 30 大文件
 

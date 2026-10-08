@@ -4,13 +4,13 @@
  * 守的是「同名不同扩展名」那条边界：v1 只按主名派生 sidecar，同目录的 `图3.svg` 与 `图3.png`
  * 会落到同一个文件上，不加归属校验就会把邻居的标注读成自己的。
  */
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   buildAnnotationDocument,
   type AnnotationDocument,
   type AnnotationTargetKind,
 } from "../../../types/annotationReference";
-import { readAnnotation } from "./sidecar";
+import { readAnnotation, saveAnnotation } from "./sidecar";
 
 const mocks = vi.hoisted(() => ({ readFile: vi.fn(), saveFile: vi.fn() }));
 
@@ -23,13 +23,19 @@ const SVG_PATH = `${DIR}/图3.svg`;
 const PNG_PATH = `${DIR}/图3.png`;
 const LEGACY_PATH = `${DIR}/图3.annot.json`;
 
+const MEDIA_TYPES: Record<AnnotationTargetKind, string> = {
+  "figure-svg": "image/svg+xml",
+  image: "image/png",
+  html: "text/html",
+};
+
 function documentFor(path: string, kind: AnnotationTargetKind): AnnotationDocument {
   return buildAnnotationDocument({
     target: {
       kind,
       path,
       relativePath: path,
-      mediaType: kind === "image" ? "image/png" : "image/svg+xml",
+      mediaType: MEDIA_TYPES[kind],
       width: 210,
       height: 297,
       sha256: "a".repeat(64),
@@ -93,5 +99,46 @@ describe("annotation sidecar read", () => {
     serveFiles({});
 
     expect(await readAnnotation("proj", PNG_PATH)).toBeNull();
+  });
+});
+
+/**
+ * 发布门控（D6）：`kind:"html"` 侧车的写入默认关闭。开启前任何写入都必须被拒绝——
+ * 旧版读者读到未知 kind 会视为「从未标注」，并在保存时静默覆盖（H0 #6 实测，
+ * 见 docs/notes/proposed/2026-10-08-html-annotation.md）。
+ */
+describe("html annotation write gate", () => {
+  const HTML_PATH = `${DIR}/report.html`;
+
+  beforeEach(() => {
+    mocks.readFile.mockReset();
+    mocks.saveFile.mockReset();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("refuses to save an html sidecar while the gate is closed (default)", async () => {
+    await expect(saveAnnotation("proj", HTML_PATH, documentFor(HTML_PATH, "html"))).rejects.toThrow(/not enabled/);
+    expect(mocks.saveFile).not.toHaveBeenCalled();
+  });
+
+  it("saves the sidecar once the gate is enabled", async () => {
+    vi.stubEnv("VITE_ENABLE_HTML_ANNOTATION", "true");
+    mocks.saveFile.mockResolvedValue({ ok: true });
+
+    await expect(saveAnnotation("proj", HTML_PATH, documentFor(HTML_PATH, "html"))).resolves.toBe(
+      `${HTML_PATH}.annot.json`,
+    );
+    expect(mocks.saveFile).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves non-html surfaces untouched by the gate", async () => {
+    mocks.saveFile.mockResolvedValue({ ok: true });
+
+    await expect(saveAnnotation("proj", SVG_PATH, documentFor(SVG_PATH, "figure-svg"))).resolves.toBe(
+      `${SVG_PATH}.annot.json`,
+    );
   });
 });
