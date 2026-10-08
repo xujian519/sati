@@ -10,7 +10,13 @@ import { Router } from "express";
 import fs from "fs";
 import { promises as fsPromises } from "fs";
 import path from "path";
-import { authenticateToken } from "../middleware/auth.js";
+import {
+  authenticateProjectPreview,
+  authenticateToken,
+  generateProjectPreviewToken,
+  PROJECT_PREVIEW_TOKEN_TTL_SECONDS,
+} from "../middleware/auth.js";
+import { applyProjectPreviewSecurityHeaders } from "../middleware/projectPreviewSecurity.js";
 import {
   getConfiguredOfficePreviewService,
   getLibreOfficeCandidateStatuses,
@@ -281,9 +287,24 @@ router.get(
   },
 );
 
+// 为预览签发仅限该项目的短期凭据。预览 URL 只携带这份凭据，不再携带会话 JWT。
+router.post("/api/projects/:projectName/preview-token", authenticateToken, async (req, res) => {
+  const { projectName } = req.params;
+  const projectRoot = await extractProjectDirectory(projectName).catch(() => null);
+  if (!projectRoot) {
+    return res.status(404).json({ error: "Project not found" });
+  }
+  res.setHeader("Cache-Control", "no-store");
+  return res.json({
+    token: generateProjectPreviewToken(req.user, projectName),
+    expiresIn: PROJECT_PREVIEW_TOKEN_TTL_SECONDS,
+  });
+});
+
 // Serve project files through a stable project-root URL so generated HTML can
 // load sibling CSS, JS and image assets with normal relative paths.
-router.get("/api/projects/:projectName/preview/{*splat}", authenticateToken, async (req, res) => {
+router.get("/api/projects/:projectName/preview/{*splat}", authenticateProjectPreview, async (req, res) => {
+  applyProjectPreviewSecurityHeaders(res);
   try {
     const { projectName } = req.params;
     const relativeFilePath = getSplatPath(req) || "index.html";

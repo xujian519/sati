@@ -76,6 +76,11 @@ const authenticateToken = async (req, res, next) => {
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
 
+    // 带 scope 的 token 是受限凭据（如项目预览凭据），只能由其专属中间件接受，不得当作完整会话。
+    if (decoded.scope) {
+      return res.status(403).json({ error: "Invalid token" });
+    }
+
     // Verify user still exists and is active
     const user = userDb.getUserById(decoded.userId);
     if (!user) {
@@ -112,6 +117,72 @@ const generateToken = user => {
   );
 };
 
+/** 项目预览凭据的 scope 标记。带此 scope 的 token 不能通过通用鉴权。 */
+const PROJECT_PREVIEW_SCOPE = "project-preview";
+
+/**
+ * 项目预览凭据的有效期（秒）。iframe 只在导航时带一次凭据，子资源不携带它，
+ * 因此有效期只需覆盖一次预览会话；取短值以限制泄露窗口。
+ */
+export const PROJECT_PREVIEW_TOKEN_TTL_SECONDS = 15 * 60;
+
+/**
+ * 签发项目预览凭据：只对单个项目的预览路由有效。
+ *
+ * 它用于替代把会话 JWT 拼进预览 URL。即便被预览文档读取，它也无法调用任何其它 API
+ * （通用鉴权与 WebSocket 鉴权都拒绝带 scope 的 token）。
+ *
+ * @param {{ id: number }} user - 当前用户。
+ * @param {string} projectName - 绑定的项目名。
+ * @returns {string} 预览凭据。
+ */
+export const generateProjectPreviewToken = (user, projectName) => {
+  return jwt.sign({ userId: user.id, scope: PROJECT_PREVIEW_SCOPE, project: projectName }, JWT_SECRET, {
+    expiresIn: PROJECT_PREVIEW_TOKEN_TTL_SECONDS,
+  });
+};
+
+/**
+ * 项目预览路由的鉴权。
+ *
+ * 接受两种凭据：
+ * - `Authorization: Bearer <会话 JWT>`（程序化请求）；
+ * - `?token=<项目预览凭据>`，且必须 scope 为预览、项目名与路径参数一致。
+ *
+ * 会话 JWT 放在 query 中一律拒绝——它是此前泄露的来源。
+ */
+const authenticateProjectPreview = async (req, res, next) => {
+  if (IS_PLATFORM || DISABLE_LOCAL_AUTH) {
+    return authenticateToken(req, res, next);
+  }
+
+  const authHeader = req.headers["authorization"];
+  if (authHeader && authHeader.split(" ")[1]) {
+    return authenticateToken(req, res, next);
+  }
+
+  const token = req.query.token;
+  if (typeof token !== "string" || !token) {
+    return res.status(401).json({ error: "Access denied. No token provided." });
+  }
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    if (decoded.scope !== PROJECT_PREVIEW_SCOPE || decoded.project !== req.params.projectName) {
+      return res.status(403).json({ error: "Invalid token" });
+    }
+    const user = userDb.getUserById(decoded.userId);
+    if (!user) {
+      return res.status(401).json({ error: "Invalid token. User not found." });
+    }
+    req.user = user;
+    return next();
+  } catch (error) {
+    logger.error("Preview token verification error:", error);
+    return res.status(403).json({ error: "Invalid token" });
+  }
+};
+
 // WebSocket authentication function
 const authenticateWebSocket = token => {
   // Platform mode: bypass token validation, return first user
@@ -135,6 +206,10 @@ const authenticateWebSocket = token => {
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
+    // 受限凭据（带 scope）不得开启 WebSocket 会话（与 REST authenticateToken 一致）。
+    if (decoded.scope) {
+      return null;
+    }
     // Verify user actually exists in database (matches REST authenticateToken behavior)
     const user = userDb.getUserById(decoded.userId);
     if (!user) {
@@ -147,4 +222,11 @@ const authenticateWebSocket = token => {
   }
 };
 
-export { validateApiKey, authenticateToken, generateToken, authenticateWebSocket, JWT_SECRET };
+export {
+  validateApiKey,
+  authenticateToken,
+  authenticateProjectPreview,
+  generateToken,
+  authenticateWebSocket,
+  JWT_SECRET,
+};

@@ -24,6 +24,26 @@ const encodePathSegments = relativePath =>
     .map(segment => encodeURIComponent(segment))
     .join("/");
 
+/**
+ * 为项目预览申请一份仅限该项目预览路由的短期凭据。
+ *
+ * @param {string} projectName - 项目名。
+ * @returns {Promise<string>} 预览凭据。
+ */
+export const requestProjectPreviewToken = async projectName => {
+  const response = await authenticatedFetch(`/api/projects/${encodeURIComponent(projectName)}/preview-token`, {
+    method: "POST",
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to create preview token (${response.status})`);
+  }
+  const data = await response.json();
+  if (typeof data?.token !== "string" || !data.token) {
+    throw new Error("Preview token response is missing a token");
+  }
+  return data.token;
+};
+
 export const appendAuthToken = url => {
   const token = localStorage.getItem("auth-token");
   if (!token) return url;
@@ -440,10 +460,12 @@ export const api = {
       headers: {},
     }),
 
-  projectPreviewUrl: (projectName, filePath, projectRoot) => {
+  // 预览 URL 只携带仅限该项目预览路由的短期凭据，不携带会话 JWT（见 project-preview 路由的鉴权）。
+  projectPreviewUrl: async (projectName, filePath, projectRoot) => {
     const relativePath = getProjectRelativePath(filePath, projectRoot);
     const encoded = encodePathSegments(relativePath);
-    return appendAuthToken(`/api/projects/${encodeURIComponent(projectName)}/preview/${encoded}`);
+    const token = await requestProjectPreviewToken(projectName);
+    return `/api/projects/${encodeURIComponent(projectName)}/preview/${encoded}?token=${encodeURIComponent(token)}`;
   },
 
   downloadProjectZip: projectName => authenticatedFetch(`/api/projects/${encodeURIComponent(projectName)}/download`),

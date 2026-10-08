@@ -98,6 +98,12 @@ app.use("/api", validateApiKey);
 // Authentication routes (public)
 app.use("/api/auth", authRoutes);
 
+// Project preview routes are mounted ahead of the protected /api/projects gate below:
+// the preview document is authenticated by its own middleware (a project-scoped preview
+// credential, or a session header), and the gate would otherwise reject that credential.
+// Every route in this router carries its own authenticateToken / preview auth.
+app.use(projectPreviewRoutes);
+
 // Projects API Routes (protected)
 app.use("/api/projects", authenticateToken, projectsRoutes);
 
@@ -176,7 +182,6 @@ app.use(
 
 app.use(projectSessionsRoutes);
 app.use(projectFilesRoutes);
-app.use(projectPreviewRoutes);
 app.use(projectUploadsRoutes);
 app.use(tokenUsageRoutes);
 

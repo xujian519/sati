@@ -28,6 +28,7 @@ import type { FileTreeNode } from "../file-tree/types/types";
 import { getFileIconData } from "../file-tree/constants/fileIcons";
 import { cn } from "../../lib/utils.js";
 import { api } from "../../utils/api";
+import { openProjectPreviewInNewTab } from "../../utils/openProjectPreview";
 import { copyTextToClipboard } from "../../utils/clipboard";
 import { isImeEnterEvent } from "../../utils/ime";
 import { ADD_WORKSPACE_FILE_MENTION_EVENT, getWorkspaceRelativePath } from "../../utils/workspaceFileMention";
@@ -484,9 +485,7 @@ export default function FilesV2({
     (event: ReactMouseEvent<HTMLButtonElement>, node: FileTreeNode) => {
       event.stopPropagation();
       if (!selectedProject?.name) return;
-
-      const previewUrl = api.projectPreviewUrl(selectedProject.name, node.path, projectRoot);
-      window.open(previewUrl, "_blank", "noopener");
+      openProjectPreviewInNewTab(selectedProject.name, node.path, projectRoot);
     },
     [projectRoot, selectedProject?.name],
   );
