@@ -284,6 +284,86 @@ describe("annotation contract", () => {
     expect(normalizeAnnotationDocument(legacyDocument())?.target.kind).toBe("figure-svg");
   });
 
+  it("reads a dsh-written v1 html sidecar, keeping its selector and baseline", () => {
+    const migrated = normalizeAnnotationDocument(
+      legacyDocument({
+        figure: {
+          // dsh 只写绝对 path（没有 relativePath），也没有 kind。
+          path: "/w/reports/monthly.html",
+          mediaType: "text/html",
+          width: 1024,
+          height: 768,
+          sha256: "f".repeat(64),
+        },
+        marks: [
+          {
+            id: "m1",
+            kind: "arrow",
+            color: "#e03131",
+            points: [
+              [10, 20],
+              [200, 150],
+            ],
+            text: "这里要指向图表",
+            figureFingerprint: `sha256:${"f".repeat(64)}`,
+            anchor: { tag: "canvas", bbox: [10, 10, 200, 120], selector: "body > canvas:nth-of-type(1)" },
+          },
+        ],
+      }),
+    );
+
+    expect(migrated?.target.kind).toBe("html");
+    expect(migrated?.target.relativePath).toBe("/w/reports/monthly.html");
+    expect(migrated?.marks[0]?.anchor?.selector).toBe("body > canvas:nth-of-type(1)");
+    expect(migrated?.marks[0]?.targetFingerprint).toBe(`sha256:${"f".repeat(64)}`);
+  });
+
+  it("keeps the read → save → read invariant for a dsh html sidecar", () => {
+    const migrated = normalizeAnnotationDocument(
+      legacyDocument({
+        figure: {
+          path: "/w/reports/monthly.html",
+          mediaType: "text/html",
+          width: 1024,
+          height: 768,
+          sha256: "f".repeat(64),
+        },
+        marks: [
+          {
+            id: "m1",
+            kind: "arrow",
+            color: "#e03131",
+            points: [
+              [10, 20],
+              [200, 150],
+            ],
+            text: "这里要指向图表",
+            figureFingerprint: `sha256:${"f".repeat(64)}`,
+            anchor: { tag: "canvas", bbox: [10, 10, 200, 120], selector: "body > canvas:nth-of-type(1)" },
+          },
+        ],
+        summary: "互读夹具",
+      }),
+    );
+    expect(migrated).not.toBeNull();
+    if (migrated === null) return;
+
+    // 读 → 存：按 v2 形状重建（Sati 的保存路径）。
+    const saved = buildAnnotationDocument({
+      target: migrated.target,
+      marks: migrated.marks,
+      summary: migrated.summary,
+      createdAt: migrated.createdAt,
+    });
+    // 存 → 读：JSON 往返后逐字段一致（target / marks / summary / createdAt）。
+    const reread = normalizeAnnotationDocument(JSON.parse(JSON.stringify(saved)));
+    expect(reread).not.toBeNull();
+    expect(reread?.target).toEqual(saved.target);
+    expect(reread?.marks).toEqual(saved.marks);
+    expect(reread?.summary).toBe("互读夹具");
+    expect(reread?.createdAt).toBe(saved.createdAt);
+  });
+
   it("accepts a v2 html target and keeps its selector anchor", () => {
     const document = buildAnnotationDocument({
       target: {

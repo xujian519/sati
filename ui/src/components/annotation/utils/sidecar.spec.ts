@@ -105,7 +105,7 @@ describe("annotation sidecar read", () => {
 /**
  * 发布门控（D6）：`kind:"html"` 侧车的写入默认关闭。开启前任何写入都必须被拒绝——
  * 旧版读者读到未知 kind 会视为「从未标注」，并在保存时静默覆盖（H0 #6 实测，
- * 见 docs/notes/proposed/2026-10-08-html-annotation.md）。
+ * 见 docs/notes/implemented/2026-10-08-html-annotation.md）。
  */
 describe("html annotation write gate", () => {
   const HTML_PATH = `${DIR}/report.html`;

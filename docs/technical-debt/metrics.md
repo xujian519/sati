@@ -10,7 +10,7 @@
 | src TS 文件 / 行数 | 1081 / 187213 |
 | src JS 文件 | 0 |
 | tests 文件 | 620 |
-| ui/src 文件 / 行数 | 638 / 102167 |
+| ui/src 文件 / 行数 | 638 / 102247 |
 | ui/server 文件 / 行数 | 128 / 35113 |
 
 ## 指标口径
@@ -86,6 +86,7 @@
 | `src/web/client/webMessage.ts` | `applyWebGatewayEvent` | 383 | function |
 | `ui/src/components/app-shell/MainAreaV2.tsx` | `MainAreaV2Content` | 381 | function |
 | `ui/src/components/settings/view/integrations/im/components/FeishuChannelSection.tsx` | `FeishuChannelSection` | 381 | function |
+| `ui/src/types/annotationReference.spec.ts` | `(anonymous)` | 381 | arrow |
 | `ui/src/components/chat/tools/components/InteractiveRenderers/AskUserQuestionPanel.tsx` | `AskUserQuestionPanel` | 378 | arrow |
 | `ui/src/components/kanban/hooks/useBoardState.ts` | `useBoardState` | 368 | function |
 | `ui/src/components/chat/hooks/useFileMentions.tsx` | `useFileMentions` | 366 | function |
@@ -107,7 +108,6 @@
 | `src/cli/projectRuntimeFactory.ts` | `resolve` | 307 | function |
 | `ui/src/components/settings/view/integrations/im/components/WeixinChannelSection.tsx` | `WeixinChannelSection` | 303 | function |
 | `src/gateway/client/InProcessGateway.ts` | `submitTurn` | 301 | method |
-| `ui/src/types/annotationReference.spec.ts` | `(anonymous)` | 301 | arrow |
 
 ## Top 30 大文件
 

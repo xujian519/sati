@@ -1,6 +1,6 @@
 # HTML 标注能力 —— 计划（参照 dsh-annotator）
 
-> 状态：**计划 v2 已获裁定；P0/H0/H1/H2/H3 已合入 main（H3 含整机点击验收）；H4 已实现（本 PR）；H5 未开工**
+> 状态：**计划 v2 已获裁定；P0–H4 已合入 main；H5（互通与收尾）已实现（本 PR）——H 系列全部落地；发布门控保持默认关闭（开启条件见 §6 H5）**
 > 裁定记录（2026-10-08，用户）：D0 先独立修复 P0；D1 允许沙箱内脚本；D5 固定 1024×768 视口；D4 Sati 侧修、dsh 侧另议。D2、D3、D6 沿用推荐项，未单独裁定。
 > 参照实现：`/Users/xujian/projects/dsh-annotator`（DSH 插件，已实现 HTML 标注）
 > 上游方案：`docs/document-annotation-plan.md`（图片族 + sidecar v2，已落地）
@@ -379,6 +379,12 @@ DoD：#0 与 #1 必须先于其他项；每项记录命令或工具、时间、�
 
 ### H5 — 互通与收尾
 
+**状态：已实现（本 PR）**：
+
+- **双向互读与不变量**：dsh 写的 v1 HTML 侧车在 Sati 读为 `kind:"html"`、`selector`/`figureFingerprint→targetFingerprint` 保留；「读 dsh v1 → 存 v2 → 再读」不变量有单测（丢失项与 §4.6 清单一致）；dsh 读 Sati v2 的实测见 H0 #5。
+- **发布门控开启条件**：默认保持关闭；确认工作区所有读者（dsh 及在用 Sati 版本）均含 kind-aware 读取后，再显式置 `VITE_ENABLE_HTML_ANNOTATION=true`（决策记录已写明，开启是人工确认动作）。
+- **收尾**：决策记录转 `docs/notes/implemented/2026-10-08-html-annotation.md`；`docs/document-annotation-plan.md` 状态行与阶段清单加入 HTML 行；技术债基线同 PR 刷新。
+
 - dsh 夹具双向互读；「读→存→读」不变量测试；互通清单写入决策记录。
 - 发布门控的开启条件：确认所有读者已升级，再开启写入。
 - 技术债基线 `pnpm measure:update`（同 PR）。
@@ -460,6 +466,6 @@ DoD：#0 与 #1 必须先于其他项；每项记录命令或工具、时间、�
 1. ✅ 用户裁定 D0–D6（§9）：D0/D1/D5/D4 已裁定；D2/D3/D6 按推荐项执行。
 2. ✅ P0 独立 PR：`fix/preview-credential-sandbox`（PR #615，含决策记录），CI 全绿。
 3. ✅ H0 spike（#0、#1 优先）：结论已回写本文件 §6 与 §10（2026-10-08）。
-4. ✅ HTML 标注决策记录（proposed）：`docs/notes/proposed/2026-10-08-html-annotation.md`（PR #617）。
+4. ✅ HTML 标注决策记录：已转 `docs/notes/implemented/2026-10-08-html-annotation.md`（H5 转正）。
 5. ✅ H1 契约层（PR #618）；✅ H2 渲染面与桥接（PR #619，回退方案定案 A）；✅ H3 UI 接入（PR #620 + #621 验收回填）。
-6. ✅ H4 发送通路与纪律（本 PR）；H5（互通与收尾：dsh 夹具双向、发布门控开启条件、决策记录转正）为最后一阶段；每阶段结束时更新本文件状态行。
+6. ✅ H4 发送通路与纪律（PR #622）；✅ H5 互通与收尾（本 PR，决策记录已转正）。**H 系列全部落地**；发布门控仍默认关闭，开启由用户按「所有读者已升级」条件人工执行。
