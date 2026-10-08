@@ -1,6 +1,6 @@
 # HTML 标注能力 —— 计划（参照 dsh-annotator）
 
-> 状态：**计划 v2 已获裁定；P0 已实现（本分支，见 §6 与决策记录），H0–H5 未开工**（见 §6 P0 小节的残余项）
+> 状态：**计划 v2 已获裁定；P0 已实现（PR #615，见 §6 与决策记录）；H0 已完成（实测结论见 §6）；H1–H5 未开工**
 > 裁定记录（2026-10-08，用户）：D0 先独立修复 P0；D1 允许沙箱内脚本；D5 固定 1024×768 视口；D4 Sati 侧修、dsh 侧另议。D2、D3、D6 沿用推荐项，未单独裁定。
 > 参照实现：`/Users/xujian/projects/dsh-annotator`（DSH 插件，已实现 HTML 标注）
 > 上游方案：`docs/document-annotation-plan.md`（图片族 + sidecar v2，已落地）
@@ -291,6 +291,26 @@ DoD 达成情况：真实浏览器中（真实服务端 + 真实响应头），�
 
 DoD：#0 与 #1 必须先于其他项；每项记录命令或工具、时间、结果与判定；真实浏览器用 ego-browser / playwright-cli。
 
+**实测结论（2026-10-08 完成）**。环境：真实服务端（登录 + 默认两种模式）、Playwright 1.62 无头 Chromium、dsh `store.ts`/`sidecar.ts` 真实代码（经 tsx 直跑）；样本为 5 个模板 + 注入/相对资源/哈希专用样本。
+
+| # | 判定 | 结论 |
+|---|---|---|
+| 0 | ✅ | 修复前：会话 JWT 可被文档读取并外发（2 次命中）；修复后：顶层与 iframe 均 0 命中、`SecurityError`（详见 P0 决策记录） |
+| 1 | ⚠️ 部分 | **默认模式**：相对资源（css/js/png）全部 200 且 URL 无凭据 ✓。**登录模式**：文档 200、sibling 全部 401 ✗ → 需回退。回退机制矩阵实测：`SameSite=Lax` cookie **已存储但沙箱下不携带**（顶层与 iframe 均 401）；`Partitioned` 不携带；**`SameSite=None; Secure` 在可信源（localhost/127.0.0.1）下顶层与 iframe 均成功**（子资源 200，`document.cookie` 仍被沙箱阻断）；非可信源（局域网 http）不可用 |
+| 2 | ✅ | data-report 20/20、finance 20/20、deck 17/20 命中同一结构位置；deck 的 3 个运行时按钮（`#nav > button`）被源解析校验识别（`srcResolves=false`）→ 正确标记为运行时节点。现模板未触发 id 转义缺陷（规则仍保留） |
+| 3 | ✅ | 1024×768：deck 恰好一屏（active slide 1024×768、无内部滚动）；social-card 适配（558px 高）；poster/data-report 纵向可滚动（1796/1929）且无横向溢出；`100vh` = 768 实测 |
+| 4 | ✅ | dsh `fileDigest` = Node 字节 SHA-256 = 浏览器 `crypto.subtle`（raw 字节），普通/BOM/GBK 三样本全一致；**文本转码（UTF-8 解码再编码）会破坏一致性** → 实证 §4.2 必须取 raw 端点 |
+| 5 | ✅（预期内丢失） | dsh 读回 Sati v2 HTML 侧车：`selector`、`id` 保留；`targetFingerprint`、`hashAlgo`、`target.kind` 按 §4.6 预期丢弃；dsh 读→存会把侧车**降级写回 v1**，selector 存活；无新增未知丢失 |
+| 6 | ⚠️ 缺陷证实 | `kind:"html"` → 现 reader `parseAnnotationDocument` 返回 null（视为未标注）→ 保存必覆盖；两侧 sidecar 路径同一（`<名>.html.annot.json`）已证实。dsh 写的 v1 HTML（mediaType `text/html`）被现 reader 推导为 `figure-svg`（硬编码）→ 误读为 SVG 面。另：读取对未知字段是**透传**（selector 原始数据未丢），但类型/`readAnchor`/`describeAnchor` 不识别 → H1 补 |
+| 7 | ✅ | 各模板带盒元素 ≤94（最大 data-report），远低于任何合理上限；截断语义原型验证：被截断元素的中心点命中 → 「无锚点」而非祖先 |
+| 8 | ✅ | doctype 后注入在模板/注释/脚本/BOM 四类样本全部正确、结构无损；无 doctype 回退首页注入可用（BackCompat，分叉记录）；朴素 `<head>` 替换在注释与脚本样本均致 bridge 不执行 → A9 决策实证 |
+| 9 | ✅ | opaque origin 下 `"*"` 双向 postMessage 正常（父页见 origin `"null"`、读不到 frame DOM）；真实 CSP 下 Chart.js 加载并绘制、Google Fonts（css + woff2）加载；inline 脚本无需 nonce（依赖 `'unsafe-inline'`） |
+
+**结论对计划的修正**：
+- §3.3：D5-b（固定 1024×768 + 框内滚动）获实测支持，维持。
+- #1 的回退方案在 H2/H3 定稿（三候选）：A = `SameSite=None; Secure` 的路径限定 cookie（仅可信源可用，需安全评估与降级提示）；B = annotate 模式服务端内联相对资源（自包含化）；C = 接受限制并提示。倾向 A（+ 非可信源降级提示）。
+- 其余假设维持，§4.2/§4.6/§3.2 均有实测证据补强。
+
 ### H1 — 契约层（无用户可见变化；HTML 写入默认关闭）
 
 - `kind` 加 `html`；`selector`；`readLegacyFigure` 推导 kind；`kind`↔`mediaType` 一致性；width 告警规则；`describeAnchor` 限长转义。
@@ -380,7 +400,8 @@ DoD：#0 与 #1 必须先于其他项；每项记录命令或工具、时间、�
 |---|---|---|
 | P0 修复影响既有预览（CSP 拦截正常资源） | 高 | allowlist 覆盖模板所用域名；H0 #9 验证；P0 独立回滚 |
 | 任意 JavaScript 在预览中执行（方案 A' 的固有代价） | 高 | 需用户明确接受（D1）；P0 收紧凭据与外发面 |
-| 相对资源因凭据机制变更而失效 | 中 | H0 #1 |
+| 相对资源因凭据机制变更而失效 | 中 | H0 #1 实测：登录模式当前不可用（sibling 401）；回退候选 A（`None+Secure` cookie，仅可信源）/ B（内联）；非可信源降级提示，H2 定案 |
+| 沙箱下 cookie 语义不稳定（`Lax`/`Partitioned` 均不携带） | 中 | H0 #1 矩阵；若采用 cookie 方案，只依赖受测组合（`None+Secure`）并加回归测试 |
 | 运行时插入节点无法定位 | 中 | 源解析校验；界面告知；禁止落笔 |
 | 快照与实际布局不同步 | 中 | nonce + revision；attributes 监听；「测量中」状态 |
 | 与 dsh 的 selector 或字段不一致造成误读 | 高 | §4.6 清单；互通夹具；H0 #5 |
@@ -402,8 +423,8 @@ DoD：#0 与 #1 必须先于其他项；每项记录命令或工具、时间、�
 
 ## 12. 下一步
 
-1. 用户裁定 D0–D6（§9）；D0 是硬前置。
-2. P0 独立 PR（含决策记录）。
-3. H0 spike（#0、#1 优先）；结论回写本文件 §6 与 §10。
-4. 新建 HTML 标注决策记录（含 Alternatives considered，正面回应 dsh 的否决理由）。
-5. 按 H1 → H5 推进；每阶段结束时更新本文件状态行。
+1. ✅ 用户裁定 D0–D6（§9）：D0/D1/D5/D4 已裁定；D2/D3/D6 按推荐项执行。
+2. ✅ P0 独立 PR：`fix/preview-credential-sandbox`（PR #615，含决策记录），CI 全绿。
+3. ✅ H0 spike（#0、#1 优先）：结论已回写本文件 §6 与 §10（2026-10-08）。
+4. 新建 HTML 标注决策记录（含 `## Alternatives considered`，正面回应 dsh 的否决理由）——草案：`docs/notes/proposed/2026-10-08-html-annotation.md`。
+5. 按 H1 → H5 推进（H1 需先定 #1 的回退方案）；每阶段结束时更新本文件状态行。
