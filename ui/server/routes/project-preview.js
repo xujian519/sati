@@ -10,6 +10,7 @@ import { Router } from "express";
 import fs from "fs";
 import { promises as fsPromises } from "fs";
 import path from "path";
+import mime from "mime-types";
 import {
   authenticateProjectPreview,
   authenticateToken,
@@ -17,6 +18,11 @@ import {
   PROJECT_PREVIEW_TOKEN_TTL_SECONDS,
 } from "../middleware/auth.js";
 import { applyProjectPreviewSecurityHeaders } from "../middleware/projectPreviewSecurity.js";
+import {
+  ANNOTATABLE_MAX_BYTES,
+  buildHtmlAnnotationBridgeScript,
+  injectHtmlAnnotationBridge,
+} from "../services/htmlAnnotationBridge.js";
 import {
   getConfiguredOfficePreviewService,
   getLibreOfficeCandidateStatuses,
@@ -332,6 +338,21 @@ router.get("/api/projects/:projectName/preview/{*splat}", authenticateProjectPre
 
     res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
     setPreviewContentType(res, resolved);
+
+    // 标注模式（H2）：doctype 后注入桥接（字节级，不改编码）；其余情况保持原有流式输出逐字节不变。
+    if (req.query.annotate === "1" && mime.lookup(resolved) === "text/html") {
+      const nonce = typeof req.query.sati_nonce === "string" ? req.query.sati_nonce : "";
+      if (!/^[A-Za-z0-9_-]{8,64}$/.test(nonce)) {
+        return res.status(400).type("text/plain").send("Annotation mode requires a valid sati_nonce.");
+      }
+      if (stats.size > ANNOTATABLE_MAX_BYTES) {
+        return res.status(413).type("text/plain").send("This file is too large to annotate.");
+      }
+      const source = await fsPromises.readFile(resolved);
+      const script = buildHtmlAnnotationBridgeScript({ nonce });
+      return res.send(injectHtmlAnnotationBridge(source, script).bytes);
+    }
+
     fs.createReadStream(resolved).pipe(res);
   } catch (error) {
     logger.error("Error serving project preview:", error);
