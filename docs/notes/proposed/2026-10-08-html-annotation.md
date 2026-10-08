@@ -12,12 +12,12 @@ Sati 的 HTML 交付物（`skills/html-data-report`、`skills/html-finance-repor
 
 采用方案 A'：**沙箱内允许脚本（不加 `allow-same-origin`）+ 注入桥接生成快照；父页不信任桥接输出**。
 
-- **不把桥接当安全边界**（对 dsh 否决理由的正面回应）：父页对消息只做 `source`/`nonce`/类型/长度校验；锚点以**源文件解析**为准——`selector` 只有在源解析 DOM（不执行脚本）中命中同一结构位置才输出；运行时节点标记 `origin` 且不输出 selector。快照伪造至多影响定位辅助，写入侧以源文件为准。
+- **不把桥接当安全边界**（对 dsh 否决理由的正面回应）：父页对消息只做 `source`/`nonce`/类型/长度校验；锚点以**源文件解析**为准——bridge 只产出候选 `selector`，**父页**用源文件字节（DOMParser，不执行脚本）复核：命中且 `tag`/`id` 一致才保留，否则置空并标记 `runtime`（父页是不信任模型的校验端，桥接不读源文件）。快照伪造至多影响定位辅助，写入侧以源文件为准。
 - **渲染**：固定 1024 宽（与 dsh 一致，坐标可互通）；D5-b 固定 1024×768 视口、超出部分框内滚动。H0 #3 实测：deck 恰好一屏、poster/报告类纵向可滚动、全模板无横向溢出、`100vh` = 768。
 - **前提**（D0/D1）：预览凭据收窄 + CSP 沙箱先行（P0 已落地：`scope` 预览凭据、沙箱 CSP、`connect-src 'none'`、allowlist）；标注模式沙箱进一步收紧为仅 `allow-scripts`。
 - **哈希**：只接受字节级 SHA-256，取自 raw 文件端点；非安全上下文不写侧车。H0 #4 对拍：dsh `fileDigest` = Node = 浏览器 `subtle`（普通/BOM/GBK 一致）；文本转码路径会破坏一致性。
 - **互通**：v2 契约增加 `selector`；dsh→Sati 的 kind 推导（按 `mediaType`）必修；发布门控默认关闭（D6）。H0 #6 证实旧版 Sati 现在会静默覆盖 `kind:"html"` 侧车（两侧 sidecar 路径同一）。
-- **相对资源（登录模式）**：H0 #1 实测当前不可用。候选 A = `SameSite=None; Secure` 的路径限定 cookie（可信源上顶层与 iframe 均验证通过，`document.cookie` 仍被沙箱阻断；非可信源不可用需降级提示）；候选 B = annotate 模式服务端内联相对资源。倾向 A，H2 定案。
+- **相对资源（登录模式）**：**采纳候选 A** —— `SameSite=None; Secure` 的路径限定 cookie（H0 #1 实测：`Lax`/`Partitioned` 在沙箱文档下不被携带，`None+Secure` 顶层与 iframe 均可用；非可信源降级提示）。实现与端到端证据见计划 §6 H2。
 
 ## Alternatives considered
 

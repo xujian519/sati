@@ -1,6 +1,6 @@
 # HTML 标注能力 —— 计划（参照 dsh-annotator）
 
-> 状态：**计划 v2 已获裁定；P0 已实现（PR #615，见 §6 与决策记录）；H0 已完成（实测结论见 §6）；H1–H5 未开工**
+> 状态：**计划 v2 已获裁定；P0/H0/H1 已合入 main（PR #615/#617/#618）；H2 已实现（本 PR）；#1 回退方案定案为候选 A（预览 cookie）；H3–H5 未开工**
 > 裁定记录（2026-10-08，用户）：D0 先独立修复 P0；D1 允许沙箱内脚本；D5 固定 1024×768 视口；D4 Sati 侧修、dsh 侧另议。D2、D3、D6 沿用推荐项，未单独裁定。
 > 参照实现：`/Users/xujian/projects/dsh-annotator`（DSH 插件，已实现 HTML 标注）
 > 上游方案：`docs/document-annotation-plan.md`（图片族 + sidecar v2，已落地）
@@ -313,6 +313,13 @@ DoD：#0 与 #1 必须先于其他项；每项记录命令或工具、时间、�
 
 ### H1 — 契约层（无用户可见变化；HTML 写入默认关闭）
 
+**状态：已实现（PR #618）**。落地说明：
+
+- 发布门控在 `saveAnnotation` **强制**（开关未开启即拒绝写 `kind:"html"`），不只靠 UI 约定；开关为 `VITE_ENABLE_HTML_ANNOTATION`（默认关）。
+- v2 一致性校验为 `kind↔mediaType` 成对（`html` 只配 `text/html`，反之亦然）；`width` 只要求正数（非 1024 只告警不拒绝）。
+- 读取路径对未知字段是透传的（`selector` 原始数据不会丢），H1 补齐类型、`readAnchor` 与 `describeAnchor`（selector 最高优先级；id/title ≤200、text ≤80、去换行、转义引号与反斜杠）。
+- 未做（随 H3）：渲染宽度常量与「非 1024 告警」的界面落点。
+
 - `kind` 加 `html`；`selector`；`readLegacyFigure` 推导 kind；`kind`↔`mediaType` 一致性；width 告警规则；`describeAnchor` 限长转义。
 - `referenceSurfaceOf` 返回 `"html"`；`locator.surface` 拓宽。
 - **发布门控开关**（默认关）：控制是否写 `kind:"html"`。
@@ -321,6 +328,14 @@ DoD：#0 与 #1 必须先于其他项；每项记录命令或工具、时间、�
 - DoD：`pnpm check` 通过；SVG/栅格零行为变化。
 
 ### H2 — 渲染面与桥接
+
+**状态：已实现（本 PR）**。落地说明与计划偏差：
+
+- **#1 回退方案采纳候选 A**：文档导航的预览凭据会种下 `SameSite=None; Secure` 的路径限定 cookie（HttpOnly、15 分钟、Path 到项目预览前缀），沙箱文档的相对子资源据此鉴权。端到端实证：登录模式下 sibling（css/js/png）全部 200（此前 401）；非可信源（局域网 http）因 `Secure` 被拒收而降级（H3 提示）。
+- **注入为字节级**：doctype 后插入、不解码（BOM/GBK 保真）、>8MB 拒绝；无参数响应用 `cmp` 实证逐字节不变；`?annotate=1` 需合法 `sati_nonce`，非 HTML 文件不注入。
+- **偏差（源解析校验位置）**：§4.3 原写「桥接生成 selector 时做源解析校验」；实现改为**父页校验**——父页持有 raw 字节且是不信任模型的校验端，桥接不读源文件；桥接只产出候选 selector，父页 `validateSnapshotAgainstSource` 复核（源解析命中 + tag/id 一致）才保留，否则置空并标记 `runtime`。
+- 桥接其余按计划：叶子优先、上限 2000、selector ≤400、文档坐标、MutationObserver（attributes+childList）与 150ms 节流维持 revision、`remeasure` 消息、targetOrigin `*`（安全靠 source+nonce）。
+- 测试：注入保真（BOM/GBK/注释/无 doctype）、快照截断与消息过滤、cookie 鉴权矩阵、消息校验与源解析复核；全量 vitest 179 文件 / 1260 用例通过。
 
 - `?annotate=1` 注入（doctype 后插入、大小上限、不写盘）。
 - 桥接：源解析校验、快照（叶子优先、限额、文档坐标）、MutationObserver（attributes+childList）、节流退避、nonce、revision。
@@ -400,7 +415,7 @@ DoD：#0 与 #1 必须先于其他项；每项记录命令或工具、时间、�
 |---|---|---|
 | P0 修复影响既有预览（CSP 拦截正常资源） | 高 | allowlist 覆盖模板所用域名；H0 #9 验证；P0 独立回滚 |
 | 任意 JavaScript 在预览中执行（方案 A' 的固有代价） | 高 | 需用户明确接受（D1）；P0 收紧凭据与外发面 |
-| 相对资源因凭据机制变更而失效 | 中 | H0 #1 实测：登录模式当前不可用（sibling 401）；回退候选 A（`None+Secure` cookie，仅可信源）/ B（内联）；非可信源降级提示，H2 定案 |
+| 相对资源因凭据机制变更而失效 | 中 | **已定案 A（H2）**：`None+Secure` 路径限定 cookie；端到端实证登录模式 sibling 200；非可信源降级由 H3 提示 |
 | 沙箱下 cookie 语义不稳定（`Lax`/`Partitioned` 均不携带） | 中 | H0 #1 矩阵；若采用 cookie 方案，只依赖受测组合（`None+Secure`）并加回归测试 |
 | 运行时插入节点无法定位 | 中 | 源解析校验；界面告知；禁止落笔 |
 | 快照与实际布局不同步 | 中 | nonce + revision；attributes 监听；「测量中」状态 |
@@ -426,5 +441,6 @@ DoD：#0 与 #1 必须先于其他项；每项记录命令或工具、时间、�
 1. ✅ 用户裁定 D0–D6（§9）：D0/D1/D5/D4 已裁定；D2/D3/D6 按推荐项执行。
 2. ✅ P0 独立 PR：`fix/preview-credential-sandbox`（PR #615，含决策记录），CI 全绿。
 3. ✅ H0 spike（#0、#1 优先）：结论已回写本文件 §6 与 §10（2026-10-08）。
-4. 新建 HTML 标注决策记录（含 `## Alternatives considered`，正面回应 dsh 的否决理由）——草案：`docs/notes/proposed/2026-10-08-html-annotation.md`。
-5. 按 H1 → H5 推进（H1 需先定 #1 的回退方案）；每阶段结束时更新本文件状态行。
+4. ✅ HTML 标注决策记录（proposed）：`docs/notes/proposed/2026-10-08-html-annotation.md`（PR #617）。
+5. ✅ H1 契约层（PR #618）；✅ H2 渲染面与桥接（本 PR，回退方案定案 A）。
+6. H3 → H5 按序推进；每阶段结束时更新本文件状态行（H5 时将决策记录转 `implemented/`）。
