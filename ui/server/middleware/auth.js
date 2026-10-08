@@ -121,8 +121,7 @@ const generateToken = user => {
 const PROJECT_PREVIEW_SCOPE = "project-preview";
 
 /**
- * 项目预览凭据的有效期（秒）。iframe 只在导航时带一次凭据，子资源不携带它，
- * 因此有效期只需覆盖一次预览会话；取短值以限制泄露窗口。
+ * 项目预览凭据的有效期（秒）。iframe 只在导航时带一次凭据，子资源靠 cookie；取短值以限制泄露窗口。
  */
 export const PROJECT_PREVIEW_TOKEN_TTL_SECONDS = 15 * 60;
 
@@ -143,11 +142,90 @@ export const generateProjectPreviewToken = (user, projectName) => {
 };
 
 /**
+ * 项目预览 cookie 名：文档为同目录子资源（CSS/JS/图片）种下的路径限定凭据。
+ *
+ * 预览文档处于不透明源（CSP sandbox），相对子资源请求不携带 Authorization 头；
+ * H0 #1 实测：`SameSite=None; Secure` 是唯一能在沙箱文档子资源请求上被携带的组合
+ * （`Lax` 已存储也不携带、`Partitioned` 不携带）。
+ */
+export const PROJECT_PREVIEW_COOKIE = "sati_project_preview";
+
+/**
+ * 预览 cookie 的 Set-Cookie 串。
+ *
+ * - `HttpOnly`：文档脚本读不到（沙箱不透明源下 `document.cookie` 本就抛 SecurityError，双保险）。
+ * - `Secure`：要求可信源（https / localhost / 127.0.0.1）；局域网 http 下浏览器拒收，
+ *   相对资源随之降级——这是已知分叉，由界面提示（H3）。
+ * - `Path` 精确到该项目的预览前缀：一份 cookie 只对一个项目的预览生效。
+ *
+ * @param {string} token - 预览凭据。
+ * @param {string} path - 该项目预览的原始 URL 前缀（`req.path` 截取，保留编码）。
+ * @returns {string} Set-Cookie 头值。
+ */
+export const buildProjectPreviewCookie = (token, path) => {
+  return `${PROJECT_PREVIEW_COOKIE}=${token}; Path=${path}; HttpOnly; SameSite=None; Secure; Max-Age=${PROJECT_PREVIEW_TOKEN_TTL_SECONDS}`;
+};
+
+/** 读取一个请求 cookie 的值（不引依赖；只认第一个同名项）。 */
+function readRequestCookie(req, name) {
+  const header = req.headers.cookie;
+  if (typeof header !== "string" || header === "") return null;
+  for (const part of header.split(";")) {
+    const separator = part.indexOf("=");
+    if (separator < 0) continue;
+    if (part.slice(0, separator).trim() === name) return part.slice(separator + 1).trim();
+  }
+  return null;
+}
+
+/**
+ * 从预览请求的原始路径截出 cookie Path（`…/preview`，保留客户端使用的百分号编码）。
+ *
+ * Path 用 `req.path` 而不是由 `projectName` 重新编码：项目名可能含 `/`（绝对路径形态），
+ * 重新编码可能得到与请求不同的十六进制大小写形态，导致 cookie 不匹配。
+ */
+function previewCookiePath(req) {
+  const rawPath = typeof req.path === "string" ? req.path : "";
+  const marker = "/preview";
+  const at = rawPath.indexOf(marker);
+  if (at < 0) return null;
+  return rawPath.slice(0, at + marker.length);
+}
+
+/**
+ * 校验一份预览凭据并放行；`setCookie` 时把凭据种成路径限定 cookie（供沙箱文档的子资源携带）。
+ */
+function verifyProjectPreviewToken(req, res, next, token, { setCookie }) {
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    if (decoded.scope !== PROJECT_PREVIEW_SCOPE || decoded.project !== req.params.projectName) {
+      return res.status(403).json({ error: "Invalid token" });
+    }
+    const user = userDb.getUserById(decoded.userId);
+    if (!user) {
+      return res.status(401).json({ error: "Invalid token. User not found." });
+    }
+    req.user = user;
+    if (setCookie) {
+      const cookiePath = previewCookiePath(req);
+      if (cookiePath !== null) {
+        res.setHeader("Set-Cookie", buildProjectPreviewCookie(token, cookiePath));
+      }
+    }
+    return next();
+  } catch (error) {
+    logger.error("Preview token verification error:", error);
+    return res.status(403).json({ error: "Invalid token" });
+  }
+}
+
+/**
  * 项目预览路由的鉴权。
  *
- * 接受两种凭据：
+ * 接受三种凭据：
  * - `Authorization: Bearer <会话 JWT>`（程序化请求）；
- * - `?token=<项目预览凭据>`，且必须 scope 为预览、项目名与路径参数一致。
+ * - `?token=<项目预览凭据>`（文档导航；同时种下路径限定 cookie 供子资源使用）；
+ * - `Cookie: sati_project_preview=<项目预览凭据>`（沙箱文档发出的相对子资源请求）。
  *
  * 会话 JWT 放在 query 中一律拒绝——它是此前泄露的来源。
  */
@@ -161,26 +239,17 @@ const authenticateProjectPreview = async (req, res, next) => {
     return authenticateToken(req, res, next);
   }
 
-  const token = req.query.token;
-  if (typeof token !== "string" || !token) {
-    return res.status(401).json({ error: "Access denied. No token provided." });
+  const queryToken = req.query.token;
+  if (typeof queryToken === "string" && queryToken) {
+    return verifyProjectPreviewToken(req, res, next, queryToken, { setCookie: true });
   }
 
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    if (decoded.scope !== PROJECT_PREVIEW_SCOPE || decoded.project !== req.params.projectName) {
-      return res.status(403).json({ error: "Invalid token" });
-    }
-    const user = userDb.getUserById(decoded.userId);
-    if (!user) {
-      return res.status(401).json({ error: "Invalid token. User not found." });
-    }
-    req.user = user;
-    return next();
-  } catch (error) {
-    logger.error("Preview token verification error:", error);
-    return res.status(403).json({ error: "Invalid token" });
+  const cookieToken = readRequestCookie(req, PROJECT_PREVIEW_COOKIE);
+  if (cookieToken) {
+    return verifyProjectPreviewToken(req, res, next, cookieToken, { setCookie: false });
   }
+
+  return res.status(401).json({ error: "Access denied. No token provided." });
 };
 
 // WebSocket authentication function

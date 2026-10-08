@@ -132,3 +132,62 @@ describe("WebSocket 鉴权不接受受限凭据", () => {
     expect(auth.authenticateWebSocket(sessionToken())).toEqual({ userId: USER.id, username: USER.username });
   });
 });
+
+/**
+ * 预览 cookie（H2 #1 回退）：沙箱文档的相对子资源请求不携带 Authorization 头；
+ * 文档导航的 query 凭据会种下 `SameSite=None; Secure` 的路径限定 cookie 供其携带。
+ */
+describe("项目预览 cookie", () => {
+  const COOKIE = auth.PROJECT_PREVIEW_COOKIE;
+
+  async function fetchPreview(path, headers = {}) {
+    return fetch(`${baseUrl}${path}`, { headers });
+  }
+
+  it("pin the cookie name and attributes", () => {
+    expect(COOKIE).toBe("sati_project_preview");
+    const cookie = auth.buildProjectPreviewCookie("tok", "/api/projects/alpha/preview");
+    expect(cookie).toContain(`Path=/api/projects/alpha/preview`);
+    expect(cookie).toContain("HttpOnly");
+    expect(cookie).toContain("SameSite=None");
+    expect(cookie).toContain("Secure");
+    expect(cookie).toContain(`Max-Age=${auth.PROJECT_PREVIEW_TOKEN_TTL_SECONDS}`);
+  });
+
+  it("有效预览 cookie 可访问预览路由（无 query、无 Authorization）", async () => {
+    const token = generateProjectPreviewToken(USER, "alpha");
+    expect(await get("/api/projects/alpha/preview/index.html", { Cookie: `${COOKIE}=${token}` })).toBe(200);
+  });
+
+  it("跨项目的 cookie 被拒绝", async () => {
+    const token = generateProjectPreviewToken(USER, "alpha");
+    expect(await get("/api/projects/beta/preview/index.html", { Cookie: `${COOKIE}=${token}` })).toBe(403);
+  });
+
+  it("会话 JWT 放进 cookie 不被接受（scope 隔离不因载体改变）", async () => {
+    expect(await get("/api/projects/alpha/preview/index.html", { Cookie: `${COOKIE}=${sessionToken()}` })).toBe(403);
+  });
+
+  it("query 凭据导航会种下路径限定的 cookie，cookie 鉴权不刷新它", async () => {
+    const token = generateProjectPreviewToken(USER, "alpha");
+
+    const navigation = await fetchPreview(`/api/projects/alpha/preview/index.html?token=${token}`);
+    expect(navigation.status).toBe(200);
+    const setCookie = navigation.headers.get("set-cookie") ?? "";
+    expect(setCookie).toContain(`${COOKIE}=${token}`);
+    expect(setCookie).toContain("Path=/api/projects/alpha/preview");
+    expect(setCookie).toContain("HttpOnly");
+    expect(setCookie).toContain("SameSite=None");
+    expect(setCookie).toContain("Secure");
+
+    const subresource = await fetchPreview("/api/projects/alpha/preview/style.css", { Cookie: `${COOKIE}=${token}` });
+    expect(subresource.status).toBe(200);
+    // 子资源不重复种 cookie（避免用资产请求刷新 TTL）。
+    expect(subresource.headers.get("set-cookie")).toBeNull();
+  });
+
+  it("cookie 在其它路由不被当作凭据（通用鉴权不读它）", async () => {
+    const token = generateProjectPreviewToken(USER, "alpha");
+    expect(await get("/api/projects/alpha/files/content", { Cookie: `${COOKIE}=${token}` })).toBe(401);
+  });
+});
