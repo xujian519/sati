@@ -23,6 +23,7 @@ import * as fsSync from "node:fs";
 import * as net from "node:net";
 import * as os from "node:os";
 import * as path from "node:path";
+import { StringDecoder } from "node:string_decoder";
 import { Transform } from "node:stream";
 import { parse as parseYaml } from "yaml";
 import { reconstructPnpmLinks, stageRuntimeLayout } from "./runtime-layout.js";
@@ -92,14 +93,17 @@ function sleep(ms: number): Promise<void> {
  * 生产日志此前全为裸行（136k 行/17MB 无时间戳），排查「从何时开始变慢」
  * 只能靠外部线索推断；补前缀后可直接 grep/按时间切片对照。
  * 行缓冲注意：chunk 边界与行边界无关，残行存入 carry 等下一 chunk；
+ * chunk 边界也可能落在多字节 UTF-8 字符中间（中文日志常见），经
+ * StringDecoder 缓冲半个字符，避免两侧各解出 U+FFFD 乱码；
  * flush 时把未闭合尾行也写出——崩溃日志的最后一行往往最重要。
  * 导出供测试。
  */
 export function createTimestampTransform(): Transform {
   let carry = "";
+  const decoder = new StringDecoder("utf8");
   return new Transform({
     transform(chunk: Buffer, _encoding, callback) {
-      const lines = (carry + chunk.toString("utf8")).split("\n");
+      const lines = (carry + decoder.write(chunk)).split("\n");
       carry = lines.pop() ?? "";
       if (lines.length > 0) {
         const ts = new Date().toISOString();
@@ -108,6 +112,7 @@ export function createTimestampTransform(): Transform {
       callback();
     },
     flush(callback) {
+      carry += decoder.end();
       if (carry.length > 0) this.push(`${new Date().toISOString()} ${carry}\n`);
       callback();
     },

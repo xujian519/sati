@@ -18,7 +18,7 @@ Status: implemented
 
 **列表路径零构建**：`ProjectRuntimeRegistry.listSessions` 不再 `resolve()`，直接 `listProjectSessions({ projectRoot, pilotHome, limit, offset })` 读磁盘会话（cursor 即 offset 数字串，满页才发 nextCursor）。运行时按需构建——首个会话创建时（`prepareSessionRuntime → resolve`）。`onProjectActivated`（extensionWatchManager.watchProject）随之从「列表」推迟到「开聊」：列表本身不需要扩展监听。
 
-**自检进程内去重 + 短超时**：`checkEmbeddingConsistencyOnce` 以 `${dbPath}\0${endpointKey}` 为键做 module-level Promise 去重——首调用发真实请求、其余（同库同端点）共享同一 Promise；成功/失败都缓存（负缓存：拥塞期不重试，避免再次打满队列，下个进程自然重试）。调用点移入 `setTimeout(0)`（其首个 await 前有同步采样 SQL，直接调用会阻塞 listen）；单次超时 30s → `DEFAULT_SELF_CHECK_TIMEOUT_MS = 5s`，拥塞时快速跳过而不是排队。
+**自检进程内去重 + 短超时**：`checkEmbeddingConsistencyOnce` 以 `${dbPath}\0${endpointKey}` 为键做 module-level Promise 去重——首调用发真实请求、其余（同库同端点）共享同一 Promise；成功/失败都缓存（负缓存：拥塞期不重试，避免再次打满队列）；失败条目**在进程生命周期内不重检**——端点恢复后要重新探测一致性，需重启进程（gateway / 桌面 App）。调用点移入 `setTimeout(0)`（其首个 await 前有同步采样 SQL，直接调用会阻塞 listen）；单次超时 30s → `DEFAULT_SELF_CHECK_TIMEOUT_MS = 5s`，拥塞时快速跳过而不是排队。
 
 **检索超时显式配置**：`~/.sati/sati.yaml` 显式配 `memory.embedding.timeoutMs: 8000`、`memory.embedding.rerank.timeoutMs: 5000`（均 ≤ `retrievalTimeoutMs: 8000`）。代码默认值保持 30s——不替所有用户改变默认行为。
 
@@ -37,5 +37,5 @@ Status: implemented
 ## Consequences
 
 - **换来**：首屏 `GET /api/projects` 不再随项目数放大（列表路径零构建）；启动瞬间自检从 N 次降为 1 次调度 + N-1 次去重命中；检索路径拥塞时 8s/5s 内降级而非 30s；慢场景复盘有 metrics/debug 数据面。
-- **付出**：首次在某项目开聊时现场付一次运行时构建（原在启动批次预付）；onProjectActivated 时点从列表推迟到开聊；自检负缓存意味着单进程内失败不再重试（下个进程恢复）；`memory.embedding(.rerank).timeoutMs` 成为需维护的配置项。
+- **付出**：首次在某项目开聊时现场付一次运行时构建（原在启动批次预付）；onProjectActivated 时点从列表推迟到开聊；自检负缓存意味着单进程内失败不再重试（重启 gateway / 桌面 App 才重新探测）；`memory.embedding(.rerank).timeoutMs` 成为需维护的配置项。
 - 交叉引用源码：`src/cli/ProjectRuntimeRegistry.ts`、`src/knowledge/shared/embedding-consistency.ts`、`src/knowledge/assemble.ts`、`src/model/embedding/client.ts`、`ui/server/projects.js`。

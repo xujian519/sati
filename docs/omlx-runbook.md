@@ -76,6 +76,7 @@ rerank 同理：`POST /v1/rerank`，body `{"model":"BAAI-bge-reranker-v2-m3-mlx-
 - Sati 已把「每个项目运行时装配各发一次一致性自检」改为**进程内去重**（同 knowledge.db + 同端点单次）+ **5s 短超时**——启动不再向 oMLX 扇出 N 并发（见 `docs/notes/implemented/2026-10-10-desktop-slowness-storm-shedding.md`）。
 - 复测对照（同日）：17:16–17:18 旧代码启动风暴窗，oMLX 侧 embedding `in 29–30s` + 6 次 500；17:19 之后新代码，**0 次 500，自检单批 8 锚点 `in 0.345s`**。
 - Sati 侧超时（`~/.sati/sati.yaml`）：embedding `8000ms` / rerank `5000ms`（均 ≤ `memory.retrievalTimeoutMs: 8000`）——拥塞时 Sati 端 8s/5s 内自动降级（熔断 → 关键词/FTS），不再逐请求等满 30s。
+- 一致性自检为**进程内一次性**（成功/失败均缓存不重检）：启动时若自检因拥塞超时告警，oMLX 恢复后信号不会自愈——需**重启 gateway**（桌面 App 退出重开）重新探测。
 
 ## 5. 命令小抄
 
