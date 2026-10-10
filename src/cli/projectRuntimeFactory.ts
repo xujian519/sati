@@ -260,6 +260,7 @@ export function createProjectRuntimeResolver(deps: ProjectRuntimeFactoryDeps): P
       return cached;
     }
 
+    const buildStartedAt = Date.now();
     const snapshot = loadPilotConfig({ projectRoot, env: deps.env });
     const baseModel = deps.modelFactory ? deps.modelFactory(snapshot) : createModelRuntime(snapshot.config.model);
     // Phase 4 T1: replay seam hooks. SATI_LLM_REPLAY_RECORD_ROOT records every
@@ -469,7 +470,11 @@ export function createProjectRuntimeResolver(deps: ProjectRuntimeFactoryDeps): P
         rerankTopN: snapshot.config.memory?.embedding?.rerank?.topN,
         indexWiki: snapshot.config.memory?.embedding?.indexWiki !== false,
         stats: knowledgeStats,
-        logger: { warn: (...args) => logger.warn("knowledge:", ...args) },
+        logger: {
+          warn: (...args) => logger.warn("knowledge:", ...args),
+          // debug 透传供自检去重命中留痕（SATI_DEBUG=1 可见）。
+          debug: (...args) => logger.debug("knowledge:", ...args),
+        },
       }),
     );
 
@@ -557,6 +562,10 @@ export function createProjectRuntimeResolver(deps: ProjectRuntimeFactoryDeps): P
       },
     };
     deps.runtimes.set(projectRoot, runtime);
+    // 首屏风暴观测（SATI_DEBUG=1 可见，保留为常态可观测性）：/api/projects 的串行
+    // 列表会为每个工作区各触发一次这里（缓存未命中时全量装配），逐项耗时之和即
+    // 风暴墙钟。排查首屏慢时按本行定位 top 项目（`project runtime built`）。
+    logger.debug(`project runtime built for ${projectRoot} in ${Date.now() - buildStartedAt}ms`);
     return runtime;
   }
 

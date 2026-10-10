@@ -88,6 +88,8 @@ export {
 } from "./shared/knowledge-embeddings.js";
 export {
   checkEmbeddingConsistency,
+  checkEmbeddingConsistencyOnce,
+  DEFAULT_SELF_CHECK_TIMEOUT_MS,
   type EmbeddingConsistencyResult,
   type EmbeddingConsistencySample,
 } from "./shared/embedding-consistency.js";

@@ -43,9 +43,10 @@ export function createOpenAiEmbeddingClient(config: EmbeddingEndpointConfig): Em
     vectorCache.set(text, vector);
   }
 
-  async function postEmbeddings(input: string[]): Promise<number[][]> {
+  async function postEmbeddings(input: string[], overrideTimeoutMs?: number): Promise<number[][]> {
+    const effectiveTimeoutMs = overrideTimeoutMs ?? timeoutMs;
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const timer = setTimeout(() => controller.abort(), effectiveTimeoutMs);
     try {
       const response = await fetch(`${baseUrl}/embeddings`, {
         method: "POST",
@@ -85,7 +86,7 @@ export function createOpenAiEmbeddingClient(config: EmbeddingEndpointConfig): Em
     } catch (error) {
       if (error instanceof EmbeddingRequestError) throw error;
       if (controller.signal.aborted) {
-        throw new EmbeddingRequestError(`Embedding request timed out after ${timeoutMs}ms.`, undefined, true);
+        throw new EmbeddingRequestError(`Embedding request timed out after ${effectiveTimeoutMs}ms.`, undefined, true);
       }
       throw new EmbeddingRequestError(
         `Embedding request failed: ${error instanceof Error ? error.message : String(error)}`,
@@ -98,7 +99,7 @@ export function createOpenAiEmbeddingClient(config: EmbeddingEndpointConfig): Em
   }
 
   return {
-    async embed(texts: string[]): Promise<number[][]> {
+    async embed(texts: string[], options?: { timeoutMs?: number }): Promise<number[][]> {
       if (texts.length === 0) return [];
       const results: number[][] = new Array(texts.length);
       const missing: Array<{ index: number; text: string }> = [];
@@ -111,7 +112,10 @@ export function createOpenAiEmbeddingClient(config: EmbeddingEndpointConfig): Em
         }
       });
       if (missing.length > 0) {
-        const vectors = await embedBatched(missing.map(item => item.text));
+        const vectors = await embedBatched(
+          missing.map(item => item.text),
+          options?.timeoutMs,
+        );
         missing.forEach((item, k) => {
           // postEmbeddings 已保证响应条数与请求一致（不一致抛错），此处必存在
           results[item.index] = vectors[k]!;
@@ -122,6 +126,10 @@ export function createOpenAiEmbeddingClient(config: EmbeddingEndpointConfig): Em
     },
     get dimensions(): number {
       return inferredDimensions ?? config.dimensions ?? 0;
+    },
+    // 端点身份供进程内去重键（如启动自检 per-process×per-endpoint 单次）。
+    get endpointKey(): string {
+      return `${config.apiType}:${baseUrl}:${config.model}`;
     },
     async healthCheck(): Promise<boolean> {
       try {
@@ -135,11 +143,11 @@ export function createOpenAiEmbeddingClient(config: EmbeddingEndpointConfig): Em
   };
 
   /** 按 batchSize 分批请求（嵌入路径内部，缓存未命中时调用）。 */
-  async function embedBatched(texts: string[]): Promise<number[][]> {
+  async function embedBatched(texts: string[], overrideTimeoutMs?: number): Promise<number[][]> {
     const results: number[][] = [];
     for (let offset = 0; offset < texts.length; offset += batchSize) {
       const chunk = texts.slice(offset, offset + batchSize);
-      const embeddings = await postEmbeddings(chunk);
+      const embeddings = await postEmbeddings(chunk, overrideTimeoutMs);
       results.push(...embeddings);
     }
     return results;

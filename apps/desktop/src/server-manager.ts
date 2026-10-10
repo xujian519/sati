@@ -23,6 +23,7 @@ import * as fsSync from "node:fs";
 import * as net from "node:net";
 import * as os from "node:os";
 import * as path from "node:path";
+import { Transform } from "node:stream";
 import { parse as parseYaml } from "yaml";
 import { reconstructPnpmLinks, stageRuntimeLayout } from "./runtime-layout.js";
 
@@ -86,10 +87,38 @@ function sleep(ms: number): Promise<void> {
 }
 
 /**
+ * 逐行补 ISO 时间戳的 Transform（stdout/stderr 各持一个实例）。
+ *
+ * 生产日志此前全为裸行（136k 行/17MB 无时间戳），排查「从何时开始变慢」
+ * 只能靠外部线索推断；补前缀后可直接 grep/按时间切片对照。
+ * 行缓冲注意：chunk 边界与行边界无关，残行存入 carry 等下一 chunk；
+ * flush 时把未闭合尾行也写出——崩溃日志的最后一行往往最重要。
+ * 导出供测试。
+ */
+export function createTimestampTransform(): Transform {
+  let carry = "";
+  return new Transform({
+    transform(chunk: Buffer, _encoding, callback) {
+      const lines = (carry + chunk.toString("utf8")).split("\n");
+      carry = lines.pop() ?? "";
+      if (lines.length > 0) {
+        const ts = new Date().toISOString();
+        this.push(lines.map(line => `${ts} ${line}\n`).join(""));
+      }
+      callback();
+    },
+    flush(callback) {
+      if (carry.length > 0) this.push(`${new Date().toISOString()} ${carry}\n`);
+      callback();
+    },
+  });
+}
+
+/**
  * 生成子进程并镜像 stdout/stderr 到日志文件。统一 gateway/server 两个
- * spawn 块的日志管道（stdout/stderr pipe + end-on-exit），并暴露 endLog
- * 供调用方在 stop()/失败路径手动 flush（stop() 会 removeAllListeners("exit")
- * 移除 exit 监听，必须手动 end 日志流否则 fd 泄漏且尾部日志丢失）。
+ * spawn 块的日志管道（逐行 ISO 时间戳 + end-on-close），并暴露 endLog
+ * 供调用方在 stop()/失败路径手动 flush：主进程可能等不到 'close' 回调
+ * 就退出，不手动 end 会 fd 泄漏且尾部日志丢失。
  */
 function spawnWithLog(
   argv: string[],
@@ -105,12 +134,17 @@ function spawnWithLog(
     env: options.env,
     windowsHide: true,
   });
-  child.stdout?.pipe(logStream, { end: false });
-  child.stderr?.pipe(logStream, { end: false });
+  // 两条流各接一个时间戳 Transform 再落盘（共享实例会把两条流的残行拼错）。
+  const stampedStdout = createTimestampTransform();
+  const stampedStderr = createTimestampTransform();
+  child.stdout?.pipe(stampedStdout).pipe(logStream, { end: false });
+  child.stderr?.pipe(stampedStderr).pipe(logStream, { end: false });
   const endLog = (): void => {
     if (!logStream.writableEnded) logStream.end();
   };
-  child.once("exit", endLog);
+  // 用 'close'（stdio 全部关闭后触发）而非 'exit'：Transform 的尾行 flush
+  // 依赖 stdout/stderr 读到 EOF，'exit' 时管道里可能仍有未消费数据。
+  child.once("close", endLog);
   return { child, endLog };
 }
 
@@ -1165,8 +1199,9 @@ export class ServerManager extends EventEmitter<ServerManagerEvents> {
     this.stopRequested = true;
     this.clearStableTimer();
     // 移除 exit watchdog（防止退出过程中的 exit 事件触发重启调度）。
-    // 注意：这也会移除 spawnWithLog 注册的"exit → endLog"监听，因此
-    // 必须手动 end 日志流，否则 fd 泄漏且子进程最后几行日志丢失。
+    // spawnWithLog 的日志 flush 挂在 'close' 上，不受这里影响；仍手动 end
+    // 日志流兜底：stop() 后主进程可能立即退出，等不到 'close' 回调，
+    // 不手动 end 会 fd 泄漏且尾部日志丢失。
     this.child?.removeAllListeners("exit");
     this.serverLogEnd?.();
     this.serverLogEnd = null;

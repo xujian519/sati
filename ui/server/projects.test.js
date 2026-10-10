@@ -20,7 +20,7 @@ vi.mock("./database/db.js", () => ({
   applyCustomSessionNames: vi.fn(),
 }));
 
-import { deleteProject, deleteSession } from "./projects.js";
+import { deleteProject, deleteSession, getProjects } from "./projects.js";
 import { createProjectId, sanitizeSessionIdForPath } from "./utils/pilotPaths.js";
 
 function deferred() {
@@ -76,6 +76,65 @@ describe("deleteSession lifecycle", () => {
     gateway.closeSession.mockRejectedValue(new Error("Gateway unavailable"));
     await expect(deleteSession(project, sessionId)).rejects.toThrow("Gateway unavailable");
     expect(await fs.readFile(transcript, "utf8")).toBe("original transcript");
+  });
+});
+
+describe("getProjects 首屏 metrics 与降级", () => {
+  let satiHome;
+  let previousHome;
+  let logSpy;
+
+  beforeEach(async () => {
+    previousHome = process.env.SATI_HOME;
+    satiHome = await fs.mkdtemp(path.join(os.tmpdir(), "sati-get-projects-"));
+    process.env.SATI_HOME = satiHome;
+    gateway.listProjects = vi.fn(async () => ({
+      projects: [
+        {
+          fullPath: path.join(satiHome, "workspace"),
+          projectKey: path.join(satiHome, "workspace"),
+          sessionCount: 0,
+          lastActivity: "2026-10-10T00:00:00.000Z",
+        },
+      ],
+    }));
+    gateway.listSessions = vi.fn(async () => ({ sessions: [] }));
+    gateway.describeProject = vi.fn(async () => ({ sessionCount: 0 }));
+    // metrics 行经 consoleLogger.info → console.log 落 stdout，spy 捕获。
+    logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+  });
+
+  afterEach(async () => {
+    logSpy.mockRestore();
+    if (previousHome === undefined) delete process.env.SATI_HOME;
+    else process.env.SATI_HOME = previousHome;
+    await fs.rm(satiHome, { recursive: true, force: true });
+  });
+
+  it("首屏 metrics 行格式稳定（墙钟/列表耗时/最慢项目可 grep）", async () => {
+    const projects = await getProjects();
+    // 项目列表含 real 项目 + 合成的 general（unshift 到首位）。
+    expect(projects.map(p => p.name)).toContain("general");
+    expect(projects.length).toBe(2);
+
+    const lines = logSpy.mock.calls.map(args => String(args[0]));
+    const metricsLine = lines.find(line => line.startsWith("[projects] getProjects:"));
+    expect(metricsLine, "getProjects 必须无条件记一条可 grep 的 metrics 行（降级但不静默）").toBeTruthy();
+    // 格式：`[projects] getProjects: <N> projects in <wall>ms (listSessions <total>ms; slowest <name:ms, ...>)`
+    expect(metricsLine).toMatch(
+      /^\[projects\] getProjects: 1 projects in \d+ms \(listSessions \d+ms; slowest .+:\d+ms\)$/,
+    );
+  });
+
+  it("listSessions 抛错时项目仍返回（会话降级为空，不打断首屏）", async () => {
+    gateway.listSessions = vi.fn(async () => {
+      throw new Error("Gateway unavailable");
+    });
+    const projects = await getProjects();
+    const workspace = projects.find(p => p.name !== "general");
+    expect(workspace, "单个项目的会话枚举失败不得整项消失").toBeTruthy();
+    expect(workspace.sessions).toEqual([]);
+    expect(workspace.sessionMeta.total).toBe(0);
   });
 });
 

@@ -95,6 +95,8 @@
     "@rdkit/rdkit": "2026.3.6",
     "@viz-js/viz": "^3.29.0",
     "@vscode/ripgrep": "^1.18.0",
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
     "csv-parse": "^7.0.2",
     "edgeclaw-memory-core": "workspace:*",
     "ink": "^7.1.1",

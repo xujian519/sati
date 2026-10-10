@@ -5,7 +5,10 @@ import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type { EmbeddingClient } from "../../src/model/embedding/types.js";
-import { checkEmbeddingConsistency } from "../../src/knowledge/shared/embedding-consistency.js";
+import {
+  checkEmbeddingConsistency,
+  checkEmbeddingConsistencyOnce,
+} from "../../src/knowledge/shared/embedding-consistency.js";
 import { quantizeInt8 } from "../../src/context/vector/cosine.js";
 
 /**
@@ -77,6 +80,23 @@ function makeInconsistentClient(): EmbeddingClient {
  */
 function anchorText(): string {
   return "一致性自检锚点文本。用于验证查询端模型与知识库向量是否同源：".repeat(4);
+}
+
+/** 计数客户端：记录 embed 实际发起次数，用于验证去重语义。 */
+function makeCountingClient(endpointKey?: string): { client: EmbeddingClient; calls: () => number } {
+  let calls = 0;
+  const client: EmbeddingClient = {
+    dimensions: 4,
+    endpointKey,
+    async embed(texts: string[]): Promise<number[][]> {
+      calls += 1;
+      return texts.map(() => [0.99, 0, 0, 0]);
+    },
+    async healthCheck(): Promise<boolean> {
+      return true;
+    },
+  };
+  return { client, calls: () => calls };
 }
 
 test("embedding-consistency: 同源模型通过（均值 ≥ 阈值）", async () => {
@@ -212,4 +232,59 @@ test("embedding-consistency: int8 存储格式（--migrate-int8 产物，含 sca
   assert.equal(result.ok, true, "反量化后同源余弦应 ≥ 阈值");
   assert.ok(result.meanCosine > 0.9, `int8 反量化余弦应 >0.9，实际 ${result.meanCosine}`);
   rmSync(dir, { recursive: true, force: true });
+});
+
+/**
+ * checkEmbeddingConsistencyOnce —— 启动风暴削峰的进程内去重（per-dbPath × per-endpoint 单次）。
+ *
+ * 成对判据：(1) 同键并发只打端点一次；(2) 换端点必须各跑一次——否则「去重」
+ * 会被误实现成「忽略端点身份的全局单次」。注意一致性缓存是 module 级 Map，
+ * 每个用例用独立 mkdtemp 库路径隔离键空间（同文件内不可对同库测「重跑」）。
+ */
+test("checkEmbeddingConsistencyOnce: 同库同端点的并发调用只发一次请求（去重命中）", async () => {
+  const dbPath = createKnowledgeDb([1, 2, 3, 4].map(() => ({ content: anchorText(), vector: [1, 0, 0, 0] })));
+  const { client, calls } = makeCountingClient("ep-dedupe");
+  const first = checkEmbeddingConsistencyOnce(dbPath, client, { sampleSize: 4, threshold: 0.9 });
+  const second = checkEmbeddingConsistencyOnce(dbPath, client, { sampleSize: 4, threshold: 0.9 });
+  const [r1, r2] = await Promise.all([first, second]);
+  assert.equal(calls(), 1, "同一 (dbPath, endpointKey) 只应发一次 embed（23 项目启动风暴的削峰点）");
+  assert.ok(r1, "首次调用应产生真实自检结果");
+  assert.equal(r1.ok, true);
+  assert.equal(r2, r1, "去重命中应共享同一 Promise 结果（引用相等）");
+  rmSync(dirname(dbPath), { recursive: true, force: true });
+});
+
+test("checkEmbeddingConsistencyOnce: 不同端点各自执行（去重键含 endpointKey，不误并）", async () => {
+  const dbPath = createKnowledgeDb([1, 2, 3, 4].map(() => ({ content: anchorText(), vector: [1, 0, 0, 0] })));
+  const a = makeCountingClient("ep-a");
+  const b = makeCountingClient("ep-b");
+  await Promise.all([
+    checkEmbeddingConsistencyOnce(dbPath, a.client, { sampleSize: 4, threshold: 0.9 }),
+    checkEmbeddingConsistencyOnce(dbPath, b.client, { sampleSize: 4, threshold: 0.9 }),
+  ]);
+  assert.equal(a.calls(), 1, "端点 A 应恰好执行一次");
+  assert.equal(b.calls(), 1, "端点 B 必须独立执行（换端点后自检结论不得被旧缓存顶替）");
+  rmSync(dirname(dbPath), { recursive: true, force: true });
+});
+
+test("checkEmbeddingConsistencyOnce: 失败同样缓存（负结果不重复打端点）", async () => {
+  const dbPath = createKnowledgeDb([{ content: anchorText(), vector: [1, 0, 0, 0] }]);
+  let calls = 0;
+  const failing: EmbeddingClient = {
+    dimensions: 4,
+    endpointKey: "ep-failing",
+    async embed(): Promise<number[][]> {
+      calls += 1;
+      throw new Error("embedding endpoint down");
+    },
+    async healthCheck(): Promise<boolean> {
+      return false;
+    },
+  };
+  const first = await checkEmbeddingConsistencyOnce(dbPath, failing, { logger: { warn: () => {} } });
+  const second = await checkEmbeddingConsistencyOnce(dbPath, failing, { logger: { warn: () => {} } });
+  assert.equal(first, null, "端点失败时自检降级返回 null");
+  assert.equal(second, null);
+  assert.equal(calls, 1, "失败应计入负缓存：拥塞期不得每次构建重打端点");
+  rmSync(dirname(dbPath), { recursive: true, force: true });
 });
