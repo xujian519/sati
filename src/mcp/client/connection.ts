@@ -17,6 +17,9 @@
 import { rmSync } from "node:fs";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
+import { AjvJsonSchemaValidator } from "@modelcontextprotocol/sdk/validation/ajv";
+import { Ajv } from "ajv";
+import addFormatsImport from "ajv-formats";
 import type { SatiMcpServerSpec, SatiMcpStatus, SatiMcpToolSpec } from "../protocol/types.js";
 import { APP_VERSION } from "../../version.js";
 import { McpClientError, isSessionExpired, withTimeout } from "./errors.js";
@@ -26,6 +29,39 @@ export type ListToolsCache = {
   expiresAt: number;
   tools: SatiMcpToolSpec[];
 };
+
+/**
+ * MCP 客户端 JSON Schema 校验器——与 SDK 默认实例逐项等配置，只做一处修正：
+ * 把 `uint32`/`uint64` 注册为「已知但跳过校验」。
+ *
+ * 背景（2026-10 桌面端变慢排查）：Task Master 等 Rust 生态 MCP 服务器在工具
+ * outputSchema 中声明非标准 format `uint32`/`uint64`。SDK 默认 Ajv 实例
+ * （validateFormats: true）编译时对每个未知 format 打一行 console.warn，生产
+ * 日志累计 3200 行。注册为 `true` 与 ajv 对未知 format 的既有运行语义完全
+ * 一致（忽略、不校验），仅消除噪声；其余未知 format 仍会告警（信号保留）。
+ * 初始选项与 SDK createDefaultAjvInstance 逐项对齐，addFormats 保证
+ * date-time 等标准 format 仍被实际校验。
+ *
+ * 每个连接独立实例（与 SDK 默认的 per-Client 语义一致）：ajv 以 schema `$id`
+ * 为缓存键，不同服务器可能声明同名 `$id`，共享实例会串用错误 schema。
+ * 导出供测试。
+ */
+export function createJsonSchemaValidator(): AjvJsonSchemaValidator {
+  // ajv / ajv-formats 是 CJS 包但 d.ts 按 ESM 语法声明 default；NodeNext 的 CJS
+  // interop 会把 default 导入的*类型*失真为模块命名空间（运行时无此问题）。
+  // ajv 经命名导出 `Ajv` 绕开；ajv-formats 无命名导出，默认导入后断言回模块
+  // 自身声明的 default 类型。
+  const addFormats = addFormatsImport as unknown as typeof import("ajv-formats").default;
+  const ajv = new Ajv({
+    strict: false,
+    validateFormats: true,
+    validateSchema: false,
+    allErrors: true,
+    formats: { uint32: true, uint64: true },
+  });
+  addFormats(ajv);
+  return new AjvJsonSchemaValidator(ajv);
+}
 
 export class McpConnection {
   private client: Client | null = null;
@@ -76,7 +112,10 @@ export class McpConnection {
     const built = buildTransport(this.spec, this.options);
     const transport = built.transport;
     if (built.perSessionDir !== null) this.perSessionDir = built.perSessionDir;
-    const client = new Client({ name: "sati", version: APP_VERSION }, { capabilities: { elicitation: {} } });
+    const client = new Client(
+      { name: "sati", version: APP_VERSION },
+      { capabilities: { elicitation: {} }, jsonSchemaValidator: createJsonSchemaValidator() },
+    );
     const handshakeMs = this.options.handshakeTimeoutMs ?? 10_000;
     try {
       await withTimeout(

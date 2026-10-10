@@ -15,7 +15,7 @@ import type { RerankClient } from "../model/embedding/rerank.js";
 import { KgStore } from "./shared/kg-store.js";
 import { VectorDbSearch } from "./shared/vector-db.js";
 import { KnowledgeEmbeddingSearch, createKnowledgeEmbeddingSearch } from "./shared/knowledge-embeddings.js";
-import { checkEmbeddingConsistency } from "./shared/embedding-consistency.js";
+import { checkEmbeddingConsistencyOnce } from "./shared/embedding-consistency.js";
 import type { KnowledgeRuntimeStats } from "./shared/knowledge-stats.js";
 import { PatentKgAdapter } from "./patent/patent-kg-adapter.js";
 import { PatentMemoryProvider } from "./patent/patent-memory-provider.js";
@@ -55,7 +55,7 @@ export type BuildKnowledgeResolversOptions = {
   rerankTopN?: number;
   /** 运行时状态聚合（可选，可观测性出口）；注入后由各 provider 打点。 */
   stats?: KnowledgeRuntimeStats;
-  logger?: { warn?: (...args: unknown[]) => void };
+  logger?: { warn?: (...args: unknown[]) => void; debug?: (...args: unknown[]) => void };
 };
 
 export function buildKnowledgeResolvers(options: BuildKnowledgeResolversOptions): MemoryResolver[] {
@@ -233,13 +233,16 @@ export function buildKnowledgeResolvers(options: BuildKnowledgeResolversOptions)
   // embedding 查询端与 knowledge.db 库向量一致性自检（fire-and-forget，不阻塞启动）。
   // checkEmbeddingConsistency 在首个 await 之前会同步执行一段采样 SQL，直接调用会
   // 阻塞 gateway 启动（修复前实测约 7s）；setTimeout(0) 推迟到 server listen 之后执行。
+  // Once 语义：同一 (knowledgeDb, embedding 端点) 进程内只检一次——修复前每个项目
+  // 运行时构建各发一次（23 个项目 = 启动瞬间 23 并发），打满端点串行队列后大面积
+  // 30s 超时（生产日志 9-13 次/启动）；去重后仅 1 次，超时也从 30s 降至 5s。
   if (options.knowledgeDb && options.embedding) {
     const knowledgeDb = options.knowledgeDb;
     const embedding = options.embedding;
     const logger = options.logger;
     const stats = options.stats;
     setTimeout(() => {
-      checkEmbeddingConsistency(knowledgeDb, embedding, { logger })
+      checkEmbeddingConsistencyOnce(knowledgeDb, embedding, { logger })
         .then(result => {
           if (result) stats?.setEmbeddingConsistency({ ok: result.ok, meanCosine: result.meanCosine });
         })

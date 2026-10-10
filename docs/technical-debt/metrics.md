@@ -7,11 +7,11 @@
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1081 / 187253 |
+| src TS 文件 / 行数 | 1081 / 187379 |
 | src JS 文件 | 0 |
-| tests 文件 | 626 |
+| tests 文件 | 628 |
 | ui/src 文件 / 行数 | 638 / 102247 |
-| ui/server 文件 / 行数 | 128 / 35125 |
+| ui/server 文件 / 行数 | 128 / 35213 |
 
 ## 指标口径
 
@@ -29,8 +29,8 @@
 | 指标 | 总量 | 热点模块 |
 |---|---|---|
 | `any`/`@ts-expect-error`/`@ts-ignore` | 3 | ui/src(3) |
-| `as unknown as`（双重断言） | 37 | ui/src(29) · adapters(2) · tool(2) |
-| 裸 `console.*` | 158 | cli(137) · telemetry(8) · ui/server(5) |
+| `as unknown as`（双重断言） | 38 | ui/src(29) · adapters(2) · mcp(2) |
+| 裸 `console.*` | 160 | cli(137) · telemetry(8) · ui/server(6) |
 | 空 `catch {}` | 0 | — |
 | 无参 `catch {`（总计） | 690 | ui/server(160) · ui/src(125) · adapters(70) |
 | ↳ **无注释**（隐患类，目标） | **17** | — |
@@ -69,10 +69,10 @@
 | `src/router/execution/executeRouterDecision.ts` | `executeRouterDecision` | 449 | function |
 | `ui/src/components/settings/view/modelPool/components/ProviderCard.tsx` | `ProviderCard` | 447 | function |
 | `ui/src/components/chat-v2/MessageRowV2.tsx` | `MessageRowV2` | 429 | function |
+| `src/cli/projectRuntimeFactory.ts` | `createProjectRuntimeResolver` | 424 | function |
 | `src/tool/builtin/patentFigureGenerate.ts` | `createPatentFigureGenerateTool` | 422 | function |
 | `ui/src/components/code-editor/view/subcomponents/DocxBuiltinPreview.tsx` | `DocxBuiltinPreview` | 422 | function |
 | `src/gateway/client/eventMapping.ts` | `mapAgentEventForTurn` | 417 | function |
-| `src/cli/projectRuntimeFactory.ts` | `createProjectRuntimeResolver` | 415 | function |
 | `src/tool/builtin/patentFigureProject.ts` | `execute` | 411 | method |
 | `ui/src/components/chat-v2/processGrouping.test.ts` | `(anonymous)` | 409 | arrow |
 | `ui/src/types/contentReference.spec.ts` | `(anonymous)` | 408 | arrow |
@@ -104,8 +104,8 @@
 | `ui/src/components/code-editor/view/CodeEditor.tsx` | `CodeEditor` | 326 | function |
 | `src/tool/builtin/patentFigureGenerate.ts` | `execute` | 322 | method |
 | `ui/src/components/annotation/view/Annotator.tsx` | `Annotator` | 322 | function |
+| `src/cli/projectRuntimeFactory.ts` | `resolve` | 316 | function |
 | `ui/src/components/chat-v2/SubagentDetailMessageFlow.tsx` | `SubagentDetailMessageFlow` | 309 | function |
-| `src/cli/projectRuntimeFactory.ts` | `resolve` | 307 | function |
 | `ui/src/components/settings/view/integrations/im/components/WeixinChannelSection.tsx` | `WeixinChannelSection` | 303 | function |
 | `src/gateway/client/InProcessGateway.ts` | `submitTurn` | 301 | method |
 
@@ -175,8 +175,8 @@
 | model | 33 |
 | session | 28 |
 | router | 19 |
+| cli | 15 |
 | always-on | 14 |
-| cli | 14 |
 | extension | 13 |
 | mcp | 13 |
 | cron | 12 |
@@ -199,7 +199,7 @@
 | runtime | 1 |
 | status | 1 |
 
-| **合计** | **600** |
+| **合计** | **601** |
 
 ## i18n en/zh-CN 对齐
 

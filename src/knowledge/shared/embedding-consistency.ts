@@ -36,8 +36,16 @@ export type EmbeddingConsistencyOptions = {
   sampleSize?: number;
   /** 判定阈值（默认 0.97）。 */
   threshold?: number;
-  logger?: { warn?: (...args: unknown[]) => void };
+  /**
+   * 单次 embedding 请求超时（默认 5000ms）。自检是诊断路径：端点拥塞时
+   * 快速跳过本轮（下个进程自然重试），而不是排满 30s 默认超时占用队列。
+   */
+  timeoutMs?: number;
+  logger?: { warn?: (...args: unknown[]) => void; debug?: (...args: unknown[]) => void };
 };
+
+/** 自检默认超时（毫秒）：远短于检索链路默认 30s——拥塞时跳过优于排队。 */
+export const DEFAULT_SELF_CHECK_TIMEOUT_MS = 5_000;
 
 /**
  * 执行一致性自检。knowledge.db 不可用或样本为空时返回 null（不视为失败，
@@ -50,6 +58,7 @@ export async function checkEmbeddingConsistency(
 ): Promise<EmbeddingConsistencyResult | null> {
   const sampleSize = options.sampleSize ?? 8;
   const threshold = options.threshold ?? 0.97;
+  const timeoutMs = options.timeoutMs ?? DEFAULT_SELF_CHECK_TIMEOUT_MS;
   const logger = options.logger;
 
   let db: DatabaseSync;
@@ -155,7 +164,10 @@ export async function checkEmbeddingConsistency(
       valid.push({ row, vector: out });
     }
     if (valid.length === 0) return null;
-    const queryVectors = await client.embed(valid.map(v => v.row.content));
+    const queryVectors = await client.embed(
+      valid.map(v => v.row.content),
+      { timeoutMs },
+    );
 
     const samples: EmbeddingConsistencySample[] = valid.map((v, i) => {
       const query = Float32Array.from(queryVectors[i] ?? []);
@@ -176,4 +188,34 @@ export async function checkEmbeddingConsistency(
   } finally {
     db.close();
   }
+}
+
+/**
+ * 进程内去重的自检入口（per-process × per-dbPath × per-endpoint 单次）。
+ *
+ * 背景：buildKnowledgeResolvers 在每个项目运行时构建时都会调度一次自检；
+ * N 个工作区 = N 个并发请求打向同一 embedding 端点。实测 oMLX embedding 为
+ * 严格串行 FIFO（≈150ms/批），23 个并发自检仅空载就占用队头 ≈3.5s；机器
+ * 负载期排队升级为 30s 超时风暴（生产日志 9-13 次/启动）。同一
+ * (knowledgeDb, 端点) 只需检一次：首个调用发真实请求，后续调用共享同一
+ * Promise——成功/失败都缓存（失败即负缓存，避免拥塞期反复重试再次打满队列）。
+ */
+const consistencyChecks = new Map<string, Promise<EmbeddingConsistencyResult | null>>();
+
+export function checkEmbeddingConsistencyOnce(
+  dbPath: string,
+  client: EmbeddingClient,
+  options: EmbeddingConsistencyOptions = {},
+): Promise<EmbeddingConsistencyResult | null> {
+  const endpoint = client.endpointKey ?? "unknown-endpoint";
+  const key = `${dbPath}\u0000${endpoint}`;
+  const existing = consistencyChecks.get(key);
+  if (existing) {
+    options.logger?.debug?.(`[knowledge] 一致性自检去重命中（${endpoint}，跳过重复调度）`);
+    return existing;
+  }
+  options.logger?.debug?.(`[knowledge] 一致性自检调度（${endpoint}）`);
+  const promise = checkEmbeddingConsistency(dbPath, client, options);
+  consistencyChecks.set(key, promise);
+  return promise;
 }

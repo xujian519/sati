@@ -677,12 +677,27 @@ export class ProjectRuntimeRegistry {
     };
   }
 
+  /**
+   * 列出项目会话（轻量路径）：**不构建项目运行时**。
+   *
+   * 历史上这里先 `this.resolve(input.projectKey)` 再取 `runtime.projectStorage`
+   * 传给 `listProjectSessions`——但 projectStorage 仅是 {projectRoot, pilotHome}
+   * 两个字段，全量 resolve（loadPilotConfig/ModelRuntime/PluginRuntime 技能扫描/
+   * 工具注册表/知识库解析器）对「列目录」是纯浪费。右侧栏首屏（GET /api/projects）
+   * 串行对每个工作区调本方法，全量构建造成「N 个项目 = N 次装配」的启动风暴
+   * （实测 23 次构建 ≈2.2s，占首屏墙钟一半）。
+   *
+   * onProjectActivated（extensionWatchManager.watchProject）随之不再由列表触发，
+   * 推迟到会话真正创建时（prepareSessionRuntime → resolve）——语义等价：列表本身
+   * 不需要扩展监听，用户在项目里开聊时才需要。
+   */
   async listSessions(input: ListSessionsInput): Promise<ListSessionsResult> {
-    const runtime = this.resolve(input.projectKey);
+    const projectRoot = resolve(input.projectKey ?? this.options.fallbackProjectRoot);
     const offset = input.cursor ? Number.parseInt(input.cursor, 10) : 0;
     const safeOffset = Number.isFinite(offset) ? offset : 0;
     const sessions = await listProjectSessions({
-      ...runtime.projectStorage,
+      projectRoot,
+      pilotHome: this.options.pilotHome,
       limit: input.limit,
       offset: safeOffset,
     });

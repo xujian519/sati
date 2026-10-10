@@ -30,10 +30,18 @@ export interface EmbeddingClient {
   /**
    * 将文本批量编码为向量。返回顺序与入参一致；空输入返回空数组。
    * 出错抛 `EmbeddingRequestError`（上层应 catch 降级）。
+   *
+   * `options.timeoutMs` 为**本次调用**的超时覆盖（缺省用端点配置的 timeoutMs）——
+   * 诊断类路径（启动自检）用更短超时，端点拥塞时快速跳过而不长期占用队列。
    */
-  embed(texts: string[]): Promise<number[][]>;
+  embed(texts: string[], options?: { timeoutMs?: number }): Promise<number[][]>;
   /** 已确认的向量维度；未确认时为 0。 */
   readonly dimensions: number;
+  /**
+   * 端点身份（如 `openai:baseUrl:model`），供进程内去重/缓存键使用
+   * （启动自检的 per-process×per-endpoint 单次语义依赖它）。测试替身可不实现。
+   */
+  readonly endpointKey?: string;
   /** 探测端点可用性（发一条最小请求，不保证模型加载完成）。 */
   healthCheck(): Promise<boolean>;
 }

@@ -132,6 +132,7 @@ async function readMarkedProjectPaths() {
 }
 
 async function getProjects(progressCallback = null) {
+  const startedAt = Date.now();
   // Gateway hiccups must not nuke the whole project list — degrade to an
   // empty project set so the virtual "general" workspace below still gets
   // returned and the sidebar stays usable instead of erroring out.
@@ -190,6 +191,9 @@ async function getProjects(progressCallback = null) {
   const total = dedupedProjects.length;
 
   const result = [];
+  // 首屏风暴观测：逐项目记录 listSessions 耗时（debug 级，SATI_DEBUG=1 可见），
+  // 函数末尾汇总一条 metrics 行（info 级）供常态 grep（`[projects] getProjects`）。
+  const listDurations = [];
   for (let index = 0; index < dedupedProjects.length; index += 1) {
     const project = dedupedProjects[index];
     const fullPath = project.fullPath || project.projectKey;
@@ -205,9 +209,13 @@ async function getProjects(progressCallback = null) {
       });
     }
 
+    const listStartedAt = Date.now();
     const sessionsResult = gateway
       ? await gateway.listSessions({ projectKey: fullPath, limit: 5 }).catch(() => ({ sessions: [] }))
       : { sessions: [] };
+    const listMs = Date.now() - listStartedAt;
+    listDurations.push({ name, ms: listMs });
+    logger.debug(`[projects] listSessions ${name}: ${listMs}ms`);
     const sessions = (sessionsResult.sessions || []).map(session => toLegacySession(session, name));
     applyCustomSessionNames(sessions, "claude");
 
@@ -285,6 +293,19 @@ async function getProjects(progressCallback = null) {
     },
     taskmaster: { hasTaskmaster: false },
   });
+
+  // 首屏风暴 metrics（对应桌面首屏阻塞请求 /api/projects）：墙钟与列表总耗时分开
+  // 记录，慢查询逐名可查。修复前本机 ≈ 项目数 × 全量运行时装配耗时。
+  const wallMs = Date.now() - startedAt;
+  const listTotalMs = listDurations.reduce((sum, entry) => sum + entry.ms, 0);
+  const slowest = [...listDurations]
+    .sort((left, right) => right.ms - left.ms)
+    .slice(0, 3)
+    .map(entry => `${entry.name}:${entry.ms}ms`)
+    .join(", ");
+  logger.info(
+    `[projects] getProjects: ${total} projects in ${wallMs}ms (listSessions ${listTotalMs}ms; slowest ${slowest || "n/a"})`,
+  );
 
   return result;
 }
