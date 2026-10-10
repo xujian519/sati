@@ -1,4 +1,6 @@
 import path from "node:path";
+import { realpathSync } from "node:fs";
+import { resolveRealWritePath } from "../../tool/builtin/filesystem/pathSafety.js";
 import type { PermissionContext, PermissionRule } from "../protocol/types.js";
 
 const FILE_WRITE_TOOLS = new Set(["write_file", "edit_file"]);
@@ -22,7 +24,9 @@ export function matchPermissionRule(
   }
 
   if (FILE_WRITE_TOOLS.has(toolName) && !rule.pattern) {
-    return isFileInputInsideWorkspace(input, context);
+    // allow 规则授权的是「工作区内」这个范围：若路径经符号链接落到工作区外，
+    // 词法命中不等于授权成立。
+    return isFileInputInsideWorkspace(input, context, rule.behavior === "allow");
   }
 
   return rule.pattern ? matchRulePattern(rule, toolName, input, context) : true;
@@ -106,12 +110,29 @@ function matchFilePathPattern(pattern: string, input: unknown, context: Permissi
   return filePath ? wildcardToRegExp(normalizePathForPattern(pattern)).test(normalizePathForPattern(filePath)) : false;
 }
 
-function isFileInputInsideWorkspace(input: unknown, context: PermissionContext | undefined): boolean {
+function isFileInputInsideWorkspace(
+  input: unknown,
+  context: PermissionContext | undefined,
+  resolveSymlinks: boolean,
+): boolean {
   const filePath = resolveInputFilePath(input, context);
   if (!filePath || !context) return false;
-  return [context.cwd, ...context.additionalWorkingDirectories]
-    .map(root => path.resolve(root))
-    .some(root => isPathWithinRoot(filePath, root));
+  const roots = [context.cwd, ...context.additionalWorkingDirectories].map(root => path.resolve(root));
+  if (!roots.some(root => isPathWithinRoot(filePath, root))) return false;
+  if (!resolveSymlinks) return true;
+  // 工作区内的软链仍可把写入引到别处。
+  const realFilePath = resolveRealWritePath(filePath);
+  if (!realFilePath) return false;
+  return roots.map(safeRealpath).some(root => isPathWithinRoot(realFilePath, root));
+}
+
+function safeRealpath(value: string): string {
+  try {
+    return realpathSync.native(value);
+  } catch {
+    // 不存在/断链 → 按未解析路径处理（与 pathSafety 的宽松侧一致）。
+    return value;
+  }
 }
 
 function resolveInputFilePath(input: unknown, context: PermissionContext | undefined): string | undefined {
