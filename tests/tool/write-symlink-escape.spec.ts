@@ -220,6 +220,28 @@ test("a folder-scoped write_file allow rule (with pattern) does not cover symlin
   });
 });
 
+test("a session allow rule for an outside folder still authorizes writes there", async () => {
+  await withTempDirs(async (workspace, outside) => {
+    const ctx = context(workspace);
+    // 用户显式批准的外部目录：「允许这个文件夹」铸造的规则 pattern 指向 root 外，
+    // 真实落点判定不得对它生效（否则会话授予失效、每次写入都重新弹窗）。
+    const rule: PermissionRule = {
+      source: "session",
+      behavior: "allow",
+      toolName: "write_file",
+      pattern: join(outside, "*"),
+    };
+    const permissionContext = { ...ctx.permissionContext, rules: { allow: [rule], deny: [], ask: [] } };
+    const input = { file_path: join(outside, "new.txt"), content: "outside\n" };
+
+    assert.equal(matchPermissionRule(rule, "write_file", input, permissionContext), true);
+    assert.equal(
+      (await new PermissionRuntime().decide(createWriteFileTool(), input, { ...ctx, permissionContext }, "call")).type,
+      "allow",
+    );
+  });
+});
+
 for (const absoluteTarget of [false, true]) {
   for (const targetKind of ["outside", ".git"] as const) {
     test(`write_file rejects an existing ${targetKind} target behind a symlink and .. (${absoluteTarget ? "absolute" : "relative"})`, async () => {

@@ -29,7 +29,19 @@ export function matchPermissionRule(
     return isFileInputInsideWorkspace(input, context, rule.behavior === "allow");
   }
 
-  return rule.pattern ? matchRulePattern(rule, toolName, input, context) : true;
+  if (!rule.pattern) return true;
+  if (!matchRulePattern(rule, toolName, input, context)) return false;
+
+  // 带 pattern 的 allow 规则同样要过真实落点：pattern 常取自**词法**路径（如
+  // writePermissions 的 buildRecursiveFileWriteRule 铸造的会话授予），工作区内的一个
+  // 软链就能借它放行越界写入。deny/ask 不参与（命中即生效，否则显式规则会被逃逸路径
+  // 绕过）；词法本就在 root 外的授予（用户显式批准的外部目录）不受此约束；`text:`
+  // 规则无路径语义，暂不参与——见 docs/notes/implemented/2026-10-10-write-path-symlink-escape.md。
+  if (rule.behavior === "allow" && FILE_WRITE_TOOLS.has(toolName) && !rule.pattern.startsWith(TEXT_PATTERN_PREFIX)) {
+    return isRealLandingInsideRoots(input, context);
+  }
+
+  return true;
 }
 
 function matchesToolName(ruleToolName: string, toolName: string): boolean {
@@ -133,6 +145,22 @@ function safeRealpath(value: string): string {
     // 不存在/断链 → 按未解析路径处理（与 pathSafety 的宽松侧一致）。
     return value;
   }
+}
+
+/**
+ * 写目标**词法**落在某个 root 内时，其真实落点也必须在某个 root 内。词法本就在
+ * root 外的位置（用户显式批准的外部目录）不由这条判定——那里的授权范围是调用方给的
+ * 绝对路径、不是「工作区」，一并收紧只会让会话授予失效、退化成反复弹窗。
+ */
+function isRealLandingInsideRoots(input: unknown, context: PermissionContext | undefined): boolean {
+  const filePath = resolveInputFilePath(input, context);
+  if (!filePath || !context) return false;
+  const roots = [context.cwd, ...context.additionalWorkingDirectories].map(root => path.resolve(root));
+  if (!roots.some(root => isPathWithinRoot(filePath, root))) return true;
+  const realFilePath = resolveRealWritePath(filePath);
+  if (!realFilePath) return false;
+  // 根侧用同一逐组件解析：根不存在（用假 cwd 的用例）或根本身是软链时，两侧才可比。
+  return roots.some(root => isPathWithinRoot(realFilePath, resolveRealWritePath(root) ?? safeRealpath(root)));
 }
 
 function resolveInputFilePath(input: unknown, context: PermissionContext | undefined): string | undefined {
