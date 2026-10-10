@@ -110,7 +110,7 @@
     {
       "rule": "file-size",
       "file": "ui/server/routes/config.test.js",
-      "lines": 1138
+      "lines": 1090
     },
     {
       "rule": "file-size",

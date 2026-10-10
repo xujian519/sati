@@ -11,7 +11,7 @@
 | src JS 文件 | 0 |
 | tests 文件 | 629 |
 | ui/src 文件 / 行数 | 638 / 102247 |
-| ui/server 文件 / 行数 | 128 / 35213 |
+| ui/server 文件 / 行数 | 129 / 35394 |
 
 ## 指标口径
 
@@ -133,9 +133,9 @@
 | `ui/src/components/chat-v2/MessagesPaneV2.tsx` | 1183 |
 | `ui/server/routes/taskmaster.js` | 1179 |
 | `src/agent/loop/AgentLoop.ts` | 1150 |
-| `ui/server/routes/config.test.js` | 1138 |
 | `ui/src/components/main-content-v2/CronV2.tsx` | 1130 |
 | `ui/src/components/main-content/view/MainContent.tsx` | 1111 |
+| `ui/server/routes/config.test.js` | 1090 |
 | `src/model/streaming/streamModel.ts` | 1085 |
 | `ui/server/routes/commands.js` | 1082 |
 | `src/always-on/runtime/DiscoveryFire.ts` | 1079 |

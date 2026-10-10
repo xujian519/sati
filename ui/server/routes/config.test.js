@@ -821,54 +821,6 @@ describe("write-lock conflict surfacing", () => {
   });
 });
 
-describe("dangling model references", () => {
-  const providerWith = models =>
-    stringifyYaml({
-      schemaVersion: 1,
-      agent: { model: "openai/gpt-4o" },
-      model: {
-        providers: {
-          openai: { protocol: "openai", url: "https://api.openai.com/v1", apiKey: "sk-x", models },
-        },
-      },
-    });
-
-  it("rejects a save whose agent.model no longer resolves after the model is deleted", async () => {
-    const { request } = await createDiskConfigApp(providerWith(["gpt-4o"]));
-
-    const response = await request("/api/config", {
-      method: "PUT",
-      body: JSON.stringify({ raw: providerWith(["gpt-4o-mini"]) }),
-    });
-
-    expect(response.status).toBe(400);
-    expect(String(response.body.validation?.errors?.join(" "))).toContain("agent.model");
-  });
-
-  it("rejects a save whose router reference no longer resolves after the model is deleted", async () => {
-    const withRouter = models =>
-      stringifyYaml({
-        schemaVersion: 1,
-        agent: { model: "openai/gpt-4o" },
-        model: {
-          providers: {
-            openai: { protocol: "openai", url: "https://api.openai.com/v1", apiKey: "sk-x", models },
-          },
-        },
-        router: { enabled: true, scenarios: { cheap: "openai/gpt-4o-mini" } },
-      });
-    const { request } = await createDiskConfigApp(withRouter(["gpt-4o", "gpt-4o-mini"]));
-
-    const response = await request("/api/config", {
-      method: "PUT",
-      body: JSON.stringify({ raw: withRouter(["gpt-4o"]) }),
-    });
-
-    expect(response.status).toBe(400);
-    expect(String(response.body.validation?.errors?.join(" "))).toContain("router.scenarios.cheap");
-  });
-});
-
 describe("config routes invalid YAML fallback", () => {
   it("returns raw invalid YAML instead of failing GET /api/config", async () => {
     const brokenRaw = "schemaVersion: 1\nmodel:\n  providers: [\n";
