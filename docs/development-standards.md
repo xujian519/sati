@@ -67,7 +67,7 @@
 | 提交前 | `scripts/lint-staged.mjs`（pre-commit hook） | staged 文件 biome format + eslint --fix，按 ui/root 分流 |
 | 边界 | `scripts/check-architecture-boundaries.mjs`（挂 `pnpm lint`）与 `scripts/check-ui-server-boundary.mjs`（挂 ui lint） | `src/` 不 import `ui/`、`ui/src` 不 import 后端 `src/`；`ui/server` → `src/` 走 barrel 白名单（两方向都是纯路径静态校验——带扩展名 specifier 下 eslint resolver 不回退，规则会静默跳过；specifier 提取见 `scripts/lib/import-specifiers.mjs`） |
 | 基线新鲜度 | `scripts/check-workspace-freshness.mjs`（`pnpm check:freshness`，挂 `pnpm check` 首位） | 不在过期基线上开工——本仓有两条按 `file:line` 硬编码的产物门禁（事件矩阵、文档事实层 claim），旧基线上的分析结论与生成物都是错的 |
-| 领域门禁 | `check:catalog-mirror` / `check:event-matrix` / `check:patent-sop` / `check:patent-workflow-docs` / `check:html-templates` / `check:skills` / `check:i18n-namespaces` / `check:issue-labels` / `check:techdebt-metrics` / `check:protocol-version` / `check:architecture-boundaries` / `check:doc-claims`（均挂 `pnpm lint`，共 <!-- claim:lint_gate_count -->12<!-- /claim --> 个） | 模型目录镜像、事件矩阵新鲜度、专利 SOP 引用、workflow 文档幂等、HTML 模板、skill frontmatter、i18n namespace 注册一致、标签清单与 issue 模板一致、技术债指标基线、协议台账、架构边界与文件规模、文档事实层（版本/计数/模块索引） |
+| 领域门禁 | `check:catalog-mirror` / `check:event-matrix` / `check:patent-sop` / `check:patent-workflow-docs` / `check:html-templates` / `check:skills` / `check:i18n-namespaces` / `check:issue-labels` / `check:techdebt-metrics` / `check:protocol-version` / `check:architecture-boundaries` / `check:degradation` / `check:doc-claims`（均挂 `pnpm lint`，共 <!-- claim:lint_gate_count -->13<!-- /claim --> 个） | 模型目录镜像、事件矩阵新鲜度、专利 SOP 引用、workflow 文档幂等、HTML 模板、skill frontmatter、i18n namespace 注册一致、标签清单与 issue 模板一致、技术债指标基线、协议台账、架构边界与文件规模、降级 registry（fail 方向/可观测/豁免/负向演练）、文档事实层（版本/计数/模块索引） |
 | 测试 | 后端 `node:test` + UI `vitest` + Playwright e2e + `llm-replay` 无 key 重放 seam | 单元/集成/回路级；用例数与测试文件数**不写进文档**（每加一个测试就会变，跑一次 `pnpm test` 才准） |
 | 版本 | `scripts/bump-version.mjs` | 根 / ui / apps-desktop 三处 version lockstep |
 | CI | `.github/workflows/ci.yml`（<!-- claim:ci_job_count -->3<!-- /claim --> job） | typecheck/lint/format/test（root+ui）+ Windows desktop build&lint |
@@ -160,7 +160,7 @@
 
 ### 领域门禁（Sati 特有，✅ 已落地，维持）
 
-`pnpm lint` 末尾已挂接 <!-- claim:lint_gate_count -->12<!-- /claim --> 个领域门禁，任何事件面/专利 SOP/模板/标签/i18n/架构边界/文件规模/文档事实改动漏改即红。**这些是 Sati 相对模板的"超额资产"，保持并继续维护**（清单的生成源见 `docs/code-facts.md` §4）：
+`pnpm lint` 末尾已挂接 <!-- claim:lint_gate_count -->13<!-- /claim --> 个领域门禁，任何事件面/专利 SOP/模板/标签/i18n/架构边界/文件规模/降级 registry/文档事实改动漏改即红。**这些是 Sati 相对模板的"超额资产"，保持并继续维护**（清单的生成源见 `docs/code-facts.md` §4）：
 
 | 门禁 | 生成器 | 保护什么 |
 |---|---|---|
@@ -175,6 +175,7 @@
 | `check:techdebt-metrics` | `measure-techdebt.mjs --check` | `docs/technical-debt/metrics.md` 指标基线新鲜度 |
 | `check:protocol-version` | `check-protocol-version.ts` | 协议台账 ↔ `frames.ts` union 两向集合相等 + 版本连续性 |
 | `check:architecture-boundaries` | `check-architecture-boundaries.mjs` | 三条规则：`src/` 不 import `ui/`（铁律 2）、`ui/src` 不 import 后端 `src/`、单文件 ≤ 800 行。存量豁免在 `docs/technical-debt/architecture-baseline.json`（命中=不阻塞，其余即红；新增条目等于承认一笔新债） |
+| `check:degradation` | `check-degradation-registry.mjs` | `assets/degradation/registry.yaml`：外部/软依赖的 fail 方向（open/closed/mixed）+ 可观测足迹 + 负向演练登记（铁律 11 的机器化）；component/drill 路径腐烂、枚举非法、豁免缺理由、冗余豁免即红 |
 | `check:doc-claims` | `gen-doc-claims.ts --check` | 文档事实层：`docs/code-facts.md` 与叙述文档里的行内 claim 标记必须与代码现算值一致（版本/计数/src 模块索引；标记语法见 `docs/code-facts.md` 开头） |
 
 > **`check:skills` 语义**：该门禁**警告即阻断**——`validate-skills.mjs` 对 `hard`(exit 1) 与 `warn`(exit 2) 均返回非零；因 lint 用 `&&` 链式，任意 skill 触发告警（如描述 <20 字符）都会让 `pnpm lint` 变红。这是有意的严格策略，改 skill 时需保证其 frontmatter 描述达标。
@@ -289,8 +290,10 @@
 pnpm check            # 聚合门禁：check:freshness + check:config + typecheck + ui typecheck + lint + format:check（不含 test）
 pnpm check:freshness  # 开工前基线新鲜度（默认离线；--fetch 拉最新远端，--max-behind-main N 调阈值）
 pnpm typecheck        # tsc --noEmit（根）+ edgeclaw-memory-core typecheck；先 build 子包
-pnpm lint             # eslint src tests scripts apps/desktop + ui lint + <!-- claim:lint_gate_count -->12<!-- /claim --> 个领域门禁
+pnpm lint             # eslint src tests scripts apps/desktop + ui lint + <!-- claim:lint_gate_count -->13<!-- /claim --> 个领域门禁
 pnpm check:architecture-boundaries   # 架构边界与文件规模（--update-baseline 重写 docs/technical-debt/architecture-baseline.json）
+pnpm check:degradation   # 降级 registry 门禁（fail 方向/可观测/豁免/负向演练；挂 lint）
+pnpm audit:silent-catches   # 静默 catch 分档审计（DoD 对账用；--fail-on-hits 预留 CI 化）
 pnpm format:check     # biome check（格式）
 pnpm format           # biome format --write
 pnpm test             # build + node --test dist/tests（后端）
