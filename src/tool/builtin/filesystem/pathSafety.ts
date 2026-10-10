@@ -12,6 +12,16 @@ export type SatiPathSafetyResult =
 
 const DEFAULT_WRITE_DENY_DIRECTORIES = new Set([".git", "node_modules", "dist"]);
 const MAX_SYMLINK_HOPS = 40;
+/** 失败原因之一：**词法**落点在某个 root 内、**真实**落点在所有 root 之外（软链外逃）。 */
+const SYMLINK_ESCAPE_REASON = "symlink_escape";
+
+/**
+ * 判断 `resolveSatiWorkspacePath` 的失败是否属于「工作区里的软链把写入引到 root 外」。
+ * 调用方据此区分「本来就在工作区外的目标」（可走审批）与「逃逸」（拒绝）。
+ */
+export function isSymlinkEscapeError(error: SatiToolError): boolean {
+  return error.details?.reason === SYMLINK_ESCAPE_REASON;
+}
 
 export function resolveSatiWorkspacePath(
   inputPath: string,
@@ -106,10 +116,15 @@ export function resolveSatiWorkspacePath(
   }
 
   // 词法在 root 内 ≠ 真实落点在 root 内：这一条才是拦「工作区内软链指向工作区外」的闸。
-  if (realWritePath && !findRealRoot(realWritePath, roots) && !options?.allowOutsideWorkspace) {
+  // 不给 allow 决策留短路：审批授予的是「某个文件夹」，而这里的真实落点不在任何 root
+  // 内，放行它等于让一个词法假象批准越界写入（`writePermissions` 因此也不再为这类路径
+  // 提供审批入口，判断依据就是下面这个 reason）。
+  if (realWritePath && !findRealRoot(realWritePath, roots)) {
     return {
       ok: false,
-      error: toolError("path_not_allowed", `Path ${inputPath} resolves outside the Sati workspace.`),
+      error: toolError("path_not_allowed", `Path ${inputPath} resolves outside the Sati workspace.`, {
+        reason: SYMLINK_ESCAPE_REASON,
+      }),
     };
   }
 
