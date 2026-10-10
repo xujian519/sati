@@ -4,6 +4,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { TokenStatsCollector, type RouterStatsRecord } from "../../src/router/stats/TokenStatsCollector.js";
+import { logger } from "../../src/telemetry/index.js";
 
 function makeRecord(overrides: Partial<RouterStatsRecord> = {}): RouterStatsRecord {
   return {
@@ -112,4 +113,51 @@ test("disabled 时不落盘且不报错", async () => {
   await collector.flush();
   assert.equal(collector.snapshot().totalRequests, 0);
   collector.dispose();
+});
+
+test("异步落盘失败（真实 I/O 错误）：warn 留痕、flush 不抛出", async t => {
+  const dir = tempDir();
+  const filePath = path.join(dir, "stats.jsonl");
+  // 用同名目录占据 stats.jsonl 位置：openSync/appendFile 均以 EISDIR 真实失败
+  // （fd 打开失败 ⇒ writePayload 走 appendFile 路径 ⇒ 仍失败 ⇒ reject）。
+  fs.mkdirSync(filePath, { recursive: true });
+  const warnings: unknown[][] = [];
+  t.mock.method(logger, "warn", (...args: unknown[]) => {
+    warnings.push(args);
+  });
+  const collector = new TokenStatsCollector({ enabled: true, filePath });
+  try {
+    collector.observe(makeRecord());
+    await collector.flush(); // 不抛：失败被降级并由 warn 留痕
+    assert.equal(warnings.length, 1, "异步落盘失败必须记恰好一条 warn（否则重回静默降级）");
+    assert.match(String(warnings[0]?.[0]), /async flush failed/);
+    assert.ok(warnings[0]?.[1] instanceof Error, "warn 必须带原始 error");
+    // 再次入缓冲后 dispose：同步兜底（drainSync）同样以 EISDIR 失败 ⇒ 第二条 warn。
+    collector.observe(makeRecord());
+    collector.dispose();
+    assert.equal(warnings.length, 2, "drainSync 失败（丢弃缓冲）同样必须留痕");
+    assert.match(String(warnings[1]?.[0]), /drainSync failed/);
+  } finally {
+    collector.dispose(); // 幂等保险（断言提前失败时仍收尾定时器）
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("正常落盘不记 warn（日志是失败信号，不是每次都打）", async t => {
+  const dir = tempDir();
+  const filePath = path.join(dir, "stats.jsonl");
+  const warnings: unknown[][] = [];
+  t.mock.method(logger, "warn", (...args: unknown[]) => {
+    warnings.push(args);
+  });
+  const collector = new TokenStatsCollector({ enabled: true, filePath });
+  try {
+    collector.observe(makeRecord());
+    await collector.flush();
+    assert.equal(warnings.length, 0);
+    assert.equal(fs.readFileSync(filePath, "utf-8").split("\n").filter(Boolean).length, 1);
+  } finally {
+    collector.dispose();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });

@@ -7,9 +7,9 @@
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1081 / 187213 |
+| src TS 文件 / 行数 | 1081 / 187253 |
 | src JS 文件 | 0 |
-| tests 文件 | 621 |
+| tests 文件 | 626 |
 | ui/src 文件 / 行数 | 638 / 102247 |
 | ui/server 文件 / 行数 | 128 / 35125 |
 
@@ -32,9 +32,9 @@
 | `as unknown as`（双重断言） | 37 | ui/src(29) · adapters(2) · tool(2) |
 | 裸 `console.*` | 158 | cli(137) · telemetry(8) · ui/server(5) |
 | 空 `catch {}` | 0 | — |
-| 无参 `catch {`（总计） | 700 | ui/server(160) · ui/src(125) · adapters(70) |
+| 无参 `catch {`（总计） | 690 | ui/server(160) · ui/src(125) · adapters(70) |
 | ↳ **无注释**（隐患类，目标） | **17** | — |
-| ↳ 已带意图注释 | 683 | — |
+| ↳ 已带意图注释 | 673 | — |
 | `TODO/HACK/FIXME/XXX` | 11 | always-on(4) · tests(4) · ui/src(2) |
 | 分层违规 `ui/server→src` | 15 | — |
 | 分层违规 `src→ui` | 0 | — |
@@ -167,16 +167,16 @@
 | 模块 | 测试文件 |
 |---|---|
 | patent | 141 |
-| tool | 66 |
-| agent | 59 |
+| tool | 67 |
+| agent | 60 |
 | knowledge | 39 |
-| context | 36 |
+| context | 37 |
 | gateway | 34 |
 | model | 33 |
 | session | 28 |
-| router | 18 |
+| router | 19 |
 | always-on | 14 |
-| cli | 13 |
+| cli | 14 |
 | extension | 13 |
 | mcp | 13 |
 | cron | 12 |
@@ -199,7 +199,7 @@
 | runtime | 1 |
 | status | 1 |
 
-| **合计** | **595** |
+| **合计** | **600** |
 
 ## i18n en/zh-CN 对齐
 

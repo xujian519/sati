@@ -442,6 +442,7 @@ export class DefaultContextRuntime implements ContextRuntime {
           })),
         );
       } catch (error) {
+        createLogger("context:tool-results").warn("Failed to persist tool result; keeping original projection", error);
         diagnostics.push({
           code: "tool_result_persistence_failed",
           severity: "error",

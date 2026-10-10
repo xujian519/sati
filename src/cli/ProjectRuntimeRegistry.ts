@@ -37,6 +37,7 @@ import {
   RESUME_TURN_MESSAGE,
   resumeAgentSession,
   TaskResumeScanner,
+  type TaskResumeScanResult,
 } from "../session/index.js";
 import { createSessionTitleGenerator } from "../session/title/SessionTitleGenerator.js";
 import { type SatiToolDefinition } from "../tool/index.js";
@@ -90,6 +91,29 @@ type ProjectRuntimeRegistryOptions = {
 
 /** M5：任务续算扫描启动延时——避开启动期 transcript 读盘竞争。 */
 const TASK_RESUME_SCAN_DELAY_MS = 3_000;
+
+/**
+ * 执行一次续算扫描并记录结果——runTaskResumeScan 定时器回调的核心（导出供测试）。
+ *
+ * 接线契约（降级但不静默）：
+ *   - 逐会话失败：TaskResumeScanner 内部记 warn（带 sessionKey 与原始 error）；
+ *   - 汇总：无条件记一条 info（含 failed 计数）——「扫了但没有可续算会话」与
+ *     「续算失败的会话被静默跳过」必须可区分。
+ */
+export async function runTaskResumeScanOnce(deps: {
+  projectRoot: string;
+  pilotHome: string;
+  submitResumeTurn: (sessionKey: string) => Promise<void>;
+  hasPendingApprovals?: (sessionKey: string) => boolean;
+}): Promise<TaskResumeScanResult> {
+  const scanner = new TaskResumeScanner({ ...deps });
+  const result = await scanner.scan();
+  logger.info(
+    `Task resume: scanned=${result.scanned}, resumed=${result.resumed}, failed=${result.failed}, ` +
+      `skippedPartial=${result.skippedPartial}, skippedApprovals=${result.skippedApprovals}`,
+  );
+  return result;
+}
 
 export class ProjectRuntimeRegistry {
   private readonly runtimes = new Map<string, ProjectRuntime>();
@@ -487,35 +511,27 @@ export class ProjectRuntimeRegistry {
     if (!enabled) return;
     const gateway = this.gateway;
     if (!gateway) return;
-    const scanner = new TaskResumeScanner({
-      projectRoot: this.options.fallbackProjectRoot,
-      pilotHome: this.options.pilotHome,
-      submitResumeTurn: async sessionKey => {
-        const input: GatewaySubmitTurnInput = {
-          sessionKey,
-          channelKey: "cron",
-          message: RESUME_TURN_MESSAGE,
-          canPrompt: false,
-        };
-        // 消费全部事件使续算 turn 驱动到完成（串行，避免并发写同一会话）。
-        for await (const _event of gateway.submitTurn(input)) {
-          // drain
-        }
-      },
-      hasPendingApprovals: sessionKey => gateway.getApprovalBus().list(sessionKey).length > 0,
-    });
     setTimeout(() => {
-      void scanner
-        .scan()
-        .then(result => {
-          if (result.resumed > 0) {
-            logger.info(
-              `Task resume: scanned=${result.scanned}, resumed=${result.resumed}, ` +
-                `skippedPartial=${result.skippedPartial}, skippedApprovals=${result.skippedApprovals}`,
-            );
+      void runTaskResumeScanOnce({
+        projectRoot: this.options.fallbackProjectRoot,
+        pilotHome: this.options.pilotHome,
+        submitResumeTurn: async sessionKey => {
+          const input: GatewaySubmitTurnInput = {
+            sessionKey,
+            channelKey: "cron",
+            message: RESUME_TURN_MESSAGE,
+            canPrompt: false,
+          };
+          // 消费全部事件使续算 turn 驱动到完成（串行，避免并发写同一会话）。
+          for await (const _event of gateway.submitTurn(input)) {
+            // drain
           }
-        })
-        .catch(() => undefined);
+        },
+        hasPendingApprovals: sessionKey => gateway.getApprovalBus().list(sessionKey).length > 0,
+      }).catch(error => {
+        // scan() 逐会话不抛错；此处兜底整体失败（如 listProjectSessions 抛错）。
+        logger.warn("Task resume scan failed", error);
+      });
     }, TASK_RESUME_SCAN_DELAY_MS);
   }
 
