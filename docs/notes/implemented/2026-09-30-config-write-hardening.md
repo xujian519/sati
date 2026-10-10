@@ -29,7 +29,7 @@ I/O 原语（路径解析 / 稳定读 / 原子写）拆到 `services/satiConfigF
 - **软链改成"解析出目标目录 + 原文件名"再拼路径** — 落选：等价于 `resolveConfigWritePath` 但少一层 ELOOP 防护与"路径尚不存在"的处理。
 - **稳定读做成通用工具（注入 `isSame` 谓词）** — 落选：`{ exists, raw }` 就是本仓配置读的契约，为"通用"再加一层谓词只增加调用方负担。
 - **只登记基线增长（`--update-baseline` +92 行）** — 落选：门禁首选拆分，而 I/O 原语本就该能独立测试，拆出去比追认增长更划算。
-- **顺带收编 `gateway.js` 的 `saveYaml`（裸 `writeFileSync`，不走事务路径）** — **未做**：它是同步写、调用方也是同步的，异步化整条调用链超出本次范围，留作后续。
+- **顺带收编 `gateway.js` 的 `saveYaml`（裸 `writeFileSync`，不走事务路径）** — **本次未做**：它是同步写、调用方也是同步的，异步化整条调用链超出本次范围，留作后续。**2026-10-07 已补做**：`gateway.js` 的 7 处写点改走 `updateSatiConfig` 外科写，理由与形态见 `2026-10-07-config-surgical-write-and-read-consistency.md`。
 
 ## Consequences
 
@@ -38,4 +38,4 @@ I/O 原语（路径解析 / 稳定读 / 原子写）拆到 `services/satiConfigF
 - 保存失败不再吞掉外部变更事件。
 - 带 `previousRevision` 的服务层保存多出 250ms 量级的稳定读开销；目前只有 memory 设置这一条路径走服务层乐观锁（`config.js` 在路由层用 `baseRevision` 校验，不受影响）。
 - `satiConfig.js` 968 → 871 行（基线 876），新增 `satiConfigFileIo.js`；ui/server 文件数 +1。
-- 已知缺口：`gateway.js` 的 `saveYaml` 仍是裸 `writeFileSync`（无锁、无原子性）。
+- 已知缺口（**2026-10-07 关闭**）：`gateway.js` 的 `saveYaml` 当时仍是裸 `writeFileSync`（无锁、无原子性）；该写点与其调用方已改走 `updateSatiConfig`（见 `2026-10-07-config-surgical-write-and-read-consistency.md`）。

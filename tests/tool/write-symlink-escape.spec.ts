@@ -170,6 +170,78 @@ test("a workspace-scoped write_file allow rule does not cover symlinks that esca
   });
 });
 
+test("a folder-scoped write_file allow rule (with pattern) does not cover symlinks that escape the workspace", async () => {
+  await withTempDirs(async (workspace, outside) => {
+    await mkdir(join(workspace, "real-dir"));
+    await symlink("real-dir", join(workspace, "alias-dir"));
+    await symlink(outside, join(workspace, "escape"));
+    const ctx = context(workspace);
+    // 「允许这个文件夹」审批铸造的形态：pattern 取自**词法**路径
+    // （`writePermissions.ts` 的 buildRecursiveFileWriteRule），因此词法命中 ≠ 授权成立。
+    const rule: PermissionRule = {
+      source: "session",
+      behavior: "allow",
+      toolName: "write_file",
+      pattern: join(workspace, "escape", "*"),
+    };
+    const permissionContext = { ...ctx.permissionContext, rules: { allow: [rule], deny: [], ask: [] } };
+    const input = { file_path: "escape/new.txt", content: "outside\n" };
+
+    assert.equal(
+      matchPermissionRule(rule, "write_file", input, permissionContext),
+      false,
+      "an allow rule carrying a pattern must not match a path whose real landing is outside the workspace",
+    );
+
+    // 执行层：即便按审批结论放行，写入也不得落到工作区外——结论是 allow 还是别的，
+    // 都不改变这一条。
+    const ruledCtx = { ...ctx, permissionContext };
+    const tool = createWriteFileTool();
+    const decision = await new PermissionRuntime().decide(tool, input, ruledCtx, "call");
+    const execCtx = decision.type === "allow" ? { ...ruledCtx, currentPermissionDecision: decision } : ruledCtx;
+    await assert.rejects(
+      tool.execute(input, execCtx),
+      /outside the Sati workspace/,
+      "an allow rule carrying a pattern must not authorize a write that lands outside the workspace",
+    );
+    await assert.rejects(readFile(join(outside, "new.txt")), { code: "ENOENT" });
+
+    // 守卫：工作区内的目录级授予仍须生效（修正不得误伤这一形态）。
+    const insideRule: PermissionRule = { ...rule, pattern: join(workspace, "alias-dir", "*") };
+    assert.equal(
+      matchPermissionRule(
+        insideRule,
+        "write_file",
+        { file_path: "alias-dir/new.txt", content: "inside\n" },
+        permissionContext,
+      ),
+      true,
+    );
+  });
+});
+
+test("a session allow rule for an outside folder still authorizes writes there", async () => {
+  await withTempDirs(async (workspace, outside) => {
+    const ctx = context(workspace);
+    // 用户显式批准的外部目录：「允许这个文件夹」铸造的规则 pattern 指向 root 外，
+    // 真实落点判定不得对它生效（否则会话授予失效、每次写入都重新弹窗）。
+    const rule: PermissionRule = {
+      source: "session",
+      behavior: "allow",
+      toolName: "write_file",
+      pattern: join(outside, "*"),
+    };
+    const permissionContext = { ...ctx.permissionContext, rules: { allow: [rule], deny: [], ask: [] } };
+    const input = { file_path: join(outside, "new.txt"), content: "outside\n" };
+
+    assert.equal(matchPermissionRule(rule, "write_file", input, permissionContext), true);
+    assert.equal(
+      (await new PermissionRuntime().decide(createWriteFileTool(), input, { ...ctx, permissionContext }, "call")).type,
+      "allow",
+    );
+  });
+});
+
 for (const absoluteTarget of [false, true]) {
   for (const targetKind of ["outside", ".git"] as const) {
     test(`write_file rejects an existing ${targetKind} target behind a symlink and .. (${absoluteTarget ? "absolute" : "relative"})`, async () => {
