@@ -1,0 +1,237 @@
+# candidates-baseline.yaml — 降级候选扫描的「已确认项」基线
+#
+# 用途：scripts/gen-degradation-candidates.mjs 的差集对象之一。扫描命中文件 =
+#   registry 覆盖 + 本基线（已确认项）+ 新增候选。
+#   - known-unregistered：已知未登记——真外部/软依赖触点，属登记候选队列
+#     （后续批次按 T5 模式深挖补登记；不阻塞扫描转硬门禁）；
+#   - waived：书面豁免——模式误报（注释/类型/自命中）、同族语义覆盖（wrapper /
+#     实现本体 / 登记行调用位置）、dev/CI 工具链（非产品降级面）。
+#
+# 纪律（与 registry「冗余豁免即红」同精神）：
+#   1. 新增候选必须三选一后清零：补 registry 登记 / 记入本基线（写清依据）/ 修扫描模式；
+#   2. 基线条目失效（不再命中）或冗余（已被 registry 覆盖）会被报告为「失效/冗余基线」，
+#      --check 下失败——豁免是「暂时没有」的书面承认，不是永久标签；
+#   3. 文件级精确匹配，不支持目录/glob 豁免（防止整树静默）；
+#   4. 处理流程与退出判据见 docs/degradation-runbook.md。
+#
+# 首次生成：T6（2026-10-10）——对扫描差集 72 项 100% 分类（waived 28 / known-unregistered 44）。
+entries:
+  - path: scripts/check-degradation-registry.mjs
+    disposition: waived
+    reason: "dev/CI 门禁工具：spawn git 读取跟踪清单；失败即非零退出（非产品降级面）"
+  - path: scripts/check-workspace-freshness.mjs
+    disposition: waived
+    reason: "dev/CI 门禁工具：git 远端比对；失败语义即退出码契约"
+  - path: scripts/dev-launcher.mjs
+    disposition: waived
+    reason: "dev 启动器：spawn pnpm；失败即终端可见"
+  - path: scripts/doc-claims/resolvers.ts
+    disposition: waived
+    reason: "dev/CI 门禁工具：git ls-files 取清单"
+  - path: scripts/export-html.mjs
+    disposition: waived
+    reason: "dev 导出工具：execFile 本仓校验脚本；失败即非零退出"
+  - path: scripts/figure-benchmark/renderer-compare.ts
+    disposition: waived
+    reason: "dev 工具：渲染器对比（人工运行；figure-benchmark 族）"
+  - path: scripts/gen-degradation-candidates.mjs
+    disposition: waived
+    reason: "扫描器自身：模式字面量与注释自命中，非依赖触点"
+  - path: scripts/lint-staged.mjs
+    disposition: waived
+    reason: "dev 工具：spawn npx lint-staged；失败即提交中断"
+  - path: scripts/list-untracked-tests.mjs
+    disposition: waived
+    reason: "dev 工具：git ls-files 查询"
+  - path: scripts/measure-techdebt.mjs
+    disposition: waived
+    reason: "dev/CI 门禁工具：git 取文件清单"
+  - path: scripts/open-pr.mjs
+    disposition: waived
+    reason: "dev 工具：gh CLI 创建 PR；失败即报错"
+  - path: scripts/sync-labels.mjs
+    disposition: waived
+    reason: "dev 工具：gh CLI 同步标签；失败即报错"
+
+  - path: src/adapters/channel/homeassistant/HomeAssistantChannel.ts
+    disposition: known-unregistered
+    reason: "渠道适配器（基线范围外）：HA WebSocket 端点；候选后续批次补登记"
+  - path: src/adapters/channel/mattermost/MattermostChannel.ts
+    disposition: known-unregistered
+    reason: "渠道适配器（基线范围外）：Mattermost WS；候选后续批次补登记"
+  - path: src/adapters/channel/protocol/ChannelCommandRegistry.ts
+    disposition: known-unregistered
+    reason: "渠道命令注册：动态 execFile 执行；候选后续批次补登记"
+  - path: src/adapters/channel/qq/qqbot-gateway.ts
+    disposition: known-unregistered
+    reason: "渠道适配器（基线范围外）：QQ 机器人 WS 网关；候选后续批次补登记"
+  - path: src/adapters/channel/tui/TuiChannel.ts
+    disposition: known-unregistered
+    reason: "渠道适配器（基线范围外）：spawn 分页器进程；候选后续批次补登记"
+  - path: src/adapters/channel/whatsapp/WhatsAppChannel.ts
+    disposition: known-unregistered
+    reason: "渠道适配器（基线范围外）：WhatsApp 桥接子进程；候选后续批次补登记"
+  - path: src/always-on/workspace/GitWorktreeProvider.ts
+    disposition: known-unregistered
+    reason: "always-on workspace（基线范围外）：git worktree 子进程；候选后续批次补登记"
+  - path: src/always-on/workspace/SnapshotCopyProvider.ts
+    disposition: known-unregistered
+    reason: "always-on workspace（基线范围外）：快照进程；候选后续批次补登记"
+  - path: src/always-on/workspace/WorkspaceApply.ts
+    disposition: known-unregistered
+    reason: "always-on workspace（基线范围外）：git apply 子进程；候选后续批次补登记"
+  - path: src/browser/backend/browserUsePyBackend.ts
+    disposition: known-unregistered
+    reason: "浏览器后端（基线范围外）：browser-use CLI 探测；候选后续批次补登记"
+  - path: src/browser/backend/browserosNeoBackend.ts
+    disposition: known-unregistered
+    reason: "浏览器后端（基线范围外）：netstat/lsof 端口探测；候选后续批次补登记"
+  - path: src/cli/proxy.ts
+    disposition: waived
+    reason: "模式误报：仅 JSDoc 提及 networkFetch，无调用点"
+  - path: src/cli/sati.ts
+    disposition: known-unregistered
+    reason: "CLI：git 操作（branch/fetch）——候选并作 git 族登记评估"
+  - path: src/extension/hooks/execution/CommandHookExecutor.ts
+    disposition: known-unregistered
+    reason: "扩展钩子（基线范围外）：spawn 钩子命令；候选后续批次补登记"
+  - path: src/gateway/client/GatewayWsClient.ts
+    disposition: known-unregistered
+    reason: "gateway 客户端 WS（服务端已登记；客户端重连语义候选补登记）"
+  - path: src/literature/runtime/http.ts
+    disposition: waived
+    reason: "同族覆盖：连接器共享 HTTP 层（包装已登记 networkFetch；DEG-N07 语义行）"
+  - path: src/mcp/client/McpClient.ts
+    disposition: waived
+    reason: "DEG-P01 语义行覆盖（component 取 McpRuntime.ts；client/* 为该行调用位置）"
+  - path: src/mcp/client/connection.ts
+    disposition: waived
+    reason: "DEG-P01 语义行覆盖（component 取 McpRuntime.ts；client/* 为该行调用位置）"
+  - path: src/mcp/client/transport.ts
+    disposition: waived
+    reason: "DEG-P01 语义行覆盖（component 取 McpRuntime.ts；client/* 为该行调用位置）"
+  - path: src/model/streaming/streamModel.ts
+    disposition: waived
+    reason: "经已登记网络层 networkFetch 出网（依赖本体已立规）"
+  - path: src/model/window/probe.ts
+    disposition: waived
+    reason: "经已登记网络层 networkFetch 出网（依赖本体已立规）"
+  - path: src/network/fetch.ts
+    disposition: waived
+    reason: "network-fetch-retry 实现本体（component 指向 index.ts 再导出）"
+  - path: src/network/proxyFallback.ts
+    disposition: waived
+    reason: "network-fetch-retry 的代理回退实现（同条目语义）"
+  - path: src/patent/document/pdfRenderer.ts
+    disposition: known-unregistered
+    reason: "文档渲染（基线范围外）：外部渲染进程；候选后续批次补登记"
+  - path: src/patent/figuregen/cad/freecad.ts
+    disposition: known-unregistered
+    reason: "附图渲染（基线范围外）：FreeCAD 外部二进制；候选后续批次补登记"
+  - path: src/patent/figuregen/inkscape-renderer.ts
+    disposition: known-unregistered
+    reason: "附图渲染（基线范围外）：Inkscape 外部二进制；候选后续批次补登记"
+  - path: src/patent/figuregen/render-graphviz.ts
+    disposition: known-unregistered
+    reason: "附图渲染（基线范围外）：dot（graphviz）外部二进制；候选后续批次补登记"
+  - path: src/runtime/commandShell.ts
+    disposition: waived
+    reason: "模式误报：仅注释提及 spawn；本模块只做 shell 参数装配"
+  - path: src/task/runtime/BackgroundTaskRuntime.ts
+    disposition: known-unregistered
+    reason: "后台任务（基线范围外）：spawn detached 子进程；候选后续批次补登记"
+  - path: src/telemetry/context.ts
+    disposition: known-unregistered
+    reason: "遥测环境探测：git rev-parse 失败静默退化（catch→false）；候选评估登记"
+  - path: src/tool/builtin/bash/commandRunner.ts
+    disposition: known-unregistered
+    reason: "bash 工具（基线范围外）：命令子进程（含 taskkill）；候选后续批次补登记"
+  - path: src/tool/builtin/executeCode.ts
+    disposition: known-unregistered
+    reason: "execute_code（基线范围外）：python 子进程；候选后续批次补登记"
+  - path: src/tool/builtin/exportHtml.ts
+    disposition: known-unregistered
+    reason: "export_html（基线范围外）：execFile 本仓 Node 脚本；候选后续批次补登记"
+  - path: src/tool/builtin/filesystem/ripgrep.ts
+    disposition: known-unregistered
+    reason: "ripgrep 外部二进制（基线范围外）；候选后续批次补登记"
+  - path: src/tool/builtin/filesystem/syntaxDiagnostics.ts
+    disposition: known-unregistered
+    reason: "语法诊断（基线范围外）：外部诊断进程；候选后续批次补登记"
+  - path: src/tool/builtin/patent-pdf-download/types.ts
+    disposition: waived
+    reason: "模式误报：类型注释提及（测试缝）"
+  - path: src/tool/builtin/web/urlFetcher.ts
+    disposition: waived
+    reason: "DEG-N05 同族调用位置（web_fetch 条目语义覆盖）"
+  - path: src/tool/builtin/webSearchPerformers.ts
+    disposition: waived
+    reason: "DEG-N06 同族调用位置（web_search 条目语义覆盖）"
+
+  - path: ui/server/routes/agent.js
+    disposition: known-unregistered
+    reason: "UI 服务端（基线范围外）：git 子进程（agent 路由）；候选后续批次评估"
+  - path: ui/server/routes/commands.js
+    disposition: known-unregistered
+    reason: "UI 服务端（基线范围外）：execFile 命令执行；候选后续批次评估"
+  - path: ui/server/routes/config.js
+    disposition: waived
+    reason: "复用已登记网络层 networkFetch；spawn 用于在文件管理器中打开配置（辅助路径）"
+  - path: ui/server/routes/git.js
+    disposition: known-unregistered
+    reason: "UI 服务端（基线范围外）：git 子进程；候选后续批次评估"
+  - path: ui/server/routes/mcp.js
+    disposition: known-unregistered
+    reason: "UI 服务端（基线范围外）：spawn MCP server 进程；候选后续批次评估"
+  - path: ui/server/routes/projects.js
+    disposition: known-unregistered
+    reason: "UI 服务端（基线范围外）：git clone；候选后续批次评估"
+  - path: ui/server/routes/skills.js
+    disposition: known-unregistered
+    reason: "UI 服务端（基线范围外）：execFile（skills）；候选后续批次评估"
+  - path: ui/server/routes/taskmaster.js
+    disposition: known-unregistered
+    reason: "UI 服务端（基线范围外）：spawn taskmaster 进程；候选后续批次评估"
+  - path: ui/server/routes/update.js
+    disposition: known-unregistered
+    reason: "UI 服务端（基线范围外）：更新脚本/重启进程；候选后续批次评估"
+  - path: ui/server/routes/user.js
+    disposition: known-unregistered
+    reason: "UI 服务端（基线范围外）：spawn 用户命令；候选后续批次评估"
+  - path: ui/server/services/desktopUpdateService.js
+    disposition: known-unregistered
+    reason: "桌面更新服务（基线范围外）：execFile 安装器；候选后续批次评估"
+  - path: ui/server/services/officePreview.js
+    disposition: known-unregistered
+    reason: "Office 预览（基线范围外）：execFile 转换进程；候选后续批次评估"
+  - path: ui/server/services/server-boot.js
+    disposition: known-unregistered
+    reason: "服务启动器（基线范围外）：spawn opener；候选后续批次评估"
+  - path: ui/server/services/spreadsheetPreview.js
+    disposition: known-unregistered
+    reason: "表格预览（基线范围外）：execFile 转换进程；候选后续批次评估"
+  - path: ui/server/services/updateRuntime.js
+    disposition: known-unregistered
+    reason: "更新运行时（基线范围外）：execFile；候选后续批次评估"
+  - path: ui/server/utils/clawhub.js
+    disposition: known-unregistered
+    reason: "clawhub CLI 集成（基线范围外）；候选后续批次评估"
+  - path: ui/server/utils/gitConfig.js
+    disposition: known-unregistered
+    reason: "git config 子进程（基线范围外）；候选后续批次评估"
+  - path: ui/server/utils/plugin-loader.js
+    disposition: known-unregistered
+    reason: "插件加载（基线范围外）：git/build 子进程；候选后续批次评估"
+  - path: ui/server/utils/plugin-process-manager.js
+    disposition: known-unregistered
+    reason: "插件进程管理（基线范围外）：spawn node；候选后续批次评估"
+  - path: ui/server/websocket/shell.js
+    disposition: known-unregistered
+    reason: "终端 shell（基线范围外）：pty.spawn（node-pty）；候选后续批次评估"
+
+  - path: ui/src/components/shell/hooks/useShellConnection.ts
+    disposition: waived
+    reason: "浏览器侧终端 WS（本地连接；ui-websocket-reconnect 同族语义）"
+  - path: ui/src/contexts/WebSocketContext.tsx
+    disposition: waived
+    reason: "浏览器侧 WS 客户端：重连语义已由 ui-websocket-reconnect 条目登记（含浏览器侧退避）"

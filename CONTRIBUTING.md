@@ -177,6 +177,7 @@ cd ui && pnpm test    # UI 测试
 - [ ] 未引入 `any` / `@ts-ignore`
 - [ ] 相关文档已更新（README、docs/ 等）
 - [ ] 核心模块改动附有测试
+- [ ] 新增外部/软依赖已在 `assets/degradation/registry.yaml` 登记五要素（含「谁漏了什么」；流程见 `docs/degradation-runbook.md`）
 - [ ] UI 变更已在 PR 中完成视觉验证（双主题 / 双语言 / 状态 / 响应式）
 
 ## 行为准则

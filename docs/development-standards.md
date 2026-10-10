@@ -70,7 +70,7 @@
 | 领域门禁 | `check:catalog-mirror` / `check:event-matrix` / `check:patent-sop` / `check:patent-workflow-docs` / `check:html-templates` / `check:skills` / `check:i18n-namespaces` / `check:issue-labels` / `check:techdebt-metrics` / `check:protocol-version` / `check:architecture-boundaries` / `check:degradation` / `check:doc-claims`（均挂 `pnpm lint`，共 <!-- claim:lint_gate_count -->13<!-- /claim --> 个） | 模型目录镜像、事件矩阵新鲜度、专利 SOP 引用、workflow 文档幂等、HTML 模板、skill frontmatter、i18n namespace 注册一致、标签清单与 issue 模板一致、技术债指标基线、协议台账、架构边界与文件规模、降级 registry（fail 方向/可观测/豁免/负向演练）、文档事实层（版本/计数/模块索引） |
 | 测试 | 后端 `node:test` + UI `vitest` + Playwright e2e + `llm-replay` 无 key 重放 seam | 单元/集成/回路级；用例数与测试文件数**不写进文档**（每加一个测试就会变，跑一次 `pnpm test` 才准） |
 | 版本 | `scripts/bump-version.mjs` | 根 / ui / apps-desktop 三处 version lockstep |
-| CI | `.github/workflows/ci.yml`（<!-- claim:ci_job_count -->3<!-- /claim --> job） | typecheck/lint/format/test（root+ui）+ Windows desktop build&lint |
+| CI | `.github/workflows/ci.yml`（<!-- claim:ci_job_count -->4<!-- /claim --> job） | typecheck/lint/format/test（root+ui）+ Windows desktop build&lint |
 | 议题标签 | `.github/labels.yml` + `scripts/sync-labels.mjs --check`（挂 `pnpm lint`）+ `scripts/classify-issue.mjs` + `.github/workflows/issue-triage.yml` / `stale.yml` | 标签清单与 issue 模板双向一致（模板引用未声明标签、scope 勾选项漂移即红）；新议题自动打 `scope:*` 并落 `status: triage`；过期议题自动治理 |
 
 ### 2.2 缺口（❌ / ⚠️，对应 §7 分阶段落地）
@@ -233,10 +233,11 @@
 1. **真实现优先**：只 mock 昂贵/非确定边界（网络、时钟、外部服务、LLM 适配器），其余保持真实。mock 绿 ≠ 产品能跑。
 2. **测真实入口**：产品可见行为走真实入口（真实 Loader / bin / HTTP），别只测手挂的单元组合；`bin` 测 built 产物用 plain node（构建器会掩盖模块解析错误）。
 3. **验证世界，不是自述**：断言外部状态（重跑命令 / 重读文件 / 字节一致），不信被测对象自己的报告。
-4. **降级但不静默**：任何跳过、降级或"未量测"都必须回答**「谁因此漏了什么」**，不得把"没跑"呈现成"通过"。三种形态：
+4. **降级但不静默**：任何跳过、降级或"未量测"都必须回答**「谁因此漏了什么」**，不得把"没跑"呈现成"通过"。四种形态：
    - **测试因缺依赖整组 `skip`**（日志读起来仍然绿）⇒ 需要 CI 守卫断言依赖真的可用（跳过即红），或至少让依赖装进 CI 镜像；用例文件头写明"跳过表示无信号，不是通过"（实例：`tests/patent/figuregen/external-dependency-signal.spec.ts`）。**反面教材**：一条把本地字面量与自身 `deepEqual` 的断言——标题声称在守某条纪律，实际零检测力，改坏被测对象也不会红。
    - **运行时降级**（解码器不可用、索引写入失败、无可用引线落位、规模超限）⇒ 报告里点明受影响的对象与后果（"这三张图因此少了黑白性与线宽核验"），不静默吞掉、也不为本地环境缺件阻断交付。
    - **门禁的两种结果必须可区分**：「未量测/未核验」与「已核验且无问题」不得同形。没有 `not-measured` 清单时，"未发现问题"才等于逐类量测过。
+   - **新增依赖必须登记**（义务）：任何新增外部/软依赖（网络出口、子进程/外部二进制、外部服务、文件、WebSocket、MCP、模型端点）必须先在 `assets/degradation/registry.yaml` 登记五要素——fail 方向（open/closed/mixed）+ **「谁漏了什么」必填** + 可观测足迹 + 负向演练（或书面豁免）。机器化：`pnpm check:degradation`（lint 硬门禁）+ `pnpm gen:degradation-candidates`（CI informational 漂移扫描，零新增连续 4 次后转硬门禁）。流程与退出判据见 `docs/degradation-runbook.md`。
 
 ---
 
@@ -329,10 +330,11 @@ node scripts/bump-version.mjs patch|minor|major   # 版本 lockstep
 | `scripts/check-ui-server-boundary.mjs` | ui/server→src 边界门禁（挂 ui lint；barrel 白名单） |
 | `scripts/check-architecture-boundaries.mjs` + `scripts/lib/import-specifiers.mjs` | 架构边界与文件规模门禁（挂 `pnpm lint`）+ 共用的 TS AST specifier 提取器 |
 | `docs/technical-debt/architecture-baseline.json` | 架构门禁的存量豁免清单（`--update-baseline` 生成；新增条目须在 PR 说明理由） |
+| `assets/degradation/registry.yaml`（+ `candidates-baseline.yaml`） | 降级 registry：外部/软依赖 fail 方向与负向演练登记；候选扫描已确认项基线；流程见 `docs/degradation-runbook.md` |
 | `scripts/check-workspace-freshness.mjs` | 开工前基线新鲜度（挂 `pnpm check` 首位；负控制见同名 `.test.mjs`） |
 | `scripts/gen-event-matrix.ts` | 事件矩阵生成器（--check 挂 lint） |
 | `scripts/gen-doc-claims.ts` + `scripts/doc-claims/resolvers.ts` | 文档事实层生成器与解析器（--check 挂 lint） |
 | `docs/code-facts.md` | 代码事实层（生成物）：版本矩阵 / 计数矩阵 / src 模块索引 / 门禁与 CI |
 | `scripts/bump-version.mjs` | 三处 package.json 版本 lockstep |
-| `.github/workflows/ci.yml` | CI（<!-- claim:ci_job_count -->3<!-- /claim --> job） |
+| `.github/workflows/ci.yml` | CI（<!-- claim:ci_job_count -->4<!-- /claim --> job） |
 | `.github/PULL_REQUEST_TEMPLATE.md` | PR 模板（含视觉验证强制节） |
