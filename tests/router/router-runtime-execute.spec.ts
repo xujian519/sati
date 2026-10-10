@@ -419,3 +419,49 @@ test("回合已取消时不发起任何 attempt", async () => {
   assert.equal(h.calls.length, 0);
   assert.equal(h.stats.length, 0);
 });
+
+test("熔断 open 的候选 provider 在 fallback 链中被跳过（executeRouterDecision:350-356）", async () => {
+  // 三个 provider 用独立键：熔断状态按 provider 记录，跳过只应发生在熔断的那一个。
+  const PROV_A: RouterModelRef = { id: "prov-a/model-a", provider: "prov-a", model: "model-a" };
+  const PROV_B: RouterModelRef = { id: "prov-b/model-b", provider: "prov-b", model: "model-b" };
+  const PROV_C: RouterModelRef = { id: "prov-c/model-c", provider: "prov-c", model: "model-c" };
+  const config = closeBudget({ scenarios: { default: PROV_A }, fallback: { default: [PROV_B, PROV_C] } });
+  // 每轮：A 限流 → B 限流 → C 成功。B 每轮记 1 次失败，5 轮后（默认 openThreshold=5）进入 open。
+  const rateLimitFor = (ref: RouterModelRef): CanonicalModelEvent => ({
+    type: "error",
+    error: {
+      provider: ref.provider,
+      protocol: "openai",
+      code: "rate_limit_error",
+      message: "429 too many requests",
+      retryable: true,
+    },
+  });
+  const h = harness(config, {
+    [PROV_A.id]: Array.from({ length: 6 }, () => scripted(rateLimitFor(PROV_A))),
+    [PROV_B.id]: Array.from({ length: 6 }, () => scripted(rateLimitFor(PROV_B))),
+    [PROV_C.id]: Array.from({ length: 6 }, () => scripted(...SUCCESS_EVENTS)),
+  });
+
+  for (let round = 0; round < 5; round += 1) {
+    await collect(h.runtime.execute(decisionFor(PROV_A), request, ctx));
+  }
+  assert.ok(h.calls.includes(`${PROV_B.provider}/${PROV_B.model}`), "预热期 B 必须被实际调用（否则熔断无从建立）");
+
+  h.calls.length = 0;
+  h.events.length = 0;
+  const events = await collect(h.runtime.execute(decisionFor(PROV_A), request, ctx));
+
+  assert.deepEqual(
+    h.calls,
+    [`${PROV_A.provider}/${PROV_A.model}`, `${PROV_C.provider}/${PROV_C.model}`],
+    "open 的 B 不得发起请求（跳过）；链尾 C 未被跳过、正常执行",
+  );
+  assert.deepEqual(
+    events.map(event => event.type),
+    ["message_start", "text_delta", "usage", "message_end"],
+    "跳过 open 候选后仍应取得成功结果",
+  );
+  assert.equal(h.stats.at(-1)?.model, PROV_C.model);
+  assert.equal(h.stats.at(-1)?.resolvedFrom, "fallback");
+});

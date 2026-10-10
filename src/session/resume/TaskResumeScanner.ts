@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { getPilotProjectChatDir } from "../../pilot/index.js";
+import { logger } from "../../telemetry/index.js";
 import { findOpenRequest } from "../transcript/interruptedTurn.js";
 import { readTranscript } from "../transcript/TranscriptReader.js";
 import { listProjectSessions } from "../storage/SessionList.js";
@@ -46,6 +47,8 @@ export type TaskResumeScanResult = {
   skippedPartial: number;
   /** 有挂起审批跳过数。 */
   skippedApprovals: number;
+  /** 单会话失败（读盘/提交异常）数——已逐条记 warn 日志（铁律：降级但不静默）。 */
+  failed: number;
 };
 
 export class TaskResumeScanner {
@@ -57,7 +60,7 @@ export class TaskResumeScanner {
 
   /**
    * 扫描并提交续算。异步、不抛错（宿主 fire-and-forget 调用）；单个会话的
-   * 提交失败仅计数，不影响其余会话。
+   * 提交失败仅计数并向日志留痕（warn），不影响其余会话。
    */
   async scan(): Promise<TaskResumeScanResult> {
     const sessions = await listProjectSessions({
@@ -71,6 +74,7 @@ export class TaskResumeScanner {
       resumed: 0,
       skippedPartial: 0,
       skippedApprovals: 0,
+      failed: 0,
     };
     for (const info of sessions) {
       const sessionKey = info.sessionId;
@@ -95,8 +99,11 @@ export class TaskResumeScanner {
         await this.options.submitResumeTurn(sessionKey);
         this.options.submittedKeys?.add(sessionKey);
         result.resumed += 1;
-      } catch {
-        // 单会话失败（读盘/提交异常）不阻塞整轮扫描；宿主负责日志。
+      } catch (error) {
+        // 单会话失败（读盘/提交异常）不阻塞整轮扫描——但必须留痕（降级但不静默）：
+        // 续算失败的会话若无声消失，宿主侧与「无可续算会话」不可区分。
+        result.failed += 1;
+        logger.warn(`Task resume failed for session ${sessionKey}`, error);
       }
     }
     return result;

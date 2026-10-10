@@ -3,6 +3,7 @@ import * as path from "node:path";
 import type { CanonicalUsage } from "../../model/index.js";
 import type { RouterStatsConfig } from "../config/schema.js";
 import { resolvePilotHome } from "../../shared/paths/index.js";
+import { logger } from "../../telemetry/index.js";
 import type { RouterDecision } from "../protocol/decision.js";
 import { lookupModelPricing } from "../utils/modelPricing.js";
 
@@ -84,8 +85,9 @@ export class TokenStatsCollector {
       const routerDir = config?.filePath ? path.dirname(config.filePath) : path.join(resolvePilotHome(), "router");
       try {
         fs.mkdirSync(routerDir, { recursive: true });
-      } catch {
+      } catch (error) {
         // 目录已存在或创建失败：openSync 会随后再试，此处失败不阻断（best-effort）。
+        logger.debug("Token stats: router dir ensure failed (openSync will retry)", error);
       }
 
       this.jsonlPath = path.join(routerDir, "stats.jsonl");
@@ -99,8 +101,9 @@ export class TokenStatsCollector {
       // (one per project runtime) safely share the same file via O_APPEND.
       try {
         this.fd = fs.openSync(this.jsonlPath, "a");
-      } catch {
+      } catch (error) {
         // 打开失败：fd 保持 undefined，writePayload 会回退到逐次 appendFile（保守）。
+        logger.debug("Token stats: openSync failed; falling back to per-write appendFile", error);
       }
       this.startFlushTimer();
     } else {
@@ -193,8 +196,9 @@ export class TokenStatsCollector {
     if (this.jsonlPath) {
       try {
         fs.writeFileSync(this.jsonlPath, "", "utf-8");
-      } catch {
-        // 截断失败：清空统计为尽力而为，失败不影响内存态，下次启动仍会重建（best-effort）。
+      } catch (error) {
+        // 截断失败：清空统计为尽力而为——但用户可见语义（清空未生效）必须留痕。
+        logger.warn("Token stats: clear failed to truncate file; old stats may reappear after restart", error);
       }
     }
   }
@@ -206,8 +210,9 @@ export class TokenStatsCollector {
     if (this.fd !== undefined) {
       try {
         fs.closeSync(this.fd);
-      } catch {
+      } catch (error) {
         // 句柄已损坏/重复关闭：忽略关闭失败，fd 随即置空（best-effort 清理）。
+        logger.debug("Token stats: closeSync failed (fd cleanup)", error);
       }
       this.fd = undefined;
     }
@@ -245,15 +250,21 @@ export class TokenStatsCollector {
     this.pendingBytes = 0;
     this.flushChain = this.flushChain
       .then(() => this.writePayload(payload))
-      .catch(() => {
-        // 异步落盘失败：静默降级，统计以内存聚合为准（best-effort 不中断 turn）。
+      .catch(error => {
+        // 异步落盘失败：统计以内存聚合为准（best-effort 不中断 turn）——但必须留痕。
+        logger.warn("Token stats: async flush failed (in-memory aggregates remain authoritative)", error);
       });
     return this.flushChain;
   }
 
   private writePayload(payload: string): Promise<void> {
-    return new Promise(resolve => {
-      const done = () => resolve();
+    return new Promise((resolve, reject) => {
+      // 写失败必须拒绝（而非 resolve 吞掉）：scheduleFlush 的 catch 是唯一的
+      // 留痕点，吞错会让「异步落盘失败」重新变成静默降级（issue: 降级但不静默）。
+      const done = (error?: NodeJS.ErrnoException | null) => {
+        if (error) reject(error);
+        else resolve();
+      };
       if (this.fd !== undefined) {
         const buf = Buffer.from(payload, "utf8");
         // position=null：O_APPEND 单次 write 原子追加，多实例并发安全。
@@ -277,8 +288,9 @@ export class TokenStatsCollector {
       } else if (this.jsonlPath) {
         fs.appendFileSync(this.jsonlPath, payload, "utf-8");
       }
-    } catch {
-      // 冷路径兜底同步写失败：放弃剩余缓冲，避免拖慢退出（best-effort，数据已在内存）。
+    } catch (error) {
+      // 冷路径兜底同步写失败：放弃剩余缓冲，避免拖慢退出——但必须留痕（缓冲被丢弃）。
+      logger.warn("Token stats: drainSync failed; remaining buffer dropped", error);
     }
   }
 
@@ -288,8 +300,9 @@ export class TokenStatsCollector {
     let raw: string;
     try {
       raw = fs.readFileSync(this.jsonlPath, "utf-8");
-    } catch {
-      // 读 stats.jsonl 失败：按空数据重建，文件缺失/损坏不阻断启动（best-effort）。
+    } catch (error) {
+      // 读 stats.jsonl 失败（首启缺失/损坏）：按空数据重建，不阻断启动——留 debug 痕。
+      logger.debug("Token stats: stats.jsonl unreadable; rebuilding from empty", error);
       return data;
     }
     for (const line of raw.split("\n")) {
@@ -316,8 +329,9 @@ export class TokenStatsCollector {
         const sess = data.sessions[record.sessionId]!;
         bumpAggregate(sess.aggregate, record);
         sess.requestLog.push(record);
-      } catch {
-        // 单行非法 JSON：跳过该条坏行，其余行照常回放（fail-open，避免单条数据拖垮重建）。
+      } catch (error) {
+        // 单行非法 JSON：跳过该条坏行，其余行照常回放（fail-open）——留 debug 痕。
+        logger.debug("Token stats: skipped malformed line during rebuild", error);
       }
     }
 
@@ -495,12 +509,14 @@ function migrateJsonToJsonl(routerDir: string, jsonlPath: string): void {
       // Rename old file so it won't be read again
       try {
         fs.renameSync(jsonPath, jsonPath + ".bak");
-      } catch {
+      } catch (error) {
         // 旧文件改名失败：仅可能导致下次启动重复迁移（幂等），不影响本次迁移（best-effort）。
+        logger.debug("Token stats: rename to .bak failed (migration may retry next start)", error);
       }
       return;
-    } catch {
-      // 该候选统计文件迁移失败：跳过此候选，其余候选照常处理（fail-open）。
+    } catch (error) {
+      // 该候选统计文件迁移失败：跳过此候选，其余候选照常处理（fail-open）——留痕。
+      logger.warn("Token stats: migration candidate failed", error);
     }
   }
 }

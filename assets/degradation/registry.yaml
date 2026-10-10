@@ -14,10 +14,10 @@
 #   - mixed 类按子语义拆分：router（pre-content open / post-content closed）、
 #     schema 版本（真源 closed / 派生 open）、patent_search（网络错 closed / 零结果 open）、
 #     patent_metadata（not-found open / 网络错 closed）、team 转派（重试 open / 迟到写 closed）。
-#   - 静默豁免（intentional_silence）：D2 spill（T3b 修复后解除）、task-resume（T3a 解除）、
-#     token-stats（T3b 解除）、edgeclaw inner（T3c 永久）、ollama probe（现状无日志，永久）。
-#   - 演练豁免（drill_missing）：provider-health / web-fetch / agent-input-flush（T4 补）、
-#     scripts smoke（无独立 spec，T5 评估）。
+#   - 静默豁免（intentional_silence）：edgeclaw inner（T3c 永久）、ollama probe（现状无日志，永久）。
+#     spill / task-resume / token-stats 曾为临时静默豁免——已于 T3 补 warn 留痕并解除（2026-10-10）。
+#   - 演练豁免（drill_missing）：仅剩 scripts smoke（无独立 spec，T5 评估）。
+#     provider-health / web-fetch / agent-input-flush 已于 T4 补 spec 并解除（2026-10-10）。
 version: 1
 entries:
   # ---------- 模型 / 路由 ----------
@@ -46,9 +46,7 @@ entries:
     degradedBehavior: "healthy→degraded→open→half_open；连续失败降级候选，熔断期该 provider 不参与路由"
     degradedImpact: "熔断期候选集缩小；无用户直接感知（fallbackTier 事件间接可见）"
     observability: "状态机自身无日志；路由侧 fallbackTier 事件间接可见"
-    waiver:
-      - kind: drill_missing
-        reason: "状态机无独立 spec——T4 补（openDurationMs: 0 构造 half_open + 迁移断言）"
+    negativeDrill: tests/router/health/provider-health-tracker.spec.ts
 
   - id: router-zero-usage-retry
     component: src/router/retry/retryGates.ts
@@ -261,9 +259,7 @@ entries:
     degradedBehavior: "HTTP 错 → 结构化错误含可行动指导；allowlist 拦截 → EGRESS_BLOCKED；abort 原样传播"
     degradedImpact: "错误上抛，避免把错误页当内容"
     observability: "结构化错误 + EGRESS_BLOCKED"
-    waiver:
-      - kind: drill_missing
-        reason: "无独立 spec——T4 补（结构化错误 + EGRESS_BLOCKED 路径）"
+    negativeDrill: tests/tool/builtin/webFetch.spec.ts
 
   - id: web-search-error
     component: src/tool/builtin/webSearch.ts
@@ -317,25 +313,19 @@ entries:
     dependency: "工具结果溢出落盘（本地磁盘 spill 层）"
     failDirection: open
     degradedBehavior: "落盘失败（writeFile 上抛）→ DefaultContextRuntime 捕获并回退原始投影，AgentLoop 二重兜底；turn 不失败"
-    degradedImpact: "无（原文不丢）；诊断 tool_result_persistence_failed 当前零消费 = 事实静默点"
-    observability: ""
-    negativeDrill: tests/tool/tool-result-size-limit.spec.ts
-    waiver:
-      - kind: intentional_silence
-        reason: "诊断已产出但全仓无消费者；T3 计划补 warn/消费诊断后解除（见计划 T3）"
+    degradedImpact: "无（原文不丢）；落盘降级经 warn 留痕（T3 起）"
+    observability: "warn 日志（DefaultContextRuntime 捕获落盘失败时）+ 诊断 tool_result_persistence_failed"
+    negativeDrill: tests/context/tool-result-spill-fallback.spec.ts
 
   # ---------- 会话恢复 ----------
   - id: task-resume-scan-degrade
     component: src/session/resume/TaskResumeScanner.ts
     dependency: "跨进程断点续算扫描（宿主 ProjectRuntimeRegistry）"
     failDirection: open
-    degradedBehavior: "单会话读盘/提交失败 catch 仅计数不阻塞；宿主仅 resumed>0 记 info"
-    degradedImpact: "续算失败的会话漏掉且无可观测痕迹（T3a 待修）"
-    observability: ""
-    negativeDrill: tests/session/resume/task-resume-scanner.spec.ts
-    waiver:
-      - kind: intentional_silence
-        reason: "catch 体内无日志、宿主未接线（ProjectRuntimeRegistry.ts:518 另有静默 catch）；T3a 修复后解除豁免"
+    degradedBehavior: "单会话读盘/提交失败 catch 仅计数不阻塞；宿主无条件记汇总 info（含 failed）"
+    degradedImpact: "续算失败的会话不再无声：逐条 warn + 汇总 failed 计数（T3a 起）"
+    observability: "warn 日志（逐会话失败，含 sessionKey 与原始 error）+ 宿主汇总 info（runTaskResumeScanOnce）"
+    negativeDrill: tests/cli/task-resume-scan-logging.spec.ts
 
   # ---------- 记忆 ----------
   - id: edgeclaw-memory-retrieve
@@ -422,9 +412,7 @@ entries:
     degradedBehavior: "注释立规：全部已接受条目落盘。失败即中止本步（未包 try，抛出即中止）"
     degradedImpact: "落盘失败中止本步，不静默丢输入"
     observability: "抛错上抛"
-    waiver:
-      - kind: drill_missing
-        reason: "无 spec——T4 补（行为实体 AgentLoop.ts:754-757 / TurnRunner.ts:358-360）"
+    negativeDrill: tests/agent/loop/flush-checkpoint-fail-closed.spec.ts
 
   # ---------- 其他 ----------
   - id: telemetry-sender-queue
@@ -440,13 +428,10 @@ entries:
     component: src/router/stats/TokenStatsCollector.ts
     dependency: "token 统计异步落盘"
     failDirection: open
-    degradedBehavior: "注释『异步落盘失败：静默降级，以内存聚合为准』；真实吞错点 writePayload（回调忽略 err）"
-    degradedImpact: "重启后该时段统计丢失（T3b 待修）"
-    observability: ""
+    degradedBehavior: "落盘失败降级仍在（best-effort），但错误经 writePayload reject 上抛——不再吞错"
+    degradedImpact: "重启后该时段统计可能丢失，但 warn/debug 留痕可见（T3b 起）"
+    observability: "warn 日志（异步 flush / drainSync / clear 截断 / 迁移失败）+ debug（重建与坏行跳过，SATI_DEBUG 门控）"
     negativeDrill: tests/router/token-stats-collector.spec.ts
-    waiver:
-      - kind: intentional_silence
-        reason: "现状无日志且 writePayload 吞错；T3b 修复（err→reject + warn）后解除豁免"
 
   - id: auto-compact-fallback-truncate
     component: src/agent/loop/compactionExecutor.ts

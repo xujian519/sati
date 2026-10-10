@@ -13,6 +13,7 @@ import {
   RESUME_TURN_MESSAGE,
   TaskResumeScanner,
 } from "../../../src/session/resume/TaskResumeScanner.js";
+import { logger } from "../../../src/telemetry/index.js";
 
 type JsonEntry = Record<string, unknown>;
 
@@ -160,6 +161,53 @@ test("空 chatDir 零提交", async () => {
     assert.equal(result.scanned, 0);
     assert.equal(result.resumed, 0);
     assert.deepEqual(submitted, []);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("提交失败的会话：failed 计数 + warn 留痕，其余会话不受影响", async t => {
+  const root = await mkdtemp(join(tmpdir(), "sati-resume-scan-"));
+  try {
+    await writeTranscript(root, "s1", [acceptedInput("s1", "t1", 1, "请分析甲"), requestHeader("s1", "t1", 2)]);
+    await writeTranscript(root, "s2", [acceptedInput("s2", "t1", 1, "请分析乙"), requestHeader("s2", "t1", 2)]);
+    const warnings: unknown[][] = [];
+    t.mock.method(logger, "warn", (...args: unknown[]) => {
+      warnings.push(args);
+    });
+    const submitted: string[] = [];
+    const scanner = new TaskResumeScanner({
+      projectRoot: root,
+      pilotHome: root,
+      submitResumeTurn: async sessionKey => {
+        if (sessionKey === "s1") throw new Error("submit boom");
+        submitted.push(sessionKey);
+      },
+    });
+    const result = await scanner.scan();
+    assert.equal(result.failed, 1, "失败会话必须计入 failed");
+    assert.equal(result.resumed, 1, "单个失败不得阻塞其余会话");
+    assert.deepEqual(submitted, ["s2"]);
+    assert.equal(warnings.length, 1, "失败会话必须记恰好一条 warn（否则失败与『无可续算』不可区分）");
+    assert.match(String(warnings[0]?.[0]), /s1/);
+    assert.ok(warnings[0]?.[1] instanceof Error, "日志必须带原始 error");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("正常扫描不记 warn（日志是失败信号，不是每次都打）", async t => {
+  const root = await mkdtemp(join(tmpdir(), "sati-resume-scan-"));
+  try {
+    await writeTranscript(root, "s1", [acceptedInput("s1", "t1", 1, "请分析"), requestHeader("s1", "t1", 2)]);
+    const warnings: unknown[][] = [];
+    t.mock.method(logger, "warn", (...args: unknown[]) => {
+      warnings.push(args);
+    });
+    const { result } = await withScanner(root);
+    assert.equal(result.resumed, 1);
+    assert.equal(result.failed, 0);
+    assert.equal(warnings.length, 0, "成功路径不应产出 warn");
   } finally {
     await rm(root, { recursive: true, force: true });
   }
