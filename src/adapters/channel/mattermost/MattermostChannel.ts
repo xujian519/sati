@@ -1,4 +1,5 @@
 import type { Gateway, GatewayChannelKey } from "../../../gateway/index.js";
+import { redactUrlCredentials } from "../../../shared/credentialRedaction.js";
 import { chunkText } from "../protocol/text.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
 import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
@@ -104,7 +105,9 @@ export class MattermostChannel implements ChannelAdapter {
       this.ws = ws;
 
       const onMsg = (data: string | Buffer) => void this.onWsMessage(String(data));
-      const onErr = (e: unknown) => this.logger?.error?.(`mattermost: ws error: ${e}`);
+      // `ws` echoes the URL in the message for a malformed URL, and that URL
+      // carries the access token as a query parameter.
+      const onErr = (e: unknown) => this.logger?.error?.(redactUrlCredentials(`mattermost: ws error: ${e}`));
       const onClose = () => {
         this.ws = null;
         if (!this.closed) {
@@ -122,7 +125,7 @@ export class MattermostChannel implements ChannelAdapter {
         ws.on("close", onClose);
       }
     } catch (e) {
-      this.logger?.error?.(`mattermost: ws connect failed: ${e}`);
+      this.logger?.error?.(redactUrlCredentials(`mattermost: ws connect failed: ${e}`));
     }
   }
 

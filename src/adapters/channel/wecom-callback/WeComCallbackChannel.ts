@@ -2,6 +2,7 @@ import * as http from "node:http";
 import * as crypto from "node:crypto";
 import { URL } from "node:url";
 import type { Gateway, GatewayChannelKey } from "../../../gateway/index.js";
+import { redactUrlCredentials } from "../../../shared/credentialRedaction.js";
 import type { CronResultDelivery } from "../../../cron/index.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
 import { deliverChatCronResult } from "../protocol/ImCronDelivery.js";
@@ -277,7 +278,10 @@ export class WeComCallbackChannel implements ChannelAdapter {
       }
       return true;
     } catch (e) {
-      this.logger?.error?.(`wecom_callback: sendReply error: ${e}`);
+      // getAccessToken / sendReply both embed the credential in the request URL
+      // (`?corpsecret=` / `?access_token=`), and a URL parse failure echoes that
+      // URL in the error text.
+      this.logger?.error?.(redactUrlCredentials(`wecom_callback: sendReply error: ${e}`));
       return false;
     }
   }

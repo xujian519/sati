@@ -26,3 +26,24 @@ export function sanitizeOutgoingText(text: string): { text: string; redacted: bo
     .replace(SECRET_ASSIGNMENT_RE, `$1$2$3${REDACTED_SECURE_TOKEN}$3`);
   return { text: out, redacted: out !== text };
 }
+
+// 日志面专用：URL 的 userinfo 段（`user@` 与 `user:pass@` 两种形态都收）与常见
+// 凭证名 query 参数。比 `URL_CREDENTIALS_RE` 宽，因为日志里出现的是 GitHub 那种
+// 「只有 token 没有冒号」的形态，以及 `?token=` 这种 query 形态。
+const LOG_URL_USERINFO_RE = /([a-z][a-z0-9+.-]*:\/\/)[^\s/@]+@/gi;
+const CREDENTIAL_QUERY_RE =
+  /([?&](?:token|access_token|refresh_token|api_key|apikey|key|secret|password)=)[^&\s"'<>]*/gi;
+
+/**
+ * 脱敏 **URL 携带的凭证**（userinfo 段 + 凭证名 query 参数），服务日志与错误文本。
+ *
+ * 与 `sanitizeOutgoingText` 的分工：后者作用于模型入参与路由事件落盘，刻意保留
+ * query 参数原样；本函数只面向日志面。触发场景：WebSocket 与 Git 的 URL 把凭证
+ * 放在 query/userinfo，失败路径的异常正文会回显整串 URL——实测 `ws` 在 URL 畸形时
+ * 抛出 `SyntaxError: Invalid URL: ws://…?token=…`（正常连接失败不含 URL）。
+ */
+export function redactUrlCredentials(text: string): string {
+  return text
+    .replace(CREDENTIAL_QUERY_RE, `$1${REDACTED_CREDENTIALS}`)
+    .replace(LOG_URL_USERINFO_RE, `$1${REDACTED_CREDENTIALS}@`);
+}

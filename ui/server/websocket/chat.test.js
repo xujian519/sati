@@ -84,8 +84,32 @@ describe("/ws rewrite streaming frames", () => {
   });
 });
 
+describe("/ws connection logging", () => {
+  it("logs the request path without the auth token query string", async () => {
+    const harness = await startChatServer();
+    try {
+      await harness.connect("token-probe");
+
+      const attempt = harness.infoCalls.find(args => args[0] === "WebSocket connection attempt to:");
+      expect(attempt).toBeDefined();
+      expect(attempt[1]).toBe("/ws");
+      // 判据落在整份日志上：任何一行都不许出现握手 URL 的 query。
+      expect(JSON.stringify(harness.infoCalls)).not.toContain("token=test");
+    } finally {
+      await harness.close();
+    }
+  });
+});
+
 async function startChatServer() {
   vi.resetModules();
+  const infoCalls = [];
+  vi.doMock("../utils/consoleLogger.js", () => ({
+    logger: {
+      info: (...args) => infoCalls.push(args),
+      error: () => {},
+    },
+  }));
   vi.doMock("../middleware/auth.js", () => ({ authenticateWebSocket: () => USER }));
   vi.doMock("./shell.js", () => ({ handleShellConnection: vi.fn() }));
   vi.doMock("../utils/plugin-process-manager.js", () => ({ getPluginPort: vi.fn(() => null) }));
@@ -121,6 +145,7 @@ async function startChatServer() {
   const { port } = server.address();
 
   return {
+    infoCalls,
     connect: label => connectClient(`ws://127.0.0.1:${port}/ws?token=test`, label),
     waitForWatchers: async (sessionId, expected) => {
       // `getWatchers()` 返回 Set（不是数组）

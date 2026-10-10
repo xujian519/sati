@@ -9,6 +9,7 @@ import { userDb, apiKeysDb, githubTokensDb } from "../database/db.js";
 import { addProjectManually } from "../projects.js";
 import { runChatViaGateway } from "../sati-bridge.js";
 import { resolvePilotHome, resolveProjectStorageId, sanitizeSessionIdForPath } from "../utils/pilotPaths.js";
+import { redactSecrets } from "../utils/redactSecrets.js";
 import { SERVER_TIMEOUTS } from "../utils/timeouts.js";
 import { Octokit } from "@octokit/rest";
 import { IS_PLATFORM } from "../constants/config.js";
@@ -351,15 +352,18 @@ async function cloneGitHubRepo(githubUrl, githubToken = null, projectPath) {
 
   // Execute git clone
   const { code, stderr } = await runGit(["clone", "--depth", "1", cloneUrl, cloneDir], {
-    onStderr: data => logger.info("Git stderr:", data),
+    onStderr: data => logger.info("Git stderr:", redactSecrets(data)),
   });
 
   if (code === 0) {
     logger.info("✅ Repository cloned successfully");
     return cloneDir;
   }
-  logger.error("❌ Git clone failed:", stderr);
-  throw new Error(`Git clone failed: ${stderr}`);
+  // git echoes the remote URL on failure and `cloneUrl` embeds the access token,
+  // so redact before both logging and surfacing the message to the client.
+  const safeStderr = redactSecrets(stderr);
+  logger.error("❌ Git clone failed:", safeStderr);
+  throw new Error(`Git clone failed: ${safeStderr}`);
 }
 
 /**

@@ -7,11 +7,11 @@
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1088 / 189122 |
+| src TS 文件 / 行数 | 1088 / 189150 |
 | src JS 文件 | 0 |
-| tests 文件 | 634 |
+| tests 文件 | 635 |
 | ui/src 文件 / 行数 | 642 / 102634 |
-| ui/server 文件 / 行数 | 131 / 35595 |
+| ui/server 文件 / 行数 | 133 / 35710 |
 
 ## 指标口径
 
@@ -120,7 +120,7 @@
 | `ui/src/components/chat-v2/processGrouping.ts` | 1294 |
 | `ui/src/components/chat-v2/MessagesPaneV2.render.test.tsx` | 1234 |
 | `ui/server/routes/config.js` | 1234 |
-| `ui/server/routes/agent.js` | 1224 |
+| `ui/server/routes/agent.js` | 1228 |
 | `ui/src/components/chat-v2/ComposerV2.tsx` | 1188 |
 | `ui/src/components/chat-v2/MessagesPaneV2.tsx` | 1183 |
 | `ui/server/routes/taskmaster.js` | 1179 |
@@ -179,11 +179,11 @@
 | literature | 8 |
 | permission | 4 |
 | test-support | 4 |
+| shared | 3 |
 | telemetry | 3 |
 | board | 2 |
 | methodology | 2 |
 | network | 2 |
-| shared | 2 |
 | task | 2 |
 | browser | 1 |
 | fs | 1 |
@@ -191,7 +191,7 @@
 | runtime | 1 |
 | status | 1 |
 
-| **合计** | **607** |
+| **合计** | **608** |
 
 ## i18n en/zh-CN 对齐
 
