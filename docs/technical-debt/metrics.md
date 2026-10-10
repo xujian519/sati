@@ -9,7 +9,7 @@
 |---|---|
 | src TS 文件 / 行数 | 1081 / 187213 |
 | src JS 文件 | 0 |
-| tests 文件 | 620 |
+| tests 文件 | 621 |
 | ui/src 文件 / 行数 | 638 / 102247 |
 | ui/server 文件 / 行数 | 128 / 35125 |
 
@@ -169,7 +169,7 @@
 | patent | 141 |
 | tool | 66 |
 | agent | 59 |
-| knowledge | 38 |
+| knowledge | 39 |
 | context | 36 |
 | gateway | 34 |
 | model | 33 |
@@ -199,7 +199,7 @@
 | runtime | 1 |
 | status | 1 |
 
-| **合计** | **594** |
+| **合计** | **595** |
 
 ## i18n en/zh-CN 对齐
 

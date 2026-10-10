@@ -12,6 +12,9 @@
 // 本脚本强制的规则：
 //   1. 结构：顶层 entries 数组；id 唯一且 kebab-case。
 //   2. component / negativeDrill 指向的文件必须存在——路径失效即红（防登记腐烂）。
+//      且必须**被 git 跟踪**（在 git 工作树内时硬校验）：`.gitignore` 忽略类文件
+//      （如 *.test.ts 本地草稿）本地可见但 CI checkout 缺失——本地绿、CI 红的经典陷阱
+//      （AGENTS.md：新增 *.test.ts 必须 git add -f 或改指向已跟踪文件）。
 //   3. failDirection ∈ {open, closed, mixed}。
 //   4. observability 不得为空——除非带 waiver（kind: intentional_silence + reason）。
 //      「降级但不静默」没有可观测足迹就必须书面豁免，豁免必须写清理由。
@@ -24,6 +27,7 @@
 //   node scripts/check-degradation-registry.mjs --stats    # 条目数与 failDirection 分布（供对账）
 //   node scripts/check-degradation-registry.mjs --root DIR # 供负控制测试指向 fixture 树
 
+import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -62,6 +66,29 @@ function parseArgs(argv, defaultRoot) {
 
 const isNonEmptyString = value => typeof value === "string" && value.trim().length > 0;
 
+/**
+ * 读取 git 跟踪文件集合（POSIX 相对路径）。非 git 工作树（如负控制测试的临时目录）返回 null，
+ * 调用方据此跳过跟踪校验——fixture 树不是仓库，跟踪校验只在真实仓库内生效。
+ */
+function loadTrackedFiles(root) {
+  const probe = spawnSync("git", ["-C", root, "rev-parse", "--is-inside-work-tree"], { encoding: "utf8" });
+  if (probe.status !== 0 || probe.stdout.trim() !== "true") return null;
+  const listed = spawnSync("git", ["-C", root, "ls-files", "-z"], { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 });
+  if (listed.status !== 0) return null;
+  return new Set(listed.stdout.split("\0").filter(Boolean));
+}
+
+/** 路径硬校验：存在 + （在 git 树内时）被跟踪。返回问题文本或 null。 */
+function pathProblem(root, relativePath, field, trackedFiles) {
+  if (!existsSync(join(root, relativePath))) {
+    return `${field} 路径不存在：${relativePath}（登记已腐烂，修正或删除条目）`;
+  }
+  if (trackedFiles !== null && !trackedFiles.has(relativePath)) {
+    return `${field} 未被 git 跟踪：${relativePath}（本地可见但 CI checkout 缺失——忽略类文件请 git add -f，或改指向已跟踪文件）`;
+  }
+  return null;
+}
+
 /** 把 waiver 字段规范化为数组（允许单个对象或对象数组两种写法）。 */
 function normalizeWaivers(entry) {
   const { waiver } = entry;
@@ -70,7 +97,7 @@ function normalizeWaivers(entry) {
 }
 
 /** 校验单条 entry，问题以人类可读文本追加进 problems。 */
-function validateEntry(root, entry, index, seenIds, problems) {
+function validateEntry(root, entry, index, seenIds, problems, trackedFiles) {
   const fallbackLabel = `第 ${index + 1} 条`;
   if (entry === null || typeof entry !== "object" || Array.isArray(entry)) {
     problems.push(`[${fallbackLabel}] 不是对象`);
@@ -90,8 +117,9 @@ function validateEntry(root, entry, index, seenIds, problems) {
 
   if (!isNonEmptyString(entry.component)) {
     problems.push(`${where} component 缺失`);
-  } else if (!existsSync(join(root, entry.component))) {
-    problems.push(`${where} component 路径不存在：${entry.component}（登记已腐烂，修正或删除条目）`);
+  } else {
+    const problem = pathProblem(root, entry.component, "component", trackedFiles);
+    if (problem !== null) problems.push(`${where} ${problem}`);
   }
 
   for (const field of ["dependency", "degradedBehavior", "degradedImpact"]) {
@@ -137,10 +165,13 @@ function validateEntry(root, entry, index, seenIds, problems) {
     if (!waiverKinds.has("drill_missing")) {
       problems.push(`${where} negativeDrill 缺失：补负向演练测试或挂 waiver(drill_missing)`);
     }
-  } else if (!existsSync(join(root, entry.negativeDrill))) {
-    problems.push(`${where} negativeDrill 路径不存在：${entry.negativeDrill}（登记已腐烂，修正或删除条目）`);
-  } else if (waiverKinds.has("drill_missing")) {
-    problems.push(`${where} 冗余豁免：negativeDrill 已存在，请移除 drill_missing waiver`);
+  } else {
+    const problem = pathProblem(root, entry.negativeDrill, "negativeDrill", trackedFiles);
+    if (problem !== null) {
+      problems.push(`${where} ${problem}`);
+    } else if (waiverKinds.has("drill_missing")) {
+      problems.push(`${where} 冗余豁免：negativeDrill 已存在，请移除 drill_missing waiver`);
+    }
   }
 }
 
@@ -197,7 +228,8 @@ function main() {
   const { entries } = parsedRegistry;
   const problems = [];
   const seenIds = new Set();
-  entries.forEach((entry, index) => validateEntry(root, entry, index, seenIds, problems));
+  const trackedFiles = loadTrackedFiles(root);
+  entries.forEach((entry, index) => validateEntry(root, entry, index, seenIds, problems, trackedFiles));
 
   const { counts, waived } = countByDirection(entries);
   const distribution = `open ${counts.open} / closed ${counts.closed} / mixed ${counts.mixed}${
