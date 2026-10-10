@@ -35,10 +35,16 @@ export function matchPermissionRule(
   // 带 pattern 的 allow 规则同样要过真实落点：pattern 常取自**词法**路径（如
   // writePermissions 的 buildRecursiveFileWriteRule 铸造的会话授予），工作区内的一个
   // 软链就能借它放行越界写入。deny/ask 不参与（命中即生效，否则显式规则会被逃逸路径
-  // 绕过）；词法本就在 root 外的授予（用户显式批准的外部目录）不受此约束；`text:`
-  // 规则无路径语义，暂不参与——见 docs/notes/implemented/2026-10-10-write-path-symlink-escape.md。
-  if (rule.behavior === "allow" && FILE_WRITE_TOOLS.has(toolName) && !rule.pattern.startsWith(TEXT_PATTERN_PREFIX)) {
-    return isRealLandingInsideRoots(input, context);
+  // 绕过）；词法本就在 root 外的授予（用户显式批准的外部目录）不受此约束——见
+  // docs/notes/implemented/2026-10-10-write-path-symlink-escape.md。
+  if (rule.behavior === "allow" && FILE_WRITE_TOOLS.has(toolName)) {
+    if (!rule.pattern.startsWith(TEXT_PATTERN_PREFIX)) {
+      return isRealLandingInsideRoots(input, context);
+    }
+    // `text:` 规则只声明「内容」不声明「位置」，因此它没有可授予的越界落点：输入带路径
+    // 时要求词法与真实落点都在工作区内（否则它就是越界写入的通行证）；输入不带路径时
+    // 没有位置可授权，维持纯内容匹配（写工具随后会以缺 file_path 拒绝该调用）。
+    return resolveInputFilePath(input, context) === undefined ? true : isFileInputInsideWorkspace(input, context, true);
   }
 
   return true;

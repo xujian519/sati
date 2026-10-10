@@ -129,13 +129,17 @@ test("edit_file rejects edits into .git through a directory symlink", async () =
   });
 });
 
-test("write_file asks before writing outside the workspace through a directory symlink", async () => {
+// 与上游的偏离（决策记录 implemented/2026-10-10-write-path-symlink-escape）：真实落点
+// 在 root 外的写目标不再给审批入口，一律硬拒。审批授予的是「某个文件夹」，这类路径的
+// 词法落点只是假象、真实落点不在任何 root 内，批准了执行层也不放行——问一次再拒一次
+// 只会误导。要写那个真实位置，直接写真实路径即可（走正常的外部目录审批）。
+test("write_file rejects writing outside the workspace through a directory symlink", async () => {
   await withTempDirs(async (workspace, outside) => {
     await symlink(outside, join(workspace, "escape"));
     const ctx = context(workspace);
 
     const permission = checkFilesystemWritePermission("write_file", "escape/created.txt", ctx);
-    assert.equal(permission.type, "ask");
+    assert.equal(permission.type, "deny");
 
     await assert.rejects(
       createWriteFileTool().execute({ file_path: "escape/created.txt", content: "outside\n" }, ctx),
@@ -235,10 +239,15 @@ test("a session allow rule for an outside folder still authorizes writes there",
     const input = { file_path: join(outside, "new.txt"), content: "outside\n" };
 
     assert.equal(matchPermissionRule(rule, "write_file", input, permissionContext), true);
-    assert.equal(
-      (await new PermissionRuntime().decide(createWriteFileTool(), input, { ...ctx, permissionContext }, "call")).type,
-      "allow",
-    );
+    const tool = createWriteFileTool();
+    const decision = await new PermissionRuntime().decide(tool, input, { ...ctx, permissionContext }, "call");
+    if (decision.type !== "allow") {
+      throw new Error(`expected a session allow rule to yield an allow decision, got ${decision.type}`);
+    }
+    // 外部目录的显式授予必须一路落盘到底：收紧执行层那道「真实落点在 root 内」的闸时
+    // 不得把它一起拒掉（它的词法落点本就在 root 外，走的是另一条分支）。
+    await tool.execute(input, { ...ctx, permissionContext, currentPermissionDecision: decision });
+    assert.equal(await readFile(join(outside, "new.txt"), "utf8"), "outside\n");
   });
 });
 
@@ -256,10 +265,8 @@ for (const absoluteTarget of [false, true]) {
         const ctx = context(workspace);
 
         assert.equal(resolveRealWritePath(join(workspace, "filelink")), join(await realpath(targetRoot), "victim.txt"));
-        assert.equal(
-          checkFilesystemWritePermission("write_file", "filelink", ctx).type,
-          targetKind === "outside" ? "ask" : "deny",
-        );
+        // 外部目标同样是硬拒（见上「与上游的偏离」）；写入 .git 仍由保护目录判定拒。
+        assert.equal(checkFilesystemWritePermission("write_file", "filelink", ctx).type, "deny");
         assert.equal(
           matchPermissionRule(
             { source: "session", behavior: "allow", toolName: "write_file" },
@@ -273,7 +280,7 @@ for (const absoluteTarget of [false, true]) {
         assert.equal(
           (await new PermissionRuntime().decide(tool, { file_path: "filelink", content: "clobbered\n" }, ctx, "call"))
             .type,
-          targetKind === "outside" ? "ask" : "deny",
+          "deny",
         );
         await assert.rejects(
           tool.execute({ file_path: "filelink", content: "clobbered\n" }, ctx),
@@ -285,7 +292,7 @@ for (const absoluteTarget of [false, true]) {
     });
   }
 
-  test(`write_file asks for a dangling symlink target with an intermediate symlink and .. (${absoluteTarget ? "absolute" : "relative"})`, async () => {
+  test(`write_file rejects a dangling symlink target with an intermediate symlink and .. (${absoluteTarget ? "absolute" : "relative"})`, async () => {
     await withTempDirs(async (workspace, outside) => {
       await mkdir(join(outside, "subdir"));
       await symlink(join(outside, "subdir"), join(workspace, "dirlink"));
@@ -294,7 +301,7 @@ for (const absoluteTarget of [false, true]) {
       const ctx = context(workspace);
 
       assert.equal(resolveRealWritePath(join(workspace, "filelink")), join(await realpath(outside), "created.txt"));
-      assert.equal(checkFilesystemWritePermission("write_file", "filelink", ctx).type, "ask");
+      assert.equal(checkFilesystemWritePermission("write_file", "filelink", ctx).type, "deny");
       assert.equal(
         matchPermissionRule(
           { source: "session", behavior: "allow", toolName: "write_file" },
@@ -547,3 +554,70 @@ for (const toolName of ["write_file", "edit_file"] as const) {
     });
   }
 }
+
+test("a text: allow rule does not authorize writes that land outside the workspace", async () => {
+  await withTempDirs(async (workspace, outside) => {
+    await symlink(outside, join(workspace, "escape"));
+    const ctx = context(workspace);
+    // 宪法规则 policy-bridge 铸造的形态：pattern 取关键词、对输入序列化文本做包含匹配，
+    // 对「写到哪里」没有任何声明——这样的规则只能授权工作区内的落点。
+    const rule: PermissionRule = {
+      source: "user",
+      behavior: "allow",
+      toolName: "write_file",
+      pattern: "text:机密密级",
+    };
+    const permissionContext = { ...ctx.permissionContext, rules: { allow: [rule], deny: [], ask: [] } };
+    const content = "机密密级：内部资料\n";
+
+    assert.equal(
+      matchPermissionRule(rule, "write_file", { file_path: "notes.txt", content }, permissionContext),
+      true,
+      "工作区内的写入仍须被 text: 规则命中",
+    );
+    assert.equal(
+      matchPermissionRule(rule, "write_file", { file_path: "escape/new.txt", content }, permissionContext),
+      false,
+      "text: 规则不得授权软链外逃的落点",
+    );
+    assert.equal(
+      matchPermissionRule(rule, "write_file", { file_path: join(outside, "new.txt"), content }, permissionContext),
+      false,
+      "text: 规则不得授权工作区外的落点",
+    );
+
+    const decision = await new PermissionRuntime().decide(
+      createWriteFileTool(),
+      { file_path: "escape/new.txt", content },
+      { ...ctx, permissionContext },
+      "call",
+    );
+    assert.equal(decision.type, "deny");
+  });
+});
+
+test("an approval cannot authorize a write whose real landing is outside the workspace", async () => {
+  await withTempDirs(async (workspace, outside) => {
+    await symlink(outside, join(workspace, "escape"));
+    const ctx = context(workspace);
+    const input = { file_path: "escape/created.txt", content: "outside\n" };
+
+    // 逃逸路径没有可授予的落点，因此不给审批入口（见开头「与上游的偏离」）。
+    assert.equal(checkFilesystemWritePermission("write_file", input.file_path, ctx).type, "deny");
+
+    // 即便审批已给了 allow（ToolRuntime 把 allow 结论放进该字段），执行层那道
+    // 「真实落点必须在 root 内」的闸也不得被它短路。
+    await assert.rejects(
+      createWriteFileTool().execute(input, {
+        ...ctx,
+        currentPermissionDecision: {
+          type: "allow",
+          reason: { type: "tool", toolName: "write_file", message: "Approved once by the user." },
+        },
+      }),
+      /outside the Sati workspace/,
+      "审批不得让写入落到工作区外",
+    );
+    await assert.rejects(readFile(join(outside, "created.txt"), "utf8"), { code: "ENOENT" });
+  });
+});
