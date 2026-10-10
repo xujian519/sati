@@ -173,3 +173,25 @@ test("--stats 输出条目数与分布（仍执行校验）", t => {
   assert.match(result.stdout, /条目总数 2/);
   assert.match(result.stdout, /open 1 \/ closed 0 \/ mixed 1/);
 });
+
+test("git 跟踪校验：全部跟踪 → fresh；未跟踪的 drill（忽略类文件）→ 失败并指路 git add -f", t => {
+  // 正向：git 仓库内 component/drill 全部跟踪
+  const clean = seedTree(t, "git-tracked");
+  writeRegistry(clean, entry());
+  spawnSync("git", ["init", "-q"], { cwd: clean });
+  spawnSync("git", ["add", "-A"], { cwd: clean });
+  const cleanResult = run(clean);
+  assert.equal(cleanResult.status, 0, cleanResult.stderr);
+
+  // 负向：drill 是 *.test.ts 忽略类文件，未被 git 跟踪（本地存在、CI 缺失的经典陷阱）
+  const dirty = seedTree(t, "git-untracked-drill");
+  write(dirty, ".gitignore", "*.test.ts\n");
+  write(dirty, "tests/draft.test.ts", "// 本地草稿\n");
+  writeRegistry(dirty, entry({ drill: "tests/draft.test.ts" }));
+  spawnSync("git", ["init", "-q"], { cwd: dirty });
+  spawnSync("git", ["add", "-A"], { cwd: dirty });
+  const dirtyResult = run(dirty);
+  assert.equal(dirtyResult.status, 1);
+  assert.match(dirtyResult.stderr, /未被 git 跟踪：tests\/draft\.test\.ts/);
+  assert.match(dirtyResult.stderr, /git add -f/);
+});
