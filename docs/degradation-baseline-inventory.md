@@ -2,7 +2,7 @@
 
 > **用途**：`docs/degradation-registry-plan.md` 的 T2 对账基线、T5 深挖输入、`registry.yaml` 录入来源。
 > **来源**：2026-10-10 explorer 全仓静态盘点（@ HEAD）+ oracle 评审复核修订（S01/D2 事实链、T01 宿主接线、A02 测试锁三处已订正）。
-> **口径**：按「依赖行为单元」逐行展开，共 **40 行已盘点 + 6 项待深挖**。原盘点报告摘要口径为「约 37 项」，差异源于同族工具捆绑与计数口径（少数行捆绑同族工具，如 N04）；T2 对账以本表为准，**不设分布目标值**，分布由 `check-degradation-registry.mjs --stats` 输出为准。
+> **口径**：按「依赖行为单元」逐行展开，共 **40 行已盘点 + 6 项待深挖**（T5 已完成：6 项全部补登记，registry 46→61 条，见文末）。原盘点报告摘要口径为「约 37 项」，差异源于同族工具捆绑与计数口径（少数行捆绑同族工具，如 N04）；T2 对账以本表为准，**不设分布目标值**，分布由 `check-degradation-registry.mjs --stats` 输出为准。
 > **标记**：✅ 已确认（有代码/测试证据）｜⚠️ 模式推断（同族工具未逐一复核）｜🔍 待深挖（见文末清单）
 > **注意**：本表为静态快照，可能随 HEAD 漂移；T2 对账时以脚本硬校验（component 路径存在）兜底。
 
@@ -105,16 +105,21 @@
 
 ---
 
-## 待深挖清单（T5 输入，6 项）
+## 待深挖清单（T5 输入，6 项）→ **T5 已完成（2026-10-10）**
 
-| # | 项 | 为什么待深挖 | 输出要求 |
-|---|---|---|---|
-| 1 | egoBrowser 工具失败行为 | `src/tool/builtin/egoBrowser.ts` 失败路径完全未盘点 | 补登记条目或书面豁免 |
-| 2 | gateway 服务端 WebSocket 断连/重连语义 | 此前只盘 ui/server 桥侧（DEG-U01） | 同上 |
-| 3 | edgeclaw-memory-core vendored 内部故障矩阵 | LLM extraction / dream / heartbeat 各路径降级/重试未展开（13+ spec 存在） | 同上 |
-| 4 | SessionTitleGenerator / searchChatHistory | catch 行为未展开（疑似静默降级） | 同上 |
-| 5 | `ui/server/websocket/chat.js` 重连策略 | 断连仅记日志（:507,540,563），无重连契约 | 同上 |
-| 6 | scripts/ 其余 fetch 类脚本 | embedding-baseline、measure-assembly-stability 等未核对 | 同上 |
+> 6 项已全部深挖并补登记（registry 46→61 条目）；脚本类负向发现：`measure-assembly-stability.ts` /
+> `measure-fixed-overhead.ts` / `record-llm-replay.ts` **不触网**（假模型），无需登记。
+> 新发现 3 处静默点已登记豁免（gateway 断连 abort / edgeclaw 生产无 logger / searchChatHistory 目录不可读），
+> 候选后续专项修复。
+
+| # | 项 | T5 结论 |
+|---|---|---|
+| 1 | egoBrowser 工具失败行为 | 已登记 `ego-browser-tool`（closed；drill：`tests/tool/builtin/egoBrowser.spec.ts`） |
+| 2 | gateway 服务端 WebSocket 断连语义 | 已登记 2 条：`gateway-ws-handshake-close`（closed）+ `gateway-ws-disconnect-cleanup`（open；新静默点） |
+| 3 | edgeclaw-memory-core vendored 内部矩阵 | 已登记 4 条：`edgeclaw-http-retry` / `edgeclaw-parse-fallback` / `edgeclaw-heartbeat-isolation` / `edgeclaw-maintenance-scheduling` |
+| 4 | SessionTitleGenerator / searchChatHistory | 已登记 2 条：`session-title-generator`（open）+ `search-chat-history`（mixed；新静默点） |
+| 5 | `ui/server/websocket/chat.js` 重连策略 | 已登记 `ui-websocket-reconnect`（open） |
+| 6 | scripts/ 其余 fetch 类脚本 | 已登记 5 条（embedding-baseline / build-knowledge-vectors / record-real-fixture / patent-agent-eval / figure-benchmark） |
 
 ## 对账使用说明（T2）
 

@@ -14,10 +14,16 @@
 #   - mixed 类按子语义拆分：router（pre-content open / post-content closed）、
 #     schema 版本（真源 closed / 派生 open）、patent_search（网络错 closed / 零结果 open）、
 #     patent_metadata（not-found open / 网络错 closed）、team 转派（重试 open / 迟到写 closed）。
-#   - 静默豁免（intentional_silence）：edgeclaw inner（T3c 永久）、ollama probe（现状无日志，永久）。
-#     spill / task-resume / token-stats 曾为临时静默豁免——已于 T3 补 warn 留痕并解除（2026-10-10）。
-#   - 演练豁免（drill_missing）：仅剩 scripts smoke（无独立 spec，T5 评估）。
-#     provider-health / web-fetch / agent-input-flush 已于 T4 补 spec 并解除（2026-10-10）。
+# T5 深挖补登记（2026-10-10）：+15 条（46→61）——ego 浏览器 / gateway 服务端 WS（握手 + 断连清理）/
+#   edgeclaw 子包（HTTP 重试、解析 fallback、heartbeat 隔离、维护调度）/ session 检索（标题、历史搜索）/
+#   ui relay 重连 / scripts 触网脚本 ×5。负向发现：measure-assembly-stability 等两脚本不触网，无需登记。
+#
+# 豁免总览（2026-10-10）：
+#   - 静默豁免 ×5：edgeclaw inner（T3c 永久）、ollama probe（永久）；T5 新发现 3 处——
+#     gateway 断连 abort 吞错、edgeclaw 解析 fallback（生产未注入 logger）、searchChatHistory 目录不可读
+#     ——均已登记，候选后续专项修复。
+#   - 演练豁免 ×11：scripts/工具类与深内部路径（理由见各条目）；spill / task-resume / token-stats /
+#     provider-health / web-fetch / agent-input-flush 曾为临时豁免，已于 T3/T4 修复并解除。
 version: 1
 entries:
   # ---------- 模型 / 路由 ----------
@@ -452,3 +458,166 @@ entries:
     waiver:
       - kind: drill_missing
         reason: "无独立 spec（CI 工具语义，失败即非零退出）；T5 评估是否补"
+
+  # ---------- T5 深挖补登记（2026-10-10） ----------
+  - id: ego-browser-tool
+    component: src/tool/builtin/egoBrowser.ts
+    dependency: "ego-browser CLI（ego lite app，仅 macOS）+ 用户登录态浏览器"
+    failDirection: closed
+    degradedBehavior: "可用性过滤剔除工具（非 darwin→unavailable / CLI 缺失→setup_required，附替代链指引）；execute 失败抛结构化错误（tool_timeout / tool_execution_failed + stderr 截断 2KB）"
+    degradedImpact: "本轮浏览器自动化不可用，模型收到明确错误可换 web_fetch 等替代；静态可用性 ok ≠ ego lite 在运行（doctorCheck 默认关，首次 execute 才暴露）"
+    observability: "结构化错误码 + 可用性诊断（{toolName, code, reason}）"
+    negativeDrill: tests/tool/builtin/egoBrowser.spec.ts
+
+  - id: gateway-ws-handshake-close
+    component: src/gateway/server/GatewayWsConnection.ts
+    dependency: "gateway 服务端 WebSocket（远端客户端握手）"
+    failDirection: closed
+    degradedBehavior: "握手 fail-closed：非 JSON→close 4002 / 非 hello→4001 / 协议 MAJOR 不匹配→4001 / token 错→4003"
+    degradedImpact: "对端收到明确关闭码；未认证连接可无限空闲（无 hello 超时/服务端 ping）"
+    observability: "close code/reason 传对端（4001/4002/4003）"
+    negativeDrill: tests/gateway/protocol-versioning.spec.ts
+
+  - id: gateway-ws-disconnect-cleanup
+    component: src/gateway/server/GatewayWsConnection.ts
+    dependency: "gateway 服务端断连清理（in-flight turn / presence / 缓冲）"
+    failDirection: open
+    degradedBehavior: "断连：presence.close（60s 宽限窗）+ kanban 退订 + abortInFlightTurns 逐 session abort（失败静默吞 .catch(() => undefined)）+ flush 缓冲丢弃"
+    degradedImpact: "abort 失败无痕（turn 可能继续空跑）；关闭瞬间排队帧静默丢弃（对端已断，影响小）——T5 新发现静默点"
+    observability: ""
+    waiver:
+      - kind: intentional_silence
+        reason: "abortInFlightTurns 的 abort 失败无日志、服务端断连本身无日志（T5 新发现，建议后续补 warn）"
+      - kind: drill_missing
+        reason: "abortInFlightTurns 全仓无专项演练（候选补测）"
+
+  - id: edgeclaw-http-retry
+    component: src/context/memory/edgeclaw-memory-core/src/core/skills/llm-http.ts
+    dependency: "edgeclaw 记忆提取 LLM（vendored 子包，原生 fetch）"
+    failDirection: closed
+    degradedBehavior: "最多 3 次重试（仅 408/409/425/429/5xx + 超时/网络类，指数退避 1000×2^n）；非 transient 或耗尽 → throw"
+    degradedImpact: "提取失败明确上抛（telemetry），不静默丢记忆"
+    observability: "telemetry trackError（model_request_error）+ 抛错"
+    negativeDrill: src/context/memory/edgeclaw-memory-core/tests/skills/request-retry.spec.ts
+
+  - id: edgeclaw-parse-fallback
+    component: src/context/memory/edgeclaw-memory-core/src/core/skills/llm-extraction.ts
+    dependency: "edgeclaw 记忆提取/画像/笔记的解析路径（vendored 子包）"
+    failDirection: open
+    degradedBehavior: "解析/空响应类失败多层 fail-open 跳过：classifyMemoryTurn→{shouldStore:false}；createMemoryNote→null；rewriteUserProfile→null；dream 步骤仅对空响应/JSON 解析失败跳过（网络错上抛）"
+    degradedImpact: "该轮记忆不提取，且与『本无可记』在 trace 上不可区分——T5 新发现静默点（生产装配未注入 logger，logger?.warn 为 no-op）"
+    observability: ""
+    negativeDrill: src/context/memory/edgeclaw-memory-core/tests/skills/llm-extraction-dream-fallback.spec.ts
+    waiver:
+      - kind: intentional_silence
+        reason: "生产装配未注入 logger（projectRuntimeFactory 未传），解析类 fallback 的 warn 为 no-op（T5 新发现，建议后续接线）"
+
+  - id: edgeclaw-heartbeat-isolation
+    component: src/context/memory/edgeclaw-memory-core/src/core/pipeline/heartbeat.ts
+    dependency: "edgeclaw heartbeat 索引（逐 session，vendored 子包）"
+    failDirection: open
+    degradedBehavior: "逐 session try/catch：failedSessions 计数 + trace『Index Error』step；失败 session 不 markL0Indexed，下轮重试"
+    degradedImpact: "单 session 失败延后到下一轮；failedSessions 随 memory_flush 工具结果可见"
+    observability: "trace step + failedSessions 计数（memory_flush 工具结果透出）"
+    waiver:
+      - kind: drill_missing
+        reason: "单 session 失败隔离无专项演练（子包 heartbeat-helpers spec 未覆盖；候选补测）"
+
+  - id: edgeclaw-maintenance-scheduling
+    component: src/context/memory/edgeclaw-memory-core/src/service.ts
+    dependency: "edgeclaw 记忆维护调度（宿主定时触发）"
+    failDirection: open
+    degradedBehavior: "runDueScheduledMaintenance 自身不 catch；宿主 ProjectRuntimeRegistry.scheduleMemoryMaintenance catch：telemetry + warn → 本轮维护放弃，下轮再来"
+    degradedImpact: "当轮维护整体跳过（宿主 warn 可见）"
+    observability: "telemetry trackError + 宿主 logger.warn（ProjectRuntimeRegistry:408-423）"
+    waiver:
+      - kind: drill_missing
+        reason: "宿主 maintenance catch 无演练（候选补测）"
+
+  - id: session-title-generator
+    component: src/session/title/SessionTitleGenerator.ts
+    dependency: "会话标题生成（可选增强 LLM 调用）"
+    failDirection: open
+    degradedBehavior: "30s 超时 + 调用方 signal 合并；provider 异常/解析失败 → debug + 返回 null（会话保持默认标题）"
+    degradedImpact: "无用户可见错误；标题保持默认"
+    observability: "logger.debug（debug 级）+ TurnRunner 写回失败 warn"
+    negativeDrill: tests/session/title/SessionTitleGenerator.spec.ts
+
+  - id: search-chat-history
+    component: src/session/search/searchChatHistory.ts
+    dependency: "历史会话检索（projects/chats 目录流式读取）"
+    failDirection: mixed
+    degradedBehavior: "目录不可读 → 返回空结果（无日志）；torn JSON 行跳过；单文件流错误 → 整次调用 reject；非法 regex 抛错"
+    degradedImpact: "目录级失败把『不可读』伪装成『无匹配』——T5 新发现静默点；单文件坏则整个搜索失败（消费方：CLI 非零退出 / 频道回复 / HTTP 500）"
+    observability: ""
+    waiver:
+      - kind: intentional_silence
+        reason: "目录不可读 catch 无日志（T5 新发现，建议后续补 warn）；抛错路径靠上层（CLI/频道/HTTP）"
+      - kind: drill_missing
+        reason: "I/O 降级路径无演练（现有 spec 仅 team 过滤；候选补测）"
+
+  - id: ui-websocket-reconnect
+    component: ui/server/websocket/chat.js
+    dependency: "ui/server relay ↔ 浏览器 WS（断线补投 + 浏览器侧重连）"
+    failDirection: open
+    degradedBehavior: "relay 无 socket 级重连：断线后帧 fanout 给同 user 全部连接（Reconnect fail-safe）；浏览器侧指数退避 1s×2^n 上限 30s 无限重试；断线期间仅排队 check-session-status（其余丢弃 + warn）"
+    degradedImpact: "断线期间非 queueable 消息静默丢弃（仅 logWarn + ConnectionBanner 可视提示）；重连前流帧靠 fanout 兜底"
+    observability: "relay info/error 日志 + 浏览器 logWarn + ConnectionBanner"
+    waiver:
+      - kind: drill_missing
+        reason: "退避重试与 fanout 补投无专项演练（chat.test.js 仅覆盖 rewrite 流广播；候选补测）"
+
+  - id: script-embedding-baseline
+    component: scripts/embedding-baseline.ts
+    dependency: "embedding 基线脚本（人工运行，触网）"
+    failDirection: closed
+    degradedBehavior: "healthCheck 失败 → console.error + exit 1；运行中异常 → 入口 catch exit 1；无重试"
+    degradedImpact: "脚本失败即非零退出，不产出坏基线"
+    observability: "console.error + 非零退出"
+    waiver:
+      - kind: drill_missing
+        reason: "dev/运维脚本、人工触发；无离线 spec（候选评估）"
+
+  - id: script-build-knowledge-vectors
+    component: scripts/build-knowledge-vectors.ts
+    dependency: "知识向量构建脚本（人工运行，触网 embedding）"
+    failDirection: closed
+    degradedBehavior: "健康检查门禁 + 入口 catch exit 1；缺语料 DB/未知语料 → warn 跳过；中断构建保持 version=0 待重建"
+    degradedImpact: "失败即非零退出；跳过的语料不产向量（warn 可见）"
+    observability: "console 输出 + 非零退出"
+    waiver:
+      - kind: drill_missing
+        reason: "dev/运维脚本、人工触发；无离线 spec（候选评估）"
+
+  - id: script-record-real-fixture
+    component: scripts/record-real-fixture.ts
+    dependency: "llm-replay fixture 录制脚本（人工运行，真实 LLM）"
+    failDirection: open
+    degradedBehavior: "顶层无 try/catch；turn_failed 仅打印并继续，最终 exit 0（录制失败不改变退出码）"
+    degradedImpact: "录制者可能提交坏 fixture（需人工 record:replay 校验）——T5 新发现隐患"
+    observability: "turn_failed 打印（无退出码传导）"
+    waiver:
+      - kind: drill_missing
+        reason: "无离线 spec；exit 0 语义候选后续修复（改为非零退出），届时本条转 closed"
+
+  - id: script-patent-agent-eval
+    component: scripts/run-patent-agent-eval.ts
+    dependency: "专利 agent 评测脚本（--live 触网，人工运行）"
+    failDirection: closed
+    degradedBehavior: "缺 fixture/参数 → exit 2；主流程 reject → exit 1；scoreboard 写失败 → exit 1"
+    degradedImpact: "失败即非零退出"
+    observability: "非零退出"
+    waiver:
+      - kind: drill_missing
+        reason: "dev/运维脚本、人工触发；无离线 spec（候选评估）"
+
+  - id: script-figure-benchmark
+    component: scripts/figure-benchmark/run.ts
+    dependency: "附图 benchmark 脚本（触网模型，人工运行）"
+    failDirection: mixed
+    degradedBehavior: "单图 try/catch → result.error 继续（open）；无 manifest/主流程异常 → exit 1（closed）"
+    degradedImpact: "单图失败不拖垮批次；主流程失败即非零退出"
+    observability: "result.error + 非零退出"
+    waiver:
+      - kind: drill_missing
+        reason: "现有 run.spec.ts 仅测纯函数、未演练失败路径（候选补测）"
