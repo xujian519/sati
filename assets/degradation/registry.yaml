@@ -9,8 +9,123 @@
 # 立规背景：docs/degradation-registry-plan.md；对账基线：docs/degradation-baseline-inventory.md。
 #
 # 手工编辑规则：新增外部依赖必须登记；豁免必须给 reason；observability 为空即须豁免。
+#
+# T2 存量登记（2026-10-10）：按 baseline-inventory 全量对账录入 46 条。
+#   - mixed 类按子语义拆分：router（pre-content open / post-content closed）、
+#     schema 版本（真源 closed / 派生 open）、patent_search（网络错 closed / 零结果 open）、
+#     patent_metadata（not-found open / 网络错 closed）、team 转派（重试 open / 迟到写 closed）。
+#   - 静默豁免（intentional_silence）：D2 spill（T3b 修复后解除）、task-resume（T3a 解除）、
+#     token-stats（T3b 解除）、edgeclaw inner（T3c 永久）、ollama probe（现状无日志，永久）。
+#   - 演练豁免（drill_missing）：provider-health / web-fetch / agent-input-flush（T4 补）、
+#     scripts smoke（无独立 spec，T5 评估）。
 version: 1
 entries:
+  # ---------- 模型 / 路由 ----------
+  - id: router-fallback-pre-content
+    component: src/router/fallback/runFallbackChain.ts
+    dependency: "模型路由 fallback 链（跨 provider/model）——执行前段"
+    failDirection: open
+    degradedBehavior: "逐 attempt 换 fallback 目标（zero-usage retry 门控）；吐出内容前可整链重试"
+    degradedImpact: "换用降级模型时质量/成本变化；用户经重试与 fallback 事件可见"
+    observability: "fallbackTier / 重试事件打点"
+    negativeDrill: tests/router/fallback/runFallbackChain.spec.ts
+
+  - id: router-post-content-truncation
+    component: src/router/execution/executeRouterDecision.ts
+    dependency: "模型路由执行层——已产出内容段"
+    failDirection: closed
+    degradedBehavior: "一旦吐出内容事件即不再 fallback：遇错截断并统一上报（:58 关键不变量）"
+    degradedImpact: "已产出内容可能停在残片；用户见错误事件"
+    observability: "错误事件 + 截断上报"
+    negativeDrill: tests/router/router-runtime-execute.spec.ts
+
+  - id: provider-health-tracker
+    component: src/router/health/ProviderHealthTracker.ts
+    dependency: "Provider 健康熔断器（内存态状态机）"
+    failDirection: open
+    degradedBehavior: "healthy→degraded→open→half_open；连续失败降级候选，熔断期该 provider 不参与路由"
+    degradedImpact: "熔断期候选集缩小；无用户直接感知（fallbackTier 事件间接可见）"
+    observability: "状态机自身无日志；路由侧 fallbackTier 事件间接可见"
+    waiver:
+      - kind: drill_missing
+        reason: "状态机无独立 spec——T4 补（openDurationMs: 0 构造 half_open + 迁移断言）"
+
+  - id: router-zero-usage-retry
+    component: src/router/retry/retryGates.ts
+    dependency: "零用量重试门控"
+    failDirection: open
+    degradedBehavior: "无产出内容时可重试；有产出不重试（避免重复文本）"
+    degradedImpact: "重试增加时延；无内容损失"
+    observability: "重试事件"
+    negativeDrill: tests/router/retry/zeroUsageRetry.spec.ts
+
+  - id: token-saver-judge-fallback
+    component: src/router/tokenSaver/classifyAndRoute.ts
+    dependency: "tokenSaver 判官（judge LLM）"
+    failDirection: open
+    degradedBehavior: "judge 失败 / 输入超 40K → 降级默认 tier（resolvedFrom: fallback）"
+    degradedImpact: "该轮无 tokenSaver 节省，按默认 tier 计费"
+    observability: "resolvedFrom 标记"
+    negativeDrill: tests/router/router-runtime-token-saver-failure.spec.ts
+
+  - id: multimodal-reroute
+    component: src/router/media/rerouteDecisionForMedia.ts
+    dependency: "多模态重路由（媒体升级链）"
+    failDirection: open
+    degradedBehavior: "模型不支持图/PDF/音频 → 换支持候选重发（不参与故障降级链）；无候选 → 明确报错"
+    degradedImpact: "无候选时模型收到 unsupported_modality 错误，不静默丢媒体"
+    observability: "结构化错误 ModelRequestError"
+    negativeDrill: tests/router/utils/mediaReroute.spec.ts
+
+  - id: ollama-probe-degrade
+    component: src/model/ollama/probe.ts
+    dependency: "Ollama 模型探测（本地推理服务）"
+    failDirection: open
+    degradedBehavior: "探测失败按『未安装可识别模型』处理（返回 null / 缓存列表）；warm 路径 fire-and-forget"
+    degradedImpact: "Ollama 模型列表可能缺失（至下次探测成功）；用户选择器可见"
+    observability: ""
+    waiver:
+      - kind: intentional_silence
+        reason: "现状无日志（探测失败=未安装的语义写在代码注释；.catch(() => {}) 防 unhandledRejection）。永久豁免，T6 复核是否补 debug 日志"
+    negativeDrill: tests/model/ollamaProbe.spec.ts
+
+  - id: embedding-resolve-degrade
+    component: src/model/embedding/resolve.ts
+    dependency: "Embedding 客户端（memory.embedding 可选增强）"
+    failDirection: open
+    degradedBehavior: "配置错误（未知 provider/缺端点）→ 返回 undefined + warning 诊断（recoverable: true）"
+    degradedImpact: "失去语义召回；关键词路径原样工作"
+    observability: "warning 诊断（recoverable）"
+    negativeDrill: tests/model/embedding/resolve.spec.ts
+
+  - id: model-provider-error
+    component: src/model/providers/openai-responses/stream.ts
+    dependency: "模型 provider（anthropic/google/openai/openai-responses）原始错误"
+    failDirection: closed
+    degradedBehavior: "统一包装 ModelProviderError 上抛，由 router fallback/retry 接管"
+    degradedImpact: "错误原样上报；是否降级由路由层决定"
+    observability: "结构化错误 ModelProviderError"
+    negativeDrill: tests/model/streaming/streamModelRetry.spec.ts
+
+  # ---------- 知识底座 ----------
+  - id: knowledge-db-file-missing
+    component: src/knowledge/assemble.ts
+    dependency: "知识库 DB 文件（运行期外部文件，5 类路径探测）"
+    failDirection: open
+    degradedBehavior: "缺失 → 该源不建 resolver；打开失败逐源 try/catch，单个失败不影响其他（头注释：单个失败不影响其他）"
+    degradedImpact: "缺哪个源漏哪个源的召回"
+    observability: "warn 日志"
+    negativeDrill: tests/knowledge/kg-store-knowledge-db.spec.ts
+
+  - id: db-version-source-mismatch
+    component: src/knowledge/shared/db-version.ts
+    dependency: "知识库真源 DB schema 版本"
+    failDirection: closed
+    degradedBehavior: "version > 程序 或真源旧版本 → throw KnowledgeDbVersionError（拒绝启动该源）"
+    degradedImpact: "版本不匹配即明确失败，不静默读错数据"
+    observability: "抛错 KnowledgeDbVersionError"
+    negativeDrill: tests/knowledge/db-version.spec.ts
+
   - id: knowledge-db-derived-rebuild
     component: src/knowledge/shared/db-version.ts
     dependency: "知识库派生 DB（vectors.db 等运行期外部文件；数据在仓外）"
@@ -20,6 +135,183 @@ entries:
     observability: "warn 日志（assemble.ts：vectors.db 打开失败，跳过 KG/法条语义召回）"
     negativeDrill: tests/knowledge/db-version.spec.ts
 
+  - id: fts5-unavailable
+    component: src/knowledge/legal/legal-search.ts
+    dependency: "SQLite FTS5（法条全文检索）"
+    failDirection: open
+    degradedBehavior: "prepare 抛错 → ftsDegraded=true 降级 LIKE（构造期完成）"
+    degradedImpact: "失去 BM25 排序，LIKE 结果质量下降"
+    observability: "ftsDegraded 标记"
+    negativeDrill: tests/knowledge/legal-search-fts-degrade.spec.ts
+
+  - id: fts-query-like-fallback
+    component: src/knowledge/shared/fts.ts
+    dependency: "FTS 查询（runFtsThenLikeFallback）"
+    failDirection: open
+    degradedBehavior: "FTS 查询失败回退 LIKE；短查询直接 LIKE"
+    degradedImpact: "排序质量下降（同 fts5-unavailable）"
+    observability: "回退路径显式（runFtsThenLikeFallback）"
+    negativeDrill: tests/knowledge/shared/fts-then-like.spec.ts
+
+  - id: int8-vector-degrade
+    component: src/knowledge/shared/knowledge-embeddings.ts
+    dependency: "int8 向量索引（vectors.db / knowledge.db embeddings）"
+    failDirection: open
+    degradedBehavior: "打开/版本失败 → warn + 跳过语义路；异步预热失败吞错返回空矩阵（重置单飞）"
+    degradedImpact: "语义召回缺失，仅剩关键词路；warn 可见"
+    observability: "warn 日志"
+    negativeDrill: tests/knowledge/vector-db.spec.ts
+
+  - id: case-law-degrade
+    component: src/knowledge/case-law/case-law-search.ts
+    dependency: "case-law DB（判例全文检索）"
+    failDirection: open
+    degradedBehavior: "多处分段 catch：FTS chunks 失败回退、semantic source 失败跳过该段"
+    degradedImpact: "部分段落召回缺失"
+    observability: "分段降级路径显式（检索结果自带来源标记）"
+    negativeDrill: tests/knowledge/case-law-search.spec.ts
+
+  - id: knowledge-circuit-breaker
+    component: src/knowledge/shared/circuit-breaker.ts
+    dependency: "知识检索熔断器"
+    failDirection: open
+    degradedBehavior: "熔断后跳过该路径"
+    degradedImpact: "熔断期该检索路径不可用"
+    observability: "熔断状态（内存态，spec 可断言）"
+    negativeDrill: tests/knowledge/circuit-breaker.spec.ts
+
+  - id: composite-resolver-partial
+    component: src/knowledge/shared/composite-memory-resolver.ts
+    dependency: "组合 resolver（跨源聚合）"
+    failDirection: open
+    degradedBehavior: "单 resolver 失败 catch → 转 diagnostics 错误项返回，其他源结果保留"
+    degradedImpact: "失败源条目缺失，但诊断可见（部分结果）"
+    observability: "diagnostics 错误项"
+    negativeDrill: tests/knowledge/composite-memory-resolver.test.ts
+
+  # ---------- LLM 重放 ----------
+  - id: llm-replay-no-record
+    component: src/test-support/llm-replay/replay.ts
+    dependency: "LLM 重放 seam（测试态）"
+    failDirection: closed
+    degradedBehavior: "无录制 → 抛 NO_REPLAY_RECORD，绝不穿透真网；assertAllConsumed 抓欠驱动"
+    degradedImpact: "测试失败即暴露（防静默混过）"
+    observability: "抛错 NO_REPLAY_RECORD"
+    negativeDrill: tests/test-support/llm-replay.spec.ts
+
+  # ---------- 网络类工具 ----------
+  - id: patent-search-network-error
+    component: src/tool/builtin/patentSearch.ts
+    dependency: "Google Patents 检索（nuo-patent 通道）"
+    failDirection: closed
+    degradedBehavior: "网络失败报错（不伪装空结果）"
+    degradedImpact: "模型收到明确错误，可重试"
+    observability: "结构化错误"
+    negativeDrill: tests/tool/builtin/patentSearch.spec.ts
+
+  - id: patent-search-empty-result
+    component: src/tool/builtin/patentSearch.ts
+    dependency: "Google Patents 检索——真零结果段"
+    failDirection: open
+    degradedBehavior: "真零结果返回空 hits + warnings；LRU 缓存命中不打外网"
+    degradedImpact: "零结果与源错误语义分离"
+    observability: "warnings"
+    negativeDrill: tests/tool/builtin/patentSearch.spec.ts
+
+  - id: patent-pdf-download-entry-fallback
+    component: src/tool/builtin/patent-pdf-download/fetchFallback.ts
+    dependency: "专利 PDF 下载（浏览器驱动 + fetch 兜底）"
+    failDirection: open
+    degradedBehavior: "条目级：浏览器拦截 → fetch 兜底（60s、重试 3）；403/404/魔数错=确定性失败不重试；落盘 .tmp→原子 rename"
+    degradedImpact: "单篇失败不拖垮批次；failed 条目保留 pdfUrl 供手动重试"
+    observability: "条目级 failed 标记"
+    negativeDrill: tests/tool/builtin/patentPdfDownload.spec.ts
+
+  - id: patent-metadata-not-found
+    component: src/tool/builtin/patentMetadata.ts
+    dependency: "按号元数据点查——不存在段"
+    failDirection: open
+    degradedBehavior: "『不存在』→ 数据 success:false（明确区分不存在与出错）"
+    degradedImpact: "模型可判别不存在，不误当故障重试"
+    observability: "success:false"
+    negativeDrill: tests/tool/builtin/patentMetadata.spec.ts
+
+  - id: patent-metadata-network-error
+    component: src/tool/builtin/patentMetadata.ts
+    dependency: "按号元数据点查——网络段"
+    failDirection: closed
+    degradedBehavior: "网络/超时/执行错 → 抛 SatiToolRuntimeError"
+    degradedImpact: "错误上抛带 errorCode"
+    observability: "errorCode"
+    negativeDrill: tests/tool/builtin/patentMetadata.spec.ts
+
+  - id: patent-legal-status-pattern
+    component: src/tool/builtin/patentLegalStatus.ts
+    dependency: "全球法律状态等 nuo-patent 族工具"
+    failDirection: mixed
+    degradedBehavior: "与 patent-metadata 同模式（not-found fail-open / 网络错 fail-closed）——模式推断，T5 逐工具复核"
+    degradedImpact: "同 metadata 族语义"
+    observability: "success:false / errorCode"
+    negativeDrill: tests/tool/builtin/patentLegalStatus.spec.ts
+
+  - id: web-fetch-error
+    component: src/tool/builtin/webFetch.ts
+    dependency: "web_fetch（fetch 工具）"
+    failDirection: closed
+    degradedBehavior: "HTTP 错 → 结构化错误含可行动指导；allowlist 拦截 → EGRESS_BLOCKED；abort 原样传播"
+    degradedImpact: "错误上抛，避免把错误页当内容"
+    observability: "结构化错误 + EGRESS_BLOCKED"
+    waiver:
+      - kind: drill_missing
+        reason: "无独立 spec——T4 补（结构化错误 + EGRESS_BLOCKED 路径）"
+
+  - id: web-search-error
+    component: src/tool/builtin/webSearch.ts
+    dependency: "web_search（搜索工具）"
+    failDirection: closed
+    degradedBehavior: "失败抛错（同族模式，推断）"
+    degradedImpact: "错误上抛"
+    observability: "结构化错误"
+    negativeDrill: tests/tool/builtin/webSearch.spec.ts
+
+  - id: paper-search-source-error
+    component: src/literature/tool/paperSearch.ts
+    dependency: "学术检索（arXiv/OpenAlex/Semantic Scholar/Crossref）"
+    failDirection: closed
+    degradedBehavior: "『源错误 ≠ 无结果』：抛结构化错误 + rate-limit 指导，不返回空结果"
+    degradedImpact: "模型明确知道是源故障而非零结果"
+    observability: "结构化错误"
+    negativeDrill: tests/literature/tool/paperSearch.spec.ts
+
+  - id: network-fetch-retry
+    component: src/network/index.ts
+    dependency: "统一 fetch + 代理（networkFetch）"
+    failDirection: open
+    degradedBehavior: "指数退避重试（1s×2，最多 3 次）；408/409/425/429/5xx 与网络错可重试；代理回退"
+    degradedImpact: "重试耗尽后错误上抛（调用方可见）；无独立日志"
+    observability: "错误上抛（调用方可见）"
+    negativeDrill: tests/network/fetch.spec.ts
+
+  # ---------- MCP ----------
+  - id: mcp-server-isolation
+    component: src/mcp/runtime/McpRuntime.ts
+    dependency: "MCP server 连接/握手/调用"
+    failDirection: open
+    degradedBehavior: "每 server 独立 catch，单 server 失败置 status:error 不中止其他；握手 10s 超时 mcp_handshake_failed；调用超时 mcp_call_timeout + 自动重连一次"
+    degradedImpact: "坏 server 工具不可用，其余不受影响"
+    observability: "mcp_* 错误码 + server status"
+    negativeDrill: tests/mcp/runtime/McpRuntime.spec.ts
+
+  - id: mcp-list-aggregation
+    component: src/mcp/runtime/McpRuntime.ts
+    dependency: "MCP 资源/工具列表聚合"
+    failDirection: open
+    degradedBehavior: "非 ready client 跳过；单 client listResources 失败 catch 跳过"
+    degradedImpact: "该 server 资源不进聚合"
+    observability: "server status"
+    negativeDrill: tests/mcp/client/connection.spec.ts
+
+  # ---------- 工具结果溢出 ----------
   - id: tool-result-spill-fallback
     component: src/context/budget/ToolResultBudget.ts
     dependency: "工具结果溢出落盘（本地磁盘 spill 层）"
@@ -32,11 +324,146 @@ entries:
       - kind: intentional_silence
         reason: "诊断已产出但全仓无消费者；T3 计划补 warn/消费诊断后解除（见计划 T3）"
 
-  - id: router-post-content-truncation
-    component: src/router/execution/executeRouterDecision.ts
-    dependency: "模型路由 fallback 链（跨 provider/model）"
-    failDirection: mixed
-    degradedBehavior: "吐出内容前：逐 attempt 换 fallback 目标（open）；一旦吐出内容：不再 fallback，截断并上报错误（closed，:58 不变量）"
-    degradedImpact: "已产出内容可能停在残片；用户见重试/错误事件"
-    observability: "fallbackTier / 重试事件打点"
-    negativeDrill: tests/router/router-runtime-execute.spec.ts
+  # ---------- 会话恢复 ----------
+  - id: task-resume-scan-degrade
+    component: src/session/resume/TaskResumeScanner.ts
+    dependency: "跨进程断点续算扫描（宿主 ProjectRuntimeRegistry）"
+    failDirection: open
+    degradedBehavior: "单会话读盘/提交失败 catch 仅计数不阻塞；宿主仅 resumed>0 记 info"
+    degradedImpact: "续算失败的会话漏掉且无可观测痕迹（T3a 待修）"
+    observability: ""
+    negativeDrill: tests/session/resume/task-resume-scanner.spec.ts
+    waiver:
+      - kind: intentional_silence
+        reason: "catch 体内无日志、宿主未接线（ProjectRuntimeRegistry.ts:518 另有静默 catch）；T3a 修复后解除豁免"
+
+  # ---------- 记忆 ----------
+  - id: edgeclaw-memory-retrieve
+    component: src/context/memory/EdgeClawMemoryProvider.ts
+    dependency: "EdgeClaw 记忆检索（memory provider）"
+    failDirection: open
+    degradedBehavior: "abort/熔断 → 返回空结果（不缓存、不遥测，防陈旧结果）；inner 抛错 → telemetry + memory_provider_error diagnostics"
+    degradedImpact: "该轮注入缺失，诊断可见"
+    observability: "diagnostics + telemetry trackError"
+    negativeDrill: tests/context/memory/edgeclaw-memory-provider.spec.ts
+
+  - id: edgeclaw-inner-catch-discard
+    component: src/context/memory/EdgeClawMemoryProvider.ts
+    dependency: "edgeclaw inner 调用（不可中止，不消费 AbortSignal）"
+    failDirection: open
+    degradedBehavior: "外层 raceAbort 丢弃结果 + 挂空 catch 防 unhandledRejection（.catch(() => {})）"
+    degradedImpact: "幽灵调用内层仍跑完，结果被丢弃（设计注释：丢弃陈旧结果）"
+    observability: ""
+    negativeDrill: tests/context/memory/edgeclaw-memory-provider.spec.ts
+    waiver:
+      - kind: intentional_silence
+        reason: "T3c 永久豁免：设计注释明确『挂空 catch 防 unhandledRejection，结果一律丢弃』"
+
+  # ---------- UI / 桌面壳 ----------
+  - id: sati-bridge-gateway-down
+    component: ui/server/sati-bridge.js
+    dependency: "ui/server sati-bridge ← gateway WebSocket"
+    failDirection: closed
+    degradedBehavior: "gateway 不可用 → resetGatewayConnection + gateway_unavailable status + userHint；流无 turn_completed → 专属错误码 + userHint"
+    degradedImpact: "用户见可操作提示，无静默"
+    observability: "status 码 + userHint"
+    negativeDrill: ui/server/sati-bridge.test.js
+
+  - id: desktop-server-manager-restart
+    component: apps/desktop/src/server-manager.ts
+    dependency: "Electron 外壳 gateway 子进程"
+    failDirection: closed
+    degradedBehavior: "健康检查 60s 超时 → 错误对话框；crash → 自动重启（max-restarts 上限）；首启期不并发重启"
+    degradedImpact: "超限后用户见错误对话框"
+    observability: "对话框 + 日志"
+    negativeDrill: tests/desktop/server-manager.spec.ts
+
+  # ---------- 子代理 / 团队 ----------
+  - id: subagent-error-propagation
+    component: src/agent/sub/SubAgentSession.ts
+    dependency: "子代理会话失败传播"
+    failDirection: closed
+    degradedBehavior: "子 agent turn 失败 → throw 传播为父 agent 的 tool error"
+    degradedImpact: "父 agent 收到明确错误"
+    observability: "抛错传播"
+    negativeDrill: tests/agent/sub/SubAgentSession.spec.ts
+
+  - id: team-worker-gate-fail-open
+    component: src/patent/team-worker-gate.ts
+    dependency: "team worker-gate（角色准入判定）"
+    failDirection: open
+    degradedBehavior: "注释立规：未注册 worker 或未登记角色一律 true（不阻塞调度）"
+    degradedImpact: "无（语义：fail-open 不阻塞；非错误路径）"
+    observability: "无降级产物（纯判定，无需告警）"
+    negativeDrill: tests/patent/team-worker-gate.spec.ts
+
+  - id: team-failed-task-retry
+    component: src/agent/team/taskpool/retry.ts
+    dependency: "team 失败任务转派——重试段"
+    failDirection: open
+    degradedBehavior: "failed 且未耗尽 maxAttempts → 重置 pending 重入池（幂等）；滞留任务 reclaim 失败仅记 error"
+    degradedImpact: "耗尽后任务停留 failed，事件可见"
+    observability: "事件 + error 日志"
+    negativeDrill: tests/agent/team/member/stranded-tasks.spec.ts
+
+  - id: team-late-write-reject
+    component: src/agent/team/taskpool/attempt.ts
+    dependency: "team 任务迟到写校验"
+    failDirection: closed
+    degradedBehavior: "迟到写校验 fail-closed（attempt.ts:50）"
+    degradedImpact: "过期写入被拒绝，避免覆盖新状态"
+    observability: "校验拒绝（抛错/无效）"
+    negativeDrill: tests/agent/team/mailbox/mailbox.spec.ts
+
+  - id: agent-input-flush-fail-closed
+    component: src/agent/loop/AgentLoop.ts
+    dependency: "agent 输入落盘（onFlushCheckpoint）"
+    failDirection: closed
+    degradedBehavior: "注释立规：全部已接受条目落盘。失败即中止本步（未包 try，抛出即中止）"
+    degradedImpact: "落盘失败中止本步，不静默丢输入"
+    observability: "抛错上抛"
+    waiver:
+      - kind: drill_missing
+        reason: "无 spec——T4 补（行为实体 AgentLoop.ts:754-757 / TurnRunner.ts:358-360）"
+
+  # ---------- 其他 ----------
+  - id: telemetry-sender-queue
+    component: src/telemetry/sender.ts
+    dependency: "遥测上报（非关键路径）"
+    failDirection: open
+    degradedBehavior: "上传失败入队；非法行跳过该条（fail-open）"
+    degradedImpact: "单条遥测丢失，dropped 计数可见"
+    observability: "dropped 计数"
+    negativeDrill: tests/telemetry/contract-shape.spec.ts
+
+  - id: token-stats-collector-silent
+    component: src/router/stats/TokenStatsCollector.ts
+    dependency: "token 统计异步落盘"
+    failDirection: open
+    degradedBehavior: "注释『异步落盘失败：静默降级，以内存聚合为准』；真实吞错点 writePayload（回调忽略 err）"
+    degradedImpact: "重启后该时段统计丢失（T3b 待修）"
+    observability: ""
+    negativeDrill: tests/router/token-stats-collector.spec.ts
+    waiver:
+      - kind: intentional_silence
+        reason: "现状无日志且 writePayload 吞错；T3b 修复（err→reject + warn）后解除豁免"
+
+  - id: auto-compact-fallback-truncate
+    component: src/agent/loop/compactionExecutor.ts
+    dependency: "自动上下文压缩"
+    failDirection: open
+    degradedBehavior: "compact 失败 → warn + fallback truncate（logFallbackTruncate，reason=compaction_failed）"
+    degradedImpact: "上下文以截断代替摘要，质量下降但有日志"
+    observability: "warn 日志（logFallbackTruncate）"
+    negativeDrill: tests/context/compaction-engine.spec.ts
+
+  - id: scripts-smoke-fail-closed
+    component: scripts/smoke-llm-center-protocols.mjs
+    dependency: "活体冒烟脚本（CI 工具语义）"
+    failDirection: closed
+    degradedBehavior: "请求失败直接 throw；必填 env 缺失即报错"
+    degradedImpact: "冒烟失败即非零退出"
+    observability: "非零退出"
+    waiver:
+      - kind: drill_missing
+        reason: "无独立 spec（CI 工具语义，失败即非零退出）；T5 评估是否补"
