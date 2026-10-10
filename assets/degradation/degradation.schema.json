@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sati.local/schemas/degradation-registry.schema.json",
+  "title": "Sati 降级语义 registry（fail-open / fail-closed 立规）",
+  "$comment": "文档/编辑器用途。硬校验以 scripts/check-degradation-registry.mjs 的手写规则为准（仓库无 JSON Schema 校验器；先例见 src/rule/runtime/rule-pack.ts）。",
+  "type": "object",
+  "required": ["version", "entries"],
+  "properties": {
+    "version": { "const": 1 },
+    "entries": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/entry" }
+    }
+  },
+  "$defs": {
+    "waiver": {
+      "type": "object",
+      "required": ["kind", "reason"],
+      "properties": {
+        "kind": {
+          "enum": ["drill_missing", "intentional_silence"],
+          "description": "drill_missing=暂无负向演练测试；intentional_silence=经评审允许无可观测足迹"
+        },
+        "reason": { "type": "string", "minLength": 1 }
+      }
+    },
+    "entry": {
+      "type": "object",
+      "required": [
+        "id",
+        "component",
+        "dependency",
+        "failDirection",
+        "degradedBehavior",
+        "degradedImpact",
+        "observability",
+        "negativeDrill"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*$",
+          "description": "全局唯一 kebab-case"
+        },
+        "component": {
+          "type": "string",
+          "description": "仓库相对路径，脚本硬校验存在"
+        },
+        "dependency": { "type": "string", "minLength": 1 },
+        "failDirection": {
+          "enum": ["open", "closed", "mixed"],
+          "description": "open=失败降级继续；closed=失败上抛中止；mixed=按阶段/子语义拆分"
+        },
+        "degradedBehavior": { "type": "string", "minLength": 1 },
+        "degradedImpact": {
+          "type": "string",
+          "minLength": 1,
+          "description": "「谁因此漏了什么」（铁律 11）"
+        },
+        "observability": {
+          "type": "string",
+          "description": "可观测足迹（日志/diagnostics/事件/错误码）。为空时必须挂 intentional_silence 豁免"
+        },
+        "negativeDrill": {
+          "type": "string",
+          "description": "负向演练测试路径（须断言降级产物 + 可观测痕迹）。可缺省，但须挂 drill_missing 豁免"
+        },
+        "waiver": {
+          "description": "豁免（单个对象或数组）。冗余豁免（drill 已存在仍挂 drill_missing 等）会被脚本拒绝",
+          "oneOf": [{ "$ref": "#/$defs/waiver" }, { "type": "array", "items": { "$ref": "#/$defs/waiver" } }]
+        }
+      }
+    }
+  }
+}

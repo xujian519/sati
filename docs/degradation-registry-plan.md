@@ -17,6 +17,10 @@
 7. **T2 验收改为与基线 artifact 一一对账**，删除内部不自洽的分布数字（原 15+10+2≈27≠37）。
 8. **T7 升级为规范之家三件套**（义务条款 + 门禁表 + 命令速查），不再只是「加一行链接」。
 
+**v2.1（2026-10-10，T1 实施中发现，随 T1 PR 落地）**
+
+9. **静默审计口径对齐**：`audit-silent-catches.mjs` 范围对齐 `measure-techdebt` 的 catch 口径（src + ui/src + ui/server，排除 `*.spec.*`），输出**分档**（档 A「无注释且无足迹」/ 档 B「有注释但无足迹」；真实存量数百处）。**DoD 对应项由「逐项对账」改为**：T3a/T3b 修复后从清单消失 + T3 涉及文件与 registry 文件级对齐 + 分档计数写入 PR 描述（不设棘轮；是否升级为门禁由 T6 决定）。
+
 ## 一、目标与非目标
 
 **目标**
@@ -35,7 +39,7 @@
 - `assets/degradation/registry.yaml`（声明式资产，单一事实源）
 - `assets/degradation/degradation.schema.json`（文档/编辑器用途；**硬校验以脚本手写为准**——仓库无 JSON Schema 校验器，先例 `rule-pack.ts:92-95` 为手写校验 + 注释声明同步）
 - `scripts/check-degradation-registry.mjs`（五要素校验 + 路径存在 + drill 存在或豁免 + observability 非空或豁免；`--stats` 输出计数与分布；`--check` 挂 `pnpm lint`，范式参考 `sync-labels.mjs --check`）
-- `scripts/audit-silent-catches.mjs`（静默审计：枚举 `catch {` / `.catch(` 体内无日志、无 rethrow/return、无诊断、无豁免注释的站点，输出可对账清单）
+- `scripts/audit-silent-catches.mjs`（静默审计：枚举 `catch {` / `.catch(` 站点，按「可观测足迹 + 意图注释」分档输出——档 A 无注释且无足迹 / 档 B 有注释但无足迹；口径对齐 `measure-techdebt` catch 范围，不设棘轮）
 
 **条目格式**（五要素 + 双类豁免，样例）：
 
@@ -79,7 +83,7 @@
 ### 阶段 1：立规载体（T1，1.5–2 天）
 
 - 建 `assets/degradation/`（registry.yaml 骨架 + schema）；
-- 写 `scripts/check-degradation-registry.mjs`（五要素 + 路径硬校验 + `--stats`）与 `scripts/audit-silent-catches.mjs`（静默审计，替换原空转 grep）；
+- 写 `scripts/check-degradation-registry.mjs`（五要素 + 路径硬校验 + `--stats`）与 `scripts/audit-silent-catches.mjs`（静默审计，替换原空转 grep；口径对齐 measure-techdebt catch 范围，分档输出，不设棘轮）；
 - 挂 `package.json` lint 链；脚本自测（check 好坏 fixture + 审计正负样例）——`test:pr-tooling` 是**显式文件清单需手动追加**，自测文件命名 `.test.mjs`（避开 `.gitignore:211-214` 的 `*.test.ts` 陷阱）；
 - **门禁维护**：lint 链变更后跑 `pnpm gen:doc-claims`（`lint_gate_count` 12→13）；新增文件后跑 `pnpm measure:update`。
 
@@ -117,7 +121,7 @@
 
 - `gen-degradation-candidates.mjs`：模式扫描产出候选清单，与 registry diff；
 - CI：独立 informational job（`continue-on-error: true`，不进 required checks），产出报告 artifact；
-- runbook：`docs/degradation-runbook.md`——候选确认流程、误报处理、退出判据（连续 4 次 CI 运行零报告）、**与 `metrics.md:34`「无注释无参 catch」指标的口径分工**（该指标为噪声口径且现恒为 0；新审计为「有实质后果的静默站点台账」口径，防止两套静默口径长期分叉）；
+- runbook：`docs/degradation-runbook.md`——候选确认流程、误报处理、退出判据（连续 4 次 CI 运行零报告）、**静默审计与 `measure-techdebt` catch 口径的分工**（metrics：`catchEmpty` / `catchNoParam.undocumented` 双棘轮、窄口径仅覆盖无参 catch；本审计：含带参 catch 与 `.catch` 回调的扩展口径、分档展示、暂不设棘轮——是否升级为门禁在此决定，防止两套口径长期分叉）；
 - **门禁维护**：CI job 增加后跑 `pnpm gen:doc-claims`（`ci_job_count` 3→4）。
 
 ### 阶段 7：文档衔接（T7，1 天）
@@ -143,7 +147,7 @@
 **T1**
 - [ ] `pnpm check:degradation` 对格式错误 fixture **exit 1** 且报错定位到条目 id；对合法 fixture **exit 0**
 - [ ] `--stats` 输出计数与分布（供 T2 对账）
-- [ ] `audit-silent-catches.mjs` 对三个已知静默点**正样例命中**；对已修复/已豁免站点**不输出**（负样例）
+- [ ] `audit-silent-catches.mjs` 分档命中三类静默形态（注释体=档 B / 仅计数=档 A / 空箭头=档 A）；带可观测足迹的 catch 不输出（负样例）；真实仓库三个已知静默点命中于档 B（T3 修复后应消失）
 - [ ] `pnpm lint 2>&1 | grep degradation` 有输出；`pnpm test:pr-tooling` green 且清单已手动追加自测文件
 - [ ] `pnpm gen:doc-claims` 已跑（`lint_gate_count` 回填为 13）；`pnpm check:doc-claims` green
 
@@ -186,7 +190,7 @@
 - [ ] `pnpm check:degradation` exit 0
 - [ ] `pnpm test` 全绿（含本期新增 spec）
 - [ ] `pnpm check` 聚合门禁 green（含 `check:techdebt-metrics`、`check:doc-claims`）
-- [ ] `node scripts/audit-silent-catches.mjs` 输出清单逐项对应 registry（已修复 / 已豁免 / 已登记三态互斥且完备）——**不使用原空转 grep**
+- [ ] `node scripts/audit-silent-catches.mjs`：T3a/T3b 修复后对应行从清单消失；清单与 registry 豁免在 T3 涉及文件级对齐；分档计数写入 PR 描述（不设棘轮，是否升级为门禁由 T6 决定）——**不使用原空转 grep**
 - [ ] registry 与基线 artifact 全量对账，零悬空
 - [ ] `docs/notes/implemented/` 决策记录入库（铁律 7）
 - [ ] 修订确认抽查点：B1（D2 事实与登记一致）、B2（`writePayload` 修复）两处经抽查通过即可，无需整体重审

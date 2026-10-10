@@ -1,0 +1,42 @@
+# 降级语义 registry —— fail-open / fail-closed 立规的唯一事实源。
+#
+# 每条 = 一个外部/软依赖的降级行为单元，五要素：
+#   component（代码位置）/ dependency / failDirection / degradedBehavior / degradedImpact
+#   + observability（可观测足迹，铁律 11）/ negativeDrill（负向演练测试）
+#
+# 门禁：scripts/check-degradation-registry.mjs（挂 pnpm lint）硬校验路径存在、枚举合法、
+# 豁免理由必填、禁止冗余豁免。schema 见 degradation.schema.json（文档用途）。
+# 立规背景：docs/degradation-registry-plan.md；对账基线：docs/degradation-baseline-inventory.md。
+#
+# 手工编辑规则：新增外部依赖必须登记；豁免必须给 reason；observability 为空即须豁免。
+version: 1
+entries:
+  - id: knowledge-db-derived-rebuild
+    component: src/knowledge/shared/db-version.ts
+    dependency: "知识库派生 DB（vectors.db 等运行期外部文件；数据在仓外）"
+    failDirection: open
+    degradedBehavior: "派生库 schema 版本低于程序 → needsRebuild 放行重建；重建期间该源跳过，其余源不受影响"
+    degradedImpact: "重建期间该源（如语义向量）不可用，降至关键词路径；warn 日志可见"
+    observability: "warn 日志（assemble.ts：vectors.db 打开失败，跳过 KG/法条语义召回）"
+    negativeDrill: tests/knowledge/db-version.spec.ts
+
+  - id: tool-result-spill-fallback
+    component: src/context/budget/ToolResultBudget.ts
+    dependency: "工具结果溢出落盘（本地磁盘 spill 层）"
+    failDirection: open
+    degradedBehavior: "落盘失败（writeFile 上抛）→ DefaultContextRuntime 捕获并回退原始投影，AgentLoop 二重兜底；turn 不失败"
+    degradedImpact: "无（原文不丢）；诊断 tool_result_persistence_failed 当前零消费 = 事实静默点"
+    observability: ""
+    negativeDrill: tests/tool/tool-result-size-limit.spec.ts
+    waiver:
+      - kind: intentional_silence
+        reason: "诊断已产出但全仓无消费者；T3 计划补 warn/消费诊断后解除（见计划 T3）"
+
+  - id: router-post-content-truncation
+    component: src/router/execution/executeRouterDecision.ts
+    dependency: "模型路由 fallback 链（跨 provider/model）"
+    failDirection: mixed
+    degradedBehavior: "吐出内容前：逐 attempt 换 fallback 目标（open）；一旦吐出内容：不再 fallback，截断并上报错误（closed，:58 不变量）"
+    degradedImpact: "已产出内容可能停在残片；用户见重试/错误事件"
+    observability: "fallbackTier / 重试事件打点"
+    negativeDrill: tests/router/router-runtime-execute.spec.ts
