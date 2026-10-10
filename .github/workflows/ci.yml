@@ -98,6 +98,61 @@ jobs:
         working-directory: ui
         run: pnpm test
 
+  # 降级候选漂移（informational）：扫描「新增外部/软依赖未登记 registry」，产出报告 artifact。
+  # continue-on-error：漂移红叉可见但**不阻塞合并**（不进 required checks）；连续 4 次 CI 运行
+  # 零新增（约 2 周）后转硬门禁（摘 continue-on-error + 加 required + 换 --check；转换时刻
+  # 记录于 PR）。处理流程与退出判据见 docs/degradation-runbook.md。
+  degradation-candidates:
+    name: 降级候选漂移（informational）
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Enable pnpm (corepack)
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.32.1 --activate
+          pnpm --version
+
+      - name: Install dependencies
+        env:
+          npm_config_fetch_retries: "5"
+          npm_config_fetch_retry_mintimeout: "1000"
+          npm_config_fetch_retry_maxtimeout: "60000"
+        # 仅需纯 JS 依赖（yaml），跳过 native 构建与 postinstall
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: 扫描降级候选漂移
+        run: pnpm gen:degradation-candidates --report degradation-candidates.md
+
+      - name: 上传候选报告 artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: degradation-candidates-report
+          path: degradation-candidates.md
+          if-no-files-found: error
+
+      - name: 摘要与告警注解
+        if: always()
+        run: |
+          LINE=$(grep -m1 '^gen-degradation-candidates:' degradation-candidates.md 2>/dev/null || true)
+          if [ -z "$LINE" ]; then
+            echo "::warning title=降级候选扫描::报告缺失（见扫描步骤日志）"
+          elif echo "$LINE" | grep -q '新增候选 0 '; then
+            echo "::notice title=降级候选扫描::$LINE"
+          else
+            echo "::warning title=降级候选漂移::$LINE——按 docs/degradation-runbook.md 处理"
+          fi
+
   desktop:
     name: Desktop (Windows) build & lint
     runs-on: windows-latest

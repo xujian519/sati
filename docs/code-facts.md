@@ -38,7 +38,7 @@
 | `drafting_stage_count` | patent_drafting_v1 阶段数 | `25` | assets/workflows/patent/generated/patent_drafting_v1.yaml |
 | `event_total_count` | 事件总数（生产者/消费者矩阵行数） | `80` | docs/event-producer-consumer.md（由 check:event-matrix 保真） |
 | `lint_gate_count` | pnpm lint 链上的领域门禁数 | `13` | package.json scripts.lint |
-| `ci_job_count` | CI job 数 | `3` | .github/workflows/ci.yml |
+| `ci_job_count` | CI job 数 | `4` | .github/workflows/ci.yml |
 
 ## 3. `src/` 模块索引
 
@@ -100,10 +100,11 @@
 - `pnpm check:degradation`
 - `pnpm check:doc-claims`
 
-CI（`.github/workflows/ci.yml`）共 **3** 个 job：
+CI（`.github/workflows/ci.yml`）共 **4** 个 job：
 
 - `pr-traceability`
 - `quality`
+- `degradation-candidates`
 - `desktop`
 
 ## 5. 维护约定
