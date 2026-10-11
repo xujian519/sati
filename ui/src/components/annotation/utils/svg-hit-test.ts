@@ -85,7 +85,7 @@ const NODE_ID_PREFIX = "n-";
 export function parseFigureSvg(source: string): SVGSVGElement | undefined {
   const parsed = new DOMParser().parseFromString(source, "image/svg+xml");
   if (parsed.querySelector("parsererror") !== null) return undefined;
-  const root = parsed.documentElement;
+  const root: Element = parsed.documentElement;
   if (root.tagName.toLowerCase() !== "svg") return undefined;
   for (const element of [...root.querySelectorAll(FORBIDDEN_ELEMENTS.join(","))]) element.remove();
   for (const element of [root, ...root.querySelectorAll("*")]) {
@@ -104,7 +104,7 @@ export function parseFigureSvg(source: string): SVGSVGElement | undefined {
       if (name === "style" || URL_ATTRIBUTES.includes(name)) attribute.value = scrubCss(attribute.value);
     }
   }
-  return root as unknown as SVGSVGElement;
+  return root as SVGSVGElement;
 }
 
 /** 序列化已 sanitize 的根元素（供导出与二次内联）。 */

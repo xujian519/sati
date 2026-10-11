@@ -108,15 +108,15 @@ function findTextMatches(root: HTMLElement, query: string): SearchMatch[] {
 }
 
 type CssHighlightApi = {
-  highlights?: Map<string, unknown>;
-  Highlight?: new (...ranges: Range[]) => unknown;
+  highlights?: HighlightRegistry;
+  Highlight?: typeof Highlight;
 };
 
 /** CSS Custom Highlight API, feature-detected — unavailable in older Chromium/Electron runtimes. */
 function getCssHighlightApi(): CssHighlightApi {
-  const css = globalThis.CSS as unknown as { highlights?: Map<string, unknown> } | undefined;
-  const Highlight = (globalThis as unknown as { Highlight?: new (...ranges: Range[]) => unknown }).Highlight;
-  return { highlights: css?.highlights, Highlight };
+  // `Highlight` 是 Chromium 105+ 才有的全局；`CSS.highlights` 与之同年引入。
+  if (typeof Highlight === "undefined" || typeof CSS === "undefined" || !CSS.highlights) return {};
+  return { highlights: CSS.highlights, Highlight };
 }
 
 export default function DocxBuiltinPreview({

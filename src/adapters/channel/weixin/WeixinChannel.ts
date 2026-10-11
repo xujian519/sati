@@ -157,7 +157,7 @@ export class WeixinChannel implements ChannelAdapter {
   private currentLoginQrUrl: string | undefined;
 
   private readonly defaultClientFactory: (options: ClientOptions) => WeixinIlinkClient = clientOptions =>
-    new ILinkClient(clientOptions) as unknown as WeixinIlinkClient;
+    new ILinkClient(clientOptions) as unknown as WeixinIlinkClient; // weixin-ilink d.ts 上传字段名与真实协议不符（file_name vs filekey），类型以本地 WeixinUploadUrlRequest 为准
 
   constructor(options: WeixinChannelOptions = {}) {
     this.credentialsPath = options.credentialsPath ?? CREDENTIALS_PATH;

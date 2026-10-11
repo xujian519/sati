@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Dispatch, FormEvent, KeyboardEvent, MouseEvent, SetStateAction, TouchEvent } from "react";
+import type { Dispatch, KeyboardEvent, SetStateAction } from "react";
 import { useDropzone } from "react-dropzone";
 import { isThinkingModeId, type ThinkingModeId } from "../constants/thinkingModes";
 import { type ThinkingModeAvailability } from "../constants/thinkingModeAvailability";
@@ -10,6 +10,7 @@ import type { ChatMessage, PendingApproval, PendingPermissionRequest, Permission
 import type { Project, ProjectSession } from "../../../types/app";
 import type { WsMessage } from "../../../contexts/WebSocketContext";
 import { MAX_ATTACHMENT_SIZE_BYTES, useAttachmentUpload } from "./useAttachmentUpload";
+import type { ComposerSubmitHandler } from "./composerSubmit";
 import { useComposerInput } from "./useComposerInput";
 import { useComposerDraft } from "./useComposerDraft";
 import { useSessionSubmit } from "./useSessionSubmit";
@@ -166,12 +167,7 @@ export function useChatComposerState({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const inputHighlightRef = useRef<HTMLDivElement>(null);
   const pendingNewSessionThinkingModeRef = useRef<ThinkingModeId | null>(null);
-  const handleSubmitRef = useRef<
-    | ((
-        event: FormEvent<HTMLFormElement> | MouseEvent | TouchEvent | KeyboardEvent<HTMLTextAreaElement>,
-      ) => Promise<void>)
-    | null
-  >(null);
+  const handleSubmitRef = useRef<ComposerSubmitHandler | null>(null);
   const inputValueRef = useRef(input);
   const activeDraftStorageKeyRef = useRef(draftStorageKey);
   const queuedBusySendRef = useRef(false);

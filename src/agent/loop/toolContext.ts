@@ -266,8 +266,9 @@ export class ToolContextFactory {
           durationMs: report.durationMs,
           // SubagentReport.parsed 为固定 5 键结构（CanonicalAssistantTextSummary），
           // fork API 契约声明为 Record<string, string>（tool 层不依赖 sub 层类型，
-          // 避免 tool → agent/sub 依赖反转）；双重 cast 是解耦的必要转换。
-          parsed: report.parsed as unknown as Record<string, string> | undefined,
+          // 避免 tool → agent/sub 依赖反转）；单步断言在类型上可证（Record 反向
+          // 可赋给 5 键结构），运行时零变换。
+          parsed: report.parsed as Record<string, string> | undefined,
         };
       },
     };

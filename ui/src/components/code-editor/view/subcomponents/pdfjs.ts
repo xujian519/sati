@@ -4,18 +4,19 @@
 import * as pdfjsImpl from "pdfjs-dist/legacy/build/pdf.mjs";
 import type {
   getDocument as GetDocumentFn,
-  GlobalWorkerOptions as GlobalWorkerOptionsType,
   PDFDocumentLoadingTask as PDFDocumentLoadingTaskType,
   PDFDocumentProxy as PDFDocumentProxyType,
   RenderTask as RenderTaskType,
   TextLayer as TextLayerCtor,
 } from "pdfjs-dist";
 
-const getDocumentImpl = pdfjsImpl.getDocument as unknown as typeof GetDocumentFn;
+// legacy 构建的 `pdf.d.mts` 是 `export * from "pdfjs-dist"` 再导出，两处类型同源，
+// 直接透传；此前的双断言系「legacy 构建未随包发类型」时期的遗留（#646 sweep P1.3）。
+const getDocumentImpl = pdfjsImpl.getDocument;
 
 export const getDocument = getDocumentImpl;
-export const GlobalWorkerOptions = pdfjsImpl.GlobalWorkerOptions as unknown as typeof GlobalWorkerOptionsType;
-export const TextLayer = pdfjsImpl.TextLayer as unknown as typeof TextLayerCtor;
+export const GlobalWorkerOptions = pdfjsImpl.GlobalWorkerOptions;
+export const TextLayer = pdfjsImpl.TextLayer;
 
 type GetDocumentOptions = Parameters<typeof GetDocumentFn>[0];
 

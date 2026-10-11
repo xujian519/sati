@@ -7,10 +7,10 @@
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1081 / 187560 |
+| src TS 文件 / 行数 | 1081 / 187563 |
 | src JS 文件 | 0 |
 | tests 文件 | 629 |
-| ui/src 文件 / 行数 | 638 / 102234 |
+| ui/src 文件 / 行数 | 638 / 102219 |
 | ui/server 文件 / 行数 | 129 / 35394 |
 
 ## 指标口径
@@ -29,7 +29,7 @@
 | 指标 | 总量 | 热点模块 |
 |---|---|---|
 | `any`/`@ts-expect-error`/`@ts-ignore` | 3 | ui/src(3) |
-| `as unknown as`（双重断言） | 38 | ui/src(29) · adapters(2) · mcp(2) |
+| `as unknown as`（双重断言） | 20 | ui/src(18) · adapters(1) · network(1) |
 | 裸 `console.*` | 160 | cli(137) · telemetry(8) · ui/server(6) |
 | 空 `catch {}` | 0 | — |
 | 无参 `catch {`（总计） | 692 | ui/server(160) · ui/src(125) · adapters(70) |
@@ -59,13 +59,13 @@
 | `src/cli/sati.ts` | `main` | 642 | function |
 | `ui/src/components/onboarding/view/subcomponents/LlmConfigurationStep.tsx` | `LlmConfigurationStep` | 633 | function |
 | `ui/src/components/app-shell/AppShellV2.tsx` | `AppShellV2` | 631 | function |
-| `ui/src/stores/useSessionStore.ts` | `createSessionActions` | 631 | function |
 | `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` | `(anonymous)` | 624 | arrow |
+| `ui/src/stores/useSessionStore.ts` | `createSessionActions` | 624 | function |
 | `ui/src/components/main-content/view/MainContent.tsx` | `SplitBody` | 573 | function |
 | `src/tool/builtin/patentFigureProject.ts` | `createPatentFigureProjectTool` | 554 | function |
 | `ui/src/components/chat/hooks/useSessionSubmit.ts` | `useSessionSubmit` | 528 | function |
 | `ui/src/components/main-content-v2/CronV2.tsx` | `CronFormView` | 476 | function |
-| `ui/src/components/chat/hooks/useChatComposerState.ts` | `useChatComposerState` | 467 | function |
+| `ui/src/components/chat/hooks/useChatComposerState.ts` | `useChatComposerState` | 462 | function |
 | `src/router/execution/executeRouterDecision.ts` | `executeRouterDecision` | 449 | function |
 | `ui/src/components/settings/view/modelPool/components/ProviderCard.tsx` | `ProviderCard` | 447 | function |
 | `ui/src/components/chat-v2/MessageRowV2.tsx` | `MessageRowV2` | 429 | function |
@@ -121,7 +121,7 @@
 | `ui/server/routes/git.js` | 1507 |
 | `src/adapters/channel/weixin/WeixinChannel.ts` | 1497 |
 | `ui/src/components/main-content-v2/SkillsV2.tsx` | 1441 |
-| `ui/src/stores/useSessionStore.ts` | 1352 |
+| `ui/src/stores/useSessionStore.ts` | 1348 |
 | `ui/src/components/main-content-v2/DashboardV2.tsx` | 1345 |
 | `src/adapters/channel/feishu/FeishuChannel.ts` | 1337 |
 | `ui/src/components/app-shell/SidebarV2.tsx` | 1323 |

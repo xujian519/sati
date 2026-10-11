@@ -57,7 +57,7 @@ emit/dispatch/emitAgentEvent/emitEvent/emitForSession/sendNotification 字符串
 | stop_failure | src/agent/loop/AgentLoop.ts:521, src/agent/loop/modelErrorRecovery.ts:239, src/agent/loop/modelErrorRecovery.ts:542 | src/gateway/client/InProcessGateway.ts:582 |
 | stop_requested | src/agent/loop/AgentLoop.ts:666 | src/gateway/client/InProcessGateway.ts:582 |
 | structured_output | src/gateway/client/eventMapping.ts:521 | submitTurn 流 ×14 |
-| subagent_completed | src/agent/loop/toolContext.ts:306 | src/gateway/client/InProcessGateway.ts:582 |
+| subagent_completed | src/agent/loop/toolContext.ts:307 | src/gateway/client/InProcessGateway.ts:582 |
 | subagent_model_event | src/agent/sub/SubAgentSession.ts:201 | src/gateway/client/InProcessGateway.ts:582 |
 | subagent_started | src/agent/loop/toolContext.ts:194 | src/gateway/client/InProcessGateway.ts:582 |
 | subagent_status | src/agent/loop/subagentExecutor.ts:168 | src/gateway/client/InProcessGateway.ts:582 |
