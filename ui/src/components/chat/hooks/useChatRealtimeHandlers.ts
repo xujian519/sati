@@ -71,9 +71,9 @@ function getMessageRunId(message: LatestChatMessage | NormalizedMessage): string
   return typeof runId === "string" && runId.trim() ? runId.trim() : undefined;
 }
 
-/** 桥帧（LatestChatMessage）→ store 模型（NormalizedMessage）。桥已归一化字段形状，此处收敛类型边界断言。 */
+/** 桥帧（LatestChatMessage）→ store 模型；桥已归一化字段形状（sati-bridge.js），帧为宽视图、store 为窄视图（5 个必需字段），按 store 契约消费。 */
 function toNormalizedMessage(msg: LatestChatMessage): NormalizedMessage {
-  return msg as unknown as NormalizedMessage;
+  return msg as LatestChatMessage & NormalizedMessage;
 }
 
 /**

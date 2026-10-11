@@ -118,14 +118,16 @@ export function __setWebFetchHookForTesting(hook: FetchHook | null): void {
   activeFetchHook = hook ?? defaultFetchHook;
 }
 
+type TurndownCtor = new () => { turndown(html: string): string };
+
 let turndownPromise: Promise<{ turndown(html: string): string }> | undefined;
 async function getTurndown(): Promise<{ turndown(html: string): string }> {
   if (!turndownPromise) {
     turndownPromise = import("turndown").then(mod => {
-      const Ctor =
-        (mod as unknown as { default?: new () => { turndown(html: string): string } }).default ??
-        (mod as unknown as new () => { turndown(html: string): string });
-      return new Ctor();
+      // CJS/ESM interop：静态类型为 `export =`（类本体），打包器运行时可能给
+      // 类本体或 `{ default }`——两种形态都覆盖（#646 sweep P1.3）。
+      const candidate: unknown = typeof mod === "function" ? mod : (mod as { default?: unknown }).default;
+      return new (candidate as TurndownCtor)();
     });
   }
   return turndownPromise;

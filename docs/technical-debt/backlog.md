@@ -27,6 +27,7 @@
     - 🟡 已消除（2026-08-23 B2 批次）：`GatewayWsConnection.ts` 43 处 `as never` → `as GatewayMethodParams<"...">`（从 `Gateway` 接口推导首参类型的具名断言；消除底部类型滥用，`typecheck` 即自验证，见 `tests/gateway/server/dispatch.spec.ts`）。运行期参数校验仍未接线（见 TD-GATEWAY-002，后续按 method 建守卫）。
     - 🔒 **保留为必要收窄（won't-fix，非可消除债）**：`knowledge/**` 40 处 `as X[]`（node:sqlite `all()/get()` 无泛型，驱动边界收窄）；`provenance-store.ts:250` 与 `evidence/receipt.ts:224`（`JSON.parse` 断言 + 字段 typeof 守卫，属防御性收窄）；`parseRouterConfig.ts` 4 处 `as string[]`（前置 `Array.isArray + typeof` 守卫后的必要收窄）；`askModeConstraints.ts`/`userInteractionConstraints.ts`/`createLocalGateway.ts`/`proxy.ts` 的 `as never`（存在性探测或跨库/跨泛型边界收窄）。
     - 结论：本次收敛聚焦**真正可消除且每处有安全收益**的断言；被判定为边界必要收窄的点不强行"消除"（避免把 `as` 挪进 helper 藏起来，或引入新抽象——自身即新的 accidental complexity）。
+    - ✅ **2026-10-12 sweep P1.3（issue #646 · `e854be98c`）**：产品代码 `as unknown as` **20 → 2**（全量 38 → 20；余 18 处于同址 `*.spec.*` 测试文件，属测试断言面，不在 M7 口径内）。消除手段：接口扩展（`NormalizedMessage` 补 `toolCallId`/`subagentType`，`useSessionStore` 直读）；最小事件契约（`MinimalSubmitEvent`——composerSubmit / useSessionSubmit / useChatComposerState 三处统一）；单步断言（`Element → SVGSVGElement` 下行、`Record<string,string>` ⊇ 5 键结构、桥帧交叉类型收窄）；lib 自带类型（Docx `HighlightRegistry`/`typeof Highlight`；pdfjs legacy shim `export *` 同源后直透传）；类型化全局（`globalThis.crypto`）；Reflect 读写（`window` 挂载 / SDK private `_instructions` 探测）；运行时守卫（`resolveWebSocketImpl` `typeof === "function"`）。**保留 2 处（有据边界，均带注释）**：`WeixinChannel` ← weixin-ilink d.ts 与真实协议不符（file_name vs filekey）；`network/fetch.ts` ← undici 独立包 Response 与全局 Response 不再结构兼容（@types/node 26），运行时鸭子互用。验证：root + UI typecheck、biome/eslint、`pnpm lint` 全链 fresh、事件矩阵重生成（3 处行号漂移）、metrics 同刷（38→20）、UI 定向测试 57/57。
 
 ### 错误&可观测
 - **TD-CONSOLE-001** · 裸 `console.*` 267 处，`cli` 191 处最热
@@ -2497,7 +2498,7 @@
 **P1 · 机械收敛（D4–D8，B 线）**
 - [x] **P1.1** 无注释无参 catch 17 处补「失败模式 → 回退语义」注释 → **0**（`6e3b447db`；棘轮 17→0 锁定）
 - [x] **P1.2** i18n：teamPanel zh 补 `pill.teamCount_one` + FilesV2 `fileTree.*` 14 处 defaultValue → 正式 en/zh key（`4c271fe6f`；实际为 **9 键 / 27 处兜底**——穷尽比对脚本发现侦察口径 14 为下限；含 `t("loading")` 归位）
-- [ ] **P1.3** `as unknown as` 产品代码 20 处 → 守卫/窄类型（M7 ≤8）
+- [x] **P1.3** `as unknown as` 产品代码 20 → **2**（全量 38 → 20；`e854be98c`；残余 2 处为有据边界：weixin SDK d.ts 失真 / fetch undici×全局 Response；余 18 处于同址测试文件，不在 M7 口径）
 - [ ] **P1.4** cli 裸 console 137 + 散落 ~9 → `src/telemetry/logger.ts` 收束（M6=0）
 - [ ] **P1.5** figuregen barrel 收敛：零消费 **84 → 0**（`scripts/measure-figuregen-exports.mjs` 口径，取代一次性侦察 88）
 

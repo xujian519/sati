@@ -48,10 +48,10 @@ export type ListToolsCache = {
  */
 export function createJsonSchemaValidator(): AjvJsonSchemaValidator {
   // ajv / ajv-formats 是 CJS 包但 d.ts 按 ESM 语法声明 default；NodeNext 的 CJS
-  // interop 会把 default 导入的*类型*失真为模块命名空间（运行时无此问题）。
-  // ajv 经命名导出 `Ajv` 绕开；ajv-formats 无命名导出，默认导入后断言回模块
-  // 自身声明的 default 类型。
-  const addFormats = addFormatsImport as unknown as typeof import("ajv-formats").default;
+  // interop 会把默认导入的*类型*失真为模块命名空间。ajv 经命名导出 `Ajv` 绕开；
+  // ajv-formats 无命名导出——取命名空间上的 `.default`：包自身在 `module.exports`
+  // 上挂 `exports.default = formatsPlugin`，两条互操作路径都指回插件本体。
+  const addFormats = addFormatsImport.default;
   const ajv = new Ajv({
     strict: false,
     validateFormats: true,
@@ -151,8 +151,8 @@ export class McpConnection {
   private peekInstructions(client: Client): string | undefined {
     // `getInstructions()` is the public API since SDK 1.29; `_instructions` /
     // `_serverInstructions` are internal fallbacks for older SDK builds.
-    const raw = client as unknown as { _instructions?: string; _serverInstructions?: string };
-    const value = raw._instructions ?? raw._serverInstructions;
+    // 经 Reflect 读取：SDK 类型把这两个字段声明为 private，直接索引需双重断言。
+    const value = Reflect.get(client, "_instructions") ?? Reflect.get(client, "_serverInstructions");
     return typeof value === "string" ? value : undefined;
   }
 

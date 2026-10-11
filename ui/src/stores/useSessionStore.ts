@@ -135,6 +135,9 @@ export interface NormalizedMessage {
   actualSessionId?: string;
   parentToolUseId?: string;
   subagentId?: string;
+  /** `subagent_link` 帧透传的关联键（toolCallId）与子代理类型。 */
+  toolCallId?: string;
+  subagentType?: string;
   isSubagentDetail?: boolean;
   subagentTools?: unknown[];
   taskId?: string;
@@ -885,14 +888,7 @@ function createSessionActions(deps: SessionActionDeps) {
 
   const recordSubagentLink = (sessionId: string, msg: NormalizedMessage) => {
     const slot = getSlot(sessionId);
-    const linkMessage = msg as unknown as {
-      toolCallId?: string;
-      subagentId?: string;
-      subagentType?: string;
-    };
-    const toolCallId = linkMessage.toolCallId;
-    const subagentId = linkMessage.subagentId;
-    const subagentType = linkMessage.subagentType;
+    const { toolCallId, subagentId, subagentType } = msg;
     if (toolCallId && subagentId) {
       const nextLinks = new Map(slot.subagentLinks);
       nextLinks.set(toolCallId, { subagentId, subagentType: subagentType || "agent" });

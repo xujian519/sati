@@ -32,10 +32,10 @@ export function resolveWebSocketImpl(): WebSocketCtor {
     return wsMod.WebSocket ?? wsMod;
   } catch {
     // ws 库不可用：回退 Node >= 22 全局 WebSocket，均无则抛错由调用方处理。
-    const globalWs = (globalThis as unknown as { WebSocket?: WebSocketCtor }).WebSocket;
-    if (!globalWs) {
+    const globalWs = (globalThis as { WebSocket?: unknown }).WebSocket;
+    if (typeof globalWs !== "function") {
       throw new Error("No WebSocket implementation available (install ws or run on Node >= 22 with global WebSocket).");
     }
-    return globalWs;
+    return globalWs as WebSocketCtor;
   }
 }

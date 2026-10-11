@@ -42,7 +42,7 @@ type DeleteSessionTarget = {
   session: ProjectSession;
 };
 
-const SettingsComponent = Settings as unknown as (props: TypedSettingsProps) => JSX.Element;
+const SettingsComponent: (props: TypedSettingsProps) => JSX.Element = Settings;
 
 const UNREAD_IGNORED_MESSAGE_TYPES = new Set([
   "websocket-reconnected",
@@ -81,13 +81,13 @@ const isUnreadWorthyMessage = (message: unknown): boolean => {
 
 // Register a window global used by the chat surface (slash commands, debug
 // console). Clears it on unmount only when nobody else has overwritten it.
+// 经 Reflect 读写：`window` 无可索引签名，下标访问需双重断言；语义等价。
 function useWindowGlobal<T>(name: string, value: T) {
   useEffect(() => {
-    const holder = window as unknown as Record<string, T | undefined>;
-    holder[name] = value;
+    Reflect.set(window, name, value);
     return () => {
-      if (holder[name] === value) {
-        delete holder[name];
+      if (Reflect.get(window, name) === value) {
+        Reflect.deleteProperty(window, name);
       }
     };
   }, [name, value]);

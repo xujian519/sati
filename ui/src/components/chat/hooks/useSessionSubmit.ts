@@ -1,12 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  type FormEvent,
-  type KeyboardEvent,
-  type MouseEvent,
-  type RefObject,
-  type TouchEvent,
-} from "react";
+import { useCallback, useEffect, type RefObject } from "react";
 import { authenticatedFetch } from "../../../utils/api";
 import { UI_TIMEOUTS } from "../../../constants/timeouts";
 import { logError } from "../../../utils/logging";
@@ -28,7 +20,7 @@ import {
 import { safeLocalStorage } from "../utils/chatStorage";
 import type { ChatAttachment, ChatImage, ChatMessage } from "../types/types";
 import type { SlashCommand } from "./useSlashCommands";
-import { createFakeSubmitEvent, type ComposerSubmitHandler } from "./composerSubmit";
+import { createFakeSubmitEvent, type ComposerSubmitHandler, type MinimalSubmitEvent } from "./composerSubmit";
 import type { QueuedBusySendSnapshot, UseChatComposerStateArgs } from "./useChatComposerState";
 
 /**
@@ -289,7 +281,7 @@ export function useSessionSubmit({
   );
 
   const handleSubmit = useCallback(
-    async (event: FormEvent<HTMLFormElement> | MouseEvent | TouchEvent | KeyboardEvent<HTMLTextAreaElement>) => {
+    async (event: MinimalSubmitEvent) => {
       event.preventDefault();
       const queuedSnapshot = queuedBusySendSnapshotRef.current;
       const currentInput = queuedSnapshot?.input ?? inputValueRef.current;

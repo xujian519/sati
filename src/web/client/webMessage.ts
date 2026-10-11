@@ -551,7 +551,7 @@ export function applyWebGatewayEvent(
 
 function defaultNewId(): string {
   // Browsers + Node 25 both expose `crypto.randomUUID`.
-  const c = typeof globalThis !== "undefined" && (globalThis as unknown as { crypto?: Crypto }).crypto;
+  const c = globalThis.crypto;
   if (c && typeof c.randomUUID === "function") {
     return c.randomUUID();
   }
