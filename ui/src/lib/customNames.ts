@@ -29,6 +29,7 @@ function readMap(key: string): NameMap {
     const parsed = JSON.parse(raw);
     return parsed && typeof parsed === "object" ? (parsed as NameMap) : {};
   } catch {
+    // localStorage 不可用/内容损坏 → 回退空映射（自定义名功能降级，不抛错）。
     return {};
   }
 }

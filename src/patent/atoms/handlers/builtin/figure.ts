@@ -240,6 +240,7 @@ export async function runRasterGate(input: {
   try {
     entries = await readdir(input.dir);
   } catch {
+    // 目录读取失败 → 视为无栅格附件（status none，与扫描无命中同一回退路径）。
     return { status: "none" };
   }
   const names = rasterAttachmentNames(entries, input.outputName);

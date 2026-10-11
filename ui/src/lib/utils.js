@@ -10,6 +10,7 @@ export function safeJsonParse(value) {
   try {
     return JSON.parse(value);
   } catch {
+    // 非法 JSON → null（调用方按无值回退）。
     return null;
   }
 }

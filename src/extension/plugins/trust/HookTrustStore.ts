@@ -48,6 +48,7 @@ export function parseHookTrustFile(raw: string): HookTrustFile {
   try {
     parsed = JSON.parse(raw);
   } catch {
+    // 非法 JSON → 空表（损坏文件按「无记录」回退，不外抛）。
     return emptyFile();
   }
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return emptyFile();
@@ -70,6 +71,7 @@ export class HookTrustStore {
     try {
       return parseHookTrustFile(readFileSync(this.filePath, "utf8"));
     } catch {
+      // 文件缺失/读取失败 → 空表（首次运行与读取故障同路径）。
       return emptyFile();
     }
   }

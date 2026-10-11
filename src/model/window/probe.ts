@@ -68,6 +68,7 @@ export async function probeProviderModelWindows(input: ModelWindowProbeInput): P
       try {
         body = JSON.parse(text);
       } catch {
+        // 候选响应非法 JSON → 跳过该候选，继续试下一个。
         continue;
       }
       const hits = extractModelWindows(body);

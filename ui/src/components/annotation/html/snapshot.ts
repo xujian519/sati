@@ -191,6 +191,7 @@ export function validateSnapshotAgainstSource(snapshot: HtmlSnapshot, source: st
     try {
       resolved = sourceDocument.querySelector(selector);
     } catch {
+      // 选择器非法/不被支持 → 视为未命中（该元素按 runtime 分支回退）。
       resolved = null;
     }
     if (resolved === null) {

@@ -3,6 +3,6 @@
   "version": 1,
   "lowerIsBetter": {
     "catchEmpty.total": 0,
-    "catchNoParam.undocumented": 17
+    "catchNoParam.undocumented": 0
   }
 }

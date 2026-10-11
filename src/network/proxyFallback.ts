@@ -52,6 +52,7 @@ export async function withDirectProxyFallback<T>(
     try {
       return await attempt(dispatcher);
     } catch {
+      // 直连重试也失败 → 原样抛最初的代理错误（直连仅兜底，不改变向上错误语义）。
       throw error;
     }
   }
