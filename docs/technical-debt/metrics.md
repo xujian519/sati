@@ -10,7 +10,7 @@
 | src TS 文件 / 行数 | 1081 / 187560 |
 | src JS 文件 | 0 |
 | tests 文件 | 629 |
-| ui/src 文件 / 行数 | 638 / 102253 |
+| ui/src 文件 / 行数 | 638 / 102234 |
 | ui/server 文件 / 行数 | 129 / 35394 |
 
 ## 指标口径
@@ -47,7 +47,7 @@
 |---|---|---|---|
 | `ui/src/components/app-shell/SidebarV2.tsx` | `SidebarV2` | 1014 | function |
 | `ui/src/components/chat-v2/MessagesPaneV2.render.test.tsx` | `(anonymous)` | 943 | arrow |
-| `ui/src/components/main-content-v2/FilesV2.tsx` | `FilesV2` | 849 | function |
+| `ui/src/components/main-content-v2/FilesV2.tsx` | `FilesV2` | 830 | function |
 | `ui/src/components/chat-v2/MessagesPaneV2.tsx` | `MessagesPaneV2` | 824 | function |
 | `ui/src/components/chat-v2/ComposerV2.tsx` | `ComposerV2` | 741 | function |
 | `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` | `useChatRealtimeHandlers` | 721 | function |
@@ -209,7 +209,7 @@
 | auth | 23 | 23 | 0 | 0 |
 | chat | 375 | 375 | 0 | 0 |
 | codeEditor | 196 | 196 | 0 | 0 |
-| common | 436 | 436 | 0 | 0 |
+| common | 445 | 445 | 0 | 0 |
 | hookTrust | 19 | 19 | 0 | 0 |
 | kanban | 44 | 44 | 0 | 0 |
 | routing | 64 | 64 | 0 | 0 |
@@ -217,7 +217,7 @@
 | sidebar | 125 | 125 | 0 | 0 |
 | stylePanel | 56 | 56 | 0 | 0 |
 | tasks | 94 | 94 | 0 | 0 |
-| teamPanel | 44 | 43 | 1 | 0 |
+| teamPanel | 44 | 44 | 0 | 0 |
 
 
 ## 历史快照

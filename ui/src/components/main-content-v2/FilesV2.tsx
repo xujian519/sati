@@ -527,7 +527,7 @@ export default function FilesV2({
   if (!selectedProject) {
     return (
       <div className="flex h-full items-center justify-center bg-white text-[13px] text-neutral-500 dark:bg-neutral-950 dark:text-neutral-400">
-        {t("fileTree.selectProject", { defaultValue: "Pick a project to browse files." })}
+        {t("fileTree.selectProject")}
       </div>
     );
   }
@@ -585,16 +585,10 @@ export default function FilesV2({
           <span className="truncate font-mono text-xxs text-neutral-500 dark:text-neutral-400">{cwd}</span>
         </div>
         <div className="flex items-center gap-1 px-3 pb-1">
-          <ToolbarButton
-            onClick={() => handleNewFile("", 0)}
-            label={t("fileTree.context.newFile", { defaultValue: "New File" }) as string}
-          >
+          <ToolbarButton onClick={() => handleNewFile("", 0)} label={t("fileTree.context.newFile") as string}>
             <FilePlus className="h-3.5 w-3.5" strokeWidth={1.75} />
           </ToolbarButton>
-          <ToolbarButton
-            onClick={() => handleNewFolder("", 0)}
-            label={t("fileTree.context.newFolder", { defaultValue: "New Folder" }) as string}
-          >
+          <ToolbarButton onClick={() => handleNewFolder("", 0)} label={t("fileTree.context.newFolder") as string}>
             <FolderPlus className="h-3.5 w-3.5" strokeWidth={1.75} />
           </ToolbarButton>
           <div className="relative">
@@ -604,7 +598,7 @@ export default function FilesV2({
                 setUploadMenuOpen(open => !open);
               }}
               disabled={uploadingProject}
-              label={t("fileTree.upload", { defaultValue: "Upload files or folder" }) as string}
+              label={t("fileTree.upload") as string}
             >
               {uploadingProject ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={1.75} />
@@ -623,7 +617,7 @@ export default function FilesV2({
                   }}
                   className="block w-full px-3 py-1.5 text-left text-neutral-700 hover:bg-neutral-100 dark:text-neutral-200 dark:hover:bg-neutral-900"
                 >
-                  {t("fileTree.uploadFiles", { defaultValue: "Upload files" })}
+                  {t("fileTree.uploadFiles")}
                 </button>
                 <button
                   type="button"
@@ -634,7 +628,7 @@ export default function FilesV2({
                   }}
                   className="block w-full px-3 py-1.5 text-left text-neutral-700 hover:bg-neutral-100 dark:text-neutral-200 dark:hover:bg-neutral-900"
                 >
-                  {t("fileTree.uploadFolder", { defaultValue: "Upload folder" })}
+                  {t("fileTree.uploadFolder")}
                 </button>
               </div>
             ) : null}
@@ -662,7 +656,7 @@ export default function FilesV2({
           <ToolbarButton
             onClick={handleDownloadProject}
             disabled={downloadingProject}
-            label={t("fileTree.downloadProject", { defaultValue: "Download project as zip" }) as string}
+            label={t("fileTree.downloadProject") as string}
           >
             {downloadingProject ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={1.75} />
@@ -674,30 +668,23 @@ export default function FilesV2({
             onClick={handleDeleteActive}
             disabled={!activePath}
             disabledOpacity="40"
-            label={t("fileTree.deleteSelected", { defaultValue: "Delete selected" }) as string}
+            label={t("fileTree.deleteSelected") as string}
           >
             <Trash2 className="h-3.5 w-3.5" strokeWidth={1.75} />
           </ToolbarButton>
-          <ToolbarButton
-            onClick={refreshFiles}
-            disabled={loading}
-            label={t("fileTree.refresh", { defaultValue: "Refresh" }) as string}
-          >
+          <ToolbarButton onClick={refreshFiles} disabled={loading} label={t("fileTree.refresh") as string}>
             <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} strokeWidth={1.75} />
           </ToolbarButton>
           <ToolbarButton
             onClick={collapseAll}
             disabled={!hasExpanded}
             disabledOpacity="40"
-            label={t("fileTree.collapseAll", { defaultValue: "Collapse all" }) as string}
+            label={t("fileTree.collapseAll") as string}
           >
             <ChevronsDownUp className="h-3.5 w-3.5" strokeWidth={1.75} />
           </ToolbarButton>
           {onClose ? (
-            <ToolbarButton
-              onClick={onClose}
-              label={t("fileTree.collapsePanel", { defaultValue: "Collapse file explorer" }) as string}
-            >
+            <ToolbarButton onClick={onClose} label={t("fileTree.collapsePanel") as string}>
               <PanelLeftClose className="h-4 w-4" strokeWidth={1.8} />
             </ToolbarButton>
           ) : null}
@@ -708,12 +695,10 @@ export default function FilesV2({
         {loading && files.length === 0 ? (
           <div className="flex items-center justify-center gap-2 py-6 text-xxs text-neutral-500 dark:text-neutral-400">
             <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={1.75} />
-            <span>{t("loading", { defaultValue: "Loading…" })}</span>
+            <span>{t("fileTree.loading")}</span>
           </div>
         ) : flat.length === 0 ? (
-          <div className="py-6 text-center text-xxs text-neutral-500 dark:text-neutral-400">
-            {t("fileTree.empty", { defaultValue: "This project is empty." })}
-          </div>
+          <div className="py-6 text-center text-xxs text-neutral-500 dark:text-neutral-400">{t("fileTree.empty")}</div>
         ) : (
           <ul className="space-y-0.5 px-4">
             {flat.map(({ node, depth }, idx) => {
@@ -806,8 +791,8 @@ export default function FilesV2({
                           type="button"
                           onClick={event => handleDownloadFile(event, node)}
                           className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-neutral-500 opacity-0 transition group-hover/row:opacity-100 hover:bg-neutral-200 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
-                          title={t("fileTree.downloadFile", { defaultValue: "Download file" }) as string}
-                          aria-label={t("fileTree.downloadFile", { defaultValue: "Download file" }) as string}
+                          title={t("fileTree.downloadFile") as string}
+                          aria-label={t("fileTree.downloadFile") as string}
                         >
                           <Download className="h-3.5 w-3.5" strokeWidth={1.75} />
                         </button>
@@ -817,12 +802,8 @@ export default function FilesV2({
                           type="button"
                           onClick={event => handleOpenHtmlPreview(event, node)}
                           className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-neutral-500 transition hover:bg-neutral-200 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
-                          title={
-                            t("fileTree.openHtmlPreview", { defaultValue: "Open HTML preview in new tab" }) as string
-                          }
-                          aria-label={
-                            t("fileTree.openHtmlPreview", { defaultValue: "Open HTML preview in new tab" }) as string
-                          }
+                          title={t("fileTree.openHtmlPreview") as string}
+                          aria-label={t("fileTree.openHtmlPreview") as string}
                         >
                           <Eye className="h-3.5 w-3.5" strokeWidth={1.75} />
                         </button>
@@ -841,7 +822,7 @@ export default function FilesV2({
       {contextMenu ? (
         <div
           role="menu"
-          aria-label={t("fileTree.context.menuLabel", { defaultValue: "File context menu" }) as string}
+          aria-label={t("fileTree.context.menuLabel") as string}
           onClick={event => event.stopPropagation()}
           onContextMenu={event => event.preventDefault()}
           className={cn(
@@ -863,7 +844,7 @@ export default function FilesV2({
                     className={menuItemClass}
                   >
                     <FilePlus className={menuIconClass} strokeWidth={1.75} />
-                    {t("fileTree.context.newFile", { defaultValue: "New File" })}
+                    {t("fileTree.context.newFile")}
                   </button>
                   <button
                     type="button"
@@ -874,7 +855,7 @@ export default function FilesV2({
                     className={menuItemClass}
                   >
                     <FolderPlus className={menuIconClass} strokeWidth={1.75} />
-                    {t("fileTree.context.newFolder", { defaultValue: "New Folder" })}
+                    {t("fileTree.context.newFolder")}
                   </button>
                   <div className="my-1 border-t border-neutral-100 dark:border-neutral-800" />
                 </>
@@ -896,7 +877,7 @@ export default function FilesV2({
                     className={menuItemClass}
                   >
                     <Download className={menuIconClass} strokeWidth={1.75} />
-                    {t("fileTree.context.download", { defaultValue: "Download" })}
+                    {t("fileTree.context.download")}
                   </button>
                   <div className="my-1 border-t border-neutral-100 dark:border-neutral-800" />
                 </>
@@ -908,7 +889,7 @@ export default function FilesV2({
                 className={menuItemClass}
               >
                 <Pencil className={menuIconClass} strokeWidth={1.75} />
-                {t("fileTree.context.rename", { defaultValue: "Rename" })}
+                {t("fileTree.context.rename")}
               </button>
               <button
                 type="button"
@@ -917,7 +898,7 @@ export default function FilesV2({
                 className={menuItemClass}
               >
                 <ClipboardCopy className={menuIconClass} strokeWidth={1.75} />
-                {t("fileTree.context.copyPath", { defaultValue: "Copy Path" })}
+                {t("fileTree.context.copyPath")}
               </button>
               {contextMenu.node.type === "file" ? (
                 <button
@@ -928,7 +909,7 @@ export default function FilesV2({
                   className={cn(menuItemClass, !canAddToChat && "pointer-events-none cursor-not-allowed opacity-45")}
                 >
                   <MessageSquarePlus className={menuIconClass} strokeWidth={1.75} />
-                  {t("fileTree.context.addToChat", { defaultValue: "Add to Conversation" })}
+                  {t("fileTree.context.addToChat")}
                 </button>
               ) : null}
               <div className="my-1 border-t border-neutral-100 dark:border-neutral-800" />
@@ -939,18 +920,18 @@ export default function FilesV2({
                 className={cn(menuItemClass, "text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30")}
               >
                 <Trash2 className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
-                {t("fileTree.context.delete", { defaultValue: "Delete" })}
+                {t("fileTree.context.delete")}
               </button>
             </>
           ) : (
             <>
               <button type="button" role="menuitem" onClick={() => handleNewFile("", 0)} className={menuItemClass}>
                 <FilePlus className={menuIconClass} strokeWidth={1.75} />
-                {t("fileTree.context.newFile", { defaultValue: "New File" })}
+                {t("fileTree.context.newFile")}
               </button>
               <button type="button" role="menuitem" onClick={() => handleNewFolder("", 0)} className={menuItemClass}>
                 <FolderPlus className={menuIconClass} strokeWidth={1.75} />
-                {t("fileTree.context.newFolder", { defaultValue: "New Folder" })}
+                {t("fileTree.context.newFolder")}
               </button>
             </>
           )}
