@@ -44,6 +44,7 @@
   - **2026-09-18 第二段交付（#353 · PR #433）**：`src` 36 处 + `ui/src` 6 处 = **42 处 / 30 文件**补齐，**只增注释、零代码改动**（+42/−0 行，无单行 catch 需展开）。至此全仓「无注释的无参 catch」**114 → 0**（`metrics.md`：无注释 114 → **0**、已注释 547 → **661**、总计 661 不变，+114/−114 闭合）。两道独立证明同段一：AST 叶子 token 比对 30/30 一致、`transpileModule({removeComments:true})` 编译产物 30/30 逐字节相同；`pnpm check:event-matrix` 为 fresh（段二文件中唯一在事件矩阵带 `file:line` 的 `src/model/providers/openai-responses/stream.ts` 矩阵记 `:131`，注释插在 `:209/:214`，不影响条目）。
   - **2026-09-18 载体收口**：`TD-SESSION-N12`（`TranscriptReader.ts` 两处）由段二注释直接还清；**`TD-TEAM-N11` 不属于本判据**——`src/cli/teamSubsystem.ts` 的 `runMemberScan` 外层是 **promise 链上的 `.catch()`** 而非 `catch {}` 子句，既不被「无注释的无参 catch」口径统计，补注释也修不了「整次启动扫描失败被静默吞掉 ⇒ 冷恢复失效而队长侧零信号」，故按 #353 的「场景 B：失败应被观测」单独补 `logger.error` 处置（PR #434），不混进纯注释变更。
   - **2026-09-24 残留 + 棘轮（#530，跨 P1+P2）**：#353 之后又新引入 12 处无注释无参 catch（4 个 commit，逐处核验均非真隐患，语义在函数/文件 JSDoc 内）⇒ 暴露护栏缺位（门禁只比新鲜度无棘轮、#353 触发线 45 过高）。**P1**（PR #557·`f04b23fc1`）修口径：`measure-techdebt.mjs` 判据补回漏算的 5 处，`undocumented` **12→17**（总计 671→678），与 `docs/code-facts.md`/`metrics.md` 同刷；**P2**（PR #558·`110438f9`）加棘轮：新增 `docs/technical-debt/thresholds.json`（`catchEmpty.total`=0 · `catchNoParam.undocumented`=17），`check:techdebt-metrics` 超限即红，把当前值冻结为上限拦住回升。详见 §37.3「`TD-CATCH-001` 残留」行（#530 载体）。最后复核：2026-09-24。
+  - **2026-10-12 sweep P1.1（issue #646 · `6e3b447db`，修正 `5e69d236f`）**：17 处残留全部补「失败模式 → 回退语义」注释，**只增注释、零代码改动**（16 处体内注释 + 1 处 `ui/server/routes/config.js` **代码行尾**注释）；config.js 在 file-size 棘轮上（基线 1234 行）——**`catch {` 行内注释会被 biome/lint-staged 在提交时重排为独立行（+1 触发棘轮并使基线漂移）**，行尾形态净增 0 行、未触发 `--update-baseline` 追认（踩坑已回填 `sweep-split-verification-checklist.md` §1.6）；`undocumented` **17 → 0**（`metrics.md` 同刷：已注释 675 → 692），`thresholds.json` 同步下调 **17 → 0** 锁定（打印 Δ −17 ✓ 锁定改善）。验证：独立复现 `measure-techdebt.mjs` 判据的扫描 17 → 0；`pnpm lint` 全链 fresh（含棘轮/架构边界/事件矩阵/doc-claims）；root + UI typecheck、biome/eslint green。最后复核：2026-10-12。
 
 ### Arch/分层
 - **TD-BOUND-001** · `ui/server → src` 深层导入 14 处
@@ -2489,3 +2490,18 @@
 - [ ] **PS-24** `ui/server/services/satiConfig.js` — 857 行 · sweep 后处置（本轮容量外，2026-10-12 登记）
 - [ ] **PS-25** `src/patent/evidence/engine.ts` — 841 行 · sweep 后处置（本轮容量外，2026-10-12 登记）
 - [ ] **PS-26** `src/tool/builtin/kanban.ts` — 815 行 · sweep 后处置（本轮容量外，2026-10-12 登记）
+
+### 38.4 P1–P4 专项条目（计划 §5 · 勾选载体）
+
+**P1 · 机械收敛（D4–D8，B 线）**
+- [x] **P1.1** 无注释无参 catch 17 处补「失败模式 → 回退语义」注释 → **0**（`6e3b447db`；棘轮 17→0 锁定）
+- [ ] **P1.2** i18n：teamPanel zh 补 `pill.teamCount_one` + FilesV2 `fileTree.*` 14 处 defaultValue → 正式 en/zh key
+- [ ] **P1.3** `as unknown as` 产品代码 20 处 → 守卫/窄类型（M7 ≤8）
+- [ ] **P1.4** cli 裸 console 137 + 散落 ~9 → `src/telemetry/logger.ts` 收束（M6=0）
+- [ ] **P1.5** figuregen barrel 收敛：零消费 **84 → 0**（`scripts/measure-figuregen-exports.mjs` 口径，取代一次性侦察 88）
+
+**P4 · 数据与测试专项（D38–D41，B 线）**
+- [ ] **P4.1** 知识卡去重 70 组 / 527,689 B（脚本化判定 + 不确定组留 note）
+- [ ] **P4.2** adapters 测试文件比 0.12 → 0.25
+- [ ] **P4.3** ui/server→src 直连 15 → ≤5（白名单 barrel 收口）
+- [ ] **P4.4** shared/browser/lifecycle/methodology/board 洼地机会型补测

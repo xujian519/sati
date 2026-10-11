@@ -88,6 +88,7 @@ export const defaultPatentSignalFs: PatentSignalFs = {
     try {
       return statSync(path).isDirectory();
     } catch {
+      // stat 失败（不存在/权限不足）→ 视为非目录。
       return false;
     }
   },
@@ -95,6 +96,7 @@ export const defaultPatentSignalFs: PatentSignalFs = {
     try {
       return readFileSync(path, { encoding: "utf8", flag: "r" }).slice(0, maxBytes);
     } catch {
+      // 读取失败（不存在/非文件/权限）→ undefined（调用方按无原文处理）。
       return undefined;
     }
   },
@@ -102,6 +104,7 @@ export const defaultPatentSignalFs: PatentSignalFs = {
     try {
       return readdirSync(path);
     } catch {
+      // 目录列举失败 → 空列表（调用方按无条目处理）。
       return [];
     }
   },

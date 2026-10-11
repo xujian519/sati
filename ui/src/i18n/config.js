@@ -54,6 +54,7 @@ const getSavedLanguage = () => {
     }
     return "en";
   } catch {
+    // localStorage 不可用（隐私模式/SSR）→ 回退默认语言 "en"。
     return "en";
   }
 };
@@ -155,6 +156,7 @@ function syncAlwaysOnLanguage(lng) {
       try {
         parsed = parseYaml(raw);
       } catch {
+        // YAML 解析失败 → 跳过本次远端语言包（保持当前语言）。
         return;
       }
       if (!parsed || typeof parsed !== "object") return;

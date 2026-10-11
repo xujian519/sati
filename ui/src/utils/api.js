@@ -140,6 +140,7 @@ export const readAgentStatusErrorFromResponse = async (response, options = {}) =
   try {
     body = await response.clone().json();
   } catch {
+    // 响应体非 JSON 或已被消费 → body 保持 null（按无 body 提取错误信息）。
     body = null;
   }
   const status =

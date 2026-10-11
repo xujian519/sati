@@ -59,6 +59,7 @@ export function parseModelWindowFile(raw: string): ModelWindowFile {
   try {
     parsed = JSON.parse(raw);
   } catch {
+    // 非法 JSON → 空表（损坏文件按「无覆盖记录」回退，不外抛）。
     return emptyFile();
   }
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return emptyFile();
@@ -127,6 +128,7 @@ export class ModelWindowStore {
     try {
       return parseModelWindowFile(readFileSync(this.filePath, "utf8"));
     } catch {
+      // 文件缺失/读取失败 → 空表（与从未写入同语义）。
       return emptyFile();
     }
   }
