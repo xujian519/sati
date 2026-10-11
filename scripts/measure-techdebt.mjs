@@ -127,7 +127,7 @@ const TODO_PATTERN = /\b(TODO|FIXME|HACK|XXX)\b/g;
  */
 const SCOPE_DOC = {
   console:
-    "src + ui/server（.ts/.tsx/.js/.jsx/.mjs/.cjs；豁免两处 C39 收束入口 ui/server/utils/consoleLogger.js 与 ui/src/utils/logging.ts）",
+    "src + ui/server（.ts/.tsx/.js/.jsx/.mjs/.cjs；豁免日志收束入口：ui/server/utils/consoleLogger.js、ui/src/utils/logging.ts，及 #646 P1.4 扩展的 src/telemetry/logger.ts + src/shared/debug.ts）",
   unsafe: "src + ui/src（.ts/.tsx，含同址 *.spec.*；TS AST 精确统计 AnyKeyword + @ts-* 指令）",
   asUnknownAs:
     "src + ui/src（.ts/.tsx，含同址 *.spec.*；TS AST 统计 `x as unknown as T` 双重断言）。**口径变更**：2026-09-15（issue #339）首度纳入——此前该形态完全未统计，故 0 → N 的变化来自口径变更而非新增债务",
@@ -142,7 +142,16 @@ const SCOPE_DOC = {
  * C39 刻意建立的日志收束入口——它们体内就是 `console.*` 转发，计入即定义性错误。
  * 真实裸调用由其消费方统计（见 C39 记录：收束后 src/ 真实裸调用 143 处，全部按设计豁免）。
  */
-const SANCTIONED_CONSOLE_ENTRIES = new Set(["ui/server/utils/consoleLogger.js", "ui/src/utils/logging.ts"]);
+const SANCTIONED_CONSOLE_ENTRIES = new Set([
+  "ui/server/utils/consoleLogger.js",
+  "ui/src/utils/logging.ts",
+  // #646 P1.4（2026-10-12）：扩展到 src 侧日志收束入口——cli 交互输出与 src
+  // 散落调用已全部经 `src/telemetry/logger.ts`（含无前缀 `plainLogger`）转发；
+  // `src/shared/debug.ts` 是 SATI_DEBUG 门控 debug 的落点（logger.debug 的实现
+  // 末端）。两者体内就是 `console.*` 转发，计入即定义性错误。
+  "src/telemetry/logger.ts",
+  "src/shared/debug.ts",
+]);
 
 const isTestFile = f => /\.(spec|test)\.[cm]?[jt]sx?$/.test(f);
 

@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { homedir } from "node:os";
 import { Document, isMap, parseDocument } from "yaml";
 import { brandEnv, ENV_KEY } from "../../env.js";
+import { plainLogger } from "../../telemetry/index.js";
 
 const SATI_HOME = brandEnv(process.env, ENV_KEY.HOME) || join(homedir(), ".sati");
 const SATI_YAML_PATH = brandEnv(process.env, ENV_KEY.CONFIG_PATH) || join(SATI_HOME, "sati.yaml");
@@ -29,7 +30,7 @@ export async function runConfigCommand(argv: string[]): Promise<void> {
       await deleteConfigValue(argv[1]);
       return;
     }
-    console.error("Usage: sati config set <key.path> <value> | sati config delete <key.path>");
+    plainLogger.error("Usage: sati config set <key.path> <value> | sati config delete <key.path>");
     process.exitCode = 1;
   } catch {
     // validateKeyPath / loadYamlDoc 已打印具体错误；此处仅避免堆栈泄漏。
@@ -39,7 +40,7 @@ export async function runConfigCommand(argv: string[]): Promise<void> {
 
 async function setConfigValue(keyPath: string | undefined, value: string | undefined): Promise<void> {
   if (value === undefined) {
-    console.error("Usage: sati config set <key.path> <value>");
+    plainLogger.error("Usage: sati config set <key.path> <value>");
     process.exitCode = 1;
     return;
   }
@@ -47,12 +48,12 @@ async function setConfigValue(keyPath: string | undefined, value: string | undef
   const doc = loadYamlDoc();
   const result = setNestedInDoc(doc, segments, value);
   if (!result.ok) {
-    console.error(`sati: cannot set ${segments.join(".")}: ${result.error}`);
+    plainLogger.error(`sati: cannot set ${segments.join(".")}: ${result.error}`);
     process.exitCode = 1;
     return;
   }
   saveYamlDoc(doc);
-  console.log(`sati: ${segments.join(".")} = ${value} (${SATI_YAML_PATH})`);
+  plainLogger.info(`sati: ${segments.join(".")} = ${value} (${SATI_YAML_PATH})`);
 }
 
 async function deleteConfigValue(keyPath: string | undefined): Promise<void> {
@@ -60,18 +61,18 @@ async function deleteConfigValue(keyPath: string | undefined): Promise<void> {
   const doc = loadYamlDoc();
   const result = deleteNestedInDoc(doc, segments);
   if (!result.ok) {
-    console.error(`sati: cannot delete ${segments.join(".")}: ${result.error}`);
+    plainLogger.error(`sati: cannot delete ${segments.join(".")}: ${result.error}`);
     process.exitCode = 1;
     return;
   }
   saveYamlDoc(doc);
-  console.log(`sati: deleted ${segments.join(".")} (${SATI_YAML_PATH})`);
+  plainLogger.info(`sati: deleted ${segments.join(".")} (${SATI_YAML_PATH})`);
 }
 
 /** Dotted key path validation: 1–3 segments, each a non-empty identifier. */
 function validateKeyPath(keyPath: string | undefined): string[] {
   if (keyPath === undefined || !/^[A-Za-z][A-Za-z0-9]*(\.[A-Za-z][A-Za-z0-9]*){0,2}$/.test(keyPath)) {
-    console.error("Usage: sati config <set|delete> <section.key[.key]>");
+    plainLogger.error("Usage: sati config <set|delete> <section.key[.key]>");
     throw new Error("invalid config key path");
   }
   return keyPath.split(".");
@@ -91,7 +92,9 @@ function loadYamlDoc(): Document {
     }
     return doc;
   } catch (error) {
-    console.error(`sati: failed to read ${SATI_YAML_PATH}: ${error instanceof Error ? error.message : String(error)}`);
+    plainLogger.error(
+      `sati: failed to read ${SATI_YAML_PATH}: ${error instanceof Error ? error.message : String(error)}`,
+    );
     process.exitCode = 1;
     throw error;
   }

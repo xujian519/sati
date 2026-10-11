@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { homedir } from "node:os";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import { brandEnv, ENV_KEY } from "../../env.js";
+import { plainLogger } from "../../telemetry/index.js";
 
 const SATI_HOME = brandEnv(process.env, ENV_KEY.HOME) || join(homedir(), ".sati");
 const SATI_YAML_PATH = brandEnv(process.env, ENV_KEY.CONFIG_PATH) || join(SATI_HOME, "sati.yaml");
@@ -56,10 +57,10 @@ export async function runGatewaySetup(argv: string[]): Promise<void> {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
 
   try {
-    console.log("╔══════════════════════════════════════════════════╗");
-    console.log(`║  Sati Gateway Setup${" ".repeat(30)}║`);
-    console.log(`║  配置 IM 平台连接${" ".repeat(32)}║`);
-    console.log("╚══════════════════════════════════════════════════╝\n");
+    plainLogger.info("╔══════════════════════════════════════════════════╗");
+    plainLogger.info(`║  Sati Gateway Setup${" ".repeat(30)}║`);
+    plainLogger.info(`║  配置 IM 平台连接${" ".repeat(32)}║`);
+    plainLogger.info("╚══════════════════════════════════════════════════╝\n");
 
     const platform = argv[0]?.toLowerCase();
     if (platform === "feishu" || platform === "lark") {
@@ -75,12 +76,12 @@ export async function runGatewaySetup(argv: string[]): Promise<void> {
       else if (choice === "wecom") await setupWeCom(rl);
       else if (choice === "all") {
         await setupFeishu(rl);
-        console.log("");
+        plainLogger.info("");
         await setupWeixin(rl);
-        console.log("");
+        plainLogger.info("");
         await setupWeCom(rl);
       } else {
-        console.log("未选择任何平台，退出。");
+        plainLogger.info("未选择任何平台，退出。");
       }
     }
   } finally {
@@ -96,12 +97,12 @@ async function selectPlatform(
   const weixinStatus = existsSync(WEIXIN_CREDS_PATH) ? "✅ 已有凭据" : "未配置";
   const wecomStatus = currentConfig?.adapters?.wecom?.enabled ? "✅ 已启用" : "未配置";
 
-  console.log("可配置的平台：");
-  console.log(`  1) 飞书 / Lark      [${feishuStatus}]`);
-  console.log(`  2) 微信 (iLink)     [${weixinStatus}]`);
-  console.log(`  3) 企业微信 WeCom   [${wecomStatus}]`);
-  console.log(`  4) 全部配置`);
-  console.log(`  q) 退出\n`);
+  plainLogger.info("可配置的平台：");
+  plainLogger.info(`  1) 飞书 / Lark      [${feishuStatus}]`);
+  plainLogger.info(`  2) 微信 (iLink)     [${weixinStatus}]`);
+  plainLogger.info(`  3) 企业微信 WeCom   [${wecomStatus}]`);
+  plainLogger.info(`  4) 全部配置`);
+  plainLogger.info(`  q) 退出\n`);
 
   const answer = (await rl.question("请选择 [1/2/3/4/q]: ")).trim().toLowerCase();
   if (answer === "1" || answer === "feishu") return "feishu";
@@ -116,9 +117,9 @@ async function selectPlatform(
 // ---------------------------------------------------------------------------
 
 async function setupFeishu(rl: ReturnType<typeof createInterface>): Promise<void> {
-  console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-  console.log("  飞书 / Lark 配置");
-  console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+  plainLogger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+  plainLogger.info("  飞书 / Lark 配置");
+  plainLogger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
 
   const currentConfig = loadYamlConfig();
   const currentAppId = currentConfig?.adapters?.feishu?.appId || "";
@@ -143,15 +144,15 @@ async function setupFeishu(rl: ReturnType<typeof createInterface>): Promise<void
     appSecret = qrResult.appSecret;
   } else {
     // Manual credential entry
-    console.log(`\n请在 ${consoleUrl} 创建企业自建应用：`);
-    console.log("  1. 创建应用 → 获取 App ID 和 App Secret");
-    console.log("  2. 权限管理 → 添加以下权限：");
-    console.log("     - im:message (收发消息)");
-    console.log("     - im:message:send_as_bot (以机器人身份发消息)");
-    console.log("     - im:resource (访问图片/文件)");
-    console.log("     - im:chat (群聊元信息)");
-    console.log("  3. 事件订阅 → 添加 im.message.receive_v1");
-    console.log("  4. 版本管理 → 发布版本\n");
+    plainLogger.info(`\n请在 ${consoleUrl} 创建企业自建应用：`);
+    plainLogger.info("  1. 创建应用 → 获取 App ID 和 App Secret");
+    plainLogger.info("  2. 权限管理 → 添加以下权限：");
+    plainLogger.info("     - im:message (收发消息)");
+    plainLogger.info("     - im:message:send_as_bot (以机器人身份发消息)");
+    plainLogger.info("     - im:resource (访问图片/文件)");
+    plainLogger.info("     - im:chat (群聊元信息)");
+    plainLogger.info("  3. 事件订阅 → 添加 im.message.receive_v1");
+    plainLogger.info("  4. 版本管理 → 发布版本\n");
 
     const defaultAppIdHint = currentAppId ? ` (当前: ${maskSecret(currentAppId)})` : "";
     appId = (await rl.question(`App ID${defaultAppIdHint}: `)).trim() || currentAppId;
@@ -162,31 +163,31 @@ async function setupFeishu(rl: ReturnType<typeof createInterface>): Promise<void
   }
 
   if (!appId || !appSecret) {
-    console.log("\n⚠️  未提供完整凭据，跳过飞书配置。");
+    plainLogger.info("\n⚠️  未提供完整凭据，跳过飞书配置。");
     return;
   }
 
   // Test connection
-  console.log("\n🔍 验证凭据...");
+  plainLogger.info("\n🔍 验证凭据...");
   const tokenUrl = domain === "lark" ? LARK_TOKEN_URL : FEISHU_TOKEN_URL;
   const testResult = await testFeishuCredentials(appId, appSecret, tokenUrl);
 
   if (!testResult.ok) {
-    console.log(`\n❌ 凭据验证失败: ${testResult.error}`);
+    plainLogger.info(`\n❌ 凭据验证失败: ${testResult.error}`);
     const proceed = (await rl.question("是否仍然保存配置？ [y/N]: ")).trim().toLowerCase();
     if (proceed !== "y" && proceed !== "yes") {
-      console.log("已取消。");
+      plainLogger.info("已取消。");
       return;
     }
   } else {
-    console.log("✅ 凭据验证通过！");
+    plainLogger.info("✅ 凭据验证通过！");
   }
 
   // Write config
   writeFeishuConfig({ appId, appSecret, domain });
-  console.log("\n✅ 飞书配置已写入 sati.yaml");
-  console.log("   连接模式: stream (WebSocket, 推荐 — 无需公网 IP)");
-  console.log("   重启 Sati 服务后生效\n");
+  plainLogger.info("\n✅ 飞书配置已写入 sati.yaml");
+  plainLogger.info("   连接模式: stream (WebSocket, 推荐 — 无需公网 IP)");
+  plainLogger.info("   重启 Sati 服务后生效\n");
 }
 
 async function attemptFeishuQRCreation(
@@ -208,15 +209,15 @@ async function attemptFeishuQRCreation(
 
   if (answer !== "y" && answer !== "yes") return null;
 
-  console.log("\n正在生成二维码...");
+  plainLogger.info("\n正在生成二维码...");
   const larkDomain =
     domain === "lark"
       ? (Lark.Domain?.Lark ?? "https://open.larksuite.com")
       : (Lark.Domain?.Feishu ?? "https://open.feishu.cn");
 
-  console.log(`\n请在浏览器中访问以下链接，使用飞书扫码授权：`);
-  console.log(`  ${larkDomain}/app\n`);
-  console.log("创建应用后，将 App ID 和 App Secret 粘贴到下方。\n");
+  plainLogger.info(`\n请在浏览器中访问以下链接，使用飞书扫码授权：`);
+  plainLogger.info(`  ${larkDomain}/app\n`);
+  plainLogger.info("创建应用后，将 App ID 和 App Secret 粘贴到下方。\n");
 
   return null;
 }
@@ -273,9 +274,9 @@ function writeFeishuConfig(cfg: { appId: string; appSecret: string; domain: "fei
 // ---------------------------------------------------------------------------
 
 async function setupWeCom(rl: ReturnType<typeof createInterface>): Promise<void> {
-  console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-  console.log("  企业微信 WeCom AI Bot 配置");
-  console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+  plainLogger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+  plainLogger.info("  企业微信 WeCom AI Bot 配置");
+  plainLogger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
 
   const currentConfig = loadYamlConfig();
   const currentWeCom = currentConfig?.adapters?.wecom;
@@ -286,7 +287,7 @@ async function setupWeCom(rl: ReturnType<typeof createInterface>): Promise<void>
   );
 
   if (currentBotId && currentSecret) {
-    console.log(`已有企业微信配置 (Bot ID: ${maskSecret(currentBotId)})`);
+    plainLogger.info(`已有企业微信配置 (Bot ID: ${maskSecret(currentBotId)})`);
     const answer = (await rl.question("重新配置？ [y/N]: ")).trim().toLowerCase();
     if (answer !== "y" && answer !== "yes") {
       writeWeComConfig({
@@ -299,22 +300,22 @@ async function setupWeCom(rl: ReturnType<typeof createInterface>): Promise<void>
         groupAllowFrom: coerceSetupList(currentWeCom?.extra?.group_allow_from ?? currentWeCom?.extra?.groupAllowFrom),
         groups: isPlainObject(currentWeCom?.extra?.groups) ? currentWeCom.extra.groups : undefined,
       });
-      console.log("企业微信已启用（使用现有凭据）。\n");
+      plainLogger.info("企业微信已启用（使用现有凭据）。\n");
       return;
     }
   }
 
-  console.log("企业微信 AI Bot 通过官方 WebSocket 网关连接，无需公网回调地址。");
-  console.log("请确保你有企业微信组织管理员权限，或已在管理后台拿到 Bot ID 和 Secret。\n");
+  plainLogger.info("企业微信 AI Bot 通过官方 WebSocket 网关连接，无需公网回调地址。");
+  plainLogger.info("请确保你有企业微信组织管理员权限，或已在管理后台拿到 Bot ID 和 Secret。\n");
 
   let credentials: WeComBotCredentials | null = null;
   const scanAnswer = (await rl.question("是否扫码自动创建/获取 Bot ID 和 Secret？ [Y/n]: ")).trim().toLowerCase();
   if (scanAnswer !== "n" && scanAnswer !== "no") {
     credentials = await qrScanForWeComBotInfo({
-      log: message => console.log(message),
+      log: message => plainLogger.info(message),
     });
     if (!credentials) {
-      console.log("\n扫码未完成或接口不可用，将使用手动输入模式。\n");
+      plainLogger.info("\n扫码未完成或接口不可用，将使用手动输入模式。\n");
     }
   }
 
@@ -322,11 +323,11 @@ async function setupWeCom(rl: ReturnType<typeof createInterface>): Promise<void>
   let secret = credentials?.secret ?? "";
 
   if (!botId || !secret) {
-    console.log("手动配置步骤：");
-    console.log("  1. 登录企业微信管理后台");
-    console.log("  2. 进入应用管理，创建 AI Bot / 智能机器人");
-    console.log("  3. 选择 API 模式");
-    console.log("  4. 复制 Bot ID 和 Secret\n");
+    plainLogger.info("手动配置步骤：");
+    plainLogger.info("  1. 登录企业微信管理后台");
+    plainLogger.info("  2. 进入应用管理，创建 AI Bot / 智能机器人");
+    plainLogger.info("  3. 选择 API 模式");
+    plainLogger.info("  4. 复制 Bot ID 和 Secret\n");
 
     const botHint = currentBotId ? ` (当前: ${maskSecret(currentBotId)})` : "";
     botId = (await rl.question(`Bot ID${botHint}: `)).trim() || currentBotId;
@@ -337,7 +338,7 @@ async function setupWeCom(rl: ReturnType<typeof createInterface>): Promise<void>
   }
 
   if (!botId || !secret) {
-    console.log("\n未提供完整 Bot ID / Secret，跳过企业微信配置。\n");
+    plainLogger.info("\n未提供完整 Bot ID / Secret，跳过企业微信配置。\n");
     return;
   }
 
@@ -373,9 +374,9 @@ async function setupWeCom(rl: ReturnType<typeof createInterface>): Promise<void>
     groupAllowFrom,
   });
 
-  console.log("\n企业微信配置已写入 sati.yaml");
-  console.log("连接模式: AI Bot WebSocket (无需公网 IP)");
-  console.log("重启 Sati 服务后生效。\n");
+  plainLogger.info("\n企业微信配置已写入 sati.yaml");
+  plainLogger.info("连接模式: AI Bot WebSocket (无需公网 IP)");
+  plainLogger.info("重启 Sati 服务后生效。\n");
 }
 
 export async function qrScanForWeComBotInfo(
@@ -509,30 +510,30 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 // ---------------------------------------------------------------------------
 
 async function setupWeixin(rl: ReturnType<typeof createInterface>): Promise<void> {
-  console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-  console.log("  微信 iLink 配置");
-  console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+  plainLogger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+  plainLogger.info("  微信 iLink 配置");
+  plainLogger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
 
   const existingCreds = loadWeixinCredentials();
   if (existingCreds) {
-    console.log(`已有凭据 (accountId: ${existingCreds.accountId})`);
+    plainLogger.info(`已有凭据 (accountId: ${existingCreds.accountId})`);
     const answer = (await rl.question("重新登录？ [y/N]: ")).trim().toLowerCase();
     if (answer !== "y" && answer !== "yes") {
       // Make sure weixin is enabled in config
       enableWeixinConfig();
-      console.log("✅ 微信已启用（使用现有凭据）\n");
+      plainLogger.info("✅ 微信已启用（使用现有凭据）\n");
       return;
     }
   }
 
-  console.log("⚠️  注意：");
-  console.log("  - 使用 iLink Bot API，非企业微信");
-  console.log("  - 建议使用小号登录，有封号风险");
-  console.log("  - 群聊功能默认禁用\n");
+  plainLogger.info("⚠️  注意：");
+  plainLogger.info("  - 使用 iLink Bot API，非企业微信");
+  plainLogger.info("  - 建议使用小号登录，有封号风险");
+  plainLogger.info("  - 群聊功能默认禁用\n");
 
   const proceed = (await rl.question("继续扫码登录？ [Y/n]: ")).trim().toLowerCase();
   if (proceed === "n" || proceed === "no") {
-    console.log("已取消。");
+    plainLogger.info("已取消。");
     return;
   }
 
@@ -542,21 +543,21 @@ async function setupWeixin(rl: ReturnType<typeof createInterface>): Promise<void
     loginWithQR = mod.loginWithQR;
   } catch {
     // 动态 import 失败（weixin-ilink 未安装 / 模块初始化抛错）→ 打印安装指引后返回，不写任何半成品凭据。
-    console.log("\n❌ weixin-ilink 模块加载失败");
-    console.log("   请运行: npm install weixin-ilink\n");
+    plainLogger.info("\n❌ weixin-ilink 模块加载失败");
+    plainLogger.info("   请运行: npm install weixin-ilink\n");
     return;
   }
 
-  console.log("\n╔══════════════════════════════════════════════╗");
-  console.log("║  请用微信扫描二维码                          ║");
-  console.log("╚══════════════════════════════════════════════╝\n");
+  plainLogger.info("\n╔══════════════════════════════════════════════╗");
+  plainLogger.info("║  请用微信扫描二维码                          ║");
+  plainLogger.info("╚══════════════════════════════════════════════╝\n");
 
   try {
     const result = await loginWithQR({
       onQRCode: (url: string) => {
-        console.log("扫码登录链接：");
-        console.log(`  ${url}\n`);
-        console.log("如果终端无法显示二维码，请在浏览器中打开上述链接。\n");
+        plainLogger.info("扫码登录链接：");
+        plainLogger.info(`  ${url}\n`);
+        plainLogger.info("如果终端无法显示二维码，请在浏览器中打开上述链接。\n");
       },
       onStatusChange: (status: string) => {
         const labels: Record<string, string> = {
@@ -565,7 +566,7 @@ async function setupWeixin(rl: ReturnType<typeof createInterface>): Promise<void
           expired: "⏰ 二维码已过期，正在刷新...",
           refreshing: "🔄 刷新中...",
         };
-        console.log(labels[status] ?? `状态: ${status}`);
+        plainLogger.info(labels[status] ?? `状态: ${status}`);
       },
     });
 
@@ -578,13 +579,13 @@ async function setupWeixin(rl: ReturnType<typeof createInterface>): Promise<void
     saveWeixinCredentials(creds);
     enableWeixinConfig();
 
-    console.log(`\n✅ 微信登录成功！`);
-    console.log(`   账号 ID: ${result.accountId}`);
-    console.log(`   凭据已保存到: ${WEIXIN_CREDS_PATH}`);
-    console.log(`   重启 Sati 服务后生效\n`);
+    plainLogger.info(`\n✅ 微信登录成功！`);
+    plainLogger.info(`   账号 ID: ${result.accountId}`);
+    plainLogger.info(`   凭据已保存到: ${WEIXIN_CREDS_PATH}`);
+    plainLogger.info(`   重启 Sati 服务后生效\n`);
   } catch (e) {
-    console.log(`\n❌ 微信登录失败: ${e instanceof Error ? e.message : String(e)}`);
-    console.log("   请检查网络连接后重试。\n");
+    plainLogger.info(`\n❌ 微信登录失败: ${e instanceof Error ? e.message : String(e)}`);
+    plainLogger.info("   请检查网络连接后重试。\n");
   }
 }
 

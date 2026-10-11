@@ -36,7 +36,7 @@ export type ListToolsCache = {
  *
  * 背景（2026-10 桌面端变慢排查）：Task Master 等 Rust 生态 MCP 服务器在工具
  * outputSchema 中声明非标准 format `uint32`/`uint64`。SDK 默认 Ajv 实例
- * （validateFormats: true）编译时对每个未知 format 打一行 console.warn，生产
+ * （validateFormats: true）编译时对每个未知 format 打一行 warning，生产
  * 日志累计 3200 行。注册为 `true` 与 ajv 对未知 format 的既有运行语义完全
  * 一致（忽略、不校验），仅消除噪声；其余未知 format 仍会告警（信号保留）。
  * 初始选项与 SDK createDefaultAjvInstance 逐项对齐，addFormats 保证

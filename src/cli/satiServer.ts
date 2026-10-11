@@ -7,6 +7,7 @@ import {
   createChannelRuntimeStatusReporter,
   type ChannelRuntimeStatusReporter,
 } from "../adapters/channel/protocol/ChannelRuntimeStatus.js";
+import { plainLogger } from "../telemetry/index.js";
 
 export type StartSatiServerOptions = {
   gateway: Gateway;
@@ -43,9 +44,9 @@ export type SatiServer = GatewayServer & {
 
 export async function startSatiServer(options: StartSatiServerOptions): Promise<SatiServer> {
   const consoleLogger = {
-    info: (msg: string) => console.log(msg),
-    warn: (msg: string) => console.warn(msg),
-    error: (msg: string) => console.error(msg),
+    info: (msg: string) => plainLogger.info(msg),
+    warn: (msg: string) => plainLogger.warn(msg),
+    error: (msg: string) => plainLogger.error(msg),
   };
   const reportChannelStatus = createSafeChannelStatusReporter(
     createChannelRuntimeStatusReporter(resolvePilotHome(process.env)),
