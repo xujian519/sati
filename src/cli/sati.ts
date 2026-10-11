@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { createLogger, logger } from "../telemetry/index.js";
+import { createLogger, logger, plainLogger as out } from "../telemetry/index.js";
 import { APP_VERSION } from "../version.js";
 import type { Gateway, GatewayEvent, GatewaySubmitTurnInput } from "../gateway/index.js";
 import type { InProcessGateway } from "../gateway/client/InProcessGateway.js";
@@ -27,7 +27,7 @@ import type {
 } from "../extension/skills/index.js";
 
 function printUsage(): void {
-  console.log(`sati v${APP_VERSION} — AI agent runtime · CLI · TUI · Web · Feishu
+  out.info(`sati v${APP_VERSION} — AI agent runtime · CLI · TUI · Web · Feishu
 
 Usage: sati [command] [options]
 
@@ -53,7 +53,7 @@ Options:
 async function main(argv = process.argv.slice(2)): Promise<void> {
   const command = argv[0];
   if (command === "--version" || command === "-v") {
-    console.log(APP_VERSION);
+    out.info(APP_VERSION);
     return;
   }
   if (command === "--help" || command === "-h" || command === "help") {
@@ -519,10 +519,10 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
     });
     bindServer(server);
     deferredBroadcast = (name, payload) => server.broadcastNotification(name, payload);
-    console.log(`Sati server listening: ${server.url}`);
-    console.log(`WebSocket: ${server.wsUrl}`);
+    out.info(`Sati server listening: ${server.url}`);
+    out.info(`WebSocket: ${server.wsUrl}`);
     if (server.tokenPath) {
-      console.log(`Token: ${server.tokenPath}`);
+      out.info(`Token: ${server.tokenPath}`);
     }
     const stop = async () => {
       try {
@@ -562,7 +562,7 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
       await runGatewaySetup(argv.slice(2));
       return;
     }
-    console.error("Usage: sati gateway setup [feishu|weixin|wecom]");
+    out.error("Usage: sati gateway setup [feishu|weixin|wecom]");
     process.exitCode = 1;
     return;
   }
@@ -594,10 +594,10 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
       doctorCheck: argv.includes("--doctor"),
     });
     if (argv.includes("--json")) {
-      console.log(JSON.stringify(probes, null, 2));
+      out.info(JSON.stringify(probes, null, 2));
       return;
     }
-    console.log(formatBrowserBackendMatrix(probes));
+    out.info(formatBrowserBackendMatrix(probes));
     return;
   }
 
@@ -621,7 +621,7 @@ async function main(argv = process.argv.slice(2)): Promise<void> {
 
   if (command === "tui") {
     if (!process.stdin.isTTY) {
-      console.error("sati tui requires an interactive terminal.");
+      out.error("sati tui requires an interactive terminal.");
       process.exitCode = 1;
       return;
     }
@@ -717,26 +717,26 @@ async function handleUpdateCommand(argv: string[]): Promise<void> {
       }).trim();
 
       if (local === remote) {
-        console.log(`Already up-to-date (${local.slice(0, 8)}) on branch ${branch}`);
+        out.info(`Already up-to-date (${local.slice(0, 8)}) on branch ${branch}`);
       } else {
         const countStr = execFileSync("git", ["rev-list", "--count", `HEAD..origin/${branch}`], {
           cwd: projectRoot,
           encoding: "utf-8",
         }).trim();
-        console.log(`Update available: ${countStr} new commit(s) on branch ${branch}`);
-        console.log(`  local:  ${local.slice(0, 8)}`);
-        console.log(`  remote: ${remote.slice(0, 8)}`);
+        out.info(`Update available: ${countStr} new commit(s) on branch ${branch}`);
+        out.info(`  local:  ${local.slice(0, 8)}`);
+        out.info(`  remote: ${remote.slice(0, 8)}`);
         const log = execFileSync("git", ["log", "--oneline", `HEAD..origin/${branch}`, "-5"], {
           cwd: projectRoot,
           encoding: "utf-8",
         }).trim();
         if (log) {
-          console.log("\nRecent commits:");
-          console.log(log);
+          out.info("\nRecent commits:");
+          out.info(log);
         }
       }
     } catch (e: unknown) {
-      console.error(`Failed to check for updates: ${e instanceof Error ? e.message : String(e)}`);
+      out.error(`Failed to check for updates: ${e instanceof Error ? e.message : String(e)}`);
       process.exitCode = 1;
     }
     return;
@@ -756,7 +756,7 @@ async function handleUpdateCommand(argv: string[]): Promise<void> {
       // Already up-to-date — not an error
       return;
     }
-    console.error(`Update failed with exit code ${err.status ?? "unknown"}`);
+    out.error(`Update failed with exit code ${err.status ?? "unknown"}`);
     process.exitCode = 1;
   }
 }
@@ -765,7 +765,7 @@ async function handleCronCommand(argv: string[]): Promise<void> {
   const { connectRemoteGatewayIfAvailable } = await import("../gateway/client/index.js");
   const gateway = await connectRemoteGatewayIfAvailable();
   if (!gateway) {
-    console.error("sati cron requires a running sati server.");
+    out.error("sati cron requires a running sati server.");
     process.exitCode = 1;
     return;
   }
@@ -775,7 +775,7 @@ async function handleCronCommand(argv: string[]): Promise<void> {
       includeHistory: argv.includes("--history"),
       limit: readNumberFlag(argv, "--limit"),
     });
-    console.log(JSON.stringify(result, null, 2));
+    out.info(JSON.stringify(result, null, 2));
     return;
   }
   if (command === "create") {
@@ -784,7 +784,7 @@ async function handleCronCommand(argv: string[]): Promise<void> {
     const once = readStringFlag(argv, "--once");
     const cron = readStringFlag(argv, "--cron");
     if (!message || !sessionKey || (!once && !cron)) {
-      console.error("Usage: sati cron create --session <sessionKey> --message <text> (--once <iso> | --cron <expr>)");
+      out.error("Usage: sati cron create --session <sessionKey> --message <text> (--once <iso> | --cron <expr>)");
       process.exitCode = 1;
       return;
     }
@@ -796,33 +796,33 @@ async function handleCronCommand(argv: string[]): Promise<void> {
       schedule: once ? { type: "once", runAt: once } : { type: "cron", expression: cron! },
       timezone: readStringFlag(argv, "--timezone"),
     });
-    console.log(JSON.stringify(result, null, 2));
+    out.info(JSON.stringify(result, null, 2));
     return;
   }
   if (command === "delete") {
     const taskId = argv[1] ?? readStringFlag(argv, "--task");
     if (!taskId) {
-      console.error("Usage: sati cron delete <taskId> [--stop-running]");
+      out.error("Usage: sati cron delete <taskId> [--stop-running]");
       process.exitCode = 1;
       return;
     }
     const result = await gateway.cronDelete({ taskId, stopRunning: argv.includes("--stop-running") });
-    console.log(JSON.stringify(result, null, 2));
+    out.info(JSON.stringify(result, null, 2));
     return;
   }
   if (command === "stop") {
     const taskId = argv[1] ?? readStringFlag(argv, "--task");
     const runId = readStringFlag(argv, "--run");
     if (!taskId && !runId) {
-      console.error("Usage: sati cron stop <taskId> or sati cron stop --run <runId>");
+      out.error("Usage: sati cron stop <taskId> or sati cron stop --run <runId>");
       process.exitCode = 1;
       return;
     }
     const result = await gateway.cronStop({ taskId, runId });
-    console.log(JSON.stringify(result, null, 2));
+    out.info(JSON.stringify(result, null, 2));
     return;
   }
-  console.error("Usage: sati cron <list|create|delete|stop>");
+  out.error("Usage: sati cron <list|create|delete|stop>");
   process.exitCode = 1;
 }
 
@@ -831,7 +831,7 @@ async function handleSkillsCommand(argv: string[]): Promise<void> {
   const { resolvePilotHome } = await import("../pilot/index.js");
   const command = argv[0];
   if (command !== "migrate") {
-    console.error(
+    out.error(
       "Usage: sati skills migrate [--execute] [--from cc,openclaw,hermes] [--source <dir>] [--overwrite|--rename]",
     );
     process.exitCode = 1;
@@ -856,7 +856,7 @@ async function handleSkillsCommand(argv: string[]): Promise<void> {
   });
 
   if (argv.includes("--json")) {
-    console.log(JSON.stringify(report, null, 2));
+    out.info(JSON.stringify(report, null, 2));
     return;
   }
 
@@ -891,27 +891,27 @@ function parseSkillMigrationSources(
 
 function printSkillMigrationReport(report: SkillMigrationReport): void {
   const mode = report.mode === "execute" ? "EXECUTED" : "DRY RUN";
-  console.log(`Sati skills migration (${mode})`);
-  console.log(`Target: ${report.targetRoot}`);
-  console.log(
+  out.info(`Sati skills migration (${mode})`);
+  out.info(`Target: ${report.targetRoot}`);
+  out.info(
     `Summary: migrated=${report.summary.migrated} would_migrate=${report.summary.would_migrate} ` +
       `conflict=${report.summary.conflict} skipped=${report.summary.skipped} error=${report.summary.error}`,
   );
 
   const actionable = report.items.filter(item => item.status !== "skipped");
   if (actionable.length > 0) {
-    console.log("");
+    out.info("");
     for (const item of actionable) {
-      console.log(`${formatSkillMigrationStatus(item)} ${item.sourceLabel}: ${item.slug || "(n/a)"}`);
-      console.log(`  ${item.sourcePath}`);
-      if (item.destinationPath) console.log(`  -> ${item.destinationPath}`);
-      if (item.reason) console.log(`  ${item.reason}`);
+      out.info(`${formatSkillMigrationStatus(item)} ${item.sourceLabel}: ${item.slug || "(n/a)"}`);
+      out.info(`  ${item.sourcePath}`);
+      if (item.destinationPath) out.info(`  -> ${item.destinationPath}`);
+      if (item.reason) out.info(`  ${item.reason}`);
     }
   }
 
   if (report.mode === "dry-run") {
-    console.log("");
-    console.log("This was a dry run. Add --execute to copy skills.");
+    out.info("");
+    out.info("This was a dry run. Add --execute to copy skills.");
   }
 }
 
@@ -1029,6 +1029,6 @@ function createFallbackGateway(sanitizeSessionIdForPath: (sessionId: string) => 
 
 main().catch(error => {
   // 顶层错误无前缀输出：CI/脚本按裸错误文本 grep，保持既有契约
-  createLogger("").error(error instanceof Error ? error.message : String(error));
+  out.error(error instanceof Error ? error.message : String(error));
   process.exitCode = 1;
 });

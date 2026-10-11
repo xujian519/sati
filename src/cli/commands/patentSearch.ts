@@ -15,6 +15,7 @@ import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import pg from "pg";
+import { plainLogger } from "../../telemetry/index.js";
 
 // date 列（OID 1082）保留服务端原字符串（YYYY-MM-DD）：pg 默认解析为 JS Date
 // 对象，String() 输出含时区、与 psql 文本输出不一致，破坏对齐
@@ -586,16 +587,16 @@ function showHelp(): string {
 /** CLI 入口（sati patent-search）。 */
 export async function main(argv: string[]): Promise<number> {
   if (argv.includes("--help") || argv.includes("-h")) {
-    console.log(showHelp());
+    plainLogger.info(showHelp());
     return 0;
   }
   try {
     const args = parsePatentSearchArgs(argv);
     validateArgs(args);
-    console.log(await runPatentSearch(args));
+    plainLogger.info(await runPatentSearch(args));
     return 0;
   } catch (error) {
-    console.error(error instanceof Error ? error.message : String(error));
+    plainLogger.error(error instanceof Error ? error.message : String(error));
     return 1;
   }
 }

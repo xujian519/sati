@@ -7,7 +7,7 @@
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1081 / 187563 |
+| src TS 文件 / 行数 | 1081 / 187584 |
 | src JS 文件 | 0 |
 | tests 文件 | 629 |
 | ui/src 文件 / 行数 | 638 / 102219 |
@@ -17,7 +17,7 @@
 
 | 指标 | 作用域 |
 |---|---|
-| console | src + ui/server（.ts/.tsx/.js/.jsx/.mjs/.cjs；豁免两处 C39 收束入口 ui/server/utils/consoleLogger.js 与 ui/src/utils/logging.ts） |
+| console | src + ui/server（.ts/.tsx/.js/.jsx/.mjs/.cjs；豁免日志收束入口：ui/server/utils/consoleLogger.js、ui/src/utils/logging.ts，及 #646 P1.4 扩展的 src/telemetry/logger.ts + src/shared/debug.ts） |
 | unsafe | src + ui/src（.ts/.tsx，含同址 *.spec.*；TS AST 精确统计 AnyKeyword + @ts-* 指令） |
 | asUnknownAs | src + ui/src（.ts/.tsx，含同址 *.spec.*；TS AST 统计 `x as unknown as T` 双重断言）。**口径变更**：2026-09-15（issue #339）首度纳入——此前该形态完全未统计，故 0 → N 的变化来自口径变更而非新增债务 |
 | catch | src + ui/src + ui/server 产品代码（排除 *.spec.* / *.test.*）。**口径变更**：2026-09-16（issue #341）纳入 ui/server——此前仅 src + ui/src，于是「空 catch {}」报 0 而 ui/server 实有 1 处，且同为「错误 & 可观测」类的 console/todos 早已含 ui/server，口径自相矛盾；2026-09-24（issue #530）补 ui/src 的 .js/.jsx（9 个文件）并解除 `lib` 目录名豁免对**同名源码目录** `ui/src/lib/` 的误伤——此后「无注释的无参 catch」由 12 更正为 17（少算的 5 处全部计入），属口径变更而非新增债务 |
@@ -30,7 +30,7 @@
 |---|---|---|
 | `any`/`@ts-expect-error`/`@ts-ignore` | 3 | ui/src(3) |
 | `as unknown as`（双重断言） | 20 | ui/src(18) · adapters(1) · network(1) |
-| 裸 `console.*` | 160 | cli(137) · telemetry(8) · ui/server(6) |
+| 裸 `console.*` | 6 | ui/server(6) |
 | 空 `catch {}` | 0 | — |
 | 无参 `catch {`（总计） | 692 | ui/server(160) · ui/src(125) · adapters(70) |
 | ↳ **无注释**（隐患类，目标） | **0** | — |

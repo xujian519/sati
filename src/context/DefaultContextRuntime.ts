@@ -937,7 +937,7 @@ function logAutoCompactEvent(
   };
   try {
     if (level === "debug") {
-      // console.debug 是 console.log 别名，无法降噪；走 SATI_DEBUG 门控。
+      // debug 级输出无法靠控制台自带级别降噪；走 SATI_DEBUG 门控。
       debugLog(`[context:auto-compact] ${stage} ${JSON.stringify(payload)}`);
       return;
     }

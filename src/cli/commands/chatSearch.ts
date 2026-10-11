@@ -1,5 +1,6 @@
 import { resolvePilotHome } from "../../pilot/index.js";
 import { formatChatHistorySearchResults } from "../../session/search/formatChatHistorySearch.js";
+import { plainLogger } from "../../telemetry/index.js";
 import {
   parseChatSearchArgs,
   searchChatHistory,
@@ -57,7 +58,7 @@ function readNumberFlag(argv: string[], flag: string): number | undefined {
 export async function runChatSearchCli(argv: string[]): Promise<void> {
   const subcommand = argv[0];
   if (subcommand !== "search") {
-    console.error(
+    plainLogger.error(
       "Usage: sati chat search <keyword> [--project <path>] [--all-projects] [--limit N] [--json] [--regex] [--case-sensitive] [--role user|assistant|all] [--session <id>]",
     );
     process.exitCode = 1;
@@ -85,7 +86,7 @@ export async function runChatSearchCli(argv: string[]): Promise<void> {
 
   const query = queryParts.join(" ").trim();
   if (!query) {
-    console.error("Error: search keyword is required.");
+    plainLogger.error("Error: search keyword is required.");
     process.exitCode = 1;
     return;
   }
@@ -103,11 +104,11 @@ export async function runChatSearchCli(argv: string[]): Promise<void> {
   });
 
   if (json) {
-    console.log(JSON.stringify(result, null, 2));
+    plainLogger.info(JSON.stringify(result, null, 2));
     return;
   }
 
-  console.log(
+  plainLogger.info(
     formatChatHistorySearchResults(result, {
       locale: "en",
       includeProject: allProjects,

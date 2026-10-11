@@ -36,6 +36,7 @@
   - 工作量：L · 严重级：P2 · 状态：new
   - **2026-08-27 复核**：总量已降至 **153**（logger 收敛生效，cli 191→137，`createLocalGateway.ts` 已清零）。剩余 cli 命中抽样 ~14/15 属 CLI 合法用户输出（向导 TUI、banner、用法报错），建议改判 mostly won't-fix；焦点转向 **ui/server 桥**：`routes/git.js` 等桥文件新增 `console.log("[sati-bridge] submitTurn runMode=...")`（`sati-bridge.js:713,731`，每条用户消息触发）应走 debugLog 门控或服务端 logger。次热现为 `telemetry`(8)。
   - **2026-09-11 终审**：✅ **done（C39，2026-09-08）**。收束 `ui/server` 408→0、`ui/src` 116→0——建两处纯转发入口 `ui/server/utils/consoleLogger.js` 与 `ui/src/utils/logging.ts`（不改输出文本，逐字节不变）；`src/` 剩余 143 处按设计豁免（CLI 交互 / 登录二维码 / `debug.ts` / telemetry 入口），即 2026-08-27 复核所述的「mostly won't-fix」部分。按 2026-09-11 对齐口径，`src + ui/server` 实测**上界 158**（含注释掉的调用等同名文本），远低于目标 <300。
+  - **2026-10-12 sweep P1.4（issue #646 · `47f4ef64d`）**：把 C39 终审「按设计豁免」的 src 剩余部分**机械化收束**：cli 全部裸调用（137）改经 `src/telemetry/logger.ts` 的**无前缀直通单例 `plainLogger`**（stdout/stderr 映射与 `console.*` 逐处 1:1：log→info / error→error / warn→warn；`--version` / `--json` 等机器可读输出与任何前缀完全隔离）；weixin 登录 banner（3）同口径；`context` / `mcp` / `createLocalGateway` 的 4 处为**注释提及**（非调用）已改写；`telemetry/logger.ts` 与 `shared/debug.ts` 作为 src 侧收束入口**申报豁免**（C39 先例扩展：`measure-techdebt.mjs` 的 SANCTIONED 集与口径文案同步，见 metrics.md console 行）。metric：`裸 console.*` **160 → 6**（cli 137→0 · telemetry 8→0 · 散落 9→0；剩 **ui/server(6)** = sessionManager.js 5 处注释残留 + projects.test.js 1 处，非 M6 口径，留档）。验证：`pnpm check` 聚合门禁 EXIT=0、定向测试 90/90（tests/cli 15 + weixin ×2 + patentSearchCli）、sati.ts 以 `plainLogger as out` 别名保持棘轮净增 0。最后复核：2026-10-12。
 - **TD-CATCH-001** · 静默吞错 catch（体仅注释/空白）151 处，`adapters` 40 · `always-on` 15 · `tool` 14
   - 影响：异常被吞且无注释，属隐患。逐条补注释或改结构化错误。
   - 工作量：L · 严重级：P2 · 状态：done（2026-09-11，C41）
@@ -2499,7 +2500,7 @@
 - [x] **P1.1** 无注释无参 catch 17 处补「失败模式 → 回退语义」注释 → **0**（`6e3b447db`；棘轮 17→0 锁定）
 - [x] **P1.2** i18n：teamPanel zh 补 `pill.teamCount_one` + FilesV2 `fileTree.*` 14 处 defaultValue → 正式 en/zh key（`4c271fe6f`；实际为 **9 键 / 27 处兜底**——穷尽比对脚本发现侦察口径 14 为下限；含 `t("loading")` 归位）
 - [x] **P1.3** `as unknown as` 产品代码 20 → **2**（全量 38 → 20；`e854be98c`；残余 2 处为有据边界：weixin SDK d.ts 失真 / fetch undici×全局 Response；余 18 处于同址测试文件，不在 M7 口径）
-- [ ] **P1.4** cli 裸 console 137 + 散落 ~9 → `src/telemetry/logger.ts` 收束（M6=0）
+- [x] **P1.4** cli 裸 console 137 + 散落 ~9 → `src/telemetry/logger.ts` 收束（M6=0；metric 160→6，剩 ui/server 6 为口径外残留；`plainLogger` 无前缀直通 + logger/debug 收束入口豁免；`47f4ef64d`）
 - [ ] **P1.5** figuregen barrel 收敛：零消费 **84 → 0**（`scripts/measure-figuregen-exports.mjs` 口径，取代一次性侦察 88）
 
 **P4 · 数据与测试专项（D38–D41，B 线）**

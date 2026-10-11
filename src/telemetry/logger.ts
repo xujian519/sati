@@ -72,3 +72,10 @@ export function createLogger(namespace: string, options: CreateLoggerOptions = {
 
 /** 默认单例（namespace="sati"），供大部分使用 `[sati]` 前缀的模块直接引用。 */
 export const logger: Logger = createLogger("sati");
+
+/**
+ * 无前缀直通单例：供 CLI 交互输出与机器可读 stdout（`--version` / `--json`）
+ * 原样输出——前缀会破坏既有输出契约。是 #646 P1.4 收束 cli 裸 `console.*`
+ * 的统一出口（stdout/stderr 映射与 logger 本体一致）。
+ */
+export const plainLogger: Logger = createLogger("");

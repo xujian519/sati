@@ -31,7 +31,7 @@ import {
   type ImLiveReplyTransport,
 } from "../protocol/ImLiveReplyController.js";
 import { createVisibleErrorStatusDetail } from "../../../status/agentStatus.js";
-import { createLogger } from "../../../telemetry/index.js";
+import { createLogger, plainLogger } from "../../../telemetry/index.js";
 import { WeixinSessionMapper, type WeixinSessionMapperState } from "./WeixinSessionMapper.js";
 
 const logger = createLogger("weixin");
@@ -315,9 +315,9 @@ export class WeixinChannel implements ChannelAdapter {
     this.logger?.info?.("weixin: no credentials found, starting QR login...");
     this.currentLoginQrUrl = undefined;
     this.reportStatus("waiting_for_login", "微信等待扫码登录");
-    console.log("\n╔══════════════════════════════════════════════╗");
-    console.log("║  微信 iLink 登录 — 请用微信扫描二维码        ║");
-    console.log("╚══════════════════════════════════════════════╝\n");
+    plainLogger.info("\n╔══════════════════════════════════════════════╗");
+    plainLogger.info("║  微信 iLink 登录 — 请用微信扫描二维码        ║");
+    plainLogger.info("╚══════════════════════════════════════════════╝\n");
     logger.info("等待扫码登录；Sati Web UI 已可继续使用。\n");
 
     this.loginPromise = this.runQrLogin(generation).finally(() => {
