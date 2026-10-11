@@ -2312,3 +2312,180 @@
 | `TD-PATENT-N32` | P2 | 投影脚本用 `raise SystemExit('…')` 报错（`freecad.ts` 7 处）；实测 freecadcmd **只传播退出码、吞掉 `SystemExit` 的消息**，而非 `SystemExit` 逃逸时**退出码反而是 0** ⇒ 失败时 `projectStep` 只能拿 stderr 兜底，拼进报错的是 **FreeCAD 版本横幅**（端到端实测：「STEP 已解析但几何为空」被报成 `FreeCAD 1.1.3, Libs: … | (C) 2001-2026 FreeCAD contributors | …`）；主流程（`shape.read`/`common`/`TechDraw.project`）无顶层兜底。**已做（#595，PR #597）**：`_fail()`（stderr 标记 `SATI_CAD_ERROR:` + `sys.exit(1)`）收口九条失败分支，主流程收进 `_main()` + 顶层 `except Exception` 兜底；STEP 读入口区分「文件不可读（带路径）」与「已解析但无 B-rep」（后者直指 `exportStep` vs `Part.export([shape], path)` 的空壳陷阱）。见 `docs/notes/implemented/2026-09-30-cad-failure-diagnostics.md` | **#595** | 2026-09-30 |
 | `TD-PATENT-N33` | P2 | `projectStep` 把「退出码 0」当成功的**充分条件**（只在 `code !== 0` 时读 stderr）⇒ freecadcmd 对未捕获的 Python 异常退出码为 0，此时 `parseProjectionOutput` 抛的是与真因无关的「投影输出缺少定界标记」，**真因（只在 stderr）整条丢弃**；`step_path` 指向不存在的文件即命中（端到端实测：真因 `OSError: File to load not existing or not readable` 完全不可见）。**已做（#596，PR #597）**：`describeCadFailure(stdout, stderr)`（脚本标记行 → stderr 尾部 → stdout 尾部，后者如实标注「stderr 为空」）由**两条**失败路径共用，边数上限检查留在 try 之外 | **#596** | 2026-09-30 |
 
+## 38. 2026-10-12 全库 sweep 冻结清单与勾选载体（P0.1）
+
+> 本节的勾选清单是《`2026-10-45day-maintainability-sweep-plan.md`》（v2 · 入库 PR #645）的执行载体，跟踪 issue #646；条目交付时勾选对应行并备注（commit 短 hash + 行数 before/after）。勾选格式对齐 `docs/issue-management.md` §6.1。
+> 口径修正（oracle 开工前评审 F1）：metrics.md 的「Top 30 大文件」是 `TOP_FILES_LIMIT=30` 截断表；同口径（src + ui/src + ui/server，排除 edgeclaw）全量为 **42** 个 ≥800 行文件，见 §38.2。
+> 基线：metrics.md 2026-10-10 快照 · HEAD `7a414709e`。交付线：M1（≥400 行归零）· M2（300–399 行 ≤8 且每个留 note）。
+> 不在此清单：4 个开放 bug（#625/#626/#643/#624）与性能专项，均走既有 issue 队列。
+
+### 38.1 God function ≥300 行（63 个 = ui/src 46 + src 17）
+
+| 批次 | 数量 |
+|---|---|
+| B1 | 4 |
+| B2 | 12 |
+| B3 | 3 |
+| B4 | 5 |
+| B5 | 22 |
+| P2 | 17 |
+
+
+**B1 · 底座与实时链（D19–D23）**
+
+- [ ] **B1.1** `ui/src/stores/useSessionStore.ts` — `createSessionActions`（631 行）
+- [ ] **B1.2** `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` — `useChatRealtimeHandlers`（721 行）
+- [ ] **B1.2** `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` — `(anonymous)`（匿名 handleMessage）（624 行）
+- [ ] **B1.3** `ui/src/hooks/useProjectsState.ts` — `useProjectsState`（647 行）
+
+**B2 · chat 主链路（D24–D29，子件先、枢纽后）**
+
+- [ ] **B2.1** `ui/src/components/chat-v2/MessagesPaneV2.tsx` — `MessagesPaneV2`（824 行）
+- [ ] **B2.2** `ui/src/components/chat-v2/ComposerV2.tsx` — `ComposerV2`（741 行）
+- [ ] **B2.3** `ui/src/components/chat-v2/MessageRowV2.tsx` — `MessageRowV2`（429 行）
+- [ ] **B2.3** `ui/src/components/chat-v2/SubagentDetailMessageFlow.tsx` — `SubagentDetailMessageFlow`（309 行）
+- [ ] **B2.3** `ui/src/components/chat/view/subcomponents/MessageComponent.tsx` — `(anonymous)`（335 行）
+- [ ] **B2.4** `ui/src/components/chat/hooks/useSessionSubmit.ts` — `useSessionSubmit`（528 行）
+- [ ] **B2.4** `ui/src/components/chat/hooks/useSlashCommands.ts` — `useSlashCommands`（395 行）
+- [ ] **B2.4** `ui/src/components/chat/hooks/useSlashCommandExecute.ts` — `useSlashCommandExecute`（331 行）
+- [ ] **B2.5** `ui/src/components/chat/hooks/useChatComposerState.ts` — `useChatComposerState`（467 行）
+- [ ] **B2.5** `ui/src/components/chat/hooks/useFileMentions.tsx` — `useFileMentions`（366 行）
+- [ ] **B2.5** `ui/src/components/chat/tools/components/InteractiveRenderers/AskUserQuestionPanel.tsx` — `AskUserQuestionPanel`（378 行）
+- [ ] **B2.6** `ui/src/components/chat-v2/ChatInterfaceV2.tsx` — `ChatInterfaceV2`（668 行）
+
+**B3 · app-shell（D30–D32）**
+
+- [ ] **B3.1** `ui/src/components/app-shell/SidebarV2.tsx` — `SidebarV2`（1014 行）
+- [ ] **B3.2** `ui/src/components/app-shell/MainAreaV2.tsx` — `MainAreaV2Content`（381 行）
+- [ ] **B3.3** `ui/src/components/app-shell/AppShellV2.tsx` — `AppShellV2`（631 行）
+
+**B4 · main-content-v2（D33–D36）**
+
+- [ ] **B4.1** `ui/src/components/main-content-v2/DashboardV2.tsx` — `DashboardV2`（332 行）
+- [ ] **B4.3** `ui/src/components/main-content-v2/FilesV2.tsx` — `FilesV2`（849 行）
+- [ ] **B4.4** `ui/src/components/main-content-v2/CronV2.tsx` — `CronFormView`（476 行）
+- [ ] **B4.4** `ui/src/components/main-content-v2/PlansAndCronJobs.tsx` — `PlansAndCronJobs`（334 行）
+- [ ] **B4.4** `ui/src/components/main-content-v2/skills/import/ImportFromFolder.tsx` — `ImportFromFolder`（688 行）
+
+**B5 · settings + 尾部（B5.4/B5.5 属余额档 D46–D50）**
+
+- [ ] **B5.1** `ui/src/components/settings/view/integrations/im/components/WeComChannelSection.tsx` — `WeComChannelSection`（398 行）
+- [ ] **B5.1** `ui/src/components/settings/view/integrations/im/components/FeishuChannelSection.tsx` — `FeishuChannelSection`（381 行）
+- [ ] **B5.1** `ui/src/components/settings/view/integrations/im/components/WeixinChannelSection.tsx` — `WeixinChannelSection`（303 行）
+- [ ] **B5.2** `ui/src/components/settings/view/modelPool/components/ProviderCard.tsx` — `ProviderCard`（447 行）
+- [ ] **B5.2** `ui/src/components/settings/view/agentRoute/components/RouterSection.tsx` — `RouterSection`（357 行）
+- [ ] **B5.2** `ui/src/components/settings/view/agentSearch/components/ToolsSection.tsx` — `ToolsSection`（399 行）
+- [ ] **B5.3** `ui/src/components/git-panel/hooks/useGitPanelController.ts` — `useGitPanelController`（704 行）
+- [ ] **B5.4** `ui/src/components/onboarding/view/subcomponents/LlmConfigurationStep.tsx` — `LlmConfigurationStep`（633 行）
+- [ ] **B5.4** `ui/src/components/kanban/hooks/useBoardState.ts` — `useBoardState`（368 行）
+- [ ] **B5.4** `ui/src/components/code-editor/view/subcomponents/DocxBuiltinPreview.tsx` — `DocxBuiltinPreview`（422 行）
+- [ ] **B5.4** `ui/src/components/code-editor/view/subcomponents/SpreadsheetInteractivePreview.tsx` — `SpreadsheetInteractivePreview`（407 行）
+- [ ] **B5.4** `ui/src/components/code-editor/view/CodeEditor.tsx` — `CodeEditor`（326 行）
+- [ ] **B5.4** `ui/src/components/main-content/view/MainContent.tsx` — `SplitBody`（573 行）
+- [ ] **B5.4** `ui/src/components/main-content/view/MainContent.tsx` — `MainContent`（346 行）
+- [ ] **B5.4** `ui/src/components/annotation/view/Annotator.tsx` — `Annotator`（322 行）
+- [ ] **B5.4** `ui/src/hooks/useSatiConfig.ts` — `useSatiConfigState`（332 行） · *（P0.1 补记：计划批次外追加，纳入 B5.4 余额档）*
+- [ ] **B5.5** `ui/src/components/chat-v2/MessagesPaneV2.render.test.tsx` — `(anonymous)`（943 行）
+- [ ] **B5.5** `ui/src/components/chat-v2/processGrouping.test.ts` — `(anonymous)`（409 行）
+- [ ] **B5.5** `ui/src/types/contentReference.spec.ts` — `(anonymous)`（408 行）
+- [ ] **B5.5** `ui/src/components/main-content-v2/CronV2.test.tsx` — `(anonymous)`（384 行）
+- [ ] **B5.5** `ui/src/types/annotationReference.spec.ts` — `(anonymous)`（381 行）
+- [ ] **B5.5** `ui/src/stores/useSessionStore.actions.test.tsx` — `(anonymous)`（354 行）
+
+**P2 · 后端拆分（D9–D18）**
+
+- [ ] **P2** `src/gateway/client/InProcessGateway.ts` — `submitTurn`（301 行）
+- [ ] **P2** `src/gateway/client/eventMapping.ts` — `mapAgentEventForTurn`（417 行）
+- [ ] **P2** `src/gateway/client/telemetry.ts` — `emitSessionTelemetry`（333 行）
+- [ ] **P2** `src/gateway/server/GatewayWsConnection.ts` — `dispatchRequest`（353 行）
+- [ ] **P2** `src/tool/builtin/patentFigureProject.ts` — `createPatentFigureProjectTool`（554 行）
+- [ ] **P2** `src/tool/builtin/patentFigureProject.ts` — `execute`（411 行）
+- [ ] **P2** `src/tool/builtin/patentFigureGenerate.ts` — `createPatentFigureGenerateTool`（422 行）
+- [ ] **P2** `src/tool/builtin/patentFigureGenerate.ts` — `execute`（322 行）
+- [ ] **P2** `src/tool/builtin/patentFigureCheck.ts` — `createPatentFigureCheckTool`（384 行）
+- [ ] **P2** `src/router/execution/executeRouterDecision.ts` — `executeRouterDecision`（449 行）
+- [ ] **P2** `src/cli/sati.ts` — `main`（642 行）
+- [ ] **P2** `src/cli/projectRuntimeFactory.ts` — `createProjectRuntimeResolver`（424 行）
+- [ ] **P2** `src/cli/projectRuntimeFactory.ts` — `resolve`（316 行）
+- [ ] **P2** `src/adapters/channel/tui/app/TuiApp.tsx` — `TuiApp`（643 行）
+- [ ] **P2** `src/web/client/webMessage.ts` — `applyWebGatewayEvent`（383 行）
+- [ ] **P2** `src/tool/execution/ToolRuntime.ts` — `execute`（388 行）
+- [ ] **P2** `src/patent/graph/domains/inventiveness.ts` — `buildInventivenessGraph`（342 行）
+
+### 38.2 ≥800 行文件（42 个：承接 16 + 未承接 26）
+
+> 承接 = 计划条目的拆分会使该文件降到 800 以下或另有明确目标；未承接 = 转 §38.3 的 sweep 后条目（**不进 45/50 天承诺面**，不静默）。注：`InProcessGateway.ts` 只拆函数不拆文件，故按未承接计。
+
+- [ ] **BF-01** `ui/server/sati-bridge.js` — 2347 行 · 未承接 → PS-01
+- [ ] **BF-02** `src/adapters/channel/wecom/WeComChannel.ts` — 1763 行 · 未承接 → PS-02
+- [ ] **BF-03** `src/patent/figuregen/render-check.ts` — 1633 行 · 未承接 → PS-03
+- [ ] **BF-04** `src/model/catalog/providers.ts` — 1592 行 · 未承接 → PS-04
+- [ ] **BF-05** `src/gateway/client/InProcessGateway.ts` — 1517 行 · 未承接 → PS-05
+- [ ] **BF-06** `ui/server/routes/git.js` — 1506 行 · 未承接 → PS-06
+- [ ] **BF-07** `src/adapters/channel/weixin/WeixinChannel.ts` — 1496 行 · 未承接 → PS-07
+- [ ] **BF-08** `ui/src/components/main-content-v2/SkillsV2.tsx` — 1440 行 · 承接：**B4.2**
+- [ ] **BF-09** `ui/src/stores/useSessionStore.ts` — 1351 行 · 承接：**B1.1**
+- [ ] **BF-10** `ui/src/components/main-content-v2/DashboardV2.tsx` — 1344 行 · 承接：**B4.1**
+- [ ] **BF-11** `src/adapters/channel/feishu/FeishuChannel.ts` — 1336 行 · 未承接 → PS-08
+- [ ] **BF-12** `ui/src/components/app-shell/SidebarV2.tsx` — 1322 行 · 承接：**B3.1**
+- [ ] **BF-13** `ui/src/components/chat-v2/processGrouping.ts` — 1293 行 · 未承接 → PS-09
+- [ ] **BF-14** `ui/src/components/chat-v2/MessagesPaneV2.render.test.tsx` — 1233 行 · 承接：**B5.5**
+- [ ] **BF-15** `ui/server/routes/config.js` — 1233 行 · 未承接 → PS-10
+- [ ] **BF-16** `ui/server/routes/agent.js` — 1223 行 · 未承接 → PS-11
+- [ ] **BF-17** `ui/src/components/chat-v2/ComposerV2.tsx` — 1187 行 · 承接：**B2.2**
+- [ ] **BF-18** `ui/src/components/chat-v2/MessagesPaneV2.tsx` — 1182 行 · 承接：**B2.1**
+- [ ] **BF-19** `ui/server/routes/taskmaster.js` — 1178 行 · 未承接 → PS-12
+- [ ] **BF-20** `src/agent/loop/AgentLoop.ts` — 1149 行 · 未承接 → PS-13
+- [ ] **BF-21** `ui/src/components/main-content-v2/CronV2.tsx` — 1129 行 · 承接：**B4.4**
+- [ ] **BF-22** `ui/src/components/main-content/view/MainContent.tsx` — 1110 行 · 承接：**B5.4**
+- [ ] **BF-23** `ui/server/routes/config.test.js` — 1089 行 · 未承接 → PS-14
+- [ ] **BF-24** `src/model/streaming/streamModel.ts` — 1084 行 · 未承接 → PS-15
+- [ ] **BF-25** `ui/server/routes/commands.js` — 1081 行 · 未承接 → PS-16
+- [ ] **BF-26** `src/always-on/runtime/DiscoveryFire.ts` — 1078 行 · 未承接 → PS-17
+- [ ] **BF-27** `src/cli/sati.ts` — 1034 行 · 承接：**P2.7**
+- [ ] **BF-28** `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` — 1024 行 · 承接：**B1.2**
+- [ ] **BF-29** `src/adapters/channel/protocol/ImLiveReplyController.ts` — 1016 行 · 未承接 → PS-18
+- [ ] **BF-30** `src/gateway/protocol/types.ts` — 994 行 · 未承接 → PS-19
+- [ ] **BF-31** `ui/src/components/main-content-v2/FilesV2.tsx` — 961 行 · 承接：**B4.3**
+- [ ] **BF-32** `src/context/DefaultContextRuntime.ts` — 953 行 · 未承接 → PS-20
+- [ ] **BF-33** `src/pilot/config/loadPilotConfig.ts` — 921 行 · 未承接 → PS-21
+- [ ] **BF-34** `src/patent/figuregen/inkscape-renderer.ts` — 915 行 · 未承接 → PS-22
+- [ ] **BF-35** `ui/src/hooks/useProjectsState.ts` — 900 行 · 承接：**B1.3**
+- [ ] **BF-36** `ui/src/components/app-shell/AppShellV2.tsx` — 894 行 · 承接：**B3.3**
+- [ ] **BF-37** `ui/src/components/chat/tools/configs/toolConfigs.ts` — 863 行 · 未承接 → PS-23
+- [ ] **BF-38** `ui/server/services/satiConfig.js` — 857 行 · 未承接 → PS-24
+- [ ] **BF-39** `src/adapters/channel/tui/app/TuiApp.tsx` — 854 行 · 承接：**P2.8**
+- [ ] **BF-40** `src/patent/evidence/engine.ts` — 841 行 · 未承接 → PS-25
+- [ ] **BF-41** `ui/src/components/main-content-v2/skills/import/ImportFromFolder.tsx` — 824 行 · 承接：**B4.4**
+- [ ] **BF-42** `src/tool/builtin/kanban.ts` — 815 行 · 未承接 → PS-26
+
+### 38.3 未承接文件处置（26 个，sweep 后条目 · status: new · 最后复核：2026-10-12）
+
+> 以下为 ≥800 行且不在 45/50 天承诺面的文件；登记为 sweep 后 backlog 条目（容量外，有意不排期），由架构边界门禁的 file-size 棘轮继续施加「不得再增长」约束。
+
+- [ ] **PS-01** `ui/server/sati-bridge.js` — 2347 行 · sweep 后处置（本轮容量外，2026-10-12 登记）
+- [ ] **PS-02** `src/adapters/channel/wecom/WeComChannel.ts` — 1763 行 · sweep 后处置（本轮容量外，2026-10-12 登记）
+- [ ] **PS-03** `src/patent/figuregen/render-check.ts` — 1633 行 · sweep 后处置（本轮容量外，2026-10-12 登记）
+- [ ] **PS-04** `src/model/catalog/providers.ts` — 1592 行 · sweep 后处置（本轮容量外，2026-10-12 登记）
+- [ ] **PS-05** `src/gateway/client/InProcessGateway.ts` — 1517 行 · sweep 后处置（本轮容量外，2026-10-12 登记）
+- [ ] **PS-06** `ui/server/routes/git.js` — 1506 行 · sweep 后处置（本轮容量外，2026-10-12 登记）
+- [ ] **PS-07** `src/adapters/channel/weixin/WeixinChannel.ts` — 1496 行 · sweep 后处置（本轮容量外，2026-10-12 登记）
+- [ ] **PS-08** `src/adapters/channel/feishu/FeishuChannel.ts` — 1336 行 · sweep 后处置（本轮容量外，2026-10-12 登记）
+- [ ] **PS-09** `ui/src/components/chat-v2/processGrouping.ts` — 1293 行 · sweep 后处置（本轮容量外，2026-10-12 登记）
+- [ ] **PS-10** `ui/server/routes/config.js` — 1233 行 · sweep 后处置（本轮容量外，2026-10-12 登记）
+- [ ] **PS-11** `ui/server/routes/agent.js` — 1223 行 · sweep 后处置（本轮容量外，2026-10-12 登记）
+- [ ] **PS-12** `ui/server/routes/taskmaster.js` — 1178 行 · sweep 后处置（本轮容量外，2026-10-12 登记）
+- [ ] **PS-13** `src/agent/loop/AgentLoop.ts` — 1149 行 · sweep 后处置（本轮容量外，2026-10-12 登记）
+- [ ] **PS-14** `ui/server/routes/config.test.js` — 1089 行 · sweep 后处置（本轮容量外，2026-10-12 登记）
+- [ ] **PS-15** `src/model/streaming/streamModel.ts` — 1084 行 · sweep 后处置（本轮容量外，2026-10-12 登记）
+- [ ] **PS-16** `ui/server/routes/commands.js` — 1081 行 · sweep 后处置（本轮容量外，2026-10-12 登记）
+- [ ] **PS-17** `src/always-on/runtime/DiscoveryFire.ts` — 1078 行 · sweep 后处置（本轮容量外，2026-10-12 登记）
+- [ ] **PS-18** `src/adapters/channel/protocol/ImLiveReplyController.ts` — 1016 行 · sweep 后处置（本轮容量外，2026-10-12 登记）
+- [ ] **PS-19** `src/gateway/protocol/types.ts` — 994 行 · sweep 后处置（本轮容量外，2026-10-12 登记）
+- [ ] **PS-20** `src/context/DefaultContextRuntime.ts` — 953 行 · sweep 后处置（本轮容量外，2026-10-12 登记）
+- [ ] **PS-21** `src/pilot/config/loadPilotConfig.ts` — 921 行 · sweep 后处置（本轮容量外，2026-10-12 登记）
+- [ ] **PS-22** `src/patent/figuregen/inkscape-renderer.ts` — 915 行 · sweep 后处置（本轮容量外，2026-10-12 登记）
+- [ ] **PS-23** `ui/src/components/chat/tools/configs/toolConfigs.ts` — 863 行 · sweep 后处置（本轮容量外，2026-10-12 登记）
+- [ ] **PS-24** `ui/server/services/satiConfig.js` — 857 行 · sweep 后处置（本轮容量外，2026-10-12 登记）
+- [ ] **PS-25** `src/patent/evidence/engine.ts` — 841 行 · sweep 后处置（本轮容量外，2026-10-12 登记）
+- [ ] **PS-26** `src/tool/builtin/kanban.ts` — 815 行 · sweep 后处置（本轮容量外，2026-10-12 登记）
