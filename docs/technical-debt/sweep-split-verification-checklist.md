@@ -20,7 +20,7 @@
 3. 判据：搬迁段**逐 token 相同 = 报 `N/N`**；一并核对 hook 创建顺序（先例：`useRef,useRef,useState,useRef` 不变）与 return 对象键序（先例：28 键顺序一致）。
 4. 不可避免的改写（补 `export`、两行写操作合并为一次调用等）走**精确重建校验**，逐字符确认，列进 PR 正文。
 5. 证明脚本可放 `/tmp`（先例）；**方法 + N/N + 改写清单必须写进 PR 正文**——脚本会丢，正文不会。
-6. **格式陷阱（2026-10-12 sweep P1.1 实证）**：`catch {` **行内**注释会被 biome 重排为**独立行**，而 lint-staged 在 pre-commit 对暂存文件执行同样的格式化——若该文件在 file-size 棘轮上（`architecture-baseline.json` 有行数上限），+1 行即触顶违规；且**基线在格式化之前生成**会造成 metrics.md 漂移（CI `measure-techdebt --check` 红）。对策：① 棘轮文件的注释用**代码行尾**形态（biome 不改）；② 任何注释/格式改动提交后**复跑** `node scripts/measure-techdebt.mjs --check docs/technical-debt/metrics.md` 与 `node scripts/check-architecture-boundaries.mjs` 再推——别信提交前的那次绿。
+6. **格式陷阱（2026-10-12 sweep P1.1 实证）**：`catch {` **行内**注释会被 biome 重排为**独立行**，而 lint-staged 在 pre-commit 对暂存文件执行同样的格式化——若该文件在 file-size 棘轮上（`architecture-baseline.json` 有行数上限），+1 行即触顶违规；且**基线在格式化之前生成**会造成 metrics.md 漂移（CI `measure-techdebt --check` 红）。对策：① 棘轮文件的注释用**代码行尾**形态（biome 不改）；② 任何注释/格式改动提交后**复跑** `node scripts/measure-techdebt.mjs --check docs/technical-debt/metrics.md` 与 `node scripts/check-architecture-boundaries.mjs` 再推——别信提交前的那次绿。 ③ 大文件（棘轮内）的注释/文档增行同样受棘轮约束——块注释超预算时改**行尾注释或单行形态**（净增 ≤0 行），完整理由放 PR 与 backlog；④ 行号漂移后**必须**跑 `pnpm gen:event-matrix`（矩阵按 `file:line` 硬编码）再提交。
 
 ## 2. 负控制（守卫之外的第二类证据）
 
