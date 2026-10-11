@@ -40,6 +40,7 @@ import {
   getStateString,
 } from "../../handler.js";
 import {
+  analyzeImageBuffer,
   assertSafeSvg,
   checkFigures,
   findFigureSidecar,
@@ -52,9 +53,10 @@ import {
   type FigureSidecarGeometry,
   type FigureSpec,
   type Jurisdiction,
+  type PixelFinding,
+  type PixelMetrics,
   type TargetOffice,
 } from "../../../figuregen/index.js";
-import { analyzeImageBuffer, type PixelFinding, type PixelMetrics } from "../../../figuregen/pixel-gate.js";
 import { caseOutputsDir } from "../../../paths.js";
 import { APPROVAL_GRANTED_KEY } from "./gate.js";
 import { degraded } from "./llm.js";

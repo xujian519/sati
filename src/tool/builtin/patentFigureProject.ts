@@ -20,16 +20,22 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { isAbsolute, resolve } from "node:path";
 import {
   CAD_VIEWS,
+  FIGURE_TEXT_TO_PATH_ENV,
+  INKSCAPE_CMD_ENV,
   buildFigureSidecar,
   checkCadProjection,
+  exportSvgTextToPath,
   figureCaption,
+  inkscapeInstallHint,
   isCadSectionView,
   isCadView,
+  isFigureTextToPathEnabled,
   printableArea,
   profileForJurisdiction,
   projectStep,
   renderCadSvg,
   resolveFreecadCmd,
+  resolveInkscapeCmd,
   sheetNumberText,
   writeFigureSidecar,
   writeSubmissionPageArtifact,
@@ -40,17 +46,9 @@ import {
   type FigureSidecarLayout,
   type FigureSidecarSheet,
   type FigureSpec,
+  type InkscapeProbe,
   type Jurisdiction,
 } from "../../patent/figuregen/index.js";
-import {
-  FIGURE_TEXT_TO_PATH_ENV,
-  INKSCAPE_CMD_ENV,
-  exportSvgTextToPath,
-  inkscapeInstallHint,
-  isFigureTextToPathEnabled,
-  resolveInkscapeCmd,
-  type InkscapeProbe,
-} from "../../patent/figuregen/inkscape-renderer.js";
 import { caseOutputsDir } from "../../patent/paths.js";
 import { SatiToolRuntimeError } from "../protocol/errors.js";
 import type { SatiToolDefinition, SatiToolRuntimeContext } from "../protocol/types.js";

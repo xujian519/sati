@@ -2249,7 +2249,7 @@
 | `TD-EXTENSION-N07` | P2 | 插件信任门每次会话装配 / 每次面板打开都把插件目录整树逐字节哈希，**无任何缓存**（实测 1990 文件 / 7.96 MB ⇒ 130 ms/次）；且 2000 文件上限使带 `node_modules/` 的插件永久 `blocked`。**已做（#538）**：① 报告/面板**可见性**路径加进程内 memo（按 walk 签名 `rel+size+mtimeMs` 失效，跳过 readFile+哈希）；**强制路径（会话装配装载 / 授权决策）仍走纯内容哈希、绕过 memo**——签名不含内容，「内容变但 size+mtime 回填」会命中陈旧摘要，喂给强制路径等于无声弱化信任门（违背 2026-09-21「mtime 不是信任判据」决策）。② `blocked` 原因结构化（`over_limit` vs `unsafe_content`）并透传到面板本地化提示 + decide reason。**不做**「跳过 `node_modules` 哈希」（会推翻「整树内容摘要=信任单位」决策，见方案 §6.1 分叉 6=b）。见 `docs/notes/implemented/2026-09-24-hook-trust-digest-memo.md` | **#538** | 2026-09-24 |
 | `TD-PATENT-N26` | P2 | `figuregen/check.ts` 754 行、`checkFigures` 单函数 **503 行**（21 条规则 × 3 法域 × 10 选项共用一个作用域，`skipLayoutRules` / `figureCount` / `zoom` 互相牵动）；三个制图工具 `execute` 各 163–335 行重复产物拼装 | **#539** | 2026-09-23 |
 | `TD-PATENT-N27` | P2 | `figuregen` 内 `escapeXml` ×4、`fmt` ×4（**精度已漂移出 1/2/3 位**）、几何谓词 `boxesOverlap` / `boxWithin` ×2（同容差、一份常量一份字面量） | **#540** | 2026-09-23 |
-| `TD-EXTENSION-N08` | P3 | `HookTrustStore` 与 `ModelWindowStore` 是同一份存储骨架的两份手抄；`lookup()` 零生产调用者却被注释为「解析期热路径」；附带 `figuregen` barrel 196 个导出中 84 个模块外零消费（issue 原写 225/92，已更正）。**已做（#541）**：删除两处零消费的 `lookup()`（`store.ts` / `HookTrustStore.ts`）——每次调用整表 `readFileSync`+parse 的死方法 + 误导注释一并消灭，4 个测试文件 9 处调用点改为 `read().entries[key(...)]`。**不做**①抽共享存储层（issue 自设触发条件「下次改动这两个 store 之一或新增第三个」今天不满足；两段 diff 172 行、语义差异大，将来若触发方向是纯函数层 `versionedJsonFile.ts` 而非继承基类）；②barrel 收敛（公开面变更须决策记录、收益为 0 而成本最高）。见 `docs/notes/implemented/2026-09-24-clone-message-and-dead-lookup.md` | **#541** | 2026-09-24 |
+| `TD-EXTENSION-N08` | P3 | `HookTrustStore` 与 `ModelWindowStore` 是同一份存储骨架的两份手抄；`lookup()` 零生产调用者却被注释为「解析期热路径」；附带 `figuregen` barrel 196 个导出中 84 个模块外零消费（issue 原写 225/92，已更正）。**已做（#541）**：删除两处零消费的 `lookup()`（`store.ts` / `HookTrustStore.ts`）——每次调用整表 `readFileSync`+parse 的死方法 + 误导注释一并消灭，4 个测试文件 9 处调用点改为 `read().entries[key(...)]`。**不做**①抽共享存储层（issue 自设触发条件「下次改动这两个 store 之一或新增第三个」今天不满足；两段 diff 172 行、语义差异大，将来若触发方向是纯函数层 `versionedJsonFile.ts` 而非继承基类）；②barrel 收敛（公开面变更须决策记录、收益为 0 而成本最高）。见 `docs/notes/implemented/2026-09-24-clone-message-and-dead-lookup.md`。**2026-10-12 sweep P1.5（#646）补记：② barrel 收敛已执行**（84 名裁剪出 barrel + 6 文件深引全归口 → 154/154 全消费、0 零消费；「不做」的前提＝公开面变更须决策记录，本次以 note 满足后执行，见 `docs/notes/implemented/2026-10-12-figuregen-barrel-convergence.md`） | **#541** | 2026-09-24 |
 | `TD-TOOL-009` | P2 | 两个制图工具把 `invalid_tool_input` 折叠成 `tool_execution_failed`（第三个工具写法正确），破坏按错误码的恢复策略与熔断识别 | **#545** | 2026-09-23 |
 
 ### 37.2 本轮新发现的缺陷（4 条 `bug`，账本此前无载体）
@@ -2501,7 +2501,7 @@
 - [x] **P1.2** i18n：teamPanel zh 补 `pill.teamCount_one` + FilesV2 `fileTree.*` 14 处 defaultValue → 正式 en/zh key（`4c271fe6f`；实际为 **9 键 / 27 处兜底**——穷尽比对脚本发现侦察口径 14 为下限；含 `t("loading")` 归位）
 - [x] **P1.3** `as unknown as` 产品代码 20 → **2**（全量 38 → 20；`e854be98c`；残余 2 处为有据边界：weixin SDK d.ts 失真 / fetch undici×全局 Response；余 18 处于同址测试文件，不在 M7 口径）
 - [x] **P1.4** cli 裸 console 137 + 散落 ~9 → `src/telemetry/logger.ts` 收束（M6=0；metric 160→6，剩 ui/server 6 为口径外残留；`plainLogger` 无前缀直通 + logger/debug 收束入口豁免；`47f4ef64d`）
-- [ ] **P1.5** figuregen barrel 收敛：零消费 **84 → 0**（`scripts/measure-figuregen-exports.mjs` 口径，取代一次性侦察 88）
+- [x] **P1.5** figuregen barrel 收敛：零消费 **84 → 0** —— 达成：**154/154 全消费、0 零消费**（84 名裁剪出 barrel + 6 文件深引全归口 + pixel-gate 三名人 barrel；决策见 `docs/notes/implemented/2026-10-12-figuregen-barrel-convergence.md`）
 
 **P4 · 数据与测试专项（D38–D41，B 线）**
 - [ ] **P4.1** 知识卡去重 70 组 / 527,689 B（脚本化判定 + 不确定组留 note）

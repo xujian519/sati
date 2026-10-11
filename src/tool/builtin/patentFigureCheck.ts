@@ -12,7 +12,9 @@
 import { readFile } from "node:fs/promises";
 import { basename, isAbsolute, resolve } from "node:path";
 import {
+  analyzeImageBuffer,
   assertSafeSvg,
+  checkFigureRendering,
   checkFigures,
   isSvgSafetyError,
   parseFigureSvg,
@@ -22,15 +24,13 @@ import {
   type FigureSpec,
   type Jurisdiction,
   type OfficeProfile,
-} from "../../patent/figuregen/index.js";
-import {
-  checkFigureRendering,
+  type PixelFinding,
+  type PixelMetrics,
   type RenderCheckFinding,
   type RenderCheckKind,
-} from "../../patent/figuregen/render-check.js";
+} from "../../patent/figuregen/index.js";
 import { figureSpecsToAnalysis } from "../../patent/figure/bridge.js";
 import { checkFigureConsistency } from "../../patent/figure/multi-figure-consistency.js";
-import { analyzeImageBuffer, type PixelFinding, type PixelMetrics } from "../../patent/figuregen/pixel-gate.js";
 import { SatiToolRuntimeError } from "../protocol/errors.js";
 import type { SatiToolDefinition, SatiToolRuntimeContext } from "../protocol/types.js";
 import {

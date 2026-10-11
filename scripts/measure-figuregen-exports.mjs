@@ -19,6 +19,8 @@
  * 基线：本脚本**首跑 2026-10-12 = 235 个导出名 / 84 个零消费**，自此为 M9 唯一判据
  * （此前一次性人工侦察口径：2026-10-11 记 88；issue #541 记 92——两数均被本脚本取代，差值为口径差）。
  * sweep 的 M9 目标：零消费 → 0（删除 / 降测试专用 / 保留并说明）。
+ * **2026-10-12 P1.5 达成：154 / 154 全消费、0 零消费**（84 名裁剪出 barrel + 深引全部归一，
+ * 决策见 docs/notes/implemented/2026-10-12-figuregen-barrel-convergence.md）。
  *
  * 用法：
  *   node scripts/measure-figuregen-exports.mjs          # 人读报告
