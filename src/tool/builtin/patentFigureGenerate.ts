@@ -22,41 +22,37 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { isAbsolute, resolve } from "node:path";
 import {
+  FIGURE_RENDERER_ENV,
+  FIGURE_TEXT_TO_PATH_ENV,
+  INKSCAPE_CMD_ENV,
   buildFigureBriefDraft,
   buildFigureSidecar,
   checkFigures,
+  createWasmDotRunner,
+  exportSvgTextToPath,
   figureCaption,
+  inkscapeInstallHint,
+  isFigureTextToPathEnabled,
   MM_PER_INCH,
   profileForJurisdiction,
   pxToMm,
   renderFigureSvg,
+  renderFigureSvgWithGraphviz,
   renderFiguresHtml,
+  resolveDotBinary,
+  resolveInkscapeCmd,
   sheetNumberText,
   shouldRenderCaption,
   writeFigureSidecar,
   writeSubmissionPageArtifact,
   type DocumentKind,
+  type DotRunner,
   type FigureSidecarLayout,
   type FigureSidecarSheet,
   type FigureSpec,
+  type InkscapeProbe,
   type Jurisdiction,
 } from "../../patent/figuregen/index.js";
-import {
-  FIGURE_RENDERER_ENV,
-  renderFigureSvgWithGraphviz,
-  resolveDotBinary,
-  type DotRunner,
-} from "../../patent/figuregen/render-graphviz.js";
-import { createWasmDotRunner } from "../../patent/figuregen/render-viz-wasm.js";
-import {
-  FIGURE_TEXT_TO_PATH_ENV,
-  INKSCAPE_CMD_ENV,
-  exportSvgTextToPath,
-  inkscapeInstallHint,
-  isFigureTextToPathEnabled,
-  resolveInkscapeCmd,
-  type InkscapeProbe,
-} from "../../patent/figuregen/inkscape-renderer.js";
 import { caseOutputsDir } from "../../patent/paths.js";
 import { SatiToolRuntimeError } from "../protocol/errors.js";
 import type { SatiToolDefinition, SatiToolRuntimeContext } from "../protocol/types.js";

@@ -16,8 +16,7 @@
 import { supportsInputModality } from "../../model/protocol/multimodal.js";
 import { analyzePatentFigure, DEFAULT_FIGURE_MODEL, DEFAULT_FIGURE_PROVIDER } from "../../patent/figure/analyze.js";
 import { analysisToFigureSpec } from "../../patent/figure/bridge.js";
-import { checkFigures } from "../../patent/figuregen/check.js";
-import type { FigureCheckRuleId } from "../../patent/figuregen/check.js";
+import { checkFigures, type FigureCheckRuleId } from "../../patent/figuregen/index.js";
 import { DEFAULT_FIGURE_INDEX_RELATIVE_PATH, upsertFigureIndex } from "../../patent/figure/index-store.js";
 import { loadFigureImage } from "../../patent/figure/preprocess.js";
 import type { FigureAnalysisResult } from "../../patent/figure/types.js";
