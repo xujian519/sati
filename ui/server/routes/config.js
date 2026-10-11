@@ -667,8 +667,7 @@ router.get("/model-windows", async (_req, res) => {
     try {
       raw = await fsPromises.readFile(file, "utf8");
     } catch {
-      // 文件缺失/读取失败 → 按「无覆盖」响应（前端走默认窗口）。
-      return res.json({ exists: false, entries: {} });
+      return res.json({ exists: false, entries: {} }); // 文件缺失/读取失败 → 按「无覆盖」响应（前端走默认窗口）。
     }
     const parsed = JSON.parse(raw);
     const entries =
