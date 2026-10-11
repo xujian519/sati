@@ -98,6 +98,7 @@
 
 ### 文档漂移
 - **TD-I18N-001** · `teamPanel` namespace 缺 2 个 zh key / 1 个 en key。工作量：S · 严重级：P3 · 状态：done（2026-09-11 复核：现为 en 44 / zh 43，仅余 `pill.teamCount_one` —— i18next 的 zh 复数类别只有 `other`，该 key 在 zh 侧按设计不存在，非缺陷；C35 已修 `pill.teamCount` → `pill.teamCount_other` 并加复数回归用例）
+  - **2026-10-12 sweep P1.2（issue #646 · `4c271fe6f`）**：① zh 补 `pill.teamCount_one`（**键集对齐**：house style 先例为 chat/routing/sidebar/common/codeEditor/hookTrust 等 7 个 locale 的 18 个 zh `_one` 键；zh 复数类只有 `other`、该键运行时不解析，属对齐非行为变化）⇒ metrics 表「缺 zh」1 → 0，「按设计不存在」改按「按设计保留对齐键」执行；② 同批治理 FilesV2 的 `fileTree.*` 英文兜底：9 个缺失键（selectProject / upload / uploadFiles / uploadFolder / downloadProject / downloadFile / deleteSelected / empty / openHtmlPreview）补入 en+zh `common.json`，27 处 `defaultValue` 兜底全部清除，`t("loading")` 归位既有 `fileTree.loading` ⇒ 中文场景不再显示英文兜底串（零行为分支变化，字符串数据源切换）；③ 验证：`check:i18n-namespaces` fresh、键解析检查 21/21、ui typecheck/eslint/biome green、boundaries fresh、metrics 同刷（common 436→445 双语、FilesV2 god function 849→830 顺带）。最后复核：2026-10-12。
 - **TD-DOC-001** · 网关协议版本文档漂移：`version.ts`=**1.4**，但 `CLAUDE.md` 仍写「当前协议 **1.2**」
   - 位置：`src/gateway/protocol/version.ts:31` ↔ `CLAUDE.md`
   - 建议：同步 `CLAUDE.md` 及变更表。工作量：S · 严重级：P2 · 状态：done（2026-08-23：设计文档 `docs/design/gateway-protocol-versioning.md` 版本表/状态更新至 1.4；本地 `CLAUDE.md` 同步至 1.4（`CLAUDE.md` gitignored 不入库））
@@ -2495,7 +2496,7 @@
 
 **P1 · 机械收敛（D4–D8，B 线）**
 - [x] **P1.1** 无注释无参 catch 17 处补「失败模式 → 回退语义」注释 → **0**（`6e3b447db`；棘轮 17→0 锁定）
-- [ ] **P1.2** i18n：teamPanel zh 补 `pill.teamCount_one` + FilesV2 `fileTree.*` 14 处 defaultValue → 正式 en/zh key
+- [x] **P1.2** i18n：teamPanel zh 补 `pill.teamCount_one` + FilesV2 `fileTree.*` 14 处 defaultValue → 正式 en/zh key（`4c271fe6f`；实际为 **9 键 / 27 处兜底**——穷尽比对脚本发现侦察口径 14 为下限；含 `t("loading")` 归位）
 - [ ] **P1.3** `as unknown as` 产品代码 20 处 → 守卫/窄类型（M7 ≤8）
 - [ ] **P1.4** cli 裸 console 137 + 散落 ~9 → `src/telemetry/logger.ts` 收束（M6=0）
 - [ ] **P1.5** figuregen barrel 收敛：零消费 **84 → 0**（`scripts/measure-figuregen-exports.mjs` 口径，取代一次性侦察 88）
