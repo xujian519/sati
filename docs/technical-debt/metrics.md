@@ -1,13 +1,13 @@
 # Sati 技术债务指标基线与趋势
 
 > 由 `node scripts/measure-techdebt.mjs --update` 自动生成，谨防手工编辑。
-> 最近一次快照：**2026-10-11**
+> 最近一次快照：**2026-10-12**
 
 ## 规模
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1081 / 187499 |
+| src TS 文件 / 行数 | 1081 / 187672 |
 | src JS 文件 | 0 |
 | tests 文件 | 629 |
 | ui/src 文件 / 行数 | 638 / 102219 |
@@ -107,7 +107,6 @@
 | `src/cli/projectRuntimeFactory.ts` | `resolve` | 316 | function |
 | `ui/src/components/chat-v2/SubagentDetailMessageFlow.tsx` | `SubagentDetailMessageFlow` | 309 | function |
 | `ui/src/components/settings/view/integrations/im/components/WeixinChannelSection.tsx` | `WeixinChannelSection` | 303 | function |
-| `src/gateway/client/InProcessGateway.ts` | `submitTurn` | 301 | method |
 
 ## Top 30 大文件
 
@@ -117,7 +116,7 @@
 | `src/adapters/channel/wecom/WeComChannel.ts` | 1764 |
 | `src/patent/figuregen/render-check.ts` | 1634 |
 | `src/model/catalog/providers.ts` | 1593 |
-| `src/gateway/client/InProcessGateway.ts` | 1518 |
+| `src/gateway/client/InProcessGateway.ts` | 1512 |
 | `ui/server/routes/git.js` | 1507 |
 | `src/adapters/channel/weixin/WeixinChannel.ts` | 1497 |
 | `ui/src/components/main-content-v2/SkillsV2.tsx` | 1441 |

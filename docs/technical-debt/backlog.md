@@ -2398,7 +2398,7 @@
 
 **P2 · 后端拆分（D9–D18）**
 
-- [ ] **P2** `src/gateway/client/InProcessGateway.ts` — `submitTurn`（301 行）
+- [x] **P2**（P2.1）`src/gateway/client/InProcessGateway.ts` — `submitTurn`（301 → **16** 行；判据 ≤150）（`bbddc03e4`；god fn 63 → 62；文件 1517 → 1511，未破 1518 棘轮；三段式 `startSubmitTurn`/`pumpSubmitTurn`/`finishSubmitTurn`；决策见 `docs/notes/implemented/2026-10-12-inprocess-submit-turn-split.md`）
 - [ ] **P2** `src/gateway/client/eventMapping.ts` — `mapAgentEventForTurn`（417 行）
 - [ ] **P2** `src/gateway/client/telemetry.ts` — `emitSessionTelemetry`（333 行）
 - [ ] **P2** `src/gateway/server/GatewayWsConnection.ts` — `dispatchRequest`（353 行）
@@ -2424,7 +2424,7 @@
 - [ ] **BF-02** `src/adapters/channel/wecom/WeComChannel.ts` — 1763 行 · 未承接 → PS-02
 - [ ] **BF-03** `src/patent/figuregen/render-check.ts` — 1633 行 · 未承接 → PS-03
 - [ ] **BF-04** `src/model/catalog/providers.ts` — 1592 行 · 未承接 → PS-04
-- [ ] **BF-05** `src/gateway/client/InProcessGateway.ts` — 1517 行 · 未承接 → PS-05
+- [ ] **BF-05** `src/gateway/client/InProcessGateway.ts` — 1517 行 · 未承接 → PS-05（P2.1 只拆函数不拆文件：**1511 行**，仍 ≥800，故未承接与勾选状态均不变）
 - [ ] **BF-06** `ui/server/routes/git.js` — 1506 行 · 未承接 → PS-06
 - [ ] **BF-07** `src/adapters/channel/weixin/WeixinChannel.ts` — 1496 行 · 未承接 → PS-07
 - [ ] **BF-08** `ui/src/components/main-content-v2/SkillsV2.tsx` — 1440 行 · 承接：**B4.2**
