@@ -1,33 +1,40 @@
 import { afterEach, vi } from "vitest";
 import React from "react";
 
-// jsdom 29 (vitest 4) does not provide localStorage on the global scope.
-// Provide a simple in-memory polyfill so components and hooks that
-// read/write localStorage work without crashing.
+// jsdom does not always expose localStorage the same way: under vitest 4 the
+// global is absent, while vitest 5 installs a getter-only `localStorage` on
+// the jsdom Window (a plain assignment throws in strict mode). Install the
+// in-memory polyfill as an own property in both majors so behaviour is
+// identical and tests that spy on `window.localStorage` instance methods keep
+// working.
 const localStorageStore = new Map<string, string>();
 
-globalThis.localStorage = {
-  getItem: (key: string): string | null => {
-    const value = localStorageStore.get(key);
-    return value === undefined ? null : value;
-  },
-  setItem: (key: string, value: string): void => {
-    localStorageStore.set(key, value);
-  },
-  removeItem: (key: string): void => {
-    localStorageStore.delete(key);
-  },
-  clear: (): void => {
-    localStorageStore.clear();
-  },
-  get length(): number {
-    return localStorageStore.size;
-  },
-  key: (index: number): string | null => {
-    const keys = Array.from(localStorageStore.keys());
-    return keys[index] ?? null;
-  },
-} as Storage;
+Object.defineProperty(globalThis, "localStorage", {
+  configurable: true,
+  writable: true,
+  value: {
+    getItem: (key: string): string | null => {
+      const value = localStorageStore.get(key);
+      return value === undefined ? null : value;
+    },
+    setItem: (key: string, value: string): void => {
+      localStorageStore.set(key, value);
+    },
+    removeItem: (key: string): void => {
+      localStorageStore.delete(key);
+    },
+    clear: (): void => {
+      localStorageStore.clear();
+    },
+    get length(): number {
+      return localStorageStore.size;
+    },
+    key: (index: number): string | null => {
+      const keys = Array.from(localStorageStore.keys());
+      return keys[index] ?? null;
+    },
+  } as Storage,
+});
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
