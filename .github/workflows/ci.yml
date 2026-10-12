@@ -135,7 +135,7 @@ jobs:
 
       - name: 上传候选报告 artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: degradation-candidates-report
           path: degradation-candidates.md
