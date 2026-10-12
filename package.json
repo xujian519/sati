@@ -89,7 +89,7 @@
     "*.{ts,tsx,js,jsx,mjs,cjs,json}": "node scripts/lint-staged.mjs"
   },
   "dependencies": {
-    "@google/genai": "^2.24.0",
+    "@google/genai": "^2.28.0",
     "@larksuiteoapi/node-sdk": "^1.74.0",
     "@modelcontextprotocol/sdk": "^1.32.1",
     "@rdkit/rdkit": "2026.9.1",
