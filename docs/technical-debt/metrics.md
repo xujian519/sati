@@ -7,7 +7,7 @@
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1081 / 187672 |
+| src TS 文件 / 行数 | 1081 / 187684 |
 | src JS 文件 | 0 |
 | tests 文件 | 629 |
 | ui/src 文件 / 行数 | 638 / 102219 |
@@ -72,7 +72,6 @@
 | `src/cli/projectRuntimeFactory.ts` | `createProjectRuntimeResolver` | 424 | function |
 | `src/tool/builtin/patentFigureGenerate.ts` | `createPatentFigureGenerateTool` | 422 | function |
 | `ui/src/components/code-editor/view/subcomponents/DocxBuiltinPreview.tsx` | `DocxBuiltinPreview` | 422 | function |
-| `src/gateway/client/eventMapping.ts` | `mapAgentEventForTurn` | 417 | function |
 | `src/tool/builtin/patentFigureProject.ts` | `execute` | 411 | method |
 | `ui/src/components/chat-v2/processGrouping.test.ts` | `(anonymous)` | 409 | arrow |
 | `ui/src/types/contentReference.spec.ts` | `(anonymous)` | 408 | arrow |
