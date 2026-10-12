@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { AgentEvent } from "../../../src/agent/protocol/events.js";
 import {
+  createSubmitFailedFailure,
+  createTurnTimeoutFailure,
   emitSessionTelemetry,
   inferToolErrorCategory,
   resolveSubmitTurnTelemetry,
@@ -69,4 +71,37 @@ test("telemetry: inferToolErrorCategory 分类", () => {
   assert.equal(inferToolErrorCategory("parse_error"), "tool_result_parse_error");
   assert.equal(inferToolErrorCategory("boom"), "tool_runtime_error");
   assert.equal(inferToolErrorCategory(undefined), "tool_runtime_error");
+});
+
+test("telemetry: createTurnTimeoutFailure —— 落盘 status 与流内事件同源同文案", () => {
+  const { status, event } = createTurnTimeoutFailure({
+    runId: "r1",
+    message: "Turn exceeded the 50ms timeout.",
+    timeoutMs: 50,
+  });
+  assert.equal(event.code, "turn_timeout");
+  assert.equal(event.runId, "r1");
+  assert.equal(event.recoverable, false);
+  assert.equal(event.message, "Turn exceeded the 50ms timeout.");
+  // status 侧：event 名与 text 必须与事件体一致（改一边漏一边不会红 —— 本用例就是那条判据）。
+  assert.equal(status.event, "turn_timeout");
+  assert.equal(status.kind, "error");
+  assert.equal(status.text, event.message, "落盘文本与流内 message 必须同文案");
+  const detail = status.detail;
+  assert.ok(detail, "失败 status 必须带 detail");
+  assert.equal(detail["userHint"], event.userHint, "userHint 不得两处漂移");
+  assert.equal(detail["scope"], "turn");
+  assert.equal(detail["timeoutMs"], 50, "timeoutMs 只进落盘 status detail");
+});
+
+test("telemetry: createSubmitFailedFailure —— code 对齐且不携带落盘 detail", () => {
+  const { status, event } = createSubmitFailedFailure({ runId: "r2", message: "boom" });
+  assert.equal(event.code, "gateway_submit_failed");
+  assert.equal(event.recoverable, false);
+  assert.equal(status.event, "gateway_submit_failed");
+  assert.equal(status.text, "boom");
+  const detail = status.detail;
+  assert.ok(detail, "失败 status 必须带 detail");
+  assert.equal(detail["userHint"], event.userHint);
+  assert.equal(detail["timeoutMs"], undefined, "非超时失败不得带 timeoutMs");
 });

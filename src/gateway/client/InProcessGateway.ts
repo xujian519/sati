@@ -1,8 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import type { DiscoveryPlanService } from "../../always-on/web/DiscoveryPlanService.js";
-import { withNonUserOriginNotice } from "../../context/prompt/nonUserOriginNotice.js";
-import { type CanonicalMessage } from "../../model/index.js";
 import { sanitizeSessionIdForPath } from "../../session/index.js";
 import type { SessionRouter } from "../SessionRouter.js";
 import { GatewayElicitationBus } from "../elicitation/GatewayElicitationBus.js";
@@ -120,7 +118,7 @@ import type {
   CronUpdateInput,
   CronUpdateResult,
 } from "../../cron/protocol/types.js";
-import { permissionEntryToRule, permissionSettingsToRuleSet, readPermissionSettings } from "../../permission/index.js";
+import { permissionEntryToRule, readPermissionSettings } from "../../permission/index.js";
 import type { PermissionRule } from "../../permission/index.js";
 import { SkillManagerError, type SkillManager } from "../../extension/skills/index.js";
 import type {
@@ -141,18 +139,25 @@ import type {
   SkillsListInput,
   SkillsListResult,
 } from "../../extension/skills/types.js";
-import { createVisibleErrorStatusDetail } from "../../status/agentStatus.js";
 import type { TelemetryClient } from "../../telemetry/index.js";
 import { createLogger } from "../../telemetry/index.js";
 import {
-  PLAN_COMMAND_USAGE,
-  normalizeGatewayModeForLegacyInput,
-  normalizeGatewayRunMode,
+  buildSubmitOptions,
+  buildSyntheticTurnMessages,
   normalizePlanCommandInput,
+  planCommandUsageEvents,
+  resolveSubmitTurnPermissions,
+  sessionBusyEvents,
 } from "./normalizers.js";
 import { cloneGatewayEvent, getGatewayEventRunId, mapAgentEvent } from "./eventMapping.js";
 import { buildAgentInputWithAttachments, collectRegisteredAttachmentReadFiles } from "./attachments.js";
-import { createGatewayFailureStatus, emitSessionTelemetry, resolveSubmitTurnTelemetry } from "./telemetry.js";
+import {
+  createSubmitFailedFailure,
+  createTurnTimeoutFailure,
+  emitSessionTelemetry,
+  resolveSubmitTurnTelemetry,
+  type TurnFailure,
+} from "./telemetry.js";
 
 const logger = createLogger("sati");
 
@@ -296,6 +301,20 @@ type ActiveTurnReplay = {
   };
 };
 
+/** P2.1 — `submitTurn` 三段间共享的句柄与可变状态（`timedOut` 由 pump 置位、finish 读取）。 */
+type SubmitTurnContext = {
+  input: GatewaySubmitTurnInput;
+  runId: string;
+  queue: AsyncQueue<GatewayEvent>;
+  turnDone: Promise<void>;
+  resolveTurnDone: () => void;
+  telemetryContext: ReturnType<typeof resolveSubmitTurnTelemetry>;
+  timedOut: boolean;
+};
+
+/** 启动段结局：`rejected` 只需放流事件；`started` 交出上下文。 */
+type SubmitTurnStartup = { kind: "rejected"; events: GatewayEvent[] } | { kind: "started"; ctx: SubmitTurnContext };
+
 export class InProcessGateway implements Gateway {
   private readonly uuid: () => string;
   /**
@@ -407,21 +426,37 @@ export class InProcessGateway implements Gateway {
     this.emitForSession(detail.sessionId, event);
   }
 
+  /**
+   * P2.1 — turn 主链路（读者入口）。三段式：`startSubmitTurn`（归一化 / 预刷新 /
+   * 占位 / 装状态）→ `pumpSubmitTurn`（后台泵）→ `finishSubmitTurn`（清理与收尾）；
+   * 本方法只负责放流与「消费者无论何时退出都收尾」，事件顺序与拆分前逐条一致。
+   */
   async *submitTurn(input: GatewaySubmitTurnInput): AsyncIterable<GatewayEvent> {
-    const plannedInput = normalizePlanCommandInput(input);
-    if (!plannedInput) {
-      yield {
-        type: "assistant_text_delta",
-        text: PLAN_COMMAND_USAGE,
-      };
-      yield {
-        type: "turn_completed",
-        usage: {},
-        finishReason: "completed",
-      };
+    const startup = await this.startSubmitTurn(input);
+    if (startup.kind === "rejected") {
+      yield* startup.events;
       return;
     }
-    input = plannedInput;
+    const { ctx } = startup;
+    const pump = this.pumpSubmitTurn(ctx);
+    try {
+      for await (const event of ctx.queue) {
+        yield event;
+      }
+    } finally {
+      await this.finishSubmitTurn(ctx, pump);
+    }
+  }
+
+  /**
+   * P2.1 — 启动段：/plan 归一化 → 预刷新配置 → 占位判定（session_busy）
+   * → 安装每 turn 状态（deferred / 重放槽 / emit sink）。
+   */
+  private async startSubmitTurn(rawInput: GatewaySubmitTurnInput): Promise<SubmitTurnStartup> {
+    const input = normalizePlanCommandInput(rawInput);
+    if (!input) {
+      return { kind: "rejected", events: planCommandUsageEvents() };
+    }
 
     // Per-turn config refresh (defensive). The fs watcher path already
     // catches most edits, but this guarantees a fresh apiKey/url is in
@@ -437,27 +472,7 @@ export class InProcessGateway implements Gateway {
     }
     const runId = input.runId ?? this.uuid();
     if (!this.router.beginTurn(input.sessionKey, runId)) {
-      const message = `Session ${input.sessionKey} already has an active turn.`;
-      const userHint = "Wait for the current turn to finish or stop it before sending another message.";
-      yield {
-        type: "agent_status",
-        event: "session_busy",
-        detail: createVisibleErrorStatusDetail({
-          message,
-          code: "session_busy",
-          userHint,
-          scope: "session",
-          source: "gateway",
-        }),
-      };
-      yield {
-        type: "error",
-        code: "session_busy",
-        message,
-        recoverable: true,
-        userHint,
-      };
-      return;
+      return { kind: "rejected", events: sessionBusyEvents(input.sessionKey) };
     }
 
     let resolveTurnDone!: () => void;
@@ -476,237 +491,216 @@ export class InProcessGateway implements Gateway {
       projection: { blocks: [], textEpoch: 0, thinkingEpoch: 0 },
     });
     this.emitSinks.set(input.sessionKey, event => queue.enqueue(event));
-    const emitGatewayFailureStatus = (status: GatewayRecordAgentStatusMessageInput["status"]): Promise<void> => {
-      const recorded = this.recordGatewayStatusMessage({
-        sessionKey: input.sessionKey,
-        turnId: runId,
-        projectKey: input.projectKey,
-        status,
-      });
-      const statusEvent: GatewayEvent = {
-        type: "agent_status",
-        event: status.event,
-        detail: status.detail,
-      };
-      this.recordActiveTurnEvent(input.sessionKey, statusEvent);
-      queue.enqueue(statusEvent);
-      return recorded;
-    };
 
     if (input.workspaceCwd && this.options.setSessionCwd) {
       this.options.setSessionCwd(input.sessionKey, input.workspaceCwd);
     }
 
-    const telemetryContext = resolveSubmitTurnTelemetry(input);
-    let timeoutHandle: NodeJS.Timeout | undefined;
-    let timedOut = false;
+    return {
+      kind: "started",
+      ctx: {
+        input,
+        runId,
+        queue,
+        turnDone,
+        resolveTurnDone,
+        telemetryContext: resolveSubmitTurnTelemetry(input),
+        timedOut: false,
+      },
+    };
+  }
 
-    // Background pump: agent events → queue.
-    const pump = (async () => {
-      try {
-        const session = await this.router.getOrCreate({
-          sessionKey: input.sessionKey,
-          projectKey: input.projectKey,
-          channelKey: input.channelKey,
-          // 浅拷贝（质量评审 M6）：防调用方复用 input 对象原地突变，污染已缓存会话 context
-          ...(input.modelRoute ? { modelRoute: { ...input.modelRoute } } : {}),
-        });
-        if (input.timeoutMs !== undefined && Number.isFinite(input.timeoutMs) && input.timeoutMs > 0) {
-          timeoutHandle = setTimeout(() => {
-            timedOut = true;
-            const message = `Turn exceeded the ${input.timeoutMs}ms timeout.`;
-            void emitGatewayFailureStatus(
-              createGatewayFailureStatus({
-                event: "turn_timeout",
-                code: "turn_timeout",
-                message,
-                userHint: "The turn exceeded its wall-clock limit. Retry with a smaller task or increase the timeout.",
-                detail: { timeoutMs: input.timeoutMs },
-              }),
-            );
-            const gatewayEvent: GatewayEvent = {
-              type: "error",
-              runId,
-              code: "turn_timeout",
-              message,
-              recoverable: false,
-              userHint: "The turn exceeded its wall-clock limit. Retry with a smaller task or increase the timeout.",
-            };
-            this.recordActiveTurnEvent(input.sessionKey, gatewayEvent);
-            queue.enqueue(gatewayEvent);
-            this.elicitationBus.rejectSession(input.sessionKey, "turn_timeout");
-            this.permissionBus.rejectSession(input.sessionKey, "turn_timeout");
-            queue.close();
-            try {
-              session.abort(`timeout:${runId}`);
-            } catch {
-              // The queue is already closed, so a faulty abort implementation
-              // cannot defeat the hard turn timeout.
-            }
-          }, input.timeoutMs);
-        }
-        const permissionSettings = readPermissionSettings();
-        const legacyInput = input as { mode?: unknown; runMode?: unknown; basePermissionMode?: unknown };
-        const inputMode = normalizeGatewayModeForLegacyInput(legacyInput.mode);
-        const runMode = normalizeGatewayRunMode(legacyInput.runMode) ?? (inputMode === "plan" ? "plan" : "agent");
-        const permissionMode = inputMode ?? (permissionSettings.skipPermissions ? "bypassPermissions" : undefined);
-        const basePermissionMode = normalizeGatewayModeForLegacyInput(legacyInput.basePermissionMode);
-        const allowPlanModeTools = input.allowPlanModeTools ?? inputMode === "plan";
-        const persistedRules = permissionSettingsToRuleSet(permissionSettings);
-        const sessionAllowRules = this.sessionPermissionGrants.get(input.sessionKey) ?? [];
-        this.options.telemetry?.trackFeatureLoopStage({
-          module: "session",
-          ownerModule: telemetryContext.ownerModule,
-          executionKind: telemetryContext.executionKind,
-          phase: telemetryContext.phase,
-          loopStage: "loop_start",
-          outcome: "success",
-          sessionId: input.sessionKey,
-          metadata: {
+  /**
+   * P2.1 — 失败上报：状态落盘 + 「status 事件 → error 事件」依次进重放与队列。
+   *
+   * 返回落盘的 promise：硬超时路径 `void` 掉（超时必须立刻生效，不被落盘阻塞），
+   * 提交异常路径 `await`。事件顺序与拆分前的闭包形态逐条一致。
+   */
+  private emitTurnFailure(ctx: SubmitTurnContext, failure: TurnFailure): Promise<void> {
+    const recorded = this.recordGatewayStatusMessage({
+      sessionKey: ctx.input.sessionKey,
+      turnId: ctx.runId,
+      projectKey: ctx.input.projectKey,
+      status: failure.status,
+    });
+    const statusEvent: GatewayEvent = {
+      type: "agent_status",
+      event: failure.status.event,
+      detail: failure.status.detail,
+    };
+    for (const event of [statusEvent, failure.event]) {
+      this.recordActiveTurnEvent(ctx.input.sessionKey, event);
+      ctx.queue.enqueue(event);
+    }
+    return recorded;
+  }
+
+  /**
+   * P2.1 — 后台泵：agent 事件 → 每 turn 队列（含硬超时与提交失败兜底）。
+   * 消费者侧退出后由 `finishSubmitTurn` 统一清理。
+   */
+  private async pumpSubmitTurn(ctx: SubmitTurnContext): Promise<void> {
+    const { input, runId, queue, telemetryContext, turnDone } = ctx;
+    let timeoutHandle: NodeJS.Timeout | undefined;
+    try {
+      const session = await this.router.getOrCreate({
+        sessionKey: input.sessionKey,
+        projectKey: input.projectKey,
+        channelKey: input.channelKey,
+        // 浅拷贝（质量评审 M6）：防调用方复用 input 对象原地突变，污染已缓存会话 context
+        ...(input.modelRoute ? { modelRoute: { ...input.modelRoute } } : {}),
+      });
+      // 捕获成局部常量：属性窄化不跨回调边界，闭包里读 `input.timeoutMs` 会退回 `number | undefined`。
+      const turnTimeoutMs = input.timeoutMs;
+      if (turnTimeoutMs !== undefined && Number.isFinite(turnTimeoutMs) && turnTimeoutMs > 0) {
+        timeoutHandle = setTimeout(() => {
+          ctx.timedOut = true;
+          const failure = createTurnTimeoutFailure({
             runId,
-            channelKey: input.channelKey,
-            permissionMode: permissionMode ?? "default",
-          },
-        });
-        // Promote a text-only turn to blocks when the host channel attached
-        // files/images. UI uploads come through this path; resolving them here
-        // keeps attachment semantics in the gateway for every client.
-        const allowedReadFiles = await collectRegisteredAttachmentReadFiles(input.attachments);
-        const agentInput = await buildAgentInputWithAttachments(input.message, input.attachments, allowedReadFiles);
-        const syntheticMessages: CanonicalMessage[] = (input.syntheticMessages ?? []).map(s => ({
-          role: "user" as const,
-          // 渠道附带的提示不是用户输入：加护栏抬头，避免被读成用户指令或授权。
-          content: [{ type: "text" as const, text: withNonUserOriginNotice(s.text) }],
-          metadata: { synthetic: true, purpose: s.purpose ?? "channel_hint" },
-        }));
-        for await (const event of session.submit(agentInput, {
-          turnId: runId,
-          maxTurns: input.maxTurns,
-          runMode,
-          permissionMode,
-          basePermissionMode,
-          allowPlanModeTools,
-          canPrompt: input.canPrompt,
-          allowedReadFiles,
-          permissionRules: {
-            ...persistedRules,
-            allow: [...sessionAllowRules, ...persistedRules.allow],
-          },
-          appendSystemPrompt: input.appendSystemPrompt,
-          ...(syntheticMessages.length > 0 ? { syntheticMessages } : {}),
-        })) {
-          if (this.turnCompletions.get(input.sessionKey) !== turnDone) {
-            break;
-          }
-          emitSessionTelemetry(this.options.telemetry, event, {
-            sessionId: input.sessionKey,
-            runId,
-            channelKey: input.channelKey,
-            permissionMode: permissionMode ?? "default",
-            ownerModule: telemetryContext.ownerModule,
-            executionKind: telemetryContext.executionKind,
-            phase: telemetryContext.phase,
+            message: `Turn exceeded the ${turnTimeoutMs}ms timeout.`,
+            timeoutMs: turnTimeoutMs,
           });
-          for (const gatewayEvent of mapAgentEvent(event, runId)) {
-            if (gatewayEvent.type === "context_budget") {
-              void this.recordGatewayStatusMessage({
-                sessionKey: input.sessionKey,
-                turnId: runId,
-                projectKey: input.projectKey,
-                status: {
-                  event: "context_budget",
-                  kind: "status",
-                  text: "context_budget",
-                  detail: { ...gatewayEvent },
-                },
-              });
-            }
-            this.recordActiveTurnEvent(input.sessionKey, gatewayEvent);
-            queue.enqueue(gatewayEvent);
+          void this.emitTurnFailure(ctx, failure);
+          this.elicitationBus.rejectSession(input.sessionKey, "turn_timeout");
+          this.permissionBus.rejectSession(input.sessionKey, "turn_timeout");
+          queue.close();
+          try {
+            session.abort(`timeout:${runId}`);
+          } catch {
+            // The queue is already closed, so a faulty abort implementation
+            // cannot defeat the hard turn timeout.
           }
+        }, turnTimeoutMs);
+      }
+      const permissionSettings = readPermissionSettings();
+      const permissions = resolveSubmitTurnPermissions(
+        input,
+        permissionSettings,
+        this.sessionPermissionGrants.get(input.sessionKey) ?? [],
+      );
+      this.options.telemetry?.trackFeatureLoopStage({
+        module: "session",
+        ownerModule: telemetryContext.ownerModule,
+        executionKind: telemetryContext.executionKind,
+        phase: telemetryContext.phase,
+        loopStage: "loop_start",
+        outcome: "success",
+        sessionId: input.sessionKey,
+        metadata: {
+          runId,
+          channelKey: input.channelKey,
+          permissionMode: permissions.permissionMode ?? "default",
+        },
+      });
+      // Promote a text-only turn to blocks when the host channel attached
+      // files/images. UI uploads come through this path; resolving them here
+      // keeps attachment semantics in the gateway for every client.
+      const allowedReadFiles = await collectRegisteredAttachmentReadFiles(input.attachments);
+      const agentInput = await buildAgentInputWithAttachments(input.message, input.attachments, allowedReadFiles);
+      const submitOptions = buildSubmitOptions({
+        input,
+        permissions,
+        runId,
+        allowedReadFiles,
+        syntheticMessages: buildSyntheticTurnMessages(input.syntheticMessages),
+      });
+      for await (const event of session.submit(agentInput, submitOptions)) {
+        if (this.turnCompletions.get(input.sessionKey) !== turnDone) {
+          break;
         }
-      } catch (error) {
-        this.options.telemetry?.trackError(error, {
-          module: "session",
+        emitSessionTelemetry(this.options.telemetry, event, {
+          sessionId: input.sessionKey,
+          runId,
+          channelKey: input.channelKey,
+          permissionMode: permissions.permissionMode ?? "default",
           ownerModule: telemetryContext.ownerModule,
           executionKind: telemetryContext.executionKind,
           phase: telemetryContext.phase,
-          loopStage: "loop_end",
-          errorCategory: "loop_error",
-          sessionId: input.sessionKey,
-          metadata: {
-            runId,
-            channelKey: input.channelKey,
-          },
         });
-        if (this.turnCompletions.get(input.sessionKey) === turnDone) {
-          const message = error instanceof Error ? error.message : String(error);
-          await emitGatewayFailureStatus(
-            createGatewayFailureStatus({
-              event: "gateway_submit_failed",
-              code: "gateway_submit_failed",
-              message,
-              userHint:
-                "Sati failed before the agent turn could finish. Retry this message; if it repeats, check the gateway logs.",
-            }),
-          );
-          const gatewayEvent: GatewayEvent = {
-            type: "error",
-            runId,
-            code: "gateway_submit_failed",
-            message,
-            recoverable: false,
-            userHint:
-              "Sati failed before the agent turn could finish. Retry this message; if it repeats, check the gateway logs.",
-          };
+        for (const gatewayEvent of mapAgentEvent(event, runId)) {
+          if (gatewayEvent.type === "context_budget") {
+            void this.recordGatewayStatusMessage({
+              sessionKey: input.sessionKey,
+              turnId: runId,
+              projectKey: input.projectKey,
+              status: {
+                event: "context_budget",
+                kind: "status",
+                text: "context_budget",
+                detail: { ...gatewayEvent },
+              },
+            });
+          }
           this.recordActiveTurnEvent(input.sessionKey, gatewayEvent);
           queue.enqueue(gatewayEvent);
         }
-      } finally {
-        if (timeoutHandle) {
-          clearTimeout(timeoutHandle);
-          timeoutHandle = undefined;
-        }
-        queue.close();
       }
-    })();
-
-    try {
-      for await (const event of queue) {
-        yield event;
+    } catch (error) {
+      this.options.telemetry?.trackError(error, {
+        module: "session",
+        ownerModule: telemetryContext.ownerModule,
+        executionKind: telemetryContext.executionKind,
+        phase: telemetryContext.phase,
+        loopStage: "loop_end",
+        errorCategory: "loop_error",
+        sessionId: input.sessionKey,
+        metadata: {
+          runId,
+          channelKey: input.channelKey,
+        },
+      });
+      if (this.turnCompletions.get(input.sessionKey) === turnDone) {
+        const failure = createSubmitFailedFailure({
+          runId,
+          message: error instanceof Error ? error.message : String(error),
+        });
+        await this.emitTurnFailure(ctx, failure);
       }
     } finally {
-      // Clean up the emit-sink and any orphaned elicitation / permission
-      // entries before returning so a subsequent turn doesn't see stale
-      // state.
-      this.emitSinks.delete(input.sessionKey);
-      this.activeTurnReplays.delete(input.sessionKey);
-      this.elicitationBus.rejectSession(input.sessionKey, "turn_ended");
-      this.permissionBus.rejectSession(input.sessionKey, "turn_ended");
-      this.router.endTurn(input.sessionKey, runId);
-      if (timedOut) {
-        // The timed-out AgentSession is never safe to reuse. Do not await a
-        // misbehaving tool here: the hard timeout must release the Cron run.
-        await this.router.close(input.sessionKey);
-        void pump.catch(() => undefined);
-      } else {
-        // Defensive — make sure the pump promise is settled before we resolve.
-        await pump.catch(() => undefined);
+      if (timeoutHandle) {
+        clearTimeout(timeoutHandle);
+        timeoutHandle = undefined;
       }
-      // Signal any in-flight `abortTurn` awaiters that the session slot
-      // has been released. Drop our deferred only if we still own it —
-      // a later turn for the same session may have already installed
-      // its own.
-      if (this.turnCompletions.get(input.sessionKey) === turnDone) {
-        this.turnCompletions.delete(input.sessionKey);
-      }
-      resolveTurnDone();
-      this.options.afterTurnCompleted?.({
-        sessionKey: input.sessionKey,
-        projectKey: input.projectKey,
-        runId,
-      });
+      queue.close();
     }
+  }
+
+  /**
+   * P2.1 — 收尾段：清 emit sink 与孤立的 elicitation / permission 条目，释放 session
+   * 槽并通知 `abortTurn` 的等待者；消费者无论正常读完还是提前 `return` 都调一次。
+   */
+  private async finishSubmitTurn(ctx: SubmitTurnContext, pump: Promise<void>): Promise<void> {
+    const { input, runId, turnDone } = ctx;
+    // Clean up the emit-sink and any orphaned elicitation / permission
+    // entries before returning so a subsequent turn doesn't see stale
+    // state.
+    this.emitSinks.delete(input.sessionKey);
+    this.activeTurnReplays.delete(input.sessionKey);
+    this.elicitationBus.rejectSession(input.sessionKey, "turn_ended");
+    this.permissionBus.rejectSession(input.sessionKey, "turn_ended");
+    this.router.endTurn(input.sessionKey, runId);
+    if (ctx.timedOut) {
+      // The timed-out AgentSession is never safe to reuse. Do not await a
+      // misbehaving tool here: the hard timeout must release the Cron run.
+      await this.router.close(input.sessionKey);
+      void pump.catch(() => undefined);
+    } else {
+      // Defensive — make sure the pump promise is settled before we resolve.
+      await pump.catch(() => undefined);
+    }
+    // Signal any in-flight `abortTurn` awaiters that the session slot
+    // has been released. Drop our deferred only if we still own it —
+    // a later turn for the same session may have already installed
+    // its own.
+    if (this.turnCompletions.get(input.sessionKey) === turnDone) {
+      this.turnCompletions.delete(input.sessionKey);
+    }
+    ctx.resolveTurnDone();
+    this.options.afterTurnCompleted?.({
+      sessionKey: input.sessionKey,
+      projectKey: input.projectKey,
+      runId,
+    });
   }
 
   async abortTurn(input: { sessionKey: string; runId?: string; reason?: string }): Promise<void> {
