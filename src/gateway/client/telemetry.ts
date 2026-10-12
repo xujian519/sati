@@ -5,12 +5,16 @@
  * createGatewayFailureStatus / emitSessionTelemetry / inferToolErrorCategory。
  * emitSessionTelemetry 为 ~330 行 switch（AgentEvent → telemetry 客户端），
  * 是自由函数区第二大单体。
+ *
+ * P2.1 追加：turn 级失败的两个具名构造（createTurnTimeoutFailure /
+ * createSubmitFailedFailure）+ 其共用的 createTurnFailure；原
+ * createGatewayFailureStatus 收为模块私有（此前唯一的消费者是 submitTurn）。
  */
 
 import type { AgentEvent } from "../../agent/index.js";
 import { createVisibleErrorStatusDetail } from "../../status/agentStatus.js";
 import type { TelemetryClient, TelemetryExecutionKind, TelemetryModule } from "../../telemetry/index.js";
-import type { GatewayRecordAgentStatusMessageInput, GatewaySubmitTurnInput } from "../protocol/types.js";
+import type { GatewayEvent, GatewayRecordAgentStatusMessageInput, GatewaySubmitTurnInput } from "../protocol/types.js";
 
 export function resolveSubmitTurnTelemetry(input: GatewaySubmitTurnInput): {
   ownerModule: TelemetryModule;
@@ -38,7 +42,7 @@ export function resolveSubmitTurnTelemetry(input: GatewaySubmitTurnInput): {
   };
 }
 
-export function createGatewayFailureStatus(args: {
+function createGatewayFailureStatus(args: {
   event: string;
   code: string;
   message: string;
@@ -58,6 +62,72 @@ export function createGatewayFailureStatus(args: {
       detail: args.detail,
     }),
   };
+}
+
+/** turn 级失败的两种产物：落盘 status + 流内 error 事件（`submitTurn` 的兜底分支用）。 */
+export type TurnFailure = {
+  status: GatewayRecordAgentStatusMessageInput["status"];
+  event: Extract<GatewayEvent, { type: "error" }>;
+};
+
+/**
+ * 由同一份 message / userHint 派生「落盘 status + 流内 error 事件」。
+ *
+ * 两份文案必须逐字一致：拆成两处字面量写过（P2.1 前），改一边漏一边不会红。
+ * `detail` 只进 status —— 它是落盘侧的诊断信息，不进面向用户的事件体。
+ */
+function createTurnFailure(args: {
+  event: string;
+  code: string;
+  message: string;
+  userHint: string;
+  recoverable: boolean;
+  runId: string;
+  detail?: Record<string, unknown>;
+}): TurnFailure {
+  return {
+    status: createGatewayFailureStatus({
+      event: args.event,
+      code: args.code,
+      message: args.message,
+      userHint: args.userHint,
+      detail: args.detail,
+    }),
+    event: {
+      type: "error",
+      runId: args.runId,
+      code: args.code,
+      message: args.message,
+      recoverable: args.recoverable,
+      userHint: args.userHint,
+    },
+  };
+}
+
+/** 硬超时（`turn_timeout`）：消息随 timeoutMs 变化，`detail.timeoutMs` 落盘可查。 */
+export function createTurnTimeoutFailure(input: { runId: string; message: string; timeoutMs: number }): TurnFailure {
+  return createTurnFailure({
+    event: "turn_timeout",
+    code: "turn_timeout",
+    message: input.message,
+    userHint: "The turn exceeded its wall-clock limit. Retry with a smaller task or increase the timeout.",
+    recoverable: false,
+    runId: input.runId,
+    detail: { timeoutMs: input.timeoutMs },
+  });
+}
+
+/** 主链路异常（`gateway_submit_failed`）：agent turn 结束前 gateway 自身抛出。 */
+export function createSubmitFailedFailure(input: { runId: string; message: string }): TurnFailure {
+  return createTurnFailure({
+    event: "gateway_submit_failed",
+    code: "gateway_submit_failed",
+    message: input.message,
+    userHint:
+      "Sati failed before the agent turn could finish. Retry this message; if it repeats, check the gateway logs.",
+    recoverable: false,
+    runId: input.runId,
+  });
 }
 
 export function emitSessionTelemetry(
