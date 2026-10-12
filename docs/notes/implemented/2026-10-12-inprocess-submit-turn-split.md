@@ -52,7 +52,7 @@ Status: implemented
 - **事件矩阵**：`pnpm check:event-matrix` fresh；86 行生产者/消费者**计数全部不变**，4 行归属改写为 `normalizers.ts`。
 - **定向测试**：`tests/gateway/client/{normalizers,submitTurn,telemetry}.spec.ts` = **23 例（12 + 4 + 7）全绿**；新增接缝 = `resolveSubmitTurnPermissions`（plan 覆盖 / skipPermissions+legacy runMode / session 授权前插）、`buildSubmitOptions`（空 `syntheticMessages` 不出键）、`createTurnTimeoutFailure` / `createSubmitFailedFailure`（status 与 event 同源同文案）、以及 `session.submit` 抛错时的 `gateway_submit_failed` 事件序 + 落盘次数。
 - **负控制**：10 处**串行**变异（每次只改一处、跑完即 `cp` 还原）**全部按预测转红且只红预测的那条**，相邻用例保持绿、还原后 23/23 绿。含两类易漏点：`turnCompletions` 所有权检查（3 处各自变异）、`buildSyntheticTurnMessages` 的 guard 头。
-- **门禁**：`tsc --noEmit`、biome、eslint（`src/` + `tests/`）、`check:architecture-boundaries`（42 条豁免不变）、`check:event-matrix`、`check:techdebt-metrics` 及其余 14 条 `check:*` 逐条 exit 0。
+- **门禁**：`pnpm check` 链的每一步单独复跑均 exit 0 —— `check:freshness` · `check:config` · `typecheck`（root）· `sati-ui typecheck` · root `eslint src tests scripts apps/desktop` · `format:check` · `check-ui-server-boundary.mjs`，以及 `package.json` 里 **全部 16 条 `check:*`**（含 `check:architecture-boundaries` 42 条豁免不变、`check:event-matrix`、`check:techdebt-metrics`、`check:doc-claims`）。唯一无法整包复跑的是 `ui` 的 `eslint src/ server/`——环境垫片断管，见下条。
 
 ## Consequences
 
@@ -60,4 +60,4 @@ Status: implemented
 - **付出了**：`normalizers.ts` 从 60 行涨到 169 行，承担了一类新的职责（"被拒绝的输入 → 事件序列"+"提交选项装配"）——它现在不是纯归一化模块了，**下次再往里塞东西前应先看是否需要第三个模块**。
 - **文件行数棘轮的一个反直觉后果**：拆分本身**增加**行数（多出的方法签名 + 段首 JSDoc + `SubmitTurnContext`/`SubmitTurnStartup` 类型）。首版拆完 `InProcessGateway.ts` 是 **1568 行**，直接超过 1518 的棘轮基线 ⇒ 必须在**同一次改动里**把纯逻辑外迁（`normalizers.ts`）并消掉重复文案（`telemetry.ts`）才算完。也就是说本项交付的形态不是"怎么拆最干净"，而是"怎么拆到干净**且不涨文件**"——记录在此，避免后人把外迁误读为多余的顺带重构。
 - **未改变**：`submitTurn` 的对外契约（事件序列、队列关闭时机、清理次数、`turnCompletions` 语义）逐条不变；`src/gateway/protocol` 无新增/变更方法，不触发 `pnpm check:protocol-version`。
-- **已知环境噪声（非本项回归）**：`pnpm check` / `pnpm lint` 在 `ui` 侧 `eslint src/ server/ --max-warnings 0` 上以 `Error: write EPIPE` 退出 2——ESLint 9.39.4 多 tsconfig program 加载所致，**未打印任何 lint 诊断**（单文件复现同样触发）。同类先例见 #534。
+- **已知环境噪声（非本项回归）**：本机 `pnpm check` / `pnpm lint` 会停在 `ui` 侧 `eslint src/ server/ --max-warnings 0`，以 `Error: write EPIPE` 退出 2，**不打印任何 lint 诊断**。栈顶指向执行环境的 IPC 垫片（`…/cli/vendor/shim/broker-ipc-client.cjs:185` 的 `Socket._write`），即**沙箱管道断管**，与 ESLint 规则无关——触发条件是**整包规模**：单文件、单目录、以及按 `server/* + src/*` 分 35 块的逐块运行全部 exit 0。分块聚合 `-f json` 结果 = **220 文件 / 0 error / 0 warning**，与 `eslint src/ server/` 的覆盖面等价（`src/index.css`、`src/assets` 的报错是显式传路径导致的垫片/忽略产物，整包运行不会出现）。CI runner 不受此垫片影响：本分支基点 `cbaf9c150` 的 `Typecheck, Lint & Test` 为 success。
