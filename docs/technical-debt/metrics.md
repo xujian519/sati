@@ -7,9 +7,9 @@
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1084 / 188322 |
+| src TS 文件 / 行数 | 1088 / 189122 |
 | src JS 文件 | 0 |
-| tests 文件 | 630 |
+| tests 文件 | 634 |
 | ui/src 文件 / 行数 | 638 / 102219 |
 | ui/server 文件 / 行数 | 129 / 35394 |
 
@@ -29,12 +29,12 @@
 | 指标 | 总量 | 热点模块 |
 |---|---|---|
 | `any`/`@ts-expect-error`/`@ts-ignore` | 3 | ui/src(3) |
-| `as unknown as`（双重断言） | 20 | ui/src(18) · adapters(1) · network(1) |
+| `as unknown as`（双重断言） | 25 | ui/src(18) · knowledge(5) · adapters(1) |
 | 裸 `console.*` | 6 | ui/server(6) |
 | 空 `catch {}` | 0 | — |
-| 无参 `catch {`（总计） | 697 | ui/server(160) · ui/src(125) · adapters(70) |
+| 无参 `catch {`（总计） | 699 | ui/server(160) · ui/src(125) · adapters(71) |
 | ↳ **无注释**（隐患类，目标） | **0** | — |
-| ↳ 已带意图注释 | 697 | — |
+| ↳ 已带意图注释 | 699 | — |
 | `TODO/HACK/FIXME/XXX` | 11 | always-on(4) · tests(4) · ui/src(2) |
 | 分层违规 `ui/server→src` | 15 | — |
 | 分层违规 `src→ui` | 0 | — |
@@ -68,7 +68,7 @@
 | `src/router/execution/executeRouterDecision.ts` | `executeRouterDecision` | 449 | function |
 | `ui/src/components/settings/view/modelPool/components/ProviderCard.tsx` | `ProviderCard` | 447 | function |
 | `ui/src/components/chat-v2/MessageRowV2.tsx` | `MessageRowV2` | 429 | function |
-| `src/cli/projectRuntimeFactory.ts` | `createProjectRuntimeResolver` | 424 | function |
+| `src/cli/projectRuntimeFactory.ts` | `createProjectRuntimeResolver` | 428 | function |
 | `ui/src/components/code-editor/view/subcomponents/DocxBuiltinPreview.tsx` | `DocxBuiltinPreview` | 422 | function |
 | `ui/src/components/chat-v2/processGrouping.test.ts` | `(anonymous)` | 409 | arrow |
 | `ui/src/types/contentReference.spec.ts` | `(anonymous)` | 408 | arrow |
@@ -96,7 +96,7 @@
 | `ui/src/components/chat/hooks/useSlashCommandExecute.ts` | `useSlashCommandExecute` | 331 | function |
 | `ui/src/components/code-editor/view/CodeEditor.tsx` | `CodeEditor` | 326 | function |
 | `ui/src/components/annotation/view/Annotator.tsx` | `Annotator` | 322 | function |
-| `src/cli/projectRuntimeFactory.ts` | `resolve` | 316 | function |
+| `src/cli/projectRuntimeFactory.ts` | `resolve` | 320 | function |
 | `src/tool/builtin/patentFigureProject.ts` | `createPatentFigureProjectTool` | 313 | function |
 | `ui/src/components/chat-v2/SubagentDetailMessageFlow.tsx` | `SubagentDetailMessageFlow` | 309 | function |
 | `ui/src/components/settings/view/integrations/im/components/WeixinChannelSection.tsx` | `WeixinChannelSection` | 303 | function |
@@ -159,9 +159,9 @@
 | 模块 | 测试文件 |
 |---|---|
 | patent | 141 |
-| tool | 68 |
+| tool | 69 |
 | agent | 60 |
-| knowledge | 39 |
+| knowledge | 40 |
 | context | 38 |
 | gateway | 34 |
 | model | 33 |
@@ -171,9 +171,9 @@
 | always-on | 14 |
 | extension | 13 |
 | mcp | 13 |
+| pilot | 13 |
+| adapters | 12 |
 | cron | 12 |
-| pilot | 12 |
-| adapters | 11 |
 | rule | 10 |
 | web | 9 |
 | literature | 8 |
@@ -191,7 +191,7 @@
 | runtime | 1 |
 | status | 1 |
 
-| **合计** | **603** |
+| **合计** | **607** |
 
 ## i18n en/zh-CN 对齐
 
