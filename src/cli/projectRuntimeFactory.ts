@@ -2,6 +2,10 @@
  * 项目运行时构造（P4a 第九刀，类内拆分）：从 ProjectRuntimeRegistry 搬出 `resolve`、
  * `buildRouterEventBus`、`emitBackgroundTaskCompletion` 与 `ProjectRuntime` 类型。
  *
+ * P2.7 再拆：`resolve` 的三段装配（记忆/知识库、工具表、路由事件落盘）外移到同目录的
+ * `projectRuntimeKnowledge.ts` / `projectRuntimeTools.ts` / `projectRuntimeRouterEvents.ts`，
+ * 本文件只留解析入口与运行时对象装配。
+ *
  * 一个 ProjectRuntime = 项目配置快照 + 模型/路由 + 工具表 + 记忆与知识库解析器 + 后台任务 +
  * per-project 存储；本模块负责**首次 resolve 时的整套装配**，之后注册表缓存命中直接返回。
  *
@@ -15,57 +19,29 @@
  * - `runtimes` / `sessionWriters`：注册表的活 Map（原地增删、引用不变），按值传入。
  */
 
-import { appendFileSync, existsSync, mkdirSync as mkdirSyncFs, renameSync } from "node:fs";
-import { join as joinPath, resolve as resolvePath } from "node:path";
+import { resolve as resolvePath } from "node:path";
 import type { EdgeClawMemoryService } from "edgeclaw-memory-core";
-import { brandEnv, ENV_KEY } from "../env.js";
+import { type MemoryResolver, TokenAccountingRuntime } from "../context/index.js";
 import { PluginRuntime } from "../extension/index.js";
 import { loadBuiltinPlugins } from "../extension/plugins/builtin/loadBuiltinPlugins.js";
-import { type GatewayProjectStorageOptions, type InProcessGateway, type KanbanBoardManager } from "../gateway/index.js";
-import {
-  buildKnowledgeResolvers,
-  CompositeMemoryResolver,
-  createCaseLawSemanticSource,
-  createKnowledgeEmbeddingSearch,
-  getOrCreatePersonalNoteIndex,
-  type KnowledgeDbPaths,
-  KnowledgeRuntimeStats,
-  logKnowledgeCapabilities,
-  resolveKnowledgeDbPaths,
-} from "../knowledge/index.js";
-import {
-  createEdgeClawMemoryProviderFromConfig,
-  type MemoryResolver,
-  TokenAccountingRuntime,
-} from "../context/index.js";
+import { type KanbanBoardManager, type InProcessGateway, type GatewayProjectStorageOptions } from "../gateway/index.js";
+import type { KnowledgeDbPaths, KnowledgeRuntimeStats } from "../knowledge/index.js";
 import { createModelRuntime, type ModelRuntime } from "../model/index.js";
-import { resolveEmbeddingClient, resolveRerankClient } from "../model/embedding/index.js";
-import { createPolicyKey, normalizeRetryReason } from "../model/streaming/retryState.js";
+import type { PilotConfigSnapshot } from "../pilot/config/types.js";
 import { loadPilotConfig } from "../pilot/index.js";
-import { getPilotProjectChatDir } from "../shared/paths/pilotPaths.js";
-import { isBuiltinToolGroupEnabled, isOptionalFeatureEnabled } from "../pilot/config/optionalFeature.js";
-import { detectPatentWorkspace, PATENT_DOMAIN } from "../pilot/workspace/patentSignals.js";
-import type { PilotConfigDiagnostic, PilotConfigSnapshot } from "../pilot/config/types.js";
 import { createRouterRuntime, type RouterRuntime } from "../router/index.js";
-import type { RouterEvent, RouterEventBus } from "../router/protocol/events.js";
+import type { RouterEventBus } from "../router/protocol/events.js";
 import type { AgentTranscriptWriter } from "../session/index.js";
-import { NEXT_TASK_MS } from "../shared/timeouts.js";
-import { BackgroundTaskRuntime, type BackgroundTaskCompletionEvent } from "../task/runtime/BackgroundTaskRuntime.js";
+import { BackgroundTaskRuntime } from "../task/runtime/BackgroundTaskRuntime.js";
 import { logger, type TelemetryClient } from "../telemetry/index.js";
 import { applyReplayEnvHooks } from "../test-support/llm-replay/index.js";
-import {
-  createBuiltinRegistry,
-  type SatiToolDefinition,
-  type SatiUnavailableToolDiagnostic,
-  type ToolRegistry,
-} from "../tool/index.js";
+import type { SatiToolDefinition, SatiUnavailableToolDiagnostic, ToolRegistry } from "../tool/index.js";
 import type { TeamToolsOptions } from "../tool/builtin/team/index.js";
-import { setCaseLawSemanticSource, setPersonalNoteSemanticSource } from "../tool/builtin/patentCaseSearch.js";
 import type { McpRuntime } from "../mcp/index.js";
+import { createKnowledgeResolverLayer, createProjectMemoryLayer } from "./projectRuntimeKnowledge.js";
+import { createRouterEventBus, emitBackgroundTaskCompletion } from "./projectRuntimeRouterEvents.js";
+import { createProjectTools } from "./projectRuntimeTools.js";
 import { ensureRouterConfig } from "./routerDefaults.js";
-
-/** M4：路由事件审计落盘批量 flush 间隔（unref，不持 event loop）。 */
-const ROUTER_EVENT_FLUSH_INTERVAL_MS = 250;
 
 export type ProjectRuntime = {
   projectRoot: string;
@@ -147,111 +123,40 @@ export type ProjectRuntimeResolver = {
   resolve(projectKey?: string): ProjectRuntime;
 };
 
+/** 模型 / token 记账 / 插件运行时 / 路由：装配顺序上互不依赖，但都先于工具与知识层。 */
+function createModelAndRouterLayer(
+  projectRoot: string,
+  deps: ProjectRuntimeFactoryDeps,
+  snapshot: PilotConfigSnapshot,
+) {
+  const baseModel = deps.modelFactory ? deps.modelFactory(snapshot) : createModelRuntime(snapshot.config.model);
+  // Phase 4 T1: replay seam hooks. SATI_LLM_REPLAY_RECORD_ROOT records every
+  // stream the gateway drives; SATI_LLM_REPLAY_ROOT replays a fixture without
+  // an API key. Unset in normal operation (applyReplayEnvHooks is a no-op).
+  const model = applyReplayEnvHooks(baseModel, deps.env);
+  const tokenAccounting = new TokenAccountingRuntime({
+    modelConfig: snapshot.config.model,
+  });
+  const pluginRuntime = new PluginRuntime({
+    projectRoot,
+    pilotHome: deps.pilotHome,
+    builtinSkillsRoot: deps.builtinSkillsRoot,
+    builtinPlugins: loadBuiltinPlugins(),
+    builtinPluginsEnabled: snapshot.config.extension.builtinPluginsEnabled,
+  });
+  const routerConfig = ensureRouterConfig(snapshot.config.router, snapshot.config.agent.model);
+  const router = createRouterRuntime(routerConfig, {
+    modelRuntime: model,
+    now: deps.now,
+    customRouterRegistry: pluginRuntime,
+    loadSkillPrompt: extensionId => pluginRuntime.loadSkillPrompt(extensionId),
+    events: deps.setRouterEventBus(createRouterEventBus(deps)),
+    telemetry: deps.telemetry,
+  });
+  return { model, tokenAccounting, pluginRuntime, router };
+}
+
 export function createProjectRuntimeResolver(deps: ProjectRuntimeFactoryDeps): ProjectRuntimeResolver {
-  function emitBackgroundTaskCompletion(event: BackgroundTaskCompletionEvent): void {
-    // 整形（等价）：原代码读的是属性 `this.gateway`，TS 收窄跨属性读有效；改取数函数后
-    // 每次调用都可能返回 undefined，故守卫前提到局部量，同一同步块内只读一次。
-    const gateway = deps.getGateway();
-    if (!event.sessionId || !gateway) {
-      return;
-    }
-    const outputPreview = event.outputPreview.trimEnd();
-    gateway.emitForSession(event.sessionId, {
-      type: "agent_status",
-      event: "background_task_completed",
-      detail: {
-        taskId: event.taskId,
-        status: event.status,
-        exitCode: event.exitCode ?? null,
-        totalBytes: event.totalBytes,
-        startedAt: event.startedAt,
-        endedAt: event.endedAt,
-        ...(outputPreview ? { outputPreview } : {}),
-      },
-    });
-  }
-
-  function buildRouterEventBus(): RouterEventBus {
-    const pilotHome = deps.pilotHome;
-    const routerDir = joinPath(pilotHome, "router");
-    try {
-      mkdirSyncFs(routerDir, { recursive: true });
-    } catch {
-      // 目录已存在或创建失败：后续事件写盘会再试，此处失败不阻断（best-effort）。
-    }
-    const eventsPath = joinPath(routerDir, "events.jsonl");
-    try {
-      const oldPath = joinPath(pilotHome, "router-events.jsonl");
-      if (!existsSync(eventsPath) && existsSync(oldPath)) {
-        renameSync(oldPath, eventsPath);
-      }
-    } catch {
-      // 迁移失败：沿用旧文件，events.jsonl 仅审计用，失败不影响主流程（best-effort）。
-    }
-    // M4：逐事件 appendFileSync 改缓冲 + 250ms 批量 flush。events.jsonl 仅供
-    // 人工审计（bootstrap-sati-config 注释），无程序化消费/重建路径——尾部
-    // 丢失可接受；flush timer unref 不持 event loop，dispose 时同步 flush 收尾。
-    const pendingEvents: RouterEvent[] = [];
-    let flushTimer: ReturnType<typeof setTimeout> | null = null;
-    const flushPendingEvents = () => {
-      if (flushTimer !== null) {
-        clearTimeout(flushTimer);
-        flushTimer = null;
-      }
-      if (pendingEvents.length === 0) return;
-      const batch = pendingEvents.splice(0, pendingEvents.length);
-      try {
-        appendFileSync(eventsPath, batch.map(event => JSON.stringify(event)).join("\n") + "\n");
-      } catch {
-        // 事件批量落盘失败：丢弃该批，不中断 agent turn，下批 flush 再试（best-effort）。
-      }
-    };
-    const scheduleFlush = () => {
-      if (flushTimer !== null) return;
-      flushTimer = setTimeout(() => {
-        flushTimer = null;
-        flushPendingEvents();
-      }, ROUTER_EVENT_FLUSH_INTERVAL_MS);
-      flushTimer.unref?.();
-    };
-    return {
-      emit: (event: RouterEvent) => {
-        pendingEvents.push(event);
-        scheduleFlush();
-        if (event.type === "sati_router_retry_progress") {
-          try {
-            deps.getGateway()?.broadcastRetryProgress(event);
-          } catch {
-            // 重试进度广播失败：事件仅审计展示，丢一条不影响重试链路（best-effort）。
-          }
-          // 跨进程重启续算 T-A：重试调度写入该会话 transcript 权威序列（log-only）。
-          // 事件含 sessionId/turnId；无 turnId（子代理上下文）或会话未登记时跳过。
-          try {
-            if (typeof event.turnId === "string") {
-              const writer = deps.sessionWriters.get(event.sessionId);
-              if (writer?.recordRetrySchedule) {
-                void writer.recordRetrySchedule(event.sessionId, event.turnId, {
-                  retryId: event.retryId ?? "",
-                  provider: event.provider,
-                  model: event.model,
-                  policyKey: createPolicyKey(),
-                  attempt: event.attempt,
-                  maxAttempts: event.maxAttempts,
-                  delayMs: event.delayMs,
-                  reason: normalizeRetryReason(event.reason),
-                  scheduledAt: deps.now().toISOString(),
-                });
-              }
-            }
-          } catch {
-            // 重试调度落盘失败：不中断 agent turn，下轮或续算路径再补（best-effort）。
-          }
-        }
-      },
-      flush: flushPendingEvents,
-    };
-  }
-
   function resolve(projectKey?: string): ProjectRuntime {
     const projectRoot = resolvePath(projectKey ?? deps.fallbackProjectRoot);
     deps.onProjectActivated?.(projectRoot);
@@ -262,287 +167,40 @@ export function createProjectRuntimeResolver(deps: ProjectRuntimeFactoryDeps): P
 
     const buildStartedAt = Date.now();
     const snapshot = loadPilotConfig({ projectRoot, env: deps.env });
-    const baseModel = deps.modelFactory ? deps.modelFactory(snapshot) : createModelRuntime(snapshot.config.model);
-    // Phase 4 T1: replay seam hooks. SATI_LLM_REPLAY_RECORD_ROOT records every
-    // stream the gateway drives; SATI_LLM_REPLAY_ROOT replays a fixture without
-    // an API key. Unset in normal operation (applyReplayEnvHooks is a no-op).
-    const model = applyReplayEnvHooks(baseModel, deps.env);
-    const tokenAccounting = new TokenAccountingRuntime({
-      modelConfig: snapshot.config.model,
-    });
-    const pluginRuntime = new PluginRuntime({
-      projectRoot,
-      pilotHome: deps.pilotHome,
-      builtinSkillsRoot: deps.builtinSkillsRoot,
-      builtinPlugins: loadBuiltinPlugins(),
-      builtinPluginsEnabled: snapshot.config.extension.builtinPluginsEnabled,
-    });
-    const routerConfig = ensureRouterConfig(snapshot.config.router, snapshot.config.agent.model);
-    const router = createRouterRuntime(routerConfig, {
-      modelRuntime: model,
-      now: deps.now,
-      customRouterRegistry: pluginRuntime,
-      loadSkillPrompt: extensionId => pluginRuntime.loadSkillPrompt(extensionId),
-      events: deps.setRouterEventBus(buildRouterEventBus()),
-      telemetry: deps.telemetry,
-    });
+    const { model, tokenAccounting, pluginRuntime, router } = createModelAndRouterLayer(projectRoot, deps, snapshot);
     const backgroundTasks = new BackgroundTaskRuntime({
       now: deps.now,
-      onCompletion: event => emitBackgroundTaskCompletion(event),
+      onCompletion: event => emitBackgroundTaskCompletion(deps.getGateway(), event),
     });
-    const toolsConfig = snapshot.config.tools;
-    const webSearchConfig = toolsConfig?.webSearch;
-    const paperSearchConfig = toolsConfig?.paperSearch;
 
-    // 语义检索（可选）：embedding 端点配置解析一次，分发给记忆、知识库与附图检索。
-    // 必须用调用方传入的 env：否则 `createLocalGateway({env})` 对
-    // `SATI_KNOWLEDGE_DIR` / `SATI_LAW_DB` 等覆盖会被静默忽略，回落到宿主 process.env
-    // （测量脚本因此无法隔离本机知识库，测出的数字跨机不可比）。
-    const knowledgePaths = resolveKnowledgeDbPaths(deps.env);
-    const embeddingDiagnostics: PilotConfigDiagnostic[] = [];
-    const embeddingClient = resolveEmbeddingClient(
-      snapshot.config.memory?.embedding,
-      snapshot.config.model,
-      embeddingDiagnostics,
-    );
-    // 重排（可选，阶段 C）：cross-encoder 对召回候选重新打分
-    const rerankClient = resolveRerankClient(
-      snapshot.config.memory?.embedding?.rerank,
-      snapshot.config.model,
-      embeddingDiagnostics,
-    );
-    for (const diagnostic of embeddingDiagnostics) {
-      logger.warn(`${diagnostic.path}: ${diagnostic.message}`);
-    }
-
-    // 知识库向量库目录（embedding 客户端解析见上，记忆/知识库/附图检索共用）。
-    // 记忆服务需在 createBuiltinRegistry 之前创建：memory_* 工具随注册表闭包注入。
-    const embeddingDir = joinPath(knowledgePaths.dataDir, "embeddings");
-
-    const memory = createEdgeClawMemoryProviderFromConfig({
-      config: snapshot.config.memory,
-      modelConfig: snapshot.config.model,
-      agentModel: snapshot.config.agent.model.id,
+    const memoryLayer = createProjectMemoryLayer({
+      snapshot,
       projectRoot,
+      env: deps.env,
       now: deps.now,
       telemetry: deps.telemetry,
-      embeddingClient,
-      embeddingDir,
     });
-
-    // 内置工具组按需注册（tools.team / tools.kanban / tools.documentStyle）：
-    // 段缺失 = 保持历史默认（注册），显式 enabled: false 才不注册——这三组是既有
-    // 内置能力，默认翻转会让升级用户静默失去功能（与搜索工具的三态语义相反）。
-    const teamTools = isBuiltinToolGroupEnabled(toolsConfig?.team) ? deps.getTeamTools() : undefined;
-    const kanbanManager = isBuiltinToolGroupEnabled(toolsConfig?.kanban) ? deps.getKanbanBoardManager() : undefined;
-    const tools = createBuiltinRegistry({
-      ...(teamTools ? { team: teamTools } : {}),
-      ...(kanbanManager ? { kanban: kanbanManager } : {}),
-      backgroundTasks: { runtime: backgroundTasks },
-      searchPatentFigure: { embeddingClient },
-      // 文书排版调参面板工具（opt-in：无参注册会破坏 llm-replay fixture 工具集匹配）
-      ...(isBuiltinToolGroupEnabled(toolsConfig?.documentStyle) ? { documentStyle: {} } : {}),
-      // knowledge_note_save 草稿闸门模式（WS2）：默认 draft；schema 不变、只改运行时行为
-      knowledgeNoteSaveMode: snapshot.config.memory?.knowledgeNoteSaveMode,
-      // J-Space 工作区工具（opt-in：与工作区账本开关联动，避免破坏 fixture 工具集匹配）
-      workspaceLedgerTools: brandEnv(deps.env, ENV_KEY.WORKSPACE_LEDGER_ENABLED) === "1",
-      ...(memory?.service ? { memory: { service: memory.service } } : {}),
-      readSkill: {
-        loader: name => pluginRuntime.loadSkillPrompt(name),
-        lister: () => pluginRuntime.getAllSkills(),
-      },
-      // Pass the YAML-configured web-search provider through to the built-in
-      // `web_search` tool. An absent or explicitly disabled section keeps search
-      // out of the registry, even when provider credentials are available in the
-      // environment（上游 #588）：未配置的搜索不再凭 GLM_WEB_SEARCH_API_KEY /
-      // TAVILY_API_KEY 自我唤醒。
-      ...(isOptionalFeatureEnabled(webSearchConfig)
-        ? {
-            webSearch: {
-              ...(webSearchConfig.provider ? { provider: webSearchConfig.provider } : {}),
-              ...(webSearchConfig.searchEngine ? { searchEngine: webSearchConfig.searchEngine } : {}),
-              ...(webSearchConfig.apiKey ? { apiKey: webSearchConfig.apiKey } : {}),
-              ...(webSearchConfig.endpoint ? { endpoint: webSearchConfig.endpoint } : {}),
-              ...(webSearchConfig.customProvider ? { customProvider: webSearchConfig.customProvider } : {}),
-            },
-          }
-        : { webSearch: false as const }),
-      // Pass the YAML-configured literature sources through to the built-in
-      // `paper_search` / `paper_list_sources` tools. Config shape matches
-      // CreateLiteratureRegistryOptions; undefined fields fall back to defaults
-      // (all sources enabled, free no-key).
-      // 段缺失 = 关（上游 #588 语义外延到 paperSearch）：注意这不只影响两个 paper 工具，
-      // `patent_workflow_run` 的多源检索以同一 registry 作为文献源，禁用后回退 nuo 单源。
-      ...(isOptionalFeatureEnabled(paperSearchConfig)
-        ? {
-            paperSearch: {
-              arxiv: paperSearchConfig.arxiv,
-              openalex: paperSearchConfig.openalex,
-              semanticScholar: paperSearchConfig.semanticScholar,
-              crossref: paperSearchConfig.crossref,
-              openalexMailto: paperSearchConfig.openalexMailto,
-              semanticScholarApiKey: paperSearchConfig.semanticScholarApiKey,
-            },
-          }
-        : { paperSearch: false as const }),
-      // Pass the YAML-configured patents.downloadDir through to the built-in
-      // `patent_pdf_download` tool (runtime-live: read at every execution).
-      ...(snapshot.config.patents?.downloadDir
-        ? { patentPdfDownload: { patentsConfigProvider: () => snapshot.config.patents } }
-        : {}),
-      // Pass the YAML-configured patents.modelHints through to
-      // `patent_workflow_run` (judgeModels multi-judge consensus + per-node
-      // model tiering). Absent → hints ignored, everything uses the session model.
-      ...(snapshot.config.patents?.modelHints ? { patentModelHints: snapshot.config.patents.modelHints } : {}),
-    });
-    for (const tool of deps.getExtraTools()) {
-      tools.register(tool);
-    }
-
-    // 工作区专利判据（#450 构件①）：patent 域是**工作区级**事实，而 tools 段是机器级配置。
-    // 判据为否时把 `patent` 并入隐藏域——28 个专利工具（~13.7k tokens schema）不再推给
-    // 每个非专利工作区；判据为是时行为与改动前逐字一致。显式 `tools.patentDomain` 最高优先。
-    const patentVerdict = detectPatentWorkspace({
+    const { tools, patentVerdict } = createProjectTools({
+      snapshot,
       projectRoot,
-      explicit: toolsConfig?.patentDomain,
-      hasPatentsConfig: snapshot.config.patents !== undefined,
-      projectChatsDir: getPilotProjectChatDir(projectRoot, deps.pilotHome),
+      pilotHome: deps.pilotHome,
+      env: deps.env,
+      backgroundTasks,
+      embeddingClient: memoryLayer.embeddingClient,
+      memory: memoryLayer.memory,
+      pluginRuntime,
+      getExtraTools: deps.getExtraTools,
+      getTeamTools: deps.getTeamTools,
+      getKanbanBoardManager: deps.getKanbanBoardManager,
     });
-
-    // 项目级工具域裁剪（tools.visibleDomains / tools.hiddenDomains）：注册表构建完成后
-    // 统一收窄——主会话、子代理与团队成员会话都从这份注册表派生，配置对三者一致生效。
-    // 域语义复用 `ToolRegistry.listByDomains`（hidden 优先；未标注 domain 的工具不受约束）。
-    const visibleDomains = toolsConfig?.visibleDomains;
-    const configuredHiddenDomains = toolsConfig?.hiddenDomains;
-    const hiddenDomains = [...(configuredHiddenDomains ?? []), ...(patentVerdict.enabled ? [] : [PATENT_DOMAIN])];
-    logger.info(
-      `patent domain ${patentVerdict.enabled ? "enabled" : "hidden"} for ${projectRoot} (signal: ${patentVerdict.signal}${
-        patentVerdict.evidence ? `, evidence: ${patentVerdict.evidence}` : ""
-      })`,
-    );
-    if (visibleDomains?.length || hiddenDomains.length) {
-      const knownDomains = new Set<string>(
-        tools
-          .list()
-          .map(tool => tool.domain)
-          .filter(domain => domain !== undefined),
-      );
-      const kept = new Set(
-        tools
-          .listByDomains({
-            visible: new Set(visibleDomains ?? []),
-            hidden: new Set(hiddenDomains ?? []),
-          })
-          .map(tool => tool.name),
-      );
-      const removed = tools.list().filter(tool => !kept.has(tool.name));
-      for (const tool of removed) {
-        tools.unregister(tool.name);
-      }
-      if (removed.length > 0) {
-        logger.info(
-          `tools domain filter removed ${removed.length} tool(s): ${removed.map(tool => tool.name).join(", ")}`,
-        );
-      }
-      // 配置的域没有任何工具命中：通常是拼写错误，或该域工具已被上游开关关闭。
-      // 只检查**用户写的**域名：判据推导出的 `patent` 被上游开关关掉时不该报警（不是配置问题）。
-      const unmatched = [...new Set([...(visibleDomains ?? []), ...(configuredHiddenDomains ?? [])])].filter(
-        domain => !knownDomains.has(domain),
-      );
-      if (unmatched.length > 0) {
-        logger.warn(`tools domain filter matched no tool for domain(s): ${unmatched.join(", ")}`);
-      }
-    }
-
-    // 知识库 MemoryResolver 组装：EdgeClaw 会话记忆 + 专利知识库 + 法律知识库。
-    // 数据库文件缺失/打开失败时自动降级（见 src/knowledge/assemble.ts）。
-    const knowledgeStats = new KnowledgeRuntimeStats();
-    const knowledgeResolvers: Array<MemoryResolver> = [];
-    if (memory?.provider) knowledgeResolvers.push(memory.provider);
-    knowledgeResolvers.push(
-      ...buildKnowledgeResolvers({
-        patentKgDb: knowledgePaths.patentKgDb,
-        lawDb: knowledgePaths.lawDb,
-        knowledgeDb: knowledgePaths.knowledgeDb,
-        notesDb: knowledgePaths.notesDb,
-        wikiDir: knowledgePaths.wikiDir,
-        vectorsDb: knowledgePaths.vectorsDb,
-        embeddingDir,
-        embedding: embeddingClient,
-        rerank: rerankClient,
-        rerankTopN: snapshot.config.memory?.embedding?.rerank?.topN,
-        indexWiki: snapshot.config.memory?.embedding?.indexWiki !== false,
-        stats: knowledgeStats,
-        logger: {
-          warn: (...args) => logger.warn("knowledge:", ...args),
-          // debug 透传供自检去重命中留痕（SATI_DEBUG=1 可见）。
-          debug: (...args) => logger.debug("knowledge:", ...args),
-        },
-      }),
-    );
-
-    // 判例语义召回源注入（patent_case_search 工具）：knowledge.db embeddings(case/judgment)
-    // + 当前 embedding client。embedding 未配置或 knowledge.db 不可用时保持语义路关闭。
-    if (embeddingClient && knowledgePaths.caseDb) {
-      try {
-        const caseEmbeddings = createKnowledgeEmbeddingSearch({
-          dbPath: knowledgePaths.caseDb,
-          docTypes: ["case", "judgment"],
-          logger: { warn: (...args) => logger.warn("knowledge:", ...args) },
-        });
-        setCaseLawSemanticSource(createCaseLawSemanticSource(texts => embeddingClient!.embed(texts), caseEmbeddings));
-        // P4 向量预热：异步分页加载（每页 setImmediate 让出）不阻塞 gateway 启动，
-        // 因此 setTimeout 0 即安全——首个语义检索前矩阵大概率已就绪（ready），
-        // 未就绪时 search 也会返回 [] 并兜底触发预热，不产生 embed 浪费
-        // （case-law searchSemantic 未 ready 跳过语义路）。
-        setTimeout(() => {
-          void caseEmbeddings.loadAsync();
-        }, NEXT_TASK_MS);
-      } catch (error) {
-        logger.warn("knowledge: 判例语义召回源注入失败，patent_case_search 语义路关闭:", error);
-      }
-    }
-
-    // personal_note 语义召回源注入（patent_case_search 工具）：项目沉淀笔记（OA 答复要点等）
-    // 可被语义召回。数据源为 Sati 自有 sati-notes.db（WS2.1 真源），knowledge.db 仅承载
-    // 可重建投影；与组装层单例键一致；进程级单例与组装层共享。引擎侧回源走 caseDb——
-    // 两者分离（SATI_CASE_DB）时笔记命中无法经 caseDb 引擎回源，显式告警关闭该路。
-    if (embeddingClient && knowledgePaths.knowledgeDb) {
-      try {
-        const noteIndex = getOrCreatePersonalNoteIndex({
-          notesDb: knowledgePaths.notesDb,
-          knowledgeDb: knowledgePaths.knowledgeDb,
-          client: embeddingClient,
-          storePath: joinPath(embeddingDir, "personal-note.jsonl"),
-          logger: { warn: (...args) => logger.warn("knowledge:", ...args) },
-        });
-        if (knowledgePaths.caseDb && knowledgePaths.caseDb !== knowledgePaths.knowledgeDb) {
-          logger.warn(
-            "knowledge: personal_note 库与判例库分离（SATI_CASE_DB），笔记命中无法回源，工具侧笔记语义路关闭。",
-          );
-        } else {
-          setPersonalNoteSemanticSource(noteIndex);
-        }
-      } catch (error) {
-        logger.warn("knowledge: personal_note 语义召回源注入失败，笔记语义路关闭:", error);
-      }
-    }
-
-    // 知识能力自检：数据/配置缺失时输出可读清单，避免静默降级。
-    // 传 runtime 快照让 KG FTS tokenizer 等运行时能力项（如 FTS5 缺失回退 LIKE）
-    // 也出现在启动输出里——provider 构造时已同步完成探测。
-    logKnowledgeCapabilities(
-      knowledgePaths,
-      {
-        embeddingConfigured: Boolean(embeddingClient),
-        rerankConfigured: Boolean(rerankClient),
-        runtime: knowledgeStats.snapshot(),
-      },
-      console,
-    );
-
-    const memoryResolver =
-      knowledgeResolvers.length === 1 ? knowledgeResolvers[0] : new CompositeMemoryResolver(knowledgeResolvers);
+    const knowledge = createKnowledgeResolverLayer({
+      snapshot,
+      knowledgePaths: memoryLayer.knowledgePaths,
+      embeddingClient: memoryLayer.embeddingClient,
+      rerankClient: memoryLayer.rerankClient,
+      embeddingDir: memoryLayer.embeddingDir,
+      memory: memoryLayer.memory,
+    });
 
     const runtime: ProjectRuntime = {
       projectRoot,
@@ -553,12 +211,12 @@ export function createProjectRuntimeResolver(deps: ProjectRuntimeFactoryDeps): P
       pluginRuntime,
       tools,
       backgroundTasks,
-      memory: memoryResolver,
-      memoryService: memory?.service,
-      knowledgePaths,
-      knowledgeStats,
-      knowledgeEmbeddingConfigured: Boolean(embeddingClient),
-      knowledgeRerankConfigured: Boolean(rerankClient),
+      memory: knowledge.memoryResolver,
+      memoryService: knowledge.memoryService,
+      knowledgePaths: memoryLayer.knowledgePaths,
+      knowledgeStats: knowledge.knowledgeStats,
+      knowledgeEmbeddingConfigured: knowledge.knowledgeEmbeddingConfigured,
+      knowledgeRerankConfigured: knowledge.knowledgeRerankConfigured,
       patentDomainEnabled: patentVerdict.enabled,
       projectStorage: {
         projectRoot,
