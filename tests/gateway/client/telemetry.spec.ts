@@ -66,6 +66,98 @@ test("telemetry: model_event request_started 触发 trackFeatureLoopStage", () =
   assert.deepEqual((calls[0]!.metadata as { provider: string }).provider, "anthropic");
 });
 
+test("telemetry: post_tool_execute 失败时 outcome=failed 且带 tool_runtime_error", () => {
+  const stages: Array<Record<string, unknown>> = [];
+  const fakeTelemetry = {
+    trackFeatureLoopStage: (input: Record<string, unknown>) => stages.push(input),
+    trackError: () => {},
+  } as unknown as Parameters<typeof emitSessionTelemetry>[0];
+  emitSessionTelemetry(
+    fakeTelemetry,
+    {
+      type: "post_tool_execute",
+      sessionId: "s1",
+      toolName: "bash",
+      toolCallId: "c1",
+      success: false,
+    } as unknown as AgentEvent,
+    {
+      sessionId: "s1",
+      runId: "r1",
+      channelKey: "web",
+      permissionMode: "default",
+      ownerModule: "session",
+      executionKind: "user_session",
+    },
+  );
+  assert.equal(stages.length, 1);
+  assert.equal(stages[0]!.loopStage, "tool_call");
+  assert.equal(stages[0]!.outcome, "failed");
+  assert.equal(stages[0]!.errorCategory, "tool_runtime_error");
+});
+
+test("telemetry: subagent_tool_result 成功走 subagent executionKind 与身份 metadata", () => {
+  const stages: Array<Record<string, unknown>> = [];
+  const fakeTelemetry = {
+    trackFeatureLoopStage: (input: Record<string, unknown>) => stages.push(input),
+    trackError: () => {},
+  } as unknown as Parameters<typeof emitSessionTelemetry>[0];
+  emitSessionTelemetry(
+    fakeTelemetry,
+    {
+      type: "subagent_tool_result",
+      sessionId: "s1",
+      subagentId: "sub-1",
+      subagentType: "explore",
+      result: { type: "success", toolName: "read", toolCallId: "c2", content: [], data: undefined },
+    } as unknown as AgentEvent,
+    {
+      sessionId: "s1",
+      runId: "r1",
+      channelKey: "web",
+      permissionMode: "default",
+      ownerModule: "session",
+      executionKind: "user_session",
+    },
+  );
+  assert.equal(stages.length, 1);
+  assert.equal(stages[0]!.executionKind, "subagent");
+  const metadata = stages[0]!.metadata as { subagentId: string; subagentType: string; toolCallId: string };
+  assert.equal(metadata.subagentId, "sub-1");
+  assert.equal(metadata.subagentType, "explore");
+  assert.equal(metadata.toolCallId, "c2");
+});
+
+test("telemetry: permission_denied 触发 permission_error 且 code 固定", () => {
+  const errors: Array<{ error: unknown; input: Record<string, unknown> }> = [];
+  const fakeTelemetry = {
+    trackFeatureLoopStage: () => {},
+    trackError: (error: unknown, input: Record<string, unknown>) => errors.push({ error, input }),
+  } as unknown as Parameters<typeof emitSessionTelemetry>[0];
+  emitSessionTelemetry(
+    fakeTelemetry,
+    {
+      type: "permission_denied",
+      sessionId: "s1",
+      toolName: "write_file",
+      reason: "User rejected the permission request.",
+    } as unknown as AgentEvent,
+    {
+      sessionId: "s1",
+      runId: "r1",
+      channelKey: "web",
+      permissionMode: "default",
+      ownerModule: "session",
+      executionKind: "user_session",
+    },
+  );
+  assert.equal(errors.length, 1);
+  assert.equal(errors[0]!.input.loopStage, "permission_check");
+  assert.equal(errors[0]!.input.errorCategory, "permission_error");
+  assert.equal(errors[0]!.input.code, "permission_denied");
+  assert.equal(errors[0]!.input.toolName, "write_file");
+});
+
 test("telemetry: inferToolErrorCategory 分类", () => {
   assert.equal(inferToolErrorCategory("invalid_argument"), "tool_param_error");
   assert.equal(inferToolErrorCategory("parse_error"), "tool_result_parse_error");
