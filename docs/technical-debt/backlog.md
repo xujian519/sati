@@ -2402,11 +2402,10 @@
 - [ ] **P2** `src/gateway/client/eventMapping.ts` — `mapAgentEventForTurn`（417 行）
 - [x] **P2**（P2.3）`src/gateway/client/telemetry.ts` — `emitSessionTelemetry`（333 → **14** 行；判据 ≤150）（god fn 61 → **60**；`AGENT_EVENT_TELEMETRY` required Record 查表 + `trackLoopStage`/`trackSessionError`/`trackModelStreamTelemetry` 三个打点 helper，与 P2.2 eventMapping 同构；测试 7 → 10；决策见 `docs/notes/implemented/2026-10-14-telemetry-mapping-table.md`）
 - [x] **P2**（P2.4）`src/gateway/server/GatewayWsConnection.ts` — `dispatchRequest`（353 → **11** 行；判据「守卫表反推分发」达成——`methodDispatchers` 与 `METHOD_PARAM_GUARDS` 同构 required Record；god fn 60 → **59**（P2.3 合并后口径）；`callMethod`/`callOptional` 两 helper 消样板，特例（close_project_sessions 显式抛错 / skill_* 绑定 / kanban 订阅 / submit_turn 事件流特判）保留显式；dispatch.spec 10 → 15；决策见 `docs/notes/implemented/2026-10-14-dispatch-table.md`）
-- [ ] **P2** `src/tool/builtin/patentFigureProject.ts` — `createPatentFigureProjectTool`（554 行）
-- [ ] **P2** `src/tool/builtin/patentFigureProject.ts` — `execute`（411 行）
-- [ ] **P2** `src/tool/builtin/patentFigureGenerate.ts` — `createPatentFigureGenerateTool`（422 行）
-- [ ] **P2** `src/tool/builtin/patentFigureGenerate.ts` — `execute`（322 行）
-- [ ] **P2** `src/tool/builtin/patentFigureCheck.ts` — `createPatentFigureCheckTool`（384 行）
+- [x] **P2**（P2.5）`src/tool/builtin/patentFigureProject.ts` — `createPatentFigureProjectTool`（554 → 313 行）+ `execute`（411 → **170** 行；判据 ≤200 达成）（`validateSectionOffset`/`validateProjectAnnotations`/`probeFreecadCommand`/`writeProjectArtifacts`/`buildProjectResultLines` 模块级分层；入参管线收进 `patentFigureShared.ts`；**唯一行为变化**：补 `sheet_index>sheet_total` 拒绝，与另两工具对齐）
+- [x] **P2**（P2.5）`src/tool/builtin/patentFigureGenerate.ts` — `createPatentFigureGenerateTool`（422 → ~330 行）+ `execute`（322 → **182** 行；判据 ≤200 达成）（`resolveRenderPipeline`/`renderFigureArtifacts`/`exportFiguresTextToPath`/`buildGenerateReportLines` 模块级分层）
+- [x] **P2**（P2.5）`src/tool/builtin/patentFigureCheck.ts` — `createPatentFigureCheckTool`（384 → ~290 行，掉出 ≥300 清单）+ `execute`（250 → **115** 行；判据 ≤200 达成）（`readbackSvgFigures`/`buildCheckReportLines` 模块级分层）
+- [x] **P2**（P2.5 · patentFigure 三工具）`src/tool/builtin/patentFigure*.ts` — execute 收敛到共享装配与分层（god fn 59 → **56**；无第二份产物清单——产物装配本就在 `figuregen/deliverables.ts`，本批收敛的是**入参管线**重复：新建 `src/tool/builtin/patentFigureShared.ts` 收 textToPath 探测 / sheet 成对校验 / outputDir / output_name / documentKind；patent 全套 544 pass / 0 fail；metrics 与 code-facts 已刷新；决策见 `docs/notes/implemented/2026-10-14-figure-tool-extract.md`）
 - [ ] **P2** `src/router/execution/executeRouterDecision.ts` — `executeRouterDecision`（449 行）
 - [ ] **P2** `src/cli/sati.ts` — `main`（642 行）
 - [ ] **P2** `src/cli/projectRuntimeFactory.ts` — `createProjectRuntimeResolver`（424 行）
