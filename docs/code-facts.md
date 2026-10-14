@@ -46,7 +46,7 @@
 
 | 模块 | .ts/.tsx 文件数 | barrel | 职责 |
 | --- | --- | --- | --- |
-| `src/adapters/` | 95 | ✓ | IM 渠道适配器（21 个渠道 + Channel/render/SessionMapper） |
+| `src/adapters/` | 96 | ✓ | IM 渠道适配器（21 个渠道 + Channel/render/SessionMapper） |
 | `src/agent/` | 79 | ✓ | Agent 循环、会话、子代理与团队编排 |
 | `src/always-on/` | 38 | ✓ | 常驻后台执行（Discovery 计划/报告/工作周期） |
 | `src/board/` | 8 | ✓ | 项目看板（protocol/runtime/storage 三组，kanban_* 工具与网关方法组） |
@@ -57,7 +57,7 @@
 | `src/extension/` | 51 | ✓ | 插件系统（plugin.json、lifecycle hooks、skills、贡献点） |
 | `src/fs/` | 1 | — | 文件系统小工具（JSONL run 写入器） |
 | `src/gateway/` | 39 | ✓ | WebSocket 网关（protocol/server/client/approval） |
-| `src/knowledge/` | 46 | ✓ | 知识库（图谱/判例/法规/embeddings/wiki 卡片） |
+| `src/knowledge/` | 48 | ✓ | 知识库（图谱/判例/法规/embeddings/wiki 卡片） |
 | `src/lifecycle/` | 6 | ✓ | 生命周期（protocol/runtime） |
 | `src/literature/` | 13 | ✓ | 学术论文检索（arXiv/OpenAlex/Semantic Scholar/Crossref） |
 | `src/mcp/` | 16 | ✓ | MCP 客户端/协议/运行时 |

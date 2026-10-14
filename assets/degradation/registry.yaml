@@ -621,3 +621,13 @@ entries:
     waiver:
       - kind: drill_missing
         reason: "现有 run.spec.ts 仅测纯函数、未演练失败路径（候选补测）"
+
+  # ---------- 知识草稿闸门（WS2，2026-10-14） ----------
+  - id: knowledge-drafts-write
+    component: src/knowledge/personal-note/drafts.ts
+    dependency: "knowledge.db 写路径（knowledge_drafts 草稿表 + confirm 事务）"
+    failDirection: closed
+    degradedBehavior: "草稿写入/确认失败 → 工具返回错误文本（agent 可见）或 HTTP 500/4xx（用户可见）；confirm 事务失败整单回滚，草稿保持 pending 可重试，无孤儿行"
+    degradedImpact: "本次沉淀未保存（调用方明确感知）；已入库数据不受影响（回滚保证）"
+    observability: "工具错误返回 / HTTP 状态码（400/404/409/500）带错误码与原因"
+    negativeDrill: tests/knowledge/knowledge-drafts.spec.ts

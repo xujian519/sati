@@ -342,6 +342,8 @@ export function createProjectRuntimeResolver(deps: ProjectRuntimeFactoryDeps): P
       searchPatentFigure: { embeddingClient },
       // 文书排版调参面板工具（opt-in：无参注册会破坏 llm-replay fixture 工具集匹配）
       ...(isBuiltinToolGroupEnabled(toolsConfig?.documentStyle) ? { documentStyle: {} } : {}),
+      // knowledge_note_save 草稿闸门模式（WS2）：默认 draft；schema 不变、只改运行时行为
+      knowledgeNoteSaveMode: snapshot.config.memory?.knowledgeNoteSaveMode,
       // J-Space 工作区工具（opt-in：与工作区账本开关联动，避免破坏 fixture 工具集匹配）
       workspaceLedgerTools: brandEnv(deps.env, ENV_KEY.WORKSPACE_LEDGER_ENABLED) === "1",
       ...(memory?.service ? { memory: { service: memory.service } } : {}),

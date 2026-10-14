@@ -177,6 +177,13 @@ export type PilotMemoryConfig = {
   embedding?: PilotMemoryEmbeddingConfig;
   /** 项目知识偏好（可选；未配置则知识注入无项目侧加权）。 */
   knowledgeProfile?: PilotKnowledgeProfileConfig;
+  /**
+   * knowledge_note_save 写入模式（WS2 草稿闸门）：`draft`（默认）= AI 只提交
+   * pending 草稿，经 /api/web/knowledge-drafts 人工确认后入库；`direct` = 直写
+   * documents 层（逃生口，保持旧行为）。决策见
+   * docs/notes/implemented/2026-10-14-knowledge-draft-gate.md。
+   */
+  knowledgeNoteSaveMode: "direct" | "draft";
 };
 
 export type PilotGatewayConfig = {
