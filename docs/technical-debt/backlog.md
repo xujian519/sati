@@ -197,7 +197,8 @@
     可中止延时）；「重试判定纯函数」→ `retry/retryGates.ts`（`shouldTransientRetry` /
     `shouldZeroUsageRetry`，判据表达式逐字搬走、短路顺序不变）。嵌套与「不可测」两处根因消除。
   - **残留**：`executeRouterDecision` 本体仍有 429 行（比原 411 行**更大**，因判据改走谓词多出调用与
-    实参行），两套重试分支的「发事件 + 算退避 + 等待」编排未拆 ⇒ 已另立 **TD-ROUTER-009**。
+    实参行），两套重试分支的「发事件 + 算退避 + 等待」编排未拆 ⇒ 已另立 **TD-ROUTER-009**
+    （**2026-10-15 已关闭**：sweep P2.6 三段分层，`executeRouterDecision` 449 → 273 行，见其条目）。
 - **TD-ROUTER-003** · `decide()` 决策函数 ~211 行含多层嵌套分支
   - 类别：A · 严重级：P2 · 工作量：M · 状态：done（#384）
   - 位置：原 `src/router/RouterRuntime.ts:257-480`（实测 224 行；台账 2026-08-27 复核记 `:257-473` ≈217 行）
@@ -238,7 +239,7 @@
     在 `tests/` 下零命中（全量套件的 router 一律 `enabled: false` 直通）。
   - 注：这些用例是**重构前**先写、对旧闭包跑绿的，抽取后断言一行未改仍全绿 ⇒ 同时充当等价性证据。
 - **TD-ROUTER-009** · `executeRouterDecision` 429 行，两套重试分支副作用编排未拆
-  - 类别：A · 严重级：P3 · 工作量：M · 状态：new
+  - 类别：A · 严重级：P3 · 工作量：M · 状态：**done（2026-10-15，sweep P2.6 · `0f9bfcb4d`）**
   - 位置：`src/router/execution/executeRouterDecision.ts` 的 `executeRouterDecision`（429 行，当前 `src/` 最大函数）
   - 来源：`TD-ROUTER-002` 拆分后的残留（#384）。原 `execute` 为 411 行，抽走单 attempt 执行器与重试谓词后
     因调用与实参行反而增至 429 行。
@@ -249,6 +250,19 @@
     （全纯，可直测多模态分区逻辑）；② 把两套重试分支的 emit+退避抽成 `emitTransientRetry` / `emitZeroUsageRetry`；
     ③ 可选：内容门控循环抽成二级生成器（`pending` 缓冲 + 哨兵）。三者均不改变 `continue outer`/`break outer` 语义。
   - 触发条件：下次调整路由策略或重试判定之前先做 ① ②；或本函数再增长超过 450 行时立项。
+  - **2026-10-15 关闭（sweep P2.6 · `0f9bfcb4d` · PR 见回填）**：建议 ①②③ **三条全部落地**——①
+    `attemptPlanning.ts`（纯）：`planAttemptExecution`（候选分档 + 三套重试预算归一）+ `planAttempt` +
+    `subagentBudgetError` + `classifyAttemptGate`（结局 → 下一步动作，**含退避延迟**，使「上报的延迟」与
+    「实际等待的延迟」单一来源）；② `attemptReporting.ts`：`reportFallbackTransition` /
+    `reportTransientRetry` / `reportZeroUsageRetry` / `finalizeAttemptSuccess` / `finalizeAttemptFailure`；
+    ③ `streamAttemptBuffered` 二级生成器承接 `pending` 缓冲与内容门控（哨兵即 `outcome` 哨兵），
+    `continue outer`/`break outer` 语义不变（改 `switch (gate.kind)` 分派）。函数 **449 → 273 行**、文件
+    689 → 528 行；全部 `yield` 留在编排体内，事件矩阵生产者面仅行号位移（4 处 `error`，计数与归属不变）。
+    证据：行为指纹 23 例逐字节 diff=0（含派发请求 / 7 种改写标签 / yield 序列 / router 事件 / telemetry /
+    stats / usageCache / 日志文本）、负控制 4/4 按预期转红、新增纯函数直测 17 例。决策与备选见
+    `docs/notes/implemented/2026-10-15-execute-router-decision-split.md`。**遗留登记**：不支持媒体守卫
+    （`attemptPlans.length === 0`）经语料 23 例复核为**当前实现下不可达**——删它属行为变更（计划 §1.2
+    非目标），故保留原样，另议。
 
 ---
 
@@ -2399,14 +2413,14 @@
 **P2 · 后端拆分（D9–D18）**
 
 - [x] **P2**（P2.1）`src/gateway/client/InProcessGateway.ts` — `submitTurn`（301 → **16** 行；判据 ≤150）（`bbddc03e4`；god fn 63 → 62；文件 1517 → 1511，未破 1518 棘轮；三段式 `startSubmitTurn`/`pumpSubmitTurn`/`finishSubmitTurn`；决策见 `docs/notes/implemented/2026-10-12-inprocess-submit-turn-split.md`）
-- [ ] **P2** `src/gateway/client/eventMapping.ts` — `mapAgentEventForTurn`（417 行）
+- [x] **P2**（P2.2）`src/gateway/client/eventMapping.ts` — `mapAgentEventForTurn`（417 → **表 + 具名函数的 8 个投影函数**；判据「映射表化，事件矩阵不变」达成——45 个 `AgentEvent` 种类全量进 required Record `AGENT_EVENT_MAPPERS`，16 个帧面静音种类显式化；矩阵 diff 4 行为纯行号位移）（`7c2059a9d`；god fn **55 → 54** 口径下 ≥400 存量 28 → 27；决策见 `docs/notes/implemented/2026-10-12-event-mapping-table.md`）· *（P2.6 回填：本条原缺勾选，交付时漏记，本次补齐）*
 - [x] **P2**（P2.3）`src/gateway/client/telemetry.ts` — `emitSessionTelemetry`（333 → **14** 行；判据 ≤150）（god fn 61 → **60**；`AGENT_EVENT_TELEMETRY` required Record 查表 + `trackLoopStage`/`trackSessionError`/`trackModelStreamTelemetry` 三个打点 helper，与 P2.2 eventMapping 同构；测试 7 → 10；决策见 `docs/notes/implemented/2026-10-14-telemetry-mapping-table.md`）
 - [x] **P2**（P2.4）`src/gateway/server/GatewayWsConnection.ts` — `dispatchRequest`（353 → **11** 行；判据「守卫表反推分发」达成——`methodDispatchers` 与 `METHOD_PARAM_GUARDS` 同构 required Record；god fn 60 → **59**（P2.3 合并后口径）；`callMethod`/`callOptional` 两 helper 消样板，特例（close_project_sessions 显式抛错 / skill_* 绑定 / kanban 订阅 / submit_turn 事件流特判）保留显式；dispatch.spec 10 → 15；决策见 `docs/notes/implemented/2026-10-14-dispatch-table.md`）
 - [x] **P2**（P2.5）`src/tool/builtin/patentFigureProject.ts` — `createPatentFigureProjectTool`（554 → 313 行）+ `execute`（411 → **170** 行；判据 ≤200 达成）（`validateSectionOffset`/`validateProjectAnnotations`/`probeFreecadCommand`/`writeProjectArtifacts`/`buildProjectResultLines` 模块级分层；入参管线收进 `patentFigureShared.ts`；**唯一行为变化**：补 `sheet_index>sheet_total` 拒绝，与另两工具对齐）
 - [x] **P2**（P2.5）`src/tool/builtin/patentFigureGenerate.ts` — `createPatentFigureGenerateTool`（422 → ~330 行）+ `execute`（322 → **182** 行；判据 ≤200 达成）（`resolveRenderPipeline`/`renderFigureArtifacts`/`exportFiguresTextToPath`/`buildGenerateReportLines` 模块级分层）
 - [x] **P2**（P2.5）`src/tool/builtin/patentFigureCheck.ts` — `createPatentFigureCheckTool`（384 → ~290 行，掉出 ≥300 清单）+ `execute`（250 → **115** 行；判据 ≤200 达成）（`readbackSvgFigures`/`buildCheckReportLines` 模块级分层）
 - [x] **P2**（P2.5 · patentFigure 三工具）`src/tool/builtin/patentFigure*.ts` — execute 收敛到共享装配与分层（god fn 59 → **56**；无第二份产物清单——产物装配本就在 `figuregen/deliverables.ts`，本批收敛的是**入参管线**重复：新建 `src/tool/builtin/patentFigureShared.ts` 收 textToPath 探测 / sheet 成对校验 / outputDir / output_name / documentKind；patent 全套 544 pass / 0 fail；metrics 与 code-facts 已刷新；决策见 `docs/notes/implemented/2026-10-14-figure-tool-extract.md`）
-- [ ] **P2** `src/router/execution/executeRouterDecision.ts` — `executeRouterDecision`（449 行）
+- [x] **P2**（P2.6）`src/router/execution/executeRouterDecision.ts` — `executeRouterDecision`（449 → **273** 行；判据「决策树外置，行为逐 token」达成）（`0f9bfcb4d`；god fn **55 → 54**、≥400 存量 28 → 27；三段分层——判定 `attemptPlanning.ts`（纯，262 行：`planAttemptExecution`/`planAttempt`/`classifyAttemptGate`/`subagentBudgetError`）+ 上报落账 `attemptReporting.ts`（248 行）+ 编排骨架（全部 `yield` 留在编排体内）；文件 689 → 528 行；新增纯函数直测 17 例、行为指纹 23 例 diff=0、负控制 4/4 转红；关闭 `TD-ROUTER-009`；决策见 `docs/notes/implemented/2026-10-15-execute-router-decision-split.md`）
 - [ ] **P2** `src/cli/sati.ts` — `main`（642 行）
 - [ ] **P2** `src/cli/projectRuntimeFactory.ts` — `createProjectRuntimeResolver`（424 行）
 - [ ] **P2** `src/cli/projectRuntimeFactory.ts` — `resolve`（316 行）

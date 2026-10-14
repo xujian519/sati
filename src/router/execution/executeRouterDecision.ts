@@ -1,35 +1,33 @@
-import type { CanonicalModelEvent, CanonicalModelRequest, ModelProtocol, ModelRuntime } from "../../model/index.js";
-import type { InputModality } from "../../model/index.js";
-import {
-  LITELLM_DEFAULT_MAX_RETRIES,
-  LITELLM_INITIAL_RETRY_DELAY_MS,
-  LITELLM_MAX_RETRY_DELAY_MS,
-  LITELLM_RETRY_JITTER,
-} from "../../model/streaming/streamModel.js";
-import { computeBackoffDelay } from "../../shared/retry/index.js";
-import { createLogger } from "../../telemetry/index.js";
+import type {
+  CanonicalModelEvent,
+  CanonicalModelRequest,
+  InputModality,
+  ModelProtocol,
+  ModelRuntime,
+} from "../../model/index.js";
 import type { TelemetryClient } from "../../telemetry/index.js";
 import type { RouterConfig, RouterModelRef } from "../config/schema.js";
-import { isFallbackEligible, planFallback } from "../fallback/runFallbackChain.js";
 import type { ProviderHealthTracker } from "../health/ProviderHealthTracker.js";
-import { downgradeRequestForAttempt, missingForModel, supportsMediaRequirements } from "../media/modelMediaSupport.js";
+import { downgradeRequestForAttempt, missingForModel } from "../media/modelMediaSupport.js";
 import type { RouterDecision, RouterExecuteContext, RouterTransformTag } from "../protocol/decision.js";
 import type { RouterEventBus } from "../protocol/events.js";
-import { stripSubagentTagFromMessages } from "../scenario/subagentDetector.js";
 import type { SessionUsageCache } from "../session/sessionUsageCache.js";
 import type { TokenStatsCollector } from "../stats/TokenStatsCollector.js";
-import { countMessagesTokens, countResponseTokens } from "../utils/countTokens.js";
-import { collectRequiredInputModalities } from "../utils/mediaRequirements.js";
-import { shouldTransientRetry, shouldZeroUsageRetry } from "../retry/retryGates.js";
 import {
-  type AttemptOutcome,
-  abortableDelay,
-  classifyRetryReason,
-  protocolForProvider,
-  streamAttempt,
-} from "./streamAttempt.js";
-
-const satiLogger = createLogger("sati");
+  clampMaxOutputTokensToModelCap,
+  classifyAttemptGate,
+  planAttempt,
+  planAttemptExecution,
+  subagentBudgetError,
+} from "./attemptPlanning.js";
+import {
+  finalizeAttemptFailure,
+  finalizeAttemptSuccess,
+  reportFallbackTransition,
+  reportTransientRetry,
+  reportZeroUsageRetry,
+} from "./attemptReporting.js";
+import { type AttemptOutcome, protocolForProvider, streamAttempt } from "./streamAttempt.js";
 
 /** `executeRouterDecision` 的显式依赖：原闭包捕获量在此收敛为一个对象。 */
 export type RouterExecutionDeps = {
@@ -55,35 +53,13 @@ export type RouterExecutionDeps = {
  * 直通，因此 fallback / 三种重试 / 「已产出内容是否可重放」的状态机**此前零直接
  * 覆盖**；现在它是模块级函数，`tests/router/router-runtime-execute.spec.ts` 逐条钉死。
  *
+ * #646 sweep P2.6 起本文件只留**编排**：判定在 `attemptPlanning.ts`（纯函数）、
+ * 上报与落账在 `attemptReporting.ts`，全部 `yield` 仍留在本文件——事件矩阵的
+ * 生产者面因此只在行号上位移，不跨文件。
+ *
  * 关键不变量：一旦向消费方吐出过内容事件（text/thinking/tool），就**不再** fallback
  * 或重试——否则会向用户泄漏重复文本（见 `isContentEvent` 的长注释）。
  */
-
-type AttemptPlan = {
-  attempt: RouterModelRef;
-  downgradeUnsupportedMedia: boolean;
-};
-
-export function applyDecisionToRequest(
-  decision: RouterDecision,
-  request: CanonicalModelRequest,
-  deps: Pick<RouterExecutionDeps, "modelRuntime">,
-): CanonicalModelRequest {
-  let messages = decision.requestPatch?.messages ?? request.messages;
-  if (decision.mutations.subagentTagStripped) {
-    messages = stripSubagentTagFromMessages(messages);
-  }
-  return clampMaxOutputTokensToModelCap(
-    {
-      ...request,
-      ...decision.requestPatch,
-      provider: decision.provider,
-      model: decision.model,
-      messages,
-    },
-    deps.modelRuntime,
-  );
-}
 
 /**
  * "Content" events are the ones that are visible to the end-user / agent
@@ -162,6 +138,65 @@ async function* streamAttemptWithReport(
   yield* streamAttempt(request, deps.modelRuntime, ctx, events);
 }
 
+/** 一次 attempt 的流式结果：`pending` 是首个内容事件前暂存的帧，由调用方决定回放或丢弃。 */
+type BufferedAttemptResult = {
+  /** 流未给出 outcome（调用方主动收尾）时为 `undefined`，与原实现的 `!outcome` 分支同义。 */
+  outcome: AttemptOutcome | undefined;
+  pending: CanonicalModelEvent[];
+  hasYieldedContent: boolean;
+};
+
+/**
+ * 带内容门控的 attempt 执行：首个内容事件之前只暂存帧事件（`request_started` /
+ * `message_start` 等），一旦出现内容事件就补吐暂存帧并转入直通；若该 attempt 最终
+ * 走回退或重试，暂存帧随 `pending` 交回调用方**丢弃**（否则用户会看到已作废的帧）。
+ *
+ * 门控本身不能内化：是否丢弃取决于调用方在拿到 outcome 后算出的 gate。
+ */
+async function* streamAttemptBuffered(args: {
+  request: CanonicalModelRequest;
+  decision: RouterDecision;
+  transforms: readonly RouterTransformTag[];
+  ctx: RouterExecuteContext;
+  deps: RouterExecutionDeps;
+  events: RouterEventBus;
+}): AsyncGenerator<CanonicalModelEvent, BufferedAttemptResult> {
+  let hasYieldedContent = false;
+  const pending: CanonicalModelEvent[] = [];
+  for await (const item of streamAttemptWithReport(
+    args.request,
+    args.decision,
+    args.transforms,
+    args.ctx,
+    args.deps,
+    args.events,
+  )) {
+    if (item.kind === "outcome") {
+      return { outcome: item.outcome, pending, hasYieldedContent };
+    }
+    const event = item.event;
+    if (!hasYieldedContent && isContentEvent(event)) {
+      // Flush any framing events queued before the first content delta
+      // (request_started / message_start) and the content event itself.
+      for (const queued of pending) {
+        yield queued;
+      }
+      pending.length = 0;
+      yield event;
+      hasYieldedContent = true;
+      continue;
+    }
+    if (hasYieldedContent) {
+      yield event;
+      continue;
+    }
+    // Pre-content phase: defer framing events; we may need to swallow
+    // them and replay from a fallback attempt.
+    pending.push(event);
+  }
+  return { outcome: undefined, pending, hasYieldedContent };
+}
+
 /**
  * 直通分支（`enabled: false`）的改写标签。
  *
@@ -197,26 +232,6 @@ function attemptTransformTags(args: {
     requestPatch: args.decision.requestPatch,
     maxOutputTokensChanged: args.dispatched.maxOutputTokens !== args.original.maxOutputTokens,
   });
-}
-
-function clampMaxOutputTokensToModelCap(
-  request: CanonicalModelRequest,
-  modelRuntime: ModelRuntime,
-): CanonicalModelRequest {
-  const requested = request.maxOutputTokens;
-  if (requested === undefined) {
-    return request;
-  }
-
-  try {
-    const cap = modelRuntime.getCapabilities(request.provider, request.model).maxOutputTokens;
-    if (Number.isFinite(cap) && cap > 0 && requested > cap) {
-      return { ...request, maxOutputTokens: cap };
-    }
-  } catch {
-    // Unknown provider/model — let validateModelRequest surface the real error.
-  }
-  return request;
 }
 
 function createUnsupportedMediaError(
@@ -282,36 +297,12 @@ export async function* executeRouterDecision(
   }
 
   const startedAt = (deps.now?.() ?? new Date()).toISOString();
-  const fallbackPlan = planFallback(config.fallback, decision.scenarioType);
-  const baseRequest = applyDecisionToRequest(decision, request, deps);
-  const requiredModalities = collectRequiredInputModalities(baseRequest.messages);
-  const requestedAttempt: RouterModelRef = {
-    id: `${decision.provider}/${decision.model}`,
-    provider: decision.provider,
-    model: decision.model,
-  };
-  const candidateAttempts: RouterModelRef[] = [requestedAttempt, ...fallbackPlan.attempts].filter(
-    (attempt, index, all) =>
-      all.findIndex(candidate => candidate.provider === attempt.provider && candidate.model === attempt.model) ===
-      index,
+  const { requestedAttempt, requiredModalities, attemptPlans, retry } = planAttemptExecution(
+    decision,
+    request,
+    config,
+    deps.modelRuntime,
   );
-  const nativeAttempts: RouterModelRef[] = candidateAttempts.filter(attempt =>
-    supportsMediaRequirements(attempt, requiredModalities, deps.modelRuntime),
-  );
-  const downgradedAttempts: RouterModelRef[] =
-    requiredModalities.length > 0
-      ? candidateAttempts.filter(attempt => !supportsMediaRequirements(attempt, requiredModalities, deps.modelRuntime))
-      : [];
-  const attemptPlans: AttemptPlan[] = [
-    ...nativeAttempts.map(attempt => ({ attempt, downgradeUnsupportedMedia: false })),
-    ...downgradedAttempts.map(attempt => ({ attempt, downgradeUnsupportedMedia: true })),
-  ];
-  const zeroUsageMax = Math.max(1, config.zeroUsageRetry?.maxAttempts ?? 5);
-  const zeroUsageEnabled = config.zeroUsageRetry?.enabled ?? true;
-  const transientRetryEnabled = config.transientRetry?.enabled ?? true;
-  const transientRetryMax = Math.max(1, config.transientRetry?.maxAttempts ?? LITELLM_DEFAULT_MAX_RETRIES);
-  const transientBaseDelayMs = config.transientRetry?.baseDelayMs ?? LITELLM_INITIAL_RETRY_DELAY_MS;
-  const transientMaxDelayMs = config.transientRetry?.maxDelayMs ?? LITELLM_MAX_RETRY_DELAY_MS;
 
   let lastBuffered: CanonicalModelEvent[] = [];
   let lastError: import("../../model/index.js").CanonicalModelError | undefined;
@@ -354,35 +345,26 @@ export async function* executeRouterDecision(
     ) {
       continue;
     }
-    const attemptDecision: RouterDecision = {
-      ...decision,
-      provider: attempt.provider,
-      model: attempt.model,
-      resolvedFrom: attemptIndex === 0 ? decision.resolvedFrom : "fallback",
-    };
-    let attemptRequest = applyDecisionToRequest(attemptDecision, request, deps);
-    if (attemptPlan.downgradeUnsupportedMedia) {
-      attemptRequest = downgradeRequestForAttempt(attemptRequest, attempt, deps.modelRuntime);
-    }
+    const { attemptDecision, attemptRequest } = planAttempt(
+      decision,
+      attemptPlan,
+      attemptIndex,
+      request,
+      deps.modelRuntime,
+    );
     lastAttempt = attempt;
     lastDecision = attemptDecision;
 
     if (decision.isSubagent && config.autoOrchestrate?.subagentMaxTokens) {
-      const budget = config.autoOrchestrate.subagentMaxTokens;
-      const estimated = countMessagesTokens(attemptRequest.messages);
-      if (estimated > budget) {
-        yield {
-          type: "error",
-          error: {
-            provider: attempt.provider,
-            protocol: protocolForProvider(deps.modelRuntime, attempt.provider),
-            code: "subagent_budget_exceeded",
-            message: `Sub-agent budget exceeded (${estimated} estimated tokens > ${budget} limit).`,
-            retryable: false,
-            userHint:
-              "Reduce the subagent prompt/context, increase the subagent token budget, or split the task into smaller steps.",
-          },
-        } as CanonicalModelEvent;
+      const budgetError = subagentBudgetError(
+        decision,
+        config,
+        attempt,
+        attemptRequest,
+        protocolForProvider(deps.modelRuntime, attempt.provider),
+      );
+      if (budgetError) {
+        yield { type: "error", error: budgetError };
         return;
       }
     }
@@ -391,17 +373,13 @@ export async function* executeRouterDecision(
     let transientRetryCount = 0;
     while (true) {
       zeroUsageAttempt += 1;
-      // Live-stream events. We track whether we've already surfaced any
-      // content event (text/thinking/tool) to the consumer; once we have,
-      // fallback / retry is no longer safe (would duplicate text).
-      let hasYieldedContent = false;
-      const pending: CanonicalModelEvent[] = [];
-      let outcome: AttemptOutcome | undefined;
-
-      for await (const item of streamAttemptWithReport(
-        attemptRequest,
-        attemptDecision,
-        attemptTransformTags({
+      // Live-stream events with content gating: framing events are held back
+      // until the first content event (see `streamAttemptBuffered`), and the
+      // gate below decides whether held-back frames are replayed or dropped.
+      const { outcome, pending, hasYieldedContent } = yield* streamAttemptBuffered({
+        request: attemptRequest,
+        decision: attemptDecision,
+        transforms: attemptTransformTags({
           attemptIndex,
           downgradeUnsupportedMedia: attemptPlan.downgradeUnsupportedMedia,
           decision,
@@ -411,31 +389,7 @@ export async function* executeRouterDecision(
         ctx,
         deps,
         events,
-      )) {
-        if (item.kind === "outcome") {
-          outcome = item.outcome;
-          break;
-        }
-        const event = item.event;
-        if (!hasYieldedContent && isContentEvent(event)) {
-          // Flush any framing events queued before the first content delta
-          // (request_started / message_start) and the content event itself.
-          for (const queued of pending) {
-            yield queued;
-          }
-          pending.length = 0;
-          yield event;
-          hasYieldedContent = true;
-          continue;
-        }
-        if (hasYieldedContent) {
-          yield event;
-          continue;
-        }
-        // Pre-content phase: defer framing events; we may need to swallow
-        // them and replay from a fallback attempt.
-        pending.push(event);
-      }
+      });
 
       if (!outcome) {
         lastHasYieldedContent = hasYieldedContent;
@@ -448,201 +402,94 @@ export async function* executeRouterDecision(
       if (outcome.error) {
         lastError = outcome.error;
         getHealthTracker(ctx.sessionId).recordFailure(attempt.provider);
-        if (!hasYieldedContent && isFallbackEligible(outcome.error)) {
-          if (attemptIndex < attemptPlans.length - 1) {
-            const next = attemptPlans[attemptIndex + 1].attempt;
-            events.emit({
-              type: "sati_router_fallback",
-              sessionId: ctx.sessionId,
-              turnId: ctx.turnId,
-              scenarioType: attemptDecision.scenarioType,
-              attempt: attemptIndex + 1,
-              fromProvider: attempt.provider,
-              fromModel: attempt.model,
-              toProvider: next.provider,
-              toModel: next.model,
-              error: outcome.error,
-            });
-            telemetry?.trackFeatureLoopStage({
-              module: "router",
-              ownerModule: "router",
-              phase: "fallback",
-              loopStage: "module_event",
-              outcome: "success",
-              sessionId: ctx.sessionId,
-              metadata: {
-                event: "fallback_attempt",
-                scenarioType: attemptDecision.scenarioType,
-                attempt: attemptIndex + 1,
-                fromProvider: attempt.provider,
-                fromModel: attempt.model,
-                toProvider: next.provider,
-                toModel: next.model,
-                errorCode: outcome.error.code,
-              },
-            });
-            continue outer;
-          }
+      }
+
+      const gate = classifyAttemptGate({
+        outcome,
+        hasYieldedContent,
+        attemptIndex,
+        attemptCount: attemptPlans.length,
+        retry,
+        zeroUsageAttempt,
+        transientRetryCount,
+      });
+
+      switch (gate.kind) {
+        case "fallback": {
+          reportFallbackTransition({
+            ctx,
+            events,
+            telemetry,
+            attemptIndex,
+            attemptDecision,
+            attempt,
+            next: attemptPlans[attemptIndex + 1].attempt,
+            error: outcome.error!,
+          });
+          continue outer;
         }
-        if (
-          shouldTransientRetry({
-            hasYieldedContent,
-            fallbackEligible: isFallbackEligible(outcome.error),
-            enabled: transientRetryEnabled,
+        case "transientRetry": {
+          await reportTransientRetry({
+            ctx,
+            events,
+            telemetry,
+            attempt,
             retryCount: transientRetryCount,
-            maxRetries: transientRetryMax,
-          })
-        ) {
-          const delay = computeBackoffDelay(
-            transientRetryCount,
-            {
-              baseMs: transientBaseDelayMs,
-              capMs: transientMaxDelayMs,
-              growth: "linear",
-              jitterRatio: LITELLM_RETRY_JITTER,
-            },
-            outcome.error.retryAfterMs ?? undefined,
-          );
-          satiLogger.warn(
-            `transientRetry: ${outcome.error.code} (attempt ${transientRetryCount + 1}/${transientRetryMax}, delay=${Math.round(delay)}ms)`,
-          );
-          events.emit({
-            type: "sati_router_transient_retry",
-            sessionId: ctx.sessionId,
-            turnId: ctx.turnId,
-            attempt: transientRetryCount + 1,
-            delayMs: Math.round(delay),
-            provider: attempt.provider,
-            model: attempt.model,
-            errorCode: outcome.error.code,
+            maxRetries: retry.transient.maxAttempts,
+            delayMs: gate.delayMs,
+            error: outcome.error!,
           });
-          events.emit({
-            type: "sati_router_retry_progress",
-            sessionId: ctx.sessionId,
-            turnId: ctx.turnId,
-            attempt: transientRetryCount + 1,
-            maxAttempts: transientRetryMax,
-            delayMs: Math.round(delay),
-            reason: classifyRetryReason(outcome.error.code),
-            provider: attempt.provider,
-            model: attempt.model,
-          });
-          telemetry?.trackFeatureLoopStage({
-            module: "router",
-            ownerModule: "router",
-            phase: "fallback",
-            loopStage: "module_event",
-            outcome: "success",
-            sessionId: ctx.sessionId,
-            metadata: {
-              event: "transient_retry",
-              attempt: transientRetryCount + 1,
-              delayMs: Math.round(delay),
-              provider: attempt.provider,
-              model: attempt.model,
-              errorCode: outcome.error.code,
-            },
-          });
-          await abortableDelay(delay, ctx.abortSignal);
           transientRetryCount++;
           continue;
         }
-        // mid-stream continuation 已移除：流中段失败（rate_limit/overloaded）
-        // 统一由 streamModel 的 streamInterruption 机制（#511）接管——部分
-        // 内容由 AgentLoop 恢复链续接，router 不再手工拼接 continuation
-        // request（避免与 checkpoint 累积的双重续接）。
-        for (const queued of pending) {
-          yield queued;
+        case "zeroUsageRetry": {
+          await reportZeroUsageRetry({
+            ctx,
+            events,
+            telemetry,
+            attempt,
+            zeroUsageAttempt,
+            maxAttempts: retry.zeroUsage.maxAttempts,
+            delayMs: gate.delayMs,
+          });
+          continue;
         }
-        lastHasYieldedContent = hasYieldedContent;
-        break outer;
-      }
+        case "terminalFailure": {
+          // mid-stream continuation 已移除：流中段失败（rate_limit/overloaded）
+          // 统一由 streamModel 的 streamInterruption 机制（#511）接管——部分
+          // 内容由 AgentLoop 恢复链续接，router 不再手工拼接 continuation
+          // request（避免与 checkpoint 累积的双重续接）。
+          for (const queued of pending) {
+            yield queued;
+          }
+          lastHasYieldedContent = hasYieldedContent;
+          break outer;
+        }
+        case "success": {
+          getHealthTracker(ctx.sessionId).recordSuccess(attempt.provider);
 
-      if (
-        shouldZeroUsageRetry({
-          hasYieldedContent,
+          if (!hasYieldedContent) {
+            for (const queued of pending) {
+              yield queued;
+            }
+          }
 
-          enabled: zeroUsageEnabled,
-
-          attemptSaysRetry: outcome.shouldRetryZeroUsage,
-
-          attempt: zeroUsageAttempt,
-
-          maxAttempts: zeroUsageMax,
-        })
-      ) {
-        satiLogger.warn(
-          `zeroUsageRetry: empty response from ${attempt.provider}/${attempt.model} ` +
-            `(attempt ${zeroUsageAttempt}/${zeroUsageMax}, session=${ctx.sessionId})`,
-        );
-        events.emit({
-          type: "sati_router_zero_usage_retry",
-          sessionId: ctx.sessionId,
-          turnId: ctx.turnId,
-          attempt: zeroUsageAttempt,
-          provider: attempt.provider,
-          model: attempt.model,
-        });
-        events.emit({
-          type: "sati_router_retry_progress",
-          sessionId: ctx.sessionId,
-          turnId: ctx.turnId,
-          attempt: zeroUsageAttempt,
-          maxAttempts: zeroUsageMax,
-          delayMs: 500 * zeroUsageAttempt,
-          reason: "zero_usage",
-          provider: attempt.provider,
-          model: attempt.model,
-        });
-        telemetry?.trackFeatureLoopStage({
-          module: "router",
-          ownerModule: "router",
-          phase: "fallback",
-          loopStage: "module_event",
-          outcome: "success",
-          sessionId: ctx.sessionId,
-          metadata: {
-            event: "zero_usage_retry",
-            attempt: zeroUsageAttempt,
-            provider: attempt.provider,
-            model: attempt.model,
-          },
-        });
-        await abortableDelay(500 * zeroUsageAttempt, ctx.abortSignal);
-        continue;
-      }
-
-      getHealthTracker(ctx.sessionId).recordSuccess(attempt.provider);
-
-      if (!hasYieldedContent) {
-        for (const queued of pending) {
-          yield queued;
+          finalizeAttemptSuccess({
+            ctx,
+            stats,
+            usageCache,
+            decision,
+            attemptDecision,
+            attempt,
+            attemptRequest,
+            buffered: outcome.buffered,
+            usage: outcome.usage,
+            startedAt,
+            endedAt: (deps.now?.() ?? new Date()).toISOString(),
+          });
+          return;
         }
       }
-
-      const endedAt = (deps.now?.() ?? new Date()).toISOString();
-      let finalUsage = outcome.usage;
-      if (!finalUsage || (!finalUsage.inputTokens && !finalUsage.outputTokens)) {
-        const inputEst = countMessagesTokens(attemptRequest.messages);
-        const outputEst = countResponseTokens(outcome.buffered);
-        finalUsage = { inputTokens: inputEst, outputTokens: outputEst, totalTokens: inputEst + outputEst };
-      }
-      usageCache.observe(ctx.sessionId, finalUsage);
-      stats.observe({
-        sessionId: ctx.sessionId,
-        turnId: ctx.turnId,
-        projectPath: ctx.projectPath,
-        scenarioType: attemptDecision.scenarioType,
-        resolvedFrom: attemptDecision.resolvedFrom,
-        provider: attempt.provider,
-        model: attempt.model,
-        tier: decision.tokenSaverTier,
-        role: decision.isSubagent ? "subagent" : "main",
-        usage: finalUsage,
-        startedAt,
-        endedAt,
-      });
-      return;
     }
   }
 
@@ -657,23 +504,15 @@ export async function* executeRouterDecision(
       error: lastError,
     });
     const endedAt = (deps.now?.() ?? new Date()).toISOString();
-    let failUsage = lastUsage;
-    if (!failUsage || (!failUsage.inputTokens && !failUsage.outputTokens)) {
-      const inputEst = countMessagesTokens(request.messages);
-      const outputEst = countResponseTokens(lastBuffered);
-      failUsage = { inputTokens: inputEst, outputTokens: outputEst, totalTokens: inputEst + outputEst };
-    }
-    stats.observe({
-      sessionId: ctx.sessionId,
-      turnId: ctx.turnId,
-      projectPath: ctx.projectPath,
-      scenarioType: lastDecision.scenarioType,
-      resolvedFrom: lastDecision.resolvedFrom,
-      provider: lastAttempt.provider,
-      model: lastAttempt.model,
-      tier: decision.tokenSaverTier,
-      role: decision.isSubagent ? "subagent" : "main",
-      usage: failUsage,
+    finalizeAttemptFailure({
+      ctx,
+      stats,
+      decision,
+      lastDecision,
+      attempt: lastAttempt,
+      request,
+      buffered: lastBuffered,
+      usage: lastUsage,
       startedAt,
       endedAt,
     });

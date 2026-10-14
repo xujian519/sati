@@ -4,11 +4,8 @@ import type { RouterConfig } from "./config/schema.js";
 import type { CustomRouterRegistry } from "./customRouter/customRouter.js";
 import { noopCustomRouterRegistry } from "./customRouter/customRouter.js";
 import { decideRouterDecision, type RouterDecisionDeps } from "./decision/decideRouterDecision.js";
-import {
-  applyDecisionToRequest,
-  executeRouterDecision,
-  type RouterExecutionDeps,
-} from "./execution/executeRouterDecision.js";
+import { executeRouterDecision, type RouterExecutionDeps } from "./execution/executeRouterDecision.js";
+import { applyDecisionToRequest } from "./execution/attemptPlanning.js";
 import { ProviderHealthTracker } from "./health/ProviderHealthTracker.js";
 import type { RouterDecision, RouterDecisionInput, RouterExecuteContext } from "./protocol/decision.js";
 import type { RouterEventBus } from "./protocol/events.js";
@@ -143,7 +140,7 @@ export function createRouterRuntime(config: RouterConfig, deps: RouterRuntimeDep
     ctx: RouterExecuteContext,
   ): AsyncIterable<CanonicalModelEvent> => executeRouterDecision(decision, request, ctx, executionDeps);
   const materializeRequest = (decision: RouterDecision, request: CanonicalModelRequest): CanonicalModelRequest =>
-    applyDecisionToRequest(decision, request, executionDeps);
+    applyDecisionToRequest(decision, request, executionDeps.modelRuntime);
 
   async function* stream(
     request: CanonicalModelRequest,

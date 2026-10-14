@@ -5,8 +5,9 @@
  * 这两个判据原本内联在 411 行的 `execute()` 闭包里，条件与副作用（发事件、算退避、
  * 等待）交缠在一起，无法单独验证「什么情况下该重试」。
  *
- * 抽成谓词后**条件表达式逐字搬走、短路顺序不变**，副作用仍留在
- * `execution/executeRouterDecision.ts` 里；`tests/router/retry/retry-gates.spec.ts`
+ * 抽成谓词后**条件表达式逐字搬走、短路顺序不变**，判定组装在
+ * `execution/attemptPlanning.ts` 的 `classifyAttemptGate`，副作用（emit / 打点 /
+ * 退避等待 / 落账）在 `execution/attemptReporting.ts` 与编排体内；`tests/router/retry/retry-gates.spec.ts`
  * 直接覆盖真值表。
  *
  * 两个判据共有的前提是 `!hasYieldedContent`：一旦向消费方吐出过内容事件
