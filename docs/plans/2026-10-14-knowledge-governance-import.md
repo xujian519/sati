@@ -44,23 +44,23 @@ dsh 的**检索引擎**（纯关键词 IDF、61 条标定、上限 5000 条）�
 
 ### 任务清单
 
-- [ ] **T1.1** 新建 `src/context/memory/recall-log.ts`：open + migrate（v1 建表）+ `appendRecallLog` + `citeRecallLog` + 滚动清理；复用 `src/shared/sqlite.ts`
-- [ ] **T1.2** `MemoryResolver.ts`：`MemoryRetrieveResult` 增加可选 `hits?: MemoryHit[]`（id/score/snippet/provider）；`composite-memory-resolver.ts` 透传
-- [ ] **T1.3** `MemoryAttachmentBuilder.build()`：三条路径（注入/空/异常）统一落日志；诊断码与 skip_reason 映射表
-- [ ] **T1.4** turn 收尾回填：在 turnExit captureTurn 链路后挂 `citeRecallLog`；匹配规则 = 注入条目 id 或标题前缀（前缀碰撞则两条都不标）
-- [ ] **T1.5** 单元测试：`*.spec.ts`（schema 迁移、append/cite、滚动清理、builder 三路径落日志、resolver 假实现 wiring）；**mock 外部网络/LLM，不走真实 resolver**
-- [ ] **T1.6** docs/notes 决策记录：`2026-10-XX-memory-recall-log.md`，含 Alternatives considered（写 knowledge.db / 写 edgeclaw 库 / 写 session jsonl 三条被否路径的理由）
+- [x] **T1.1** 新建 `src/context/memory/recall-log.ts`：open + migrate（v1 建表）+ `appendRecallLog` + `citeRecallLog` + 滚动清理；复用 `src/shared/sqlite.ts`
+- [x] **T1.2** `MemoryResolver.ts`：`MemoryRetrieveResult` 增加可选 `hits?: MemoryHit[]`（id/score/snippet/provider）；`composite-memory-resolver.ts` 透传
+- [x] **T1.3** `MemoryAttachmentBuilder.build()`：三条路径（注入/空/异常）统一落日志；诊断码与 skip_reason 映射表
+- [x] **T1.4** turn 收尾回填：在 turnExit captureTurn 链路后挂 `citeRecallLog`；匹配规则 = 注入条目 id 或标题前缀（前缀碰撞则两条都不标）
+- [x] **T1.5** 单元测试：`*.spec.ts`（schema 迁移、append/cite、滚动清理、builder 三路径落日志、resolver 假实现 wiring）；**mock 外部网络/LLM，不走真实 resolver**
+- [x] **T1.6** docs/notes 决策记录：`2026-10-XX-memory-recall-log.md`，含 Alternatives considered（写 knowledge.db / 写 edgeclaw 库 / 写 session jsonl 三条被否路径的理由）
 
 ### 检查清单（PR 合并前）
 
-- [ ] `pnpm check` 全绿（先跑，见规则 9）
-- [ ] `pnpm test` 通过；新测试均为 `*.spec.ts`（如误建 `*.test.ts` 须 `git add -f` + 先 `pnpm measure:update` 再提交，规则见 AGENTS.md 环境事实）
-- [ ] strict 模式：无 `any`、无 `@ts-ignore`
-- [ ] 注入失败/超时路径有日志且带 skip_reason（规则 11，可区分「未核验」与「已核验无问题」）
-- [ ] `MemoryResolver` 契约变更向后兼容：未实现 `hits` 的 provider 不报错
-- [ ] 日志库路径可配置（env），默认不在 knowledge.db / edgeclaw rootDir 内
-- [ ] docs/notes note 已同 PR 提交
-- [ ] Conventional Commits：`feat(memory): ...`
+- [x] `pnpm check` 全绿（先跑，见规则 9）
+- [x] `pnpm test` 通过；新测试均为 `*.spec.ts`（如误建 `*.test.ts` 须 `git add -f` + 先 `pnpm measure:update` 再提交，规则见 AGENTS.md 环境事实）
+- [x] strict 模式：无 `any`、无 `@ts-ignore`
+- [x] 注入失败/超时路径有日志且带 skip_reason（规则 11，可区分「未核验」与「已核验无问题」）
+- [x] `MemoryResolver` 契约变更向后兼容：未实现 `hits` 的 provider 不报错
+- [x] 日志库路径可配置（env），默认不在 knowledge.db / edgeclaw rootDir 内
+- [x] docs/notes note 已同 PR 提交
+- [x] Conventional Commits：`feat(memory): ...`
 
 ## 4. WS2：写入草稿闸门（knowledge_note_save）
 
