@@ -7,7 +7,7 @@
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1085 / 188388 |
+| src TS 文件 / 行数 | 1086 / 188702 |
 | src JS 文件 | 0 |
 | tests 文件 | 633 |
 | ui/src 文件 / 行数 | 638 / 102219 |
@@ -29,12 +29,12 @@
 | 指标 | 总量 | 热点模块 |
 |---|---|---|
 | `any`/`@ts-expect-error`/`@ts-ignore` | 3 | ui/src(3) |
-| `as unknown as`（双重断言） | 22 | ui/src(18) · knowledge(2) · adapters(1) |
+| `as unknown as`（双重断言） | 25 | ui/src(18) · knowledge(5) · adapters(1) |
 | 裸 `console.*` | 6 | ui/server(6) |
 | 空 `catch {}` | 0 | — |
-| 无参 `catch {`（总计） | 693 | ui/server(160) · ui/src(125) · adapters(71) |
+| 无参 `catch {`（总计） | 694 | ui/server(160) · ui/src(125) · adapters(71) |
 | ↳ **无注释**（隐患类，目标） | **0** | — |
-| ↳ 已带意图注释 | 693 | — |
+| ↳ 已带意图注释 | 694 | — |
 | `TODO/HACK/FIXME/XXX` | 11 | always-on(4) · tests(4) · ui/src(2) |
 | 分层违规 `ui/server→src` | 15 | — |
 | 分层违规 `src→ui` | 0 | — |
@@ -68,7 +68,7 @@
 | `src/router/execution/executeRouterDecision.ts` | `executeRouterDecision` | 449 | function |
 | `ui/src/components/settings/view/modelPool/components/ProviderCard.tsx` | `ProviderCard` | 447 | function |
 | `ui/src/components/chat-v2/MessageRowV2.tsx` | `MessageRowV2` | 429 | function |
-| `src/cli/projectRuntimeFactory.ts` | `createProjectRuntimeResolver` | 426 | function |
+| `src/cli/projectRuntimeFactory.ts` | `createProjectRuntimeResolver` | 428 | function |
 | `ui/src/components/code-editor/view/subcomponents/DocxBuiltinPreview.tsx` | `DocxBuiltinPreview` | 422 | function |
 | `ui/src/components/chat-v2/processGrouping.test.ts` | `(anonymous)` | 409 | arrow |
 | `ui/src/types/contentReference.spec.ts` | `(anonymous)` | 408 | arrow |
@@ -96,7 +96,7 @@
 | `ui/src/components/chat/hooks/useSlashCommandExecute.ts` | `useSlashCommandExecute` | 331 | function |
 | `ui/src/components/code-editor/view/CodeEditor.tsx` | `CodeEditor` | 326 | function |
 | `ui/src/components/annotation/view/Annotator.tsx` | `Annotator` | 322 | function |
-| `src/cli/projectRuntimeFactory.ts` | `resolve` | 318 | function |
+| `src/cli/projectRuntimeFactory.ts` | `resolve` | 320 | function |
 | `src/tool/builtin/patentFigureProject.ts` | `createPatentFigureProjectTool` | 313 | function |
 | `ui/src/components/chat-v2/SubagentDetailMessageFlow.tsx` | `SubagentDetailMessageFlow` | 309 | function |
 | `ui/src/components/settings/view/integrations/im/components/WeixinChannelSection.tsx` | `WeixinChannelSection` | 303 | function |

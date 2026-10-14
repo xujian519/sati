@@ -25,6 +25,8 @@ Status: proposed
 - A（推荐）：把 Sati 运行期写入迁出 knowledge.db，落到 Sati 自有库（如 `~/.sati/knowledge/sati-notes.db`），documents 层仅存只读镜像视图或确认时同步插入——knowledge.db 恢复「纯管道产物、Sati 只读」的干净契约，之后 WS3 加列落在 Sati 自有库无任何契约风险；
 - B：与 XiaoNuo 管道约定 merge 协议（管道侧保留非 `source='nuo'` 的行/列）——跨仓契约，协调成本高。
 
+**前置 A 已落地（WS2.1，2026-10-14，随 PR #672）**：sati-notes.db 成为 notes/drafts 唯一真源；knowledge.db 只承载可重建检索投影，文件签名（size+mtime）失配时写路径自动全量重投影——管道刷新后笔记自动恢复、草稿零丢失。WS3 剩余门禁仅「月 churn > 20 条或首例事故」的触发条件；加列落点改为 sati-notes.db 的 notes 表（superseded_by/valid_until + revisions），与管道产物零耦合。
+
 **Acceptance criteria（立项后）**：
 - 压制语义生效后，被取代条目在 `patent_case_search` / 语义召回 / FTS 三路均不可见（负例测试锁定）；
 - 前像可恢复（restore 路径有测试）；
@@ -39,6 +41,6 @@ Status: proposed
 
 ## Risks
 
-- **WS2 事后风险（须评审知晓）**：knowledge_drafts 表与 personal_note 行当前住在 knowledge.db 内，产物刷新会**静默清空 pending 草稿与已确认笔记**。短期缓解：产物刷新属低频手工操作；长期根治即前置方案 A（建议单独立项 WS2.1）。
-- 方案 A 的迁移成本：drafts 表迁移是机械搬库；personal_note 迁移需同步迁移 `PersonalNoteStore`/向量索引的数据源路径与存量数据导出，需一次性的导出-导入脚本。
-- 月 churn  currently 远低于 20 条/月（立项触发条件未达），WS3 不急；但 WS2.1（迁出）不受该条件约束，越早做契约越干净。
+- **WS2 事后风险（已于 WS2.1 根治，2026-10-14 随 PR #672 落地）**：~~knowledge_drafts 表与 personal_note 行当前住在 knowledge.db 内，产物刷新会**静默清空 pending 草稿与已确认笔记**~~ → 真源已迁出至 Sati 自有 sati-notes.db，knowledge.db 仅留可重建投影 + 签名检测自动重投影，刷新不再丢失任何 Sati 侧数据。
+- 方案 A 的迁移成本：drafts 表迁移是机械搬库；personal_note 迁移需同步迁移 `PersonalNoteStore`/向量索引的数据源路径与存量数据导出，需一次性的导出-导入脚本。（已由 import_v1 一次性导入承接，无需手工脚本。）
+- 月 churn  currently 远低于 20 条/月（立项触发条件未达），WS3 不急；~~但 WS2.1（迁出）不受该条件约束，越早做契约越干净~~ → WS2.1 已落地。

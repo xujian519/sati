@@ -2,6 +2,12 @@
 
 Status: implemented
 
+> **修订（2026-10-14，WS2.1，同 PR #672）**：草稿与笔记真源已从 knowledge.db
+> 迁出至 Sati 自有 sati-notes.db（knowledge.db 仅留可重建检索投影 + 签名重投影），
+> 本 note 中「knowledge_drafts 表在 knowledge.db」的落点描述以 WS2.1 为准——
+> 闸门语义（草稿/确认/拒痕/direct 逃生口）不变。背景与契约发现见
+> `docs/notes/proposed/2026-10-14-knowledge-supersede-semantics.md`。
+
 ## Problem
 
 `knowledge_note_save` 让 agent 把项目产出（OA 答复要点、无效分析结论、检索心得）直写 knowledge.db 的 personal_note 层，后续检索可召回。直写意味着：**AI 产出的知识未经任何人确认就成为长期知识库的一部分**——幻觉、过时结论、半成品分析都会沉淀并在后续检索中污染上下文，且无任何审批留痕与「不该这样写」的负反馈回路。

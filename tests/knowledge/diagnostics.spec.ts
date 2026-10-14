@@ -13,7 +13,7 @@ import type { KnowledgeDbPaths } from "../../src/knowledge/config.js";
 import type { KnowledgeRuntimeStatsSnapshot } from "../../src/knowledge/shared/knowledge-stats.js";
 
 function paths(overrides: Partial<KnowledgeDbPaths> = {}): KnowledgeDbPaths {
-  return { dataDir: "/tmp/sati-knowledge-test", ...overrides };
+  return { dataDir: "/tmp/sati-knowledge-test", notesDb: "/tmp/sati-knowledge-test/sati-notes.db", ...overrides };
 }
 
 type KnowledgeDbRows = { kgNodes?: number; lawArticles?: number; embeddings?: number; documents?: number };

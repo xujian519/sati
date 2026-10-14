@@ -1,27 +1,25 @@
 /**
- * personal_note 只读数据源（knowledge.db documents/chunks）。
+ * personal_note 只读数据源（WS2.1：Sati 自有 sati-notes.db 的 notes 真源表）。
  *
- * `knowledge_note_save` 工具把项目沉淀（OA 答复要点、无效结论、检索心得）写入
- * documents（source='project'、doc_type='personal_note'）+ chunks + docs_fts。
- * 本 store 以只读连接枚举这些笔记，供 PersonalNoteVectorIndex 建语义向量。
+ * knowledge.db（XiaoNuo 管道产物，文件级整体替换）只承载可重建的检索投影；
+ * 语义索引的数据源是 sidecar——管道刷新后由写路径签名检测自动重投影，
+ * 本 store 无需关心投影面。
  *
- * 只读边界：仅 SELECT，不写 knowledge.db；读连接不阻塞 knowledge_note_save
- * 的短连接事务写入（journal_mode=delete 下写锁短暂）。
+ * 只读边界：仅 SELECT，不写 sati-notes.db；读连接不阻塞工具侧短连接写入
+ * （journal_mode=delete 下写锁短暂）。
  */
 
 import { DatabaseSync } from "node:sqlite";
-import { registerChunkUncompress } from "../shared/chunk-compression.js";
-import { openKnowledgeDb } from "../shared/db-version.js";
-import { KNOWLEDGE_DB } from "../shared/schema-versions.js";
+import { ensureNotesDb } from "./notes-db.js";
 
-/** 一条 personal_note（documents 行 + 聚合后的 chunk 正文）。 */
+/** 一条 personal_note（notes 真源行）。 */
 export type PersonalNoteRow = {
-  /** documents.id（noteDocumentId：sha1(project|title|content) 前 16 位）。 */
+  /** notes.id（noteDocumentId：sha1(project|title|content) 前 16 位）。 */
   id: string;
   title: string;
-  /** 全部 chunk 正文按 chunk_index 拼接（personal_note 通常单 chunk）。 */
+  /** 正文（sidecar 单表全量存储，无 chunk 聚合）。 */
   content: string;
-  /** documents.indexed_at（ISO 字符串，参与快照版本）。 */
+  /** notes.updated_at（ISO 字符串，参与快照版本）。 */
   indexedAt: string;
 };
 
@@ -39,97 +37,78 @@ const PAGE_SIZE = 256;
 type PersonalNoteRowSql = {
   id: string;
   title: string;
-  indexed_at: string;
-  chunk_index: number;
+  updated_at: string;
   content: string;
 };
 
 export class PersonalNoteStore {
   private readonly db: DatabaseSync;
 
-  constructor(dbPath: string) {
-    const opened = openKnowledgeDb(dbPath, KNOWLEDGE_DB, { readOnly: true });
-    this.db = opened.db;
-    // chunk 压缩解压函数（--compress-chunks 产物 BLOB；明文原样返回）。
-    registerChunkUncompress(this.db);
+  constructor(notesDbPath: string, options: { knowledgeDb?: string } = {}) {
+    // ensure（含一次性导入）后再只读打开：sidecar 由本模块独家写入，
+    // 长驻只读连接与短连接写入不冲突（autocommit SELECT 不持锁）。
+    ensureNotesDb(notesDbPath, options.knowledgeDb).close();
+    this.db = new DatabaseSync(notesDbPath, { readOnly: true });
   }
 
   /**
-   * 列出 project personal_note（id/title/content/indexedAt）。
+   * 列出全部沉淀笔记（updated_at 倒序）。
    * 读取失败时异常上抛（不降级为空数组）——由 PersonalNoteVectorIndex 的
    * search() catch 降级，避免把瞬时读错误当作"笔记清空"触发 stale 整体删除。
    */
   list(options: PersonalNoteListOptions = {}): PersonalNoteRow[] {
-    return this.aggregate(this.queryRows(options.limit, options.offset));
+    let sql = "SELECT id, title, content, updated_at FROM notes ORDER BY updated_at DESC";
+    const params: Array<string | number> = [];
+    if (options.limit !== undefined && options.limit > 0) {
+      sql += " LIMIT ?";
+      params.push(options.limit);
+    }
+    if (options.offset !== undefined && options.offset > 0) {
+      sql += " OFFSET ?";
+      params.push(options.offset);
+    }
+    const rows = this.db.prepare(sql).all(...params) as unknown as PersonalNoteRowSql[];
+    return rows.map(row => ({
+      id: row.id,
+      title: row.title,
+      content: row.content,
+      indexedAt: row.updated_at,
+    }));
   }
 
   /**
-   * 分页拉取全部笔记（每页 PAGE_SIZE 行，聚合语义与 list() 一致）。
-   * 供语义索引全量同步使用：单条 SQL 的 JOIN + sati_uncompress 规模有界，
-   * 避免一次全量无界扫描（docs 数量增长时内存与单语句耗时可控）。
+   * 分页拉取全部笔记（每页 pageSize 行）。
+   * 供语义索引全量同步使用：单条 SQL 规模有界，避免一次全量无界扫描。
    */
   listAllPaged(pageSize = PAGE_SIZE): PersonalNoteRow[] {
     const rows: PersonalNoteRowSql[] = [];
     let offset = 0;
     for (;;) {
-      const page = this.queryRows(pageSize, offset);
+      const page = this.db
+        .prepare("SELECT id, title, content, updated_at FROM notes ORDER BY updated_at DESC LIMIT ? OFFSET ?")
+        .all(pageSize, offset) as unknown as PersonalNoteRowSql[];
       rows.push(...page);
       if (page.length < pageSize) break;
       offset += pageSize;
     }
-    return this.aggregate(rows);
-  }
-
-  private queryRows(limit: number | undefined, offset: number | undefined): PersonalNoteRowSql[] {
-    let sql = `SELECT d.id AS id, d.title AS title, d.indexed_at AS indexed_at,
-                      c.chunk_index AS chunk_index, sati_uncompress(c.content) AS content
-               FROM documents d
-               JOIN chunks c ON c.document_id = d.id
-               WHERE d.source = 'project' AND d.doc_type = 'personal_note'
-               ORDER BY d.indexed_at DESC, c.chunk_index ASC`;
-    const params: Array<string | number> = [];
-    if (limit !== undefined && limit > 0) {
-      sql += " LIMIT ?";
-      params.push(limit);
-    }
-    if (offset !== undefined && offset > 0) {
-      sql += " OFFSET ?";
-      params.push(offset);
-    }
-    return this.db.prepare(sql).all(...params) as PersonalNoteRowSql[];
-  }
-
-  /** 一个 document 可能多 chunk：按 id 聚合正文（保持 chunk_index 顺序）。 */
-  private aggregate(rows: PersonalNoteRowSql[]): PersonalNoteRow[] {
-    const byId = new Map<string, PersonalNoteRow & { parts: string[] }>();
-    for (const row of rows) {
-      let entry = byId.get(row.id);
-      if (!entry) {
-        entry = { id: row.id, title: row.title, content: "", indexedAt: row.indexed_at, parts: [] };
-        byId.set(row.id, entry);
-      }
-      entry.parts.push(row.content);
-    }
-    return Array.from(byId.values()).map(entry => ({
-      id: entry.id,
-      title: entry.title,
-      content: entry.parts.join("\n"),
-      indexedAt: entry.indexedAt,
+    return rows.map(row => ({
+      id: row.id,
+      title: row.title,
+      content: row.content,
+      indexedAt: row.updated_at,
     }));
   }
 
   /**
-   * 快照版本：`count:maxIndexedAt`。供增量同步门控——笔记集合未变时零成本跳过。
+   * 快照版本：`count:maxUpdatedAt`。供增量同步门控——笔记集合未变时零成本跳过。
    * 读取失败返回空串（哨兵：调用方视为数据源不可用，跳过本次同步、不碰既有索引）。
    */
   snapshotVersion(): string {
     try {
-      const row = this.db
-        .prepare(
-          `SELECT COUNT(*) AS c, COALESCE(MAX(indexed_at), '') AS m
-           FROM documents WHERE source = 'project' AND doc_type = 'personal_note'`,
-        )
-        .get() as { c: number; m: string };
+      const row = this.db.prepare("SELECT COUNT(*) AS c, COALESCE(MAX(updated_at), '') AS m FROM notes").get() as {
+        c: number;
+        m: string;
+      };
       return `${row.c}:${row.m}`;
     } catch {
       // 读取失败 → 空串哨兵（调用方跳过本次同步，不碰既有索引）。

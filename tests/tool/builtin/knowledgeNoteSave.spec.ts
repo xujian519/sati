@@ -12,16 +12,17 @@ import {
 import { CaseLawSearchEngine } from "../../../src/knowledge/case-law/case-law-search.js";
 
 /**
- * knowledge_note_save 单元测试（personal_note 反馈回路）。
+ * knowledge_note_save 单元测试（personal_note 反馈回路，WS2.1 sidecar 版）。
  *
- * fixture 与真实 knowledge.db 的 documents/chunks/docs_fts 一致
+ * 真源为 Sati 自有 sati-notes.db；knowledge.db（XiaoNuo 管道产物）只承载可重建的
+ * 检索投影。fixture 与真实两库的 documents/chunks/docs_fts 一致
  * （contentless trigram FTS5，rowid 即 chunks.id）。
  */
 
-function createFixture(): { dbPath: string; dir: string } {
+function createFixture(): { notesDb: string; knowledgeDb: string; dir: string } {
   const dir = mkdtempSync(join(tmpdir(), "note-save-test-"));
-  const dbPath = join(dir, "test.db");
-  const db = new DatabaseSync(dbPath);
+  const knowledgeDb = join(dir, "knowledge.db");
+  const db = new DatabaseSync(knowledgeDb);
   db.exec(`
     CREATE TABLE documents (
       id TEXT PRIMARY KEY, source TEXT NOT NULL, doc_type TEXT NOT NULL, domain TEXT NOT NULL DEFAULT 'patent',
@@ -39,27 +40,41 @@ function createFixture(): { dbPath: string; dir: string } {
     );
   `);
   db.close();
-  return { dbPath, dir };
+  return { notesDb: join(dir, "sati-notes.db"), knowledgeDb, dir };
 }
 
-function withFixture(t: test.TestContext): string {
-  const { dbPath, dir } = createFixture();
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
-  return dbPath;
+function withFixture(t: test.TestContext): { notesDb: string; knowledgeDb: string } {
+  const fixture = createFixture();
+  t.after(() => rmSync(fixture.dir, { recursive: true, force: true }));
+  return fixture;
 }
 
-test("savePersonalNote 写入 documents + chunks + docs_fts", t => {
-  const dbPath = withFixture(t);
-  const result = savePersonalNote(dbPath, {
-    title: "OA 答复要点：创造性三步法",
-    content: "答复创造性 A22.3 时，重点论证区别特征的技术启示判断。",
-    project: "proj-a",
-  });
+test("savePersonalNote：真源落 sidecar notes 表 + 投影到 knowledge.db 三层", t => {
+  const { notesDb, knowledgeDb } = withFixture(t);
+  const result = savePersonalNote(
+    { notesDb, knowledgeDb },
+    {
+      title: "OA 答复要点：创造性三步法",
+      content: "答复创造性 A22.3 时，重点论证区别特征的技术启示判断。",
+      project: "proj-a",
+    },
+  );
   assert.equal(result.reason, "inserted");
   assert.equal(result.saved, true);
-  assert.ok(result.documentId, "应生成 documentId");
+  assert.ok(result.documentId);
 
-  const db = new DatabaseSync(dbPath, { readOnly: true });
+  const sidecar = new DatabaseSync(notesDb, { readOnly: true });
+  try {
+    const note = sidecar.prepare("SELECT title, content FROM notes WHERE id = ?").get(result.documentId!) as
+      | { title: string; content: string }
+      | undefined;
+    assert.ok(note, "sidecar notes 表应有真源行");
+    assert.equal(note.title, "OA 答复要点：创造性三步法");
+  } finally {
+    sidecar.close();
+  }
+
+  const db = new DatabaseSync(knowledgeDb, { readOnly: true });
   try {
     const doc = db
       .prepare("SELECT source, doc_type, domain, title FROM documents WHERE id = ?")
@@ -76,41 +91,55 @@ test("savePersonalNote 写入 documents + chunks + docs_fts", t => {
   }
 });
 
-test("幂等：同内容重复保存返回 duplicate 且不新增行", t => {
-  const dbPath = withFixture(t);
+test("幂等：同内容重复保存返回 duplicate 且不新增行（sidecar 与投影同去重）", t => {
+  const { notesDb, knowledgeDb } = withFixture(t);
+  const paths = { notesDb, knowledgeDb };
   const input = { title: "t", content: "内容", project: "p" };
-  const first = savePersonalNote(dbPath, input);
-  const second = savePersonalNote(dbPath, input);
+  const first = savePersonalNote(paths, input);
+  const second = savePersonalNote(paths, input);
   assert.equal(first.reason, "inserted");
   assert.equal(second.reason, "duplicate");
   assert.equal(first.documentId, second.documentId);
-  const db = new DatabaseSync(dbPath, { readOnly: true });
+
+  const sidecar = new DatabaseSync(notesDb, { readOnly: true });
+  try {
+    const count = sidecar.prepare("SELECT COUNT(*) AS c FROM notes WHERE id = ?").get(first.documentId!) as {
+      c: number;
+    };
+    assert.equal(count.c, 1, "sidecar 不得重复");
+  } finally {
+    sidecar.close();
+  }
+  const db = new DatabaseSync(knowledgeDb, { readOnly: true });
   try {
     const count = (
       db.prepare("SELECT COUNT(*) AS c FROM documents WHERE id = ?").get(first.documentId!) as { c: number }
     ).c;
-    assert.equal(count, 1, "重复保存不应新增行");
+    assert.equal(count, 1, "投影不得重复");
   } finally {
     db.close();
   }
 });
 
 test("空 title/content 跳过", t => {
-  const dbPath = withFixture(t);
-  assert.equal(savePersonalNote(dbPath, { title: "  ", content: "x" }).reason, "skipped");
-  assert.equal(savePersonalNote(dbPath, { title: "x", content: "" }).reason, "skipped");
+  const { notesDb } = withFixture(t);
+  assert.equal(savePersonalNote({ notesDb }, { title: "  ", content: "x" }).reason, "skipped");
+  assert.equal(savePersonalNote({ notesDb }, { title: "x", content: "" }).reason, "skipped");
 });
 
-test("保存后可被 CaseLawSearchEngine 全文检索召回", t => {
+test("保存后可被 CaseLawSearchEngine 全文检索召回（投影面）", t => {
   // 自管清理顺序：engine.close() 必须先于 rmSync（after 钩子按注册序执行，
   // 若复用 withFixture 的 rm 钩子，Windows 上句柄未释放导致 EBUSY）。
-  const { dbPath, dir } = createFixture();
-  savePersonalNote(dbPath, {
-    title: "无效分析结论：区别特征与预料不到效果",
-    content: "无效宣告分析中，区别特征产生了预料不到的技术效果。",
-    project: "proj-b",
-  });
-  const engine = new CaseLawSearchEngine(dbPath);
+  const { notesDb, knowledgeDb, dir } = createFixture();
+  savePersonalNote(
+    { notesDb, knowledgeDb },
+    {
+      title: "无效分析结论：区别特征与预料不到效果",
+      content: "无效宣告分析中，区别特征产生了预料不到的技术效果。",
+      project: "proj-b",
+    },
+  );
+  const engine = new CaseLawSearchEngine(knowledgeDb);
   t.after(() => {
     engine.close();
     rmSync(dir, { recursive: true, force: true });
@@ -128,17 +157,20 @@ test("noteDocumentId 稳定且随内容变化", () => {
 });
 
 test("工具 execute：正常保存返回插入消息", async t => {
-  const dbPath = withFixture(t);
+  const { notesDb, knowledgeDb } = withFixture(t);
   const tool = createKnowledgeNoteSaveTool();
   const { makeToolContext } = await import("../context-fixture.js");
-  // 通过 SATI_KNOWLEDGE_DB 注入 fixture 库路径，让 execute 命中"库存在"分支。
-  // resolveKnowledgeDbPaths 每次调用实时读 env（无缓存），CI 无 ~/.sati 库也能稳定断言；
-  // 写入路径由 savePersonalNote 用例覆盖，此处仅验证输入校验分支。
+  // 通过 SATI_KNOWLEDGE_DB / SATI_NOTES_DB 注入 fixture 路径（knowledge 域 env 实时读、无缓存），
+  // 让 execute 命中"库存在"分支；写入路径由 savePersonalNote 用例覆盖，此处仅验证输入校验分支。
   const prevDb = process.env.SATI_KNOWLEDGE_DB;
-  process.env.SATI_KNOWLEDGE_DB = dbPath;
+  const prevNotes = process.env.SATI_NOTES_DB;
+  process.env.SATI_KNOWLEDGE_DB = knowledgeDb;
+  process.env.SATI_NOTES_DB = notesDb;
   t.after(() => {
     if (prevDb === undefined) delete process.env.SATI_KNOWLEDGE_DB;
     else process.env.SATI_KNOWLEDGE_DB = prevDb;
+    if (prevNotes === undefined) delete process.env.SATI_NOTES_DB;
+    else process.env.SATI_NOTES_DB = prevNotes;
   });
   const missing = await tool.execute(
     { title: "", content: "x" } as unknown as Parameters<typeof tool.execute>[0],

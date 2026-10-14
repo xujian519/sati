@@ -17,6 +17,7 @@ import {
   listPendingKnowledgeDrafts,
   rejectKnowledgeDraft,
 } from "../../knowledge/personal-note/drafts.js";
+import { ensureNotesDb } from "../../knowledge/personal-note/notes-db.js";
 
 function sendJson(response: ServerResponse, status: number, body: unknown): void {
   response.writeHead(status, { "content-type": "application/json" });
@@ -42,11 +43,6 @@ async function readJsonBody(request: IncomingMessage): Promise<Record<string, un
   }
 }
 
-function resolveDbPath(): string | undefined {
-  const { knowledgeDb } = resolveKnowledgeDbPaths();
-  return knowledgeDb && existsSync(knowledgeDb) ? knowledgeDb : undefined;
-}
-
 /** 处理 /api/web/knowledge-drafts* 请求；返回 false 表示非本路由职责。 */
 export async function handleKnowledgeDraftRoutes(
   request: IncomingMessage,
@@ -58,16 +54,10 @@ export async function handleKnowledgeDraftRoutes(
     return false;
   }
 
-  const dbPath = resolveDbPath();
-  if (!dbPath) {
-    sendJson(response, 404, errorBody("knowledge_db_not_found", "未找到 knowledge.db，草稿通道不可用"));
-    return true;
-  }
-
   try {
-    return await dispatchKnowledgeDraftRoute(request, response, url, pathname, dbPath);
+    return await dispatchKnowledgeDraftRoute(request, response, url, pathname);
   } catch (error) {
-    // 库损坏/版本不符等打开期异常：fail-closed + 可观测（500 带原因），不静默吞。
+    // sidecar 打开/写入期异常：fail-closed + 可观测（500 带原因），不静默吞。
     sendJson(
       response,
       500,
@@ -82,12 +72,18 @@ async function dispatchKnowledgeDraftRoute(
   response: ServerResponse,
   url: URL,
   pathname: string,
-  dbPath: string,
 ): Promise<boolean> {
+  const { knowledgeDb, notesDb } = resolveKnowledgeDbPaths();
+
   if (pathname === "/api/web/knowledge-drafts" && request.method === "GET") {
     const limitParam = Number(url.searchParams.get("limit") ?? "100");
     const limit = Number.isFinite(limitParam) && limitParam > 0 ? Math.floor(limitParam) : 100;
-    sendJson(response, 200, { drafts: listPendingKnowledgeDrafts(dbPath, { limit }) });
+    const sidecar = ensureNotesDb(notesDb, knowledgeDb);
+    try {
+      sendJson(response, 200, { drafts: listPendingKnowledgeDrafts(notesDb, { limit }) });
+    } finally {
+      sidecar.close();
+    }
     return true;
   }
 
@@ -97,12 +93,27 @@ async function dispatchKnowledgeDraftRoute(
       sendJson(response, 400, errorBody("invalid_body", "Expected { id }"));
       return true;
     }
-    const result = confirmKnowledgeDraft(dbPath, body.id);
-    if (!result.ok) {
-      sendJson(response, result.code === "draft_not_found" ? 404 : 409, errorBody(result.code, result.message));
+    if (!knowledgeDb || !existsSync(knowledgeDb)) {
+      sendJson(response, 404, errorBody("knowledge_db_not_found", "未找到 knowledge.db，无法投影入库"));
       return true;
     }
-    sendJson(response, 200, { ok: true, documentId: result.documentId });
+    const sidecar = ensureNotesDb(notesDb, knowledgeDb);
+    try {
+      const result = confirmKnowledgeDraft({ notesDb, knowledgeDb }, body.id);
+      if (!result.ok) {
+        const status =
+          result.code === "draft_not_found" || result.code === "knowledge_db_not_found"
+            ? 404
+            : result.code === "projection_failed"
+              ? 500
+              : 409;
+        sendJson(response, status, errorBody(result.code, result.message));
+        return true;
+      }
+      sendJson(response, 200, { ok: true, documentId: result.documentId });
+    } finally {
+      sidecar.close();
+    }
     return true;
   }
 
@@ -113,12 +124,17 @@ async function dispatchKnowledgeDraftRoute(
       return true;
     }
     const reason = typeof body.reason === "string" && body.reason.trim() ? body.reason.trim() : undefined;
-    const result = rejectKnowledgeDraft(dbPath, body.id, reason);
-    if (!result.ok) {
-      sendJson(response, result.code === "draft_not_found" ? 404 : 409, errorBody(result.code, result.message));
-      return true;
+    const sidecar = ensureNotesDb(notesDb, knowledgeDb);
+    try {
+      const result = rejectKnowledgeDraft(notesDb, body.id, reason);
+      if (!result.ok) {
+        sendJson(response, result.code === "draft_not_found" ? 404 : 409, errorBody(result.code, result.message));
+        return true;
+      }
+      sendJson(response, 200, { ok: true });
+    } finally {
+      sidecar.close();
     }
-    sendJson(response, 200, { ok: true });
     return true;
   }
 

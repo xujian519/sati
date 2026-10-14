@@ -18,8 +18,10 @@ export { PersonalNoteStore, type PersonalNoteRow } from "./personal-note-store.j
 export { PersonalNoteVectorIndex, type PersonalNoteVectorIndexOptions } from "./personal-note-vector-index.js";
 
 export type GetOrCreatePersonalNoteIndexOptions = {
-  /** knowledge.db 路径（personal_note 数据源）。 */
-  dbPath: string;
+  /** sati-notes.db 路径（WS2.1：Sati 自有真源库，替代原 knowledge.db 直读）。 */
+  notesDb: string;
+  /** knowledge.db 路径（可选）：首次打开 sidecar 时一次性导入存量笔记/草稿。 */
+  knowledgeDb?: string;
   /** 语义检索客户端（memory.embedding 解析产物）。 */
   client: EmbeddingClient;
   /** 向量持久化文件（默认建议 {embeddingDir}/personal-note.jsonl）。 */
@@ -27,20 +29,20 @@ export type GetOrCreatePersonalNoteIndexOptions = {
   logger?: { warn?: (...args: unknown[]) => void };
 };
 
-// 进程级单例：按 `dbPath|storePath` 复用同一索引（含 store 只读连接与 JSONL
-// 持久化句柄）。键同时含 storePath：不同数据源（SATI_CASE_DB 分离场景）即使
-// 误传同一 storePath 也不会互相擦写同一 JSONL。
+// 进程级单例：按 `notesDb|storePath` 复用同一索引（含 store 只读连接与 JSONL
+// 持久化句柄）。键同时含 storePath：不同数据源即使误传同一 storePath 也不会
+// 互相擦写同一 JSONL。
 const instanceCache = new Map<string, PersonalNoteVectorIndex>();
 
 /**
- * 获取或创建 personal_note 语义索引（按 dbPath|storePath 单例）。
+ * 获取或创建 personal_note 语义索引（按 notesDb|storePath 单例）。
  * 数据源打开失败时抛出，由调用方 catch 降级（语义路关闭，关键词路不受影响）。
  */
 export function getOrCreatePersonalNoteIndex(options: GetOrCreatePersonalNoteIndexOptions): PersonalNoteVectorIndex {
-  const cacheKey = `${options.dbPath}::${options.storePath}`;
+  const cacheKey = `${options.notesDb}::${options.storePath}`;
   const existing = instanceCache.get(cacheKey);
   if (existing) return existing;
-  const store = new PersonalNoteStore(options.dbPath);
+  const store = new PersonalNoteStore(options.notesDb, { knowledgeDb: options.knowledgeDb });
   const index = new PersonalNoteVectorIndex({
     store,
     client: options.client,

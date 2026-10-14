@@ -1,24 +1,18 @@
 /**
- * knowledge_note_save — 项目知识沉淀工具（personal_note 反馈回路）。
+ * knowledge_note_save — 项目知识沉淀工具（personal_note 反馈回路，WS2.1）。
  *
- * 把项目产出（OA 答复要点、无效分析结论、检索心得）写入 knowledge.db
- * 的 personal_note 文档层（documents + chunks + docs_fts），使后续
- * `patent_case_search` / 语义检索可召回，实现"产出反哺知识、越用越强"。
+ * 真源为 Sati 自有 sati-notes.db（sidecar）；knowledge.db（XiaoNuo 管道产物，
+ * 文件级整体替换）只承载可重建的检索投影——管道刷新后写路径自动重投影，
+ * 笔记与草稿零丢失（见 docs/notes/proposed/2026-10-14-knowledge-supersede-semantics.md）。
  *
  * 两种写入模式（WS2 草稿闸门，决策见 docs/notes/implemented/2026-10-14-knowledge-draft-gate.md）：
  * - `draft`（默认，D1）：AI 只提交 pending 草稿，经 `/api/web/knowledge-drafts/confirm`
  *   人工确认后才入库——AI 沉淀不再直触知识库；
- * - `direct`（逃生口）：保持旧行为直写 documents 层（knowledgeNoteSaveMode: direct）。
+ * - `direct`（逃生口）：真源直落 sidecar notes 表 + 投影 knowledge.db（旧直写语义）。
  *
  * ⚠️ 本工具的 name / inputSchema / description 字节参与 llm-replay fixture 的
  * toolSchemaDigest 绑定：改任何描述文本都会使 fixture 失配须重录。模式差异只体现在
  * 运行时行为与返回文本，不体现在 schema。
- *
- * 知识库只读边界（显式声明）：
- * - 只写 source='project'、doc_type='personal_note' 的文档行；
- * - 不动 kg_nodes / kg_edges / law_article 等核心只读数据；
- * - knowledge.db 以短连接 + 事务写入（不持有长连接），journal_mode=delete
- *   下不影响既有关键路径的只读访问（短暂写锁，用完即关）。
  *
  * 幂等：id = sha1(project|title|content) 前 16 位，同内容重复保存直接跳过。
  */
@@ -26,9 +20,8 @@
 import { existsSync } from "node:fs";
 import { resolveKnowledgeDbPaths } from "../../knowledge/config.js";
 import { saveKnowledgeDraft } from "../../knowledge/personal-note/drafts.js";
-import { insertPersonalNoteDocument, noteDocumentId } from "../../knowledge/personal-note/note-document.js";
-import { openKnowledgeDb } from "../../knowledge/shared/db-version.js";
-import { KNOWLEDGE_DB } from "../../knowledge/shared/schema-versions.js";
+import { noteDocumentId } from "../../knowledge/personal-note/note-document.js";
+import { ensureNotesDb, projectNoteToKnowledgeDb } from "../../knowledge/personal-note/notes-db.js";
 import type { SatiToolDefinition } from "../protocol/types.js";
 
 /** 写入模式：draft（默认，草稿闸门）或 direct（直写逃生口）。 */
@@ -64,8 +57,20 @@ export type CreateKnowledgeNoteSaveToolOptions = {
 const MAX_TITLE_CHARS = 200;
 const MAX_CONTENT_CHARS = 20_000;
 
-/** 写入实现（导出便于测试注入 dbPath）。事务内含重复检查，幂等且原子。 */
-export function savePersonalNote(dbPath: string, input: KnowledgeNoteSaveInput): KnowledgeNoteSaveOutput {
+export type SavePersonalNotePaths = {
+  /** Sati 自有真源库（sati-notes.db）。 */
+  notesDb: string;
+  /** knowledge.db（检索投影目标）；缺省时只写真源不投影。 */
+  knowledgeDb?: string;
+};
+
+/**
+ * 直写实现（导出便于测试注入路径）：
+ *  1. sidecar notes 表插真源行（重复检查，幂等）；
+ *  2. 投影进 knowledge.db（签名检测/重投影 + 幂等插入）。
+ * 投影失败抛错由调用方 fail-closed（真源行已落，重试经幂等收敛）。
+ */
+export function savePersonalNote(paths: SavePersonalNotePaths, input: KnowledgeNoteSaveInput): KnowledgeNoteSaveOutput {
   const title = input.title.trim();
   const content = input.content.trim();
   if (!title || !content) {
@@ -73,27 +78,33 @@ export function savePersonalNote(dbPath: string, input: KnowledgeNoteSaveInput):
   }
   const documentId = noteDocumentId(input.project, title, content);
 
-  // 短连接 + 事务（journal_mode=delete 下写锁短暂；用完即关）。
-  // 写路径同样做版本校验：真源版本不符时拒绝写入，避免向旧库写新格式数据。
-  const opened = openKnowledgeDb(dbPath, KNOWLEDGE_DB);
-  const db = opened.db;
+  const sidecar = ensureNotesDb(paths.notesDb, paths.knowledgeDb);
   try {
-    db.exec("BEGIN");
+    sidecar.exec("BEGIN");
     try {
-      // 重复检查与写入同事务：并发下不会出现"检查通过后重复插入"的竞态窗口。
-      if (db.prepare("SELECT id FROM documents WHERE id = ?").get(documentId)) {
-        db.exec("ROLLBACK");
+      if (sidecar.prepare("SELECT id FROM notes WHERE id = ?").get(documentId)) {
+        sidecar.exec("ROLLBACK");
         return { saved: false, documentId, reason: "duplicate" };
       }
-      const { charCount } = insertPersonalNoteDocument(db, { documentId, title, content });
-      db.exec("COMMIT");
-      return { saved: true, documentId, reason: "inserted", charCount };
+      const now = new Date().toISOString();
+      sidecar
+        .prepare(
+          `INSERT INTO notes (id, title, content, project, created_at, updated_at, confirmed_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(documentId, title, content, input.project ?? null, now, now, now);
+      sidecar.exec("COMMIT");
     } catch (error) {
-      db.exec("ROLLBACK");
+      sidecar.exec("ROLLBACK");
       throw error;
     }
+
+    if (paths.knowledgeDb && existsSync(paths.knowledgeDb)) {
+      projectNoteToKnowledgeDb(sidecar, paths.knowledgeDb, { id: documentId, title, content });
+    }
+    return { saved: true, documentId, reason: "inserted", charCount: content.length };
   } finally {
-    db.close();
+    sidecar.close();
   }
 }
 
@@ -143,7 +154,7 @@ export function createKnowledgeNoteSaveTool(
       return { ok: true };
     },
     execute: async (input: KnowledgeNoteSaveInput, context) => {
-      const { knowledgeDb } = resolveKnowledgeDbPaths();
+      const { knowledgeDb, notesDb } = resolveKnowledgeDbPaths();
       if (!knowledgeDb || !existsSync(knowledgeDb)) {
         return {
           content: [
@@ -168,9 +179,9 @@ export function createKnowledgeNoteSaveTool(
       }
       try {
         if (saveMode === "draft") {
-          // 草稿闸门（WS2）：只写 pending 草稿，确认通道见
+          // 草稿闸门（WS2）：只写 sidecar pending 草稿，确认通道见
           // /api/web/knowledge-drafts/confirm（HTTP 面，不经 agent 工具表）。
-          const draft = saveKnowledgeDraft(knowledgeDb, {
+          const draft = saveKnowledgeDraft(notesDb, {
             sessionId: context.sessionId ?? "unknown-session",
             title,
             content,
@@ -187,7 +198,7 @@ export function createKnowledgeNoteSaveTool(
           };
           return { content: [{ type: "text", text: message }], data: result };
         }
-        const result = savePersonalNote(knowledgeDb, input);
+        const result = savePersonalNote({ notesDb, knowledgeDb }, input);
         const message =
           result.reason === "inserted"
             ? `已沉淀笔记（id=${result.documentId}，${result.charCount} 字符），后续可经 patent_case_search / 语义检索召回。`
