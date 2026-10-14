@@ -110,7 +110,9 @@ export function createChatWebSocketServer(server) {
   const wss = new WebSocketServer({
     server,
     verifyClient: info => {
-      logger.info("WebSocket connection attempt to:", info.req.url);
+      // Path only: the query string carries the auth token (extracted below),
+      // so logging the raw URL would write the credential to disk.
+      logger.info("WebSocket connection attempt to:", info.req.url?.split("?")[0]);
 
       // Platform / no-login mode skips token validation; otherwise extract the
       // token from the query string or Authorization header.

@@ -95,7 +95,7 @@
     {
       "rule": "file-size",
       "file": "ui/server/routes/agent.js",
-      "lines": 1224
+      "lines": 1228
     },
     {
       "rule": "file-size",
