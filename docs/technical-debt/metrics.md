@@ -7,9 +7,9 @@
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1088 / 189150 |
+| src TS 文件 / 行数 | 1090 / 189499 |
 | src JS 文件 | 0 |
-| tests 文件 | 635 |
+| tests 文件 | 636 |
 | ui/src 文件 / 行数 | 642 / 102634 |
 | ui/server 文件 / 行数 | 133 / 35710 |
 
@@ -65,7 +65,6 @@
 | `ui/src/components/chat/hooks/useSessionSubmit.ts` | `useSessionSubmit` | 528 | function |
 | `ui/src/components/main-content-v2/CronV2.tsx` | `CronFormView` | 476 | function |
 | `ui/src/components/chat/hooks/useChatComposerState.ts` | `useChatComposerState` | 462 | function |
-| `src/router/execution/executeRouterDecision.ts` | `executeRouterDecision` | 449 | function |
 | `ui/src/components/settings/view/modelPool/components/ProviderCard.tsx` | `ProviderCard` | 447 | function |
 | `ui/src/components/chat-v2/MessageRowV2.tsx` | `MessageRowV2` | 429 | function |
 | `src/cli/projectRuntimeFactory.ts` | `createProjectRuntimeResolver` | 428 | function |
@@ -166,7 +165,7 @@
 | gateway | 34 |
 | model | 33 |
 | session | 28 |
-| router | 19 |
+| router | 20 |
 | cli | 15 |
 | always-on | 14 |
 | extension | 13 |
@@ -191,7 +190,7 @@
 | runtime | 1 |
 | status | 1 |
 
-| **合计** | **608** |
+| **合计** | **609** |
 
 ## i18n en/zh-CN 对齐
 
