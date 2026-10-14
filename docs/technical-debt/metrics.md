@@ -7,7 +7,7 @@
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1081 / 187674 |
+| src TS 文件 / 行数 | 1081 / 187623 |
 | src JS 文件 | 0 |
 | tests 文件 | 629 |
 | ui/src 文件 / 行数 | 638 / 102219 |
@@ -91,7 +91,6 @@
 | `ui/src/components/chat/hooks/useFileMentions.tsx` | `useFileMentions` | 366 | function |
 | `ui/src/components/settings/view/agentRoute/components/RouterSection.tsx` | `RouterSection` | 357 | function |
 | `ui/src/stores/useSessionStore.actions.test.tsx` | `(anonymous)` | 354 | arrow |
-| `src/gateway/server/GatewayWsConnection.ts` | `dispatchRequest` | 353 | method |
 | `ui/src/components/main-content/view/MainContent.tsx` | `MainContent` | 346 | function |
 | `src/patent/graph/domains/inventiveness.ts` | `buildInventivenessGraph` | 342 | function |
 | `ui/src/components/chat/view/subcomponents/MessageComponent.tsx` | `(anonymous)` | 335 | arrow |

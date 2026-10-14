@@ -1,5 +1,5 @@
 import type { Gateway, GatewayEvent } from "../protocol/types.js";
-import type { WsHelloFrame, WsRequestFrame } from "../protocol/frames.js";
+import type { WsGatewayMethod, WsHelloFrame, WsRequestFrame } from "../protocol/frames.js";
 import { SATI_GATEWAY_PROTOCOL_VERSION, isProtocolCompatible } from "../protocol/version.js";
 import { notConfigured } from "../protocol/notConfigured.js";
 import { GatewayMethodUnavailableError } from "../protocol/methodUnavailable.js";
@@ -263,358 +263,307 @@ export class GatewayWsConnection {
     }
   }
 
+  /** 直连：gateway 必实现方法（结果原样回，可选 map 变换如统一 {ok:true}）。 */
+  private callMethod<K extends keyof Gateway>(
+    name: K,
+    params: GatewayMethodParams<K>,
+    map?: (result: unknown) => unknown,
+  ): Promise<unknown> {
+    const method = this.options.gateway[name] as (p: GatewayMethodParams<K>) => Promise<unknown>;
+    const result = method.call(this.options.gateway, params);
+    return map ? result.then(map) : result;
+  }
+
+  /**
+   * 可选：方法未接线时回退 fallback(params)（not_configured 降级或合成默认），
+   * 不崩溃。必选形态差异（not_configured 文案 / 合成默认值）留在表项里一眼可见。
+   */
+  private callOptional<K extends keyof Gateway>(
+    name: K,
+    params: GatewayMethodParams<K>,
+    fallback: (params: GatewayMethodParams<K>) => unknown,
+  ): Promise<unknown> {
+    const method = this.options.gateway[name] as ((p: GatewayMethodParams<K>) => Promise<unknown>) | undefined;
+    if (!method) return Promise.resolve(fallback(params));
+    return method.call(this.options.gateway, params);
+  }
+
+  /**
+   * method → 分发器表（P2.4）：与 methodGuards.ts 的 METHOD_PARAM_GUARDS 同构的
+   * required Record —— WsGatewayMethod union 新增方法名时 typecheck 强制补表项，
+   * 旧 switch default 的「Unknown gateway method」收敛为 dispatchRequest 唯一防御分支。
+   * 表项按「直连 / {ok:true} 包装 / 可选回退 / 必填抛错 / skill 绑定 / kanban 订阅特判」分组；
+   * callMethod/callOptional 消掉逐 case 的 `if (!method)` 样板。
+   */
+  private readonly methodDispatchers: Record<WsGatewayMethod, (params: unknown) => Promise<unknown>> = {
+    // —— 直连：结果原样回 ——
+    list_sessions: p => this.callMethod("listSessions", p as GatewayMethodParams<"listSessions">),
+    resume_session: p => this.callMethod("resumeSession", p as GatewayMethodParams<"resumeSession">),
+    new_session: p => this.callMethod("newSession", p as GatewayMethodParams<"newSession">),
+    cron_create: p => this.callMethod("cronCreate", p as GatewayMethodParams<"cronCreate">),
+    cron_update: p => this.callMethod("cronUpdate", p as GatewayMethodParams<"cronUpdate">),
+    cron_list: p => this.callMethod("cronList", p as GatewayMethodParams<"cronList">),
+    cron_delete: p => this.callMethod("cronDelete", p as GatewayMethodParams<"cronDelete">),
+    cron_stop: p => this.callMethod("cronStop", p as GatewayMethodParams<"cronStop">),
+    cron_run_now: p => this.callMethod("cronRunNow", p as GatewayMethodParams<"cronRunNow">),
+    elicitation_respond: p => this.callMethod("respondElicitation", p as GatewayMethodParams<"respondElicitation">),
+    permission_decide: p => this.callMethod("permissionDecide", p as GatewayMethodParams<"permissionDecide">),
+    grant_session_permission: p =>
+      this.callMethod("grantSessionPermission", p as GatewayMethodParams<"grantSessionPermission">),
+    read_session_messages: p => this.callMethod("readSessionMessages", p as GatewayMethodParams<"readSessionMessages">),
+    read_subagent_messages: p =>
+      this.callMethod("readSubagentMessages", p as GatewayMethodParams<"readSubagentMessages">),
+    fork_session: p => this.callMethod("forkSession", p as GatewayMethodParams<"forkSession">),
+    describe_project: p => this.callMethod("describeProject", p as GatewayMethodParams<"describeProject">),
+
+    // —— 直连：返回值统一包装成 {ok:true} ——
+    abort_turn: p => this.callMethod("abortTurn", p as GatewayMethodParams<"abortTurn">, () => ({ ok: true })),
+    close_session: p => this.callMethod("closeSession", p as GatewayMethodParams<"closeSession">, () => ({ ok: true })),
+
+    // —— 直连：无参 ——
+    describe_server: () => this.options.gateway.describeServer(),
+    list_projects: () => this.options.gateway.listProjects(),
+
+    // —— 可选：未接线 → not_configured 降级 ——
+    steer_turn: p =>
+      this.callOptional("steerTurn", p as GatewayMethodParams<"steerTurn">, () =>
+        notConfigured({ delivered: false }, "Mid-turn steering not available"),
+      ),
+    cancel_steer: p =>
+      this.callOptional("cancelSteer", p as GatewayMethodParams<"cancelSteer">, () =>
+        notConfigured({ cancelled: false }, "Mid-turn steering not available"),
+      ),
+    edit_last_turn: p =>
+      this.callOptional("editLastTurn", p as GatewayMethodParams<"editLastTurn">, () =>
+        notConfigured({ rewritten: false }, "Edit last turn not available"),
+      ),
+    regenerate_last_turn: p =>
+      this.callOptional("regenerateLastTurn", p as GatewayMethodParams<"regenerateLastTurn">, () =>
+        notConfigured({ rewritten: false }, "Regenerate last turn not available"),
+      ),
+    panel_heartbeat: p =>
+      this.callOptional("panelHeartbeat", p as GatewayMethodParams<"panelHeartbeat">, () =>
+        notConfigured({ touched: 0 }, "Panel heartbeat not available"),
+      ),
+    team_panel_snapshot: p =>
+      this.callOptional("teamPanelSnapshot", p as GatewayMethodParams<"teamPanelSnapshot">, () =>
+        notConfigured({ teams: [] }, "Team panel snapshot not available"),
+      ),
+    team_tool_call: p =>
+      this.callOptional("teamToolCall", p as GatewayMethodParams<"teamToolCall">, () =>
+        notConfigured(
+          { ok: false, error: { code: "not_configured", message: "Team tool call not available" } },
+          "Team tool call not available",
+        ),
+      ),
+    approval_list_pending: p =>
+      this.callOptional("approvalListPending", p as GatewayMethodParams<"approvalListPending">, () =>
+        notConfigured({ pending: [] }, "Approval list not available"),
+      ),
+    approval_decide: p =>
+      this.callOptional("approvalDecide", p as GatewayMethodParams<"approvalDecide">, () =>
+        notConfigured({ delivered: false }, "Approval decide not available"),
+      ),
+    hook_trust_list: p =>
+      this.callOptional("hookTrustList", p as GatewayMethodParams<"hookTrustList">, () =>
+        notConfigured({ workspaceIdentityKey: "", entries: [] }, "Hook trust not available"),
+      ),
+    hook_trust_decide: p =>
+      this.callOptional("hookTrustDecide", p as GatewayMethodParams<"hookTrustDecide">, () =>
+        notConfigured({ applied: false }, "Hook trust not available"),
+      ),
+    always_on_apply: p =>
+      this.callOptional("alwaysOnApply", p as GatewayMethodParams<"alwaysOnApply">, () =>
+        notConfigured({ sessionKey: "" }, "Always-On apply not available"),
+      ),
+    always_on_rerun_plan: p =>
+      this.callOptional("alwaysOnRerunPlan", p as GatewayMethodParams<"alwaysOnRerunPlan">, () =>
+        notConfigured({ runId: "" }, "Always-On rerun not available"),
+      ),
+    always_on_list_plans: p =>
+      this.callOptional("alwaysOnListPlans", p as GatewayMethodParams<"alwaysOnListPlans">, () =>
+        notConfigured({ plans: [] }, "Always-On plans list not available"),
+      ),
+    always_on_read_report: p =>
+      this.callOptional("alwaysOnReadReport", p as GatewayMethodParams<"alwaysOnReadReport">, () =>
+        notConfigured({ content: "" }, "Always-On report not available"),
+      ),
+    always_on_list_cycles: p =>
+      this.callOptional("alwaysOnListCycles", p as GatewayMethodParams<"alwaysOnListCycles">, () =>
+        notConfigured({ cycles: [] }, "Always-On cycles list not available"),
+      ),
+    always_on_archive_cycle: p =>
+      this.callOptional("alwaysOnArchiveCycle", p as GatewayMethodParams<"alwaysOnArchiveCycle">, () =>
+        notConfigured({ archived: false }, "Always-On archive not available"),
+      ),
+    always_on_apply_cycle: p =>
+      this.callOptional("alwaysOnApplyCycle", p as GatewayMethodParams<"alwaysOnApplyCycle">, () =>
+        notConfigured({ cycle: null }, "Always-On apply not available"),
+      ),
+    knowledge_capabilities: p =>
+      this.callOptional("knowledgeCapabilities", p as GatewayMethodParams<"knowledgeCapabilities">, () =>
+        notConfigured(
+          { dataDir: "", capabilities: [], embeddingConfigured: false, rerankConfigured: false },
+          "Knowledge capabilities not available",
+        ),
+      ),
+    kanban_get: p =>
+      this.callOptional("kanbanGet", p as GatewayMethodParams<"kanbanGet">, () =>
+        notConfigured({}, "Kanban is not available"),
+      ),
+    kanban_add_card: p =>
+      this.callOptional("kanbanAddCard", p as GatewayMethodParams<"kanbanAddCard">, () =>
+        notConfigured({ card: null }, "Kanban is not available"),
+      ),
+    kanban_update_card: p =>
+      this.callOptional("kanbanUpdateCard", p as GatewayMethodParams<"kanbanUpdateCard">, () =>
+        notConfigured({ card: null }, "Kanban is not available"),
+      ),
+    kanban_move_card: p =>
+      this.callOptional("kanbanMoveCard", p as GatewayMethodParams<"kanbanMoveCard">, () =>
+        notConfigured({ ok: false }, "Kanban is not available"),
+      ),
+    kanban_archive_card: p =>
+      this.callOptional("kanbanArchiveCard", p as GatewayMethodParams<"kanbanArchiveCard">, () =>
+        notConfigured({ ok: false }, "Kanban is not available"),
+      ),
+    kanban_restore_card: p =>
+      this.callOptional("kanbanRestoreCard", p as GatewayMethodParams<"kanbanRestoreCard">, () =>
+        notConfigured({ ok: false }, "Kanban is not available"),
+      ),
+    kanban_purge_card: p =>
+      this.callOptional("kanbanPurgeCard", p as GatewayMethodParams<"kanbanPurgeCard">, () =>
+        notConfigured({ ok: false }, "Kanban is not available"),
+      ),
+    kanban_bulk_archive_cards: p =>
+      this.callOptional("kanbanBulkArchiveCards", p as GatewayMethodParams<"kanbanBulkArchiveCards">, () =>
+        notConfigured({ ok: false }, "Kanban is not available"),
+      ),
+    kanban_bulk_move_cards: p =>
+      this.callOptional("kanbanBulkMoveCards", p as GatewayMethodParams<"kanbanBulkMoveCards">, () =>
+        notConfigured({ ok: false }, "Kanban is not available"),
+      ),
+    kanban_duplicate_card: p =>
+      this.callOptional("kanbanDuplicateCard", p as GatewayMethodParams<"kanbanDuplicateCard">, () =>
+        notConfigured({ card: null }, "Kanban is not available"),
+      ),
+    kanban_move_card_to_project: p =>
+      this.callOptional("kanbanMoveCardToProject", p as GatewayMethodParams<"kanbanMoveCardToProject">, () =>
+        notConfigured({ card: null }, "Kanban is not available"),
+      ),
+    kanban_add_column: p =>
+      this.callOptional("kanbanAddColumn", p as GatewayMethodParams<"kanbanAddColumn">, () =>
+        notConfigured({ column: null }, "Kanban is not available"),
+      ),
+    kanban_rename_column: p =>
+      this.callOptional("kanbanRenameColumn", p as GatewayMethodParams<"kanbanRenameColumn">, () =>
+        notConfigured({ ok: false }, "Kanban is not available"),
+      ),
+    kanban_delete_column: p =>
+      this.callOptional("kanbanDeleteColumn", p as GatewayMethodParams<"kanbanDeleteColumn">, () =>
+        notConfigured({ ok: false }, "Kanban is not available"),
+      ),
+    kanban_reorder_columns: p =>
+      this.callOptional("kanbanReorderColumns", p as GatewayMethodParams<"kanbanReorderColumns">, () =>
+        notConfigured({ ok: false }, "Kanban is not available"),
+      ),
+    kanban_undo: p =>
+      this.callOptional("kanbanUndo", p as GatewayMethodParams<"kanbanUndo">, () =>
+        notConfigured({ ok: false }, "Kanban is not available"),
+      ),
+
+    // —— 可选：未接线 → 合成默认（非 not_configured 形状） ——
+    record_agent_status_message: p =>
+      this.callOptional("recordAgentStatusMessage", p as GatewayMethodParams<"recordAgentStatusMessage">, () => ({
+        recorded: false,
+      })),
+    active_turn_snapshot: p =>
+      this.callOptional("getActiveTurnSnapshot", p as GatewayMethodParams<"getActiveTurnSnapshot">, params => ({
+        active: false,
+        sessionKey: (params as { sessionKey?: string } | undefined)?.sessionKey ?? "",
+        events: [],
+      })),
+    reload_config: p =>
+      this.callOptional("reloadConfig", p as GatewayMethodParams<"reloadConfig">, () => ({
+        reloaded: false,
+        reason: "unsupported",
+      })),
+    prepare_weixin_login: p =>
+      this.callOptional("prepareWeixinLogin", p as GatewayMethodParams<"prepareWeixinLogin">, () => ({
+        requested: false,
+        requestedAt: new Date().toISOString(),
+        reason: "unsupported",
+      })),
+    reload_extensions: p =>
+      this.callOptional("reloadExtensions", p as GatewayMethodParams<"reloadExtensions">, () => ({
+        reloaded: false,
+        reason: "unsupported",
+      })),
+
+    // —— 可选但语义必填：未接线必须显式失败（调用方据结果做破坏性决策） ——
+    close_project_sessions: p => {
+      // 显式失败而非 not_configured 降级：调用方（项目删除）必须知道会话
+      // 是否真的排空了，否则会在活跃写入器之下删文件。
+      if (!this.options.gateway.closeProjectSessions) {
+        throw new GatewayMethodUnavailableError("Project session closure is unavailable.");
+      }
+      return this.options.gateway.closeProjectSessions(p as GatewayMethodParams<"closeProjectSessions">);
+    },
+
+    // —— skill：可选方法经 requireSkillMethod 绑定（未接线抛结构化 SkillManagerError） ——
+    skill_list: p => requireSkillMethod(this.options.gateway.skillsList, this.options.gateway)(p as never),
+    skill_read: p => requireSkillMethod(this.options.gateway.skillRead, this.options.gateway)(p as never),
+    skill_write: p => requireSkillMethod(this.options.gateway.skillWrite, this.options.gateway)(p as never),
+    skill_create: p => requireSkillMethod(this.options.gateway.skillCreate, this.options.gateway)(p as never),
+    skill_delete: p => requireSkillMethod(this.options.gateway.skillDelete, this.options.gateway)(p as never),
+    skill_import: p => requireSkillMethod(this.options.gateway.skillImport, this.options.gateway)(p as never),
+    skill_validate: p => requireSkillMethod(this.options.gateway.skillValidate, this.options.gateway)(p as never),
+    skill_scan: p => requireSkillMethod(this.options.gateway.skillScan, this.options.gateway)(p as never),
+
+    // —— kanban 订阅：走连接级 subscriber 与连接持有订阅的 manager ——
+    kanban_subscribe: p => {
+      const manager = this.options.kanban;
+      if (!manager) {
+        return Promise.resolve(notConfigured({ subscribed: false }, "Kanban is not available"));
+      }
+      const projectId = (p as { projectId?: string } | undefined)?.projectId;
+      if (typeof projectId !== "string" || projectId === "") {
+        throw new Error("kanban_subscribe requires projectId");
+      }
+      manager.subscribe(projectId, this.kanbanSubscriber);
+      return Promise.resolve({ subscribed: true });
+    },
+    kanban_unsubscribe: p => {
+      const manager = this.options.kanban;
+      if (!manager) {
+        return Promise.resolve(notConfigured({ unsubscribed: false }, "Kanban is not available"));
+      }
+      const projectId = (p as { projectId?: string } | undefined)?.projectId;
+      if (typeof projectId !== "string" || projectId === "") {
+        throw new Error("kanban_unsubscribe requires projectId");
+      }
+      manager.unsubscribe(projectId, this.kanbanSubscriber);
+      return Promise.resolve({ unsubscribed: true });
+    },
+
+    // —— 特判外的方法 ——
+    // submit_turn 由 handleRequest 事件流分支处理（16ms 缓冲 + final 帧），不进入本表；
+    // 走到这里说明前置分支被破坏，语义对齐旧 switch default。
+    submit_turn: () => {
+      throw new Error("Unknown gateway method submit_turn.");
+    },
+  };
+
   private dispatchRequest(frame: WsRequestFrame): Promise<unknown> {
-    switch (frame.method) {
-      case "abort_turn":
-        return this.options.gateway
-          .abortTurn(frame.params as GatewayMethodParams<"abortTurn">)
-          .then(() => ({ ok: true }));
-      case "steer_turn":
-        if (this.options.gateway.steerTurn) {
-          return this.options.gateway.steerTurn(frame.params as GatewayMethodParams<"steerTurn">);
-        }
-        return Promise.resolve(notConfigured({ delivered: false }, "Mid-turn steering not available"));
-      case "cancel_steer":
-        if (this.options.gateway.cancelSteer) {
-          return this.options.gateway.cancelSteer(frame.params as GatewayMethodParams<"cancelSteer">);
-        }
-        return Promise.resolve(notConfigured({ cancelled: false }, "Mid-turn steering not available"));
-      case "edit_last_turn":
-        if (this.options.gateway.editLastTurn) {
-          return this.options.gateway.editLastTurn(frame.params as GatewayMethodParams<"editLastTurn">);
-        }
-        return Promise.resolve(notConfigured({ rewritten: false }, "Edit last turn not available"));
-      case "regenerate_last_turn":
-        if (this.options.gateway.regenerateLastTurn) {
-          return this.options.gateway.regenerateLastTurn(frame.params as GatewayMethodParams<"regenerateLastTurn">);
-        }
-        return Promise.resolve(notConfigured({ rewritten: false }, "Regenerate last turn not available"));
-      case "list_sessions":
-        return this.options.gateway.listSessions(frame.params as GatewayMethodParams<"listSessions">);
-      case "resume_session":
-        return this.options.gateway.resumeSession(frame.params as GatewayMethodParams<"resumeSession">);
-      case "new_session":
-        return this.options.gateway.newSession(frame.params as GatewayMethodParams<"newSession">);
-      case "close_session":
-        return this.options.gateway
-          .closeSession(frame.params as GatewayMethodParams<"closeSession">)
-          .then(() => ({ ok: true }));
-      case "close_project_sessions":
-        // 显式失败而非 not_configured 降级：调用方（项目删除）必须知道会话
-        // 是否真的排空了，否则会在活跃写入器之下删文件。
-        if (!this.options.gateway.closeProjectSessions) {
-          throw new GatewayMethodUnavailableError("Project session closure is unavailable.");
-        }
-        return this.options.gateway.closeProjectSessions(frame.params as GatewayMethodParams<"closeProjectSessions">);
-      case "record_agent_status_message":
-        if (this.options.gateway.recordAgentStatusMessage) {
-          return this.options.gateway.recordAgentStatusMessage(
-            frame.params as GatewayMethodParams<"recordAgentStatusMessage">,
-          );
-        }
-        return Promise.resolve({ recorded: false });
-      case "describe_server":
-        return this.options.gateway.describeServer();
-      case "active_turn_snapshot":
-        if (this.options.gateway.getActiveTurnSnapshot) {
-          return this.options.gateway.getActiveTurnSnapshot(
-            frame.params as GatewayMethodParams<"getActiveTurnSnapshot">,
-          );
-        }
-        return Promise.resolve({
-          active: false,
-          sessionKey: (frame.params as { sessionKey?: string } | undefined)?.sessionKey ?? "",
-          events: [],
-        });
-      case "cron_create":
-        return this.options.gateway.cronCreate(frame.params as GatewayMethodParams<"cronCreate">);
-      case "cron_update":
-        return this.options.gateway.cronUpdate(frame.params as GatewayMethodParams<"cronUpdate">);
-      case "cron_list":
-        return this.options.gateway.cronList(frame.params as GatewayMethodParams<"cronList">);
-      case "cron_delete":
-        return this.options.gateway.cronDelete(frame.params as GatewayMethodParams<"cronDelete">);
-      case "cron_stop":
-        return this.options.gateway.cronStop(frame.params as GatewayMethodParams<"cronStop">);
-      case "cron_run_now":
-        return this.options.gateway.cronRunNow(frame.params as GatewayMethodParams<"cronRunNow">);
-      case "panel_heartbeat":
-        if (this.options.gateway.panelHeartbeat) {
-          return this.options.gateway.panelHeartbeat(frame.params as GatewayMethodParams<"panelHeartbeat">);
-        }
-        return Promise.resolve(notConfigured({ touched: 0 }, "Panel heartbeat not available"));
-      case "team_panel_snapshot":
-        if (this.options.gateway.teamPanelSnapshot) {
-          return this.options.gateway.teamPanelSnapshot(frame.params as GatewayMethodParams<"teamPanelSnapshot">);
-        }
-        return Promise.resolve(notConfigured({ teams: [] }, "Team panel snapshot not available"));
-      case "team_tool_call":
-        if (this.options.gateway.teamToolCall) {
-          return this.options.gateway.teamToolCall(frame.params as GatewayMethodParams<"teamToolCall">);
-        }
-        return Promise.resolve(
-          notConfigured(
-            { ok: false, error: { code: "not_configured", message: "Team tool call not available" } },
-            "Team tool call not available",
-          ),
-        );
-      case "elicitation_respond":
-        return this.options.gateway.respondElicitation(frame.params as GatewayMethodParams<"respondElicitation">);
-      case "permission_decide":
-        return this.options.gateway.permissionDecide(frame.params as GatewayMethodParams<"permissionDecide">);
-      case "grant_session_permission":
-        return this.options.gateway.grantSessionPermission(
-          frame.params as GatewayMethodParams<"grantSessionPermission">,
-        );
-      case "approval_list_pending":
-        if (this.options.gateway.approvalListPending) {
-          return this.options.gateway.approvalListPending(frame.params as GatewayMethodParams<"approvalListPending">);
-        }
-        return Promise.resolve(notConfigured({ pending: [] }, "Approval list not available"));
-      case "approval_decide":
-        if (this.options.gateway.approvalDecide) {
-          return this.options.gateway.approvalDecide(frame.params as GatewayMethodParams<"approvalDecide">);
-        }
-        return Promise.resolve(notConfigured({ delivered: false }, "Approval decide not available"));
-      case "hook_trust_list":
-        if (this.options.gateway.hookTrustList) {
-          return this.options.gateway.hookTrustList(frame.params as GatewayMethodParams<"hookTrustList">);
-        }
-        return Promise.resolve(notConfigured({ workspaceIdentityKey: "", entries: [] }, "Hook trust not available"));
-      case "hook_trust_decide":
-        if (this.options.gateway.hookTrustDecide) {
-          return this.options.gateway.hookTrustDecide(frame.params as GatewayMethodParams<"hookTrustDecide">);
-        }
-        return Promise.resolve(notConfigured({ applied: false }, "Hook trust not available"));
-      case "read_session_messages":
-        return this.options.gateway.readSessionMessages(frame.params as GatewayMethodParams<"readSessionMessages">);
-      case "read_subagent_messages":
-        return this.options.gateway.readSubagentMessages(frame.params as GatewayMethodParams<"readSubagentMessages">);
-      case "fork_session":
-        return this.options.gateway.forkSession(frame.params as GatewayMethodParams<"forkSession">);
-      case "list_projects":
-        return this.options.gateway.listProjects();
-      case "describe_project":
-        return this.options.gateway.describeProject(frame.params as GatewayMethodParams<"describeProject">);
-      case "reload_config":
-        if (this.options.gateway.reloadConfig) {
-          return this.options.gateway.reloadConfig();
-        }
-        return Promise.resolve({ reloaded: false, reason: "unsupported" });
-      case "prepare_weixin_login":
-        if (this.options.gateway.prepareWeixinLogin) {
-          return this.options.gateway.prepareWeixinLogin();
-        }
-        return Promise.resolve({
-          requested: false,
-          requestedAt: new Date().toISOString(),
-          reason: "unsupported",
-        });
-      case "reload_extensions":
-        if (this.options.gateway.reloadExtensions) {
-          return this.options.gateway.reloadExtensions(frame.params as GatewayMethodParams<"reloadExtensions">);
-        }
-        return Promise.resolve({ reloaded: false, reason: "unsupported" });
-      case "skill_list":
-        return requireSkillMethod(
-          this.options.gateway.skillsList,
-          this.options.gateway,
-        )(frame.params as GatewayMethodParams<"skillsList">);
-      case "skill_read":
-        return requireSkillMethod(
-          this.options.gateway.skillRead,
-          this.options.gateway,
-        )(frame.params as GatewayMethodParams<"skillRead">);
-      case "skill_write":
-        return requireSkillMethod(
-          this.options.gateway.skillWrite,
-          this.options.gateway,
-        )(frame.params as GatewayMethodParams<"skillWrite">);
-      case "skill_create":
-        return requireSkillMethod(
-          this.options.gateway.skillCreate,
-          this.options.gateway,
-        )(frame.params as GatewayMethodParams<"skillCreate">);
-      case "skill_delete":
-        return requireSkillMethod(
-          this.options.gateway.skillDelete,
-          this.options.gateway,
-        )(frame.params as GatewayMethodParams<"skillDelete">);
-      case "skill_import":
-        return requireSkillMethod(
-          this.options.gateway.skillImport,
-          this.options.gateway,
-        )(frame.params as GatewayMethodParams<"skillImport">);
-      case "skill_validate":
-        return requireSkillMethod(
-          this.options.gateway.skillValidate,
-          this.options.gateway,
-        )(frame.params as GatewayMethodParams<"skillValidate">);
-      case "skill_scan":
-        return requireSkillMethod(
-          this.options.gateway.skillScan,
-          this.options.gateway,
-        )(frame.params as GatewayMethodParams<"skillScan">);
-      case "always_on_apply":
-        if (this.options.gateway.alwaysOnApply) {
-          return this.options.gateway.alwaysOnApply(frame.params as GatewayMethodParams<"alwaysOnApply">);
-        }
-        return Promise.resolve(notConfigured({ sessionKey: "" }, "Always-On apply not available"));
-      case "always_on_rerun_plan":
-        if (this.options.gateway.alwaysOnRerunPlan) {
-          return this.options.gateway.alwaysOnRerunPlan(frame.params as GatewayMethodParams<"alwaysOnRerunPlan">);
-        }
-        return Promise.resolve(notConfigured({ runId: "" }, "Always-On rerun not available"));
-      case "always_on_list_plans":
-        if (this.options.gateway.alwaysOnListPlans) {
-          return this.options.gateway.alwaysOnListPlans(frame.params as GatewayMethodParams<"alwaysOnListPlans">);
-        }
-        return Promise.resolve(notConfigured({ plans: [] }, "Always-On plans list not available"));
-      case "always_on_read_report":
-        if (this.options.gateway.alwaysOnReadReport) {
-          return this.options.gateway.alwaysOnReadReport(frame.params as GatewayMethodParams<"alwaysOnReadReport">);
-        }
-        return Promise.resolve(notConfigured({ content: "" }, "Always-On report not available"));
-      case "always_on_list_cycles":
-        if (this.options.gateway.alwaysOnListCycles) {
-          return this.options.gateway.alwaysOnListCycles(frame.params as GatewayMethodParams<"alwaysOnListCycles">);
-        }
-        return Promise.resolve(notConfigured({ cycles: [] }, "Always-On cycles list not available"));
-      case "always_on_archive_cycle":
-        if (this.options.gateway.alwaysOnArchiveCycle) {
-          return this.options.gateway.alwaysOnArchiveCycle(frame.params as GatewayMethodParams<"alwaysOnArchiveCycle">);
-        }
-        return Promise.resolve(notConfigured({ archived: false }, "Always-On archive not available"));
-      case "always_on_apply_cycle":
-        if (this.options.gateway.alwaysOnApplyCycle) {
-          return this.options.gateway.alwaysOnApplyCycle(frame.params as GatewayMethodParams<"alwaysOnApplyCycle">);
-        }
-        return Promise.resolve(notConfigured({ cycle: null }, "Always-On apply not available"));
-      case "knowledge_capabilities":
-        if (this.options.gateway.knowledgeCapabilities) {
-          return this.options.gateway.knowledgeCapabilities(
-            frame.params as GatewayMethodParams<"knowledgeCapabilities">,
-          );
-        }
-        return Promise.resolve(
-          notConfigured(
-            { dataDir: "", capabilities: [], embeddingConfigured: false, rerankConfigured: false },
-            "Knowledge capabilities not available",
-          ),
-        );
-      case "kanban_get":
-        if (this.options.gateway.kanbanGet) {
-          return this.options.gateway.kanbanGet(frame.params as GatewayMethodParams<"kanbanGet">);
-        }
-        return Promise.resolve(notConfigured({}, "Kanban is not available"));
-      case "kanban_add_card":
-        if (this.options.gateway.kanbanAddCard) {
-          return this.options.gateway.kanbanAddCard(frame.params as GatewayMethodParams<"kanbanAddCard">);
-        }
-        return Promise.resolve(notConfigured({ card: null }, "Kanban is not available"));
-      case "kanban_update_card":
-        if (this.options.gateway.kanbanUpdateCard) {
-          return this.options.gateway.kanbanUpdateCard(frame.params as GatewayMethodParams<"kanbanUpdateCard">);
-        }
-        return Promise.resolve(notConfigured({ card: null }, "Kanban is not available"));
-      case "kanban_move_card":
-        if (this.options.gateway.kanbanMoveCard) {
-          return this.options.gateway.kanbanMoveCard(frame.params as GatewayMethodParams<"kanbanMoveCard">);
-        }
-        return Promise.resolve(notConfigured({ ok: false }, "Kanban is not available"));
-      case "kanban_archive_card":
-        if (this.options.gateway.kanbanArchiveCard) {
-          return this.options.gateway.kanbanArchiveCard(frame.params as GatewayMethodParams<"kanbanArchiveCard">);
-        }
-        return Promise.resolve(notConfigured({ ok: false }, "Kanban is not available"));
-      case "kanban_restore_card":
-        if (this.options.gateway.kanbanRestoreCard) {
-          return this.options.gateway.kanbanRestoreCard(frame.params as GatewayMethodParams<"kanbanRestoreCard">);
-        }
-        return Promise.resolve(notConfigured({ ok: false }, "Kanban is not available"));
-      case "kanban_purge_card":
-        if (this.options.gateway.kanbanPurgeCard) {
-          return this.options.gateway.kanbanPurgeCard(frame.params as GatewayMethodParams<"kanbanPurgeCard">);
-        }
-        return Promise.resolve(notConfigured({ ok: false }, "Kanban is not available"));
-      case "kanban_bulk_archive_cards":
-        if (this.options.gateway.kanbanBulkArchiveCards) {
-          return this.options.gateway.kanbanBulkArchiveCards(
-            frame.params as GatewayMethodParams<"kanbanBulkArchiveCards">,
-          );
-        }
-        return Promise.resolve(notConfigured({ ok: false }, "Kanban is not available"));
-      case "kanban_bulk_move_cards":
-        if (this.options.gateway.kanbanBulkMoveCards) {
-          return this.options.gateway.kanbanBulkMoveCards(frame.params as GatewayMethodParams<"kanbanBulkMoveCards">);
-        }
-        return Promise.resolve(notConfigured({ ok: false }, "Kanban is not available"));
-      case "kanban_duplicate_card":
-        if (this.options.gateway.kanbanDuplicateCard) {
-          return this.options.gateway.kanbanDuplicateCard(frame.params as GatewayMethodParams<"kanbanDuplicateCard">);
-        }
-        return Promise.resolve(notConfigured({ card: null }, "Kanban is not available"));
-      case "kanban_move_card_to_project":
-        if (this.options.gateway.kanbanMoveCardToProject) {
-          return this.options.gateway.kanbanMoveCardToProject(
-            frame.params as GatewayMethodParams<"kanbanMoveCardToProject">,
-          );
-        }
-        return Promise.resolve(notConfigured({ card: null }, "Kanban is not available"));
-      case "kanban_add_column":
-        if (this.options.gateway.kanbanAddColumn) {
-          return this.options.gateway.kanbanAddColumn(frame.params as GatewayMethodParams<"kanbanAddColumn">);
-        }
-        return Promise.resolve(notConfigured({ column: null }, "Kanban is not available"));
-      case "kanban_rename_column":
-        if (this.options.gateway.kanbanRenameColumn) {
-          return this.options.gateway.kanbanRenameColumn(frame.params as GatewayMethodParams<"kanbanRenameColumn">);
-        }
-        return Promise.resolve(notConfigured({ ok: false }, "Kanban is not available"));
-      case "kanban_delete_column":
-        if (this.options.gateway.kanbanDeleteColumn) {
-          return this.options.gateway.kanbanDeleteColumn(frame.params as GatewayMethodParams<"kanbanDeleteColumn">);
-        }
-        return Promise.resolve(notConfigured({ ok: false }, "Kanban is not available"));
-      case "kanban_reorder_columns":
-        if (this.options.gateway.kanbanReorderColumns) {
-          return this.options.gateway.kanbanReorderColumns(frame.params as GatewayMethodParams<"kanbanReorderColumns">);
-        }
-        return Promise.resolve(notConfigured({ ok: false }, "Kanban is not available"));
-      case "kanban_undo":
-        if (this.options.gateway.kanbanUndo) {
-          return this.options.gateway.kanbanUndo(frame.params as GatewayMethodParams<"kanbanUndo">);
-        }
-        return Promise.resolve(notConfigured({ ok: false }, "Kanban is not available"));
-      case "kanban_subscribe": {
-        const manager = this.options.kanban;
-        if (!manager) {
-          return Promise.resolve(notConfigured({ subscribed: false }, "Kanban is not available"));
-        }
-        const subParams = frame.params as { projectId?: string } | undefined;
-        const projectId = subParams?.projectId;
-        if (typeof projectId !== "string" || projectId === "") {
-          throw new Error("kanban_subscribe requires projectId");
-        }
-        manager.subscribe(projectId, this.kanbanSubscriber);
-        return Promise.resolve({ subscribed: true });
-      }
-      case "kanban_unsubscribe": {
-        const manager = this.options.kanban;
-        if (!manager) {
-          return Promise.resolve(notConfigured({ unsubscribed: false }, "Kanban is not available"));
-        }
-        const unsubParams = frame.params as { projectId?: string } | undefined;
-        const projectId = unsubParams?.projectId;
-        if (typeof projectId !== "string" || projectId === "") {
-          throw new Error("kanban_unsubscribe requires projectId");
-        }
-        manager.unsubscribe(projectId, this.kanbanSubscriber);
-        return Promise.resolve({ unsubscribed: true });
-      }
-      default:
-        throw new Error(`Unknown gateway method ${(frame as { method?: string }).method}.`);
+    // 表为 required Record，正常路径必有表项；undefined 分支只承接运行时传入 union
+    // 之外的旧方法名，语义对齐旧 switch 的 default（抛 Unknown gateway method）。
+    const dispatcher = this.methodDispatchers[frame.method as WsGatewayMethod] as
+      | ((params: unknown) => Promise<unknown>)
+      | undefined;
+    if (dispatcher === undefined) {
+      throw new Error(`Unknown gateway method ${(frame as { method?: string }).method}.`);
     }
+    return dispatcher(frame.params);
   }
 }
 
