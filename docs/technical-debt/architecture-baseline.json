@@ -45,12 +45,12 @@
     {
       "rule": "file-size",
       "file": "src/context/DefaultContextRuntime.ts",
-      "lines": 954
+      "lines": 969
     },
     {
       "rule": "file-size",
       "file": "src/gateway/client/InProcessGateway.ts",
-      "lines": 1518
+      "lines": 1512
     },
     {
       "rule": "file-size",
@@ -185,7 +185,7 @@
     {
       "rule": "file-size",
       "file": "ui/src/components/main-content-v2/FilesV2.tsx",
-      "lines": 962
+      "lines": 943
     },
     {
       "rule": "file-size",
@@ -210,7 +210,7 @@
     {
       "rule": "file-size",
       "file": "ui/src/stores/useSessionStore.ts",
-      "lines": 1352
+      "lines": 1348
     }
   ]
 }

@@ -7,9 +7,9 @@
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1082 / 187902 |
+| src TS 文件 / 行数 | 1084 / 188322 |
 | src JS 文件 | 0 |
-| tests 文件 | 629 |
+| tests 文件 | 630 |
 | ui/src 文件 / 行数 | 638 / 102219 |
 | ui/server 文件 / 行数 | 129 / 35394 |
 
@@ -32,9 +32,9 @@
 | `as unknown as`（双重断言） | 20 | ui/src(18) · adapters(1) · network(1) |
 | 裸 `console.*` | 6 | ui/server(6) |
 | 空 `catch {}` | 0 | — |
-| 无参 `catch {`（总计） | 692 | ui/server(160) · ui/src(125) · adapters(70) |
+| 无参 `catch {`（总计） | 697 | ui/server(160) · ui/src(125) · adapters(70) |
 | ↳ **无注释**（隐患类，目标） | **0** | — |
-| ↳ 已带意图注释 | 692 | — |
+| ↳ 已带意图注释 | 697 | — |
 | `TODO/HACK/FIXME/XXX` | 11 | always-on(4) · tests(4) · ui/src(2) |
 | 分层违规 `ui/server→src` | 15 | — |
 | 分层违规 `src→ui` | 0 | — |
@@ -162,7 +162,7 @@
 | tool | 68 |
 | agent | 60 |
 | knowledge | 39 |
-| context | 37 |
+| context | 38 |
 | gateway | 34 |
 | model | 33 |
 | session | 28 |
@@ -191,7 +191,7 @@
 | runtime | 1 |
 | status | 1 |
 
-| **合计** | **602** |
+| **合计** | **603** |
 
 ## i18n en/zh-CN 对齐
 

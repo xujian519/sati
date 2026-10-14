@@ -148,10 +148,17 @@ export {
   type ContextMemoryMessage,
   type MemoryCaptureTurnInput,
   type MemoryDiagnostic,
+  type MemoryHit,
   type MemoryResolver,
   type MemoryRetrieveInput,
   type MemoryRetrieveResult,
 } from "./memory/MemoryResolver.js";
+export {
+  FileRecallLogSink,
+  type RecallLogEntry,
+  type RecallLogSink,
+  type RecallLogSkipReason,
+} from "./memory/recall-log.js";
 export { EdgeClawMemoryProvider } from "./memory/EdgeClawMemoryProvider.js";
 export {
   createEdgeClawMemoryProviderFromConfig,

@@ -621,3 +621,13 @@ entries:
     waiver:
       - kind: drill_missing
         reason: "现有 run.spec.ts 仅测纯函数、未演练失败路径（候选补测）"
+
+  # ---------- 记忆召回日志（WS1，2026-10-14） ----------
+  - id: memory-recall-log-db
+    component: src/context/memory/recall-log.ts
+    dependency: "记忆召回日志库（Sati 自有状态文件，~/.sati/state/memory-recall-log.db）"
+    failDirection: open
+    degradedBehavior: "打开/写入失败 → 一次性 warn 后 fail-open 停用（disabled 标记），检索与注入主流程不受影响"
+    degradedImpact: "运营侧丢失该会话的记忆召回可观测性（谁检索了什么/注入了什么/是否被引用）；agent 功能无损"
+    observability: "logger context:memory-recall-log 一次性 warn（含路径与原因）；registry 语义见 docs/notes/2026-10-14-memory-recall-log.md"
+    negativeDrill: tests/context/memory/recall-log.spec.ts

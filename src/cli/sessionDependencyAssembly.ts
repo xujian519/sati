@@ -28,6 +28,7 @@ import {
   type MemoryResolver,
   MicroCompactionEngine,
   type PluginRuntimeExtensionResolver,
+  FileRecallLogSink,
   SnipEngine,
   type TokenAccountingRuntime,
   TokenBudgetManager,
@@ -43,6 +44,8 @@ import { createAgentProjectSessionStorage } from "../session/index.js";
 import { FileHistoryStore } from "../session/filesystem/FileHistoryStore.js";
 import type { ResumeSessionDependencyExtension } from "../session/resume/resumeAgentSession.js";
 import { createPlanFileManager, type ToolRegistry } from "../tool/index.js";
+import { brandEnv, ENV_KEY } from "../env.js";
+import { getRecallLogDbPath } from "../shared/paths/pilotPaths.js";
 import { createAutoElicitationChannel } from "./gatewaySupport.js";
 
 /** buildSessionDependencies 需要读的 ProjectRuntime 投影（类内 ProjectRuntime 不导出）。 */
@@ -201,6 +204,11 @@ export function buildSessionDependencies(deps: SessionDependenciesInput): Sessio
       projectRoot,
       patentDomainEnabled: runtime.patentDomainEnabled,
       memoryResolver,
+      // 召回日志（WS1）：Sati 自有状态库（env SATI_RECALL_LOG_DB 可覆盖），
+      // 与 knowledge.db 解耦；打开失败 fail-open（registry 已登记）。
+      recallLog: new FileRecallLogSink(
+        brandEnv(process.env, ENV_KEY.RECALL_LOG_DB) ?? getRecallLogDbPath(deps.pilotHome),
+      ),
       memoryRetrievalTimeoutMs: runtime.snapshot.config.memory?.retrievalTimeoutMs,
       memoryInjectionBudgetMs: runtime.snapshot.config.memory?.injectionBudgetMs,
       // 项目知识偏好透传：knowledge provider 据此强制注入/加权审查标准
