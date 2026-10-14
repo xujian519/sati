@@ -17,22 +17,22 @@
  * 渲染器选择走 SATI_FIGURE_RENDERER 环境变量（builtin 默认 / graphviz 系统 dot /
  * graphviz-wasm 打包 WASM，后两者均为复杂大图可选增强）：环境变量而非 inputSchema
  * 选项，避免动 llm-replay 请求键。默认保持 builtin——改默认会使全部快照与既有行为突变。
+ *
+ * P2.5（issue #646）：execute 的 322 行按「入参校验 → 渲染管线 → 产物装配 → 报告」
+ * 分层；渲染器解析与逐幅落盘收敛到模块级函数，与 project/check 逐字重复的入参管线
+ * 收进 patentFigureShared.ts。
  */
 
 import { mkdir, writeFile } from "node:fs/promises";
-import { isAbsolute, resolve } from "node:path";
+import { resolve } from "node:path";
 import {
   FIGURE_RENDERER_ENV,
-  FIGURE_TEXT_TO_PATH_ENV,
-  INKSCAPE_CMD_ENV,
   buildFigureBriefDraft,
   buildFigureSidecar,
   checkFigures,
   createWasmDotRunner,
   exportSvgTextToPath,
   figureCaption,
-  inkscapeInstallHint,
-  isFigureTextToPathEnabled,
   MM_PER_INCH,
   profileForJurisdiction,
   pxToMm,
@@ -40,7 +40,6 @@ import {
   renderFigureSvgWithGraphviz,
   renderFiguresHtml,
   resolveDotBinary,
-  resolveInkscapeCmd,
   sheetNumberText,
   shouldRenderCaption,
   writeFigureSidecar,
@@ -52,8 +51,8 @@ import {
   type FigureSpec,
   type InkscapeProbe,
   type Jurisdiction,
+  type OfficeProfile,
 } from "../../patent/figuregen/index.js";
-import { caseOutputsDir } from "../../patent/paths.js";
 import { SatiToolRuntimeError } from "../protocol/errors.js";
 import type { SatiToolDefinition, SatiToolRuntimeContext } from "../protocol/types.js";
 import {
@@ -64,8 +63,14 @@ import {
   JURISDICTIONS,
   toFigureCount,
   toJurisdiction,
-  toSheet,
 } from "./patentFigureSchema.js";
+import {
+  assertFigureOutputName,
+  resolveFigureOutputDir,
+  resolveInkscapeProbe,
+  toDocumentKind,
+  validateSheetArgs,
+} from "./patentFigureShared.js";
 
 export type PatentFigureGenerateInput = {
   figures: FigureSpec[];
@@ -108,6 +113,200 @@ function resolveFigureRenderer(env: NodeJS.ProcessEnv = process.env): FigureRend
     `非法 ${FIGURE_RENDERER_ENV} "${value}"（可用: builtin, graphviz, graphviz-wasm）`,
     { tool: "patent_figure_generate" },
   );
+}
+
+/** 渲染产物清单条目（sidecar 的 files 与 data.figures 共用）。 */
+type RenderedFigureFile = {
+  path: string;
+  figure_no: number;
+  caption?: string;
+  sheet?: FigureSidecarSheet;
+  layout?: FigureSidecarLayout;
+};
+
+/** 渲染管线：环境变量解析 + 渲染器依赖探测 + 逐幅渲染闭包。 */
+function resolveRenderPipeline(
+  figures: FigureSpec[],
+  jurisdiction: Jurisdiction,
+  figureCount: number,
+  tool: string,
+): { renderer: FigureRenderer; renderOne: (figure: FigureSpec) => Promise<string> } {
+  const renderer = resolveFigureRenderer();
+  let dotPath: string | null = null;
+  let wasmRunner: DotRunner | undefined;
+  if (renderer === "graphviz") {
+    dotPath = resolveDotBinary();
+    if (dotPath === null) {
+      throw new SatiToolRuntimeError(
+        "tool_execution_failed",
+        `${FIGURE_RENDERER_ENV}=graphviz 但未找到 graphviz dot 可执行文件：请安装 graphviz（brew install graphviz），` +
+          `或用 SATI_GRAPHVIZ_DOT 指定 dot 路径；改回内置渲染器可 unset ${FIGURE_RENDERER_ENV}`,
+        { tool },
+      );
+    }
+  } else if (renderer === "graphviz-wasm") {
+    // graphviz-wasm 不依赖系统 dot 二进制；WASM 加载失败在首次渲染时 fail-loud，
+    // 绝不静默回退内置渲染器（那会让"要 graphviz 布局"的意图被悄悄违背）。
+    wasmRunner = createWasmDotRunner();
+  }
+  // 曲线图只能由内置渲染器绘制（graphviz 画不出坐标轴与数据曲线）：先于落盘整体拒绝，
+  // 避免"前几幅写盘、后几幅报错"的半成品目录。
+  if (renderer !== "builtin") {
+    const chartFigure = figures.find(figure => figure.kind === "chart");
+    if (chartFigure !== undefined) {
+      throw new SatiToolRuntimeError(
+        "tool_execution_failed",
+        `图${chartFigure.figure_no} 是曲线图（kind="chart"），${FIGURE_RENDERER_ENV} 通路（${renderer}）无法绘制：` +
+          `请去掉 ${FIGURE_RENDERER_ENV} 或设为 builtin 后重试（曲线图走内置矢量渲染器）`,
+        { tool, figure_no: chartFigure.figure_no },
+      );
+    }
+  }
+  const renderOne = async (figure: FigureSpec): Promise<string> => {
+    if (renderer === "graphviz" && dotPath !== null) {
+      return (await renderFigureSvgWithGraphviz(figure, { dotPath, jurisdiction, figureCount })).svg;
+    }
+    if (renderer === "graphviz-wasm" && wasmRunner !== undefined) {
+      return (await renderFigureSvgWithGraphviz(figure, { runner: wasmRunner, jurisdiction, figureCount })).svg;
+    }
+    return renderFigureSvg(figure, { jurisdiction, figureCount }).svg;
+  };
+  return { renderer, renderOne };
+}
+
+/**
+ * 逐幅产物装配：渲染 + SVG 落盘 + 可选落版页（文件名形态与 layout 字段与 CAD 通路
+ * 共用 writeSubmissionPageArtifact，见 figuregen/deliverables.ts）。
+ */
+async function renderFigureArtifacts(args: {
+  figures: FigureSpec[];
+  renderOne: (figure: FigureSpec) => Promise<string>;
+  outputDir: string;
+  outputName: string;
+  profile: OfficeProfile;
+  sheet: { index: number; total: number } | undefined;
+  sheetText: string | undefined;
+  fitToPage: boolean | undefined;
+  figureCount: number;
+  sourceCharMm: number;
+}): Promise<{
+  files: RenderedFigureFile[];
+  pagePaths: { path: string; figure_no: number }[];
+  renderedSvgs: Map<number, string>;
+}> {
+  const { figures, renderOne, outputDir, outputName, profile, sheet, sheetText, sourceCharMm } = args;
+  const files: RenderedFigureFile[] = [];
+  const renderedSvgs = new Map<number, string>();
+  const pagePaths: { path: string; figure_no: number }[] = [];
+  for (const figure of figures) {
+    const svg = await renderOne(figure);
+    const path = resolve(outputDir, `${outputName}-fig${figure.figure_no}.svg`);
+    await writeFile(path, svg, "utf8");
+    const caption = figureCaption(profile, figure.figure_no, args.figureCount);
+    const entry: RenderedFigureFile = { path, figure_no: figure.figure_no };
+    if (caption !== undefined) entry.caption = caption;
+    if (sheet !== undefined && sheetText !== undefined) entry.sheet = { ...sheet, text: sheetText };
+    renderedSvgs.set(figure.figure_no, svg);
+
+    // 落版页（附加产物）：图号在图形下、页码在版心上沿，法域档案同时决定纸面常数与编号体例。
+    // 页面层不再画图号：图形自身已把图号画在标注带上（4.3「标注在相应附图的正下方」），
+    // 而需要编号时图形必有图号、不需要编号时（pct/us 单幅）页面也不得出现 "Fig."。
+    if (args.fitToPage === true) {
+      // 落版页的装配（文件名形态 + sidecar 的 layout 字段）与 CAD 通路共用一份实现，
+      // 避免"新增附加产物要改两处、漏改则同一工具族给出不同 sidecar"。
+      const page = await writeSubmissionPageArtifact({
+        outputDir,
+        outputName,
+        figureNo: figure.figure_no,
+        drawingSvg: svg,
+        office: profile.office,
+        ...(sheet === undefined || sheetText === undefined
+          ? {}
+          : { sheet: { index: sheet.index, total: sheet.total } }),
+        sourceCharHeightMm: sourceCharMm,
+      });
+      pagePaths.push({ path: page.path, figure_no: figure.figure_no });
+      entry.layout = page.layout;
+    }
+    files.push(entry);
+  }
+  return { files, pagePaths, renderedSvgs };
+}
+
+/** 文本转路径收尾（可选，最后一步）：全部 SVG 落盘之后、sidecar 落盘之前。 */
+async function exportFiguresTextToPath(paths: readonly string[], inkscape: InkscapeProbe, tool: string): Promise<void> {
+  for (const svgPath of paths) {
+    const outcome = await exportSvgTextToPath({ path: svgPath, cmd: inkscape.cmd });
+    if (!outcome.ok) {
+      throw new SatiToolRuntimeError(
+        "tool_execution_failed",
+        `文本转路径失败（${svgPath}）：${outcome.error}${
+          outcome.installHint === undefined ? "" : `——${outcome.installHint}`
+        }`,
+        { tool, path: svgPath, reason: outcome.reason },
+      );
+    }
+  }
+}
+
+/** 报告文本（行式摘要：逐幅路径、图号体例、页码、落版页、sidecar、核验发现与附图说明草稿）。 */
+function buildGenerateReportLines(args: {
+  files: RenderedFigureFile[];
+  pagePaths: { path: string; figure_no: number }[];
+  profile: OfficeProfile;
+  jurisdiction: Jurisdiction;
+  figureCount: number;
+  captionRendered: boolean;
+  sheetText: string | undefined;
+  sheetTotal: number | undefined;
+  sidecarPath: string;
+  htmlPath: string | undefined;
+  check: ReturnType<typeof checkFigures>;
+  brief: boolean | undefined;
+  figures: FigureSpec[];
+  inventionName: string | undefined;
+  documentKind: DocumentKind | undefined;
+  rendererLabel: string | undefined;
+}): string[] {
+  const { files, pagePaths, profile, jurisdiction, figureCount, captionRendered } = args;
+  const { sheetText, sheetTotal, sidecarPath, htmlPath, check, brief, figures, rendererLabel } = args;
+  const lines: string[] = [
+    `已生成 ${files.length} 幅附图（黑白线条，审查指南一部一章 4.3/4.6 合规` +
+      (rendererLabel === undefined ? "）：" : `；渲染器: ${rendererLabel}）：`),
+    ...files.map(file => `- 图${file.figure_no}: ${file.path}`),
+    `- 图号：${captionRendered ? `${figureCaption(profile, 1, figureCount)} 式样，标注在图形正下方` : "本案仅一幅附图，按 " + profile.office + " 档案不标注图号"}` +
+      `（法域 ${jurisdiction} ⇒ 档案 ${profile.office}）`,
+    ...(sheetText === undefined
+      ? []
+      : [`- 附图页页码：本图页写作 ${sheetText}（${files.length} 幅，共 ${sheetTotal} 页）`]),
+    ...pagePaths.map(page => `- 提交落版页（A4 整页，图号在图下、页码在版心上沿）: ${page.path}`),
+    `- 附图 sidecar（FigureSpec 与生成期核验留痕，供 patent_figure_check / 附图门禁复用）: ${sidecarPath}`,
+  ];
+  if (htmlPath !== undefined) {
+    lines.push(`A4 打印版式 HTML（PDF 可经 export_html 产出）: ${htmlPath}`);
+  }
+
+  if (check.findings.length > 0) {
+    lines.push(
+      "",
+      "附图结构核验（生成期 spec_text 为空，V2/V3 结果以 patent_figure_check 提交说明书后为准）：",
+      ...check.findings.map(
+        finding =>
+          `- [${finding.severity.toUpperCase()}] ${finding.rule}: ${finding.message}` +
+          (finding.evidence ? `\n  ${finding.evidence.join("\n  ")}` : ""),
+      ),
+    );
+  }
+
+  if (brief !== false) {
+    const briefDraft = buildFigureBriefDraft(figures, {
+      inventionName: args.inventionName,
+      documentKind: args.documentKind,
+      jurisdiction: jurisdiction,
+    });
+    lines.push("", "--- 附图说明草稿（可直接并入说明书） ---", briefDraft);
+  }
+  return lines;
 }
 
 export function createPatentFigureGenerateTool(): SatiToolDefinition<PatentFigureGenerateInput> {
@@ -209,82 +408,35 @@ export function createPatentFigureGenerateTool(): SatiToolDefinition<PatentFigur
     isReadOnly: () => false,
     isConcurrencySafe: () => true,
     async execute(input, context: SatiToolRuntimeContext) {
+      const tool = "patent_figure_generate";
       const figures = input.figures;
       if (!Array.isArray(figures) || figures.length === 0) {
         throw new SatiToolRuntimeError("invalid_tool_input", "figures 不能为空（至少 1 幅附图）", {
-          tool: "patent_figure_generate",
+          tool,
         });
       }
-      assertFigurePayloads(figures, "patent_figure_generate");
+      assertFigurePayloads(figures, tool);
       // 字体独立导出（`SATI_FIGURE_TEXT_TO_PATH`，默认关）：**先探测、后落盘**——若开关
       // 开了却没有 Inkscape，必须在写出任何产物之前 fail-loud，否则会留下"图形已落盘但
       // 没转路径"的半成品目录（调用方拿到的产物与声明不符）。
-      const textToPath = isFigureTextToPathEnabled();
-      let inkscape: InkscapeProbe | undefined;
-      if (textToPath) {
-        try {
-          inkscape = resolveInkscapeCmd();
-        } catch (err) {
-          throw new SatiToolRuntimeError(
-            "invalid_tool_input",
-            `${FIGURE_TEXT_TO_PATH_ENV} 已开启，但 ${INKSCAPE_CMD_ENV} 指向的可执行文件不可用：${
-              err instanceof Error ? err.message : String(err)
-            }`,
-            { tool: "patent_figure_generate" },
-          );
-        }
-        if (inkscape === undefined) {
-          throw new SatiToolRuntimeError(
-            "tool_execution_failed",
-            `${FIGURE_TEXT_TO_PATH_ENV} 已开启但未找到 Inkscape：${inkscapeInstallHint()}`,
-            { tool: "patent_figure_generate" },
-          );
-        }
-      }
+      const inkscape = resolveInkscapeProbe(tool);
       // `format` 此前在 SVGs 与 sidecar 都已落盘**之后**才校验：非法值会先写出一个半成品
       // 输出目录、再抛错。入参校验集中到落盘之前。
       const format = input.format ?? "svg";
       if (!FORMATS.includes(format)) {
         throw new SatiToolRuntimeError("invalid_tool_input", `非法 format "${format}"（可用: ${FORMATS.join(", ")}）`, {
-          tool: "patent_figure_generate",
+          tool,
           format,
         });
       }
-      if (!/^[A-Za-z0-9._\-\u4e00-\u9fa5]{1,100}$/u.test(input.output_name)) {
-        throw new SatiToolRuntimeError("invalid_tool_input", `非法 output_name: ${JSON.stringify(input.output_name)}`, {
-          tool: "patent_figure_generate",
-        });
-      }
+      assertFigureOutputName(input.output_name, tool);
 
-      const documentKind: DocumentKind | undefined =
-        input.document_kind === "utility" ? "utility" : input.document_kind === "invention" ? "invention" : undefined;
-      const jurisdiction: Jurisdiction = toJurisdiction(input.jurisdiction);
+      const documentKind = toDocumentKind(input.document_kind);
+      const jurisdiction = toJurisdiction(input.jurisdiction);
       const profile = profileForJurisdiction(jurisdiction);
       const figureCount = toFigureCount(input.figure_count, figures.length);
-      const sheet = toSheet({ sheet_index: input.sheet_index, sheet_total: input.sheet_total });
-      if (sheet === undefined && (input.sheet_index !== undefined || input.sheet_total !== undefined)) {
-        throw new SatiToolRuntimeError(
-          "invalid_tool_input",
-          "sheet_index 与 sheet_total 须成对给出且均 ≥1（附图页码体例由法域档案决定，缺一项无法判定）",
-          { tool: "patent_figure_generate" },
-        );
-      }
-      if (sheet !== undefined && sheet.index > sheet.total) {
-        throw new SatiToolRuntimeError(
-          "invalid_tool_input",
-          `sheet_index ${sheet.index} 超出 sheet_total ${sheet.total}`,
-          { tool: "patent_figure_generate" },
-        );
-      }
-
-      const outputDir =
-        input.output_dir !== undefined
-          ? isAbsolute(input.output_dir)
-            ? input.output_dir
-            : resolve(context.cwd, input.output_dir)
-          : input.case_id !== undefined
-            ? resolve(context.cwd, caseOutputsDir(input.case_id))
-            : resolve(context.cwd, ".sati", "figures");
+      const sheet = validateSheetArgs(input, tool);
+      const outputDir = resolveFigureOutputDir(input, context.cwd);
       await mkdir(outputDir, { recursive: true });
 
       try {
@@ -297,108 +449,33 @@ export function createPatentFigureGenerateTool(): SatiToolDefinition<PatentFigur
           jurisdiction: jurisdiction,
           figureCount,
         });
-        const renderer = resolveFigureRenderer();
-        let dotPath: string | null = null;
-        let wasmRunner: DotRunner | undefined;
-        if (renderer === "graphviz") {
-          dotPath = resolveDotBinary();
-          if (dotPath === null) {
-            throw new SatiToolRuntimeError(
-              "tool_execution_failed",
-              `${FIGURE_RENDERER_ENV}=graphviz 但未找到 graphviz dot 可执行文件：请安装 graphviz（brew install graphviz），` +
-                `或用 SATI_GRAPHVIZ_DOT 指定 dot 路径；改回内置渲染器可 unset ${FIGURE_RENDERER_ENV}`,
-              { tool: "patent_figure_generate" },
-            );
-          }
-        } else if (renderer === "graphviz-wasm") {
-          // graphviz-wasm 不依赖系统 dot 二进制；WASM 加载失败在首次渲染时 fail-loud，
-          // 绝不静默回退内置渲染器（那会让"要 graphviz 布局"的意图被悄悄违背）。
-          wasmRunner = createWasmDotRunner();
-        }
-        // 曲线图只能由内置渲染器绘制（graphviz 画不出坐标轴与数据曲线）：先于落盘整体拒绝，
-        // 避免"前几幅写盘、后几幅报错"的半成品目录。
-        if (renderer !== "builtin") {
-          const chartFigure = figures.find(figure => figure.kind === "chart");
-          if (chartFigure !== undefined) {
-            throw new SatiToolRuntimeError(
-              "tool_execution_failed",
-              `图${chartFigure.figure_no} 是曲线图（kind="chart"），${FIGURE_RENDERER_ENV} 通路（${renderer}）无法绘制：` +
-                `请去掉 ${FIGURE_RENDERER_ENV} 或设为 builtin 后重试（曲线图走内置矢量渲染器）`,
-              { tool: "patent_figure_generate", figure_no: chartFigure.figure_no },
-            );
-          }
-        }
-        const renderOne = async (figure: FigureSpec): Promise<string> => {
-          if (renderer === "graphviz" && dotPath !== null) {
-            return (await renderFigureSvgWithGraphviz(figure, { dotPath, jurisdiction, figureCount })).svg;
-          }
-          if (renderer === "graphviz-wasm" && wasmRunner !== undefined) {
-            return (await renderFigureSvgWithGraphviz(figure, { runner: wasmRunner, jurisdiction, figureCount })).svg;
-          }
-          return renderFigureSvg(figure, { jurisdiction, figureCount }).svg;
-        };
-        const files: {
-          path: string;
-          figure_no: number;
-          caption?: string;
-          sheet?: FigureSidecarSheet;
-          layout?: FigureSidecarLayout;
-        }[] = [];
-        const renderedSvgs = new Map<number, string>();
+        const { renderer, renderOne } = resolveRenderPipeline(figures, jurisdiction, figureCount, tool);
         const captionRendered = shouldRenderCaption(profile, figureCount);
         const sourceCharMm = renderer === "graphviz" ? (14 / 72) * MM_PER_INCH : pxToMm(14);
         const sheetText = sheet === undefined ? undefined : sheetNumberText(profile, sheet.index, sheet.total);
-        const pagePaths: { path: string; figure_no: number }[] = [];
-        for (const figure of figures) {
-          const svg = await renderOne(figure);
-          const path = resolve(outputDir, `${input.output_name}-fig${figure.figure_no}.svg`);
-          await writeFile(path, svg, "utf8");
-          const caption = figureCaption(profile, figure.figure_no, figureCount);
-          const entry: (typeof files)[number] = { path, figure_no: figure.figure_no };
-          if (caption !== undefined) entry.caption = caption;
-          if (sheet !== undefined && sheetText !== undefined) entry.sheet = { ...sheet, text: sheetText };
-          renderedSvgs.set(figure.figure_no, svg);
-
-          // 落版页（附加产物）：图号在图形下、页码在版心上沿，法域档案同时决定纸面常数与编号体例。
-          // 页面层不再画图号：图形自身已把图号画在标注带上（4.3「标注在相应附图的正下方」），
-          // 而需要编号时图形必有图号、不需要编号时（pct/us 单幅）页面也不得出现 "Fig."。
-          if (input.fit_to_page === true) {
-            // 落版页的装配（文件名形态 + sidecar 的 layout 字段）与 CAD 通路共用一份实现，
-            // 避免"新增附加产物要改两处、漏改则同一工具族给出不同 sidecar"。
-            const page = await writeSubmissionPageArtifact({
-              outputDir,
-              outputName: input.output_name,
-              figureNo: figure.figure_no,
-              drawingSvg: svg,
-              office: profile.office,
-              ...(sheet === undefined || sheetText === undefined
-                ? {}
-                : { sheet: { index: sheet.index, total: sheet.total } }),
-              sourceCharHeightMm: sourceCharMm,
-            });
-            pagePaths.push({ path: page.path, figure_no: figure.figure_no });
-            entry.layout = page.layout;
-          }
-          files.push(entry);
-        }
+        const { files, pagePaths, renderedSvgs } = await renderFigureArtifacts({
+          figures,
+          renderOne,
+          outputDir,
+          outputName: input.output_name,
+          profile,
+          sheet,
+          sheetText,
+          fitToPage: input.fit_to_page,
+          figureCount,
+          sourceCharMm,
+        });
 
         // 字体独立导出（可选收尾，最后一步）：把字形换成轮廓路径，使交付物不依赖读者机器
         // 上的字体。放在**全部 SVG 落盘之后、sidecar 落盘之前**——此后不再有模块解析这些
         // 文件的文本，而 sidecar 需要记录"产物已转路径"这一事实（回读语义见 sidecar.ts
         // 的 text_to_path：转路径后图面上的文字不再是 `<text>`，"可见图号"读不到不等于没有）。
         if (inkscape !== undefined) {
-          for (const svgPath of [...files.map(file => file.path), ...pagePaths.map(page => page.path)]) {
-            const outcome = await exportSvgTextToPath({ path: svgPath, cmd: inkscape.cmd });
-            if (!outcome.ok) {
-              throw new SatiToolRuntimeError(
-                "tool_execution_failed",
-                `文本转路径失败（${svgPath}）：${outcome.error}${
-                  outcome.installHint === undefined ? "" : `——${outcome.installHint}`
-                }`,
-                { tool: "patent_figure_generate", path: svgPath, reason: outcome.reason },
-              );
-            }
-          }
+          await exportFiguresTextToPath(
+            [...files.map(file => file.path), ...pagePaths.map(page => page.path)],
+            inkscape,
+            tool,
+          );
         }
 
         // 附图产物 sidecar（v1）：把 FigureSpec 完整落盘，供下游在**有说明书文本时**
@@ -431,42 +508,24 @@ export function createPatentFigureGenerateTool(): SatiToolDefinition<PatentFigur
 
         const rendererLabel: string | undefined =
           renderer === "graphviz" ? "graphviz dot" : renderer === "graphviz-wasm" ? "graphviz (WASM)" : undefined;
-        const lines: string[] = [
-          `已生成 ${files.length} 幅附图（黑白线条，审查指南一部一章 4.3/4.6 合规` +
-            (rendererLabel === undefined ? "）：" : `；渲染器: ${rendererLabel}）：`),
-          ...files.map(file => `- 图${file.figure_no}: ${file.path}`),
-          `- 图号：${captionRendered ? `${figureCaption(profile, 1, figureCount)} 式样，标注在图形正下方` : "本案仅一幅附图，按 " + profile.office + " 档案不标注图号"}` +
-            `（法域 ${jurisdiction} ⇒ 档案 ${profile.office}）`,
-          ...(sheetText === undefined
-            ? []
-            : [`- 附图页页码：本图页写作 ${sheetText}（${files.length} 幅，共 ${sheet!.total} 页）`]),
-          ...pagePaths.map(page => `- 提交落版页（A4 整页，图号在图下、页码在版心上沿）: ${page.path}`),
-          `- 附图 sidecar（FigureSpec 与生成期核验留痕，供 patent_figure_check / 附图门禁复用）: ${sidecarPath}`,
-        ];
-        if (htmlPath !== undefined) {
-          lines.push(`A4 打印版式 HTML（PDF 可经 export_html 产出）: ${htmlPath}`);
-        }
-
-        if (check.findings.length > 0) {
-          lines.push(
-            "",
-            "附图结构核验（生成期 spec_text 为空，V2/V3 结果以 patent_figure_check 提交说明书后为准）：",
-            ...check.findings.map(
-              finding =>
-                `- [${finding.severity.toUpperCase()}] ${finding.rule}: ${finding.message}` +
-                (finding.evidence ? `\n  ${finding.evidence.join("\n  ")}` : ""),
-            ),
-          );
-        }
-
-        if (input.brief !== false) {
-          const briefDraft = buildFigureBriefDraft(figures, {
-            inventionName: input.invention_name,
-            documentKind: documentKind,
-            jurisdiction: jurisdiction,
-          });
-          lines.push("", "--- 附图说明草稿（可直接并入说明书） ---", briefDraft);
-        }
+        const lines = buildGenerateReportLines({
+          files,
+          pagePaths,
+          profile,
+          jurisdiction,
+          figureCount,
+          captionRendered,
+          sheetText,
+          sheetTotal: sheet?.total,
+          sidecarPath,
+          htmlPath,
+          check,
+          brief: input.brief,
+          figures,
+          inventionName: input.invention_name,
+          documentKind,
+          rendererLabel,
+        });
 
         const data = {
           output_name: input.output_name,
@@ -526,7 +585,7 @@ export function createPatentFigureGenerateTool(): SatiToolDefinition<PatentFigur
         if (err instanceof SatiToolRuntimeError) throw err;
         const message = err instanceof Error ? err.message : String(err);
         throw new SatiToolRuntimeError("tool_execution_failed", `patent_figure_generate 执行失败: ${message}`, {
-          tool: "patent_figure_generate",
+          tool,
         });
       }
     },
