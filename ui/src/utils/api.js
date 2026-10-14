@@ -609,6 +609,52 @@ export const api = {
     },
   },
 
+  // 知识草稿确认（WS2）：ui/server /api/knowledge-drafts/* → gateway HTTP 面透传。
+  // list 返回 { drafts }；confirm 返回 { ok, documentId }；reject 返回 { ok }；
+  // gateway 的 404/409/500 语义原样透传（降级不静默）。
+  knowledgeDrafts: {
+    list: async limit => {
+      const query = limit === undefined ? "" : `?limit=${encodeURIComponent(String(limit))}`;
+      const response = await authenticatedFetch(`/api/knowledge-drafts${query}`);
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        const { default: i18n } = await import("../i18n/config.js");
+        throw new Error(
+          payload?.error?.message || i18n.t("knowledgeDrafts:errors.requestFailed", { status: response.status }),
+        );
+      }
+      return payload;
+    },
+    confirm: async id => {
+      const response = await authenticatedFetch("/api/knowledge-drafts/confirm", {
+        method: "POST",
+        body: JSON.stringify({ id }),
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        const { default: i18n } = await import("../i18n/config.js");
+        throw new Error(
+          payload?.error?.message || i18n.t("knowledgeDrafts:errors.requestFailed", { status: response.status }),
+        );
+      }
+      return payload;
+    },
+    reject: async id => {
+      const response = await authenticatedFetch("/api/knowledge-drafts/reject", {
+        method: "POST",
+        body: JSON.stringify({ id }),
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        const { default: i18n } = await import("../i18n/config.js");
+        throw new Error(
+          payload?.error?.message || i18n.t("knowledgeDrafts:errors.requestFailed", { status: response.status }),
+        );
+      }
+      return payload;
+    },
+  },
+
   // Generic GET method for any endpoint
   get: endpoint => authenticatedFetch(`/api${endpoint}`),
 

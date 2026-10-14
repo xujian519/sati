@@ -1,0 +1,14 @@
+{
+  "title": "知识草稿待确认",
+  "subtitle_one": "agent 提交了 {{count}} 条笔记草稿，尚未入库",
+  "subtitle_other": "agent 提交了 {{count}} 条笔记草稿，尚未入库",
+  "expand": "查看草稿",
+  "collapse": "收起",
+  "confirm": "确认入库",
+  "reject": "拒绝",
+  "footer": "草稿经确认后才会进入可检索的知识库；拒绝记录保留 90 天作为负记忆，防止同一内容被反复提交。",
+  "dismiss": "稍后再说",
+  "errors": {
+    "requestFailed": "知识草稿请求失败（{{status}}）"
+  }
+}

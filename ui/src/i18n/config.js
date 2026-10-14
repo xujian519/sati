@@ -31,6 +31,7 @@ import enTeamPanel from "./locales/en/teamPanel.json";
 import enStylePanel from "./locales/en/stylePanel.json";
 import enKanban from "./locales/en/kanban.json";
 import enHookTrust from "./locales/en/hookTrust.json";
+import enKnowledgeDrafts from "./locales/en/knowledgeDrafts.json";
 import zhCommon from "./locales/zh-CN/common.json";
 import zhSettings from "./locales/zh-CN/settings.json";
 import zhAuth from "./locales/zh-CN/auth.json";
@@ -44,6 +45,7 @@ import zhTeamPanel from "./locales/zh-CN/teamPanel.json";
 import zhStylePanel from "./locales/zh-CN/stylePanel.json";
 import zhKanban from "./locales/zh-CN/kanban.json";
 import zhHookTrust from "./locales/zh-CN/hookTrust.json";
+import zhKnowledgeDrafts from "./locales/zh-CN/knowledgeDrafts.json";
 import { languages } from "./languages.js";
 
 const getSavedLanguage = () => {
@@ -78,6 +80,7 @@ i18n
         stylePanel: enStylePanel,
         kanban: enKanban,
         hookTrust: enHookTrust,
+        knowledgeDrafts: enKnowledgeDrafts,
       },
       "zh-CN": {
         common: zhCommon,
@@ -93,6 +96,7 @@ i18n
         stylePanel: zhStylePanel,
         kanban: zhKanban,
         hookTrust: zhHookTrust,
+        knowledgeDrafts: zhKnowledgeDrafts,
       },
     },
 
@@ -113,6 +117,7 @@ i18n
       "teamPanel",
       "kanban",
       "hookTrust",
+      "knowledgeDrafts",
     ],
     defaultNS: "common",
     keySeparator: ".",

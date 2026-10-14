@@ -10,8 +10,8 @@
 | src TS 文件 / 行数 | 1088 / 189122 |
 | src JS 文件 | 0 |
 | tests 文件 | 634 |
-| ui/src 文件 / 行数 | 638 / 102219 |
-| ui/server 文件 / 行数 | 129 / 35394 |
+| ui/src 文件 / 行数 | 642 / 102634 |
+| ui/server 文件 / 行数 | 131 / 35595 |
 
 ## 指标口径
 
@@ -32,9 +32,9 @@
 | `as unknown as`（双重断言） | 25 | ui/src(18) · knowledge(5) · adapters(1) |
 | 裸 `console.*` | 6 | ui/server(6) |
 | 空 `catch {}` | 0 | — |
-| 无参 `catch {`（总计） | 699 | ui/server(160) · ui/src(125) · adapters(71) |
+| 无参 `catch {`（总计） | 700 | ui/server(161) · ui/src(125) · adapters(71) |
 | ↳ **无注释**（隐患类，目标） | **0** | — |
-| ↳ 已带意图注释 | 699 | — |
+| ↳ 已带意图注释 | 700 | — |
 | `TODO/HACK/FIXME/XXX` | 11 | always-on(4) · tests(4) · ui/src(2) |
 | 分层违规 `ui/server→src` | 15 | — |
 | 分层违规 `src→ui` | 0 | — |
@@ -58,7 +58,7 @@
 | `src/adapters/channel/tui/app/TuiApp.tsx` | `TuiApp` | 643 | function |
 | `src/cli/sati.ts` | `main` | 642 | function |
 | `ui/src/components/onboarding/view/subcomponents/LlmConfigurationStep.tsx` | `LlmConfigurationStep` | 633 | function |
-| `ui/src/components/app-shell/AppShellV2.tsx` | `AppShellV2` | 631 | function |
+| `ui/src/components/app-shell/AppShellV2.tsx` | `AppShellV2` | 632 | function |
 | `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` | `(anonymous)` | 624 | arrow |
 | `ui/src/stores/useSessionStore.ts` | `createSessionActions` | 624 | function |
 | `ui/src/components/main-content/view/MainContent.tsx` | `SplitBody` | 573 | function |
@@ -204,6 +204,7 @@
 | common | 445 | 445 | 0 | 0 |
 | hookTrust | 19 | 19 | 0 | 0 |
 | kanban | 44 | 44 | 0 | 0 |
+| knowledgeDrafts | 10 | 10 | 0 | 0 |
 | routing | 64 | 64 | 0 | 0 |
 | settings | 1074 | 1074 | 0 | 0 |
 | sidebar | 125 | 125 | 0 | 0 |

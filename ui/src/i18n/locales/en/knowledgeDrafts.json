@@ -1,0 +1,14 @@
+{
+  "title": "Knowledge drafts pending review",
+  "subtitle_one": "{{count}} note draft submitted by the agent is awaiting confirmation",
+  "subtitle_other": "{{count}} note drafts submitted by the agent are awaiting confirmation",
+  "expand": "Review drafts",
+  "collapse": "Collapse",
+  "confirm": "Confirm & add to knowledge base",
+  "reject": "Reject",
+  "footer": "Drafts enter the searchable knowledge base only after confirmation. Rejections are kept for 90 days as negative memory to prevent repeated submissions.",
+  "dismiss": "Later",
+  "errors": {
+    "requestFailed": "Knowledge drafts request failed ({{status}})"
+  }
+}
