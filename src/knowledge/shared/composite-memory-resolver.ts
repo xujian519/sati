@@ -33,6 +33,7 @@ export class CompositeMemoryResolver implements MemoryResolver {
       this.resolvers.map(resolver =>
         resolver.retrieve(input).catch((error: unknown) => ({
           systemContext: undefined,
+          hits: undefined,
           diagnostics: [
             {
               code: "memory_provider_error" as const,
@@ -48,10 +49,12 @@ export class CompositeMemoryResolver implements MemoryResolver {
       .map(r => r.systemContext)
       .filter((ctx): ctx is string => typeof ctx === "string" && ctx.trim().length > 0);
     const diagnostics: MemoryDiagnostic[] = results.flatMap(r => r.diagnostics);
+    const hits = results.flatMap(r => r.hits ?? []);
 
     return {
       systemContext: contexts.length > 0 ? contexts.join("\n\n") : undefined,
       diagnostics,
+      hits: hits.length > 0 ? hits : undefined,
     };
   }
 

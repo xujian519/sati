@@ -68,6 +68,8 @@ export const ENV_KEY = {
   CLAIM_GUARD_ENABLED: "CLAIM_GUARD_ENABLED",
   /** 宪法规则工具拦截通道开关（SATI_RULE_POLICY_BRIDGE_ENABLED，默认关）。 */
   RULE_POLICY_BRIDGE_ENABLED: "RULE_POLICY_BRIDGE_ENABLED",
+  /** 记忆召回日志库路径覆盖（SATI_RECALL_LOG_DB；缺省 ~/.sati/state/memory-recall-log.db）。 */
+  RECALL_LOG_DB: "RECALL_LOG_DB",
 } as const;
 
 /** 品牌前缀：品牌键 = `${BRAND_PREFIX}${中性键}`，仅本文件允许出现。 */

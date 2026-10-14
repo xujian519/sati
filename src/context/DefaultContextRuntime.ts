@@ -22,6 +22,7 @@ import { NullExtensionResolver, type ExtensionResolver } from "./extension/Exten
 import type { InstructionDiscovery, InstructionScope } from "./instructions/InstructionDiscovery.js";
 import { MemoryAttachmentBuilder } from "./memory/MemoryAttachmentBuilder.js";
 import type { KnowledgeProfile, MemoryResolver } from "./memory/MemoryResolver.js";
+import { RecallLogWiring, type RecallLogSink } from "./memory/recall-log-wiring.js";
 import { buildPromptDateNotice } from "./prompt/promptDateNotice.js";
 import { PromptAssembler } from "./prompt/PromptAssembler.js";
 import { MessageProjector } from "./projection/MessageProjector.js";
@@ -101,6 +102,8 @@ export type DefaultContextRuntimeOptions = {
   memoryInjectionBudgetMs?: number;
   /** 项目知识偏好（per-project knowledge profile），透传给 MemoryResolver.retrieve。 */
   knowledgeProfile?: KnowledgeProfile;
+  /** 召回日志出口（WS1，可选；行为见 recall-log-wiring.ts）。 */
+  recallLog?: RecallLogSink;
   /**
    * 工作区专利判据结果（#450）。`false` 时技能/角色清单不列专利条目；缺省 = `true`
    * （保持既有行为，判据由 `projectRuntimeFactory` 装配时算出）。
@@ -161,6 +164,7 @@ export class DefaultContextRuntime implements ContextRuntime {
   private readonly memoryRetrievalTimeoutMs: number;
   private readonly memoryInjectionBudgetMs: number;
   private readonly knowledgeProfile?: KnowledgeProfile;
+  private readonly recallLogWiring?: RecallLogWiring;
   private readonly now: () => Date;
   /** 会话提示日期锚点与已追加的跨日通知；解析与提交规则见 `resolvePromptTime`。 */
   private readonly promptTimeState = new Map<string, PromptTimeState>();
@@ -184,8 +188,9 @@ export class DefaultContextRuntime implements ContextRuntime {
     this.messageProjector = options.messageProjector ?? new MessageProjector();
     this.toolResultBudget = options.toolResultBudget;
     this.memoryResolver = options.memoryResolver;
+    this.recallLogWiring = options.recallLog ? new RecallLogWiring(options.recallLog) : undefined;
     this.memoryAttachmentBuilder = options.memoryResolver
-      ? new MemoryAttachmentBuilder(options.memoryResolver)
+      ? new MemoryAttachmentBuilder(options.memoryResolver, { recallLog: options.recallLog })
       : undefined;
     this.tokenBudget = options.tokenBudget;
     this.compactionEngine = options.compactionEngine;
@@ -235,6 +240,7 @@ export class DefaultContextRuntime implements ContextRuntime {
           signal: input.abortSignal,
           timeoutMs: this.memoryRetrievalTimeoutMs,
           knowledgeProfile: this.knowledgeProfile,
+          turnId: input.turnId,
         })
       : undefined;
 
@@ -269,6 +275,8 @@ export class DefaultContextRuntime implements ContextRuntime {
       // promise 无需额外 catch。budgetMs <= 0 时退化为完整等待（旧行为）。
       const memory = await raceWithInjectionBudget(memoryPromise, this.memoryInjectionBudgetMs);
       if (memory) {
+        // 记录本轮结构化命中（无论是否为空），供 captureTurn 收尾做保守引用判定。
+        this.recallLogWiring?.noteInjected(input.sessionId, memory.hits ?? []);
         for (const block of memory.attachments) {
           for (const content of block.content) {
             if (content.type === "text" && content.text.trim().length > 0) {
@@ -291,6 +299,12 @@ export class DefaultContextRuntime implements ContextRuntime {
           code: "memory_retrieval_deferred",
           severity: "info",
           message: `Memory retrieval exceeded the ${this.memoryInjectionBudgetMs}ms injection budget; deferred to warm the cache for the next turn.`,
+        });
+        // 召回日志（可观测旁路，失败不抛）：builder 尚未结算，deferred 由 runtime 记录。
+        this.recallLogWiring?.recordDeferred({
+          sessionId: input.sessionId,
+          turnId: input.turnId,
+          query: extractRecentUserText(input.messages) ?? "",
         });
       }
       if (input.abortSignal?.aborted) {
@@ -457,6 +471,7 @@ export class DefaultContextRuntime implements ContextRuntime {
   async captureTurn(input: ContextCaptureTurnInput): Promise<void> {
     if (!this.memoryResolver) return;
     if (isAlwaysOnSession(input.sessionId)) return;
+    this.recallLogWiring?.cite(input);
     try {
       await this.memoryResolver.captureTurn({
         sessionId: input.sessionId,

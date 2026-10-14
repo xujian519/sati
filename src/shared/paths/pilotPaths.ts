@@ -34,6 +34,16 @@ export function getPilotMemoryRootDir(pilotHome: string): string {
   return resolve(pilotHome, "memory");
 }
 
+/** Sati 自有状态目录（召回日志等运行期产物；不属 knowledge.db / edgeclaw 记忆库）。 */
+export function getPilotStateDir(pilotHome: string): string {
+  return resolve(pilotHome, "state");
+}
+
+/** 记忆召回日志库默认路径（可用 SATI_RECALL_LOG_DB 覆盖）。 */
+export function getRecallLogDbPath(pilotHome: string): string {
+  return resolve(getPilotStateDir(pilotHome), "memory-recall-log.db");
+}
+
 export function getPilotProjectChatDir(projectRoot: string, pilotHome: string): string {
   const projectId = resolveProjectStorageId(projectRoot, pilotHome);
   return resolve(pilotHome, "projects", projectId, "chats");
