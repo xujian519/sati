@@ -46,6 +46,7 @@ import projectSessionsRoutes from "./routes/project-sessions.js";
 import systemRoutes from "./routes/system.js";
 import kanbanRoutes from "./routes/kanban.js";
 import hookTrustRoutes from "./routes/hookTrust.js";
+import knowledgeDraftsRoutes from "./routes/knowledgeDrafts.js";
 
 import { validateApiKey, authenticateToken } from "./middleware/auth.js";
 import { getConnectableHost } from "../shared/networkHosts.js";
@@ -190,6 +191,9 @@ app.use("/api/kanban", authenticateToken, kanbanRoutes);
 
 // Hook trust API Routes (protected) — 经 gateway hook_trust_* 方法转发（协议 1.12）
 app.use("/api/hook-trust", authenticateToken, hookTrustRoutes);
+
+// Knowledge drafts API Routes (protected) — 经 gateway HTTP 面 /api/web/knowledge-drafts* 转发（WS2）
+app.use("/api/knowledge-drafts", authenticateToken, knowledgeDraftsRoutes);
 
 // Serve React app for all other routes (excluding static files)
 app.get("/{*splat}", (req, res) => {

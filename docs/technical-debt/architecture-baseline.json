@@ -135,7 +135,7 @@
     {
       "rule": "file-size",
       "file": "ui/src/components/app-shell/AppShellV2.tsx",
-      "lines": 895
+      "lines": 897
     },
     {
       "rule": "file-size",

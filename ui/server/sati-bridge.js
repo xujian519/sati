@@ -121,7 +121,7 @@ const WEB_DEFAULT_PERMISSION_MODE = process.env.SATI_WEB_PERMISSION_MODE || "def
 /** @type {ReturnType<typeof createRemoteGateway> | null} */
 let gatewayPromise = null;
 
-async function readGatewayToken() {
+export async function readGatewayToken() {
   try {
     const raw = await fsPromises.readFile(GATEWAY_TOKEN_PATH, "utf8");
     const trimmed = raw.trim();
