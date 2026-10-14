@@ -69,6 +69,23 @@ export type MemoryRetrieveResult = {
   systemContext?: string;
   diagnostics: MemoryDiagnostic[];
   metadata?: Record<string, unknown>;
+  /**
+   * 结构化命中列表（可选，召回日志/引用回填用）。provider 渐进实现：
+   * 未实现的 resolver 行为与现状完全一致（hits 缺省视为空）。
+   */
+  hits?: MemoryHit[];
+};
+
+/**
+ * 一条结构化记忆命中（召回日志与保守引用判定的最小单元）。
+ * id 为引用判定的主键；title 用于唯一前缀判定（见 recall-log.ts）。
+ */
+export type MemoryHit = {
+  id: string;
+  title?: string;
+  score?: number;
+  snippet?: string;
+  provider?: string;
 };
 
 export type MemoryCaptureTurnInput = {
