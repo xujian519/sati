@@ -3,15 +3,20 @@
  *
  * 从 InProcessGateway.ts 拆出（A11 轮 3）：resolveSubmitTurnTelemetry /
  * createGatewayFailureStatus / emitSessionTelemetry / inferToolErrorCategory。
- * emitSessionTelemetry 为 ~330 行 switch（AgentEvent → telemetry 客户端），
- * 是自由函数区第二大单体。
  *
  * P2.1 追加：turn 级失败的两个具名构造（createTurnTimeoutFailure /
  * createSubmitFailedFailure）+ 其共用的 createTurnFailure；原
  * createGatewayFailureStatus 收为模块私有（此前唯一的消费者是 submitTurn）。
+ *
+ * P2.3（issue #646）：emitSessionTelemetry 的 ~330 行 switch 改为
+ * AGENT_EVENT_TELEMETRY 查表 —— 与 P2.2 eventMapping 同构的 required Record，
+ * AgentEvent union 新增种类时 typecheck 强制补表项，不再被 default 静默吞掉；
+ * 各分支收敛到 trackLoopStage / trackSessionError / trackModelStreamTelemetry
+ * 三个打点 helper（module="session" 与 context 投影的公共字段一次成型）。
  */
 
 import type { AgentEvent } from "../../agent/index.js";
+import type { CanonicalModelEvent } from "../../model/index.js";
 import { createVisibleErrorStatusDetail } from "../../status/agentStatus.js";
 import type { TelemetryClient, TelemetryExecutionKind, TelemetryModule } from "../../telemetry/index.js";
 import type { GatewayEvent, GatewayRecordAgentStatusMessageInput, GatewaySubmitTurnInput } from "../protocol/types.js";
@@ -130,326 +135,250 @@ export function createSubmitFailedFailure(input: { runId: string; message: strin
   });
 }
 
-export function emitSessionTelemetry(
-  telemetry: TelemetryClient | undefined,
-  event: AgentEvent,
-  context: {
-    sessionId: string;
-    runId: string;
-    channelKey: string;
-    permissionMode: string;
-    ownerModule: TelemetryModule;
-    executionKind: TelemetryExecutionKind;
-    phase?: string;
+type SessionTelemetryContext = {
+  sessionId: string;
+  runId: string;
+  channelKey: string;
+  permissionMode: string;
+  ownerModule: TelemetryModule;
+  executionKind: TelemetryExecutionKind;
+  phase?: string;
+};
+
+/** 打点公共字段：所有 session 遥测共享 module="session" 与 context 投影。 */
+function sessionTrackContext(context: SessionTelemetryContext) {
+  return {
+    module: "session" as const,
+    ownerModule: context.ownerModule,
+    executionKind: context.executionKind,
+    phase: context.phase,
+    sessionId: context.sessionId,
+  };
+}
+
+/** trackFeatureLoopStage 的表项简写：公共字段由 sessionTrackContext 投影，调用点只写差异部分。 */
+function trackLoopStage(
+  telemetry: TelemetryClient,
+  context: SessionTelemetryContext,
+  fields: {
+    loopStage: "model_request" | "model_response" | "tool_prepare" | "tool_call" | "permission_check" | "loop_end";
+    outcome: "success" | "failed" | "aborted";
+    errorCategory?: "tool_runtime_error";
+    executionKind?: TelemetryExecutionKind;
+    metadata: Record<string, unknown>;
   },
 ): void {
-  if (!telemetry) return;
-  switch (event.type) {
-    case "model_request_started":
-      return;
-    case "model_event":
-      if (event.event.type === "request_started") {
-        telemetry.trackFeatureLoopStage({
-          module: "session",
-          ownerModule: context.ownerModule,
-          executionKind: context.executionKind,
-          phase: context.phase,
-          loopStage: "model_request",
-          outcome: "success",
-          sessionId: context.sessionId,
-          metadata: {
-            runId: context.runId,
-            provider: event.event.provider,
-            model: event.event.model,
-            ...(event.event.providerBaseUrl ? { providerBaseUrl: event.event.providerBaseUrl } : {}),
-            permissionMode: context.permissionMode,
-            channelKey: context.channelKey,
-          },
-        });
-        return;
-      }
-      if (event.event.type === "message_end") {
-        telemetry.trackFeatureLoopStage({
-          module: "session",
-          ownerModule: context.ownerModule,
-          executionKind: context.executionKind,
-          phase: context.phase,
-          loopStage: "model_response",
-          outcome: "success",
-          sessionId: context.sessionId,
-          metadata: { runId: context.runId },
-        });
-      }
-      if (event.event.type === "error") {
-        telemetry.trackError(event.event.error, {
-          module: "session",
-          ownerModule: context.ownerModule,
-          executionKind: context.executionKind,
-          phase: context.phase,
-          loopStage: "model_request",
-          errorCategory: "model_request_error",
-          sessionId: context.sessionId,
-          code: event.event.error.code,
-          metadata: {
-            runId: context.runId,
-            provider: event.event.error.provider,
-          },
-        });
-      }
-      return;
-    case "tool_calls_detected":
-      telemetry.trackFeatureLoopStage({
-        module: "session",
-        ownerModule: context.ownerModule,
-        executionKind: context.executionKind,
-        phase: context.phase,
-        loopStage: "tool_prepare",
+  const { executionKind, ...rest } = fields;
+  telemetry.trackFeatureLoopStage({
+    ...sessionTrackContext(context),
+    ...rest,
+    ...(executionKind ? { executionKind } : {}),
+  });
+}
+
+/** trackError 的表项简写：公共字段由 sessionTrackContext 投影，调用点只写差异部分。 */
+function trackSessionError(
+  telemetry: TelemetryClient,
+  context: SessionTelemetryContext,
+  error: unknown,
+  fields: {
+    loopStage: "model_request" | "tool_call" | "permission_check" | "loop_end";
+    errorCategory:
+      | "model_request_error"
+      | "tool_param_error"
+      | "tool_runtime_error"
+      | "tool_result_parse_error"
+      | "permission_error"
+      | "loop_error";
+    code?: string;
+    toolName?: string;
+    executionKind?: TelemetryExecutionKind;
+    metadata: Record<string, unknown>;
+  },
+): void {
+  const { executionKind, ...rest } = fields;
+  telemetry.trackError(error, {
+    ...sessionTrackContext(context),
+    ...rest,
+    ...(executionKind ? { executionKind } : {}),
+  });
+}
+
+/** 模型流（model_event / subagent_model_event 共用）：按流事件种类打点。 */
+function trackModelStreamTelemetry(
+  telemetry: TelemetryClient,
+  context: SessionTelemetryContext,
+  streamEvent: CanonicalModelEvent,
+  options: {
+    executionKind: TelemetryExecutionKind;
+    extraMetadata: Record<string, unknown>;
+    /** 仅 session 路径：request_started 携带 permissionMode/channelKey。 */
+    permissionMeta?: boolean;
+  },
+): void {
+  const { executionKind, extraMetadata, permissionMeta } = options;
+  switch (streamEvent.type) {
+    case "request_started":
+      trackLoopStage(telemetry, context, {
+        loopStage: "model_request",
         outcome: "success",
-        sessionId: context.sessionId,
+        executionKind,
         metadata: {
           runId: context.runId,
-          toolCount: event.calls.length,
-          toolNames: event.calls.map(call => call.name),
+          provider: streamEvent.provider,
+          model: streamEvent.model,
+          ...(streamEvent.providerBaseUrl ? { providerBaseUrl: streamEvent.providerBaseUrl } : {}),
+          ...(permissionMeta ? { permissionMode: context.permissionMode, channelKey: context.channelKey } : {}),
+          ...extraMetadata,
         },
       });
       return;
-    case "pre_tool_execute":
-      telemetry.trackFeatureLoopStage({
-        module: "session",
-        ownerModule: context.ownerModule,
-        executionKind: context.executionKind,
-        phase: context.phase,
-        loopStage: "tool_call",
+    case "message_end":
+      trackLoopStage(telemetry, context, {
+        loopStage: "model_response",
         outcome: "success",
-        sessionId: context.sessionId,
-        metadata: {
-          runId: context.runId,
-          toolName: event.toolName,
-          toolCallId: event.toolCallId,
-        },
+        executionKind,
+        metadata: { runId: context.runId, ...extraMetadata },
       });
       return;
-    case "post_tool_execute":
-      telemetry.trackFeatureLoopStage({
-        module: "session",
-        ownerModule: context.ownerModule,
-        executionKind: context.executionKind,
-        phase: context.phase,
-        loopStage: "tool_call",
-        outcome: event.success ? "success" : "failed",
-        errorCategory: event.success ? undefined : "tool_runtime_error",
-        sessionId: context.sessionId,
-        metadata: {
-          runId: context.runId,
-          toolName: event.toolName,
-          toolCallId: event.toolCallId,
-          success: event.success,
-        },
+    case "error":
+      trackSessionError(telemetry, context, streamEvent.error, {
+        loopStage: "model_request",
+        errorCategory: "model_request_error",
+        code: streamEvent.error.code,
+        executionKind,
+        metadata: { runId: context.runId, provider: streamEvent.error.provider, ...extraMetadata },
       });
       return;
-    case "tool_result":
-      if (event.result.type === "error") {
-        const code = event.result.error.code;
-        telemetry.trackError(event.result.error.message, {
-          module: "session",
-          ownerModule: context.ownerModule,
-          executionKind: context.executionKind,
-          phase: context.phase,
-          loopStage: "tool_call",
-          errorCategory: inferToolErrorCategory(code),
-          sessionId: context.sessionId,
-          code,
-          toolName: event.result.toolName,
-          metadata: {
-            runId: context.runId,
-            toolName: event.result.toolName,
-            toolCallId: event.result.toolCallId,
-          },
-        });
-      }
+    default:
       return;
-    case "permission_requested":
-      telemetry.trackFeatureLoopStage({
-        module: "session",
-        ownerModule: context.ownerModule,
-        executionKind: context.executionKind,
-        phase: context.phase,
-        loopStage: "permission_check",
-        outcome: "success",
-        sessionId: context.sessionId,
-        metadata: {
-          runId: context.runId,
-          toolName: event.toolName,
-          toolCallId: event.toolCallId,
-        },
-      });
-      return;
-    case "permission_denied":
-      telemetry.trackError(event.reason, {
-        module: "session",
-        ownerModule: context.ownerModule,
-        executionKind: context.executionKind,
-        phase: context.phase,
-        loopStage: "permission_check",
-        errorCategory: "permission_error",
-        sessionId: context.sessionId,
-        code: "permission_denied",
+  }
+}
+
+type SessionTelemetryMapper<K extends AgentEvent["type"]> = (
+  telemetry: TelemetryClient,
+  event: Extract<AgentEvent, { type: K }>,
+  context: SessionTelemetryContext,
+) => void;
+
+/** 遥测静音的表项（表为 required Record，签名仍需 telemetry 形参）。 */
+function silentTelemetry(): void {}
+
+/**
+ * AgentEvent → telemetry 打点表（P2.3）。required Record：AgentEvent union 新增种类时
+ * typecheck 强制补表项（旧 switch default 的静默返回收敛为 emitSessionTelemetry 里
+ * 唯一的防御分支）。表项内只写差异字段，公共字段由 helper 投影。
+ */
+const AGENT_EVENT_TELEMETRY: { [K in AgentEvent["type"]]: SessionTelemetryMapper<K> } = {
+  // —— 打点分支 ——
+  model_event: (telemetry, event, context) =>
+    trackModelStreamTelemetry(telemetry, context, event.event, {
+      executionKind: context.executionKind,
+      extraMetadata: {},
+      permissionMeta: true,
+    }),
+  tool_calls_detected: (telemetry, event, context) =>
+    trackLoopStage(telemetry, context, {
+      loopStage: "tool_prepare",
+      outcome: "success",
+      metadata: {
+        runId: context.runId,
+        toolCount: event.calls.length,
+        toolNames: event.calls.map(call => call.name),
+      },
+    }),
+  pre_tool_execute: (telemetry, event, context) =>
+    trackLoopStage(telemetry, context, {
+      loopStage: "tool_call",
+      outcome: "success",
+      metadata: { runId: context.runId, toolName: event.toolName, toolCallId: event.toolCallId },
+    }),
+  post_tool_execute: (telemetry, event, context) =>
+    trackLoopStage(telemetry, context, {
+      loopStage: "tool_call",
+      outcome: event.success ? "success" : "failed",
+      ...(event.success ? {} : { errorCategory: "tool_runtime_error" as const }),
+      metadata: {
+        runId: context.runId,
         toolName: event.toolName,
-        metadata: {
-          runId: context.runId,
-          toolName: event.toolName,
-        },
-      });
-      return;
-    case "turn_completed":
-      telemetry.trackFeatureLoopStage({
-        module: "session",
-        ownerModule: context.ownerModule,
-        executionKind: context.executionKind,
-        phase: context.phase,
-        loopStage: "loop_end",
-        outcome: "success",
-        sessionId: context.sessionId,
-        metadata: {
-          runId: context.runId,
-          stopReason: event.result.stopReason,
-          turns: event.result.turns,
-        },
-      });
-      return;
-    case "turn_failed":
-      telemetry.trackError(event.error, {
-        module: "session",
-        ownerModule: context.ownerModule,
-        executionKind: context.executionKind,
-        phase: context.phase,
-        loopStage: "loop_end",
-        errorCategory: "loop_error",
-        sessionId: context.sessionId,
-        code: event.error.code,
-        metadata: {
-          runId: context.runId,
-        },
-      });
-      return;
-    case "session_aborted":
-      telemetry.trackFeatureLoopStage({
-        module: "session",
-        ownerModule: context.ownerModule,
-        executionKind: context.executionKind,
-        phase: context.phase,
-        loopStage: "loop_end",
-        outcome: "aborted",
-        sessionId: context.sessionId,
-        metadata: {
-          runId: context.runId,
-          reason: event.reason,
-        },
-      });
-      return;
-    case "subagent_model_event":
-      if (event.event.type === "request_started") {
-        telemetry.trackFeatureLoopStage({
-          module: "session",
-          ownerModule: context.ownerModule,
-          executionKind: "subagent",
-          phase: context.phase,
-          loopStage: "model_request",
-          outcome: "success",
-          sessionId: context.sessionId,
-          metadata: {
-            runId: context.runId,
-            provider: event.event.provider,
-            model: event.event.model,
-            ...(event.event.providerBaseUrl ? { providerBaseUrl: event.event.providerBaseUrl } : {}),
-            subagentId: event.subagentId,
-            subagentType: event.subagentType,
-          },
-        });
-      }
-      if (event.event.type === "message_end") {
-        telemetry.trackFeatureLoopStage({
-          module: "session",
-          ownerModule: context.ownerModule,
-          executionKind: "subagent",
-          phase: context.phase,
-          loopStage: "model_response",
-          outcome: "success",
-          sessionId: context.sessionId,
-          metadata: {
-            runId: context.runId,
-            subagentId: event.subagentId,
-            subagentType: event.subagentType,
-          },
-        });
-      }
-      if (event.event.type === "error") {
-        telemetry.trackError(event.event.error, {
-          module: "session",
-          ownerModule: context.ownerModule,
-          executionKind: "subagent",
-          phase: context.phase,
-          loopStage: "model_request",
-          errorCategory: "model_request_error",
-          sessionId: context.sessionId,
-          code: event.event.error.code,
-          metadata: {
-            runId: context.runId,
-            provider: event.event.error.provider,
-            subagentId: event.subagentId,
-            subagentType: event.subagentType,
-          },
-        });
-      }
-      return;
-    case "subagent_tool_calls_detected":
-      telemetry.trackFeatureLoopStage({
-        module: "session",
-        ownerModule: context.ownerModule,
-        executionKind: "subagent",
-        phase: context.phase,
-        loopStage: "tool_prepare",
-        outcome: "success",
-        sessionId: context.sessionId,
-        metadata: {
-          runId: context.runId,
-          subagentId: event.subagentId,
-          subagentType: event.subagentType,
-          toolCount: event.calls.length,
-          toolNames: event.calls.map(call => call.name),
-        },
-      });
-      return;
-    case "subagent_tool_result":
-      if (event.result.type === "error") {
-        telemetry.trackError(event.result.error.message, {
-          module: "session",
-          ownerModule: context.ownerModule,
-          executionKind: "subagent",
-          phase: context.phase,
-          loopStage: "tool_call",
-          errorCategory: inferToolErrorCategory(event.result.error.code),
-          sessionId: context.sessionId,
-          code: event.result.error.code,
-          toolName: event.result.toolName,
-          metadata: {
-            runId: context.runId,
-            subagentId: event.subagentId,
-            subagentType: event.subagentType,
-            toolName: event.result.toolName,
-            toolCallId: event.result.toolCallId,
-          },
-        });
-        return;
-      }
-      telemetry.trackFeatureLoopStage({
-        module: "session",
-        ownerModule: context.ownerModule,
-        executionKind: "subagent",
-        phase: context.phase,
+        toolCallId: event.toolCallId,
+        success: event.success,
+      },
+    }),
+  tool_result: (telemetry, event, context) => {
+    if (event.result.type !== "error") return;
+    const code = event.result.error.code;
+    trackSessionError(telemetry, context, event.result.error.message, {
+      loopStage: "tool_call",
+      errorCategory: inferToolErrorCategory(code),
+      code,
+      toolName: event.result.toolName,
+      metadata: {
+        runId: context.runId,
+        toolName: event.result.toolName,
+        toolCallId: event.result.toolCallId,
+      },
+    });
+  },
+  permission_requested: (telemetry, event, context) =>
+    trackLoopStage(telemetry, context, {
+      loopStage: "permission_check",
+      outcome: "success",
+      metadata: { runId: context.runId, toolName: event.toolName, toolCallId: event.toolCallId },
+    }),
+  permission_denied: (telemetry, event, context) =>
+    trackSessionError(telemetry, context, event.reason, {
+      loopStage: "permission_check",
+      errorCategory: "permission_error",
+      code: "permission_denied",
+      toolName: event.toolName,
+      metadata: { runId: context.runId, toolName: event.toolName },
+    }),
+  turn_completed: (telemetry, event, context) =>
+    trackLoopStage(telemetry, context, {
+      loopStage: "loop_end",
+      outcome: "success",
+      metadata: { runId: context.runId, stopReason: event.result.stopReason, turns: event.result.turns },
+    }),
+  turn_failed: (telemetry, event, context) =>
+    trackSessionError(telemetry, context, event.error, {
+      loopStage: "loop_end",
+      errorCategory: "loop_error",
+      code: event.error.code,
+      metadata: { runId: context.runId },
+    }),
+  session_aborted: (telemetry, event, context) =>
+    trackLoopStage(telemetry, context, {
+      loopStage: "loop_end",
+      outcome: "aborted",
+      metadata: { runId: context.runId, reason: event.reason },
+    }),
+  subagent_model_event: (telemetry, event, context) =>
+    trackModelStreamTelemetry(telemetry, context, event.event, {
+      executionKind: "subagent",
+      extraMetadata: { subagentId: event.subagentId, subagentType: event.subagentType },
+    }),
+  subagent_tool_calls_detected: (telemetry, event, context) =>
+    trackLoopStage(telemetry, context, {
+      loopStage: "tool_prepare",
+      outcome: "success",
+      executionKind: "subagent",
+      metadata: {
+        runId: context.runId,
+        subagentId: event.subagentId,
+        subagentType: event.subagentType,
+        toolCount: event.calls.length,
+        toolNames: event.calls.map(call => call.name),
+      },
+    }),
+  subagent_tool_result: (telemetry, event, context) => {
+    if (event.result.type === "error") {
+      trackSessionError(telemetry, context, event.result.error.message, {
         loopStage: "tool_call",
-        outcome: "success",
-        sessionId: context.sessionId,
+        errorCategory: inferToolErrorCategory(event.result.error.code),
+        code: event.result.error.code,
+        toolName: event.result.toolName,
+        executionKind: "subagent",
         metadata: {
           runId: context.runId,
           subagentId: event.subagentId,
@@ -459,9 +388,70 @@ export function emitSessionTelemetry(
         },
       });
       return;
-    default:
-      return;
-  }
+    }
+    trackLoopStage(telemetry, context, {
+      loopStage: "tool_call",
+      outcome: "success",
+      executionKind: "subagent",
+      metadata: {
+        runId: context.runId,
+        subagentId: event.subagentId,
+        subagentType: event.subagentType,
+        toolName: event.result.toolName,
+        toolCallId: event.result.toolCallId,
+      },
+    });
+  },
+
+  // —— 遥测静音：以下事件不打 session 遥测点 ——
+  turn_started: silentTelemetry,
+  session_started: silentTelemetry,
+  session_ended: silentTelemetry,
+  input_accepted: silentTelemetry,
+  user_prompt_submitted: silentTelemetry,
+  setup_completed: silentTelemetry,
+  instructions_loaded: silentTelemetry,
+  assistant_message: silentTelemetry,
+  file_artifacts: silentTelemetry,
+  mode_change_requested: silentTelemetry,
+  steer_applied: silentTelemetry,
+  steer_unapplied: silentTelemetry,
+  token_cap_adjusted: silentTelemetry,
+  empty_output_recovery: silentTelemetry,
+  model_recovery_failed: silentTelemetry,
+  compact_started: silentTelemetry,
+  compact_completed: silentTelemetry,
+  warning: silentTelemetry,
+  agent_status: silentTelemetry,
+  turn_continued: silentTelemetry,
+  tool_results_projected: silentTelemetry,
+  context_budget: silentTelemetry,
+  subagent_started: silentTelemetry,
+  subagent_completed: silentTelemetry,
+  subagent_status: silentTelemetry,
+  retry_progress: silentTelemetry,
+  stop_requested: silentTelemetry,
+  stop_failure: silentTelemetry,
+  elicitation_requested: silentTelemetry,
+  elicitation_resolved: silentTelemetry,
+  doomloop_signal: silentTelemetry,
+  // model_request_started 在旧 switch 中为显式空分支，语义等同静音组。
+  model_request_started: silentTelemetry,
+};
+
+export function emitSessionTelemetry(
+  telemetry: TelemetryClient | undefined,
+  event: AgentEvent,
+  context: SessionTelemetryContext,
+): void {
+  if (!telemetry) return;
+  // 表为 required Record，正常路径必有表项；undefined 分支只承接运行时传入 union
+  // 之外的旧事件类型，语义对齐旧 switch 的 default（静默返回）。
+  const mapper = AGENT_EVENT_TELEMETRY[event.type] as
+    | ((telemetry: TelemetryClient, event: AgentEvent, context: SessionTelemetryContext) => void)
+    | undefined;
+  if (mapper === undefined) return;
+  mapper(telemetry, event, context);
 }
 
 export function inferToolErrorCategory(
