@@ -76,23 +76,23 @@ dsh 的**检索引擎**（纯关键词 IDF、61 条标定、上限 5000 条）�
 
 ### 任务清单
 
-- [ ] **T2.1** schema：knowledge.db 迁移新增 `knowledge_drafts` 表 + 部分唯一索引；`schema-versions.ts` bump
-- [ ] **T2.2** `src/knowledge/personal-note/drafts.ts`（新）：`saveDraft`（会话级覆盖）/ `confirmDraft`（事务内写 documents+chunks+fts 并回填）/ `rejectDraft`（留拒痕）/ `listPending`
-- [ ] **T2.3** 改造 `knowledgeNoteSave.ts`：按开关写草稿或直写；**同步更新 tool description → 触发 llm-replay 重录**
-- [ ] **T2.4** 确认通道实现（按 D1 决策）；若走 UI：i18n 提取 `ui/src/i18n/locales/{en,zh-CN}/`
-- [ ] **T2.5** 单元测试：草稿 CRUD、同会话覆盖、confirm 事务原子性（失败回滚不留半写）、拒痕保留、开关双路径
-- [ ] **T2.6** llm-replay fixture 重录 + `pnpm check:event-matrix`（若改 gateway 帧则必须先 `pnpm gen:event-matrix`）
-- [ ] **T2.7** docs/notes 决策记录：含 Alternatives considered（确认通道三选一的取舍、默认开关取值、为何不直接废掉 direct 模式）
+- [x] **T2.1** schema：knowledge.db 迁移新增 `knowledge_drafts` 表 + 部分唯一索引；`schema-versions.ts` bump
+- [x] **T2.2** `src/knowledge/personal-note/drafts.ts`（新）：`saveDraft`（会话级覆盖）/ `confirmDraft`（事务内写 documents+chunks+fts 并回填）/ `rejectDraft`（留拒痕）/ `listPending`
+- [x] **T2.3** 改造 `knowledgeNoteSave.ts`：按开关写草稿或直写；**同步更新 tool description → 触发 llm-replay 重录**
+- [x] **T2.4** 确认通道实现（按 D1 决策）；若走 UI：i18n 提取 `ui/src/i18n/locales/{en,zh-CN}/`
+- [x] **T2.5** 单元测试：草稿 CRUD、同会话覆盖、confirm 事务原子性（失败回滚不留半写）、拒痕保留、开关双路径
+- [x] **T2.6** llm-replay fixture 重录 + `pnpm check:event-matrix`（若改 gateway 帧则必须先 `pnpm gen:event-matrix`）
+- [x] **T2.7** docs/notes 决策记录：含 Alternatives considered（确认通道三选一的取舍、默认开关取值、为何不直接废掉 direct 模式）
 
 ### 检查清单（PR 合并前）
 
-- [ ] `pnpm check` 全绿（含 `check:event-matrix`、`check:doc-claims`）
-- [ ] `pnpm test` 通过；replay fixture 已重录且 CI 绿
-- [ ] 新增用户可见文案全部进 i18n locales（若含 UI）
-- [ ] direct 逃生口可用：`knowledgeNoteSaveMode=direct` 时行为与现状逐字节一致（用现有测试锁定）
-- [ ] confirm 失败事务回滚，不产生孤儿 documents/chunks 行
-- [ ] 同会话并发提交不产生双 pending 草稿（唯一索引兜底，有测试）
-- [ ] docs/notes note 已同 PR 提交
+- [x] `pnpm check` 全绿（含 `check:event-matrix`、`check:doc-claims`）
+- [x] `pnpm test` 通过；replay fixture 已重录且 CI 绿
+- [x] 新增用户可见文案全部进 i18n locales（若含 UI）
+- [x] direct 逃生口可用：`knowledgeNoteSaveMode=direct` 时行为与现状逐字节一致（用现有测试锁定）
+- [x] confirm 失败事务回滚，不产生孤儿 documents/chunks 行
+- [x] 同会话并发提交不产生双 pending 草稿（唯一索引兜底，有测试）
+- [x] docs/notes note 已同 PR 提交
 
 ## 5. WS3：条目压制语义（supersede / valid_until）
 
