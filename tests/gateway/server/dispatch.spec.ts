@@ -275,4 +275,113 @@ describe("GatewayWsConnection dispatchRequest 分发路由", () => {
       "SkillManagerError 应回结构化错误帧",
     );
   });
+
+  it("active_turn_snapshot 未接线 → 合成默认（active:false，sessionKey 回显）", async () => {
+    const ws = new MockWs();
+    makeConnection(ws, baseGateway());
+    ws.receive(helloFrame());
+    await settle();
+    ws.receive(requestFrame("1", "active_turn_snapshot", { sessionKey: "s9" }));
+    await settle();
+    assert.ok(
+      ws.sent.some(
+        line =>
+          line.includes('"type":"response"') &&
+          line.includes('"ok":true') &&
+          line.includes('"active":false') &&
+          line.includes('"sessionKey":"s9"') &&
+          line.includes('"events":[]'),
+      ),
+      "未接线时应回合成默认快照而非 not_configured",
+    );
+  });
+
+  it("prepare_weixin_login 未接线 → 合成默认（requested:false，带时间戳）", async () => {
+    const ws = new MockWs();
+    makeConnection(ws, baseGateway());
+    ws.receive(helloFrame());
+    await settle();
+    ws.receive(requestFrame("1", "prepare_weixin_login", {}));
+    await settle();
+    const line = ws.sent.find(l => l.includes('"type":"response"') && l.includes('"ok":true'));
+    assert.ok(line, "应回结果帧");
+    const result = JSON.parse(line).result as { requested: boolean; requestedAt?: string; reason?: string };
+    assert.equal(result.requested, false);
+    assert.equal(result.reason, "unsupported");
+    assert.ok(typeof result.requestedAt === "string" && result.requestedAt.length > 0, "时间戳在分发时合成");
+  });
+
+  it("kanban_get 未接线 → not_configured 降级（Kanban is not available）", async () => {
+    const ws = new MockWs();
+    makeConnection(ws, baseGateway());
+    ws.receive(helloFrame());
+    await settle();
+    ws.receive(requestFrame("1", "kanban_get", { projectKey: "p1" }));
+    await settle();
+    assert.ok(
+      ws.sent.some(
+        line =>
+          line.includes('"type":"response"') &&
+          line.includes('"ok":true') &&
+          line.includes('"code":"not_configured"') &&
+          line.includes("Kanban is not available"),
+      ),
+      "未接线 kanban 方法应回 not_configured 降级结果帧",
+    );
+  });
+
+  it("kanban_subscribe 已接线 manager → 订阅连接级 subscriber 并回 subscribed:true", async () => {
+    const ws = new MockWs();
+    const subscribed: Array<{ projectId: string; subscriberId: string }> = [];
+    const kanban = {
+      subscribe: (projectId: string, subscriber: { id: string }) => {
+        subscribed.push({ projectId, subscriberId: subscriber.id });
+      },
+      unsubscribeAll: () => {},
+    };
+    const conn = new GatewayWsConnection(ws as unknown as TextWebSocketConnection, {
+      gateway: baseGateway(),
+      token: "test-token",
+      serverVersion: "test",
+      presence: undefined,
+      kanban: kanban as never,
+    });
+    void conn;
+    ws.receive(helloFrame());
+    await settle();
+    ws.receive(requestFrame("1", "kanban_subscribe", { projectId: "p1" }));
+    await settle();
+    assert.deepEqual(
+      subscribed.map(s => s.projectId),
+      ["p1"],
+    );
+    assert.ok(
+      ws.sent.some(
+        line => line.includes('"type":"response"') && line.includes('"ok":true') && line.includes('"subscribed":true'),
+      ),
+      "应回 subscribed:true 结果帧",
+    );
+  });
+
+  it("kanban_subscribe 缺 projectId → 入参守卫先拦下回 invalid_params", async () => {
+    const ws = new MockWs();
+    const kanban = { subscribe: () => {}, unsubscribeAll: () => {} };
+    const conn = new GatewayWsConnection(ws as unknown as TextWebSocketConnection, {
+      gateway: baseGateway(),
+      token: "test-token",
+      serverVersion: "test",
+      presence: undefined,
+      kanban: kanban as never,
+    });
+    void conn;
+    ws.receive(helloFrame());
+    await settle();
+    ws.receive(requestFrame("1", "kanban_subscribe", {}));
+    await settle();
+    // 守卫表要求 projectId 为 string，空对象在分发前即被拦——
+    // 表内的 requires projectId 是守卫之下的纵深防御分支（直达 dispatchRequest 才可达）。
+    const err = invalidParamsErrorFrame(ws);
+    assert.equal(err.code, "invalid_params");
+    assert.match(err.message ?? "", /projectId/);
+  });
 });

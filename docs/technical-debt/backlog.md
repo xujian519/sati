@@ -2401,7 +2401,7 @@
 - [x] **P2**（P2.1）`src/gateway/client/InProcessGateway.ts` — `submitTurn`（301 → **16** 行；判据 ≤150）（`bbddc03e4`；god fn 63 → 62；文件 1517 → 1511，未破 1518 棘轮；三段式 `startSubmitTurn`/`pumpSubmitTurn`/`finishSubmitTurn`；决策见 `docs/notes/implemented/2026-10-12-inprocess-submit-turn-split.md`）
 - [ ] **P2** `src/gateway/client/eventMapping.ts` — `mapAgentEventForTurn`（417 行）
 - [x] **P2**（P2.3）`src/gateway/client/telemetry.ts` — `emitSessionTelemetry`（333 → **14** 行；判据 ≤150）（god fn 61 → **60**；`AGENT_EVENT_TELEMETRY` required Record 查表 + `trackLoopStage`/`trackSessionError`/`trackModelStreamTelemetry` 三个打点 helper，与 P2.2 eventMapping 同构；测试 7 → 10；决策见 `docs/notes/implemented/2026-10-14-telemetry-mapping-table.md`）
-- [ ] **P2** `src/gateway/server/GatewayWsConnection.ts` — `dispatchRequest`（353 行）
+- [x] **P2**（P2.4）`src/gateway/server/GatewayWsConnection.ts` — `dispatchRequest`（353 → **11** 行；判据「守卫表反推分发」达成——`methodDispatchers` 与 `METHOD_PARAM_GUARDS` 同构 required Record；god fn 60 → **59**（P2.3 合并后口径）；`callMethod`/`callOptional` 两 helper 消样板，特例（close_project_sessions 显式抛错 / skill_* 绑定 / kanban 订阅 / submit_turn 事件流特判）保留显式；dispatch.spec 10 → 15；决策见 `docs/notes/implemented/2026-10-14-dispatch-table.md`）
 - [ ] **P2** `src/tool/builtin/patentFigureProject.ts` — `createPatentFigureProjectTool`（554 行）
 - [ ] **P2** `src/tool/builtin/patentFigureProject.ts` — `execute`（411 行）
 - [ ] **P2** `src/tool/builtin/patentFigureGenerate.ts` — `createPatentFigureGenerateTool`（422 行）
