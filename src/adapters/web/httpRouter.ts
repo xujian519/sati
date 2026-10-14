@@ -8,6 +8,7 @@
 
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Gateway } from "../../gateway/protocol/types.js";
+import { handleKnowledgeDraftRoutes } from "./knowledgeDrafts.js";
 import { ProjectFileService, WorkspaceBoundaryError } from "./projectFiles.js";
 
 export type WebHttpRouterOptions = {
@@ -35,6 +36,11 @@ export async function handleWebApiRequest(
   }
 
   const match = PROJECT_RE.exec(url.pathname);
+
+  // 知识草稿闸门确认通道（WS2）：先于 project 路由匹配，全局（不挂 projectKey）。
+  if (await handleKnowledgeDraftRoutes(request, response, url)) {
+    return true;
+  }
   if (url.pathname === "/api/web/projects" && request.method === "GET") {
     const result = await options.gateway.listProjects();
     sendJson(response, 200, result);

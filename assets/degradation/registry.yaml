@@ -631,3 +631,22 @@ entries:
     degradedImpact: "运营侧丢失该会话的记忆召回可观测性（谁检索了什么/注入了什么/是否被引用）；agent 功能无损"
     observability: "logger context:memory-recall-log 一次性 warn（含路径与原因）；registry 语义见 docs/notes/2026-10-14-memory-recall-log.md"
     negativeDrill: tests/context/memory/recall-log.spec.ts
+
+  # ---------- 知识草稿闸门（WS2，2026-10-14） ----------
+  - id: knowledge-drafts-write
+    component: src/knowledge/personal-note/drafts.ts
+    dependency: "sati-notes.db（Sati 自有真源）+ knowledge.db 投影写路径"
+    failDirection: closed
+    degradedBehavior: "草稿写入/拒绝失败 → 工具错误文本或 HTTP 500/4xx（用户可见）；confirm 投影失败 → projection_failed（草稿保持 pending 可重试，无孤儿投影）"
+    degradedImpact: "本次沉淀未保存（调用方明确感知）；已确认笔记真源不受影响（住 sidecar）"
+    observability: "工具错误返回 / HTTP 状态码（400/404/409/500）带错误码与原因"
+    negativeDrill: tests/knowledge/knowledge-drafts.spec.ts
+
+  - id: sati-notes-sidecar-db
+    component: src/knowledge/personal-note/notes-db.ts
+    dependency: "Sati 自有 sati-notes.db 文件（笔记/草稿真源，~/.sati/knowledge/sati-notes.db）"
+    failDirection: closed
+    degradedBehavior: "打开/迁移/导入失败 → 工具与 /api/web/knowledge-drafts 路由错误返回；knowledge.db 只读检索不受影响"
+    degradedImpact: "草稿与笔记不可写（调用方明确感知）；管道产物刷新不再丢失 Sati 侧数据（真源已迁出，WS2.1）"
+    observability: "工具错误返回 / HTTP 500 knowledge_drafts_error（带原因）"
+    negativeDrill: tests/knowledge/knowledge-drafts.spec.ts

@@ -29,6 +29,11 @@ export type KnowledgeDbPaths = {
   caseDb?: string;
   /** knowledge.db 统一主库（XiaoNuo 管道产物：kg_nodes/法规/embeddings/判例），缺失时 undefined。 */
   knowledgeDb?: string;
+  /**
+   * Sati 自有笔记/草稿真源库（sati-notes.db；WS2.1）。knowledge.db 是管道
+   * 产物（文件级整体替换），运行期写入迁出至此——恒可创建，不判存在性。
+   */
+  notesDb: string;
   /** 数据目录来源（用于诊断）。 */
   dataDir: string;
 };
@@ -85,5 +90,14 @@ export function resolveKnowledgeDbPaths(env: NodeJS.ProcessEnv = process.env): K
   const caseDb =
     env.SATI_CASE_DB ?? knowledgeDb ?? firstExisting([join(dataDir, "knowledge.db"), join(dataDir, "cases.db")]);
 
-  return { patentKgDb, lawDb, wikiDir, vectorsDb, caseDb, knowledgeDb, dataDir };
+  return {
+    patentKgDb,
+    lawDb,
+    wikiDir,
+    vectorsDb,
+    caseDb,
+    knowledgeDb,
+    notesDb: env.SATI_NOTES_DB ?? join(dataDir, "sati-notes.db"),
+    dataDir,
+  };
 }

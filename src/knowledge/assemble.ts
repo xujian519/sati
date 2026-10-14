@@ -12,6 +12,7 @@ import type { MemoryResolver } from "../context/memory/MemoryResolver.js";
 import { NEXT_TASK_MS } from "../shared/timeouts.js";
 import type { EmbeddingClient } from "../model/embedding/types.js";
 import type { RerankClient } from "../model/embedding/rerank.js";
+import { resolveKnowledgeDbPaths } from "./config.js";
 import { KgStore } from "./shared/kg-store.js";
 import { VectorDbSearch } from "./shared/vector-db.js";
 import { KnowledgeEmbeddingSearch, createKnowledgeEmbeddingSearch } from "./shared/knowledge-embeddings.js";
@@ -39,6 +40,8 @@ export type BuildKnowledgeResolversOptions = {
   lawDb?: string;
   /** knowledge.db 路径（XiaoNuo 统一知识库：kg_nodes + 法规 + embeddings，优先）。 */
   knowledgeDb?: string;
+  /** sati-notes.db 路径（WS2.1：Sati 自有笔记/草稿真源；缺省取配置解析值）。 */
+  notesDb?: string;
   /** wiki 卡片目录。 */
   wikiDir?: string;
   /** vectors.db 路径（legacy 语义索引，存在才启用 KG/法条语义召回）。 */
@@ -201,7 +204,8 @@ export function buildKnowledgeResolvers(options: BuildKnowledgeResolversOptions)
         if (options.embedding) {
           try {
             noteSemantic = getOrCreatePersonalNoteIndex({
-              dbPath: options.knowledgeDb,
+              notesDb: options.notesDb ?? resolveKnowledgeDbPaths().notesDb,
+              knowledgeDb: options.knowledgeDb,
               client: options.embedding,
               storePath: join(options.embeddingDir, "personal-note.jsonl"),
               logger: options.logger,

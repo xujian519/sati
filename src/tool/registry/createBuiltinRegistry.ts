@@ -138,6 +138,12 @@ export type CreateBuiltinRegistryOptions = {
    */
   webSearch?: CreateWebSearchToolOptions | false;
   /**
+   * `knowledge_note_save` 写入模式（WS2 草稿闸门）：`draft`（默认）经草稿确认
+   * 后入库；`direct` 直写逃生口。只影响运行时行为——工具的 name/inputSchema/
+   * description 保持不变，llm-replay fixture 的 toolSchemaDigest 不受影响。
+   */
+  knowledgeNoteSaveMode?: "direct" | "draft";
+  /**
    * `agent` subagent tool. **Opt-in** because it requires a model client at
    * execution time — the AgentLoop forwards the loop's model client through
    * `SatiToolRuntimeContext.model`, but stand-alone tool runtimes (e.g.
@@ -415,7 +421,7 @@ export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): T
     registry.register(annotate(createPatentWikiSearchTool(), "patent"));
     registry.register(annotate(createPatentKgQueryTool(), "patent"));
     registry.register(annotate(createPatentCaseSearchTool(), "patent"));
-    registry.register(annotate(createKnowledgeNoteSaveTool(), "patent"));
+    registry.register(annotate(createKnowledgeNoteSaveTool({ saveMode: options?.knowledgeNoteSaveMode }), "patent"));
     registry.register(annotate(createAnalyzePatentFigureTool(), "patent"));
     registry.register(
       annotate(

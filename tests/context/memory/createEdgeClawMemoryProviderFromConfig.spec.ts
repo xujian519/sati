@@ -48,6 +48,7 @@ function makeConfig(rootDir: string): PilotMemoryConfig {
     captureStrategy: "last_turn",
     includeAssistant: false,
     maxMessageChars: 6000,
+    knowledgeNoteSaveMode: "draft",
     embedding: { enabled: true, model: "test", baseUrl: "http://localhost:1", dimensions: 8, indexMemory: true },
   };
 }

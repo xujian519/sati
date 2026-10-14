@@ -73,6 +73,7 @@ export function parseMemoryConfig(
     "autoDreamIntervalMinutes",
     "embedding",
     "knowledgeProfile",
+    "knowledgeNoteSaveMode",
   ]);
   for (const key of Object.keys(rawMemory)) {
     if (!KNOWN_FIELDS.has(key)) {
@@ -101,6 +102,7 @@ export function parseMemoryConfig(
     heartbeatBatchSize: readOptionalPositiveInteger(rawMemory.heartbeatBatchSize, "memory.heartbeatBatchSize"),
     embedding,
     knowledgeProfile,
+    knowledgeNoteSaveMode: readNoteSaveMode(rawMemory.knowledgeNoteSaveMode),
   };
 }
 
@@ -473,6 +475,17 @@ function readCaptureStrategy(value: unknown): PilotMemoryConfig["captureStrategy
     "CONFIG_MEMORY_CAPTURE_INVALID",
     "memory.captureStrategy must be last_turn or full_session.",
   );
+}
+
+/** 解析 knowledge_note_save 写入模式：缺省 draft（草稿闸门默认开，D1）。 */
+function readNoteSaveMode(value: unknown): "direct" | "draft" {
+  if (value === undefined) {
+    return "draft";
+  }
+  if (value === "direct" || value === "draft") {
+    return value;
+  }
+  throw new PilotConfigError("CONFIG_MEMORY_VALUE_INVALID", "memory.knowledgeNoteSaveMode must be direct or draft.");
 }
 
 function readString(value: unknown, fallback: string, path: string): string {
