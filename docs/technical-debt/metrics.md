@@ -7,9 +7,9 @@
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1132 / 197465 |
+| src TS 文件 / 行数 | 1136 / 197604 |
 | src JS 文件 | 0 |
-| tests 文件 | 655 |
+| tests 文件 | 656 |
 | ui/src 文件 / 行数 | 646 / 102967 |
 | ui/server 文件 / 行数 | 136 / 36362 |
 
@@ -55,7 +55,6 @@
 | `ui/src/components/main-content-v2/skills/import/ImportFromFolder.tsx` | `ImportFromFolder` | 688 | function |
 | `ui/src/components/chat-v2/ChatInterfaceV2.tsx` | `ChatInterfaceV2` | 668 | function |
 | `ui/src/hooks/useProjectsState.ts` | `useProjectsState` | 647 | function |
-| `src/adapters/channel/tui/app/TuiApp.tsx` | `TuiApp` | 643 | function |
 | `ui/src/components/onboarding/view/subcomponents/LlmConfigurationStep.tsx` | `LlmConfigurationStep` | 633 | function |
 | `ui/src/components/app-shell/AppShellV2.tsx` | `AppShellV2` | 632 | function |
 | `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` | `(anonymous)` | 624 | arrow |
@@ -165,10 +164,10 @@
 | cli | 20 |
 | router | 20 |
 | always-on | 14 |
+| adapters | 13 |
 | extension | 13 |
 | mcp | 13 |
 | pilot | 13 |
-| adapters | 12 |
 | cron | 12 |
 | rule | 10 |
 | web | 9 |
@@ -187,7 +186,7 @@
 | runtime | 1 |
 | status | 1 |
 
-| **合计** | **628** |
+| **合计** | **629** |
 
 ## i18n en/zh-CN 对齐
 
