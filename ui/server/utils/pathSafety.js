@@ -22,3 +22,14 @@ export function isPathInsideOrEqual(root, candidate) {
   }
   return resolvedCandidate.startsWith(resolvedRoot.endsWith(path.sep) ? resolvedRoot : `${resolvedRoot}${path.sep}`);
 }
+
+/**
+ * 判定两个路径是否重叠——互为祖先或相等（父子两个方向都算）。
+ *
+ * @param {string} a 其一路径。
+ * @param {string} b 另一路径。
+ * @returns {boolean} 两条路径重叠。
+ */
+export function pathsOverlap(a, b) {
+  return isPathInsideOrEqual(a, b) || isPathInsideOrEqual(b, a);
+}

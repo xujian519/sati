@@ -23,6 +23,7 @@ import {
   resolvePathInProject,
   sha256File,
   streamFileWithRange,
+  validatePathInProject,
 } from "../services/filesystem.js";
 import { contentDispositionAttachment } from "../utils/downloadHeaders.js";
 import { WORKSPACES_ROOT, validateWorkspacePath } from "./projects.js"; // 旧 projects 子路径路由
@@ -173,19 +174,17 @@ router.get("/api/projects/:projectName/file", authenticateToken, requireRegister
   try {
     const { filePath } = req.query;
 
-    // Security: ensure the requested path is inside the project root
     if (!filePath) {
       return res.status(400).json({ error: "Invalid file path" });
     }
 
     const projectRoot = req.projectRoot;
-
-    // Handle both absolute and relative paths
-    const resolved = path.isAbsolute(filePath) ? path.resolve(filePath) : path.resolve(projectRoot, filePath);
-    const normalizedRoot = path.resolve(projectRoot) + path.sep;
-    if (!resolved.startsWith(normalizedRoot)) {
-      return res.status(403).json({ error: "Path must be under project root" });
+    // 请求方给的路径必须落在 root 之内（root 是目录，不接受与之相等）
+    const resolvedResult = validatePathInProject(projectRoot, filePath);
+    if (!resolvedResult.valid) {
+      return res.status(403).json({ error: resolvedResult.error });
     }
+    const resolved = resolvedResult.resolved;
 
     // Memory-managed files (e.g. MEMORY.md) live under the memory store
     // (memory/workspaces/<hash>/memory/...) rather than the project root.
@@ -315,7 +314,6 @@ router.put("/api/projects/:projectName/file", authenticateToken, requireRegister
   try {
     const { filePath, content } = req.body;
 
-    // Security: ensure the requested path is inside the project root
     if (!filePath) {
       return res.status(400).json({ error: "Invalid file path" });
     }
@@ -325,13 +323,12 @@ router.put("/api/projects/:projectName/file", authenticateToken, requireRegister
     }
 
     const projectRoot = req.projectRoot;
-
-    // Handle both absolute and relative paths
-    const resolved = path.isAbsolute(filePath) ? path.resolve(filePath) : path.resolve(projectRoot, filePath);
-    const normalizedRoot = path.resolve(projectRoot) + path.sep;
-    if (!resolved.startsWith(normalizedRoot)) {
-      return res.status(403).json({ error: "Path must be under project root" });
+    // 请求方给的路径必须落在 root 之内（root 是目录，不接受与之相等）
+    const resolvedResult = validatePathInProject(projectRoot, filePath);
+    if (!resolvedResult.valid) {
+      return res.status(403).json({ error: resolvedResult.error });
     }
+    const resolved = resolvedResult.resolved;
 
     // Memory-managed files must be written back to the memory store instead
     // of the project root — otherwise saving would create a shadow file at

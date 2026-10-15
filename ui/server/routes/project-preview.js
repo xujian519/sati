@@ -97,10 +97,6 @@ router.get(
       }
 
       const projectRoot = req.projectRoot;
-      if (!projectRoot) {
-        return res.status(404).json({ error: "Project not found" });
-      }
-
       const resolvedResult = resolvePathInProject(projectRoot, filePath);
       if (!resolvedResult.valid) {
         return res.status(403).json({ error: resolvedResult.error });
@@ -166,9 +162,6 @@ router.get(
       }
 
       const projectRoot = req.projectRoot;
-      if (!projectRoot) {
-        return res.status(404).json({ error: "Project not found" });
-      }
       const resolvedResult = resolvePathInProject(projectRoot, filePath);
       if (!resolvedResult.valid) {
         return res.status(403).json({ error: resolvedResult.error });
@@ -211,9 +204,6 @@ router.get(
       }
 
       const projectRoot = req.projectRoot;
-      if (!projectRoot) {
-        return res.status(404).json({ error: "Project not found" });
-      }
       const resolvedResult = resolvePathInProject(projectRoot, filePath);
       if (!resolvedResult.valid) {
         return res.status(403).json({ error: resolvedResult.error });
@@ -260,9 +250,6 @@ router.get(
       }
 
       const projectRoot = req.projectRoot;
-      if (!projectRoot) {
-        return res.status(404).json({ error: "Project not found" });
-      }
       const resolvedResult = resolvePathInProject(projectRoot, filePath);
       if (!resolvedResult.valid) {
         return res.status(403).json({ error: resolvedResult.error });
@@ -298,23 +285,14 @@ router.get(
 );
 
 // 为预览签发仅限该项目的短期凭据。预览 URL 只携带这份凭据，不再携带会话 JWT。
-router.post(
-  "/api/projects/:projectName/preview-token",
-  authenticateToken,
-  requireRegisteredProjectRoot,
-  async (req, res) => {
-    const { projectName } = req.params;
-    const projectRoot = req.projectRoot;
-    if (!projectRoot) {
-      return res.status(404).json({ error: "Project not found" });
-    }
-    res.setHeader("Cache-Control", "no-store");
-    return res.json({
-      token: generateProjectPreviewToken(req.user, projectName),
-      expiresIn: PROJECT_PREVIEW_TOKEN_TTL_SECONDS,
-    });
-  },
-);
+router.post("/api/projects/:projectName/preview-token", authenticateToken, requireRegisteredProjectRoot, (req, res) => {
+  const { projectName } = req.params;
+  res.setHeader("Cache-Control", "no-store");
+  return res.json({
+    token: generateProjectPreviewToken(req.user, projectName),
+    expiresIn: PROJECT_PREVIEW_TOKEN_TTL_SECONDS,
+  });
+});
 
 // Serve project files through a stable project-root URL so generated HTML can
 // load sibling CSS, JS and image assets with normal relative paths.
@@ -328,10 +306,6 @@ router.get(
       const relativeFilePath = getSplatPath(req) || "index.html";
 
       const projectRoot = req.projectRoot;
-      if (!projectRoot) {
-        return res.status(404).json({ error: "Project not found" });
-      }
-
       const resolvedResult = resolvePathInProject(projectRoot, relativeFilePath);
       if (!resolvedResult.valid) {
         return res.status(403).json({ error: resolvedResult.error });

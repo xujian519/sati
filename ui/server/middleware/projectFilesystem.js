@@ -14,7 +14,7 @@ import { realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import { resolveRegisteredProject } from "../services/projectRegistration.js";
 import { resolvePilotHome } from "../utils/pilotPaths.js";
-import { isPathInsideOrEqual } from "../utils/pathSafety.js";
+import { pathsOverlap } from "../utils/pathSafety.js";
 
 /** 403：路径按设计不可用于文件操作（虚拟工作区 / 与 app home 重叠）。 */
 function forbidden(res) {
@@ -42,13 +42,9 @@ export function createProjectFilesystemMiddleware({ env = process.env } = {}) {
     try {
       const pilotHome = resolvePilotHome(env);
       const projectRoot = await resolveRegisteredProject(req.params.projectName, pilotHome);
+      // 词法判定看不穿软链与大小写别名，故规范化之后再判一次。
       const [realProjectRoot, realPilotHome] = await Promise.all([realpath(projectRoot), realpath(pilotHome)]);
-      if (
-        isPathInsideOrEqual(pilotHome, projectRoot) ||
-        isPathInsideOrEqual(projectRoot, pilotHome) ||
-        isPathInsideOrEqual(realPilotHome, realProjectRoot) ||
-        isPathInsideOrEqual(realProjectRoot, realPilotHome)
-      ) {
+      if (pathsOverlap(projectRoot, pilotHome) || pathsOverlap(realProjectRoot, realPilotHome)) {
         return forbidden(res);
       }
       if (!(await stat(projectRoot)).isDirectory()) {

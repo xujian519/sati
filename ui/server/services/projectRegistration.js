@@ -35,40 +35,49 @@ export async function readRegisteredProject(projectsDir, id) {
   if (!info?.isDirectory() || info.isSymbolicLink()) {
     return null;
   }
-  let root;
   try {
     const marker = path.join(storage, ".cwd");
     const markerInfo = await fs.lstat(marker);
     if (!markerInfo.isFile() || markerInfo.isSymbolicLink()) {
       return null;
     }
-    root = (await fs.readFile(marker, "utf8")).trim();
+    const root = (await fs.readFile(marker, "utf8")).trim();
     if (!root || !path.isAbsolute(root) || root.includes("\0")) {
       return null;
     }
+    // 会话可以比工作区活得久——root 是否真的还在，由文件路由在访问时判。
+    return path.resolve(root);
   } catch (error) {
     if (error.code !== "ENOENT") {
       return null;
     }
-    // 无 `.cwd` 标记：只有 id 能由真实存在的目录按 legacy 编码反推出来时才认。
-    const parts = id.split("-");
-    for (let start = 0; start < parts.length; start++) {
-      const candidates = [`/${parts.slice(start).join("/")}`];
-      if (process.platform === "win32") {
-        for (const drive of ["C", "D", "E"]) {
-          candidates.push(`${drive}:\\${parts.slice(start).join("\\")}`);
-        }
-      }
-      for (const candidate of candidates) {
-        if (createProjectId(candidate) === id && (await fs.stat(candidate).catch(() => null))?.isDirectory()) {
-          return candidate;
-        }
+    return readLegacyEncodedProject(id);
+  }
+}
+
+/**
+ * 无 `.cwd` 标记时的回退：只有 id 能由**真实存在**的目录按 legacy 编码（`-` 即路径分隔符）
+ * 反推出来时才认，故返回的路径必定存在。
+ *
+ * @param {string} id 项目 id（`state` 目录名）。
+ * @returns {Promise<string | null>} 反推出的绝对 root，或 `null`。
+ */
+async function readLegacyEncodedProject(id) {
+  const parts = id.split("-");
+  for (let start = 0; start < parts.length; start++) {
+    const candidates = [`/${parts.slice(start).join("/")}`];
+    if (process.platform === "win32") {
+      for (const drive of ["C", "D", "E"]) {
+        candidates.push(`${drive}:\\${parts.slice(start).join("\\")}`);
       }
     }
-    return null;
+    for (const candidate of candidates) {
+      if (createProjectId(candidate) === id && (await fs.stat(candidate).catch(() => null))?.isDirectory()) {
+        return candidate;
+      }
+    }
   }
-  // 会话可以比工作区活得久——root 是否真的还在，由文件路由在访问时判。
-  return path.resolve(root);
+  return null;
 }
 
 /**

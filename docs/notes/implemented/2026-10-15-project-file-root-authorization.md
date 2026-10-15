@@ -31,6 +31,11 @@ Status: implemented
   `PROJECT_PATH_FORBIDDEN`；判定跑两遍（词法 + `realpath` 规范化后），以覆盖软链与大小写别名；
   未注册/登记失效/工作区已消失回 404 `PROJECT_NOT_FOUND`。通过后把 root 挂到 `req.projectRoot`。
 - 处理器一律改用 `req.projectRoot`；`/files` 的短横线解码兜底（`projectName.replace(/-/g,'/')`）删除。
+  处理器**不再重复判空** `req.projectRoot`——守卫要么注入 root、要么已经回了 403/404，这些
+  `if (!projectRoot) return 404` 是死分支；「每个项目面都挂守卫」由接线契约测试独立钉住，
+  不变量不在处理器里重复表达。`/file` 读写两面的包含性检查也改为复用
+  `services/filesystem.js` 的 `validatePathInProject`（与 `project-uploads.js` 同一判据，
+  语义与错误文案不变）；守卫自身的重叠判定抽成 `utils/pathSafety.js` 的 `pathsOverlap`。
 - 错误体用结构化形状 `{ error: { code, message } }`（与 `hookTrust`/`kanban`/`knowledgeDrafts`
   等较新路由一致），使「设计上不可用」（403）与「不存在」（404）可被消费方区分。
 
@@ -70,5 +75,6 @@ Status: implemented
   `req.user.id` 与临时目录，从不解析项目 root，也就没有待授权的 root；它同时没有任何源码消费方），
   该豁免在接线契约测试里显式登记，并有一条反向断言防止「豁免烂掉」。
 - **未覆盖（明示）**：`git.js` / `taskmaster.js` 的文件内容可达面未收口（见上）；`project-preview.js`
-  的预览面已收口，但预览凭据与 `authenticateProjectPreview` 的交互只在结构层面覆盖，未做端到端
-  凭据路径测试。
+  的预览面已收口，但预览凭据与 `authenticateProjectPreview` 的交互**没有自动化用例**——只在结构层面
+  覆盖；手工浏览器验证已跑通（真实 UI：`POST /preview-token` 200 → 带 `?token=` 取 `preview/*` 200 且
+  正文正确、`general` 的 `preview-token` 403），下次改动该面仍需手工复验。

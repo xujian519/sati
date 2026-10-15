@@ -143,11 +143,11 @@ describe("端到端：授权来源", () => {
     ["系统目录绝对路径", "/etc"],
     ["未注册的绝对路径", undefined],
     ["短横线解码形态", "-etc"],
-  ])("%s 在全部项目面上回 404 且不泄露文件内容", async (label, name) => {
+  ])("%s 在全部项目面上回 404 且不泄露文件内容", async (caseName, name) => {
     const target = name ?? root;
-    for (const [label2, suffix, init] of PROJECT_SURFACES) {
+    for (const [surface, suffix, init] of PROJECT_SURFACES) {
       const response = await request(target, suffix, init());
-      expect(response.status, `${label} → ${label2} 应被拒`).toBe(404);
+      expect(response.status, `${caseName} → ${surface} 应被拒`).toBe(404);
       const body = await response.text();
       expect(body).not.toContain("normal");
       expect(body).not.toContain("fake-server-token");
@@ -251,10 +251,10 @@ describe("端到端：合法工作区照常可用", () => {
 
 describe("接线契约：每个项目面都挂守卫", () => {
   /**
-   * 每个文件里 `/api/projects/:projectName/…` 面的条数。条数为 0 时下面的循环恒真，
+   * 每个路由文件里 `/api/projects/:projectName/…` 面的条数。条数为 0 时下面的循环恒真，
    * 故先钉住条数，避免「解析失败 = 断言通过」。
    */
-  const PROJECT_FACES = [
+  const PROJECT_FACE_COUNTS = [
     ["project-files.js", 5],
     ["project-preview.js", 6],
     ["project-uploads.js", 3],
@@ -272,14 +272,14 @@ describe("接线契约：每个项目面都挂守卫", () => {
       ...source.matchAll(
         /router\.(?:get|post|put|delete|patch)\(\s*(?:\n\s*)?"(\/api\/projects\/:projectName\/[^"]*)"/g,
       ),
-    ].map(match => ({ path: match[1], chain: source.slice(match.index, match.index + 400), source }));
+    ].map(match => ({ path: match[1], chain: source.slice(match.index, match.index + 400) }));
   }
 
-  it.each(PROJECT_FACES)("%s 的项目面共 %i 条，条数与接线一致", (file, expectedCount) => {
+  it.each(PROJECT_FACE_COUNTS)("%s 的项目面共 %i 条，条数与接线一致", (file, expectedCount) => {
     expect(projectFaces(file).length).toBe(expectedCount);
   });
 
-  it.each(PROJECT_FACES)("%s 的项目面都挂了守卫（豁免项需显式登记）", file => {
+  it.each(PROJECT_FACE_COUNTS)("%s 的项目面都挂了守卫（豁免项需显式登记）", file => {
     const exempt = UNGUARDED_BY_DESIGN.get(file) ?? new Set();
     const unguarded = projectFaces(file)
       .filter(({ path: routePath }) => !exempt.has(routePath))
@@ -298,7 +298,7 @@ describe("接线契约：每个项目面都挂守卫", () => {
     }
   });
 
-  it.each(PROJECT_FACES)("%s 不再按 projectName 解析 root", file => {
+  it.each(PROJECT_FACE_COUNTS)("%s 不再按 projectName 解析 root", file => {
     const source = readFileSync(new URL(file, import.meta.url), "utf8");
     expect(source).not.toContain("extractProjectDirectory");
     expect(source).not.toContain("Fallback to simple dash replacement");
