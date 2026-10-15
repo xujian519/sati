@@ -10,6 +10,7 @@ import { logger } from "../utils/consoleLogger.js";
 import { WebSocketServer, WebSocket } from "ws";
 import crypto from "crypto";
 import { authenticateWebSocket } from "../middleware/auth.js";
+import { isTrustedOrigin } from "../middleware/corsPolicy.js";
 import { isTrustedRequestSource } from "../middleware/localOriginGuard.js";
 import { DISABLE_LOCAL_AUTH, IS_PLATFORM } from "../constants/config.js";
 import { getPluginPort } from "../utils/plugin-process-manager.js";
@@ -115,12 +116,16 @@ export function createChatWebSocketServer(server) {
       // so logging the raw URL would write the credential to disk.
       logger.info("WebSocket connection attempt to:", info.req.url?.split("?")[0]);
 
-      // Platform / no-login mode skips token validation; otherwise extract the
-      // token from the query string or Authorization header.
-      const bypass = IS_PLATFORM || DISABLE_LOCAL_AUTH;
+      // 跨站握手拒止（#625）：WebSocket 不受浏览器 CORS 约束，同机任意网页
+      // 可直接 new WebSocket 建连，故必须在服务端校验 Origin。无 Origin（非浏览器
+      // 客户端）/ 同源 / 环回 / 白名单放行，其余跨站拒绝。
+      if (!isTrustedOrigin(info.req.headers.origin, info.req.headers.host)) {
+        logger.info(`[WARN] WebSocket handshake blocked from untrusted origin: ${info.req.headers.origin}`);
+        return false;
+      }
 
-      // 本机免登录模式下没有凭据可验，跨站页面同样能发起握手（WebSocket 不受 CORS 约束）——
-      // 与 HTTP 面共用同一来源判据（见 ../middleware/localOriginGuard.js）。
+      // 第二层（本机免登录模式，判据同 HTTP 面）：上面那条把 Origin 与 Host 同为主机名的
+      // rebinding 请求视为同源放行，本层按「本机可达名」判 Host 与 Origin 兜住该缺口。
       if (DISABLE_LOCAL_AUTH && !IS_PLATFORM) {
         const headers = info.req.headers;
         if (!isTrustedRequestSource({ host: headers.host, origin: info.origin ?? headers.origin })) {
@@ -128,6 +133,10 @@ export function createChatWebSocketServer(server) {
           return false;
         }
       }
+
+      // Platform / no-login mode skips token validation; otherwise extract the
+      // token from the query string or Authorization header.
+      const bypass = IS_PLATFORM || DISABLE_LOCAL_AUTH;
 
       const token = bypass
         ? null

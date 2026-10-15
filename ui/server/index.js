@@ -18,7 +18,6 @@ logger.info("SERVER_PORT from runtime config:", process.env.SERVER_PORT);
 
 import express from "express";
 import http from "http";
-import cors from "cors";
 
 import gitRoutes from "./routes/git.js";
 import authRoutes from "./routes/auth.js";
@@ -50,6 +49,7 @@ import knowledgeDraftsRoutes from "./routes/knowledgeDrafts.js";
 import urlTicketRoutes from "./routes/url-ticket.js";
 
 import { validateApiKey, authenticateToken } from "./middleware/auth.js";
+import { corsPolicy } from "./middleware/corsPolicy.js";
 import { createLocalOriginGuard } from "./middleware/localOriginGuard.js";
 import { DISABLE_LOCAL_AUTH, IS_PLATFORM } from "./constants/config.js";
 import { getConnectableHost } from "../shared/networkHosts.js";
@@ -79,11 +79,16 @@ startTeamPresenceHeartbeat({
   },
 });
 
-app.use(cors({ exposedHeaders: ["X-Refreshed-Token"] }));
+// 跨站来源收窄（#625）：默认免登录模式下曾无条件 cors()（ACAO `*`），
+// 同机任意网页即可读本机 API。corsPolicy 只放行无 Origin / 同源 / 环回 / 显式白名单
+// 来源，其余跨站在抵达任何路由前 403 拒绝（详见 middleware/corsPolicy.js）。
+app.use(corsPolicy());
 
-// 本机免登录模式下，任意网页都能调用本机 API 并读响应（cors() 放行任意 origin，auth 直接放行）。
-// 来源守卫把「外部网页」这条入口关掉；托管部署（IS_PLATFORM）有真实 JWT 且 Host 是公网域名，
-// 故那里不启用。见 ./middleware/localOriginGuard.js。
+// 第二层（本机免登录模式）：corsPolicy 的同源判据在 DNS rebinding 下会放行
+// —— 攻击页自身跑在同端口（http://evil.com:3001）时，其 Origin 与 Host 同为主机名
+// evil.com，于是被判为「同源」。本层要求 Host 与 Origin 各自都是本机可达名
+// （环回 / 私有地址 / 本机主机名 / SATI_TRUSTED_HOSTS），rebinding 页无论端口都过不去。
+// 托管部署（IS_PLATFORM）有真实 JWT 且 Host 是公网域名，故那里不启用。
 app.use(
   createLocalOriginGuard({
     enabled: DISABLE_LOCAL_AUTH && !IS_PLATFORM,

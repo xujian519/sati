@@ -15,8 +15,37 @@ import {
   isTrustedLocalHost,
   isTrustedRequestSource,
 } from "./localOriginGuard.js";
+import { corsPolicy } from "./corsPolicy.js";
 
 const nativeFetch = globalThis.fetch;
+
+/** 原生 http 客户端：`fetch`（undici）不允许覆写 `Host`，而 rebinding 判据正是要伪造 `Host`。 */
+function rawGet(port, path, headers = {}) {
+  return new Promise((resolve, reject) => {
+    const req = httpRequest({ host: "127.0.0.1", port, path, headers }, res => {
+      let body = "";
+      res.on("data", chunk => {
+        body += chunk;
+      });
+      res.on("end", () => resolve({ status: res.statusCode, body }));
+    });
+    req.on("error", reject);
+    req.end();
+  });
+}
+
+/** 起一个只挂给定中间件的探针服务（`/api/probe` 恒 200）。 */
+async function serve(middlewares) {
+  const app = express();
+  for (const middleware of middlewares) app.use(middleware);
+  app.get("/api/probe", (_req, res) => res.json({ ok: true }));
+  const server = app.listen(0, "127.0.0.1");
+  await new Promise(resolve => server.once("listening", resolve));
+  return {
+    port: server.address().port,
+    close: () => new Promise(resolve => server.close(resolve)),
+  };
+}
 
 describe("extractHostname", () => {
   it.each([
@@ -104,31 +133,8 @@ describe("isTrustedRequestSource", () => {
 });
 
 describe("中间件行为", () => {
-  /** 原生 http 客户端：`fetch`（undici）不允许覆写 `Host`，而 rebinding 判据正是要伪造 `Host`。 */
-  function rawGet(port, path, headers = {}) {
-    return new Promise((resolve, reject) => {
-      const req = httpRequest({ host: "127.0.0.1", port, path, headers }, res => {
-        let body = "";
-        res.on("data", chunk => {
-          body += chunk;
-        });
-        res.on("end", () => resolve({ status: res.statusCode, body }));
-      });
-      req.on("error", reject);
-      req.end();
-    });
-  }
-
-  async function start({ enabled, ...options }) {
-    const app = express();
-    app.use(createLocalOriginGuard({ enabled, selfHostname: "my-mac", ...options }));
-    app.get("/api/probe", (_req, res) => res.json({ ok: true }));
-    const server = app.listen(0, "127.0.0.1");
-    await new Promise(resolve => server.once("listening", resolve));
-    return {
-      port: server.address().port,
-      close: () => new Promise(resolve => server.close(resolve)),
-    };
+  function start({ enabled, ...options }) {
+    return serve([createLocalOriginGuard({ enabled, selfHostname: "my-mac", ...options })]);
   }
 
   it("启用后只放行本机来源，公网来源与 rebinding 一律 403", async () => {
@@ -168,6 +174,43 @@ describe("中间件行为", () => {
         headers: { Origin: "https://evil.com" },
       });
       expect(crossSite.status).toBe(200);
+    } finally {
+      await close();
+    }
+  });
+});
+
+// 本层与 corsPolicy（#625）职责相邻，故把「两层叠加才拦得住」这件事本身钉成用例：
+// 少了本层，下面这个 rebinding 形态会被 corsPolicy 判成同源而放行。
+describe("与 corsPolicy 叠加", () => {
+  // DNS rebinding 且攻击页跑在同端口：Host 与 Origin 同为主机名 evil.com:PORT
+  const rebinding = { host: "evil.com:3001", origin: "http://evil.com:3001" };
+
+  it("只用 corsPolicy 时，该形态被判同源放行（本层存在的理由）", async () => {
+    const { port, close } = await serve([corsPolicy(new Set())]);
+    try {
+      const res = await rawGet(port, "/api/probe", rebinding);
+      expect(res.status).toBe(200);
+    } finally {
+      await close();
+    }
+  });
+
+  it("两层叠加后拒绝，且本机同源请求不受影响", async () => {
+    const { port, close } = await serve([
+      corsPolicy(new Set()),
+      createLocalOriginGuard({ enabled: true, selfHostname: "my-mac" }),
+    ]);
+    try {
+      const blocked = await rawGet(port, "/api/probe", rebinding);
+      expect(blocked.status).toBe(403);
+      expect(blocked.body).toContain("UNTRUSTED_REQUEST_ORIGIN");
+
+      const local = await rawGet(port, "/api/probe", {
+        host: `127.0.0.1:${port}`,
+        origin: `http://127.0.0.1:${port}`,
+      });
+      expect(local.status).toBe(200);
     } finally {
       await close();
     }

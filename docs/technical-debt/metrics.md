@@ -7,11 +7,11 @@
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1132 / 197469 |
+| src TS 文件 / 行数 | 1136 / 197608 |
 | src JS 文件 | 0 |
-| tests 文件 | 656 |
+| tests 文件 | 657 |
 | ui/src 文件 / 行数 | 647 / 103033 |
-| ui/server 文件 / 行数 | 147 / 38366 |
+| ui/server 文件 / 行数 | 149 / 38686 |
 
 ## 指标口径
 
@@ -32,9 +32,9 @@
 | `as unknown as`（双重断言） | 29 | ui/src(22) · knowledge(5) · adapters(1) |
 | 裸 `console.*` | 6 | ui/server(6) |
 | 空 `catch {}` | 0 | — |
-| 无参 `catch {`（总计） | 698 | ui/server(156) · ui/src(125) · adapters(71) |
+| 无参 `catch {`（总计） | 699 | ui/server(157) · ui/src(125) · adapters(71) |
 | ↳ **无注释**（隐患类，目标） | **0** | — |
-| ↳ 已带意图注释 | 698 | — |
+| ↳ 已带意图注释 | 699 | — |
 | `TODO/HACK/FIXME/XXX` | 11 | always-on(4) · tests(4) · ui/src(2) |
 | 分层违规 `ui/server→src` | 15 | — |
 | 分层违规 `src→ui` | 0 | — |
@@ -55,7 +55,6 @@
 | `ui/src/components/main-content-v2/skills/import/ImportFromFolder.tsx` | `ImportFromFolder` | 688 | function |
 | `ui/src/components/chat-v2/ChatInterfaceV2.tsx` | `ChatInterfaceV2` | 668 | function |
 | `ui/src/hooks/useProjectsState.ts` | `useProjectsState` | 647 | function |
-| `src/adapters/channel/tui/app/TuiApp.tsx` | `TuiApp` | 643 | function |
 | `ui/src/components/onboarding/view/subcomponents/LlmConfigurationStep.tsx` | `LlmConfigurationStep` | 633 | function |
 | `ui/src/components/app-shell/AppShellV2.tsx` | `AppShellV2` | 632 | function |
 | `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` | `(anonymous)` | 624 | arrow |
@@ -165,10 +164,10 @@
 | cli | 20 |
 | router | 20 |
 | always-on | 14 |
+| adapters | 13 |
 | extension | 13 |
 | mcp | 13 |
 | pilot | 13 |
-| adapters | 12 |
 | cron | 12 |
 | rule | 10 |
 | web | 9 |
@@ -187,7 +186,7 @@
 | runtime | 1 |
 | status | 1 |
 
-| **合计** | **629** |
+| **合计** | **630** |
 
 ## i18n en/zh-CN 对齐
 

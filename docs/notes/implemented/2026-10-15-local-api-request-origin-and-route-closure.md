@@ -41,10 +41,24 @@ Status: implemented
 
 ### 本机模式的请求来源守卫（`middleware/localOriginGuard.js`）
 
-挂在 `cors()` 之后、所有路由之前；`enabled = DISABLE_LOCAL_AUTH && !IS_PLATFORM`（托管部署有真实
-JWT，且 Host 是公网域名，不启用）。`Host` 与 `Origin` **两个头各自过同一套「本机可达名字」判定**
-（回环名/地址、私有地址字面量、`os.hostname()` / `<hostname>.local`，或显式 `SATI_TRUSTED_HOSTS`
-里列出的名字）：
+**与 #625 的关系（合流时补记）**：本批开发期间 main 上先合并了 #680（`middleware/corsPolicy.js`，
+「跨站来源收窄」），它替换了 `index.js` 里原先无条件的 `cors()`，判据为「无 Origin / 同源 / 环回 /
+`SATI_ALLOWED_ORIGINS` 白名单」。两者职责相邻但**不可互相替代**，故合流后保留为**两层**：
+
+- `corsPolicy()`：负责跨站与 CORS 头（可信跨源反射 Origin + 凭据），服务跨机/反代部署；
+- `localOriginGuard`（本层，仅本机免登录模式）：在它之后再加一道「`Host` 与 `Origin` 都必须是本机
+  可达名」。**少了本层，DNS rebinding 会漏**：攻击页自己跑在同端口（`http://evil.com:3001`）时，
+  请求的 `Origin` 与 `Host` 同为主机名 `evil.com`，正好命中 `corsPolicy` 的「同源」判据而放行。
+  这条已钉成用例（`localOriginGuard.test.js` 的「与 corsPolicy 叠加」：单挂 `corsPolicy` 该形态
+  回 200，两层叠加回 403）。
+
+两层的语义不能互换：`corsPolicy` 的判据若塞进「Host 必须本机可达」，会把「`SATI_ALLOWED_ORIGINS`
+登记的跨机部署」一并打断（那里 `Host` 本就是公网域名）；反过来 `localOriginGuard` 不负责 CORS 头。
+
+本层挂在 `corsPolicy()` 之后、所有路由之前；`enabled = DISABLE_LOCAL_AUTH && !IS_PLATFORM`
+（托管部署有真实 JWT，且 Host 是公网域名，不启用）。`Host` 与 `Origin` **两个头各自过同一套
+「本机可达名字」判定**（回环名/地址、私有地址字面量、`os.hostname()` / `<hostname>.local`，或显式
+`SATI_TRUSTED_HOSTS` 里列出的名字）：
 
 1. `Host` 这一半挡 **DNS rebinding**：攻击者的域名解析到 127.0.0.1 时，请求的 `Host` 就是那个
    公网域名，不是本机名字。
@@ -94,6 +108,9 @@ Windows 分隔符统一换成 `/`，转义被碾成 `/344/270/…`（用 `git sh
   （`evil.com` 解析到 127.0.0.1），`Origin` 与 `Host` 都是那个域名，第一条判据不成立就漏。
 - **只校验 `Host`，不校验 `Origin`** —— 挡不住 `https://evil.com` 直打 `127.0.0.1:3001`：那条请求的
   `Host` 正是本机地址，判据通过。
+- **把来源守卫整体并进 `corsPolicy`（或干脆删掉本层，只留 #625 的判定）** —— 落选：两层的判据
+  服务不同形态，合并必然要在「本机可达」与「白名单跨机」之间二选一。只留 #625 则 rebinding
+  漏（同源判据在 `evil.com` 解析到 127.0.0.1 时成立），已用例固定该差异。
 - **给本机 API 加凭据（强制 `SATI_DISABLE_LOCAL_AUTH=0` 登录）** —— 把「本机就是用户本人」的产品
   前提推翻，代价是整个 UI 加登录墙；而威胁模型里**本机进程**本来就不在防护范围（它能直接读文件），
   要挡的只有「外部网页」这条非用户通道。守卫的粒度正好匹配威胁模型。
@@ -121,9 +138,9 @@ Windows 分隔符统一换成 `/`，转义被碾成 `/344/270/…`（用 `git sh
   `ui/server/routes/taskmaster.test.js`（15 例：未注册/短横线/app home 的 6 个面回 404/403、
   `fileName` 穿越回 400 且 `escaped.txt` 不落盘、接线契约与「文件里没有 `shell: true`」；
   回退守卫 → 6 例转红，回退文件名校验 → 5 例转红）、
-  `ui/server/middleware/localOriginGuard.test.js`（38 例：判据表 + 真实 express，公网来源与
+  `ui/server/middleware/localOriginGuard.test.js`（40 例：判据表 + 真实 express，公网来源与
   rebinding 403、无 `Origin` 与 dev 形态放行；`enabled: false` 时跨站请求确实进得来——反向证明
-  判据不是恒真）、
+  判据不是恒真；外加 2 例固定与 `corsPolicy` 的分层差异）、
   `ui/server/routes/project-files.root-guard.test.js`（新增路由表自校验：用换参数名的假面实测
   能抓出扫描漏检）。浏览器实测另覆盖：应用同源可用（文件树 / Git 面板 / 变更文件点开读出内容）、
   General 在文件树与源代码管理都得到可区分文案、`Host: evil.com` 与 `Origin: https://evil.com`
@@ -132,6 +149,9 @@ Windows 分隔符统一换成 `/`，转义被碾成 `/344/270/…`（用 `git sh
   - 非本机名部署需配置：UI 经**自定义域名**或**未列出的主机名**访问时，API 会回 403
     `UNTRUSTED_REQUEST_ORIGIN`，须把该主机名加进 `SATI_TRUSTED_HOSTS`。回环、私有地址字面量、
     `os.hostname()`/`.local` 无需配置（MAC 上的 LAN 直连因此照常可用）。
+  - 现有两个环境变量是**两个轴**，容易混：`SATI_ALLOWED_ORIGINS`（#625）登记的是**来源 Origin**，
+    `SATI_TRUSTED_HOSTS`（本层）登记的是**被当作本机可达的主机名**；跨机部署通常要配前者，而经
+    自定义域名访问本机 UI 时两个都可能要配。
   - `general` 的 git 面板从「不是 git 仓库」的提示变为「该路径不可用于文件操作」（两者都是拒绝，
     文案不同）；未注册 id 的 git 面从「解析出的任意路径」变为「Project not found」。
   - WebSocket 握手被来源判据拒绝时只留一行 `[WARN] WebSocket handshake rejected` 日志。
