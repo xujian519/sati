@@ -291,7 +291,13 @@ export async function verifyApplicationDocx(input: {
 
 ---
 
-## 四、A2 —— `law_verify` 法条引用核验
+## 四、A2 —— `law_verify` 法条引用核验（**已落地 2026-10-15**）
+
+> **实施结果**：工具已落地（`law-index.ts` / `law-verify.ts` / `law-verify-tool.ts`，19 用例全绿，
+> 含真实知识库集成断言）。实测推翻了本节的**四处**计划假设——§4.1 第 2 行（复用取全文）、
+> §4.2（命题判据依赖的词表）、§4.3（选源判据的边界）、§4.7（同义改写的期望值），
+> 逐条已在原位标注修正。决策记录：`docs/notes/implemented/2026-10-15-law-verify-citation-check.md`。
+> 重放契约如 §4.8 所料**确实触发了重录**（加工具必然触发，与 A1「只改返回值不触发」形成对照）。
 
 ### 4.1 落点
 
@@ -302,7 +308,8 @@ export async function verifyApplicationDocx(input: {
 | 新增工具 | `src/knowledge/legal/law-verify-tool.ts` |
 | 注册 | `src/tool/registry/createBuiltinRegistry.ts`（与 `:435` 的 `law_search` 相邻） |
 | 导出 | `src/knowledge/index.ts`（现 `:81` 导出 `createLawSearchTool` 处） |
-| 复用 | `article-parser.ts`（`splitLawIntoArticles` / `normalizeArticleId` / `parseArticleHeading`）、`knowledge-law-search.ts`（取全文）、`resolveKnowledgeDbPaths` |
+| 复用 | `article-parser.ts`（`splitLawIntoArticles` / `normalizeArticleId` / `parseArticleHeading`）、`resolveKnowledgeDbPaths` |
+| ⚠️ **不许复用**（实测推翻） | ~~`knowledge-law-search.ts`（取全文）~~：它的 `getById`/`findByName` 是 `ORDER BY char_count DESC LIMIT 1`，**只取最大的单个 chunk**。实测专利法全文 11 318 字分散在 **27 条** chunk 里，最大一条仅 498 字 ⇒ 取全文必须自己按 `chunk_index` 拼全部 chunk（见 `law-index.ts` 的 `readFullText`） |
 | **必须复用，不许自造** | `rule/runtime/text-utils.ts` 的 `parseCnNumber`（§2.5） |
 | 测试 | `tests/knowledge/legal/law-verify.spec.ts`（目录按 `tests/` 镜像 `src/` 惯例） |
 
@@ -345,6 +352,21 @@ knowledge.db 里**同一部法律有多个来源**。实测 `title LIKE '%专利
 > 不按 `source='raw'` 前缀硬编码，是为了让判据对**将来新增的法源**同样成立；前缀只作为报告里的可读标注。
 >
 > ⚠️ 已实测的 82 / 149 是**指定到具体 docId** 得到的结果（§2.1）。索引构建实现后必须**用同一组反例复跑**（§4.7），确认自动选源选中的正是这两份。
+>
+> ✅ **已复跑**：自动选源选中的正是这两份（专利法 82 / 实施细则 149），8 条 wiki 碎片全部落选。
+>
+> ⚠️ 实测补充三条本节未覆盖的边界（都已在实现里处理）：
+>
+> 1. `title LIKE '%专利法%'` 会**同时命中「专利法实施细则」**（它含「专利法」三字），而实施细则
+>    149 条 > 专利法 82 条 ⇒ 直接取 maxContig 最大者会**错选实施细则**。必须先归一化法名再精确比对。
+> 2. 归一化必须剥掉「一、」「第五章」这类**章节与序号前缀**：库里有「一、山东省专利条例」（wiki，0 条）
+>    与「山东省专利条例」（raw，33 条）**同一部法**；不剥前缀会让引用优先命中更长的带前缀名，
+>    把合法条号判成 `not-indexed`，而真相是同一部法的另一份来源里有全文。
+> 3. `doc_type='law_article'` 里混着**语料片段**（实测 60 个「法名」中含 `CLAUDE.md`、`分拆目录`、
+>    `第五章 商标相同、近似的审查审理`）⇒ 抽取用的法名须过「法规后缀白名单」（`isLawLikeName`，
+>    以 法/条例/办法/规定/细则/规则/标准/解释/批复/指南/通知/决定/命令/规程 结尾）；
+>    但**书名号路径（`《任意名》第N条`）不过此判据**——否则编造法名会被静默忽略，
+>    而「静默忽略」比「判 not-indexed」更糟。
 
 ### 4.4 域标注（一个需要拍板的点）
 
@@ -358,7 +380,7 @@ knowledge.db 里**同一部法律有多个来源**。实测 `title LIKE '%专利
 
 ### 4.5 已知边界（必须写进工具描述，不许读者自行发现）
 
-1. **拦不住"条号与命题不符"**：`matchProposition` 是双向包含（`packages/patent/patent-law/src/verify.ts:274-280`），命题句里出现**任一主题词**即判 `valid`。研究报告 §5.5 实测「该商标应当核准注册，但本申请具备创造性」→ `valid`。
+1. **拦不住"条号与命题不符"**：~~`matchProposition` 是双向包含（`packages/patent/patent-law/src/verify.ts:274-280`），命题句里出现**任一主题词**即判 `valid`~~（同类判据 Sati 侧改为「命题与条文正文共享任一 3-gram」——dsh 依赖的 `ArticleEntry.topics` 人工词表 Sati 没有）。研究报告 §5.5 实测「该商标应当核准注册，但本申请具备创造性」→ `valid`；Sati 侧复跑同样 `valid`，且理由里报出**仅重合 1/16 个片段**（dsh 不报这个强度）。
    → 工具描述里必须写明：**这是引用形式门禁，不是命题正确性门禁**；"该条是否真支撑该论断"仍须由更强判据（如 `evaluate_evidence` 链路）承担。
 2. **索引抄录正确性**不可由运行时证伪。Sati 侧已由 §2.5 的探针验证了两部核心法的条号完整性，但**条文内容**是否抄错仍只能人工复核。
 3. 命题方向的反向误报**是已知的**（同义改写 → `mismatch`）。工具描述要提醒：`mismatch` 可能是措辞差异而非真错误。
@@ -377,7 +399,7 @@ knowledge.db 里**同一部法律有多个来源**。实测 `title LIKE '%专利
 | `《专利法实施细则》第一百五十条` | `out-of-range`（149 条） |
 | 编造法名（`《中华人民共和国专利促进法》`） | `not-indexed`（法名不在库） |
 | 合法条号 + 无关命题 | `valid`（**记录这个漏放**，作为边界测试而非缺陷测试） |
-| 合法条号 + 同义改写命题 | `mismatch`（记录误报方向） |
+| 合法条号 + 同义改写命题 | **`valid` + 「仅重合 N/M」提示**（⚠️ 计划原写 `mismatch`，**实测推翻**：同义改写仍共享「技术相」这类片段，按弱重合判 `block` 级会误伤正确引用——判据改为只在**零重合**时判 `mismatch`，见决策记录） |
 | DB 不可用 | `setup_required`，**不得**返回 valid |
 | 索引构建遇全文缺失 | 不给 `out-of-range`，给"上界未能证明" |
 

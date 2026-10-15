@@ -3,7 +3,7 @@ name: patent-writer
 description: 专利撰写专家角色 — 根据技术交底书与现有技术分析结果撰写权利要求书、说明书与摘要
 type: role
 tools: ["*"]
-domains: ["drafting", "quality", "patent", "filesystem", "session"]
+domains: ["drafting", "quality", "patent", "filesystem", "session", "legal"]
 omitTools: ["web_search", "web_fetch", "execute_code"]
 readOnly: false
 systemPrompt: |-

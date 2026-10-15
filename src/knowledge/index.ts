@@ -79,6 +79,38 @@ export { WikiCardVectorIndex, type WikiCardVectorIndexOptions } from "./patent/w
 export { LegalSearchEngine, type LegalSearchOptions } from "./legal/legal-search.js";
 export { KnowledgeLawSearch, type KnowledgeLawSearchOptions } from "./legal/knowledge-law-search.js";
 export { createLawSearchTool, type LawSearchToolInput, type LawSearchToolOutput } from "./legal/law-search-tool.js";
+export {
+  createLawVerifyTool,
+  renderLawVerifyReport,
+  toLawVerifyOutput,
+  type LawVerifyFindingOutput,
+  type LawVerifyToolInput,
+  type LawVerifyToolOutput,
+} from "./legal/law-verify-tool.js";
+export {
+  buildLawIndex,
+  isLawLikeName,
+  loadLawIndex,
+  maxContiguousArticle,
+  normalizeLawName,
+  type IndexedArticle,
+  type LawEntry,
+  type LawIndex,
+  type LawSourceCandidate,
+  type LoadedLawIndex,
+} from "./legal/law-index.js";
+export {
+  DECISION_SEVERITY,
+  evaluateProposition,
+  extractLawReferences,
+  verifyCitation,
+  verifyCitations,
+  type CitationDecision,
+  type CitationFinding,
+  type LawArticleReference,
+  type LawReference,
+  type PropositionVerdict,
+} from "./legal/law-verify.js";
 export { LegalMemoryProvider } from "./legal/legal-memory-provider.js";
 export {
   KnowledgeEmbeddingSearch,
