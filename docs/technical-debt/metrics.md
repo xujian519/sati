@@ -7,9 +7,9 @@
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1090 / 189499 |
+| src TS 文件 / 行数 | 1106 / 189961 |
 | src JS 文件 | 0 |
-| tests 文件 | 636 |
+| tests 文件 | 641 |
 | ui/src 文件 / 行数 | 642 / 102634 |
 | ui/server 文件 / 行数 | 133 / 35710 |
 
@@ -56,7 +56,6 @@
 | `ui/src/components/chat-v2/ChatInterfaceV2.tsx` | `ChatInterfaceV2` | 668 | function |
 | `ui/src/hooks/useProjectsState.ts` | `useProjectsState` | 647 | function |
 | `src/adapters/channel/tui/app/TuiApp.tsx` | `TuiApp` | 643 | function |
-| `src/cli/sati.ts` | `main` | 642 | function |
 | `ui/src/components/onboarding/view/subcomponents/LlmConfigurationStep.tsx` | `LlmConfigurationStep` | 633 | function |
 | `ui/src/components/app-shell/AppShellV2.tsx` | `AppShellV2` | 632 | function |
 | `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` | `(anonymous)` | 624 | arrow |
@@ -67,7 +66,6 @@
 | `ui/src/components/chat/hooks/useChatComposerState.ts` | `useChatComposerState` | 462 | function |
 | `ui/src/components/settings/view/modelPool/components/ProviderCard.tsx` | `ProviderCard` | 447 | function |
 | `ui/src/components/chat-v2/MessageRowV2.tsx` | `MessageRowV2` | 429 | function |
-| `src/cli/projectRuntimeFactory.ts` | `createProjectRuntimeResolver` | 428 | function |
 | `ui/src/components/code-editor/view/subcomponents/DocxBuiltinPreview.tsx` | `DocxBuiltinPreview` | 422 | function |
 | `ui/src/components/chat-v2/processGrouping.test.ts` | `(anonymous)` | 409 | arrow |
 | `ui/src/types/contentReference.spec.ts` | `(anonymous)` | 408 | arrow |
@@ -95,7 +93,6 @@
 | `ui/src/components/chat/hooks/useSlashCommandExecute.ts` | `useSlashCommandExecute` | 331 | function |
 | `ui/src/components/code-editor/view/CodeEditor.tsx` | `CodeEditor` | 326 | function |
 | `ui/src/components/annotation/view/Annotator.tsx` | `Annotator` | 322 | function |
-| `src/cli/projectRuntimeFactory.ts` | `resolve` | 320 | function |
 | `src/tool/builtin/patentFigureProject.ts` | `createPatentFigureProjectTool` | 313 | function |
 | `ui/src/components/chat-v2/SubagentDetailMessageFlow.tsx` | `SubagentDetailMessageFlow` | 309 | function |
 | `ui/src/components/settings/view/integrations/im/components/WeixinChannelSection.tsx` | `WeixinChannelSection` | 303 | function |
@@ -130,10 +127,10 @@
 | `src/model/streaming/streamModel.ts` | 1085 |
 | `ui/server/routes/commands.js` | 1082 |
 | `src/always-on/runtime/DiscoveryFire.ts` | 1079 |
-| `src/cli/sati.ts` | 1035 |
 | `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` | 1025 |
 | `src/adapters/channel/protocol/ImLiveReplyController.ts` | 1017 |
 | `src/gateway/protocol/types.ts` | 995 |
+| `src/context/DefaultContextRuntime.ts` | 969 |
 
 ## vendored 子包（单列，不计入上述规模与排名）
 
@@ -165,8 +162,8 @@
 | gateway | 34 |
 | model | 33 |
 | session | 28 |
+| cli | 20 |
 | router | 20 |
-| cli | 15 |
 | always-on | 14 |
 | extension | 13 |
 | mcp | 13 |
@@ -190,7 +187,7 @@
 | runtime | 1 |
 | status | 1 |
 
-| **合计** | **609** |
+| **合计** | **614** |
 
 ## i18n en/zh-CN 对齐
 

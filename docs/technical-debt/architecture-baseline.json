@@ -39,11 +39,6 @@
     },
     {
       "rule": "file-size",
-      "file": "src/cli/sati.ts",
-      "lines": 1035
-    },
-    {
-      "rule": "file-size",
       "file": "src/context/DefaultContextRuntime.ts",
       "lines": 969
     },

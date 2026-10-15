@@ -72,7 +72,7 @@
   - `useChatComposerState` 1433（`chat/hooks/`）· `PdfDocumentPreview` 1138 · `SidebarV2` 1017 · `useChatSessionState` 941 · `MessagesPaneV2` 937 · `FilesV2` 877 · `MessagesPaneV2.render.test.tsx` 842
   - 建议：按 hook/组件拆分 + 子组件提取；涉及 UI 须浏览器验证。工作量：L（每组件）· 状态：new
 - **TD-GOD-002**（P2）· 后端巨无霸函数：`createRouterRuntime` 877（`router/`）· `main` 635（`cli/sati.ts`）· `createReadFileTool` 509（`tool/readFile.ts`）
-  - 细分见各模块节。工作量：L · 状态：new
+  - 细分见各模块节。工作量：L · 状态：**in_progress**——`main`（实测 642 行）已由 #646 sweep P2.7 消解（2026-10-15，`ea361690a`：`cli/sati.ts` 1034 → 14 行，逻辑迁入 `commandDispatch.ts` 的 `COMMANDS` 分发表 + `commands/` 下 6 个 server 模块；同批 `projectRuntimeFactory` 的 `createProjectRuntimeResolver` 428 → 77、`resolve` 320 → 73；god fn ≥300 54 → 51、≥400 27 → 25）；余 **`createRouterRuntime` 877 与 `createReadFileTool` 509 未处置**
   - **2026-08-27 复核补充（`createLocalGateway.ts` 结构债，jscpd 盲区——重复为小型接线模式而非文本克隆）**：(a) 模块为三件无关架构钉合：CLI 引导工厂 `:309-820` + 巨类 `ProjectRuntimeRegistry` `:904~2090`（`resolve`≈245 行、`prepareSessionRuntime`≈430 行，失败域横跨插件系统+MCP 生命周期+browser 工具）+ 无关自由工具函数 `:2215-2461`（browser proxy env 解析）；(b) 工厂内 team 成员回收闭包双实现——`runMemberScan :601-612` vs wakeMember 回调 `:682-688`，注释自承「与 scanner 冷恢复路径同款」；(c) browser-use 专属逻辑（mkdirSync 截图目录、逐 spec 参数改写 `:1663-1689`）泄漏进通用会话装配。建议拆出 `TeamReclaimCoordinator`、以 `SessionToolProvisioner` 承接 browser-use/MCP 装配、迁走 proxy env 工具函数。工作量：M×3 子项。
     - **2026-09-12 进展**：两次逐字迁移已落地（决策见 `docs/notes/implemented/2026-09-11-createlocalgateway-helper-extraction.md`、`2026-09-12-projectruntimeregistry-module-extraction.md`）——(a) 模块级 helper 外置为 `src/cli/{browserLaunchArgs,routerDefaults,gatewaySupport}.ts`；(b) `ProjectRuntimeRegistry` 类整体迁出为 `src/cli/ProjectRuntimeRegistry.ts`（1664 行），`createLocalGateway.ts` 2437 → 804 行。**未完成**：(b) 工厂内 team 成员回收闭包双实现、(c) browser-use 逻辑泄漏进会话装配。
     - **2026-09-12（第三刀）**：`new InProcessGateway(router, {...})` 的 22 字段网关选项（17 个闭包回调，其中 team 面板快照/特权直调、配置热重载、回合收尾等）抽到 `src/cli/gatewayRuntimeOptions.ts`，组合根 803 → 634 行；决策见 `docs/notes/implemented/2026-09-12-gateway-runtime-options-builder.md`。剩余 team 子系统 builder（约 226 行）压 ≤600，browser-use 泄漏随会话装配 builder 处置。
@@ -2421,17 +2421,18 @@
 - [x] **P2**（P2.5）`src/tool/builtin/patentFigureCheck.ts` — `createPatentFigureCheckTool`（384 → ~290 行，掉出 ≥300 清单）+ `execute`（250 → **115** 行；判据 ≤200 达成）（`readbackSvgFigures`/`buildCheckReportLines` 模块级分层）
 - [x] **P2**（P2.5 · patentFigure 三工具）`src/tool/builtin/patentFigure*.ts` — execute 收敛到共享装配与分层（god fn 59 → **56**；无第二份产物清单——产物装配本就在 `figuregen/deliverables.ts`，本批收敛的是**入参管线**重复：新建 `src/tool/builtin/patentFigureShared.ts` 收 textToPath 探测 / sheet 成对校验 / outputDir / output_name / documentKind；patent 全套 544 pass / 0 fail；metrics 与 code-facts 已刷新；决策见 `docs/notes/implemented/2026-10-14-figure-tool-extract.md`）
 - [x] **P2**（P2.6）`src/router/execution/executeRouterDecision.ts` — `executeRouterDecision`（449 → **273** 行；判据「决策树外置，行为逐 token」达成）（`0f9bfcb4d`；god fn **55 → 54**、≥400 存量 28 → 27；三段分层——判定 `attemptPlanning.ts`（纯，262 行：`planAttemptExecution`/`planAttempt`/`classifyAttemptGate`/`subagentBudgetError`）+ 上报落账 `attemptReporting.ts`（248 行）+ 编排骨架（全部 `yield` 留在编排体内）；文件 689 → 528 行；新增纯函数直测 17 例、行为指纹 23 例 diff=0、负控制 4/4 转红；关闭 `TD-ROUTER-009`；决策见 `docs/notes/implemented/2026-10-15-execute-router-decision-split.md`）
-- [ ] **P2** `src/cli/sati.ts` — `main`（642 行）
-- [ ] **P2** `src/cli/projectRuntimeFactory.ts` — `createProjectRuntimeResolver`（424 行）
-- [ ] **P2** `src/cli/projectRuntimeFactory.ts` — `resolve`（316 行）
+- [x] **P2**（P2.7）`src/cli/sati.ts` — `main`（642 → **文件 1034 → 14 行**，函数本身不再存在；判据「命令分发表化；两 file ≤600」达成）（`ea361690a`；sati.ts 只留 shebang + 触发，逻辑迁入 `commandDispatch.ts`（144 行）的 `COMMANDS` 分发表——`Object.hasOwn` 查键防原型链键命中，未命中回落交互式 CLI；`server` 分支拆为 `commands/` 下 6 个模块（渠道构造 / 子系统构造与热重载 / 适配器热重载 / 关闭与信号 / 运行时状态 / 编排骨架），最大函数 `runServerCommand` **215** 行；文件脱离 file-size 棘轮，存量豁免 42 → 41；决策见 `docs/notes/implemented/2026-10-15-cli-entry-dispatch-and-runtime-assembly-split.md`）
+- [x] **P2**（P2.7）`src/cli/projectRuntimeFactory.ts` — `createProjectRuntimeResolver`（实测 428 → **77** 行；文件 577 → 235）（`ea361690a`；`emitBackgroundTaskCompletion` 与 `buildRouterEventBus` 外移 `projectRuntimeRouterEvents.ts`（141 行），模型/路由/插件层抽 `createModelAndRouterLayer`）
+- [x] **P2**（P2.7）`src/cli/projectRuntimeFactory.ts` — `resolve`（实测 320 → **73** 行；三段装配外移）（`ea361690a`；记忆/知识库 `projectRuntimeKnowledge.ts`（201 行：`createProjectMemoryLayer` + `createKnowledgeResolverLayer`）、工具表 `projectRuntimeTools.ts`（177 行：`createProjectTools`）；god fn **54 → 51**、≥400 存量 **27 → 25**）
 - [ ] **P2** `src/adapters/channel/tui/app/TuiApp.tsx` — `TuiApp`（643 行）
 - [ ] **P2** `src/web/client/webMessage.ts` — `applyWebGatewayEvent`（383 行）
 - [ ] **P2** `src/tool/execution/ToolRuntime.ts` — `execute`（388 行）
 - [ ] **P2** `src/patent/graph/domains/inventiveness.ts` — `buildInventivenessGraph`（342 行）
 
-### 38.2 ≥800 行文件（42 个：承接 16 + 未承接 26）
+### 38.2 ≥800 行文件（41 个：承接 15 + 未承接 26）
 
 > 承接 = 计划条目的拆分会使该文件降到 800 以下或另有明确目标；未承接 = 转 §38.3 的 sweep 后条目（**不进 45/50 天承诺面**，不静默）。注：`InProcessGateway.ts` 只拆函数不拆文件，故按未承接计。
+> *（P2.7 回填：原表 42 个 = 承接 16 + 未承接 26；`src/cli/sati.ts` 经 P2.7 降到 14 行已不在表内，故承接 16 → 15、总数 42 → 41，与 `architecture-baseline.json` 存量豁免 42 → 41 同步。）*
 
 - [ ] **BF-01** `ui/server/sati-bridge.js` — 2347 行 · 未承接 → PS-01
 - [ ] **BF-02** `src/adapters/channel/wecom/WeComChannel.ts` — 1763 行 · 未承接 → PS-02
@@ -2459,7 +2460,7 @@
 - [ ] **BF-24** `src/model/streaming/streamModel.ts` — 1084 行 · 未承接 → PS-15
 - [ ] **BF-25** `ui/server/routes/commands.js` — 1081 行 · 未承接 → PS-16
 - [ ] **BF-26** `src/always-on/runtime/DiscoveryFire.ts` — 1078 行 · 未承接 → PS-17
-- [ ] **BF-27** `src/cli/sati.ts` — 1034 行 · 承接：**P2.7**
+- [x] **BF-27** `src/cli/sati.ts` — 1034 行 · 承接：**P2.7** —— **已交付（2026-10-15，`ea361690a`）：1034 → 14 行**（脱表，见 §38.2 抬头回填；`main` 642 行随之消失，逻辑迁入 `commandDispatch.ts` 分发表）
 - [ ] **BF-28** `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` — 1024 行 · 承接：**B1.2**
 - [ ] **BF-29** `src/adapters/channel/protocol/ImLiveReplyController.ts` — 1016 行 · 未承接 → PS-18
 - [ ] **BF-30** `src/gateway/protocol/types.ts` — 994 行 · 未承接 → PS-19
