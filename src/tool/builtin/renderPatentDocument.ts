@@ -1,15 +1,17 @@
 /**
- * render_patent_document — 从专利文书模板生成专业 HTML/PDF 交付物。
+ * render_patent_document — 从专利文书模板生成专业 HTML/PDF 交付物，以及（可选）申请文件 docx。
  *
  * 复用 src/patent/document 渲染核心：读取 assets/templates/patent/<template>/assets/template.html，
  * 注入品牌 CSS 变量（支持 theme.json 覆盖），按元素 id 替换内容，落盘 HTML，可选调用系统
- * Chrome 打印为 PDF。
+ * Chrome 打印为 PDF。`format: "docx" | "all"` 时另经 src/patent/document/docx 以模板自带的
+ * Word 母版（assets/template.docx）为版面，把五件套内容填进对应分节。
  */
 
 import {
   SatiDocumentInputError,
   renderPatentDocument as renderDocument,
   DOCUMENT_STYLE_JSON_SCHEMA,
+  APPLICATION_DOCX_PART_IDS,
   type DocumentStyle,
   type DocumentTemplateId,
   type RenderFormat,
@@ -27,7 +29,10 @@ const TEMPLATE_IDS: readonly DocumentTemplateId[] = [
 ];
 
 /** 支持的输出格式。 */
-const FORMATS: readonly ("html" | "pdf" | "both")[] = ["html", "pdf", "both"];
+const FORMATS: readonly RenderFormat[] = ["html", "pdf", "both", "docx", "all"];
+
+/** docx 输出的件键（与 `APPLICATION_PARTS` 同源，用于文档与错误提示）。 */
+const DOCX_PART_IDS = APPLICATION_DOCX_PART_IDS;
 
 export type RenderPatentDocumentInput = {
   /** 模板 id：patentability-opinion / search-report / oa-response / claims-spec / invalidation-opinion */
@@ -38,9 +43,9 @@ export type RenderPatentDocumentInput = {
   case_id?: string;
   /** 显式输出目录（覆盖默认目录）。 */
   output_dir?: string;
-  /** html / pdf / both（默认 both）。 */
+  /** html / pdf / both / docx / all（默认 both）。 */
   format?: string;
-  /** 按元素 id 注入的 HTML 内容（innerHTML）。 */
+  /** HTML/PDF 路径：按元素 id 注入的 HTML 内容；docx 路径：按申请文件件 id（见 APPLICATION_DOCX_PART_IDS）。 */
   sections: Record<string, string>;
   /** 内联品牌覆盖（优先级最高）。 */
   brand?: Record<string, string>;
@@ -62,12 +67,17 @@ export function createRenderPatentDocumentTool(): SatiToolDefinition<RenderPaten
     aliases: ["RenderPatentDocument", "render_document"],
     title: "Render Patent Document",
     description:
-      "Render a professional patent-attorney document (HTML/PDF) from the bundled templates. " +
+      "Render a professional patent-attorney document from the bundled templates. " +
       "Injects brand variables (firm name, confidentiality, colors) from theme.json or explicit `brand`, " +
       "then replaces template sections by element id using `sections`. Templates: patentability-opinion, " +
-      "search-report, oa-response, claims-spec, invalidation-opinion. Outputs a `.html` file; when " +
-      "format is 'pdf' or 'both' and Chrome/Chromium is available, also outputs a `.pdf` via headless " +
-      "print-to-PDF.",
+      "search-report, oa-response, claims-spec, invalidation-opinion. Always outputs a `.html` file; " +
+      "format 'pdf'/'both'/'all' also prints a `.pdf` via headless Chrome when available; format " +
+      "'docx'/'all' also fills the patent **application package** `.docx` whose layout comes from the " +
+      "template's own Word master (A4, per-part page headers/footers and page numbers, official 5-part " +
+      "order). For the docx path, `sections` keys are the application parts: " +
+      `${DOCX_PART_IDS.join(" / ")} (abstract / abstract figure / claims / specification / drawings); ` +
+      "those values accept HTML (headings, paragraphs, lists, tables, inline images) or plain text. " +
+      "docx requires a template that ships assets/template.docx — currently claims-spec.",
     kind: "custom",
     domain: "patent",
     inputSchema: {
@@ -85,13 +95,16 @@ export function createRenderPatentDocumentTool(): SatiToolDefinition<RenderPaten
         output_dir: { type: "string", description: "Override output directory" },
         format: {
           type: "string",
-          enum: ["html", "pdf", "both"],
-          description: "Output format (default 'both')",
+          enum: ["html", "pdf", "both", "docx", "all"],
+          description:
+            "Extra outputs beyond HTML: 'pdf'/'both' = PDF, 'docx' = patent application .docx, 'all' = both (default 'both')",
         },
         sections: {
           type: "object",
           additionalProperties: { type: "string" },
-          description: "Map of element id -> innerHTML content to inject into the template",
+          description:
+            "Map of id -> HTML content. HTML/PDF path: template element id (e.g. meta-title). " +
+            `docx path: application part id (${DOCX_PART_IDS.join(", ")})`,
         },
         brand: {
           type: "object",
@@ -158,6 +171,11 @@ export function createRenderPatentDocumentTool(): SatiToolDefinition<RenderPaten
         } else if (result.pdfError !== undefined) {
           lines.push(`PDF 未生成: ${result.pdfError}`);
         }
+        if (result.docxPath !== undefined) {
+          lines.push(`DOCX: ${result.docxPath}`);
+        } else if (result.docxError !== undefined) {
+          lines.push(`DOCX 未生成: ${result.docxError}`);
+        }
         if (result.warnings !== undefined && result.warnings.length > 0) {
           lines.push(`提示: ${result.warnings.join("；")}`);
         }
@@ -179,6 +197,16 @@ export function createRenderPatentDocumentTool(): SatiToolDefinition<RenderPaten
                     path: result.pdfPath,
                     mimeType: "application/pdf",
                     description: "Rendered patent document PDF",
+                  },
+                ]
+              : []),
+            ...(result.docxPath !== undefined
+              ? [
+                  {
+                    type: "file" as const,
+                    path: result.docxPath,
+                    mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    description: "Rendered patent application DOCX",
                   },
                 ]
               : []),

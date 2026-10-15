@@ -10,8 +10,16 @@ export type DocumentTemplateId =
   | "claims-spec"
   | "invalidation-opinion";
 
-/** 渲染输出格式。 */
-export type RenderFormat = "html" | "pdf" | "both";
+/**
+ * 渲染输出格式。
+ *
+ * HTML 始终产出（模板注入的即时校验面）；本字段控制**附加产物**：
+ * - `html` 仅 HTML；
+ * - `pdf` / `both` 追加 PDF（headless Chrome 打印，历史语义不变）；
+ * - `docx` 追加申请文件 docx（需模板随附 `assets/template.docx` 母版）；
+ * - `all` 追加 PDF 与 docx。
+ */
+export type RenderFormat = "html" | "pdf" | "both" | "docx" | "all";
 
 /** 品牌覆盖：键名对应 assets/templates/patent/tokens.css 中的 --sati-doc-* 变量。 */
 export type DocumentBrand = Partial<Record<string, string>>;
@@ -79,9 +87,20 @@ export type DocumentRenderInput = {
   caseId?: string;
   /** 显式输出目录（覆盖默认目录）。 */
   outputDir?: string;
-  /** 输出格式：html / pdf / both（默认 both）。 */
+  /** 输出格式：html / pdf / both / docx / all（默认 both）。 */
   format?: RenderFormat;
-  /** 按元素 id 注入的 HTML 内容（innerHTML）。 */
+  /**
+   * 按元素 id 注入的 HTML 内容（innerHTML）。
+   *
+   * 两条渲染路径共用同一份映射、键名各自解释：
+   * - HTML/PDF 路径：键 = 模板 HTML 的元素 id（如 `meta-title`、`spec-background`）；
+   * - docx 路径：键 = 申请文件五件套的件 id —— `abstract`（说明书摘要）、
+   *   `abstract-figure`（摘要附图）、`claims`（权利要求书）、`specification`（说明书）、
+   *   `drawings`（说明书附图）；其余键在 docx 路径下忽略。
+   *
+   * 两路径同名键（`abstract` / `abstract-figure` / `claims` / `specification`）语义一致，
+   * 故同一份 `sections` 同时出 HTML 与 docx 时无需改写。
+   */
   sections: Record<string, string>;
   /** 内联品牌覆盖（优先级高于 brandPath / 默认 theme.json）。 */
   brand?: DocumentBrand;
@@ -97,10 +116,14 @@ export type DocumentRenderInput = {
 export type DocumentRenderResult = {
   /** 生成的 HTML 文件绝对路径。 */
   htmlPath: string;
-  /** 生成的 PDF 文件绝对路径（format=html 时不生成）。 */
+  /** 生成的 PDF 文件绝对路径（format=html/docx 时不生成）。 */
   pdfPath?: string;
   /** PDF 生成失败原因（HTML 已生成时的降级提示）。 */
   pdfError?: string;
-  /** 非致命告警（未命中的 section id、品牌配置缺失等）。 */
+  /** 生成的申请文件 docx 绝对路径（format=docx/all 且模板提供 docx 母版时）。 */
+  docxPath?: string;
+  /** docx 生成失败原因（HTML 已生成时的降级提示）。 */
+  docxError?: string;
+  /** 非致命告警（未命中的 section id、品牌配置缺失、图片未能嵌入等）。 */
   warnings?: string[];
 };
