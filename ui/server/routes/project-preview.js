@@ -44,11 +44,15 @@ import {
   setPreviewContentType,
   streamFileWithRange,
 } from "../services/filesystem.js";
-import { extractProjectDirectory } from "../projects.js";
 import { getSplatPath } from "../utils/splatPath.js";
 import { officePreviewPdfRateLimiter, officePreviewStatusRateLimiter } from "../services/rate-limit.js";
+import { createProjectFilesystemMiddleware } from "../middleware/projectFilesystem.js";
 
 const router = Router();
+
+// 项目预览路由的项目 root 守卫（上游 #648）：预览等同文件内容读取，root 同样只能来自项目
+// 注册表，且拒绝与 app home 重叠的路径。
+const requireRegisteredProjectRoot = createProjectFilesystemMiddleware();
 
 router.get("/api/office-preview/status", authenticateToken, officePreviewStatusRateLimiter, async (req, res) => {
   try {
@@ -81,10 +85,10 @@ router.get("/api/office-preview/status", authenticateToken, officePreviewStatusR
 router.get(
   "/api/projects/:projectName/files/preview/pdf",
   authenticateToken,
+  requireRegisteredProjectRoot,
   officePreviewPdfRateLimiter,
   async (req, res) => {
     try {
-      const { projectName } = req.params;
       const { path: filePath } = req.query;
       const force = req.query.force === "1" || req.query.force === "true";
 
@@ -92,7 +96,7 @@ router.get(
         return res.status(400).json({ error: "Invalid file path" });
       }
 
-      const projectRoot = await extractProjectDirectory(projectName).catch(() => null);
+      const projectRoot = req.projectRoot;
       if (!projectRoot) {
         return res.status(404).json({ error: "Project not found" });
       }
@@ -150,10 +154,10 @@ router.get(
 router.get(
   "/api/projects/:projectName/files/preview/spreadsheet/manifest",
   authenticateToken,
+  requireRegisteredProjectRoot,
   officePreviewPdfRateLimiter,
   async (req, res) => {
     try {
-      const { projectName } = req.params;
       const { path: filePath } = req.query;
       const force = req.query.force === "1" || req.query.force === "true";
 
@@ -161,7 +165,7 @@ router.get(
         return res.status(400).json({ error: "Invalid file path" });
       }
 
-      const projectRoot = await extractProjectDirectory(projectName).catch(() => null);
+      const projectRoot = req.projectRoot;
       if (!projectRoot) {
         return res.status(404).json({ error: "Project not found" });
       }
@@ -195,10 +199,10 @@ router.get(
 router.get(
   "/api/projects/:projectName/files/preview/spreadsheet/data",
   authenticateToken,
+  requireRegisteredProjectRoot,
   officePreviewPdfRateLimiter,
   async (req, res) => {
     try {
-      const { projectName } = req.params;
       const { path: filePath } = req.query;
       const force = req.query.force === "1" || req.query.force === "true";
 
@@ -206,7 +210,7 @@ router.get(
         return res.status(400).json({ error: "Invalid file path" });
       }
 
-      const projectRoot = await extractProjectDirectory(projectName).catch(() => null);
+      const projectRoot = req.projectRoot;
       if (!projectRoot) {
         return res.status(404).json({ error: "Project not found" });
       }
@@ -244,10 +248,10 @@ router.get(
 router.get(
   "/api/projects/:projectName/files/preview/spreadsheet/sheet",
   authenticateToken,
+  requireRegisteredProjectRoot,
   officePreviewPdfRateLimiter,
   async (req, res) => {
     try {
-      const { projectName } = req.params;
       const { path: filePath, sheet: sheetIndex } = req.query;
       const force = req.query.force === "1" || req.query.force === "true";
 
@@ -255,7 +259,7 @@ router.get(
         return res.status(400).json({ error: "File path and worksheet index are required" });
       }
 
-      const projectRoot = await extractProjectDirectory(projectName).catch(() => null);
+      const projectRoot = req.projectRoot;
       if (!projectRoot) {
         return res.status(404).json({ error: "Project not found" });
       }
@@ -294,71 +298,80 @@ router.get(
 );
 
 // 为预览签发仅限该项目的短期凭据。预览 URL 只携带这份凭据，不再携带会话 JWT。
-router.post("/api/projects/:projectName/preview-token", authenticateToken, async (req, res) => {
-  const { projectName } = req.params;
-  const projectRoot = await extractProjectDirectory(projectName).catch(() => null);
-  if (!projectRoot) {
-    return res.status(404).json({ error: "Project not found" });
-  }
-  res.setHeader("Cache-Control", "no-store");
-  return res.json({
-    token: generateProjectPreviewToken(req.user, projectName),
-    expiresIn: PROJECT_PREVIEW_TOKEN_TTL_SECONDS,
-  });
-});
-
-// Serve project files through a stable project-root URL so generated HTML can
-// load sibling CSS, JS and image assets with normal relative paths.
-router.get("/api/projects/:projectName/preview/{*splat}", authenticateProjectPreview, async (req, res) => {
-  applyProjectPreviewSecurityHeaders(res);
-  try {
+router.post(
+  "/api/projects/:projectName/preview-token",
+  authenticateToken,
+  requireRegisteredProjectRoot,
+  async (req, res) => {
     const { projectName } = req.params;
-    const relativeFilePath = getSplatPath(req) || "index.html";
-
-    const projectRoot = await extractProjectDirectory(projectName).catch(() => null);
+    const projectRoot = req.projectRoot;
     if (!projectRoot) {
       return res.status(404).json({ error: "Project not found" });
     }
+    res.setHeader("Cache-Control", "no-store");
+    return res.json({
+      token: generateProjectPreviewToken(req.user, projectName),
+      expiresIn: PROJECT_PREVIEW_TOKEN_TTL_SECONDS,
+    });
+  },
+);
 
-    const resolvedResult = resolvePathInProject(projectRoot, relativeFilePath);
-    if (!resolvedResult.valid) {
-      return res.status(403).json({ error: resolvedResult.error });
-    }
+// Serve project files through a stable project-root URL so generated HTML can
+// load sibling CSS, JS and image assets with normal relative paths.
+router.get(
+  "/api/projects/:projectName/preview/{*splat}",
+  authenticateProjectPreview,
+  requireRegisteredProjectRoot,
+  async (req, res) => {
+    applyProjectPreviewSecurityHeaders(res);
+    try {
+      const relativeFilePath = getSplatPath(req) || "index.html";
 
-    let resolved = resolvedResult.resolved;
-    let stats = await fsPromises.stat(resolved).catch(() => null);
-    if (stats?.isDirectory()) {
-      resolved = path.join(resolved, "index.html");
-      stats = await fsPromises.stat(resolved).catch(() => null);
-    }
-
-    if (!stats || !stats.isFile()) {
-      return res.status(404).type("text/plain").send("Preview file not found.");
-    }
-
-    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-    setPreviewContentType(res, resolved);
-
-    // 标注模式（H2）：doctype 后注入桥接（字节级，不改编码）；其余情况保持原有流式输出逐字节不变。
-    if (req.query.annotate === "1" && mime.lookup(resolved) === "text/html") {
-      const nonce = typeof req.query.sati_nonce === "string" ? req.query.sati_nonce : "";
-      if (!/^[A-Za-z0-9_-]{8,64}$/.test(nonce)) {
-        return res.status(400).type("text/plain").send("Annotation mode requires a valid sati_nonce.");
+      const projectRoot = req.projectRoot;
+      if (!projectRoot) {
+        return res.status(404).json({ error: "Project not found" });
       }
-      if (stats.size > ANNOTATABLE_MAX_BYTES) {
-        return res.status(413).type("text/plain").send("This file is too large to annotate.");
-      }
-      const source = await fsPromises.readFile(resolved);
-      const script = buildHtmlAnnotationBridgeScript({ nonce });
-      return res.send(injectHtmlAnnotationBridge(source, script).bytes);
-    }
 
-    fs.createReadStream(resolved).pipe(res);
-  } catch (error) {
-    logger.error("Error serving project preview:", error);
-    res.status(500).json({ error: error.message });
-  }
-});
+      const resolvedResult = resolvePathInProject(projectRoot, relativeFilePath);
+      if (!resolvedResult.valid) {
+        return res.status(403).json({ error: resolvedResult.error });
+      }
+
+      let resolved = resolvedResult.resolved;
+      let stats = await fsPromises.stat(resolved).catch(() => null);
+      if (stats?.isDirectory()) {
+        resolved = path.join(resolved, "index.html");
+        stats = await fsPromises.stat(resolved).catch(() => null);
+      }
+
+      if (!stats || !stats.isFile()) {
+        return res.status(404).type("text/plain").send("Preview file not found.");
+      }
+
+      res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+      setPreviewContentType(res, resolved);
+
+      // 标注模式（H2）：doctype 后注入桥接（字节级，不改编码）；其余情况保持原有流式输出逐字节不变。
+      if (req.query.annotate === "1" && mime.lookup(resolved) === "text/html") {
+        const nonce = typeof req.query.sati_nonce === "string" ? req.query.sati_nonce : "";
+        if (!/^[A-Za-z0-9_-]{8,64}$/.test(nonce)) {
+          return res.status(400).type("text/plain").send("Annotation mode requires a valid sati_nonce.");
+        }
+        if (stats.size > ANNOTATABLE_MAX_BYTES) {
+          return res.status(413).type("text/plain").send("This file is too large to annotate.");
+        }
+        const source = await fsPromises.readFile(resolved);
+        const script = buildHtmlAnnotationBridgeScript({ nonce });
+        return res.send(injectHtmlAnnotationBridge(source, script).bytes);
+      }
+
+      fs.createReadStream(resolved).pipe(res);
+    } catch (error) {
+      logger.error("Error serving project preview:", error);
+      res.status(500).json({ error: error.message });
+    }
+  },
+);
 
 // Download the complete project as a zip archive.
 

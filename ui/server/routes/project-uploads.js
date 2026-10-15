@@ -12,8 +12,8 @@ import os from "os";
 import path from "path";
 import crypto from "crypto";
 import { authenticateToken } from "../middleware/auth.js";
-import { extractProjectDirectory } from "../projects.js";
 import { validatePathInProject } from "../services/filesystem.js";
+import { createProjectFilesystemMiddleware } from "../middleware/projectFilesystem.js";
 import {
   CHAT_ATTACHMENT_IMAGE_MIMES,
   moveUploadedAttachment,
@@ -25,105 +25,118 @@ import { publicUploadLimits } from "../services/uploadLimits.js";
 
 const router = Router();
 
+// 写盘类路由的项目 root 守卫（上游 #648）：root 只来自项目注册表，且拒绝与 app home 重叠。
+const requireRegisteredProjectRoot = createProjectFilesystemMiddleware();
+
 router.get("/api/upload/limits", authenticateToken, (_req, res) => {
   res.json(publicUploadLimits());
 });
 
-router.post("/api/projects/:projectName/files/upload", authenticateToken, uploadFilesHandler);
+router.post(
+  "/api/projects/:projectName/files/upload",
+  authenticateToken,
+  requireRegisteredProjectRoot,
+  uploadFilesHandler,
+);
 
-router.post("/api/projects/:projectName/upload-attachments", authenticateToken, async (req, res) => {
-  let multerUpload;
-  try {
-    const multer = (await import("multer")).default;
-    const uploadRoot = path.join(os.tmpdir(), "sati-chat-attachments", String(req.user.id));
-    const storage = multer.diskStorage({
-      destination: async (_req, _file, cb) => {
-        try {
-          await fsPromises.mkdir(uploadRoot, { recursive: true });
-          cb(null, uploadRoot);
-        } catch (error) {
-          cb(error);
-        }
-      },
-      filename: (_req, file, cb) => {
-        const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-        file.originalname = normalizeUploadedFilename(file.originalname);
-        cb(null, `${uniqueSuffix}-${sanitizeAttachmentFilename(file.originalname)}`);
-      },
-    });
-
-    multerUpload = multer({
-      storage,
-      limits: {
-        fileSize: 20 * 1024 * 1024,
-        files: 10,
-      },
-    }).array("attachments", 10);
-  } catch (error) {
-    logger.error("Error configuring attachment upload:", error);
-    return res.status(500).json({ error: "Internal server error" });
-  }
-
-  multerUpload(req, res, async err => {
-    if (err) {
-      return res.status(400).json({ error: err.message });
-    }
-
-    if (!req.files || req.files.length === 0) {
-      return res.status(400).json({ error: "No attachments provided" });
-    }
-
-    let attachmentDir = null;
+router.post(
+  "/api/projects/:projectName/upload-attachments",
+  authenticateToken,
+  requireRegisteredProjectRoot,
+  async (req, res) => {
+    let multerUpload;
     try {
-      const projectRoot = await extractProjectDirectory(req.params.projectName);
-      const targetDir = path.join(
-        projectRoot,
-        ".tmp",
-        "chat-attachments",
-        `${Date.now()}-${crypto.randomBytes(4).toString("hex")}`,
-      );
-      const validation = validatePathInProject(projectRoot, targetDir);
-      if (!validation.valid) {
-        throw new Error(validation.error || "Invalid attachment target");
+      const multer = (await import("multer")).default;
+      const uploadRoot = path.join(os.tmpdir(), "sati-chat-attachments", String(req.user.id));
+      const storage = multer.diskStorage({
+        destination: async (_req, _file, cb) => {
+          try {
+            await fsPromises.mkdir(uploadRoot, { recursive: true });
+            cb(null, uploadRoot);
+          } catch (error) {
+            cb(error);
+          }
+        },
+        filename: (_req, file, cb) => {
+          const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+          file.originalname = normalizeUploadedFilename(file.originalname);
+          cb(null, `${uniqueSuffix}-${sanitizeAttachmentFilename(file.originalname)}`);
+        },
+      });
+
+      multerUpload = multer({
+        storage,
+        limits: {
+          fileSize: 20 * 1024 * 1024,
+          files: 10,
+        },
+      }).array("attachments", 10);
+    } catch (error) {
+      logger.error("Error configuring attachment upload:", error);
+      return res.status(500).json({ error: "Internal server error" });
+    }
+
+    multerUpload(req, res, async err => {
+      if (err) {
+        return res.status(400).json({ error: err.message });
       }
-      attachmentDir = validation.resolved;
 
-      const images = [];
-      const files = [];
-      await fsPromises.mkdir(attachmentDir, { recursive: true });
+      if (!req.files || req.files.length === 0) {
+        return res.status(400).json({ error: "No attachments provided" });
+      }
 
-      for (const [index, file] of req.files.entries()) {
-        if (CHAT_ATTACHMENT_IMAGE_MIMES.has(file.mimetype)) {
-          const buffer = await fsPromises.readFile(file.path);
-          const storedFile = await moveUploadedAttachment(file, attachmentDir, index);
-          images.push({
-            name: storedFile.name,
-            data: `data:${file.mimetype};base64,${buffer.toString("base64")}`,
-            path: storedFile.path,
-            size: storedFile.size,
-            mimeType: storedFile.mimeType,
-          });
-          continue;
+      let attachmentDir = null;
+      try {
+        const projectRoot = req.projectRoot;
+        const targetDir = path.join(
+          projectRoot,
+          ".tmp",
+          "chat-attachments",
+          `${Date.now()}-${crypto.randomBytes(4).toString("hex")}`,
+        );
+        const validation = validatePathInProject(projectRoot, targetDir);
+        if (!validation.valid) {
+          throw new Error(validation.error || "Invalid attachment target");
+        }
+        attachmentDir = validation.resolved;
+
+        const images = [];
+        const files = [];
+        await fsPromises.mkdir(attachmentDir, { recursive: true });
+
+        for (const [index, file] of req.files.entries()) {
+          if (CHAT_ATTACHMENT_IMAGE_MIMES.has(file.mimetype)) {
+            const buffer = await fsPromises.readFile(file.path);
+            const storedFile = await moveUploadedAttachment(file, attachmentDir, index);
+            images.push({
+              name: storedFile.name,
+              data: `data:${file.mimetype};base64,${buffer.toString("base64")}`,
+              path: storedFile.path,
+              size: storedFile.size,
+              mimeType: storedFile.mimeType,
+            });
+            continue;
+          }
+
+          files.push(await moveUploadedAttachment(file, attachmentDir, index));
         }
 
-        files.push(await moveUploadedAttachment(file, attachmentDir, index));
-      }
+        if (files.length === 0 && images.length === 0 && attachmentDir) {
+          await fsPromises.rm(attachmentDir, { recursive: true, force: true }).catch(() => {});
+        }
 
-      if (files.length === 0 && images.length === 0 && attachmentDir) {
-        await fsPromises.rm(attachmentDir, { recursive: true, force: true }).catch(() => {});
+        res.json({ images, files });
+      } catch (error) {
+        logger.error("Error processing attachments:", error);
+        await Promise.all((req.files || []).map(file => fsPromises.unlink(file.path).catch(() => {})));
+        if (attachmentDir) {
+          await fsPromises.rm(attachmentDir, { recursive: true, force: true }).catch(() => {});
+        }
+        res.status(500).json({ error: "Failed to process attachments" });
       }
-
-      res.json({ images, files });
-    } catch (error) {
-      logger.error("Error processing attachments:", error);
-      await Promise.all((req.files || []).map(file => fsPromises.unlink(file.path).catch(() => {})));
-      if (attachmentDir) {
-        await fsPromises.rm(attachmentDir, { recursive: true, force: true }).catch(() => {});
-      }
-      res.status(500).json({ error: "Failed to process attachments" });
-    }
-  });
-});
+    });
+  },
+);
 
 // Image upload endpoint
 router.post("/api/projects/:projectName/upload-images", authenticateToken, async (req, res) => {

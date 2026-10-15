@@ -136,8 +136,9 @@ const uploadFilesHandler = async (req, res) => {
         return res.status(400).json({ error: "No files provided" });
       }
 
-      // Get project root
-      const projectRoot = await extractProjectDirectory(projectName).catch(() => null);
+      // Get project root — 优先取路由守卫注入的注册表 root（#648），未经过守卫的调用方
+      // （如测试直接驱动处理器）才回退到按 projectName 解析。
+      const projectRoot = req.projectRoot ?? (await extractProjectDirectory(projectName).catch(() => null));
       if (!projectRoot) {
         return res.status(404).json({ error: "Project not found" });
       }
