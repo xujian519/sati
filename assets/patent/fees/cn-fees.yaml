@@ -1,0 +1,557 @@
+# 中国专利官费索引
+#
+# 本文件登记「有哪些费种、在哪个环节缴、按什么基准计数、能不能减缴」，以及每一个官费金额。
+# 结构（哪些费种、几个、怎么计数）是**可核验的规则**；金额是从官方文书**抄录**来的内容，
+# 所以每一项都带 sourceDoc / sourceUrl / publishedOn / verifiedOn / effectiveFrom。
+#
+# 抄录所据（逐条核对过，不是转抄二手）：
+#   国家知识产权局《专利收费、集成电路布图设计收费标准》（即《专利和集成电路布图设计缴费
+#   服务指南》附件2），2024-08-06 发布。
+#   https://cponline.cnipa.gov.cn/GzfwYwblGlwhTMVC/GzfwYwblGlwhT/selectByNoticeId?weihuRid=286
+#   该页同时列出收费依据：发改价格〔2017〕270号 附件2、财税〔2018〕37号、发改价格〔2022〕465号、
+#   财税〔2024〕23号、发改价格〔2024〕1156号、财税〔2016〕78号、财税〔2019〕45号。
+#   2026-10-15 复核：与 2025-12-29 修订发布的《缴费服务指南》所附「年费计算参考表」逐格一致，
+#   国内部分无改动。
+#
+# 文书自身的发布日填 publishedOn；**逐条核对通过的日期**填 verifiedOn。没有 verifiedOn 的
+# 金额是「未核验」，计价时按未核验处理（不给合计），不是默认已核验。
+#
+# 已知不覆盖（记录在此，不在条目里编造）：
+#   - 集成电路布图设计收费：本索引只做专利。
+#   - PCT 国际阶段费用（国际申请费、手续费、检索费、附加检索费、初步审查费、优先权文件费、
+#     单一性异议费、副本复制费、后提交费）：国际申请费与手续费为代世界知识产权组织国际局收取，
+#     以人民币计收的数额按 WIPO 每年公布的标准确定，随汇率调整，不是固定官费。
+#   - 外观设计国际注册申请（海牙协定）的国际程序费用与指定中国的单独指定费：国际程序费用向
+#     国际局缴纳，以瑞士法郎计。
+#   - 印花税：细则第 110 条列举的费种里没有印花税（办登已无此费）。
+#
+# 语义（转录时按此读，不要另作解释）：
+#   trigger       该费种在哪个环节产生，由查询的 triggers 选中。
+#   patentTypes   适用对象；null 表示未限定（三种专利类型同价）。
+#   basis         计数基准：per-case 每件；per-claim-beyond 超过 freeUnits 项后的每项；
+#                 per-page-beyond 超过 freeUnits 页后的每页；per-priority 每项优先权要求；
+#                 per-annuity-year 每个专利年度；per-month 每请求月数。
+#   freeUnits     计数的免费基数（仅 beyond 类基准使用）。
+#   amount        单价（元，字符串）；null 表示**未转录**，此时必须写 unpriceableReason——
+#                 除非价格在 tiers 里（年费三档就是这种：顶层没有单价，不等于不可计价）。
+#   reducible     是否属于费用减缴范围；null 表示未登记。「不予减缴」的官费按 false 记录。
+#   reductionMaxYears  年费类条目减缴覆盖的最高专利年度（未给授权年度时的保守近似）。
+#   tiers         年费分档（fromYear / toYear / amount）。
+#   latePayment   滞纳金规则：monthlyPercent 为每超过缴费时间 1 个月加收当年全额年费的百分数；
+#                 maxMonths 为法定的可补缴月数上限；tabulatedMonths 为官方参考表**已列出**的
+#                 最高滞纳金月份数（超出它的月份不给金额，交人工核价）。
+#   note          该费种特有的口径提示，随计价行带到报告里。
+#
+# 费用相同但按专利类型分档的费种拆成两个条目（申请费 / 复审费 / 无效宣告请求费各有一条
+# -utility-design 兄弟条目），年费按三种类型各一条：条目只承载一个金额，拆条目而不是让金额
+# 随类型漂移。
+
+document: 国家知识产权局《专利收费、集成电路布图设计收费标准》（《专利和集成电路布图设计缴费服务指南》附件2）
+revision: null
+currency: CNY
+sourceDoc: 国家知识产权局《专利收费、集成电路布图设计收费标准》（2024-08-06 发布）
+sourceUrl: https://cponline.cnipa.gov.cn/GzfwYwblGlwhTMVC/GzfwYwblGlwhT/selectByNoticeId?weihuRid=286
+publishedOn: '2024-08-06'
+verifiedOn: '2026-10-15'
+# 本表是多份文书的现行合并结果（发改价格〔2017〕270号 附件2 为骨架，财税〔2018〕37号、
+# 发改价格〔2022〕465号、财税〔2024〕23号、发改价格〔2024〕1156号 陆续改动若干子项），
+# 没有一个日期对全表成立，故留 null；逐项的施行依据写在条目的 legalBasis / note 里。
+effectiveFrom: null
+
+# 费用减缴（《专利收费减缴办法》财税〔2016〕78号，经财税〔2019〕45号调整门槛）。
+#
+# ⚠️ 比例与资格是两个维度，别合成一个：
+#   第三条 是**资格**——个人（上年度月均收入门槛）、企业（上年度应纳税所得额门槛）、
+#              事业单位/社会团体/非营利性科研机构（无金额门槛）。
+#   第四条 是**比例**——「专利申请人或者专利权人为个人或者单位的，减缴 85%」；
+#              「两个或者两个以上的个人或者单位为共同专利申请人或者共有专利权人的，减缴 70%」。
+#   比例只取决于申请人/专利权人是**一个还是多个**，与主体是个人还是企业无关。
+#   官方收费标准的费减栏也是这么印的：两列标题就是「85%」「70%」，与资格行正交。
+#
+# 减缴种类：申请费（不包括公布印刷费、申请附加费）、发明专利申请实质审查费、复审费、
+#           年费（自授予专利权当年起十年内的年费，专利开放实施许可期间的年费）。
+reductionPercent:
+  single: 85
+  joint: 70
+reductionKinds:
+  - kind: individual
+    label: 个人
+    eligibility: 上年度月均收入低于 5000 元（年 6 万元）的个人；请求时应提交所在单位出具的年度收入证明（无固定工作的按第七条规定提交经济困难证明）。
+  - kind: enterprise
+    label: 企业
+    eligibility: 上年度企业应纳税所得额低于 100 万元的企业；请求时应提交上年度企业所得税年度纳税申报表复印件（汇算清缴期内提交上上年度）。
+  - kind: institution
+    label: 事业单位、社会团体、非营利性科研机构
+    eligibility: 无收入或所得额门槛；请求时应提交法人证明材料复印件。
+reductionTiming: 请求减缴**申请费**的，应当在提出专利申请的同时提出；请求减缴其他费用的，可以与专利申请同时提出，也可以在相关费用缴纳期限届满日两个半月之前提出。未按规定时限提交减缴请求的，不予减缴（《专利收费减缴办法》第五条）。
+reductionNote: 减缴经国家知识产权局批准（备案）后，按批准后的应缴数额缴纳；申请人/专利权人发生变更的，变更后的权利人应重新提交减缴请求（《专利收费减缴办法》第八条、第十条）。对专利开放许可实施期间的专利年费另减免 15%，同时符合两项年费减缴条件的按其中比例较高的一项减缴，不得重复享受（财税〔2024〕23号第二条）。
+
+items:
+  # ── 提出申请 ────────────────────────────────────────────────────────────────
+  - id: application-fee
+    name: 申请费
+    trigger: filing
+    patentTypes: [invention]
+    basis: per-case
+    amount: '900'
+    reducible: true
+    legalBasis: 专利法实施细则第110条第1款第（一）项、第112条；专利收费减缴办法第2条第（一）项
+    sourceDoc: 国家知识产权局《专利收费、集成电路布图设计收费标准》发明专利费用标准
+    sourceUrl: https://cponline.cnipa.gov.cn/GzfwYwblGlwhTMVC/GzfwYwblGlwhT/selectByNoticeId?weihuRid=286
+    publishedOn: '2024-08-06'
+    verifiedOn: '2026-10-15'
+    effectiveFrom: null
+
+  - id: application-fee-utility-design
+    name: 申请费
+    trigger: filing
+    patentTypes: [utility-model, design]
+    basis: per-case
+    amount: '500'
+    reducible: true
+    legalBasis: 专利法实施细则第110条第1款第（一）项、第112条；专利收费减缴办法第2条第（一）项
+    sourceDoc: 国家知识产权局《专利收费、集成电路布图设计收费标准》实用新型及外观设计专利费用标准
+    sourceUrl: https://cponline.cnipa.gov.cn/GzfwYwblGlwhTMVC/GzfwYwblGlwhT/selectByNoticeId?weihuRid=286
+    publishedOn: '2024-08-06'
+    verifiedOn: '2026-10-15'
+    effectiveFrom: null
+
+  - id: publication-printing-fee
+    name: 公布印刷费
+    trigger: filing
+    patentTypes: [invention]
+    basis: per-case
+    amount: '50'
+    reducible: false
+    legalBasis: 专利法实施细则第110条第1款第（一）项、第112条；专利收费减缴办法第2条第（一）项
+    sourceDoc: 国家知识产权局《专利收费、集成电路布图设计收费标准》发明专利费用标准
+    sourceUrl: https://cponline.cnipa.gov.cn/GzfwYwblGlwhTMVC/GzfwYwblGlwhT/selectByNoticeId?weihuRid=286
+    publishedOn: '2024-08-06'
+    verifiedOn: '2026-10-15'
+    effectiveFrom: null
+    note: 公布印刷费不属于费用减缴范围（《专利收费减缴办法》第二条明确把「公布印刷费、申请附加费」排除在可减缴的申请费之外），按全额计。
+
+  - id: claims-surcharge
+    name: 权利要求附加费
+    trigger: filing
+    patentTypes: null
+    basis: per-claim-beyond
+    freeUnits: 10
+    amount: '150'
+    reducible: false
+    legalBasis: 专利法实施细则第110条第1款第（一）项
+    sourceDoc: 国家知识产权局《专利收费、集成电路布图设计收费标准》申请附加费
+    sourceUrl: https://cponline.cnipa.gov.cn/GzfwYwblGlwhTMVC/GzfwYwblGlwhT/selectByNoticeId?weihuRid=286
+    publishedOn: '2024-08-06'
+    verifiedOn: '2026-10-15'
+    effectiveFrom: null
+    note: 自第 11 项起每项加收 150 元；申请附加费不属于费用减缴范围。
+
+  # 金额留 null：官方按页分两档收费（从第 31 页起每页 50 元、从第 301 页起每页 100 元），
+  # 条目模型只有一个免费基数与一个单价，写成一档会把第 301 页以上的页数按 50 元再算一遍。
+  - id: specification-surcharge
+    name: 说明书附加费
+    trigger: filing
+    patentTypes: null
+    basis: per-page-beyond
+    freeUnits: 30
+    amount: null
+    unpriceableReason: 官方按页分两档计收——从第 31 页起每页 50 元、从第 301 页起每页 100 元；条目只承载一个单价，写成一档会把第 301 页以上的页数按 50 元重复计算，故不给金额。请按官方分档表人工核价。
+    reducible: false
+    legalBasis: 专利法实施细则第110条第1款第（一）项
+    sourceDoc: 国家知识产权局《专利收费、集成电路布图设计收费标准》申请附加费
+    sourceUrl: https://cponline.cnipa.gov.cn/GzfwYwblGlwhTMVC/GzfwYwblGlwhT/selectByNoticeId?weihuRid=286
+    publishedOn: '2024-08-06'
+    verifiedOn: null
+    effectiveFrom: null
+
+  - id: priority-claim-fee
+    name: 优先权要求费
+    trigger: filing
+    patentTypes: null
+    basis: per-priority
+    amount: '80'
+    reducible: false
+    legalBasis: 专利法实施细则第110条第1款第（一）项、第112条第2款
+    sourceDoc: 国家知识产权局《专利收费、集成电路布图设计收费标准》优先权要求费（每项）
+    sourceUrl: https://cponline.cnipa.gov.cn/GzfwYwblGlwhTMVC/GzfwYwblGlwhT/selectByNoticeId?weihuRid=286
+    publishedOn: '2024-08-06'
+    verifiedOn: '2026-10-15'
+    effectiveFrom: null
+    note: 优先权要求费不在《专利收费减缴办法》第二条列举的可减缴费种内，按全额计；未在缴纳申请费的同时缴足的，视为未要求优先权（细则第 112 条第 2 款）。
+
+  # ── 请求实质审查 ────────────────────────────────────────────────────────────
+  - id: substantive-examination-fee
+    name: 实质审查费
+    trigger: substantive-examination
+    patentTypes: [invention]
+    basis: per-case
+    amount: '2500'
+    reducible: true
+    legalBasis: 专利法第35条；专利法实施细则第110条第1款第（二）项、第113条；专利收费减缴办法第2条第（二）项
+    sourceDoc: 国家知识产权局《专利收费、集成电路布图设计收费标准》发明专利费用标准
+    sourceUrl: https://cponline.cnipa.gov.cn/GzfwYwblGlwhTMVC/GzfwYwblGlwhT/selectByNoticeId?weihuRid=286
+    publishedOn: '2024-08-06'
+    verifiedOn: '2026-10-15'
+    effectiveFrom: null
+    note: 对进入实质审查阶段的发明专利申请，在第一次审查意见通知书答复期限届满前（已提交答复意见的除外）主动申请撤回的，可以请求退还 50% 的实质审查费（财税〔2018〕37号第三条；收费标准注 1）。
+
+  # ── 年费 ────────────────────────────────────────────────────────────────────
+  #
+  # 滞纳金：细则第 115 条给的是「自应当缴纳年费期满之日起 6 个月内补缴，同时缴纳滞纳金；
+  # 滞纳金的金额按照每超过规定的缴费时间 1 个月，加收当年全额年费的 5% 计算」。
+  # 但官方《年费计算参考表》逐格列出的滞纳金只到 **25%（5 个月）**，与 6 个月的窗口差一个月。
+  # 这一个月的差额决定案子是「多缴」还是「缴费不足」，方向不同后果不同（后者丢权利），
+  # 所以按 tabulatedMonths 划线：5 个月以内给金额，第 6 个月不给、交人工核价。
+  - id: annual-fee
+    name: 年费
+    trigger: annual-fee
+    patentTypes: [invention]
+    basis: per-annuity-year
+    amount: null
+    reducible: true
+    reductionMaxYears: 10
+    tiers:
+      - fromYear: 1
+        toYear: 3
+        amount: '900'
+      - fromYear: 4
+        toYear: 6
+        amount: '1200'
+      - fromYear: 7
+        toYear: 9
+        amount: '2000'
+      - fromYear: 10
+        toYear: 12
+        amount: '4000'
+      - fromYear: 13
+        toYear: 15
+        amount: '6000'
+      - fromYear: 16
+        toYear: 20
+        amount: '8000'
+    latePayment:
+      monthlyPercent: 5
+      maxMonths: 6
+      tabulatedMonths: 5
+      legalBasis: 专利法实施细则第115条
+      sourceDoc: 国家知识产权局《专利收费、集成电路布图设计收费标准》发明专利年费计算参考表
+      sourceUrl: https://cponline.cnipa.gov.cn/GzfwYwblGlwhTMVC/GzfwYwblGlwhT/selectByNoticeId?weihuRid=286
+      publishedOn: '2024-08-06'
+      verifiedOn: '2026-10-15'
+      effectiveFrom: null
+    legalBasis: 专利法实施细则第110条第1款第（三）项、第114条、第115条；专利收费减缴办法第2条第（三）项
+    sourceDoc: 国家知识产权局《专利收费、集成电路布图设计收费标准》发明专利年费计算参考表
+    sourceUrl: https://cponline.cnipa.gov.cn/GzfwYwblGlwhTMVC/GzfwYwblGlwhT/selectByNoticeId?weihuRid=286
+    publishedOn: '2024-08-06'
+    verifiedOn: '2026-10-15'
+    effectiveFrom: null
+    note: 授予专利权当年的年费应当在办理登记手续的同时缴纳（细则第 114 条，见 grant-registration 环节说明）；开放许可实施期间的年费另减免 15%。
+
+  - id: annual-fee-utility-model
+    name: 年费
+    trigger: annual-fee
+    patentTypes: [utility-model]
+    basis: per-annuity-year
+    amount: null
+    reducible: true
+    reductionMaxYears: 10
+    tiers:
+      - fromYear: 1
+        toYear: 3
+        amount: '600'
+      - fromYear: 4
+        toYear: 5
+        amount: '900'
+      - fromYear: 6
+        toYear: 8
+        amount: '1200'
+      - fromYear: 9
+        toYear: 10
+        amount: '2000'
+    latePayment:
+      monthlyPercent: 5
+      maxMonths: 6
+      tabulatedMonths: 5
+      legalBasis: 专利法实施细则第115条
+      sourceDoc: 国家知识产权局《专利收费、集成电路布图设计收费标准》实用新型专利年费计算参考表
+      sourceUrl: https://cponline.cnipa.gov.cn/GzfwYwblGlwhTMVC/GzfwYwblGlwhT/selectByNoticeId?weihuRid=286
+      publishedOn: '2024-08-06'
+      verifiedOn: '2026-10-15'
+      effectiveFrom: null
+    legalBasis: 专利法实施细则第110条第1款第（三）项、第114条、第115条；专利收费减缴办法第2条第（三）项
+    sourceDoc: 国家知识产权局《专利收费、集成电路布图设计收费标准》实用新型专利年费计算参考表
+    sourceUrl: https://cponline.cnipa.gov.cn/GzfwYwblGlwhTMVC/GzfwYwblGlwhT/selectByNoticeId?weihuRid=286
+    publishedOn: '2024-08-06'
+    verifiedOn: '2026-10-15'
+    effectiveFrom: null
+
+  - id: annual-fee-design
+    name: 年费
+    trigger: annual-fee
+    patentTypes: [design]
+    basis: per-annuity-year
+    amount: null
+    reducible: true
+    reductionMaxYears: 10
+    tiers:
+      - fromYear: 1
+        toYear: 3
+        amount: '600'
+      - fromYear: 4
+        toYear: 5
+        amount: '900'
+      - fromYear: 6
+        toYear: 8
+        amount: '1200'
+      - fromYear: 9
+        toYear: 10
+        amount: '2000'
+      - fromYear: 11
+        toYear: 15
+        amount: '3000'
+    latePayment:
+      monthlyPercent: 5
+      maxMonths: 6
+      tabulatedMonths: 5
+      legalBasis: 专利法实施细则第115条
+      sourceDoc: 国家知识产权局《专利收费、集成电路布图设计收费标准》外观设计专利年费计算参考表
+      sourceUrl: https://cponline.cnipa.gov.cn/GzfwYwblGlwhTMVC/GzfwYwblGlwhT/selectByNoticeId?weihuRid=286
+      publishedOn: '2024-08-06'
+      verifiedOn: '2026-10-15'
+      effectiveFrom: null
+    legalBasis: 专利法实施细则第110条第1款第（三）项、第114条、第115条；专利收费减缴办法第2条第（三）项
+    sourceDoc: 国家知识产权局《专利收费、集成电路布图设计收费标准》外观设计专利年费计算参考表
+    sourceUrl: https://cponline.cnipa.gov.cn/GzfwYwblGlwhTMVC/GzfwYwblGlwhT/selectByNoticeId?weihuRid=286
+    publishedOn: '2024-08-06'
+    verifiedOn: '2026-10-15'
+    effectiveFrom: null
+
+  # ── 复审 ────────────────────────────────────────────────────────────────────
+  - id: reexamination-fee
+    name: 复审请求费
+    trigger: reexamination
+    patentTypes: [invention]
+    basis: per-case
+    amount: '1000'
+    reducible: true
+    legalBasis: 专利法第41条第1款；专利法实施细则第110条第1款第（二）项、第113条；专利收费减缴办法第2条第（四）项
+    sourceDoc: 国家知识产权局《专利收费、集成电路布图设计收费标准》发明专利费用标准
+    sourceUrl: https://cponline.cnipa.gov.cn/GzfwYwblGlwhTMVC/GzfwYwblGlwhT/selectByNoticeId?weihuRid=286
+    publishedOn: '2024-08-06'
+    verifiedOn: '2026-10-15'
+    effectiveFrom: null
+
+  - id: reexamination-fee-utility-design
+    name: 复审请求费
+    trigger: reexamination
+    patentTypes: [utility-model, design]
+    basis: per-case
+    amount: '300'
+    reducible: true
+    legalBasis: 专利法第41条第1款；专利法实施细则第110条第1款第（二）项、第113条；专利收费减缴办法第2条第（四）项
+    sourceDoc: 国家知识产权局《专利收费、集成电路布图设计收费标准》实用新型及外观设计专利费用标准
+    sourceUrl: https://cponline.cnipa.gov.cn/GzfwYwblGlwhTMVC/GzfwYwblGlwhT/selectByNoticeId?weihuRid=286
+    publishedOn: '2024-08-06'
+    verifiedOn: '2026-10-15'
+    effectiveFrom: null
+
+  # ── 无效宣告 ────────────────────────────────────────────────────────────────
+  - id: invalidation-fee
+    name: 无效宣告请求费
+    trigger: invalidation
+    patentTypes: [invention]
+    basis: per-case
+    amount: '3000'
+    reducible: false
+    legalBasis: 专利法实施细则第110条第1款第（五）项、第116条第3款
+    sourceDoc: 国家知识产权局《专利收费、集成电路布图设计收费标准》发明专利费用标准
+    sourceUrl: https://cponline.cnipa.gov.cn/GzfwYwblGlwhTMVC/GzfwYwblGlwhT/selectByNoticeId?weihuRid=286
+    publishedOn: '2024-08-06'
+    verifiedOn: '2026-10-15'
+    effectiveFrom: null
+
+  - id: invalidation-fee-utility-design
+    name: 无效宣告请求费
+    trigger: invalidation
+    patentTypes: [utility-model, design]
+    basis: per-case
+    amount: '1500'
+    reducible: false
+    legalBasis: 专利法实施细则第110条第1款第（五）项、第116条第3款
+    sourceDoc: 国家知识产权局《专利收费、集成电路布图设计收费标准》实用新型及外观设计专利费用标准
+    sourceUrl: https://cponline.cnipa.gov.cn/GzfwYwblGlwhTMVC/GzfwYwblGlwhT/selectByNoticeId?weihuRid=286
+    publishedOn: '2024-08-06'
+    verifiedOn: '2026-10-15'
+    effectiveFrom: null
+
+  # ── 专利权评价报告 ──────────────────────────────────────────────────────────
+  - id: evaluation-report-fee
+    name: 专利权评价报告请求费
+    trigger: evaluation-report
+    patentTypes: [utility-model, design]
+    basis: per-case
+    amount: '2400'
+    reducible: false
+    legalBasis: 专利法实施细则第110条第1款第（五）项、第116条第3款
+    sourceDoc: 国家知识产权局《专利收费、集成电路布图设计收费标准》实用新型及外观设计专利费用标准
+    sourceUrl: https://cponline.cnipa.gov.cn/GzfwYwblGlwhTMVC/GzfwYwblGlwhT/selectByNoticeId?weihuRid=286
+    publishedOn: '2024-08-06'
+    verifiedOn: '2026-10-15'
+    effectiveFrom: null
+    note: 专利权评价报告请求费不在《专利收费减缴办法》第二条列举的可减缴费种内，按全额计（实用新型与外观设计同为 2400 元）。
+
+  # ── 专利权期限补偿（财税〔2024〕23号 / 公告第594号新增） ────────────────────
+  - id: term-compensation-request-fee
+    name: 专利权期限补偿请求费
+    trigger: term-compensation
+    patentTypes: null
+    basis: per-case
+    amount: '200'
+    reducible: false
+    legalBasis: 专利法实施细则第110条第2款；国家知识产权局公告第594号第一项；财税〔2024〕23号第一条
+    sourceDoc: 国家知识产权局《专利收费、集成电路布图设计收费标准》（十五）专利权期限补偿请求费
+    sourceUrl: https://cponline.cnipa.gov.cn/GzfwYwblGlwhTMVC/GzfwYwblGlwhT/selectByNoticeId?weihuRid=286
+    publishedOn: '2024-08-06'
+    verifiedOn: '2026-10-15'
+    effectiveFrom: null
+
+  - id: term-compensation-annual-fee
+    name: 专利权补偿期年费
+    trigger: term-compensation
+    patentTypes: null
+    basis: per-case
+    amount: null
+    unpriceableReason: 官方按补偿期年数计收（每年 8000 元，不足一年部分不收取）。补偿期年数由专利权期限补偿决定确定，本索引不掌握该事实，故不给金额。
+    reducible: false
+    legalBasis: 专利法实施细则第110条第2款；国家知识产权局公告第594号第一项；财税〔2024〕23号第一条、发改价格〔2024〕1156号
+    sourceDoc: 国家知识产权局《专利收费、集成电路布图设计收费标准》（十六）专利权补偿期年费
+    sourceUrl: https://cponline.cnipa.gov.cn/GzfwYwblGlwhTMVC/GzfwYwblGlwhT/selectByNoticeId?weihuRid=286
+    publishedOn: '2024-08-06'
+    verifiedOn: '2026-10-15'
+    effectiveFrom: null
+
+  # ── 专利文件副本证明 ────────────────────────────────────────────────────────
+  - id: document-copy-fee
+    name: 专利文件副本证明费
+    trigger: document-copy
+    patentTypes: null
+    basis: per-case
+    amount: '30'
+    reducible: false
+    legalBasis: 专利法实施细则第110条第1款第（五）项
+    sourceDoc: 国家知识产权局《专利收费、集成电路布图设计收费标准》（十四）专利文件副本证明费（每份）
+    sourceUrl: https://cponline.cnipa.gov.cn/GzfwYwblGlwhTMVC/GzfwYwblGlwhT/selectByNoticeId?weihuRid=286
+    publishedOn: '2024-08-06'
+    verifiedOn: '2026-10-15'
+    effectiveFrom: null
+    note: 按份计收，每份 30 元。若一次请求多份，请按份数在本工具的 triggers 上重复请求或另行乘以份数（本条目按「每件」计数，不掌握份数）。
+
+  # ── 恢复权利 / 延长期限 / 著录事项变更 ──────────────────────────────────────
+  - id: restoration-fee
+    name: 恢复权利请求费
+    trigger: restoration
+    patentTypes: null
+    basis: per-case
+    amount: '1000'
+    reducible: false
+    legalBasis: 专利法实施细则第110条第1款第（四）项、第116条第1款
+    sourceDoc: 国家知识产权局《专利收费、集成电路布图设计收费标准》（九）恢复权利请求费
+    sourceUrl: https://cponline.cnipa.gov.cn/GzfwYwblGlwhTMVC/GzfwYwblGlwhT/selectByNoticeId?weihuRid=286
+    publishedOn: '2024-08-06'
+    verifiedOn: '2026-10-15'
+    effectiveFrom: null
+    note: 细则第 6 条第 5 款把专利法第 24、29、42、74 条的期限排除在恢复之外；这些期限逾期不能靠缴费恢复。
+
+  # 金额留 null：官方按「第一次延长期限请求费」每月 300 元、「再次延长期限请求费」每月 2000 元
+  # 两档收费，条目只承载一个单价，查询也不带「第几次」。
+  - id: extension-fee
+    name: 延长期限请求费
+    trigger: extension
+    patentTypes: null
+    basis: per-month
+    amount: null
+    unpriceableReason: 官方按两档计收——第一次延长期限请求费每月 300 元、再次延长期限请求费每月 2000 元；条目只承载一个单价，查询也不带「第几次延期」，故不给金额。请按官方两档表人工核价。
+    reducible: false
+    legalBasis: 专利法实施细则第110条第1款第（四）项、第116条第2款
+    sourceDoc: 国家知识产权局《专利收费、集成电路布图设计收费标准》（十）延长期限请求费
+    sourceUrl: https://cponline.cnipa.gov.cn/GzfwYwblGlwhTMVC/GzfwYwblGlwhT/selectByNoticeId?weihuRid=286
+    publishedOn: '2024-08-06'
+    verifiedOn: null
+    effectiveFrom: null
+
+  - id: record-change-fee
+    name: 著录事项变更费
+    trigger: record-change
+    patentTypes: null
+    basis: per-case
+    amount: '200'
+    reducible: false
+    legalBasis: 专利法实施细则第110条第1款第（五）项、第116条第3款；财税〔2024〕23号第四条
+    sourceDoc: 国家知识产权局《专利收费、集成电路布图设计收费标准》（十一）著录事项变更费
+    sourceUrl: https://cponline.cnipa.gov.cn/GzfwYwblGlwhTMVC/GzfwYwblGlwhT/selectByNoticeId?weihuRid=286
+    publishedOn: '2024-08-06'
+    verifiedOn: '2026-10-15'
+    effectiveFrom: null
+    note: 收费标准的著录事项变更费一项现在只列「发明人、申请人、专利权人的变更」200 元——专利代理机构、代理人委托关系的变更已由财税〔2018〕37号自 2018-08-01 起停征，不要按本项收费。通过批量著录项目变更请求变更申请人（或专利权人）姓名或名称且不涉及权利转移的，按一件变更缴纳（财税〔2024〕23号第四条）。
+
+  # ── PCT 进入中国国家阶段 ────────────────────────────────────────────────────
+  - id: pct-grace-fee
+    name: 宽限费
+    trigger: pct-grace
+    patentTypes: null
+    basis: per-case
+    amount: '1000'
+    reducible: false
+    legalBasis: 专利法实施细则第120条
+    sourceDoc: 国家知识产权局《专利收费、集成电路布图设计收费标准》PCT 申请进入中国国家阶段部分 1.宽限费
+    sourceUrl: https://cponline.cnipa.gov.cn/GzfwYwblGlwhTMVC/GzfwYwblGlwhT/selectByNoticeId?weihuRid=286
+    publishedOn: '2024-08-06'
+    verifiedOn: '2026-10-15'
+    effectiveFrom: null
+    note: 未能在优先权日起 30 个月内办理进入中国国家阶段手续的，缴纳宽限费后可以在自优先权日起 32 个月内办理（细则第 120 条）。
+
+  # 金额留 null：官方按阶段分两档（初审阶段 300 元、实审阶段 1200 元），条目只承载一个单价，
+  # 查询也不带阶段。
+  - id: pct-translation-correction-fee
+    name: 译文改正费
+    trigger: pct-national-phase
+    patentTypes: null
+    basis: per-case
+    amount: null
+    unpriceableReason: 官方按阶段分两档计收——初审阶段 300 元、实审阶段 1200 元；条目只承载一个单价，查询也不带阶段，故不给金额。
+    reducible: false
+    legalBasis: 专利法实施细则第121条
+    sourceDoc: 国家知识产权局《专利收费、集成电路布图设计收费标准》PCT 申请进入中国国家阶段部分 2.译文改正费
+    sourceUrl: https://cponline.cnipa.gov.cn/GzfwYwblGlwhTMVC/GzfwYwblGlwhT/selectByNoticeId?weihuRid=286
+    publishedOn: '2024-08-06'
+    verifiedOn: null
+    effectiveFrom: null
+
+  - id: pct-unity-restoration-fee
+    name: 单一性恢复费
+    trigger: pct-national-phase
+    patentTypes: null
+    basis: per-case
+    amount: '900'
+    reducible: false
+    legalBasis: 专利法实施细则第121条
+    sourceDoc: 国家知识产权局《专利收费、集成电路布图设计收费标准》PCT 申请进入中国国家阶段部分 3.单一性恢复费
+    sourceUrl: https://cponline.cnipa.gov.cn/GzfwYwblGlwhTMVC/GzfwYwblGlwhT/selectByNoticeId?weihuRid=286
+    publishedOn: '2024-08-06'
+    verifiedOn: '2026-10-15'
+    effectiveFrom: null
+
+  - id: pct-priority-restoration-fee
+    name: 优先权恢复费
+    trigger: pct-national-phase
+    patentTypes: null
+    basis: per-case
+    amount: '1000'
+    reducible: false
+    legalBasis: 专利法实施细则第121条
+    sourceDoc: 国家知识产权局《专利收费、集成电路布图设计收费标准》PCT 申请进入中国国家阶段部分 4.优先权恢复费
+    sourceUrl: https://cponline.cnipa.gov.cn/GzfwYwblGlwhTMVC/GzfwYwblGlwhT/selectByNoticeId?weihuRid=286
+    publishedOn: '2024-08-06'
+    verifiedOn: '2026-10-15'
+    effectiveFrom: null
