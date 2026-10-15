@@ -7,24 +7,37 @@
  *
  * 样本分两层：真实 `git mv` / `git status --porcelain` 产出的行（防止手写样本
  * 与真实格式漂移），以及覆盖其余状态码的字面样本。
+ *
+ * 项目 root 一律由**注册表**提供（`../../services/projectRegistration.js`）：测试在临时 app home
+ * 里写 `projects/<id>/.cwd`，而不是给路由一个能解析任意路径的桩——root 的来源正是这些路由的
+ * 授权边界（见「root 只认注册表」一节）。
  */
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import express from "express";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 
 import { parseCommitLogWithStats } from "../utils/gitCommitLog.js";
+import { createProjectId } from "../utils/pilotPaths.js";
 
 const nativeFetch = globalThis.fetch;
 const tempDirs = [];
+let satiHome = null;
 
 afterEach(() => {
   vi.restoreAllMocks();
   vi.resetModules();
   for (const dir of tempDirs.splice(0)) {
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+afterAll(() => {
+  delete process.env.SATI_HOME;
+  if (satiHome) {
+    rmSync(satiHome, { recursive: true, force: true });
   }
 });
 
@@ -122,23 +135,37 @@ async function parseStatusBucketsOf(porcelain) {
 }
 
 /**
- * Load `git.js` with its two heavy neighbours mocked out.
+ * Load `git.js` with its one heavy neighbour mocked out.
  *
- * `git.js` itself only needs `extractProjectDirectory` (project lookup) and
- * `runChatViaGateway` (one unrelated endpoint); importing them for real drags
- * in the whole `src/` chain — which a pure `--porcelain` parser test has no
- * business booting. The reset keeps each load's own mock authoritative instead
- * of reusing the module instance an earlier test imported.
+ * `git.js` only needs `runChatViaGateway` (one unrelated endpoint) stubbed; importing it for real
+ * drags in the whole `src/` chain — which a `--porcelain` parser test has no business booting.
+ * Project lookup is deliberately **not** stubbed: it must go through the real registry under the
+ * throwaway `SATI_HOME` (see `registerProject`), so a regression back to request-derived roots
+ * shows up as a failure here instead of being papered over by a mock. `vi.resetModules` keeps each
+ * load's own mock authoritative instead of reusing the instance an earlier test imported.
  */
-async function loadGitModule(projectDir = "/tmp/unused-project") {
+async function loadGitModule() {
   vi.resetModules();
-  vi.doMock("../projects.js", () => ({
-    extractProjectDirectory: vi.fn(async () => projectDir),
-  }));
   vi.doMock("../sati-bridge.js", () => ({
     runChatViaGateway: vi.fn(async () => undefined),
   }));
   return import("./git.js");
+}
+
+/**
+ * Register `dir` as a workspace in a throwaway app home — the same `<home>/projects/<id>/.cwd`
+ * marker the gateway writes. The home lives outside the workspace so it never trips the
+ * app-home overlap rejection.
+ */
+function registerProject(dir, id = "demo") {
+  if (!satiHome) {
+    satiHome = mkdtempSync(join(tmpdir(), "sati-git-home-"));
+    process.env.SATI_HOME = satiHome;
+  }
+  const storage = join(satiHome, "projects", id);
+  mkdirSync(storage, { recursive: true });
+  writeFileSync(join(storage, ".cwd"), dir);
+  return storage;
 }
 
 /** Create a real throwaway git repo with one commit and one tracked file. */
@@ -166,7 +193,8 @@ function createRepository() {
 }
 
 async function createGitApp(projectDir) {
-  const { default: gitRoutes } = await loadGitModule(projectDir);
+  registerProject(projectDir);
+  const { default: gitRoutes } = await loadGitModule();
   const app = express();
   app.use(express.json());
   app.use("/api/git", gitRoutes);
@@ -326,5 +354,91 @@ describe("GET /api/git/commits", () => {
     expect((await request("/api/git/commits?project=demo&limit=abc")).body.commits).toHaveLength(3);
     // A huge limit is clamped to 100; the repo only has 3 so all 3 come back.
     expect((await request("/api/git/commits?project=demo&limit=999")).body.commits).toHaveLength(3);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// root 的授权来源：项目注册表（否则本文件里的读文件内容面与写操作面都等于交给调用方）
+// ---------------------------------------------------------------------------
+
+describe("root 只认注册表", () => {
+  it("未注册的 git 工作树读不出文件内容", async () => {
+    const registered = createRepository();
+    const outside = createRepository();
+    // 与本项目无关的另一个工作树：旧实现（绝对路径透传 + 短横线解码）能逐字读出它。
+    writeFileSync(join(outside.dir, "secret.txt"), "CLASSIFIED-CANARY\n");
+
+    const { request } = await createGitApp(registered.dir);
+    const projects = [outside.dir, createProjectId(outside.dir), "-tmp-outside"];
+
+    for (const project of projects) {
+      for (const suffix of ["file-with-diff", "diff"]) {
+        const { body } = await request(`/api/git/${suffix}?project=${encodeURIComponent(project)}&file=secret.txt`);
+        expect(body.error, `${project} → ${suffix} 应报错而不是返回内容`).toBeTruthy();
+        expect(JSON.stringify(body)).not.toContain("CLASSIFIED-CANARY");
+      }
+    }
+  });
+
+  it("general 与 app home 的 git 面读不出 server-token（home 自身是工作树也一样）", async () => {
+    const { dir } = createRepository();
+    const { request } = await createGitApp(dir);
+    writeFileSync(join(satiHome, "server-token"), "fake-server-token");
+    // dotfiles 场景：用户 home 本身就是一个 git 工作树，于是「它是不是 git 仓库」不再是护栏。
+    execFileSync("git", ["init", "-q"], { cwd: satiHome });
+    execFileSync("git", ["add", "server-token"], { cwd: satiHome });
+
+    for (const project of ["general", satiHome]) {
+      const { body } = await request(
+        `/api/git/file-with-diff?project=${encodeURIComponent(project)}&file=server-token`,
+      );
+      expect(body.error, `${project} 应被拒`).toBeTruthy();
+      expect(JSON.stringify(body)).not.toContain("fake-server-token");
+    }
+  });
+
+  it("已注册工作区的 /file-with-diff 照常返回内容", async () => {
+    const { dir } = createRepository();
+    writeFileSync(join(dir, "a.txt"), "hello changed\n");
+
+    const { request } = await createGitApp(dir);
+    const { body } = await request("/api/git/file-with-diff?project=demo&file=a.txt");
+
+    expect(body.error).toBeUndefined();
+    expect(body.currentContent).toBe("hello changed\n");
+  });
+
+  it("非 ASCII 路径按原名返回，且能直接取回内容（core.quotepath 不再把路径碾成 `/344/...`）", async () => {
+    const { dir, runGit } = createRepository();
+    const relative = "专利/交底书.md";
+    mkdirSync(join(dir, "专利"), { recursive: true });
+    writeFileSync(join(dir, "专利", "交底书.md"), "内容\n");
+    runGit(["add", "."]);
+
+    const { request } = await createGitApp(dir);
+    const { body } = await request("/api/git/status?project=demo");
+    expect(body.added).toEqual([relative]);
+
+    const file = await request(`/api/git/file-with-diff?project=demo&file=${encodeURIComponent(relative)}`);
+    expect(file.body.error).toBeUndefined();
+    expect(file.body.currentContent).toBe("内容\n");
+  });
+
+  it("注册但非 git 仓库的目录上，checkout / create-branch 先被仓库校验拦下", async () => {
+    const plain = mkdtempSync(join(tmpdir(), "sati-git-plain-"));
+    tempDirs.push(plain);
+    const { request } = await createGitApp(plain);
+
+    for (const route of ["checkout", "create-branch"]) {
+      const { status, body } = await request(`/api/git/${route}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ project: "demo", branch: "feature" }),
+      });
+      expect(status).toBe(500);
+      // validateGitRepository 的文案（而非 git 自己的 fatal: not a git repository）——这两条路由
+      // 此前没有这一步校验。
+      expect(body.error).toMatch(/does not contain a \.git folder/);
+    }
   });
 });

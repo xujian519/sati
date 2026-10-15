@@ -295,6 +295,13 @@ describe("接线契约：每个项目面都挂守卫", () => {
    */
   const GUARD_NAMES = ["requireRegisteredProjectRoot", "requireChatAttachmentRoot"];
 
+  /**
+   * 能直接 `import()` 的路由文件（框架路由表自校验用）。`project-preview.js` 拉进 Office 预览
+   * 服务那一串依赖，本文件没有为它准备 mock，故只对前两个文件做路由表比对；它另有
+   * `project-preview.auth.test.js` 覆盖鉴权链。
+   */
+  const ROUTER_IMPORTABLE = ["project-files.js", "project-uploads.js"];
+
   const OVERLAP_PERMITTING_GUARD = "requireChatAttachmentRoot";
 
   function projectFaces(file) {
@@ -332,6 +339,24 @@ describe("接线契约：每个项目面都挂守卫", () => {
     const source = readFileSync(new URL(file, import.meta.url), "utf8");
     const literals = source.match(/\/api\/projects\/:projectName\//g) ?? [];
     expect(literals.length).toBe(projectFaces(file).length);
+  });
+
+  // 上面的扫描只认 `/api/projects/:projectName/…` 这一种路径字面量。若有人用别的参数名声明新面
+  // （`/:name/…`），字面量数与扫描数**同时**下降，两条断言都不会察觉——故再用框架自己的路由表
+  // （`router.stack`）枚举一次真实的路由，与扫描结果对表。
+  it.each(ROUTER_IMPORTABLE)("%s 的路由表与扫描结果一致", async file => {
+    const router = (await import(`./${file}`)).default;
+    const stackPaths = router.stack
+      .filter(layer => layer.route)
+      .flatMap(layer => (Array.isArray(layer.route.path) ? layer.route.path : [layer.route.path]))
+      .filter(routePath => typeof routePath === "string" && routePath.includes("/api/projects/"))
+      .sort();
+
+    expect(stackPaths).toEqual(
+      projectFaces(file)
+        .map(({ path: routePath }) => routePath)
+        .sort(),
+    );
   });
 
   it("只有聊天附件面使用放行 app home 重叠的守卫", () => {

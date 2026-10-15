@@ -14,12 +14,42 @@ import fs from "fs";
 import path from "path";
 import { promises as fsPromises } from "fs";
 import { spawn } from "child_process";
-import { extractProjectDirectory } from "../projects.js";
 import { detectTaskMasterMCPServer } from "../utils/mcp-detector.js";
 import { broadcastTaskMasterProjectUpdate, broadcastTaskMasterTasksUpdate } from "../utils/taskmaster-websocket.js";
 import { prepareCliSpawn } from "../utils/processSpawn.js";
+import { createProjectFilesystemMiddleware } from "../middleware/projectFilesystem.js";
 
 const router = express.Router();
+
+/**
+ * 项目面（`:projectName` 是路径参数的那几个）的 root 只认项目注册表 —— 本文件既按 root 写文件
+ * （`apply-template`），又按 root 起 CLI（`init` / `add-task` / `update-task` / `parse-prd`）；
+ * root 若由请求参数推导（绝对路径透传 + 短横线解码那一套），任意现有目录都能成为写入与 CLI 的
+ * cwd。守卫同时挡掉与 app home 重叠的 root。
+ */
+const requireRegisteredProjectRoot = createProjectFilesystemMiddleware();
+
+/**
+ * `.taskmaster/docs/` 下只接受**单个文件名**。
+ *
+ * `fileName` 此前直接来自 `req.body` 并用于 `path.join(root, ".taskmaster", "docs", fileName)`：
+ * `../../.sati/sati.yaml` 这类取值能把模板写出项目之外；`parse-prd` 同形，且拼好的路径还会交给
+ * 子进程。分层校验（root 由守卫守、文件名在这里收口）比只靠一层更结实。
+ *
+ * @param {unknown} value 请求体里的文件名。
+ * @returns {string} 合法的单个文件名。
+ * @throws {Error} 含分隔符 / `..` / NUL 时抛 `INVALID_DOCS_FILE_NAME`。
+ */
+function resolveDocsFileName(value) {
+  if (typeof value !== "string") {
+    throw Object.assign(new Error("Invalid document name"), { code: "INVALID_DOCS_FILE_NAME" });
+  }
+  const name = value.trim();
+  if (!name || name === "." || name === ".." || /[/\\\0]/.test(name)) {
+    throw Object.assign(new Error("Invalid document name"), { code: "INVALID_DOCS_FILE_NAME" });
+  }
+  return name;
+}
 
 function spawnCli(command, args, options = {}) {
   const prepared = prepareCliSpawn(command, args, options);
@@ -73,7 +103,6 @@ async function checkTaskMasterInstallation() {
     // Check if task-master command is available
     const child = spawnCli("which", ["task-master"], {
       stdio: ["ignore", "pipe", "pipe"],
-      shell: true,
     });
 
     let output = "";
@@ -91,7 +120,6 @@ async function checkTaskMasterInstallation() {
         // TaskMaster is installed, get version
         const versionChild = spawnCli("task-master", ["--version"], {
           stdio: ["ignore", "pipe", "pipe"],
-          shell: true,
         });
 
         let versionOutput = "";
@@ -179,21 +207,10 @@ router.get("/installation-status", async (req, res) => {
  * GET /api/taskmaster/tasks/:projectName
  * Load actual tasks from .taskmaster/tasks/tasks.json
  */
-router.get("/tasks/:projectName", async (req, res) => {
+router.get("/tasks/:projectName", requireRegisteredProjectRoot, async (req, res) => {
   try {
     const { projectName } = req.params;
-
-    // Get project path
-    let projectPath;
-    try {
-      projectPath = await extractProjectDirectory(projectName);
-    } catch {
-      // 项目名无法解析成目录（extractProjectDirectory 抛异常）→ 回 404「Project not found」，前端 refreshTasks 报错并把任务面板置空。
-      return res.status(404).json({
-        error: "Project not found",
-        message: `Project "${projectName}" does not exist`,
-      });
-    }
+    const projectPath = req.projectRoot;
 
     const taskMasterPath = path.join(projectPath, ".taskmaster");
     const tasksFilePath = path.join(taskMasterPath, "tasks", "tasks.json");
@@ -294,21 +311,10 @@ router.get("/tasks/:projectName", async (req, res) => {
  * POST /api/taskmaster/init/:projectName
  * Initialize TaskMaster in a project
  */
-router.post("/init/:projectName", async (req, res) => {
+router.post("/init/:projectName", requireRegisteredProjectRoot, async (req, res) => {
   try {
     const { projectName } = req.params;
-
-    // Get project path
-    let projectPath;
-    try {
-      projectPath = await extractProjectDirectory(projectName);
-    } catch {
-      // 项目名无法解析成目录（extractProjectDirectory 抛异常）→ 回 404「Project not found」，前端提示项目不存在并跳过 TaskMaster 初始化。
-      return res.status(404).json({
-        error: "Project not found",
-        message: `Project "${projectName}" does not exist`,
-      });
-    }
+    const projectPath = req.projectRoot;
 
     // Check if TaskMaster is already initialized
     const taskMasterPath = path.join(projectPath, ".taskmaster");
@@ -325,7 +331,6 @@ router.post("/init/:projectName", async (req, res) => {
     // Run taskmaster init command
     const { code, stdout, stderr } = await runCliProcess("npx", ["task-master", "init"], {
       cwd: projectPath,
-      shell: true,
       stdin: "yes\n",
     });
 
@@ -366,7 +371,7 @@ router.post("/init/:projectName", async (req, res) => {
  * POST /api/taskmaster/add-task/:projectName
  * Add a new task to the project
  */
-router.post("/add-task/:projectName", async (req, res) => {
+router.post("/add-task/:projectName", requireRegisteredProjectRoot, async (req, res) => {
   try {
     const { projectName } = req.params;
     const { prompt, title, description, priority = "medium", dependencies } = req.body;
@@ -378,17 +383,7 @@ router.post("/add-task/:projectName", async (req, res) => {
       });
     }
 
-    // Get project path
-    let projectPath;
-    try {
-      projectPath = await extractProjectDirectory(projectName);
-    } catch {
-      // 项目名无法解析成目录（extractProjectDirectory 抛异常）→ 回 404「Project not found」，前端提示项目不存在、不下发 add-task。
-      return res.status(404).json({
-        error: "Project not found",
-        message: `Project "${projectName}" does not exist`,
-      });
-    }
+    const projectPath = req.projectRoot;
 
     // Build the task-master add-task command
     const args = ["task-master-ai", "add-task"];
@@ -411,7 +406,6 @@ router.post("/add-task/:projectName", async (req, res) => {
     // Run task-master add-task command
     const { code, stdout, stderr } = await runCliProcess("npx", args, {
       cwd: projectPath,
-      shell: true,
     });
 
     logger.info("Add task process completed with code:", code);
@@ -452,22 +446,11 @@ router.post("/add-task/:projectName", async (req, res) => {
  * PUT /api/taskmaster/update-task/:projectName/:taskId
  * Update a specific task using TaskMaster CLI
  */
-router.put("/update-task/:projectName/:taskId", async (req, res) => {
+router.put("/update-task/:projectName/:taskId", requireRegisteredProjectRoot, async (req, res) => {
   try {
     const { projectName, taskId } = req.params;
     const { title, description, status, priority, details } = req.body;
-
-    // Get project path
-    let projectPath;
-    try {
-      projectPath = await extractProjectDirectory(projectName);
-    } catch {
-      // 项目名无法解析成目录（extractProjectDirectory 抛异常）→ 回 404「Project not found」，前端提示项目不存在、不更新该任务。
-      return res.status(404).json({
-        error: "Project not found",
-        message: `Project "${projectName}" does not exist`,
-      });
-    }
+    const projectPath = req.projectRoot;
 
     // If only updating status, use set-status command
     if (status && Object.keys(req.body).length === 1) {
@@ -476,7 +459,6 @@ router.put("/update-task/:projectName/:taskId", async (req, res) => {
         ["task-master-ai", "set-status", `--id=${taskId}`, `--status=${status}`],
         {
           cwd: projectPath,
-          shell: true,
         },
       );
 
@@ -517,7 +499,6 @@ router.put("/update-task/:projectName/:taskId", async (req, res) => {
         ["task-master-ai", "update-task", `--id=${taskId}`, `--prompt=${prompt}`],
         {
           cwd: projectPath,
-          shell: true,
         },
       );
 
@@ -557,24 +538,20 @@ router.put("/update-task/:projectName/:taskId", async (req, res) => {
  * POST /api/taskmaster/parse-prd/:projectName
  * Parse a PRD file to generate tasks
  */
-router.post("/parse-prd/:projectName", async (req, res) => {
+router.post("/parse-prd/:projectName", requireRegisteredProjectRoot, async (req, res) => {
   try {
     const { projectName } = req.params;
     const { fileName = "prd.txt", numTasks, append = false } = req.body;
+    const projectPath = req.projectRoot;
 
-    // Get project path
-    let projectPath;
+    let docsFileName;
     try {
-      projectPath = await extractProjectDirectory(projectName);
-    } catch {
-      // 项目名无法解析成目录（extractProjectDirectory 抛异常）→ 回 404「Project not found」，前端提示项目不存在、不执行 parse-prd。
-      return res.status(404).json({
-        error: "Project not found",
-        message: `Project "${projectName}" does not exist`,
-      });
+      docsFileName = resolveDocsFileName(fileName);
+    } catch (error) {
+      return res.status(400).json({ error: error.message });
     }
 
-    const prdPath = path.join(projectPath, ".taskmaster", "docs", fileName);
+    const prdPath = path.join(projectPath, ".taskmaster", "docs", docsFileName);
 
     // Check if PRD file exists
     try {
@@ -583,7 +560,7 @@ router.post("/parse-prd/:projectName", async (req, res) => {
       // PRD 文件不存在或不可读（access F_OK 抛 ENOENT/EACCES）→ 回 404「PRD file not found」，前端提示 .taskmaster/docs 下无此文件。
       return res.status(404).json({
         error: "PRD file not found",
-        message: `File "${fileName}" does not exist in .taskmaster/docs/`,
+        message: `File "${docsFileName}" does not exist in .taskmaster/docs/`,
       });
     }
 
@@ -603,7 +580,6 @@ router.post("/parse-prd/:projectName", async (req, res) => {
     // Run task-master parse-prd command
     const { code, stdout, stderr } = await runCliProcess("npx", args, {
       cwd: projectPath,
-      shell: true,
     });
 
     if (code === 0) {
@@ -615,7 +591,7 @@ router.post("/parse-prd/:projectName", async (req, res) => {
       res.json({
         projectName,
         projectPath,
-        prdFile: fileName,
+        prdFile: docsFileName,
         message: "PRD parsed and tasks generated successfully",
         output: stdout,
         timestamp: new Date().toISOString(),
@@ -663,7 +639,7 @@ router.get("/prd-templates", async (req, res) => {
  * POST /api/taskmaster/apply-template/:projectName
  * Apply a PRD template to create a new PRD file
  */
-router.post("/apply-template/:projectName", async (req, res) => {
+router.post("/apply-template/:projectName", requireRegisteredProjectRoot, async (req, res) => {
   try {
     const { projectName } = req.params;
     const { templateId, fileName = "prd.txt", customizations = {} } = req.body;
@@ -675,17 +651,14 @@ router.post("/apply-template/:projectName", async (req, res) => {
       });
     }
 
-    // Get project path
-    let projectPath;
+    let docsFileName;
     try {
-      projectPath = await extractProjectDirectory(projectName);
-    } catch {
-      // 项目名无法解析成目录（extractProjectDirectory 抛异常）→ 回 404「Project not found」，前端提示项目不存在、不写模板 PRD。
-      return res.status(404).json({
-        error: "Project not found",
-        message: `Project "${projectName}" does not exist`,
-      });
+      docsFileName = resolveDocsFileName(fileName);
+    } catch (error) {
+      return res.status(400).json({ error: error.message });
     }
+
+    const projectPath = req.projectRoot;
 
     // Get the template content (this would normally fetch from the templates list)
     const templates = await getAvailableTemplates();
@@ -715,7 +688,7 @@ router.post("/apply-template/:projectName", async (req, res) => {
       logger.error("Failed to create docs directory:", error);
     }
 
-    const filePath = path.join(docsDir, fileName);
+    const filePath = path.join(docsDir, docsFileName);
 
     // Write the template content to the file
     try {
@@ -726,7 +699,7 @@ router.post("/apply-template/:projectName", async (req, res) => {
         projectPath,
         templateId,
         templateName: template.name,
-        fileName,
+        fileName: docsFileName,
         filePath: filePath,
         message: "PRD template applied successfully",
         timestamp: new Date().toISOString(),

@@ -512,8 +512,13 @@ note 与 `tests/tool/write-symlink-escape.spec.ts` 文件头）。`git.js` / `ta
 | 注册表只看 `<app home>/projects`，与 `listProjects.ts` 的 `~/.pilotdeck/projects` 回退不一致 → 旧 home 用户「列得出项目、文件面全 404」 | 注册表补同一条 legacy 回退 + 用例（用 `process.env.HOME` 触发，不碰真实 `~/.pilotdeck`） |
 | 接线契约测试的 400 字符窗口会溢到下一个路由的中间件链（假阳性） | 改为按路由边界切分；这个缺陷正是被新增的反向断言抓出来的 |
 
-**审查确认的既有缺口（本批未修，需独立议题）**：`git.js` 自己的文件内容面（`/file-with-diff`、
-`/diff`、`/commit-diff`）仍按请求参数推导 root，且 `/checkout`、`/create-branch` 缺
-`validateGitRepository`；`taskmaster.js` 是「任意路径写 + `shell: true` 起 CLI」面（`fileName`
-未做穿越校验）；`POST /create-workspace` 仍可把任意目录变成「已注册」（本机默认免登录 + `cors()`
-默认放行任意 origin）。逐条见决策记录「未覆盖（明示）」。
+**审查确认的既有缺口（同日第二轮已全部收口）**：`git.js` 自己的文件内容面（`/file-with-diff`、
+`/diff`、`/commit-diff`）曾按请求参数推导 root，且 `/checkout`、`/create-branch` 缺
+`validateGitRepository`；`taskmaster.js` 曾是「任意路径写 + `shell: true` 起 CLI」面（`fileName`
+未做穿越校验）；`POST /create-workspace` 曾可把任意目录变成「已注册」（本机默认免登录 + `cors()`
+默认放行任意 origin）。处置：`git.js` / `taskmaster.js` 接入与项目文件路由族同一条
+`resolveAuthorizedProjectRoot` 判定链（taskmaster 的 `fileName` 收口为单个文件名、7 处
+`shell: true` 去掉），并为本机免登录模式加**请求来源守卫**（`middleware/localOriginGuard.js`：
+`Host` 必须是本机可达名字以防 DNS rebinding、`Origin` 主机名须与 `Host` 一致以便挡住跨站页面；
+WebSocket 握手用同一判据）。判据与负控制见
+`docs/notes/implemented/2026-10-15-local-api-request-origin-and-route-closure.md`。

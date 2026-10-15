@@ -102,6 +102,16 @@ describe("已注册项目的 root 解析", () => {
     await expect(resolveRegisteredProject(id, f.home)).rejects.toMatchObject({ code: "PROJECT_NOT_FOUND" });
   });
 
+  it("绝对路径经软链别名指向已登记目录时仍解析（macOS /var ↔ /private/var 那类差异）", async () => {
+    const f = await fixture();
+    await f.register(f.workspace);
+    const alias = path.join(f.root, "alias");
+    await symlink(f.workspace, alias);
+
+    // 词法不等、realpath 相同 → 认；返回值仍是**登记里的**路径，不是请求方给的那条
+    expect(await resolveRegisteredProject(alias, f.home)).toBe(f.workspace);
+  });
+
   it("工作区已消失时仍按 id 解析成功（可用性由文件路由判）", async () => {
     const f = await fixture();
     const { id } = await f.register(f.workspace);

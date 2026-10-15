@@ -76,8 +76,9 @@ Status: implemented
   与 `token-usage` 读的是**会话元数据**而不是文件内容（后者若挂守卫，General 的会话列表会直接
   坏掉——General 的会话就存在 app home 下）。本次因此只收口项目文件路由族，范围与上游一致。
   ⚠️ 后经代码审查更正：`git.js` 的 `/file-with-diff`、`/diff` 等面**本身就在读文件内容**，此前
-  把它归为「非文件内容面」是错的；`taskmaster.js` 更含写入与 CLI 副作用。二者已按下面「未覆盖」
-  逐条记名，不能算作「已按边界排除」。
+  把它归为「非文件内容面」是错的；`taskmaster.js` 更含写入与 CLI 副作用。二者**已同日收口**
+  （见 `2026-10-15-local-api-request-origin-and-route-closure.md`）；`project-sessions` /
+  `token-usage` 的会话元数据面按上述理由保持不挂守卫。
 - **让 General 的聊天附件改为「不支持」（保留 403）** —— 需要产品决定 + UI 可区分提示 + i18n，
   且直接砍掉一个原本可用的面；本次选择放行重叠判定：代价仅是上传落到 `~/.sati/.tmp/`（与改动前
   行为一致），而路径仍由服务端构造、root 仍只来自注册表。
@@ -89,8 +90,9 @@ Status: implemented
 
 ## Consequences
 
-- **换来**：任意路径不再能当项目根；app home 与其父/子目录在**项目文件路由族内**不可达（该限定
-  的理由见下面「未覆盖」对 `git.js` 的说明——它不是全局性质）。判据五份——
+- **换来**：任意路径不再能当项目根；app home 与其父/子目录在 ui/server 的 HTTP 面内不可达
+  （git / taskmaster 路由族同日接入同一条判定链，见
+  `2026-10-15-local-api-request-origin-and-route-closure.md`）。判据五份——
   `ui/server/services/projectRegistration.test.js`（授权来源 + legacy home 回退）、
   `ui/server/middleware/projectFilesystem.test.js`（重叠拒绝，含软链与大小写别名；以及放行重叠
   时仍拒未注册）、`ui/server/routes/project-files.root-guard.test.js`（真实 router 端到端 + 接线
@@ -106,24 +108,14 @@ Status: implemented
   不挂守卫（只用 `req.user.id` 与临时目录，从不解析项目 root，也就没有待授权的 root；它同时没有
   任何源码消费方），该豁免在接线契约测试里显式登记，并有一条反向断言防止「豁免烂掉」。
 - **未覆盖（明示）**：
-  - `git.js` 自己的文件内容面（`/file-with-diff`、`/diff`、`/commit-diff` 等）仍走
-    `getActualProjectPath()` → `extractProjectDirectory`（绝对路径透传 + 短横线解码），而
-    `validateProjectPath`（`git.js:90`）只拒空值、NUL、非绝对与根目录：`GET
-    /api/git/file-with-diff?project=<任意路径>&file=…` 在目标自身是 git 工作树时可逐字读出树内
-    任意文件（例如 `~` 是 dotfiles 仓库时即含 app home）。
-    另外 `/checkout`（`ui/server/routes/git.js:720`）与 `/create-branch`（`:742`）是唯二**没有**
-    `validateGitRepository` 的路由。故「app home 不可达」应表述为「项目文件路由族内不可达」。
-  - `taskmaster.js` 不只是文件内容面，而是**任意路径写 + CLI 副作用**面：`projectPath` 同样由
-    短横线解码得出，而 `fileName` / `prdFile` 直接来自 `req.body` 且未做穿越校验
-    （`path.join(projectPath, ".taskmaster", "docs", fileName)`——读 `taskmaster.js:577`、
-    写 `:718` → `:722` 的 `fsPromises.writeFile`）；这些路由还会以 `shell: true` 起
-    `task-master init` / `task-master-ai add-task|set-status|update-task|parse-prd`
-    （`:326/:414/:479/:520/:606`，`shell` 见 `:328/:414/:479/:520/:606`）。危害等级高于只读面。
-  - 注册本身就是授权来源，而 `POST /create-workspace` 可把任意现有目录变成「已注册」（本机默认
-    免登录：`ui/server/middleware/auth.js:26`，`IS_PLATFORM || DISABLE_LOCAL_AUTH` 即放行；
-    `ui/server/index.js:80` 的 `cors()` 默认放行任意 origin），随后即可读写打包：本批收窄的是
-    「root 由请求参数推导」，**没有**抬高认证边界；origin/Host 守卫仍是独立议题。
+  - ~~`git.js` 的文件内容面仍走请求参数推导的 root~~、~~`taskmaster.js` 的任意路径写 + `shell: true`
+    起 CLI~~、~~`POST /create-workspace` 可登记任意目录而无来源校验~~ —— 三条已于同日收口，
+    见 `2026-10-15-local-api-request-origin-and-route-closure.md`（git / taskmaster 接入同一条
+    `resolveAuthorizedProjectRoot` 判定链；本机免登录模式加请求来源守卫，`Host` + `Origin` 双判据，
+    WebSocket 握手同判据）。故「app home 不可达」现在的准确表述是：**本机 UI 服务（`ui/server`）
+    的全部 HTTP 面与 WebSocket 握手**内不可达，`general` 在 git / taskmaster 面同样被拒。
   - `project-preview.js` 的预览面已收口，但预览凭据与 `authenticateProjectPreview` 的交互
     **没有自动化用例**——只在结构层面覆盖；手工浏览器验证已跑通（真实 UI：`POST /preview-token`
     200 → 带 `?token=` 取 `preview/*` 200 且正文正确、`general` 的 `preview-token` 403），下次改动
     该面仍需手工复验。
+  - gateway（`sati server`，19789）与各 IM 渠道适配器不在上述守卫范围内，其来源/凭据判定各自独立。

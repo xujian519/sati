@@ -50,6 +50,8 @@ import knowledgeDraftsRoutes from "./routes/knowledgeDrafts.js";
 import urlTicketRoutes from "./routes/url-ticket.js";
 
 import { validateApiKey, authenticateToken } from "./middleware/auth.js";
+import { createLocalOriginGuard } from "./middleware/localOriginGuard.js";
+import { DISABLE_LOCAL_AUTH, IS_PLATFORM } from "./constants/config.js";
 import { getConnectableHost } from "../shared/networkHosts.js";
 import { createChatWebSocketServer, getBrowserActiveKeys } from "./websocket/chat.js";
 import { startTeamPresenceHeartbeat } from "./team-presence.js";
@@ -78,6 +80,19 @@ startTeamPresenceHeartbeat({
 });
 
 app.use(cors({ exposedHeaders: ["X-Refreshed-Token"] }));
+
+// 本机免登录模式下，任意网页都能调用本机 API 并读响应（cors() 放行任意 origin，auth 直接放行）。
+// 来源守卫把「外部网页」这条入口关掉；托管部署（IS_PLATFORM）有真实 JWT 且 Host 是公网域名，
+// 故那里不启用。见 ./middleware/localOriginGuard.js。
+app.use(
+  createLocalOriginGuard({
+    enabled: DISABLE_LOCAL_AUTH && !IS_PLATFORM,
+    trustedHosts: (process.env.SATI_TRUSTED_HOSTS ?? "")
+      .split(",")
+      .map(entry => entry.trim())
+      .filter(Boolean),
+  }),
+);
 app.use(
   express.json({
     limit: "50mb",

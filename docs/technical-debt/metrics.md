@@ -11,7 +11,7 @@
 | src JS 文件 | 0 |
 | tests 文件 | 656 |
 | ui/src 文件 / 行数 | 647 / 103033 |
-| ui/server 文件 / 行数 | 143 / 37586 |
+| ui/server 文件 / 行数 | 147 / 38366 |
 
 ## 指标口径
 
@@ -32,9 +32,9 @@
 | `as unknown as`（双重断言） | 29 | ui/src(22) · knowledge(5) · adapters(1) |
 | 裸 `console.*` | 6 | ui/server(6) |
 | 空 `catch {}` | 0 | — |
-| 无参 `catch {`（总计） | 703 | ui/server(161) · ui/src(125) · adapters(71) |
+| 无参 `catch {`（总计） | 698 | ui/server(156) · ui/src(125) · adapters(71) |
 | ↳ **无注释**（隐患类，目标） | **0** | — |
-| ↳ 已带意图注释 | 703 | — |
+| ↳ 已带意图注释 | 698 | — |
 | `TODO/HACK/FIXME/XXX` | 11 | always-on(4) · tests(4) · ui/src(2) |
 | 分层违规 `ui/server→src` | 15 | — |
 | 分层违规 `src→ui` | 0 | — |
@@ -105,8 +105,8 @@
 | `src/adapters/channel/wecom/WeComChannel.ts` | 1764 |
 | `src/patent/figuregen/render-check.ts` | 1634 |
 | `src/model/catalog/providers.ts` | 1593 |
+| `ui/server/routes/git.js` | 1523 |
 | `src/gateway/client/InProcessGateway.ts` | 1512 |
-| `ui/server/routes/git.js` | 1507 |
 | `src/adapters/channel/weixin/WeixinChannel.ts` | 1497 |
 | `ui/src/components/main-content-v2/SkillsV2.tsx` | 1441 |
 | `ui/src/stores/useSessionStore.ts` | 1348 |
@@ -119,7 +119,7 @@
 | `ui/server/routes/agent.js` | 1228 |
 | `ui/src/components/chat-v2/ComposerV2.tsx` | 1188 |
 | `ui/src/components/chat-v2/MessagesPaneV2.tsx` | 1183 |
-| `ui/server/routes/taskmaster.js` | 1179 |
+| `ui/server/routes/taskmaster.js` | 1152 |
 | `src/agent/loop/AgentLoop.ts` | 1150 |
 | `ui/src/components/main-content-v2/CronV2.tsx` | 1130 |
 | `ui/src/components/main-content/view/MainContent.tsx` | 1111 |

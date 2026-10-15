@@ -32,14 +32,15 @@ export async function readRegisteredProject(projectsDir, id) {
   }
   const storage = path.join(projectsDir, id);
   const info = await fs.lstat(storage).catch(() => null);
-  // 登记目录必须是真实目录：软链可以把 `.cwd` 引到注册表之外。
-  if (!info?.isDirectory() || info.isSymbolicLink()) {
+  // 登记目录必须是真实目录：`lstat` 不跟随软链，软链的 `isDirectory()` 恒为 false，
+  // 因此「软链可以把 `.cwd` 引到注册表之外」由类型判定本身挡住。
+  if (!info?.isDirectory()) {
     return null;
   }
   try {
     const marker = path.join(storage, ".cwd");
     const markerInfo = await fs.lstat(marker);
-    if (!markerInfo.isFile() || markerInfo.isSymbolicLink()) {
+    if (!markerInfo.isFile()) {
       return null;
     }
     const root = (await fs.readFile(marker, "utf8")).trim();
@@ -145,17 +146,48 @@ export async function resolveRegisteredProject(name, pilotHome) {
       return root;
     }
   } else {
-    const requested = path.resolve(name);
-    const entries = await fs.readdir(projectsDir, { withFileTypes: true }).catch(() => []);
-    for (const entry of entries) {
-      if (!entry.isDirectory()) {
-        continue;
-      }
-      const root = await readRegisteredProject(projectsDir, entry.name);
-      if (root && path.resolve(root) === requested) {
-        return root;
-      }
+    const root = await findRegisteredProjectByPath(projectsDir, name);
+    if (root) {
+      return root;
     }
   }
   throw projectNotFound();
+}
+
+/**
+ * 按绝对路径查已登记的项目。
+ *
+ * 先按 legacy 编码直接定位候选目录（O(1)，也是常见情形）；未命中再全表扫描——碰撞抗性 id
+ * （`<legacyId>--<digest>`）只能这样找。扫描里除词法等值外再比一次 `realpath`：UI 手上的路径
+ * 可能已被规范化（macOS `/var` ↔ `/private/var` 这类别名），词法不等但指向同一目录时不该
+ * 判成「未注册」。返回值始终是**登记里的** root，不返回请求方给的路径。
+ *
+ * @param {string} projectsDir 注册表目录。
+ * @param {string} requestedPath 请求方给的绝对路径。
+ * @returns {Promise<string | null>} 已登记的 root，或 `null`。
+ */
+async function findRegisteredProjectByPath(projectsDir, requestedPath) {
+  const requested = path.resolve(requestedPath);
+  const direct = await readRegisteredProject(projectsDir, createProjectId(requested));
+  if (direct && path.resolve(direct) === requested) {
+    return direct;
+  }
+  const entries = await fs.readdir(projectsDir, { withFileTypes: true }).catch(() => []);
+  const requestedReal = await fs.realpath(requested).catch(() => null);
+  for (const entry of entries) {
+    if (!entry.isDirectory()) {
+      continue;
+    }
+    const root = await readRegisteredProject(projectsDir, entry.name);
+    if (!root) {
+      continue;
+    }
+    if (path.resolve(root) === requested) {
+      return root;
+    }
+    if (requestedReal && (await fs.realpath(root).catch(() => null)) === requestedReal) {
+      return root;
+    }
+  }
+  return null;
 }
