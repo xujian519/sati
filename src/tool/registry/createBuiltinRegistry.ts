@@ -69,6 +69,7 @@ import { createPatentWorkerValidateTool } from "../builtin/patentWorkerValidateT
 import { createPatentWikiSearchTool } from "../builtin/patentWikiSearch.js";
 import { createPatentKgQueryTool } from "../builtin/patentKgQuery.js";
 import { createPatentCaseSearchTool } from "../builtin/patentCaseSearch.js";
+import { createPatentDeadlinesTool } from "../builtin/patentDeadlines.js";
 import { createKnowledgeNoteSaveTool } from "../builtin/knowledgeNoteSave.js";
 import { createAnalyzePatentFigureTool } from "../builtin/analyzePatentFigure.js";
 import { createSearchPatentFigureTool } from "../builtin/searchPatentFigure.js";
@@ -422,6 +423,8 @@ export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): T
     registry.register(annotate(createPatentWikiSearchTool(), "patent"));
     registry.register(annotate(createPatentKgQueryTool(), "patent"));
     registry.register(annotate(createPatentCaseSearchTool(), "patent"));
+    // 法定期限计算（A3）：纯计算 + 随包节假日资产，随 patent 域默认注册。
+    registry.register(annotate(createPatentDeadlinesTool(), "patent"));
     registry.register(annotate(createKnowledgeNoteSaveTool({ saveMode: options?.knowledgeNoteSaveMode }), "patent"));
     registry.register(annotate(createAnalyzePatentFigureTool(), "patent"));
     registry.register(
