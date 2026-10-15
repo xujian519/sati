@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import type { CodeEditorFile } from "../../../../types/types";
-import { api } from "../../../../../../utils/api";
+import { useDownloadUrl } from "../../hooks/use-download-url";
 
 export default function SpreadsheetPreviewToolbar({
   zoom,
@@ -22,6 +22,7 @@ export default function SpreadsheetPreviewToolbar({
   onToggleFullscreen?: (() => void) | null;
 }) {
   const { t } = useTranslation("codeEditor");
+  const downloadUrl = useDownloadUrl(projectName, file.path);
   const iconButtonClass =
     "flex h-8 w-8 items-center justify-center rounded-md text-neutral-600 transition-colors hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-40 dark:text-neutral-300 dark:hover:bg-neutral-800";
 
@@ -92,13 +93,8 @@ export default function SpreadsheetPreviewToolbar({
             </svg>
           </button>
         )}
-        {projectName && (
-          <a
-            href={api.fileDownloadUrl(projectName, file.path)}
-            download={file.name}
-            className={iconButtonClass}
-            title={t("actions.download")}
-          >
+        {downloadUrl && (
+          <a href={downloadUrl} download={file.name} className={iconButtonClass} title={t("actions.download")}>
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
                 d="M12 3v12m0 0l-4-4m4 4l4-4M5 20h14"

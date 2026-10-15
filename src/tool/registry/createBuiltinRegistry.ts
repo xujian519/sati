@@ -69,6 +69,8 @@ import { createPatentWorkerValidateTool } from "../builtin/patentWorkerValidateT
 import { createPatentWikiSearchTool } from "../builtin/patentWikiSearch.js";
 import { createPatentKgQueryTool } from "../builtin/patentKgQuery.js";
 import { createPatentCaseSearchTool } from "../builtin/patentCaseSearch.js";
+import { createPatentDeadlinesTool } from "../builtin/patentDeadlines.js";
+import { createPatentFeesTool } from "../builtin/patentFees.js";
 import { createKnowledgeNoteSaveTool } from "../builtin/knowledgeNoteSave.js";
 import { createAnalyzePatentFigureTool } from "../builtin/analyzePatentFigure.js";
 import { createSearchPatentFigureTool } from "../builtin/searchPatentFigure.js";
@@ -76,6 +78,7 @@ import { createRecognizeChemicalStructureTool } from "../builtin/recognizeChemic
 import { createEvaluateEvidenceTool } from "../builtin/evaluateEvidence.js";
 import { createWriteFileTool } from "../builtin/writeFile.js";
 import { createLawSearchTool } from "../../knowledge/legal/law-search-tool.js";
+import { createLawVerifyTool } from "../../knowledge/legal/law-verify-tool.js";
 import type { EmbeddingClient } from "../../model/embedding/index.js";
 import {
   createLiteratureRegistry,
@@ -421,6 +424,9 @@ export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): T
     registry.register(annotate(createPatentWikiSearchTool(), "patent"));
     registry.register(annotate(createPatentKgQueryTool(), "patent"));
     registry.register(annotate(createPatentCaseSearchTool(), "patent"));
+    // 法定期限计算（A3）：纯计算 + 随包节假日资产，随 patent 域默认注册。
+    registry.register(annotate(createPatentDeadlinesTool(), "patent"));
+    registry.register(annotate(createPatentFeesTool(), "patent"));
     registry.register(annotate(createKnowledgeNoteSaveTool({ saveMode: options?.knowledgeNoteSaveMode }), "patent"));
     registry.register(annotate(createAnalyzePatentFigureTool(), "patent"));
     registry.register(
@@ -433,6 +439,8 @@ export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): T
   }
   if (options?.legal !== false) {
     registry.register(annotate(createLawSearchTool(), "legal"));
+    // 法条引用核验：同一个 knowledge.db，但判的是「引用是否成立」而非「哪条文怎么说」。
+    registry.register(annotate(createLawVerifyTool(), "legal"));
   }
   if (literatureRegistry !== undefined) {
     registry.register(annotate(createPaperListSourcesTool({ registry: literatureRegistry }), "literature"));

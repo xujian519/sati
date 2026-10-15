@@ -15,7 +15,7 @@
   "templates": ["patentability-opinion", "search-report", "oa-response", "claims-spec", "invalidation-opinion"],
   "renders": {
     "default": "both",
-    "supported": ["html", "pdf"]
+    "supported": ["html", "pdf", "docx"]
   },
   "page": {
     "size": "A4",

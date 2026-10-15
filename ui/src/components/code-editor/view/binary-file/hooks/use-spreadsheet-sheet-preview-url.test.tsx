@@ -83,7 +83,10 @@ describe("useSpreadsheetSheetPreviewUrl cancellation", () => {
     apiMock.preflightSpreadsheetSheetPreview
       .mockImplementationOnce(() => first.promise)
       .mockImplementationOnce(() => second.promise);
-    apiMock.spreadsheetSheetPreviewUrl.mockReturnValueOnce("/api/sheet-0").mockReturnValueOnce("/api/sheet-1");
+    // 预览 URL 现在仅在 preflight 成功且未中断后才惰性获取——按 sheetIndex 求值，与调用次数/时序无关。
+    apiMock.spreadsheetSheetPreviewUrl.mockImplementation(
+      (_project: string, _filePath: string, sheetIndex: number) => `/api/sheet-${sheetIndex}`,
+    );
 
     const { result, rerender } = renderHook(
       ({ sheetIndex }) =>

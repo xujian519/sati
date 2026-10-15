@@ -157,6 +157,21 @@ await page.pdf({
 });
 ```
 
+### DOCX 导出（申请文件五件套）
+
+`docx` 路径**不复刻 HTML 版式**，改以**模板自带的 Word 母版**为版面：把母版整包原样复用
+（页眉/页脚/样式/主题/页面设置一律不动），只重建 `w:body` 的正文段落。理由是国知局的申请文件
+版面由官方模板决定，任何「重新实现一遍版面」都会与官方模板漂移。
+
+- 母版位置：`<template>/assets/template.docx`（当前仅 `claims-spec` 提供）。
+- 分节按**页眉标题**认件（`说明书摘要` / `摘要附图` / `权利要求书` / `说明书` / `说明书附图`），
+  与分节物理顺序无关；缺件 `fail-closed`。
+- 每件内容支持 HTML（标题/段落/列表/表格/行内图片）或纯文本；图片按内容区宽度等比**只缩不放**，
+  并按需补 `word/media/*`、`document.xml.rels` 与 `[Content_Types].xml` 条目。
+- 无页眉标题的分节（母版自带的非五件套内容）**按原样保留**。
+- Word 对 `w:pPr` 的子元素顺序有 schema 约束（`… spacing, ind, jc, textAlignment, rPr, sectPr`），
+  渲染器把 `w:ind`/`w:jc` 插到 `rPr` 之前——直接追加到末尾会让 Word 拒绝打开文档。
+
 ### 页码
 
 单文件 HTML 不内置页码。内置 `render_patent_document` 工具经 headless Chrome CLI 打印（`--print-to-pdf-no-header`），不生成页眉页脚/页码；如需显式页码，按各模板 `references/conventions.md` §打印导出 的 Playwright 方式导出（`displayHeaderFooter: true` + `footerTemplate`，Chromium 不支持 `@page` margin-box 页码）。

@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AlertCircle, Check, CheckCircle2, KeyRound, Loader2, MessageSquare, QrCode, XCircle } from "lucide-react";
 import { Button } from "../../../../../../shared/view/ui";
-import { appendAuthToken, authenticatedFetch } from "../../../../../../utils/api";
+import { authenticatedFetch } from "../../../../../../utils/api";
+import { useQrImageSrc } from "../hooks/useQrImageSrc";
 import { SettingsCard, SettingsSection } from "../../../../shared/view";
 import { cn } from "../../../../../../lib/utils";
 import { UI_TIMEOUTS } from "../../../../../../constants/timeouts";
@@ -26,6 +27,7 @@ export default function WeComChannelSection({ status, onSaved }: WeComChannelSec
   const [setupMode, setSetupMode] = useState<WeComSetupMode>("choose");
   const [qrPhase, setQrPhase] = useState<WeComQrPhase>("idle");
   const [qrUrl, setQrUrl] = useState("");
+  const qrImageSrc = useQrImageSrc(qrUrl || null);
   const [qrError, setQrError] = useState("");
   const [botId, setBotId] = useState("");
   const [secret, setSecret] = useState("");
@@ -247,14 +249,10 @@ export default function WeComChannelSection({ status, onSaved }: WeComChannelSec
                 </div>
               )}
 
-              {qrPhase === "scanning" && qrUrl && (
+              {qrPhase === "scanning" && qrImageSrc && (
                 <div className="space-y-3">
                   <div className="flex flex-col items-center gap-3 rounded-lg border border-border bg-white p-4 dark:bg-white">
-                    <img
-                      src={appendAuthToken(`/api/gateway/qr-image?data=${encodeURIComponent(qrUrl)}`)}
-                      alt="WeCom QR Code"
-                      className="h-[200px] w-[200px]"
-                    />
+                    <img src={qrImageSrc} alt="WeCom QR Code" className="h-[200px] w-[200px]" />
                   </div>
                   <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />

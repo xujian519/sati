@@ -2,6 +2,33 @@
 
 本文件按版本记录 Sati 的重要变更。桌面端版本号（`release(desktop)`）与根 `package.json` 由 `scripts/bump-version.mjs` 同步维护。
 
+## v0.3.7 - 2026-10-15
+
+> **版本目标（2026-10-15）**：知识工作流收口 + 凭据/日志加固——知识草稿链路（召回日志 → 草稿闸门 → 确认面板）与运行期笔记迁出 `knowledge.db` 至 Sati 自有 `sati-notes.db` 全部落地；同期收紧日志与 URL 票据两处凭据面，并继续可维护性 sweep 的 P2.3–P2.7 五个批次（单体入口与 god function 再降一档）。
+
+### Feat
+
+- feat(knowledge): 知识草稿链路——召回日志与保守引用回填（WS1，#670）、`knowledge_note_save` 草稿闸门（WS2，#672）、知识草稿确认面板（WS2 收尾，#674）
+- feat(knowledge): 运行期写入迁出 `knowledge.db` 至 Sati 自有 `sati-notes.db`（WS2.1，#672）
+
+### Fix
+
+- fix(security): 日志中的 token 脱敏——WS 握手 / git stderr / IM 渠道 URL（#676）
+- fix(ui): 退役 URL 会话 JWT，统一由短期 url-ticket 覆盖无头载体，`purpose` 钉死票据载体端点防跨载体 bearer 复用（#681）
+
+### Refactor
+
+- refactor(techdebt): sweep P2.3 `emitSessionTelemetry` 333 行 switch → required Record 打点映射表（#666）
+- refactor(techdebt): sweep P2.4 `dispatchRequest` 353 行 switch → `methodDispatchers` 查表（#667）
+- refactor(techdebt): sweep P2.5 patentFigure 三工具 `execute` 收敛到共享装配与分层（#668）
+- refactor(techdebt): sweep P2.6 `executeRouterDecision` 449→273 行三段分层（#677）
+- refactor(techdebt): sweep P2.7 `sati.ts` 1034→14 行分发表化 + 项目运行时装配分层（#678）
+
+### Docs
+
+- docs(techdebt): 台账回填——§38.1 勾选与 §38.2 承接、BF-27 脱表、TD-GOD-002 进展、TD-ROUTER-009 关闭
+- docs(notes): WS3 压制语义提案 + XiaoNuo 产物整体替换的契约发现
+
 ## v0.3.6 - 2026-10-12
 
 > **版本目标（2026-10-12）**：本版本聚焦性能优化——整体响应速度与资源占用改进，具体优化项见下方 Perf 小节。

@@ -13,7 +13,7 @@
 
 | claim | 事实 | 值 | 来源 |
 | --- | --- | --- | --- |
-| `app_version` | 应用版本（根 package.json） | `0.3.6` | package.json |
+| `app_version` | 应用版本（根 package.json） | `0.3.7` | package.json |
 | `node_engine` | Node 版本下限 | `>=22.13.0` | package.json engines.node |
 | `pnpm_version` | pnpm 版本 | `10.32.1` | package.json packageManager |
 | `typescript_version` | TypeScript 版本 | `6.0.3` | package.json devDependencies.typescript |
@@ -25,8 +25,8 @@
 
 | claim | 事实 | 值 | 来源 |
 | --- | --- | --- | --- |
-| `default_tool_count` | 默认注册工具数（无参 createBuiltinRegistry） | `52` | src/tool/registry/createBuiltinRegistry.ts（运行期实例化） |
-| `patent_tool_count` | 专利域工具数（domain === "patent"） | `28` | src/tool/registry/createBuiltinRegistry.ts（运行期实例化） |
+| `default_tool_count` | 默认注册工具数（无参 createBuiltinRegistry） | `55` | src/tool/registry/createBuiltinRegistry.ts（运行期实例化） |
+| `patent_tool_count` | 专利域工具数（domain === "patent"） | `30` | src/tool/registry/createBuiltinRegistry.ts（运行期实例化） |
 | `channel_adapter_count` | IM 渠道适配器数 | `21` | src/adapters/channel/（目录数，不含 protocol/） |
 | `skill_count` | 内置技能数（SKILL.md 总数） | `107` | skills/**/SKILL.md |
 | `role_skill_count` | 专家角色数（type: role） | `45` | skills/**/SKILL.md frontmatter |
@@ -46,7 +46,7 @@
 
 | 模块 | .ts/.tsx 文件数 | barrel | 职责 |
 | --- | --- | --- | --- |
-| `src/adapters/` | 96 | ✓ | IM 渠道适配器（21 个渠道 + Channel/render/SessionMapper） |
+| `src/adapters/` | 100 | ✓ | IM 渠道适配器（21 个渠道 + Channel/render/SessionMapper） |
 | `src/agent/` | 79 | ✓ | Agent 循环、会话、子代理与团队编排 |
 | `src/always-on/` | 38 | ✓ | 常驻后台执行（Discovery 计划/报告/工作周期） |
 | `src/board/` | 8 | ✓ | 项目看板（protocol/runtime/storage 三组，kanban_* 工具与网关方法组） |
@@ -57,14 +57,14 @@
 | `src/extension/` | 51 | ✓ | 插件系统（plugin.json、lifecycle hooks、skills、贡献点） |
 | `src/fs/` | 1 | — | 文件系统小工具（JSONL run 写入器） |
 | `src/gateway/` | 39 | ✓ | WebSocket 网关（protocol/server/client/approval） |
-| `src/knowledge/` | 49 | ✓ | 知识库（图谱/判例/法规/embeddings/wiki 卡片） |
+| `src/knowledge/` | 52 | ✓ | 知识库（图谱/判例/法规/embeddings/wiki 卡片） |
 | `src/lifecycle/` | 6 | ✓ | 生命周期（protocol/runtime） |
 | `src/literature/` | 13 | ✓ | 学术论文检索（arXiv/OpenAlex/Semantic Scholar/Crossref） |
 | `src/mcp/` | 16 | ✓ | MCP 客户端/协议/运行时 |
 | `src/methodology/` | 14 | ✓ | 方法论注册表（five-whys/mece/triz/bridge-reencode 等） |
 | `src/model/` | 75 | ✓ | 模型抽象（providers/embedding/catalog/resolveModelInfo/streaming） |
 | `src/network/` | 3 | ✓ | 网络层（fetch 封装） |
-| `src/patent/` | 199 | ✓ | 专利执行管线（workflow/graph/atoms/evidence/figure/document 等） |
+| `src/patent/` | 220 | ✓ | 专利执行管线（workflow/graph/atoms/evidence/figure/document 等） |
 | `src/permission/` | 7 | ✓ | 权限（decision/PermissionRuntime + guard/ToolGuardRegistry） |
 | `src/pilot/` | 18 | ✓ | 配置（PilotConfigStore / lastGoodFacts / workspace 判定） |
 | `src/router/` | 35 | ✓ | 智能路由（含多模态媒体降级） |
@@ -76,7 +76,7 @@
 | `src/task/` | 4 | ✓ | 后台任务存储与运行时 |
 | `src/telemetry/` | 6 | ✓ | 遥测（analytics.v2 契约） |
 | `src/test-support/` | 7 | — | 测试基建（llm-replay 录制/重放 seam） |
-| `src/tool/` | 144 | ✓ | 工具系统（registry/execution/audit/builtin） |
+| `src/tool/` | 146 | ✓ | 工具系统（registry/execution/audit/builtin） |
 | `src/web/` | 13 | — | Web 服务端与浏览器客户端投影 |
 
 > 文件数按 **git 清单**统计（`git ls-files --cached --others --exclude-standard`，排除 `.d.ts`），

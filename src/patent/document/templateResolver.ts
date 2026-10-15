@@ -64,3 +64,20 @@ export function readTemplateHtml(template: DocumentTemplateId): string {
   const { htmlPath } = resolveTemplate(template);
   return readFileSync(htmlPath, "utf8");
 }
+
+/**
+ * 模板的 docx 母版路径（`assets/template.docx`，与 `assets/template.html` 同构）。
+ * 并非每个模板都提供 docx 母版——申请文件类模板才有，此时返回 `undefined`。
+ */
+export function resolveTemplateDocxPath(template: DocumentTemplateId): string | undefined {
+  const path = join(getTemplateRoot(), template, "assets", "template.docx");
+  return existsSync(path) ? path : undefined;
+}
+
+/** 当前支持 docx 输出的模板 id（由「是否随模板分发了 docx 母版」决定，不写死清单）。 */
+export function listDocxTemplates(): DocumentTemplateId[] {
+  const available = readTemplateManifest().templates ?? [];
+  return available.filter(
+    id => resolveTemplateDocxPath(id as DocumentTemplateId) !== undefined,
+  ) as DocumentTemplateId[];
+}

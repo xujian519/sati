@@ -46,6 +46,7 @@ import systemRoutes from "./routes/system.js";
 import kanbanRoutes from "./routes/kanban.js";
 import hookTrustRoutes from "./routes/hookTrust.js";
 import knowledgeDraftsRoutes from "./routes/knowledgeDrafts.js";
+import urlTicketRoutes from "./routes/url-ticket.js";
 
 import { validateApiKey, authenticateToken } from "./middleware/auth.js";
 import { corsPolicy } from "./middleware/corsPolicy.js";
@@ -101,6 +102,9 @@ app.use("/api", validateApiKey);
 
 // Authentication routes (public)
 app.use("/api/auth", authRoutes);
+
+// URL 票据签发（#626）：登录态换取短期 scoped 凭据，自带 authenticateSessionOnly。
+app.use(urlTicketRoutes);
 
 // Project preview routes are mounted ahead of the protected /api/projects gate below:
 // the preview document is authenticated by its own middleware (a project-scoped preview

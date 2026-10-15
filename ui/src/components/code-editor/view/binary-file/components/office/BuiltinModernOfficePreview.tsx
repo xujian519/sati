@@ -1,8 +1,8 @@
 import { Suspense, lazy, useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { CodeEditorFile } from "../../../../types/types";
-import { api } from "../../../../../../utils/api";
 import { isWordFile } from "../../../../utils/binaryFile";
+import { useDownloadUrl } from "../../hooks/use-download-url";
 import { useFileBlob } from "../../hooks/use-file-blob";
 import { useOfficeAutoRefresh } from "../../hooks/use-office-auto-refresh";
 import DownloadButton from "../atoms/DownloadButton";
@@ -40,6 +40,7 @@ export default function BuiltinModernOfficePreview({
   }, []);
 
   useOfficeAutoRefresh(projectName, file.path, handleReload);
+  const downloadUrl = useDownloadUrl(projectName, file.path);
   useEffect(() => {
     setRuntimeError(null);
   }, [file.path]);
@@ -68,7 +69,7 @@ export default function BuiltinModernOfficePreview({
     projectName,
     fileName: file.name,
     filePath: file.path,
-    downloadUrl: projectName ? api.fileDownloadUrl(projectName, file.path) : null,
+    downloadUrl,
     downloadName: file.name,
     isFullscreen,
     onToggleFullscreen,

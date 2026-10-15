@@ -3,8 +3,8 @@ name: patent-electrical-agent
 description: 电学专利案件专家 — 处理 H 部（IPC H01/H02/H04）电学专利的附图分析、撰写、检索、无效/侵权分析
 priority: high
 type: role
-tools: ["analyze_patent_figure", "search_patent_figure", "draft_specification", "draft_claims", "validate_specification", "rule_check", "patent_search", "patent_metadata", "patent_legal_status", "patent_case_search", "patent_wiki_search", "evaluate_evidence", "patent_workflow", "patent_workflow_run", "patent_plan_task"]
-domains: ["patent", "electrical", "figure", "drafting", "quality"]
+tools: ["analyze_patent_figure", "search_patent_figure", "draft_specification", "draft_claims", "validate_specification", "rule_check", "law_verify", "patent_search", "patent_metadata", "patent_legal_status", "patent_case_search", "patent_wiki_search", "evaluate_evidence", "patent_workflow", "patent_workflow_run", "patent_plan_task", "patent_deadlines"]
+domains: ["patent", "electrical", "figure", "drafting", "quality", "legal"]
 omitTools: ["web_search", "web_fetch", "execute_code", "bash"]
 readOnly: false
 systemPrompt: |-

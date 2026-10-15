@@ -1,11 +1,11 @@
 import { Suspense, lazy, useCallback, useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { CodeEditorFile } from "../../../../types/types";
-import { api } from "../../../../../../utils/api";
 import PdfDocumentPreview from "../../../subcomponents/PdfDocumentPreview";
 import SpreadsheetTabs from "../../../subcomponents/SpreadsheetTabs";
 import type { OfficePreviewService } from "../../../../../../utils/officePreviewStatus";
 import type { ReloadOptions } from "../../types";
+import { useDownloadUrl } from "../../hooks/use-download-url";
 import { useOfficeAutoRefresh } from "../../hooks/use-office-auto-refresh";
 import { useSpreadsheetInteractivePreview } from "../../hooks/use-spreadsheet-interactive-preview";
 import { useSpreadsheetPreviewManifest } from "../../hooks/use-spreadsheet-preview-manifest";
@@ -37,6 +37,7 @@ export default function SpreadsheetPreview({
   onToggleFullscreen?: (() => void) | null;
 }) {
   const { t } = useTranslation("codeEditor");
+  const downloadUrl = useDownloadUrl(projectName, file.path);
   const [zoom, setZoom] = useState(1);
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
   const usePrintPreview = service === "libreoffice";
@@ -234,7 +235,7 @@ export default function SpreadsheetPreview({
           showPageControls={false}
           onRefresh={() => reloadPrint({ force: true })}
           refreshDisabled={manifestLoading || sheetLoading}
-          downloadUrl={projectName ? api.fileDownloadUrl(projectName, file.path) : null}
+          downloadUrl={downloadUrl}
           downloadName={file.name}
           isFullscreen={isFullscreen}
           onToggleFullscreen={onToggleFullscreen}

@@ -9,7 +9,7 @@ import { logger } from "../utils/consoleLogger.js";
 import fs from "fs";
 import path from "path";
 import express, { Router } from "express";
-import { authenticateToken } from "../middleware/auth.js";
+import { authenticateToken, authenticateMemoryDashboard } from "../middleware/auth.js";
 import { readPermissionSettings } from "../services/permissionSettings.js";
 import { readSatiConfigFile } from "../services/satiConfig.js";
 import { getAlwaysOnDashboardEvents } from "../services/always-on-events.js";
@@ -292,7 +292,7 @@ router.put("/api/ccr/config", authenticateToken, (_req, res) => {
   });
 });
 
-router.get("/memory-dashboard", authenticateToken, (req, res) => {
+router.get("/memory-dashboard", authenticateMemoryDashboard, (req, res) => {
   const indexPath = path.join(MEMORY_DASHBOARD_DIR, "index.html");
   if (!fs.existsSync(indexPath)) {
     res.status(404).type("text/plain").send("Memory dashboard assets not bundled.");
@@ -303,7 +303,7 @@ router.get("/memory-dashboard", authenticateToken, (req, res) => {
 
 router.use(
   "/memory-dashboard",
-  authenticateToken,
+  authenticateMemoryDashboard,
   express.static(MEMORY_DASHBOARD_DIR, {
     setHeaders: (res, filePath) => {
       if (filePath.endsWith(".html")) {
