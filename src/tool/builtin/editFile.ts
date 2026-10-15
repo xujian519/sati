@@ -204,7 +204,9 @@ export function createEditFileTool(): SatiToolDefinition<EditFileInput> {
         }
         nextContent = input.replace_all
           ? content.split(actualOldString).join(normalizedNew)
-          : content.replace(actualOldString, normalizedNew);
+          : // 函数替换器：字符串形式会把 new_string 里的 `$$` / `$&` / `` $` `` / `$'` 当替换模式展开，
+            // 写进文件的就不是用户给的字符串（replace_all 分支用 split/join，本来就不受影响）。
+            content.replace(actualOldString, () => normalizedNew);
       }
 
       const { action, mtimeMs } = await finalizeWorkspaceFileWrite(
