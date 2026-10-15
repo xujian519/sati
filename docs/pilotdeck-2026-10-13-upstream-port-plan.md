@@ -481,7 +481,7 @@ P0-1 / P0-2 / P1-1 已于 2026-10-15 落地，各带一条决策记录：
 | 项 | 落点 | 决策记录 | 判据（含负控制） |
 |---|---|---|---|
 | P0-1 #620 | `ui/server/routes/projects.js`（两条 clone 路径：凭据解析前置、删掉 404 前的 `fs.rm`） | `docs/notes/implemented/2026-10-15-workspace-parent-preserve.md` | `ui/server/routes/projects.workspace-cleanup.test.js`（4 例；回退后两条「保留已存在目录」转红） |
-| P0-2 #648 | 新增 `ui/server/services/projectRegistration.js` + `ui/server/middleware/projectFilesystem.js` + `ui/server/utils/pathSafety.js`；`project-files.js` / `project-preview.js` / `project-uploads.js` 共 9 个项目面挂同一守卫并改用 `req.projectRoot`；`services/uploads.js` 优先取注入的 root | `docs/notes/implemented/2026-10-15-project-file-root-authorization.md` | `projectRegistration.test.js` + `projectFilesystem.test.js` + `project-files.root-guard.test.js`（共 40 例；摘掉 `realpath` 判定则软链/大小写别名两条转红；回退整批则越权读 `server-token` 由 403 变 200） |
+| P0-2 #648 | 新增 `ui/server/services/projectRegistration.js` + `ui/server/middleware/projectFilesystem.js` + `ui/server/utils/pathSafety.js`；`project-files.js` / `project-preview.js` / `project-uploads.js` 共 13 个项目面挂同一守卫并改用 `req.projectRoot`（`upload-images` 按设计豁免）；`services/uploads.js` 只认守卫注入的 root（缺失即 fail-loud） | `docs/notes/implemented/2026-10-15-project-file-root-authorization.md` | `projectRegistration.test.js` + `projectFilesystem.test.js` + `project-files.root-guard.test.js`（共 46 例；摘掉 `realpath` 判定则软链/大小写别名两条转红；回退整批则越权读 `server-token` 由 403 变 200；另见下方审查轮次） |
 | P1-1 #626 | `src/tool/builtin/editFile.ts` 一行改函数替换器 | `docs/notes/implemented/2026-10-15-edit-file-literal-replacement.md` | `tests/tool/edit-file-literal-replacement.spec.ts`（18 例；回退后恰好 6 条模式用例 + 失败签名用例转红） |
 
 **落地时相对本文件的两处偏离（明示）**：
@@ -496,3 +496,24 @@ P0-1 / P0-2 / P1-1 已于 2026-10-15 落地，各带一条决策记录：
 **未做（本批明确不动）**：P1-2 起的各项，以及第十节第 1 条的引用更正**已顺手做完**（两处：
 note 与 `tests/tool/write-symlink-escape.spec.ts` 文件头）。`git.js` / `taskmaster.js` 的文件内容
 可达面仍未收口，见决策记录「未覆盖（明示）」——建议独立议题，勿以「移植 #648」形式提出。
+
+### 落地后代码审查（2026-10-15）
+
+对本批（P0-1/P0-2/P1-1 及随后的精简）做了一轮独立代码审查（code-reviewer 子代理，要求逐条负控制
+复核）。结论是**有条件可合并**：`edit_file` 修复、#620 的数据销毁路径、#648 的守卫主体经复核成立
+（软链/大小写判定、回退整批、回退 `edit_file` 一行均精确转红），但审查同时抓出一条**功能损坏**和
+四处「降级但不静默」底线问题，已当场修掉：
+
+| 审查发现 | 处置（落点） |
+|---|---|
+| General 工作区的**聊天附件**上传整条 403（root 即 app home → 被重叠判定拒），而落地记录只写了「文件标签页变空」——漏报 | `/upload-attachments` 用同一守卫但放行 app home 重叠（`{ allowAppHomeOverlap: true }`，只给不解析请求方路径的面），另有反向断言钉住「只有这一个面」 |
+| 上传处理器保留 `?? extractProjectDirectory(projectName)` 兜底：漏挂守卫即静默回到旧的任意路径行为 | 改为缺 `req.projectRoot` 时回 500 `PROJECT_ROOT_REQUIRED`（上游同一改法），测试改为注入 root |
+| 403 被渲染成「该项目为空。」——面板在断言错误事实 | `useFileTreeData` 暴露 `unavailable`，`FilesV2` 渲染独立文案（新 i18n 键），附钩子测试 |
+| 注册表只看 `<app home>/projects`，与 `listProjects.ts` 的 `~/.pilotdeck/projects` 回退不一致 → 旧 home 用户「列得出项目、文件面全 404」 | 注册表补同一条 legacy 回退 + 用例（用 `process.env.HOME` 触发，不碰真实 `~/.pilotdeck`） |
+| 接线契约测试的 400 字符窗口会溢到下一个路由的中间件链（假阳性） | 改为按路由边界切分；这个缺陷正是被新增的反向断言抓出来的 |
+
+**审查确认的既有缺口（本批未修，需独立议题）**：`git.js` 自己的文件内容面（`/file-with-diff`、
+`/diff`、`/commit-diff`）仍按请求参数推导 root，且 `/checkout`、`/create-branch` 缺
+`validateGitRepository`；`taskmaster.js` 是「任意路径写 + `shell: true` 起 CLI」面（`fileName`
+未做穿越校验）；`POST /create-workspace` 仍可把任意目录变成「已注册」（本机默认免登录 + `cors()`
+默认放行任意 origin）。逐条见决策记录「未覆盖（明示）」。

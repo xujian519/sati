@@ -28,6 +28,11 @@ const router = Router();
 // 写盘类路由的项目 root 守卫（上游 #648）：root 只来自项目注册表，且拒绝与 app home 重叠。
 const requireRegisteredProjectRoot = createProjectFilesystemMiddleware();
 
+// 聊天附件面额外放行与 app home 重叠的 root：该面不接受请求方给的路径，只在 root 下写服务端构造
+// 的 `.tmp/chat-attachments/<ts>-<rand>/` 目标，因此重叠判定要防的那两个文件（server-token /
+// sati.yaml）够不到；不放行则 General（root 即 app home）的附件上传会整条 403。
+const requireChatAttachmentRoot = createProjectFilesystemMiddleware({ allowAppHomeOverlap: true });
+
 router.get("/api/upload/limits", authenticateToken, (_req, res) => {
   res.json(publicUploadLimits());
 });
@@ -42,7 +47,7 @@ router.post(
 router.post(
   "/api/projects/:projectName/upload-attachments",
   authenticateToken,
-  requireRegisteredProjectRoot,
+  requireChatAttachmentRoot,
   async (req, res) => {
     let multerUpload;
     try {

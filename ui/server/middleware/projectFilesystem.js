@@ -34,18 +34,24 @@ function notFound(res) {
 /**
  * 构造守卫中间件。
  *
- * @param {{ env?: Record<string, string | undefined> }} [options] `env` 供测试注入（读 `SATI_HOME`）。
+ * @param {{ env?: Record<string, string | undefined>, allowAppHomeOverlap?: boolean }} [options]
+ *   `env` 供测试注入（读 `SATI_HOME`）。`allowAppHomeOverlap` 只给**不解析请求方所选路径**的面用
+ *   （见 `../routes/project-uploads.js` 的聊天附件面）：重叠判定的目的是让 app home 内的
+ *   `server-token` / `sati.yaml` 在文件 API 上不可读不可改，而这类面只往注册表 root 下的
+ *   服务端构造目标写，够不到那两个文件；不放行则 General（root 即 app home）的附件上传整条 403。
  * @returns {(req: any, res: any, next: any) => Promise<unknown>} Express 中间件。
  */
-export function createProjectFilesystemMiddleware({ env = process.env } = {}) {
+export function createProjectFilesystemMiddleware({ env = process.env, allowAppHomeOverlap = false } = {}) {
   return async (req, res, next) => {
     try {
       const pilotHome = resolvePilotHome(env);
       const projectRoot = await resolveRegisteredProject(req.params.projectName, pilotHome);
-      // 词法判定看不穿软链与大小写别名，故规范化之后再判一次。
-      const [realProjectRoot, realPilotHome] = await Promise.all([realpath(projectRoot), realpath(pilotHome)]);
-      if (pathsOverlap(projectRoot, pilotHome) || pathsOverlap(realProjectRoot, realPilotHome)) {
-        return forbidden(res);
+      if (!allowAppHomeOverlap) {
+        // 词法判定看不穿软链与大小写别名，故规范化之后再判一次。
+        const [realProjectRoot, realPilotHome] = await Promise.all([realpath(projectRoot), realpath(pilotHome)]);
+        if (pathsOverlap(projectRoot, pilotHome) || pathsOverlap(realProjectRoot, realPilotHome)) {
+          return forbidden(res);
+        }
       }
       if (!(await stat(projectRoot)).isDirectory()) {
         return notFound(res);

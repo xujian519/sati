@@ -10,6 +10,7 @@
  * 继续当授权用。
  */
 import * as fs from "node:fs/promises";
+import { homedir } from "node:os";
 import path from "node:path";
 import { createProjectId } from "../utils/pilotPaths.js";
 
@@ -81,6 +82,44 @@ async function readLegacyEncodedProject(id) {
 }
 
 /**
+ * 目标目录是否存在且可读。
+ *
+ * @param {string} target 待判目录。
+ * @returns {Promise<boolean>} 存在且可读。
+ */
+async function isReadableDir(target) {
+  try {
+    await fs.access(target);
+    return true;
+  } catch {
+    // access 抛错（通常是 ENOENT）→ 视为该层不存在，由调用方决定是否回退。
+    return false;
+  }
+}
+
+/**
+ * 项目注册表所在目录。
+ *
+ * `<app home>/projects` 不可读时回退到 rebrand 前的 `~/.pilotdeck/projects`——与
+ * `src/web/server/listProjects.ts`（侧边栏的项目清单）**同一条** legacy 兼容规则。两边不一致
+ * 时，升级用户的症状是「项目列得出来、每个文件面都 404」，比整体不支持更难诊断。
+ *
+ * @param {string} pilotHome 当前 app home。
+ * @returns {Promise<string>} 实际可读的注册表目录（都不可读时返回 `<app home>/projects`）。
+ */
+async function resolveProjectsDir(pilotHome) {
+  const projectsDir = path.join(pilotHome, "projects");
+  if (await isReadableDir(projectsDir)) {
+    return projectsDir;
+  }
+  const legacyProjectsDir = path.join(homedir(), ".pilotdeck", "projects");
+  if (await isReadableDir(legacyProjectsDir)) {
+    return legacyProjectsDir;
+  }
+  return projectsDir;
+}
+
+/**
  * 解析请求传来的 `projectName`，只返回**已注册**的工作区 root。
  *
  * 接受的形态：项目 id、可反推的真实目录路径、以及工作区自身的绝对路径（须与某条登记
@@ -99,7 +138,7 @@ export async function resolveRegisteredProject(name, pilotHome) {
   if (name === "general" || (path.isAbsolute(name) && path.resolve(name) === path.resolve(pilotHome))) {
     return path.resolve(pilotHome);
   }
-  const projectsDir = path.join(pilotHome, "projects");
+  const projectsDir = await resolveProjectsDir(pilotHome);
   if (!path.isAbsolute(name)) {
     const root = await readRegisteredProject(projectsDir, name);
     if (root) {

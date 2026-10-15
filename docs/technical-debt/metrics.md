@@ -10,8 +10,8 @@
 | src TS 文件 / 行数 | 1132 / 197469 |
 | src JS 文件 | 0 |
 | tests 文件 | 656 |
-| ui/src 文件 / 行数 | 646 / 102967 |
-| ui/server 文件 / 行数 | 143 / 37371 |
+| ui/src 文件 / 行数 | 647 / 103033 |
+| ui/server 文件 / 行数 | 143 / 37586 |
 
 ## 指标口径
 
@@ -32,9 +32,9 @@
 | `as unknown as`（双重断言） | 29 | ui/src(22) · knowledge(5) · adapters(1) |
 | 裸 `console.*` | 6 | ui/server(6) |
 | 空 `catch {}` | 0 | — |
-| 无参 `catch {`（总计） | 702 | ui/server(160) · ui/src(125) · adapters(71) |
+| 无参 `catch {`（总计） | 703 | ui/server(161) · ui/src(125) · adapters(71) |
 | ↳ **无注释**（隐患类，目标） | **0** | — |
-| ↳ 已带意图注释 | 702 | — |
+| ↳ 已带意图注释 | 703 | — |
 | `TODO/HACK/FIXME/XXX` | 11 | always-on(4) · tests(4) · ui/src(2) |
 | 分层违规 `ui/server→src` | 15 | — |
 | 分层违规 `src→ui` | 0 | — |
@@ -47,7 +47,7 @@
 |---|---|---|---|
 | `ui/src/components/app-shell/SidebarV2.tsx` | `SidebarV2` | 1014 | function |
 | `ui/src/components/chat-v2/MessagesPaneV2.render.test.tsx` | `(anonymous)` | 943 | arrow |
-| `ui/src/components/main-content-v2/FilesV2.tsx` | `FilesV2` | 830 | function |
+| `ui/src/components/main-content-v2/FilesV2.tsx` | `FilesV2` | 832 | function |
 | `ui/src/components/chat-v2/MessagesPaneV2.tsx` | `MessagesPaneV2` | 824 | function |
 | `ui/src/components/chat-v2/ComposerV2.tsx` | `ComposerV2` | 741 | function |
 | `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` | `useChatRealtimeHandlers` | 721 | function |
@@ -197,7 +197,7 @@
 | auth | 23 | 23 | 0 | 0 |
 | chat | 375 | 375 | 0 | 0 |
 | codeEditor | 196 | 196 | 0 | 0 |
-| common | 445 | 445 | 0 | 0 |
+| common | 446 | 446 | 0 | 0 |
 | hookTrust | 19 | 19 | 0 | 0 |
 | kanban | 44 | 44 | 0 | 0 |
 | knowledgeDrafts | 10 | 10 | 0 | 0 |

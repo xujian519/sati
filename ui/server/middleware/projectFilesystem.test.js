@@ -177,3 +177,51 @@ describe("与 app home 重叠一律拒绝", () => {
     expect((await response.json()).root).toBe(workspace);
   });
 });
+
+describe("放行 app home 重叠（只给不解析请求方路径的面）", () => {
+  async function startOverlapApp() {
+    const app = express();
+    app.use(
+      "/api/projects/:projectName/root",
+      createProjectFilesystemMiddleware({ env, allowAppHomeOverlap: true }),
+      (req, res) => {
+        res.json({ root: req.projectRoot });
+      },
+    );
+    const overlapServer = app.listen(0, "127.0.0.1");
+    await new Promise(resolve => overlapServer.once("listening", resolve));
+    return {
+      url: `http://127.0.0.1:${overlapServer.address().port}/api/projects`,
+      close: async () => {
+        overlapServer.closeAllConnections();
+        await new Promise(resolve => overlapServer.close(resolve));
+      },
+    };
+  }
+
+  it("general 与落在 app home 内的登记都能解析出 root", async () => {
+    const app = await startOverlapApp();
+    try {
+      await register("child", path.join(home, "projects"));
+      const general = await nativeFetch(`${app.url}/general/root`);
+      expect(general.status).toBe(200);
+      expect((await general.json()).root).toBe(home);
+      expect((await nativeFetch(`${app.url}/child/root`)).status).toBe(200);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("未注册、非法与登记失效的 root 仍被拒（放行的只有重叠判定）", async () => {
+    const app = await startOverlapApp();
+    try {
+      for (const name of ["unknown", "/etc", "-etc", root]) {
+        const response = await nativeFetch(`${app.url}/${encodeURIComponent(name)}/root`);
+        expect(response.status, `${name} 应被拒`).toBe(404);
+        expect((await response.json()).error.code).toBe("PROJECT_NOT_FOUND");
+      }
+    } finally {
+      await app.close();
+    }
+  });
+});

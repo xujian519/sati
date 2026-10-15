@@ -10,7 +10,6 @@ import { promises as fsPromises } from "fs";
 import os from "os";
 import path from "path";
 import mime from "mime-types";
-import { extractProjectDirectory } from "../projects.js";
 import { validatePathInProject } from "./filesystem.js";
 import { UPLOAD_LIMITS, UPLOAD_LIMIT_MESSAGES } from "./uploadLimits.js";
 
@@ -136,11 +135,15 @@ const uploadFilesHandler = async (req, res) => {
         return res.status(400).json({ error: "No files provided" });
       }
 
-      // Get project root — 优先取路由守卫注入的注册表 root（#648），未经过守卫的调用方
-      // （如测试直接驱动处理器）才回退到按 projectName 解析。
-      const projectRoot = req.projectRoot ?? (await extractProjectDirectory(projectName).catch(() => null));
+      // root 只认路由守卫（middleware/projectFilesystem.js）注入的注册表解析结果。这里刻意
+      // **不**回退到按 projectName 推导：那会让「忘了挂守卫」变成静默恢复旧的任意路径行为，
+      // 而本批的整条安全性质就建立在「root 不来自请求」上。
+      const projectRoot = req.projectRoot;
       if (!projectRoot) {
-        return res.status(404).json({ error: "Project not found" });
+        logger.error("[ERROR] Upload reached without an authorized project root:", projectName);
+        return res.status(500).json({
+          error: { code: "PROJECT_ROOT_REQUIRED", message: "Upload is unavailable for this route." },
+        });
       }
 
       logger.info("[DEBUG] Project root:", projectRoot);

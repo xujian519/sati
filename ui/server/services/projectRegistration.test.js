@@ -109,4 +109,46 @@ describe("已注册项目的 root 解析", () => {
     expect(await resolveRegisteredProject(id, f.home)).toBe(f.workspace);
     expect(await resolveRegisteredProject(f.workspace, f.home)).toBe(f.workspace);
   });
+
+  // 与 src/web/server/listProjects.ts 同一条 legacy 规则：<app home>/projects 不可读时回退
+  // ~/.pilotdeck/projects。不一致的症状是「侧边栏列得出项目、每个文件面都 404」。
+  // `os.homedir()` 在 POSIX 下跟随 `HOME`，故用临时 home 触发，不碰真实 ~/.pilotdeck。
+  it("app home 下没有 projects 目录时回退到 ~/.pilotdeck/projects", async () => {
+    const f = await fixture();
+    const fakeHome = path.join(f.root, "fake-user-home");
+    const registered = path.join(fakeHome, ".pilotdeck", "projects", "legacy-workspace");
+    await mkdir(registered, { recursive: true });
+    await writeFile(path.join(registered, ".cwd"), f.workspace);
+
+    const previousHome = process.env.HOME;
+    process.env.HOME = fakeHome;
+    try {
+      // f.home 下刻意没有 projects 目录
+      expect(await resolveRegisteredProject("legacy-workspace", f.home)).toBe(f.workspace);
+      await expect(resolveRegisteredProject("not-registered", f.home)).rejects.toMatchObject({
+        code: "PROJECT_NOT_FOUND",
+      });
+    } finally {
+      process.env.HOME = previousHome;
+    }
+  });
+
+  it("app home 下有 projects 目录时不看 legacy home", async () => {
+    const f = await fixture();
+    const fakeHome = path.join(f.root, "fake-user-home");
+    const legacy = path.join(fakeHome, ".pilotdeck", "projects", "legacy-only");
+    await mkdir(legacy, { recursive: true });
+    await writeFile(path.join(legacy, ".cwd"), f.workspace);
+    await mkdir(path.join(f.home, "projects"), { recursive: true });
+
+    const previousHome = process.env.HOME;
+    process.env.HOME = fakeHome;
+    try {
+      await expect(resolveRegisteredProject("legacy-only", f.home)).rejects.toMatchObject({
+        code: "PROJECT_NOT_FOUND",
+      });
+    } finally {
+      process.env.HOME = previousHome;
+    }
+  });
 });

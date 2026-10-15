@@ -180,7 +180,7 @@
     {
       "rule": "file-size",
       "file": "ui/src/components/main-content-v2/FilesV2.tsx",
-      "lines": 943
+      "lines": 945
     },
     {
       "rule": "file-size",

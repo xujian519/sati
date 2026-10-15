@@ -92,6 +92,13 @@ function formData(name, content) {
   return form;
 }
 
+/** 聊天附件面读的是 `attachments` 字段（与文件上传面的 `files` 不同）。 */
+function attachmentForm(name, content) {
+  const form = new nativeFormData();
+  form.append("attachments", new nativeBlob([content]), name);
+  return form;
+}
+
 /**
  * 每个项目面各来一发：取值、字节、写盘、文件树、打包、上传。init 用工厂是因为上传必须
  * 每次新建 FormData（重复使用同一个实例会失败），且上传要走 POST——用 GET 打它只会拿到
@@ -241,6 +248,22 @@ describe("端到端：合法工作区照常可用", () => {
     expect(await readFile(path.join(workspace, "new.txt"), "utf8")).toBe("uploaded");
   });
 
+  // General 的 root 是 app home，因此被重叠判定拒掉——但聊天附件面从不解析请求方给的路径，
+  // 只在 root 下写服务端构造的 `.tmp/chat-attachments/<ts>-<rand>/`，故该面单独放行重叠判定。
+  // 不放行的话，General 会话里任何附件都会 403（本批唯一会打断正常使用的退化）。
+  it("General 的聊天附件仍可上传，且落在服务端构造的目录内", async () => {
+    const response = await request("general", "/upload-attachments", {
+      method: "POST",
+      raw: attachmentForm("note.txt", "attached"),
+    });
+
+    expect(response.status).toBe(200);
+    const { files } = await response.json();
+    expect(files).toHaveLength(1);
+    expect(files[0].path.startsWith(path.join(home, ".tmp", "chat-attachments"))).toBe(true);
+    expect(await readFile(files[0].path, "utf8")).toBe("attached");
+  });
+
   it("工作区被删除后回 404（登记仍在）", async () => {
     await register(workspace, "demo");
     expect((await request("demo", "/file?filePath=normal.txt")).status).toBe(200);
@@ -266,13 +289,27 @@ describe("接线契约：每个项目面都挂守卫", () => {
    */
   const UNGUARDED_BY_DESIGN = new Map([["project-uploads.js", new Set(["/api/projects/:projectName/upload-images"])]]);
 
+  /**
+   * 两个守卫都只认注册表 root，区别仅在是否放行与 app home 重叠；后者只允许出现在**不接受
+   * 请求方所选路径**的面上（`requireChatAttachmentRoot` 的来由见该路由的注释）。
+   */
+  const GUARD_NAMES = ["requireRegisteredProjectRoot", "requireChatAttachmentRoot"];
+
+  const OVERLAP_PERMITTING_GUARD = "requireChatAttachmentRoot";
+
   function projectFaces(file) {
     const source = readFileSync(new URL(file, import.meta.url), "utf8");
-    return [
+    const matches = [
       ...source.matchAll(
         /router\.(?:get|post|put|delete|patch)\(\s*(?:\n\s*)?"(\/api\/projects\/:projectName\/[^"]*)"/g,
       ),
-    ].map(match => ({ path: match[1], chain: source.slice(match.index, match.index + 400) }));
+    ];
+    // 每个面的中间件链切到**下一个路由声明之前**为止。固定长度的窗口会溢到下一个路由的链上，
+    // 让「这个面挂了哪个守卫」的断言出现假阳/假阴。
+    return matches.map((match, index) => ({
+      path: match[1],
+      chain: source.slice(match.index, matches[index + 1]?.index ?? source.length),
+    }));
   }
 
   it.each(PROJECT_FACE_COUNTS)("%s 的项目面共 %i 条，条数与接线一致", (file, expectedCount) => {
@@ -283,9 +320,30 @@ describe("接线契约：每个项目面都挂守卫", () => {
     const exempt = UNGUARDED_BY_DESIGN.get(file) ?? new Set();
     const unguarded = projectFaces(file)
       .filter(({ path: routePath }) => !exempt.has(routePath))
-      .filter(({ chain }) => !chain.includes("requireRegisteredProjectRoot"))
+      .filter(({ chain }) => !GUARD_NAMES.some(name => chain.includes(name)))
       .map(({ path: routePath }) => routePath);
     expect(unguarded).toEqual([]);
+  });
+
+  // projectFaces 只认 `router.<verb>(\s*"…"` 这一种声明形态。若有人用 router.use / app.get /
+  // 别的换行方式加新面，上面的条数断言不会变，那道面就会静默逃过守卫检查——故再按路径字面量
+  // 总数钉一次（本批实测：三个文件的字面量数与扫描面数恰好相等）。
+  it.each(PROJECT_FACE_COUNTS)("%s 的项目面字面量都被扫描覆盖（防新声明形态漏检）", file => {
+    const source = readFileSync(new URL(file, import.meta.url), "utf8");
+    const literals = source.match(/\/api\/projects\/:projectName\//g) ?? [];
+    expect(literals.length).toBe(projectFaces(file).length);
+  });
+
+  it("只有聊天附件面使用放行 app home 重叠的守卫", () => {
+    const overlapFaces = [];
+    for (const [file] of PROJECT_FACE_COUNTS) {
+      for (const { path: routePath, chain } of projectFaces(file)) {
+        if (chain.includes(OVERLAP_PERMITTING_GUARD)) {
+          overlapFaces.push(`${file} ${routePath}`);
+        }
+      }
+    }
+    expect(overlapFaces).toEqual(["project-uploads.js /api/projects/:projectName/upload-attachments"]);
   });
 
   it("豁免清单不得包含已加守卫的路由（防豁免烂掉）", () => {
