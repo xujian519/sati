@@ -410,6 +410,7 @@
     "downloadFile": "Download file",
     "deleteSelected": "Delete selected",
     "empty": "This project is empty.",
+    "unavailable": "File access is unavailable for this workspace (General is rooted at the app home directory, which is blocked by design).",
     "openHtmlPreview": "Open HTML preview in new tab",
     "context": {
       "rename": "Rename",

@@ -392,6 +392,7 @@
     "downloadFile": "下载文件",
     "deleteSelected": "删除选中项",
     "empty": "该项目为空。",
+    "unavailable": "该工作区不允许文件访问（General 工作区以应用主目录为根，出于安全考虑已按设计禁止）。",
     "openHtmlPreview": "在新标签页打开 HTML 预览",
     "context": {
       "rename": "重命名",

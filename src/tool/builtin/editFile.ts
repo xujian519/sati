@@ -202,9 +202,13 @@ export function createEditFileTool(): SatiToolDefinition<EditFileInput> {
             `Found ${occurrences} matches of old_string. Set replace_all to true to replace all occurrences, or provide a more specific old_string.`,
           );
         }
-        nextContent = input.replace_all
-          ? content.split(actualOldString).join(normalizedNew)
-          : content.replace(actualOldString, normalizedNew);
+        if (input.replace_all) {
+          nextContent = content.split(actualOldString).join(normalizedNew);
+        } else {
+          // 函数替换器：字符串替换器会把 new_string 里的 `$$` / `$&` / `` $` `` / `$'`
+          // 当替换模式展开，落盘的就成了展开后的结果而非用户给的字符串。
+          nextContent = content.replace(actualOldString, () => normalizedNew);
+        }
       }
 
       const { action, mtimeMs } = await finalizeWorkspaceFileWrite(

@@ -11,6 +11,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import crypto from "crypto";
 import { authenticateWebSocket } from "../middleware/auth.js";
 import { isTrustedOrigin } from "../middleware/corsPolicy.js";
+import { isTrustedRequestSource } from "../middleware/localOriginGuard.js";
 import { DISABLE_LOCAL_AUTH, IS_PLATFORM } from "../constants/config.js";
 import { getPluginPort } from "../utils/plugin-process-manager.js";
 import { createNormalizedMessage } from "../sati-message.js";
@@ -123,9 +124,20 @@ export function createChatWebSocketServer(server) {
         return false;
       }
 
+      // 第二层（本机免登录模式，判据同 HTTP 面）：上面那条把 Origin 与 Host 同为主机名的
+      // rebinding 请求视为同源放行，本层按「本机可达名」判 Host 与 Origin 兜住该缺口。
+      if (DISABLE_LOCAL_AUTH && !IS_PLATFORM) {
+        const headers = info.req.headers;
+        if (!isTrustedRequestSource({ host: headers.host, origin: info.origin ?? headers.origin })) {
+          logger.info("[WARN] WebSocket handshake rejected: untrusted request origin");
+          return false;
+        }
+      }
+
       // Platform / no-login mode skips token validation; otherwise extract the
       // token from the query string or Authorization header.
       const bypass = IS_PLATFORM || DISABLE_LOCAL_AUTH;
+
       const token = bypass
         ? null
         : new URL(info.req.url, "http://localhost").searchParams.get("token") ||

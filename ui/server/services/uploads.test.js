@@ -16,20 +16,24 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  vi.doUnmock("../projects.js");
   vi.resetModules();
   for (const dir of tempDirs.splice(0)) {
     rmSync(dir, { recursive: true, force: true });
   }
 });
 
-async function createUploadApp() {
-  vi.doMock("../projects.js", () => ({
-    extractProjectDirectory: vi.fn(async () => workspace),
-  }));
+async function createUploadApp({ authorized = true } = {}) {
   const { uploadFilesHandler } = await import("./uploads.js");
   const app = express();
-  app.post("/api/projects/:projectName/files/upload", uploadFilesHandler);
+  // 真实路由上由守卫（middleware/projectFilesystem.js）注入注册表 root；本文件测上传服务本身，
+  // 故直接注入等价物。`authorized: false` 覆盖「未经守卫授权」的形态。
+  const injectRoot = (req, _res, next) => {
+    if (authorized) {
+      req.projectRoot = workspace;
+    }
+    next();
+  };
+  app.post("/api/projects/:projectName/files/upload", injectRoot, uploadFilesHandler);
   return app;
 }
 
@@ -124,5 +128,15 @@ describe("工作区文件上传", () => {
       { name: `../${escapeName}`, code: "INVALID_DESTINATION", message: "Path must be under project root" },
     ]);
     expect(existsSync(outside)).toBe(false);
+  });
+
+  it("未经守卫授权（缺 req.projectRoot）时显式失败，不回退到按 projectName 推导", async () => {
+    const app = await createUploadApp({ authorized: false });
+
+    const { status, body } = await upload(app, [{ name: "fresh.txt", content: "hello" }]);
+
+    expect(status).toBe(500);
+    expect(body.error.code).toBe("PROJECT_ROOT_REQUIRED");
+    expect(existsSync(join(workspace, "fresh.txt"))).toBe(false);
   });
 });

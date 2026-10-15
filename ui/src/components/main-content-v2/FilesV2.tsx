@@ -120,7 +120,7 @@ export default function FilesV2({
   canAddToChat = true,
 }: FilesV2Props) {
   const { t } = useTranslation();
-  const { files, loading, refreshFiles } = useFileTreeData(selectedProject);
+  const { files, loading, unavailable, refreshFiles } = useFileTreeData(selectedProject);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [activePath, setActivePath] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<FileContextMenu | null>(null);
@@ -698,7 +698,9 @@ export default function FilesV2({
             <span>{t("fileTree.loading")}</span>
           </div>
         ) : flat.length === 0 ? (
-          <div className="py-6 text-center text-xxs text-neutral-500 dark:text-neutral-400">{t("fileTree.empty")}</div>
+          <div className="py-6 text-center text-xxs text-neutral-500 dark:text-neutral-400">
+            {t(unavailable ? "fileTree.unavailable" : "fileTree.empty")}
+          </div>
         ) : (
           <ul className="space-y-0.5 px-4">
             {flat.map(({ node, depth }, idx) => {

@@ -105,12 +105,12 @@
     {
       "rule": "file-size",
       "file": "ui/server/routes/git.js",
-      "lines": 1507
+      "lines": 1523
     },
     {
       "rule": "file-size",
       "file": "ui/server/routes/taskmaster.js",
-      "lines": 1179
+      "lines": 1152
     },
     {
       "rule": "file-size",
@@ -175,7 +175,7 @@
     {
       "rule": "file-size",
       "file": "ui/src/components/main-content-v2/FilesV2.tsx",
-      "lines": 943
+      "lines": 945
     },
     {
       "rule": "file-size",

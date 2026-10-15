@@ -3,12 +3,21 @@ import express from "express";
 import { spawn } from "child_process";
 import path from "path";
 import { promises as fs } from "fs";
-import { extractProjectDirectory } from "../projects.js";
+import { resolveAuthorizedProjectRoot } from "../services/projectRoot.js";
 import { runChatViaGateway } from "../sati-bridge.js";
 import { parseCommitLogWithStats } from "../utils/gitCommitLog.js";
 
 const router = express.Router();
 const COMMIT_DIFF_CHARACTER_LIMIT = 500_000;
+
+/**
+ * 解析路径的 `git` 调用一律关掉 `core.quotepath`（默认开）。
+ *
+ * 开着时 git 会对非 ASCII / 特殊字符路径做 C 风格转义并在外面套引号（`"01_\344\270\223..."`），
+ * 而 `normalizeRepositoryRelativeFilePath` 把反斜杠当 Windows 分隔符换成 `/`，转义因此被碾成
+ * `/344/270/...`：面板里文件名是乱码，点开必然 404。关掉后 git 直接吐原始 UTF-8。
+ */
+const RAW_PATH_ARGS = ["-c", "core.quotepath=false"];
 
 function spawnAsync(command, args, options = {}) {
   return new Promise((resolve, reject) => {
@@ -87,32 +96,23 @@ function validateRemoteName(remote) {
   return remote;
 }
 
-function validateProjectPath(projectPath) {
-  if (!projectPath || projectPath.includes("\0")) {
-    throw new Error("Invalid project path");
-  }
-  const resolved = path.resolve(projectPath);
-  // Must be an absolute path after resolution
-  if (!path.isAbsolute(resolved)) {
-    throw new Error("Invalid project path: must be absolute");
-  }
-  // Block obviously dangerous paths
-  if (resolved === "/" || resolved === path.sep) {
-    throw new Error("Invalid project path: root directory not allowed");
-  }
-  return resolved;
-}
-
-// Helper function to get the actual project path from the encoded project name
+/**
+ * Helper function to get the actual project path from the encoded project name.
+ *
+ * root 只认项目注册表（`../services/projectRoot.js`）——本文件的 `/file-with-diff`、`/diff`、
+ * `/commit-diff` 会把工作树内任意文件逐字读出来，`/discard`、`/delete-untracked` 会删文件，
+ * `/checkout`、`/create-branch` 会改分支，root 若由请求参数推导，这些能力就等于交给了调用方。
+ * 与 app home 重叠的 root（含 `general` 虚拟工作区）同样在此被拒。
+ */
 async function getActualProjectPath(projectName) {
-  let projectPath;
   try {
-    projectPath = await extractProjectDirectory(projectName);
+    return await resolveAuthorizedProjectRoot(projectName);
   } catch (error) {
-    logger.error(`Error extracting project directory for ${projectName}:`, error);
-    throw new Error(`Unable to resolve project path for "${projectName}"`);
+    logger.error(`Error resolving project path for ${projectName}:`, error);
+    throw Object.assign(new Error(error.message || `Unable to resolve project path for "${projectName}"`), {
+      code: error.code,
+    });
   }
-  return validateProjectPath(projectPath);
 }
 
 // Helper function to strip git diff headers
@@ -315,7 +315,7 @@ async function resolveRepositoryFilePath(projectPath, filePath) {
   const candidateFilePaths = buildFilePathCandidates(projectPath, repositoryRootPath, filePath);
 
   for (const candidateFilePath of candidateFilePaths) {
-    const { stdout } = await spawnAsync("git", ["status", "--porcelain", "--", candidateFilePath], {
+    const { stdout } = await spawnAsync("git", [...RAW_PATH_ARGS, "status", "--porcelain", "--", candidateFilePath], {
       cwd: repositoryRootPath,
     });
     if (stdout.trim()) {
@@ -329,7 +329,7 @@ async function resolveRepositoryFilePath(projectPath, filePath) {
   // If the caller sent a bare filename (e.g. "hello.ts"), recover it from changed files.
   const normalizedFilePath = normalizeRepositoryRelativeFilePath(filePath);
   if (!normalizedFilePath.includes("/")) {
-    const { stdout: repositoryStatusOutput } = await spawnAsync("git", ["status", "--porcelain"], {
+    const { stdout: repositoryStatusOutput } = await spawnAsync("git", [...RAW_PATH_ARGS, "status", "--porcelain"], {
       cwd: repositoryRootPath,
     });
     const changedFilePaths = parseStatusFilePaths(repositoryStatusOutput);
@@ -369,7 +369,9 @@ router.get("/status", async (req, res) => {
     const hasCommits = await repositoryHasCommits(projectPath);
 
     // Get git status
-    const { stdout: statusOutput } = await spawnAsync("git", ["status", "--porcelain"], { cwd: projectPath });
+    const { stdout: statusOutput } = await spawnAsync("git", [...RAW_PATH_ARGS, "status", "--porcelain"], {
+      cwd: projectPath,
+    });
 
     // 分桶口径集中在 parseStatusBuckets：此前 R/C 落不进任何分支 ⇒
     // 重命名过的文件在面板里整条消失（#415）
@@ -727,6 +729,10 @@ router.post("/checkout", async (req, res) => {
   try {
     const projectPath = await getActualProjectPath(project);
 
+    // 本文件其余路由都有这一步，唯独 checkout / create-branch 漏了——没有它就能在任一本机
+    // 仓库（不限工作区）上切分支、建分支。
+    await validateGitRepository(projectPath);
+
     // Checkout the branch
     validateBranchName(branch);
     const { stdout } = await spawnAsync("git", ["checkout", branch], { cwd: projectPath });
@@ -748,6 +754,8 @@ router.post("/create-branch", async (req, res) => {
 
   try {
     const projectPath = await getActualProjectPath(project);
+
+    await validateGitRepository(projectPath);
 
     // Create and checkout new branch
     validateBranchName(branch);
@@ -805,7 +813,15 @@ router.get("/commits", async (req, res) => {
     // commit serially — 100 commits cost ~1,140ms vs ~43ms for the single call.
     const { stdout } = await spawnAsync(
       "git",
-      ["log", "--pretty=format:%H|%an|%ae|%ad|%s", "--date=iso-strict", "--stat", "-n", String(safeLimit)],
+      [
+        ...RAW_PATH_ARGS,
+        "log",
+        "--pretty=format:%H|%an|%ae|%ad|%s",
+        "--date=iso-strict",
+        "--stat",
+        "-n",
+        String(safeLimit),
+      ],
       { cwd: projectPath },
     );
 

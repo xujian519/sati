@@ -7,12 +7,15 @@ import type { FileTreeNode } from "../types/types";
 type UseFileTreeDataResult = {
   files: FileTreeNode[];
   loading: boolean;
+  /** 服务端按设计拒绝该工作区的文件访问（403）——与「项目确实没有文件」是两回事。 */
+  unavailable: boolean;
   refreshFiles: () => void;
 };
 
 export function useFileTreeData(selectedProject: Project | null): UseFileTreeDataResult {
   const [files, setFiles] = useState<FileTreeNode[]>([]);
   const [loading, setLoading] = useState(false);
+  const [unavailable, setUnavailable] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -26,6 +29,7 @@ export function useFileTreeData(selectedProject: Project | null): UseFileTreeDat
     if (!projectName) {
       setFiles([]);
       setLoading(false);
+      setUnavailable(false);
       return;
     }
 
@@ -50,6 +54,7 @@ export function useFileTreeData(selectedProject: Project | null): UseFileTreeDat
           logError("File fetch failed:", response.status, errorText);
           if (isActive) {
             setFiles([]);
+            setUnavailable(response.status === 403);
           }
           return;
         }
@@ -57,6 +62,7 @@ export function useFileTreeData(selectedProject: Project | null): UseFileTreeDat
         const data = (await response.json()) as FileTreeNode[];
         if (isActive) {
           setFiles(data);
+          setUnavailable(false);
         }
       } catch (error) {
         if ((error as { name?: string }).name === "AbortError") {
@@ -66,6 +72,7 @@ export function useFileTreeData(selectedProject: Project | null): UseFileTreeDat
         logError("Error fetching files:", error);
         if (isActive) {
           setFiles([]);
+          setUnavailable(false);
         }
       } finally {
         if (isActive) {
@@ -85,6 +92,7 @@ export function useFileTreeData(selectedProject: Project | null): UseFileTreeDat
   return {
     files,
     loading,
+    unavailable,
     refreshFiles,
   };
 }

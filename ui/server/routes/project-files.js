@@ -23,13 +23,18 @@ import {
   resolvePathInProject,
   sha256File,
   streamFileWithRange,
+  validatePathInProject,
 } from "../services/filesystem.js";
 import { contentDispositionAttachment } from "../utils/downloadHeaders.js";
 import { WORKSPACES_ROOT, validateWorkspacePath } from "./projects.js"; // 旧 projects 子路径路由
-import { extractProjectDirectory } from "../projects.js"; // 项目目录解析工具
 import { resolveManagedMemoryFile } from "../services/memoryService.js";
+import { createProjectFilesystemMiddleware } from "../middleware/projectFilesystem.js";
 
 const router = Router();
+
+// 项目文件路由共用的 root 守卫（上游 #648）：root 只来自项目注册表，且拒绝与 app home
+// 重叠的路径。下游一律用 `req.projectRoot`，不再自行按 projectName 推导。
+const requireRegisteredProjectRoot = createProjectFilesystemMiddleware();
 
 router.get("/api/browse-filesystem", authenticateToken, async (req, res) => {
   try {
@@ -165,27 +170,21 @@ router.post("/api/create-folder", authenticateToken, async (req, res) => {
 });
 
 // Read file content endpoint
-router.get("/api/projects/:projectName/file", authenticateToken, async (req, res) => {
+router.get("/api/projects/:projectName/file", authenticateToken, requireRegisteredProjectRoot, async (req, res) => {
   try {
-    const { projectName } = req.params;
     const { filePath } = req.query;
 
-    // Security: ensure the requested path is inside the project root
     if (!filePath) {
       return res.status(400).json({ error: "Invalid file path" });
     }
 
-    const projectRoot = await extractProjectDirectory(projectName).catch(() => null);
-    if (!projectRoot) {
-      return res.status(404).json({ error: "Project not found" });
+    const projectRoot = req.projectRoot;
+    // 请求方给的路径必须落在 root 之内（root 是目录，不接受与之相等）
+    const resolvedResult = validatePathInProject(projectRoot, filePath);
+    if (!resolvedResult.valid) {
+      return res.status(403).json({ error: resolvedResult.error });
     }
-
-    // Handle both absolute and relative paths
-    const resolved = path.isAbsolute(filePath) ? path.resolve(filePath) : path.resolve(projectRoot, filePath);
-    const normalizedRoot = path.resolve(projectRoot) + path.sep;
-    if (!resolved.startsWith(normalizedRoot)) {
-      return res.status(403).json({ error: "Path must be under project root" });
-    }
+    const resolved = resolvedResult.resolved;
 
     // Memory-managed files (e.g. MEMORY.md) live under the memory store
     // (memory/workspaces/<hash>/memory/...) rather than the project root.
@@ -224,59 +223,57 @@ router.get("/api/projects/:projectName/file", authenticateToken, async (req, res
 });
 
 // Serve raw file bytes for previews and downloads.
-router.get("/api/projects/:projectName/files/content", authenticateToken, async (req, res) => {
+router.get(
+  "/api/projects/:projectName/files/content",
+  authenticateToken,
+  requireRegisteredProjectRoot,
+  async (req, res) => {
+    try {
+      const { path: filePath } = req.query;
+
+      // Security: ensure the requested path is inside the project root
+      if (!filePath) {
+        return res.status(400).json({ error: "Invalid file path" });
+      }
+
+      const projectRoot = req.projectRoot;
+
+      const resolvedResult = resolvePathInProject(projectRoot, filePath);
+      if (!resolvedResult.valid) {
+        return res.status(403).json({ error: resolvedResult.error });
+      }
+
+      const resolved = resolvedResult.resolved;
+      const stats = await fsPromises.stat(resolved).catch(() => null);
+      if (!stats?.isFile()) {
+        return res.status(404).json({ error: "File not found" });
+      }
+
+      const mimeType = mime.lookup(resolved) || "application/octet-stream";
+      // 同源可渲染的文档（HTML/SVG/XML）必须带沙箱策略，否则顶层导航即可在应用源中执行。
+      applyProjectFileSecurityHeaders(res, mimeType);
+      // MHTML 等不纳入沙箱集合的类型改为强制下载，从渲染面移除。
+      const forceDownload = shouldForceAttachment(mimeType);
+      if (req.method === "HEAD" && (req.query.sha256 === "1" || req.query.sha256 === "true")) {
+        res.setHeader("X-Sati-Content-SHA256", await sha256File(resolved));
+      }
+      await streamFileWithRange(req, res, resolved, {
+        mimeType,
+        downloadFilename: req.query.download || forceDownload ? path.basename(resolved) : null,
+      });
+    } catch (error) {
+      logger.error("Error serving binary file:", error);
+      if (!res.headersSent) {
+        res.status(500).json({ error: error.message });
+      }
+    }
+  },
+);
+
+router.get("/api/projects/:projectName/download", authenticateToken, requireRegisteredProjectRoot, async (req, res) => {
   try {
     const { projectName } = req.params;
-    const { path: filePath } = req.query;
-
-    // Security: ensure the requested path is inside the project root
-    if (!filePath) {
-      return res.status(400).json({ error: "Invalid file path" });
-    }
-
-    const projectRoot = await extractProjectDirectory(projectName).catch(() => null);
-    if (!projectRoot) {
-      return res.status(404).json({ error: "Project not found" });
-    }
-
-    const resolvedResult = resolvePathInProject(projectRoot, filePath);
-    if (!resolvedResult.valid) {
-      return res.status(403).json({ error: resolvedResult.error });
-    }
-
-    const resolved = resolvedResult.resolved;
-    const stats = await fsPromises.stat(resolved).catch(() => null);
-    if (!stats?.isFile()) {
-      return res.status(404).json({ error: "File not found" });
-    }
-
-    const mimeType = mime.lookup(resolved) || "application/octet-stream";
-    // 同源可渲染的文档（HTML/SVG/XML）必须带沙箱策略，否则顶层导航即可在应用源中执行。
-    applyProjectFileSecurityHeaders(res, mimeType);
-    // MHTML 等不纳入沙箱集合的类型改为强制下载，从渲染面移除。
-    const forceDownload = shouldForceAttachment(mimeType);
-    if (req.method === "HEAD" && (req.query.sha256 === "1" || req.query.sha256 === "true")) {
-      res.setHeader("X-Sati-Content-SHA256", await sha256File(resolved));
-    }
-    await streamFileWithRange(req, res, resolved, {
-      mimeType,
-      downloadFilename: req.query.download || forceDownload ? path.basename(resolved) : null,
-    });
-  } catch (error) {
-    logger.error("Error serving binary file:", error);
-    if (!res.headersSent) {
-      res.status(500).json({ error: error.message });
-    }
-  }
-});
-
-router.get("/api/projects/:projectName/download", authenticateToken, async (req, res) => {
-  try {
-    const { projectName } = req.params;
-    const projectRoot = await extractProjectDirectory(projectName).catch(() => null);
-    if (!projectRoot) {
-      return res.status(404).json({ error: "Project not found" });
-    }
+    const projectRoot = req.projectRoot;
 
     const rootStats = await fsPromises.stat(projectRoot).catch(() => null);
     if (!rootStats?.isDirectory()) {
@@ -313,12 +310,10 @@ router.get("/api/projects/:projectName/download", authenticateToken, async (req,
 });
 
 // Save file content endpoint
-router.put("/api/projects/:projectName/file", authenticateToken, async (req, res) => {
+router.put("/api/projects/:projectName/file", authenticateToken, requireRegisteredProjectRoot, async (req, res) => {
   try {
-    const { projectName } = req.params;
     const { filePath, content } = req.body;
 
-    // Security: ensure the requested path is inside the project root
     if (!filePath) {
       return res.status(400).json({ error: "Invalid file path" });
     }
@@ -327,17 +322,13 @@ router.put("/api/projects/:projectName/file", authenticateToken, async (req, res
       return res.status(400).json({ error: "Content is required" });
     }
 
-    const projectRoot = await extractProjectDirectory(projectName).catch(() => null);
-    if (!projectRoot) {
-      return res.status(404).json({ error: "Project not found" });
+    const projectRoot = req.projectRoot;
+    // 请求方给的路径必须落在 root 之内（root 是目录，不接受与之相等）
+    const resolvedResult = validatePathInProject(projectRoot, filePath);
+    if (!resolvedResult.valid) {
+      return res.status(403).json({ error: resolvedResult.error });
     }
-
-    // Handle both absolute and relative paths
-    const resolved = path.isAbsolute(filePath) ? path.resolve(filePath) : path.resolve(projectRoot, filePath);
-    const normalizedRoot = path.resolve(projectRoot) + path.sep;
-    if (!resolved.startsWith(normalizedRoot)) {
-      return res.status(403).json({ error: "Path must be under project root" });
-    }
+    const resolved = resolvedResult.resolved;
 
     // Memory-managed files must be written back to the memory store instead
     // of the project root — otherwise saving would create a shadow file at
@@ -365,25 +356,17 @@ router.put("/api/projects/:projectName/file", authenticateToken, async (req, res
   }
 });
 
-router.get("/api/projects/:projectName/files", authenticateToken, async (req, res) => {
+router.get("/api/projects/:projectName/files", authenticateToken, requireRegisteredProjectRoot, async (req, res) => {
   try {
-    // Using fsPromises from import
-
-    // Use extractProjectDirectory to get the actual project path
-    let actualPath;
-    try {
-      actualPath = await extractProjectDirectory(req.params.projectName);
-    } catch (error) {
-      logger.error("Error extracting project directory:", error);
-      // Fallback to simple dash replacement
-      actualPath = req.params.projectName.replace(/-/g, "/");
-    }
+    // 守卫已解析出注册表内的 root。此前这里会按 projectName 推导，并在解析失败时用
+    // 「短横线替换成斜杠」兜底——那等于把任意 id 变成任意绝对路径，已删除。
+    const actualPath = req.projectRoot;
 
     // Check if path exists
     try {
       await fsPromises.access(actualPath);
     } catch {
-      // 项目真实目录不存在（access 抛 ENOENT，也可能是目录提取失败后按短横线拼出的路径）→ 回 404 + 路径；文件树请求方据此把列表置空并记日志，不会落到 500。
+      // 项目真实目录已不在（access 抛 ENOENT）→ 回 404 + 路径；文件树请求方据此把列表置空并记日志，不会落到 500。
       return res.status(404).json({ error: `Project path not found: ${actualPath}` });
     }
 
