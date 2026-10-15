@@ -1,5 +1,5 @@
 import { logError } from "../../../utils/logging";
-import { api } from "../../../utils/api";
+import { api, requestUrlTicket } from "../../../utils/api";
 import type {
   BrowseFilesystemResponse,
   CloneProgressEvent,
@@ -96,19 +96,17 @@ const buildCloneProgressQuery = ({
     query.set("newGithubToken", newGithubToken.trim());
   }
 
-  // EventSource cannot send custom headers, so the auth token is passed as query.
-  const authToken = localStorage.getItem("auth-token");
-  if (authToken) {
-    query.set("token", authToken);
-  }
-
   return query.toString();
 };
 
-export const cloneWorkspaceWithProgress = (params: CloneWorkspaceParams, handlers: CloneProgressHandlers) =>
-  new Promise<Record<string, unknown> | undefined>((resolve, reject) => {
+export const cloneWorkspaceWithProgress = async (params: CloneWorkspaceParams, handlers: CloneProgressHandlers) => {
+  // EventSource cannot send custom headers; use a short-lived, path-bound url-ticket (#626)
+  // instead of appending the session JWT. The ticket binds to the workspace path, which
+  // clone-progress also carries as `?path=`, so the generic auth binding check accepts it.
+  const ticket = await requestUrlTicket("sse", { path: params.workspacePath.trim() });
+  return new Promise<Record<string, unknown> | undefined>((resolve, reject) => {
     const query = buildCloneProgressQuery(params);
-    const eventSource = new EventSource(`/api/projects/clone-progress?${query}`);
+    const eventSource = new EventSource(`/api/projects/clone-progress?${query}&ticket=${encodeURIComponent(ticket)}`);
     let settled = false;
 
     const settle = (callback: () => void) => {
@@ -146,3 +144,4 @@ export const cloneWorkspaceWithProgress = (params: CloneWorkspaceParams, handler
       settle(() => reject(new Error("Connection lost during clone")));
     };
   });
+};

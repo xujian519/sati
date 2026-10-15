@@ -1,7 +1,7 @@
 # Sati 技术债务指标基线与趋势
 
 > 由 `node scripts/measure-techdebt.mjs --update` 自动生成，谨防手工编辑。
-> 最近一次快照：**2026-10-14**
+> 最近一次快照：**2026-10-15**
 
 ## 规模
 
@@ -10,8 +10,8 @@
 | src TS 文件 / 行数 | 1106 / 189961 |
 | src JS 文件 | 0 |
 | tests 文件 | 641 |
-| ui/src 文件 / 行数 | 642 / 102634 |
-| ui/server 文件 / 行数 | 133 / 35710 |
+| ui/src 文件 / 行数 | 646 / 102966 |
+| ui/server 文件 / 行数 | 136 / 36269 |
 
 ## 指标口径
 
@@ -29,12 +29,12 @@
 | 指标 | 总量 | 热点模块 |
 |---|---|---|
 | `any`/`@ts-expect-error`/`@ts-ignore` | 3 | ui/src(3) |
-| `as unknown as`（双重断言） | 25 | ui/src(18) · knowledge(5) · adapters(1) |
+| `as unknown as`（双重断言） | 29 | ui/src(22) · knowledge(5) · adapters(1) |
 | 裸 `console.*` | 6 | ui/server(6) |
 | 空 `catch {}` | 0 | — |
-| 无参 `catch {`（总计） | 700 | ui/server(161) · ui/src(125) · adapters(71) |
+| 无参 `catch {`（总计） | 699 | ui/server(160) · ui/src(125) · adapters(71) |
 | ↳ **无注释**（隐患类，目标） | **0** | — |
-| ↳ 已带意图注释 | 700 | — |
+| ↳ 已带意图注释 | 699 | — |
 | `TODO/HACK/FIXME/XXX` | 11 | always-on(4) · tests(4) · ui/src(2) |
 | 分层违规 `ui/server→src` | 15 | — |
 | 分层违规 `src→ui` | 0 | — |
@@ -71,15 +71,15 @@
 | `ui/src/types/contentReference.spec.ts` | `(anonymous)` | 408 | arrow |
 | `ui/src/components/code-editor/view/subcomponents/SpreadsheetInteractivePreview.tsx` | `SpreadsheetInteractivePreview` | 407 | function |
 | `ui/src/components/settings/view/agentSearch/components/ToolsSection.tsx` | `ToolsSection` | 399 | function |
-| `ui/src/components/settings/view/integrations/im/components/WeComChannelSection.tsx` | `WeComChannelSection` | 398 | function |
 | `ui/src/components/chat/hooks/useSlashCommands.ts` | `useSlashCommands` | 395 | function |
+| `ui/src/components/settings/view/integrations/im/components/WeComChannelSection.tsx` | `WeComChannelSection` | 395 | function |
 | `src/tool/execution/ToolRuntime.ts` | `execute` | 388 | method |
 | `ui/src/components/main-content-v2/CronV2.test.tsx` | `(anonymous)` | 384 | arrow |
 | `src/web/client/webMessage.ts` | `applyWebGatewayEvent` | 383 | function |
 | `ui/src/components/app-shell/MainAreaV2.tsx` | `MainAreaV2Content` | 381 | function |
-| `ui/src/components/settings/view/integrations/im/components/FeishuChannelSection.tsx` | `FeishuChannelSection` | 381 | function |
 | `ui/src/types/annotationReference.spec.ts` | `(anonymous)` | 381 | arrow |
 | `ui/src/components/chat/tools/components/InteractiveRenderers/AskUserQuestionPanel.tsx` | `AskUserQuestionPanel` | 378 | arrow |
+| `ui/src/components/settings/view/integrations/im/components/FeishuChannelSection.tsx` | `FeishuChannelSection` | 378 | function |
 | `ui/src/components/kanban/hooks/useBoardState.ts` | `useBoardState` | 368 | function |
 | `ui/src/components/chat/hooks/useFileMentions.tsx` | `useFileMentions` | 366 | function |
 | `ui/src/components/settings/view/agentRoute/components/RouterSection.tsx` | `RouterSection` | 357 | function |
@@ -95,7 +95,7 @@
 | `ui/src/components/annotation/view/Annotator.tsx` | `Annotator` | 322 | function |
 | `src/tool/builtin/patentFigureProject.ts` | `createPatentFigureProjectTool` | 313 | function |
 | `ui/src/components/chat-v2/SubagentDetailMessageFlow.tsx` | `SubagentDetailMessageFlow` | 309 | function |
-| `ui/src/components/settings/view/integrations/im/components/WeixinChannelSection.tsx` | `WeixinChannelSection` | 303 | function |
+| `ui/src/components/settings/view/integrations/im/components/WeixinChannelSection.tsx` | `WeixinChannelSection` | 300 | function |
 
 ## Top 30 大文件
 

@@ -20,24 +20,6 @@ const validateApiKey = (req, res, next) => {
   next();
 };
 
-function extractDashboardRefererToken(req) {
-  const refererHeader = req.headers.referer || req.headers.referrer;
-  if (!refererHeader || Array.isArray(refererHeader)) {
-    return null;
-  }
-
-  try {
-    const refererUrl = new URL(refererHeader, `${req.protocol}://${req.get("host")}`);
-    if (!refererUrl.pathname.startsWith("/memory-dashboard")) {
-      return null;
-    }
-    return refererUrl.searchParams.get("token");
-  } catch {
-    // Referer 头畸形、无法解析成 URL（new URL 抛 TypeError）→ 视为取不到内嵌 token，authenticateToken 继续按「无 token」回 401 而非 500。
-    return null;
-  }
-}
-
 // JWT authentication middleware
 const authenticateToken = async (req, res, next) => {
   // Platform mode:  use single database user
@@ -57,20 +39,13 @@ const authenticateToken = async (req, res, next) => {
 
   // Normal OSS JWT validation
   const authHeader = req.headers["authorization"];
-  let token = authHeader && authHeader.split(" ")[1]; // Bearer TOKEN
+  const token = authHeader && authHeader.split(" ")[1]; // Bearer TOKEN
 
-  // Also check query param for SSE endpoints (EventSource can't set headers)
-  if (!token && req.query.token) {
-    token = req.query.token;
-  }
-  // Memory dashboard static assets inherit the iframe document URL as Referer,
-  // but do not inherit the query string onto app.js/app.css requests.
+  // 无 Authorization 头：改由 `?ticket=` 的短期 URL 票据放行（#626）。会话 JWT 不再从 query 或
+  // Referer 接受——旧的两条泄露源（会话 token 落进 URL/历史/日志、子资源靠 Referer 内嵌 token）
+  // 一并切断。票据是 scope 受限、短 TTL、不可当完整会话的一次性凭据（见 verifyUrlTicket）。
   if (!token) {
-    token = extractDashboardRefererToken(req);
-  }
-
-  if (!token) {
-    return res.status(401).json({ error: "Access denied. No token provided." });
+    return verifyUrlTicket(req, res, next);
   }
 
   try {
@@ -252,6 +227,169 @@ const authenticateProjectPreview = async (req, res, next) => {
   return res.status(401).json({ error: "Access denied. No token provided." });
 };
 
+/** URL 票据的 scope 标记（#626）：供无法自定义头的载体短期访问受限资源，不能当完整会话。 */
+const URL_TICKET_SCOPE = "url-ticket";
+
+/**
+ * 各用途票据的有效期（秒）。一次性文件/二维码/SSE 取短值（仅需覆盖 URL 暴露窗口，
+ * 连接/加载一经建立即不受 TTL 约束）；dashboard 稍长（cookie 携子资源复用，参照 #615 预览先例）。
+ */
+const URL_TICKET_TTL_SECONDS = {
+  file: 5 * 60,
+  qr: 5 * 60,
+  sse: 5 * 60,
+  dashboard: 15 * 60,
+};
+
+/** 该用途的有效期（秒），供签发端点回传 expiresIn。 */
+export const urlTicketTtl = purpose => URL_TICKET_TTL_SECONDS[purpose] || URL_TICKET_TTL_SECONDS.file;
+
+/**
+ * 签发一份 URL 票据：短期、scope 受限，可选绑定项目/文件路径。
+ *
+ * 它替代把会话 JWT 拼进 `<iframe>`/`<img>`/EventSource/dashboard 文档 URL。即便落进浏览器历史、
+ * Referer、反代/服务日志或分享链接，也无法当完整会话调用其它 API（通用鉴权与 WebSocket 都拒绝带 scope 的 token），
+ * 且很快过期。
+ *
+ * @param {{ id: number }} user - 当前用户。
+ * @param {{ purpose: string, project?: string, path?: string }} opts - 用途与可选资源绑定。
+ * @returns {string} 票据。
+ */
+export const generateUrlTicket = (user, { purpose, project, path }) => {
+  const payload = { userId: user.id, scope: URL_TICKET_SCOPE, purpose };
+  if (project !== undefined) payload.project = project;
+  if (path !== undefined) payload.path = path;
+  return jwt.sign(payload, JWT_SECRET, { expiresIn: urlTicketTtl(purpose) });
+};
+
+/**
+ * 校验 `?ticket=` 里的 URL 票据并放行（供 authenticateToken 在无 Authorization 头时委派）。
+ *
+ * 只认 scope==="url-ticket"（会话 JWT 或别的 scoped 凭据塞进 `?ticket=` 一律拒绝）；
+ * 绑定按「请求侧」驱动以避免跨载体复用：项目级路由（带 `:projectName`）要求票据绑定同一项目，
+ * 文件级路由（带 `?path=`）要求票据绑定同一路径。放行时设 `req.user` 并直接 next——
+ * 不进入会话 auto-refresh，绝不换发会话 token。
+ */
+function verifyUrlTicket(req, res, next) {
+  const ticket = req.query.ticket;
+  if (typeof ticket !== "string" || !ticket) {
+    return res.status(401).json({ error: "Access denied. No token provided." });
+  }
+  let decoded;
+  try {
+    decoded = jwt.verify(ticket, JWT_SECRET);
+  } catch (error) {
+    logger.error("URL ticket verification error:", error);
+    return res.status(403).json({ error: "Invalid ticket" });
+  }
+  if (decoded.scope !== URL_TICKET_SCOPE) {
+    return res.status(403).json({ error: "Invalid ticket" });
+  }
+  if (req.params.projectName !== undefined && decoded.project !== req.params.projectName) {
+    return res.status(403).json({ error: "Invalid ticket" });
+  }
+  if (typeof req.query.path === "string" && decoded.path !== req.query.path) {
+    return res.status(403).json({ error: "Invalid ticket" });
+  }
+  const user = userDb.getUserById(decoded.userId);
+  if (!user) {
+    return res.status(401).json({ error: "Invalid token. User not found." });
+  }
+  req.user = user;
+  return next();
+}
+
+/**
+ * 仅接受 Authorization 头会话 token 的鉴权（不接受 query 票据 / cookie）。
+ * 用于「用会话换发票据」的签发端点，防止一份短票据被用来续换更长/更宽的票据。
+ * 平台 / 免登录模式下委派 authenticateToken 整体旁路（与现状一致）。
+ */
+const authenticateSessionOnly = async (req, res, next) => {
+  if (IS_PLATFORM || DISABLE_LOCAL_AUTH) {
+    return authenticateToken(req, res, next);
+  }
+  const authHeader = req.headers["authorization"];
+  const token = authHeader && authHeader.split(" ")[1];
+  if (!token) {
+    return res.status(401).json({ error: "Access denied. No token provided." });
+  }
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    if (decoded.scope) {
+      return res.status(403).json({ error: "Invalid token" });
+    }
+    const user = userDb.getUserById(decoded.userId);
+    if (!user) {
+      return res.status(401).json({ error: "Invalid token. User not found." });
+    }
+    req.user = user;
+    return next();
+  } catch (error) {
+    logger.error("Token verification error:", error);
+    return res.status(403).json({ error: "Invalid token" });
+  }
+};
+
+/**
+ * memory-dashboard 子资源 cookie 名：文档为同目录相对资源（app.js/app.css）种下的路径限定凭据。
+ * 与项目预览 cookie 同一范式（沙箱/相对请求不带 Authorization 头，靠路径限定 cookie 携带）。
+ */
+export const MEMORY_DASHBOARD_COOKIE = "sati_dashboard";
+
+/** memory-dashboard 票据 cookie 的 Set-Cookie 串（路径限定到 /memory-dashboard）。 */
+export const buildMemoryDashboardCookie = (token, ttlSeconds) =>
+  `${MEMORY_DASHBOARD_COOKIE}=${token}; Path=/memory-dashboard; HttpOnly; SameSite=None; Secure; Max-Age=${ttlSeconds}`;
+
+/** 校验一份 memory-dashboard 票据；`setCookie` 时把凭据种成路径限定 cookie 供子资源携带。 */
+function verifyMemoryDashboardTicket(req, res, next, token, { setCookie }) {
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    if (decoded.scope !== URL_TICKET_SCOPE || decoded.purpose !== "dashboard") {
+      return res.status(403).json({ error: "Invalid ticket" });
+    }
+    const user = userDb.getUserById(decoded.userId);
+    if (!user) {
+      return res.status(401).json({ error: "Invalid token. User not found." });
+    }
+    req.user = user;
+    if (setCookie) {
+      res.setHeader("Set-Cookie", buildMemoryDashboardCookie(token, urlTicketTtl("dashboard")));
+    }
+    return next();
+  } catch (error) {
+    logger.error("Memory dashboard ticket verification error:", error);
+    return res.status(403).json({ error: "Invalid ticket" });
+  }
+}
+
+/**
+ * memory-dashboard 文档与静态子资源的鉴权（替代旧的 Referer 内嵌会话 token）。
+ *
+ * 接受三种凭据：
+ * - `Authorization: Bearer <会话 JWT>`（程序化请求）；
+ * - `?ticket=<dashboard 票据>`（iframe 文档导航；同时种下路径限定 cookie 供子资源使用）；
+ * - `Cookie: sati_dashboard=<dashboard 票据>`（文档发出的相对子资源请求）。
+ * 会话 JWT 放 query 一律拒绝（#626）。
+ */
+const authenticateMemoryDashboard = async (req, res, next) => {
+  if (IS_PLATFORM || DISABLE_LOCAL_AUTH) {
+    return authenticateToken(req, res, next);
+  }
+  const authHeader = req.headers["authorization"];
+  if (authHeader && authHeader.split(" ")[1]) {
+    return authenticateToken(req, res, next);
+  }
+  const ticket = req.query.ticket;
+  if (typeof ticket === "string" && ticket) {
+    return verifyMemoryDashboardTicket(req, res, next, ticket, { setCookie: true });
+  }
+  const cookieToken = readRequestCookie(req, MEMORY_DASHBOARD_COOKIE);
+  if (cookieToken) {
+    return verifyMemoryDashboardTicket(req, res, next, cookieToken, { setCookie: false });
+  }
+  return res.status(401).json({ error: "Access denied. No token provided." });
+};
+
 // WebSocket authentication function
 const authenticateWebSocket = token => {
   // Platform mode: bypass token validation, return first user
@@ -295,6 +433,8 @@ export {
   validateApiKey,
   authenticateToken,
   authenticateProjectPreview,
+  authenticateMemoryDashboard,
+  authenticateSessionOnly,
   generateToken,
   authenticateWebSocket,
   JWT_SECRET,

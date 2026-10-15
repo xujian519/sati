@@ -48,7 +48,7 @@ export function useOfficePdfPreviewUrl(projectName: string | undefined, filePath
         // Drain the preflight body to release the connection; the content is unused.
         await res.arrayBuffer().catch(() => null);
         if (!controller.signal.aborted) {
-          setPreviewUrl(nextPreviewUrl);
+          setPreviewUrl(await nextPreviewUrl);
         }
       })
       .catch((error: Error & { code?: string; name?: string }) => {
