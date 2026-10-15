@@ -3,7 +3,7 @@ name: provision-drafting-spec
 description: 说明书撰写条款 worker（P-D02）— 依据 A26.3 撰写说明书五部分（技术领域/背景技术/发明内容/附图说明/具体实施方式），方案覆盖权利要求全部特征
 type: role
 tools: ["*"]
-domains: ["patent", "quality", "drafting", "filesystem"]
+domains: ["patent", "quality", "drafting", "filesystem", "legal"]
 omitTools: ["web_search", "web_fetch", "execute_code"]
 readOnly: false
 systemPrompt: |-

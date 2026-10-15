@@ -76,7 +76,10 @@ class CapabilityOnlyRuntime implements ModelRuntime {
 function makeConfig(cwd: string): AgentRuntimeConfig {
   return {
     provider: "deepseek",
-    model: "deepseek-v4-flash",
+    // ⚠️ 必须与录制时的 `~/.sati/sati.yaml` 的 agent.model **同源**：provider/model 是请求键的一部分，
+    // 不一致就会 NO_REPLAY_RECORD / 少驱动。本值曾长期写 "deepseek-v4-flash"，而配置已改为
+    // "deepseek-flash"——漂移会让这个 fixture **永远无法重录成功**（2026-10-15 重录时发现）。
+    model: "deepseek-flash",
     cwd,
     permissionMode: "bypassPermissions",
     permissionContext: createDefaultPermissionContext({
@@ -92,7 +95,7 @@ function makeConfig(cwd: string): AgentRuntimeConfig {
   };
 }
 
-test("真实模型 fixture 无 key 重放完整 AgentLoop 回路（deepseek-v4-flash）", async () => {
+test("真实模型 fixture 无 key 重放完整 AgentLoop 回路（deepseek-flash）", async () => {
   const replay = createReplayModelRuntime(FIXTURE_DIR, new CapabilityOnlyRuntime());
   const now = () => new Date();
   const router = createRouterRuntime({ enabled: false }, { modelRuntime: replay, now });

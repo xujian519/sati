@@ -3,7 +3,7 @@ name: provision-drafting-claims
 description: 权利要求撰写条款 worker（P-D01）— 基于 CAP02 解构与区别特征撰写权利要求书，独立权利要求+从属权利要求多层次布局
 type: role
 tools: ["*"]
-domains: ["patent", "quality", "drafting", "filesystem"]
+domains: ["patent", "quality", "drafting", "filesystem", "legal"]
 omitTools: ["web_search", "web_fetch", "execute_code"]
 readOnly: false
 systemPrompt: |-

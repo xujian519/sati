@@ -25,7 +25,7 @@
 
 | claim | 事实 | 值 | 来源 |
 | --- | --- | --- | --- |
-| `default_tool_count` | 默认注册工具数（无参 createBuiltinRegistry） | `52` | src/tool/registry/createBuiltinRegistry.ts（运行期实例化） |
+| `default_tool_count` | 默认注册工具数（无参 createBuiltinRegistry） | `53` | src/tool/registry/createBuiltinRegistry.ts（运行期实例化） |
 | `patent_tool_count` | 专利域工具数（domain === "patent"） | `28` | src/tool/registry/createBuiltinRegistry.ts（运行期实例化） |
 | `channel_adapter_count` | IM 渠道适配器数 | `21` | src/adapters/channel/（目录数，不含 protocol/） |
 | `skill_count` | 内置技能数（SKILL.md 总数） | `107` | skills/**/SKILL.md |
@@ -57,7 +57,7 @@
 | `src/extension/` | 51 | ✓ | 插件系统（plugin.json、lifecycle hooks、skills、贡献点） |
 | `src/fs/` | 1 | — | 文件系统小工具（JSONL run 写入器） |
 | `src/gateway/` | 39 | ✓ | WebSocket 网关（protocol/server/client/approval） |
-| `src/knowledge/` | 49 | ✓ | 知识库（图谱/判例/法规/embeddings/wiki 卡片） |
+| `src/knowledge/` | 52 | ✓ | 知识库（图谱/判例/法规/embeddings/wiki 卡片） |
 | `src/lifecycle/` | 6 | ✓ | 生命周期（protocol/runtime） |
 | `src/literature/` | 13 | ✓ | 学术论文检索（arXiv/OpenAlex/Semantic Scholar/Crossref） |
 | `src/mcp/` | 16 | ✓ | MCP 客户端/协议/运行时 |

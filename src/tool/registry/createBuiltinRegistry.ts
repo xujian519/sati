@@ -76,6 +76,7 @@ import { createRecognizeChemicalStructureTool } from "../builtin/recognizeChemic
 import { createEvaluateEvidenceTool } from "../builtin/evaluateEvidence.js";
 import { createWriteFileTool } from "../builtin/writeFile.js";
 import { createLawSearchTool } from "../../knowledge/legal/law-search-tool.js";
+import { createLawVerifyTool } from "../../knowledge/legal/law-verify-tool.js";
 import type { EmbeddingClient } from "../../model/embedding/index.js";
 import {
   createLiteratureRegistry,
@@ -433,6 +434,8 @@ export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): T
   }
   if (options?.legal !== false) {
     registry.register(annotate(createLawSearchTool(), "legal"));
+    // 法条引用核验：同一个 knowledge.db，但判的是「引用是否成立」而非「哪条文怎么说」。
+    registry.register(annotate(createLawVerifyTool(), "legal"));
   }
   if (literatureRegistry !== undefined) {
     registry.register(annotate(createPaperListSourcesTool({ registry: literatureRegistry }), "literature"));
