@@ -1,15 +1,15 @@
 # Sati 技术债务指标基线与趋势
 
 > 由 `node scripts/measure-techdebt.mjs --update` 自动生成，谨防手工编辑。
-> 最近一次快照：**2026-10-14**
+> 最近一次快照：**2026-10-15**
 
 ## 规模
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1106 / 189961 |
+| src TS 文件 / 行数 | 1110 / 190100 |
 | src JS 文件 | 0 |
-| tests 文件 | 641 |
+| tests 文件 | 642 |
 | ui/src 文件 / 行数 | 642 / 102634 |
 | ui/server 文件 / 行数 | 133 / 35710 |
 
@@ -55,7 +55,6 @@
 | `ui/src/components/main-content-v2/skills/import/ImportFromFolder.tsx` | `ImportFromFolder` | 688 | function |
 | `ui/src/components/chat-v2/ChatInterfaceV2.tsx` | `ChatInterfaceV2` | 668 | function |
 | `ui/src/hooks/useProjectsState.ts` | `useProjectsState` | 647 | function |
-| `src/adapters/channel/tui/app/TuiApp.tsx` | `TuiApp` | 643 | function |
 | `ui/src/components/onboarding/view/subcomponents/LlmConfigurationStep.tsx` | `LlmConfigurationStep` | 633 | function |
 | `ui/src/components/app-shell/AppShellV2.tsx` | `AppShellV2` | 632 | function |
 | `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` | `(anonymous)` | 624 | arrow |
@@ -165,10 +164,10 @@
 | cli | 20 |
 | router | 20 |
 | always-on | 14 |
+| adapters | 13 |
 | extension | 13 |
 | mcp | 13 |
 | pilot | 13 |
-| adapters | 12 |
 | cron | 12 |
 | rule | 10 |
 | web | 9 |
@@ -187,7 +186,7 @@
 | runtime | 1 |
 | status | 1 |
 
-| **合计** | **614** |
+| **合计** | **615** |
 
 ## i18n en/zh-CN 对齐
 
