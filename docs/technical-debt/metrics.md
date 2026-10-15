@@ -1,7 +1,7 @@
 # Sati 技术债务指标基线与趋势
 
 > 由 `node scripts/measure-techdebt.mjs --update` 自动生成，谨防手工编辑。
-> 最近一次快照：**2026-10-14**
+> 最近一次快照：**2026-10-15**
 
 ## 规模
 
@@ -11,7 +11,7 @@
 | src JS 文件 | 0 |
 | tests 文件 | 641 |
 | ui/src 文件 / 行数 | 642 / 102634 |
-| ui/server 文件 / 行数 | 133 / 35710 |
+| ui/server 文件 / 行数 | 135 / 35985 |
 
 ## 指标口径
 
@@ -32,9 +32,9 @@
 | `as unknown as`（双重断言） | 25 | ui/src(18) · knowledge(5) · adapters(1) |
 | 裸 `console.*` | 6 | ui/server(6) |
 | 空 `catch {}` | 0 | — |
-| 无参 `catch {`（总计） | 700 | ui/server(161) · ui/src(125) · adapters(71) |
+| 无参 `catch {`（总计） | 701 | ui/server(162) · ui/src(125) · adapters(71) |
 | ↳ **无注释**（隐患类，目标） | **0** | — |
-| ↳ 已带意图注释 | 700 | — |
+| ↳ 已带意图注释 | 701 | — |
 | `TODO/HACK/FIXME/XXX` | 11 | always-on(4) · tests(4) · ui/src(2) |
 | 分层违规 `ui/server→src` | 15 | — |
 | 分层违规 `src→ui` | 0 | — |

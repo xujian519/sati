@@ -10,6 +10,7 @@ import { logger } from "../utils/consoleLogger.js";
 import { WebSocketServer, WebSocket } from "ws";
 import crypto from "crypto";
 import { authenticateWebSocket } from "../middleware/auth.js";
+import { isTrustedOrigin } from "../middleware/corsPolicy.js";
 import { DISABLE_LOCAL_AUTH, IS_PLATFORM } from "../constants/config.js";
 import { getPluginPort } from "../utils/plugin-process-manager.js";
 import { createNormalizedMessage } from "../sati-message.js";
@@ -113,6 +114,14 @@ export function createChatWebSocketServer(server) {
       // Path only: the query string carries the auth token (extracted below),
       // so logging the raw URL would write the credential to disk.
       logger.info("WebSocket connection attempt to:", info.req.url?.split("?")[0]);
+
+      // 跨站握手拒止（#625）：WebSocket 不受浏览器 CORS 约束，同机任意网页
+      // 可直接 new WebSocket 建连，故必须在服务端校验 Origin。无 Origin（非浏览器
+      // 客户端）/ 同源 / 环回 / 白名单放行，其余跨站拒绝。
+      if (!isTrustedOrigin(info.req.headers.origin, info.req.headers.host)) {
+        logger.info(`[WARN] WebSocket handshake blocked from untrusted origin: ${info.req.headers.origin}`);
+        return false;
+      }
 
       // Platform / no-login mode skips token validation; otherwise extract the
       // token from the query string or Authorization header.

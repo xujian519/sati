@@ -18,7 +18,6 @@ logger.info("SERVER_PORT from runtime config:", process.env.SERVER_PORT);
 
 import express from "express";
 import http from "http";
-import cors from "cors";
 
 import gitRoutes from "./routes/git.js";
 import authRoutes from "./routes/auth.js";
@@ -49,6 +48,7 @@ import hookTrustRoutes from "./routes/hookTrust.js";
 import knowledgeDraftsRoutes from "./routes/knowledgeDrafts.js";
 
 import { validateApiKey, authenticateToken } from "./middleware/auth.js";
+import { corsPolicy } from "./middleware/corsPolicy.js";
 import { getConnectableHost } from "../shared/networkHosts.js";
 import { createChatWebSocketServer, getBrowserActiveKeys } from "./websocket/chat.js";
 import { startTeamPresenceHeartbeat } from "./team-presence.js";
@@ -76,7 +76,10 @@ startTeamPresenceHeartbeat({
   },
 });
 
-app.use(cors({ exposedHeaders: ["X-Refreshed-Token"] }));
+// 跨站来源收窄（#625）：默认免登录模式下曾无条件 cors()（ACAO `*`），
+// 同机任意网页即可读本机 API。corsPolicy 只放行无 Origin / 同源 / 环回 / 显式白名单
+// 来源，其余跨站在抵达任何路由前 403 拒绝（详见 middleware/corsPolicy.js）。
+app.use(corsPolicy());
 app.use(
   express.json({
     limit: "50mb",
