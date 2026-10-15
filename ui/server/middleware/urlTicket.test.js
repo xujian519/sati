@@ -46,13 +46,28 @@ beforeAll(async () => {
   const app = express();
   app.use(express.json());
   app.use(urlTicketRoutes);
+  // 文件载体：路由级 authenticateToken（req.params.projectName 可见，绑定生效）。
   app.get("/api/projects/:projectName/files/content", authenticateToken, (req, res) => {
     res.json({ ok: true, project: req.params.projectName, userId: req.user.id });
   });
-  // 无 projectName、无 path 的载体路由（如 gateway 二维码）：purpose 级票据即可放行。
-  app.get("/api/gateway/qr-image", authenticateToken, (req, res) => {
+  // gateway：挂载级 authenticateToken + 子路由无独立鉴权（与生产同构）——暴露跨载体 bearer 复用面。
+  const gatewayRouter = express.Router();
+  gatewayRouter.get("/qr-image", (req, res) => {
     res.json({ ok: true });
   });
+  gatewayRouter.post("/feishu/save", (req, res) => {
+    res.json({ ok: true });
+  });
+  app.use("/api/gateway", authenticateToken, gatewayRouter);
+  // projects（挂载级，req.params 空）：clone-progress / create-workspace 无路由级鉴权，仅靠挂载级那一次。
+  const projectsRouter = express.Router();
+  projectsRouter.get("/clone-progress", (req, res) => {
+    res.json({ ok: true });
+  });
+  projectsRouter.post("/create-workspace", (req, res) => {
+    res.json({ ok: true });
+  });
+  app.use("/api/projects", authenticateToken, projectsRouter);
   server = app.listen(0);
   const { port } = server.address();
   baseUrl = `http://127.0.0.1:${port}`;
@@ -66,6 +81,11 @@ const sessionToken = () => jwt.sign({ userId: USER.id, username: USER.username }
 
 async function get(path, headers = {}) {
   const response = await fetch(`${baseUrl}${path}`, { headers });
+  return { status: response.status, headers: response.headers };
+}
+
+async function post(path, headers = {}) {
+  const response = await fetch(`${baseUrl}${path}`, { method: "POST", headers });
   return { status: response.status, headers: response.headers };
 }
 
@@ -127,6 +147,48 @@ describe("跨载体复用与绑定校验被拒", () => {
     const ticket = generateUrlTicket(USER, { purpose: "qr" });
     const { status } = await get(`${CONTENT("alpha", "a/b.txt")}&ticket=${ticket}`);
     expect(status).toBe(403);
+  });
+});
+
+describe("purpose 钉死载体端点：跨载体 bearer 复用被拒（#626 加固）", () => {
+  it("挂载级 gateway 路由（无 projectName/?path 槽）拒绝 qr 票据之外的载体：qr 票据打 feishu/save → 403", async () => {
+    // 复现生产拓扑：/api/gateway/feishu/save 仅靠挂载级 authenticateToken，req.params 空、无 ?path。
+    // 未钉死 purpose 前，一张泄露的 qr 票据在此会被当短时 bearer 放行（200）——现必须 403。
+    const ticket = generateUrlTicket(USER, { purpose: "qr" });
+    const { status } = await post(`/api/gateway/feishu/save?ticket=${ticket}`);
+    expect(status).toBe(403);
+  });
+
+  it("qr 票据打 create-workspace（挂载级 projects）→ 403", async () => {
+    const ticket = generateUrlTicket(USER, { purpose: "qr" });
+    const { status } = await post(`/api/projects/create-workspace?ticket=${ticket}`);
+    expect(status).toBe(403);
+  });
+
+  it("sse 票据打 feishu/save（非 clone-progress）→ 403", async () => {
+    const ticket = generateUrlTicket(USER, { purpose: "sse", path: "/workspaces/demo" });
+    const { status } = await post(`/api/gateway/feishu/save?ticket=${ticket}`);
+    expect(status).toBe(403);
+  });
+
+  it("dashboard 票据不经通用鉴权放行（任何端点）→ 403", async () => {
+    const ticket = generateUrlTicket(USER, { purpose: "dashboard" });
+    const { status } = await get(`/api/gateway/qr-image?data=x&ticket=${ticket}`);
+    expect(status).toBe(403);
+  });
+
+  it("file 票据打 qr-image（purpose 与端点不符）→ 403", async () => {
+    const ticket = generateUrlTicket(USER, { purpose: "file", project: "alpha", path: "a/b.txt" });
+    const { status } = await get(`/api/gateway/qr-image?data=x&ticket=${ticket}`);
+    expect(status).toBe(403);
+  });
+
+  it("sse 票据合法命中 clone-progress（purpose+path 绑定通过）→ 200", async () => {
+    const ticket = generateUrlTicket(USER, { purpose: "sse", path: "/workspaces/demo" });
+    const { status } = await get(
+      `/api/projects/clone-progress?path=${encodeURIComponent("/workspaces/demo")}&ticket=${ticket}`,
+    );
+    expect(status).toBe(200);
   });
 });
 

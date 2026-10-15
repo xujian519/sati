@@ -33,7 +33,6 @@ export function useOfficePdfPreviewUrl(projectName: string | undefined, filePath
     setErrorCode(null);
 
     const cacheKey = `${reloadRequest.key}`;
-    const nextPreviewUrl = api.officePdfPreviewUrl(projectName, filePath, { cacheKey });
 
     api
       .preflightOfficePdfPreview(projectName, filePath, {
@@ -48,7 +47,8 @@ export function useOfficePdfPreviewUrl(projectName: string | undefined, filePath
         // Drain the preflight body to release the connection; the content is unused.
         await res.arrayBuffer().catch(() => null);
         if (!controller.signal.aborted) {
-          setPreviewUrl(await nextPreviewUrl);
+          // 仅在 preflight 通过后才申请票据：避免失败/中断路径遗留游离 Promise（unhandled rejection）与无谓发票。
+          setPreviewUrl(await api.officePdfPreviewUrl(projectName, filePath, { cacheKey }));
         }
       })
       .catch((error: Error & { code?: string; name?: string }) => {

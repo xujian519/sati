@@ -263,12 +263,38 @@ export const generateUrlTicket = (user, { purpose, project, path }) => {
 };
 
 /**
+ * 各 purpose 票据允许通过的「载体端点」白名单（按请求完整路径匹配）。
+ *
+ * 通用鉴权在「无 Authorization 头」时把 `?ticket=` 当一次性凭据接受。若不把票据钉死在它被签发的
+ * 载体端点上，一张 purpose 级票据（qr/sse，无 project/path 绑定）就能在 TTL 内被重放到仅有挂载级
+ * authenticateToken、且没有 `:projectName`/`?path=` 槽位的其它 API（如 `/api/gateway/feishu/save`、
+ * `/api/projects/create-workspace`）——沦为短时 bearer，违背「票据不可跨载体复用」不变式。故 purpose
+ * 与请求端点必须同属一个已知载体。dashboard 票据只由 authenticateMemoryDashboard 校验、不在通用鉴权
+ * 放行，故此处无它的条目（任何 dashboard 票据落到通用鉴权一律 403）。
+ */
+const URL_TICKET_ROUTE_ALLOWLIST = [
+  {
+    purpose: "file",
+    test: pathname =>
+      /^\/api\/projects\/[^/]+\/files\/(?:content|preview\/pdf|preview\/spreadsheet\/sheet)$/.test(pathname),
+  },
+  { purpose: "qr", test: pathname => pathname === "/api/gateway/qr-image" },
+  { purpose: "sse", test: pathname => pathname === "/api/projects/clone-progress" },
+];
+
+/** 请求完整路径（不含 query），不受挂载重写影响，用于载体端点匹配。 */
+function requestPathname(req) {
+  const url = req.originalUrl || req.url || "";
+  return url.split("?")[0];
+}
+
+/**
  * 校验 `?ticket=` 里的 URL 票据并放行（供 authenticateToken 在无 Authorization 头时委派）。
  *
- * 只认 scope==="url-ticket"（会话 JWT 或别的 scoped 凭据塞进 `?ticket=` 一律拒绝）；
- * 绑定按「请求侧」驱动以避免跨载体复用：项目级路由（带 `:projectName`）要求票据绑定同一项目，
- * 文件级路由（带 `?path=`）要求票据绑定同一路径。放行时设 `req.user` 并直接 next——
- * 不进入会话 auto-refresh，绝不换发会话 token。
+ * 只认 scope==="url-ticket"（会话 JWT 或别的 scoped 凭据塞进 `?ticket=` 一律拒绝）；票据 purpose 必须命中
+ * 其对应的载体端点（URL_TICKET_ROUTE_ALLOWLIST）以杜绝跨载体 bearer 复用；绑定按「请求侧」驱动：项目级路由
+ * （带 `:projectName`）要求票据绑定同一项目，文件级路由（带 `?path=`）要求票据绑定同一路径。放行时设 `req.user`
+ * 并直接 next——不进入会话 auto-refresh，绝不换发会话 token。
  */
 function verifyUrlTicket(req, res, next) {
   const ticket = req.query.ticket;
@@ -283,6 +309,11 @@ function verifyUrlTicket(req, res, next) {
     return res.status(403).json({ error: "Invalid ticket" });
   }
   if (decoded.scope !== URL_TICKET_SCOPE) {
+    return res.status(403).json({ error: "Invalid ticket" });
+  }
+  // purpose 与端点必须同属一个已知载体：把票据钉死在它被签发的载体上，杜绝跨载体 bearer 复用。
+  const route = URL_TICKET_ROUTE_ALLOWLIST.find(entry => entry.purpose === decoded.purpose);
+  if (!route || !route.test(requestPathname(req))) {
     return res.status(403).json({ error: "Invalid ticket" });
   }
   if (req.params.projectName !== undefined && decoded.project !== req.params.projectName) {

@@ -33,7 +33,6 @@ export function useSpreadsheetSheetPreviewUrl({
 
     const controller = new AbortController();
     const cacheKey = `${revision}:${refreshKey}`;
-    const nextPreviewUrl = api.spreadsheetSheetPreviewUrl(projectName, filePath, sheetIndex, { cacheKey });
 
     setPreviewUrl(null);
     setLoading(true);
@@ -49,7 +48,9 @@ export function useSpreadsheetSheetPreviewUrl({
         if (!res.ok) throw await readPreviewErrorResponse(res);
         // Drain the preflight body to release the connection; the content is unused.
         await res.arrayBuffer().catch(() => null);
-        if (!controller.signal.aborted) setPreviewUrl(await nextPreviewUrl);
+        // 仅在 preflight 通过后才申请票据：避免失败/中断路径遗留游离 Promise（unhandled rejection）与无谓发票。
+        if (!controller.signal.aborted)
+          setPreviewUrl(await api.spreadsheetSheetPreviewUrl(projectName, filePath, sheetIndex, { cacheKey }));
       })
       .catch((error: Error & { code?: string; name?: string }) => {
         if (controller.signal.aborted || error.name === "AbortError") return;
