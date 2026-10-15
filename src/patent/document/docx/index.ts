@@ -53,3 +53,14 @@ export {
   type RenderApplicationDocxInput,
   type RenderApplicationDocxResult,
 } from "./renderApplicationDocx.js";
+export {
+  verifyApplicationDocx,
+  verifyApplicationDocxPackage,
+  type DocxPackageReference,
+  type DocxVerifyFinding,
+  type DocxVerifyInfo,
+  type DocxVerifyResult,
+  type DocxVerifySectionInfo,
+  type DocxVerifyTemplateInfo,
+  type VerifyApplicationDocxPackageInput,
+} from "./verifyApplicationDocx.js";

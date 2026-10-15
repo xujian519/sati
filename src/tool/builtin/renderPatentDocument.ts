@@ -12,8 +12,10 @@ import {
   renderPatentDocument as renderDocument,
   DOCUMENT_STYLE_JSON_SCHEMA,
   APPLICATION_DOCX_PART_IDS,
+  type DocumentRenderResult,
   type DocumentStyle,
   type DocumentTemplateId,
+  type DocxVerifyInfo,
   type RenderFormat,
 } from "../../patent/document/index.js";
 import { SatiToolRuntimeError } from "../protocol/errors.js";
@@ -56,6 +58,49 @@ export type RenderPatentDocumentInput = {
   /** 样式预设名（加载 style-presets/<name>.json；显式 style 覆盖预设）。 */
   style_preset?: string;
 };
+
+/**
+ * 把渲染结果映射成工具输出的文本行。
+ *
+ * 提成纯函数是为了让各种降级组合可被直接断言（端到端造不出「成品核验未过」的产物）。
+ *
+ * PDF 与 docx 的降级**不对称**，各有原因：
+ * - `pdfError` 是裸原因（未加标签），故这里补「PDF 未生成」前缀；
+ * - `docxError` 的三种来源（生成失败 / 成品核验未过 / 核验未能执行）**文案自带标签**，
+ *   故原样转述即可——多套一层前缀反而会把「核验未过」说成「未生成」。
+ *
+ * docx 的三种状态都必须在输出里可区分（「未核验」≠「已核验且无问题」）：
+ * 核验通过给一行实测摘要，未过/未执行由 `docxError` 报出——**有产物时也要报**，
+ * 「文件在」不等于「可用」。
+ */
+export function formatRenderResultLines(result: DocumentRenderResult): string[] {
+  const lines: string[] = [`HTML: ${result.htmlPath}`];
+  if (result.pdfPath !== undefined) {
+    lines.push(`PDF: ${result.pdfPath}`);
+  } else if (result.pdfError !== undefined) {
+    lines.push(`PDF 未生成: ${result.pdfError}`);
+  }
+  if (result.docxPath !== undefined) {
+    lines.push(`DOCX: ${result.docxPath}`);
+  }
+  if (result.docxVerification?.passed === true) {
+    lines.push(`DOCX 成品核验通过（${summarizeVerifiedSections(result.docxVerification.info)}）`);
+  }
+  if (result.docxError !== undefined) {
+    lines.push(result.docxError);
+  }
+  if (result.warnings !== undefined && result.warnings.length > 0) {
+    lines.push(`提示: ${result.warnings.join("；")}`);
+  }
+  return lines;
+}
+
+/** 核验实测的一句话摘要（节数 / 落地段落数 / 落地图片数）。 */
+function summarizeVerifiedSections(info: DocxVerifyInfo): string {
+  const paragraphs = info.sections.reduce((sum, section) => sum + section.paragraphs, 0);
+  const figures = info.sections.reduce((sum, section) => sum + section.figures, 0);
+  return `${info.sections.length} 节，${paragraphs} 段，${figures} 图`;
+}
 
 export function createRenderPatentDocumentTool(): SatiToolDefinition<RenderPatentDocumentInput> {
   return {
@@ -165,20 +210,7 @@ export function createRenderPatentDocumentTool(): SatiToolDefinition<RenderPaten
           context.cwd,
         );
 
-        const lines: string[] = [`HTML: ${result.htmlPath}`];
-        if (result.pdfPath !== undefined) {
-          lines.push(`PDF: ${result.pdfPath}`);
-        } else if (result.pdfError !== undefined) {
-          lines.push(`PDF 未生成: ${result.pdfError}`);
-        }
-        if (result.docxPath !== undefined) {
-          lines.push(`DOCX: ${result.docxPath}`);
-        } else if (result.docxError !== undefined) {
-          lines.push(`DOCX 未生成: ${result.docxError}`);
-        }
-        if (result.warnings !== undefined && result.warnings.length > 0) {
-          lines.push(`提示: ${result.warnings.join("；")}`);
-        }
+        const lines = formatRenderResultLines(result);
 
         return {
           content: [

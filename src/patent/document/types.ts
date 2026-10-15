@@ -2,6 +2,10 @@
  * src/patent/document — 专利律师交付物 HTML/PDF 渲染管线类型。
  */
 
+// 类型专用导入：`docx/` 依赖本文件的 `DocumentTemplateId`，此处只回引类型，
+// 编译期完全擦除，不构成运行期循环。
+import type { DocxVerifyResult } from "./docx/verifyApplicationDocx.js";
+
 /** 受 manifest.json 支持的模板 id。 */
 export type DocumentTemplateId =
   | "patentability-opinion"
@@ -122,8 +126,20 @@ export type DocumentRenderResult = {
   pdfError?: string;
   /** 生成的申请文件 docx 绝对路径（format=docx/all 且模板提供 docx 母版时）。 */
   docxPath?: string;
-  /** docx 生成失败原因（HTML 已生成时的降级提示）。 */
+  /**
+   * docx 生成失败原因（HTML 已生成时的降级提示）。
+   *
+   * 与 `docxVerification` 合看可区分三种状态：
+   * - 生成成功且核验通过：`docxPath` 有值、本字段空、`docxVerification.passed === true`；
+   * - **生成了但没过核验**：`docxPath` 有值、本字段非空（文案含「核验未通过」）；
+   * - 根本没生成：`docxPath` 空、本字段非空。
+   *
+   * 核验器自身未能执行时本字段也会非空（文案含「核验未能执行」）——
+   * 「未核验」与「已核验且无问题」必须可区分。
+   */
   docxError?: string;
+  /** docx 成品核验结论（读完**落盘产物**再对一遍；format=docx/all 且渲染成功时存在）。 */
+  docxVerification?: DocxVerifyResult;
   /** 非致命告警（未命中的 section id、品牌配置缺失、图片未能嵌入等）。 */
   warnings?: string[];
 };
