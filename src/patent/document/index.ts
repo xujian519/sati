@@ -44,3 +44,15 @@ export {
   readContentArea,
   splitDocumentBody,
 } from "./docx/index.js";
+
+// docx 成品核验（写完读回来对一遍）。
+export { verifyApplicationDocx, verifyApplicationDocxPackage } from "./docx/index.js";
+export type {
+  DocxPackageReference,
+  DocxVerifyFinding,
+  DocxVerifyInfo,
+  DocxVerifyResult,
+  DocxVerifySectionInfo,
+  DocxVerifyTemplateInfo,
+  VerifyApplicationDocxPackageInput,
+} from "./docx/index.js";

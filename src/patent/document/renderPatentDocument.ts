@@ -8,7 +8,7 @@ import { mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
 import { caseOutputsDir } from "../paths.js";
 import { buildBrandStyle, loadBrandFromPath, mergeBrand } from "./brandInjector.js";
-import { renderApplicationDocx } from "./docx/index.js";
+import { renderApplicationDocx, verifyApplicationDocx } from "./docx/index.js";
 import { buildStyleOverrides, mergeDocumentStyle } from "./style.js";
 import { loadStylePreset, resolvePresetDirFromBrandPath } from "./stylePreset.js";
 import { SatiDocumentInputError } from "./errors.js";
@@ -207,8 +207,10 @@ export async function renderPatentDocument(input: DocumentRenderInput, cwd: stri
 
   let renderedDocxPath: string | undefined;
   let docxError: string | undefined;
+  let docxVerification: DocumentRenderResult["docxVerification"];
   if (format === "docx" || format === "all") {
     const docxPath = join(outputDir, `${name}.docx`);
+    let rendered = false;
     try {
       const docxResult = await renderApplicationDocx({
         template: input.template,
@@ -217,12 +219,43 @@ export async function renderPatentDocument(input: DocumentRenderInput, cwd: stri
         cwd,
       });
       renderedDocxPath = docxPath;
+      rendered = true;
       warnings.push(...docxResult.warnings);
     } catch (err) {
       // 母版缺件等结构问题不静默：HTML 仍是可用产物，docx 侧如实降级并报告原因。
-      docxError = err instanceof Error ? err.message : String(err);
+      // 文案自带标签，好让消费方原样转述即可（不必再猜这是哪一类失败）。
+      docxError = `DOCX 生成失败：${err instanceof Error ? err.message : String(err)}`;
+    }
+
+    // 写完读回来对一遍：核验**落盘产物本身**（内容是否真的落地、版面是否仍与母版一致）。
+    // 核验失败不删除产物——「文件在、但没过核验」与「根本没生成」是两件事
+    // （两者的区分见 types.ts 的 docxError 说明）。
+    if (rendered) {
+      try {
+        const verification = await verifyApplicationDocx({
+          docxPath,
+          expected: { parts: input.sections ?? {}, template: input.template },
+        });
+        docxVerification = verification;
+        if (!verification.passed) {
+          const failures = verification.findings.filter(finding => finding.severity === "fail");
+          docxError = `DOCX 成品核验未通过（${failures.length} 项）：${failures.map(f => f.message).join("；")}`;
+        }
+      } catch (err) {
+        // 核验器自身失败也必须报告：不得静默当作通过（「未核验」≠「已核验且无问题」）。
+        const reason = err instanceof Error ? err.message : String(err);
+        docxError = `DOCX 成品核验未能执行：${reason}`;
+      }
     }
   }
 
-  return { htmlPath, pdfPath: renderedPdfPath, pdfError, docxPath: renderedDocxPath, docxError, warnings };
+  return {
+    htmlPath,
+    pdfPath: renderedPdfPath,
+    pdfError,
+    docxPath: renderedDocxPath,
+    docxError,
+    ...(docxVerification === undefined ? {} : { docxVerification }),
+    warnings,
+  };
 }
