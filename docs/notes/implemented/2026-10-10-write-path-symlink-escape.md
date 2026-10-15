@@ -18,7 +18,7 @@ Status: implemented
 
 ## Decision
 
-移植上游 PilotDeck 的修法（commit `6afe9c6d`，AGPL-3.0；本项目与其同源），落到 **两道防线**：
+移植上游 PilotDeck 的修法（**#621** merge `a91716a7` + **#635** merge `5ac4b95a`，AGPL-3.0；本项目与其同源），落到 **两道防线**：
 
 - **`src/tool/builtin/filesystem/pathSafety.ts`**：新增导出 `resolveRealWritePath()`——逐组件解析软链（`readlinkSync` + `realpathSync.native`，`MAX_SYMLINK_HOPS=40`），处理悬空链、链内 `..`、大小写别名，超跳数返回 `undefined`；写路径（`forWrite`）一律先算真实落点，解析失败即 `path_not_allowed`。新增 `isRealWriteDenied()`（用同一逐组件逻辑解析保护目录，含悬空保护目录软链）与 `findRealRoot()`，接到**所有写分支**：`bypassPermissions`、`allowOutsideWorkspace`、root 内，以及返回成功前的无条件检查「真实落点必须落在某个 root 内（除非显式 allowOutsideWorkspace）」。`safeRealpath` 由 `realpathSync` 改为 `realpathSync.native`。
 - **`src/permission/policy/matchPermissionRule.ts`**：`isFileInputInsideWorkspace()` 增 `resolveSymlinks` 参数，`behavior === "allow"` 时要求真实落点也在 root 内；deny/ask 规则不参与真实路径判定（本就是「命中即生效」，否则显式规则会被逃逸路径绕过）。本项目特有的 `text:` 前缀匹配逻辑保持原样。

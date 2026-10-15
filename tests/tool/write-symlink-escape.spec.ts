@@ -1,6 +1,6 @@
 /**
  * 写路径符号链接逃逸判据（移植自上游 PilotDeck `tests/tool/write-symlink-escape.spec.ts`，
- * 上游 commit 6afe9c6d，AGPL-3.0）。
+ * 上游 #621 merge `a91716a7` + #635 merge `5ac4b95a`，AGPL-3.0）。
  *
  * 判据：写操作由 OS 跟随符号链接落盘，因此授权必须对**真实落点**成立。覆盖
  * 目录/文件/悬空/循环软链、`..` 组合、`.git`/`node_modules`/`dist` 保护目录、
