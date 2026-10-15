@@ -491,11 +491,11 @@ export default function FilesV2({
   );
 
   const handleDownloadFile = useCallback(
-    (event: ReactMouseEvent<HTMLButtonElement> | null, node: FileTreeNode) => {
+    async (event: ReactMouseEvent<HTMLButtonElement> | null, node: FileTreeNode) => {
       event?.stopPropagation();
       if (!selectedProject?.name || node.type === "directory") return;
 
-      const url = api.fileDownloadUrl(selectedProject.name, node.path);
+      const url = await api.fileDownloadUrl(selectedProject.name, node.path);
       const anchor = document.createElement("a");
       anchor.href = url;
       anchor.download = node.name;

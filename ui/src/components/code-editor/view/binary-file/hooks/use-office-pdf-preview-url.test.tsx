@@ -65,7 +65,10 @@ describe("useOfficePdfPreviewUrl cancellation", () => {
     apiMock.preflightOfficePdfPreview
       .mockImplementationOnce(() => first.promise)
       .mockImplementationOnce(() => second.promise);
-    apiMock.officePdfPreviewUrl.mockReturnValueOnce("/api/first").mockReturnValueOnce("/api/second");
+    // 票据/预览 URL 现在仅在 preflight 成功且未中断后才惰性获取——按 filePath 求值，与调用次数/时序无关。
+    apiMock.officePdfPreviewUrl.mockImplementation(
+      (_project: string, filePath: string) => `/api/${filePath.replace(".docx", "")}`,
+    );
 
     const { result, rerender } = renderHook(({ filePath }) => useOfficePdfPreviewUrl("hundouluo", filePath, true), {
       initialProps: { filePath: "first.docx" },

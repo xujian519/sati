@@ -1,8 +1,8 @@
 import { useTranslation } from "react-i18next";
 import type { CodeEditorFile } from "../../../../types/types";
-import { api } from "../../../../../../utils/api";
 import { getPdfNavigationMode } from "../../../../utils/documentPreview";
 import PdfDocumentPreview from "../../../subcomponents/PdfDocumentPreview";
+import { useDownloadUrl } from "../../hooks/use-download-url";
 import { useOfficeAutoRefresh } from "../../hooks/use-office-auto-refresh";
 import { useOfficePdfPreviewUrl } from "../../hooks/use-office-pdf-preview-url";
 import DownloadButton from "../atoms/DownloadButton";
@@ -27,6 +27,7 @@ export default function OfficePreview({
 }) {
   const { t } = useTranslation("codeEditor");
   const { previewUrl, errorMessage, errorCode, loading, reload } = useOfficePdfPreviewUrl(projectName, file.path, true);
+  const downloadUrl = useDownloadUrl(projectName, file.path);
 
   useOfficeAutoRefresh(projectName, file.path, reload);
 
@@ -67,7 +68,7 @@ export default function OfficePreview({
       navigationMode={getPdfNavigationMode(file.name)}
       onRefresh={() => reload({ force: true })}
       refreshDisabled={loading}
-      downloadUrl={projectName ? api.fileDownloadUrl(projectName, file.path) : null}
+      downloadUrl={downloadUrl}
       downloadName={file.name}
       isFullscreen={isFullscreen}
       onToggleFullscreen={onToggleFullscreen}

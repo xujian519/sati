@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AlertCircle, CheckCircle2, Loader2, MessageSquare, QrCode } from "lucide-react";
 import { Button } from "../../../../../../shared/view/ui";
-import { appendAuthToken, authenticatedFetch } from "../../../../../../utils/api";
+import { authenticatedFetch } from "../../../../../../utils/api";
+import { useQrImageSrc } from "../hooks/useQrImageSrc";
 import { cn } from "../../../../../../lib/utils";
 import { SettingsCard, SettingsSection } from "../../../../shared/view";
 import { UI_TIMEOUTS } from "../../../../../../constants/timeouts";
@@ -39,6 +40,7 @@ export default function WeixinChannelSection({ status, onSaved }: WeixinChannelS
   const { t } = useTranslation("settings");
   const [phase, setPhase] = useState<"idle" | "loading-qr" | "scanning" | "success" | "error">("idle");
   const [qrUrl, setQrUrl] = useState<string | null>(null);
+  const qrImageSrc = useQrImageSrc(qrUrl);
   const [error, setError] = useState("");
   const pollRef = useRef<number | null>(null);
   const prepareTimeoutRef = useRef<number | null>(null);
@@ -283,14 +285,10 @@ export default function WeixinChannelSection({ status, onSaved }: WeixinChannelS
             </div>
           )}
 
-          {phase === "scanning" && qrUrl && (
+          {phase === "scanning" && qrImageSrc && (
             <div className="space-y-3">
               <div className="flex flex-col items-center gap-3 rounded-lg border border-border bg-white p-4 dark:bg-white">
-                <img
-                  src={appendAuthToken(`/api/gateway/qr-image?data=${encodeURIComponent(qrUrl)}`)}
-                  alt="WeChat QR Code"
-                  className="h-[200px] w-[200px]"
-                />
+                <img src={qrImageSrc} alt="WeChat QR Code" className="h-[200px] w-[200px]" />
               </div>
               <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />

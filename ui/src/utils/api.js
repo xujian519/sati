@@ -44,11 +44,31 @@ export const requestProjectPreviewToken = async projectName => {
   return data.token;
 };
 
-export const appendAuthToken = url => {
-  const token = localStorage.getItem("auth-token");
-  if (!token) return url;
-  const separator = url.includes("?") ? "&" : "?";
-  return `${url}${separator}token=${encodeURIComponent(token)}`;
+/**
+ * 为「无法自定义头」的载体（`<iframe>`/`<img>`/EventSource/`<a download>`）申请一份短期 URL 票据（#626）。
+ * 登录态经会话 Authorization 头 POST /api/url-ticket 换取；票据 scope 受限、短 TTL，即便落进 URL/日志
+ * 也无法当完整会话调用其它 API，替代此前把会话 JWT 直接拼进 URL 的做法。
+ */
+export const requestUrlTicket = async (purpose, bindings = {}) => {
+  const response = await authenticatedFetch("/api/url-ticket", {
+    method: "POST",
+    body: JSON.stringify({ purpose, ...bindings }),
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to create URL ticket (${response.status})`);
+  }
+  const data = await response.json();
+  if (typeof data?.token !== "string" || !data.token) {
+    throw new Error("URL ticket response is missing a token");
+  }
+  return data.token;
+};
+
+/** 申请票据并把 `?ticket=` 拼到端点 URL（端点自身不带凭据）。 */
+const withUrlTicket = async (endpointUrl, purpose, bindings) => {
+  const ticket = await requestUrlTicket(purpose, bindings);
+  const separator = endpointUrl.includes("?") ? "&" : "?";
+  return `${endpointUrl}${separator}ticket=${encodeURIComponent(ticket)}`;
 };
 
 // Utility function for authenticated API calls
@@ -303,12 +323,6 @@ export const api = {
     authenticatedFetch(`/api/projects/${projectName}${force ? "?force=true" : ""}`, {
       method: "DELETE",
     }),
-  searchConversationsUrl: (query, limit = 50) => {
-    const token = localStorage.getItem("auth-token");
-    const params = new URLSearchParams({ q: query, limit: String(limit) });
-    if (token) params.set("token", token);
-    return `/api/search/conversations?${params.toString()}`;
-  },
   createProject: path =>
     authenticatedFetch("/api/projects/create", {
       method: "POST",
@@ -321,15 +335,21 @@ export const api = {
     }),
   readFile: (projectName, filePath) =>
     authenticatedFetch(`/api/projects/${projectName}/file?filePath=${encodeURIComponent(filePath)}`),
-  fileContentUrl: (projectName, filePath, options = {}) => {
+  fileContentEndpoint: (projectName, filePath, options = {}) => {
     const params = new URLSearchParams({ path: filePath });
     if (options.download) params.set("download", "1");
     if (options.cacheKey !== undefined && options.cacheKey !== null) {
       params.set("_", String(options.cacheKey));
     }
-    return appendAuthToken(`/api/projects/${encodeURIComponent(projectName)}/files/content?${params.toString()}`);
+    return `/api/projects/${encodeURIComponent(projectName)}/files/content?${params.toString()}`;
   },
-  readFileBlob: (projectName, filePath) => authenticatedFetch(api.fileContentUrl(projectName, filePath)),
+  // 无 Authorization 头的载体（PDF iframe、下载导航）用短期 URL 票据（#626），不再拼会话 JWT。
+  fileContentUrl: (projectName, filePath, options = {}) =>
+    withUrlTicket(api.fileContentEndpoint(projectName, filePath, options), "file", {
+      project: projectName,
+      path: filePath,
+    }),
+  readFileBlob: (projectName, filePath) => authenticatedFetch(api.fileContentEndpoint(projectName, filePath)),
   fileContentSha256: (projectName, filePath) => {
     const params = new URLSearchParams({ path: filePath, sha256: "1" });
     return authenticatedFetch(`/api/projects/${encodeURIComponent(projectName)}/files/content?${params.toString()}`, {
@@ -337,7 +357,7 @@ export const api = {
       cache: "no-store",
     });
   },
-  officePdfPreviewUrl: (projectName, filePath, options = {}) => {
+  officePdfPreviewEndpoint: (projectName, filePath, options = {}) => {
     const params = new URLSearchParams({ path: filePath });
     if (options.force) {
       params.set("force", "1");
@@ -345,11 +365,17 @@ export const api = {
     if (options.cacheKey !== undefined && options.cacheKey !== null) {
       params.set("_", String(options.cacheKey));
     }
-    return appendAuthToken(`/api/projects/${encodeURIComponent(projectName)}/files/preview/pdf?${params.toString()}`);
+    return `/api/projects/${encodeURIComponent(projectName)}/files/preview/pdf?${params.toString()}`;
   },
+  // iframe 载体用短期 URL 票据；blob/preflight 走 Authorization 头的裸端点。
+  officePdfPreviewUrl: (projectName, filePath, options = {}) =>
+    withUrlTicket(api.officePdfPreviewEndpoint(projectName, filePath, options), "file", {
+      project: projectName,
+      path: filePath,
+    }),
   readOfficePdfPreviewBlob: (projectName, filePath, options = {}) => {
     return authenticatedFetch(
-      api.officePdfPreviewUrl(projectName, filePath, {
+      api.officePdfPreviewEndpoint(projectName, filePath, {
         force: options.force,
         cacheKey: options.force ? Date.now() : options.cacheKey,
       }),
@@ -360,7 +386,7 @@ export const api = {
   },
   preflightOfficePdfPreview: (projectName, filePath, options = {}) =>
     authenticatedFetch(
-      api.officePdfPreviewUrl(projectName, filePath, {
+      api.officePdfPreviewEndpoint(projectName, filePath, {
         force: options.force,
         cacheKey: options.cacheKey,
       }),
@@ -394,7 +420,7 @@ export const api = {
       { cache: "no-store", signal: options.signal },
     );
   },
-  spreadsheetSheetPreviewUrl: (projectName, filePath, sheetIndex, options = {}) => {
+  spreadsheetSheetPreviewEndpoint: (projectName, filePath, sheetIndex, options = {}) => {
     const params = new URLSearchParams({
       path: filePath,
       sheet: String(sheetIndex),
@@ -403,13 +429,17 @@ export const api = {
     if (options.cacheKey !== undefined && options.cacheKey !== null) {
       params.set("_", String(options.cacheKey));
     }
-    return appendAuthToken(
-      `/api/projects/${encodeURIComponent(projectName)}/files/preview/spreadsheet/sheet?${params.toString()}`,
-    );
+    return `/api/projects/${encodeURIComponent(projectName)}/files/preview/spreadsheet/sheet?${params.toString()}`;
   },
+  // sheet 以 <img>/iframe 呈现，用短期 URL 票据；preflight 走 Authorization 头的裸端点。
+  spreadsheetSheetPreviewUrl: (projectName, filePath, sheetIndex, options = {}) =>
+    withUrlTicket(api.spreadsheetSheetPreviewEndpoint(projectName, filePath, sheetIndex, options), "file", {
+      project: projectName,
+      path: filePath,
+    }),
   preflightSpreadsheetSheetPreview: (projectName, filePath, sheetIndex, options = {}) =>
     authenticatedFetch(
-      api.spreadsheetSheetPreviewUrl(projectName, filePath, sheetIndex, {
+      api.spreadsheetSheetPreviewEndpoint(projectName, filePath, sheetIndex, {
         force: options.force,
         cacheKey: options.cacheKey,
       }),

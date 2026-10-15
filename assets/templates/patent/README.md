@@ -39,6 +39,18 @@ agent 读取对应模板目录下的 `SKILL.md`，按其中「输入要求」补
 2. 填充内容；保留 CSS 变量，不改样式。
 3. 按 `references/checklist.md` 自查。
 4. 输出 `html`，可选 `pdf`（通过 Playwright/Chromium 打印到 PDF）。
+5. `claims-spec` 另可输出 `docx`——申请文件五件套，版面取自模板自带的 Word 母版
+   `assets/template.docx`（见下）。
+
+### 2. docx 申请文件
+
+`claims-spec` 模板随附一份国知局五件套空白 Word 母版（`assets/template.docx`）。渲染器不重建版面，
+而是**复用母版整包**（页眉/页脚/样式/主题/页面设置），只按件重建正文；分节按页眉标题认件，缺件报错。
+
+| 模板 | `docx` 输出 | 母版 |
+|------|------------|------|
+| `claims-spec` | ✅ | `assets/template.docx`（五件套，A4） |
+| 其余模板 | ❌ | 未随附母版，`format: "docx"` 会 fail-closed |
 
 ### 3. 模板切换
 
@@ -50,7 +62,7 @@ agent 读取对应模板目录下的 `SKILL.md`，按其中「输入要求」补
 | 撰写申请文件 | `claims-spec` |
 | 发起/分析无效 | `invalidation-opinion` |
 
-### 2. 品牌覆盖
+### 4. 品牌覆盖
 
 如需为具体事务所/产品定制品牌：
 

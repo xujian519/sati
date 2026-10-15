@@ -88,7 +88,9 @@ describe("CodeEditorBinaryFile", () => {
     expect(container.querySelector(".absolute.right-2.top-1")).toBeNull();
   });
 
-  it("enables page navigation and workspace expansion for PDF files", () => {
+  it("enables page navigation and workspace expansion for PDF files", async () => {
+    vi.spyOn(api, "fileContentUrl").mockResolvedValue("/api/projects/hundouluo/files/content?path=report.pdf");
+    vi.spyOn(api, "fileDownloadUrl").mockResolvedValue("/api/projects/hundouluo/files/content?download=1");
     const onToggleExpand = vi.fn();
     render(
       <CodeEditorBinaryFile
@@ -102,7 +104,7 @@ describe("CodeEditorBinaryFile", () => {
       />,
     );
 
-    const preview = screen.getByRole("button", { name: "PDF preview" });
+    const preview = await screen.findByRole("button", { name: "PDF preview" });
     expect(preview.getAttribute("data-navigation-mode")).toBe("pages");
     expect(preview.getAttribute("data-page-controls")).toBe("true");
     preview.click();
@@ -214,6 +216,9 @@ describe("CodeEditorBinaryFile", () => {
         status: 206,
         headers: { "Content-Type": "application/pdf" },
       }),
+    );
+    vi.spyOn(api, "spreadsheetSheetPreviewUrl").mockResolvedValue(
+      "/api/projects/hundouluo/files/preview/spreadsheet/sheet?sheet=0",
     );
 
     render(
