@@ -1,6 +1,7 @@
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { Project } from "../../../../types/app";
-import { AUTH_TOKEN_STORAGE_KEY } from "../../../auth/constants";
+import { requestUrlTicket } from "../../../../utils/api";
 import { useTheme } from "../../../../contexts/ThemeContext";
 
 type MemoryPanelProps = {
@@ -35,8 +36,12 @@ const MEMORY_PANEL_TEXT: Record<
   },
 };
 
-function buildMemoryDashboardUrl(project: Project, locale: "zh" | "en", theme: "light" | "dark"): string | null {
-  const token = localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+function buildMemoryDashboardUrl(
+  project: Project,
+  locale: "zh" | "en",
+  theme: "light" | "dark",
+  ticket: string | null,
+): string | null {
   const projectPath = project.fullPath || project.path;
 
   if (!projectPath) {
@@ -44,8 +49,8 @@ function buildMemoryDashboardUrl(project: Project, locale: "zh" | "en", theme: "
   }
 
   const params = new URLSearchParams({ projectPath, locale, theme });
-  if (token) {
-    params.set("token", token);
+  if (ticket) {
+    params.set("ticket", ticket);
   }
 
   return `/memory-dashboard/index.html?${params.toString()}`;
@@ -58,6 +63,29 @@ export default function MemoryPanel({ selectedProject }: MemoryPanelProps) {
   const memoryTheme = normalizeMemoryTheme(isDarkMode);
   const text = MEMORY_PANEL_TEXT[memoryLocale];
 
+  const projectPath = selectedProject?.fullPath || selectedProject?.path;
+  // Dashboard is loaded in an <iframe> (no custom headers), so it authenticates with a
+  // short-lived, purpose-scoped ("dashboard") url-ticket instead of the session JWT (#626).
+  const [dashboardTicket, setDashboardTicket] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!projectPath) {
+      setDashboardTicket(null);
+      return undefined;
+    }
+    let alive = true;
+    requestUrlTicket("dashboard")
+      .then((ticket: string) => {
+        if (alive) setDashboardTicket(ticket);
+      })
+      .catch(() => {
+        if (alive) setDashboardTicket(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [projectPath]);
+
   if (!selectedProject) {
     return (
       <div className="flex h-full items-center justify-center bg-white text-[13px] text-neutral-500 dark:bg-neutral-950 dark:text-neutral-400">
@@ -66,8 +94,8 @@ export default function MemoryPanel({ selectedProject }: MemoryPanelProps) {
     );
   }
 
-  const dashboardUrl = buildMemoryDashboardUrl(selectedProject, memoryLocale, memoryTheme);
-  if (!dashboardUrl) {
+  const dashboardUrl = buildMemoryDashboardUrl(selectedProject, memoryLocale, memoryTheme, dashboardTicket);
+  if (!dashboardUrl || !dashboardTicket) {
     return (
       <div className="flex h-full items-center justify-center bg-white text-[13px] text-neutral-500 dark:bg-neutral-950 dark:text-neutral-400">
         {text.unavailable}

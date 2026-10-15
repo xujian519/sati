@@ -119,10 +119,11 @@ export function MessageFileCard({ file, project, source, onBrowse, compact = fal
     }
     onBrowse(relativePath || file.path);
   };
-  const handleDownload = () => {
+  const handleDownload = async () => {
     if (!project?.name || !relativePath) return;
+    const url = await api.fileDownloadUrl(project.name, relativePath);
     const anchor = document.createElement("a");
-    anchor.href = api.fileDownloadUrl(project.name, relativePath);
+    anchor.href = url;
     anchor.download = file.name;
     document.body.appendChild(anchor);
     anchor.click();

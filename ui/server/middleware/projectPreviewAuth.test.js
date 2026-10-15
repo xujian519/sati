@@ -32,7 +32,7 @@ vi.mock("../database/db.js", () => ({
 // auth.js 优先读取环境变量 JWT_SECRET；测试必须用上面注入的密钥签发，故导入前清掉它。
 delete process.env.JWT_SECRET;
 const auth = await import("./auth.js");
-const { authenticateToken, authenticateProjectPreview, generateProjectPreviewToken } = auth;
+const { authenticateToken, authenticateProjectPreview, generateProjectPreviewToken, generateUrlTicket } = auth;
 
 let server;
 let baseUrl;
@@ -72,9 +72,9 @@ describe("项目预览凭据", () => {
     expect(await get(`/api/projects/beta/preview/index.html?token=${token}`)).toBe(403);
   });
 
-  it("预览凭据不能通过通用鉴权调用其它 API（scope 隔离）", async () => {
+  it("预览凭据放 `?ticket=` 仍不被通用鉴权当作会话（scope 隔离不因载体改变）", async () => {
     const token = generateProjectPreviewToken(USER, "alpha");
-    expect(await get(`/api/projects/alpha/files/content?token=${token}`)).toBe(403);
+    expect(await get(`/api/projects/alpha/files/content?ticket=${token}`)).toBe(403);
   });
 
   it("预览凭据放在 Authorization 头中同样不被当作完整会话", async () => {
@@ -117,8 +117,13 @@ describe("会话 JWT 不得再出现在预览 URL 中", () => {
     );
   });
 
-  it("通用鉴权的 query 会话 token 行为保持不变（SSE 等既有用途）", async () => {
-    expect(await get(`/api/projects/alpha/files/content?token=${sessionToken()}`)).toBe(200);
+  it("通用鉴权不再接受 query 里的会话 token（#626 移除回退）→ 401", async () => {
+    expect(await get(`/api/projects/alpha/files/content?token=${sessionToken()}`)).toBe(401);
+  });
+
+  it("通用鉴权改由 `?ticket=` 的短期 url-ticket 放行（无头载体）", async () => {
+    const ticket = generateUrlTicket(USER, { purpose: "file", project: "alpha" });
+    expect(await get(`/api/projects/alpha/files/content?ticket=${ticket}`)).toBe(200);
   });
 });
 

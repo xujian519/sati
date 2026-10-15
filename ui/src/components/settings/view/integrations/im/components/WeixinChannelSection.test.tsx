@@ -4,12 +4,13 @@ import WeixinChannelSection from "./WeixinChannelSection";
 
 const mocks = vi.hoisted(() => ({
   authenticatedFetch: vi.fn(),
+  requestUrlTicket: vi.fn(),
 }));
 
 vi.mock("../../../../../../utils/api", () => ({
   authenticatedFetch: mocks.authenticatedFetch,
-  // 无 token 时原样返回 URL（与真实实现一致）
-  appendAuthToken: (url: string) => url,
+  // #626：二维码 <img> 用短期 url-ticket 换掉会话 JWT；mock 返回一段固定票据。
+  requestUrlTicket: mocks.requestUrlTicket,
 }));
 
 vi.mock("react-i18next", () => ({
@@ -21,6 +22,8 @@ vi.mock("react-i18next", () => ({
 describe("WeixinChannelSection", () => {
   beforeEach(() => {
     mocks.authenticatedFetch.mockReset();
+    mocks.requestUrlTicket.mockReset();
+    mocks.requestUrlTicket.mockResolvedValue("test-qr-ticket");
   });
 
   afterEach(() => {
