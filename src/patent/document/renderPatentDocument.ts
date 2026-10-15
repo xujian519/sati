@@ -1,5 +1,6 @@
 /**
- * 专利文书渲染核心：模板 HTML + 品牌注入 + 按 id 替换内容 + HTML/PDF 落盘。
+ * 专利文书渲染核心：模板 HTML + 品牌注入 + 按 id 替换内容 + HTML/PDF 落盘，
+ * 以及可选的申请文件 docx（以随模板分发的 `.docx` 母版为版面）。
  */
 
 import { existsSync } from "node:fs";
@@ -7,11 +8,12 @@ import { mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
 import { caseOutputsDir } from "../paths.js";
 import { buildBrandStyle, loadBrandFromPath, mergeBrand } from "./brandInjector.js";
+import { renderApplicationDocx } from "./docx/index.js";
 import { buildStyleOverrides, mergeDocumentStyle } from "./style.js";
 import { loadStylePreset, resolvePresetDirFromBrandPath } from "./stylePreset.js";
 import { SatiDocumentInputError } from "./errors.js";
 import { renderPdf } from "./pdfRenderer.js";
-import { readTemplateHtml } from "./templateResolver.js";
+import { listDocxTemplates, readTemplateHtml, resolveTemplateDocxPath } from "./templateResolver.js";
 import type { DocumentRenderInput, DocumentRenderResult, DocumentStyle, RenderFormat } from "./types.js";
 
 /** 默认品牌配置文件路径（相对仓库根）。 */
@@ -144,6 +146,16 @@ function injectSections(html: string, sections: Record<string, string>): { html:
 /** 渲染并落盘。 */
 export async function renderPatentDocument(input: DocumentRenderInput, cwd: string): Promise<DocumentRenderResult> {
   const warnings: string[] = [];
+  const format: RenderFormat = input.format ?? "both";
+
+  // docx 母版是「模板是否具备该能力」的确定性事实：缺失即输入错误，早于任何落盘 fail-closed。
+  if ((format === "docx" || format === "all") && resolveTemplateDocxPath(input.template) === undefined) {
+    const capable = listDocxTemplates();
+    throw new SatiDocumentInputError(
+      `模板 "${input.template}" 未提供 docx 母版（assets/template.docx），无法输出 docx 申请文件；` +
+        `当前支持 docx 的模板: ${capable.length > 0 ? capable.join(", ") : "无"}`,
+    );
+  }
 
   const outputDir = resolveOutputDir(input, cwd);
   await mkdir(outputDir, { recursive: true });
@@ -182,10 +194,9 @@ export async function renderPatentDocument(input: DocumentRenderInput, cwd: stri
 
   await atomicWriteFile(htmlPath, html);
 
-  const format: RenderFormat = input.format ?? "both";
   let renderedPdfPath: string | undefined;
   let pdfError: string | undefined;
-  if (format === "pdf" || format === "both") {
+  if (format === "pdf" || format === "both" || format === "all") {
     const pdfResult = await renderPdf(htmlPath, pdfPath);
     if (pdfResult.ok) {
       renderedPdfPath = pdfResult.path;
@@ -194,5 +205,24 @@ export async function renderPatentDocument(input: DocumentRenderInput, cwd: stri
     }
   }
 
-  return { htmlPath, pdfPath: renderedPdfPath, pdfError, warnings };
+  let renderedDocxPath: string | undefined;
+  let docxError: string | undefined;
+  if (format === "docx" || format === "all") {
+    const docxPath = join(outputDir, `${name}.docx`);
+    try {
+      const docxResult = await renderApplicationDocx({
+        template: input.template,
+        outputPath: docxPath,
+        parts: input.sections ?? {},
+        cwd,
+      });
+      renderedDocxPath = docxPath;
+      warnings.push(...docxResult.warnings);
+    } catch (err) {
+      // 母版缺件等结构问题不静默：HTML 仍是可用产物，docx 侧如实降级并报告原因。
+      docxError = err instanceof Error ? err.message : String(err);
+    }
+  }
+
+  return { htmlPath, pdfPath: renderedPdfPath, pdfError, docxPath: renderedDocxPath, docxError, warnings };
 }

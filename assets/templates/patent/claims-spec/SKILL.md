@@ -15,7 +15,7 @@ template:
   preview:
     type: html
     entry: assets/template.html
-  exports: [html, pdf]
+  exports: [html, pdf, docx]
 ---
 
 # 权利要求书与说明书模板
@@ -46,11 +46,26 @@ template:
 ```
 文件：claims-spec.html（单文件、内联 CSS）
 可选：claims-spec.pdf（A4 打印）
+     claims-spec.docx（申请文件，版面来自 assets/template.docx 母版）
      claims-spec.md（源稿）
 
 模式切换：
 - 内部审稿版：默认渲染，保留抬头密级与免责声明。
 - 正式提交版：渲染前覆盖 `--sati-doc-confidential` 为空字符串，并删除页脚 disclaimer 区块。
 ```
+
+### docx 申请文件输出
+
+`render_patent_document` 的 `format: "docx" | "all"` 会另出一份**申请文件 docx**，版面**完全来自
+本模板自带的 `assets/template.docx` Word 母版**（A4、页边距、每件页眉页脚与页码域、正文/标题样式），
+渲染器只重建正文，不改版面。
+
+- `sections` 的键改为**五件套件 id**，顺序即备案顺序：
+  `abstract`（说明书摘要）→ `abstract-figure`（摘要附图）→ `claims`（权利要求书）→
+  `specification`（说明书）→ `drawings`（说明书附图）。
+- 各件内容接受 HTML（`h1`/`p`/`ul`/`ol`/`table`/`img`/`strong`/`em`/`u`/`br`）或纯文本
+  （纯文本按换行分段）；表格、行内图片均支持。
+- 母版按**每节页眉标题**认件，与分节的物理顺序无关；缺件时 `fail-closed` 报错，不产出缺件文件。
+- 需模板随附 `assets/template.docx`；当前仅本模板具备该母版（`listDocxTemplates()` 的返回值即事实源）。
 
 品牌变量由 `assets/templates/patent/tokens.css` 注入；agent 不修改样式。
