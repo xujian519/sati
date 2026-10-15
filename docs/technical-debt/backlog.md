@@ -2424,15 +2424,16 @@
 - [x] **P2**（P2.7）`src/cli/sati.ts` — `main`（642 → **文件 1034 → 14 行**，函数本身不再存在；判据「命令分发表化；两 file ≤600」达成）（`ea361690a`；sati.ts 只留 shebang + 触发，逻辑迁入 `commandDispatch.ts`（144 行）的 `COMMANDS` 分发表——`Object.hasOwn` 查键防原型链键命中，未命中回落交互式 CLI；`server` 分支拆为 `commands/` 下 6 个模块（渠道构造 / 子系统构造与热重载 / 适配器热重载 / 关闭与信号 / 运行时状态 / 编排骨架），最大函数 `runServerCommand` **215** 行；文件脱离 file-size 棘轮，存量豁免 42 → 41；决策见 `docs/notes/implemented/2026-10-15-cli-entry-dispatch-and-runtime-assembly-split.md`）
 - [x] **P2**（P2.7）`src/cli/projectRuntimeFactory.ts` — `createProjectRuntimeResolver`（实测 428 → **77** 行；文件 577 → 235）（`ea361690a`；`emitBackgroundTaskCompletion` 与 `buildRouterEventBus` 外移 `projectRuntimeRouterEvents.ts`（141 行），模型/路由/插件层抽 `createModelAndRouterLayer`）
 - [x] **P2**（P2.7）`src/cli/projectRuntimeFactory.ts` — `resolve`（实测 320 → **73** 行；三段装配外移）（`ea361690a`；记忆/知识库 `projectRuntimeKnowledge.ts`（201 行：`createProjectMemoryLayer` + `createKnowledgeResolverLayer`）、工具表 `projectRuntimeTools.ts`（177 行：`createProjectTools`）；god fn **54 → 51**、≥400 存量 **27 → 25**）
-- [ ] **P2** `src/adapters/channel/tui/app/TuiApp.tsx` — `TuiApp`（643 行）
+- [x] **P2**（P2.8）`src/adapters/channel/tui/app/TuiApp.tsx` — `TuiApp`（643 → **184 行** render 层；判据「拆 render/input/state 三层」达成）（`50f1eca3c`；按关注点拆四模块——`useTuiActions.ts`（state 层 284）+ `useTuiInput.ts`（input 层 318，288 行 `useInput` 逐分支搬运）+ `tuiCommands.ts`（`handleCommand`/`buildPermissionEntry`，删死参 `openViewer`）+ `gatewaySurface.ts`（`Pick<Gateway,7>` 窄面供测试注入）；行为零变化；god fn **51 → 50**、≥400 存量 **25 → 24**；文件脱 file-size 棘轮存量豁免 41 → 40；事件矩阵 `submitTurn 流 ×14 → ×15`（.tsx 消费点迁入 .ts 后被正确登记，生产者列零变化）；新增 `tests/adapters/tui-commands.spec.ts` 12 例；决策见 `docs/notes/implemented/2026-10-15-tui-app-three-layer-split.md`）
 - [ ] **P2** `src/web/client/webMessage.ts` — `applyWebGatewayEvent`（383 行）
 - [ ] **P2** `src/tool/execution/ToolRuntime.ts` — `execute`（388 行）
 - [ ] **P2** `src/patent/graph/domains/inventiveness.ts` — `buildInventivenessGraph`（342 行）
 
-### 38.2 ≥800 行文件（41 个：承接 15 + 未承接 26）
+### 38.2 ≥800 行文件（40 个：承接 14 + 未承接 26）
 
 > 承接 = 计划条目的拆分会使该文件降到 800 以下或另有明确目标；未承接 = 转 §38.3 的 sweep 后条目（**不进 45/50 天承诺面**，不静默）。注：`InProcessGateway.ts` 只拆函数不拆文件，故按未承接计。
 > *（P2.7 回填：原表 42 个 = 承接 16 + 未承接 26；`src/cli/sati.ts` 经 P2.7 降到 14 行已不在表内，故承接 16 → 15、总数 42 → 41，与 `architecture-baseline.json` 存量豁免 42 → 41 同步。）*
+> *（P2.8 回填：`src/adapters/channel/tui/app/TuiApp.tsx` 经 P2.8 降到 184 行已不在表内，故承接 15 → 14、总数 41 → 40，与 `architecture-baseline.json` 存量豁免 41 → 40 同步。）*
 
 - [ ] **BF-01** `ui/server/sati-bridge.js` — 2347 行 · 未承接 → PS-01
 - [ ] **BF-02** `src/adapters/channel/wecom/WeComChannel.ts` — 1763 行 · 未承接 → PS-02
@@ -2472,7 +2473,7 @@
 - [ ] **BF-36** `ui/src/components/app-shell/AppShellV2.tsx` — 894 行 · 承接：**B3.3**
 - [ ] **BF-37** `ui/src/components/chat/tools/configs/toolConfigs.ts` — 863 行 · 未承接 → PS-23
 - [ ] **BF-38** `ui/server/services/satiConfig.js` — 857 行 · 未承接 → PS-24
-- [ ] **BF-39** `src/adapters/channel/tui/app/TuiApp.tsx` — 854 行 · 承接：**P2.8**
+- [x] **BF-39** `src/adapters/channel/tui/app/TuiApp.tsx` — 854 行 · 承接：**P2.8** —— **已交付（2026-10-15，`50f1eca3c`）：854 → 184 行**（脱表，见 §38.2 抬头回填；`TuiApp` 643 行 god fn 随之消失，逻辑迁入 render/input/state/commands 四模块）
 - [ ] **BF-40** `src/patent/evidence/engine.ts` — 841 行 · 未承接 → PS-25
 - [ ] **BF-41** `ui/src/components/main-content-v2/skills/import/ImportFromFolder.tsx` — 824 行 · 承接：**B4.4**
 - [ ] **BF-42** `src/tool/builtin/kanban.ts` — 815 行 · 未承接 → PS-26
