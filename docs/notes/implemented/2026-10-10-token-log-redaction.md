@@ -39,4 +39,4 @@ Status: implemented
 
 - **换来**：三个构造点的凭证不再进入日志与客户端可见的错误消息；新增两条可执行判据——`ui/server/websocket/chat.test.js` 的握手日志断言（真实 HTTP + 真实 WS + 真实 `verifyClient`，回退修复即变红）与 `tests/shared/credential-redaction-url.spec.ts`。
 - **付出**：`ui/server` 与 `src/shared` 各有一份脱敏实现，需同向维护（架构边界使然，非疏漏）；`redactUrlCredentials` 只覆盖「凭证名 query 参数 + URL userinfo」两种形态，不是通用秘密扫描器；Mattermost/WeCom 的泄漏是**防御性**修复——用 `ws`/`fetch` 的畸形 URL 复现了同形泄漏，但未在真实渠道配置下复现端到端。
-- **未覆盖（明示）**：`ui/server/middleware/auth.js` 的预览 token 校验错误日志经核对不含 URL；上游 `fix: workspace token cleanup` 的语义未能定位到源码落点，本项目是否有等价问题**未核验**，未纳入本次。
+- **未覆盖（明示）**：`ui/server/middleware/auth.js` 的预览 token 校验错误日志经核对不含 URL。上游 `fix: workspace token cleanup`（**#620**）的语义**已定位并核验**：本项目有且完全等价——`create-workspace` / `clone-progress` 在 token 查不到时会递归删除目标目录，而 `workspaceType: "new"` 并不要求该路径事先不存在，于是连已存在的父目录一起删。该缺陷已随 #620 移植修复（见 `2026-10-15-workspace-parent-preserve.md`），本条「未核验」至此关闭。
