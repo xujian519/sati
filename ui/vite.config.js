@@ -99,7 +99,7 @@ export default defineConfig(({ mode }) => {
     },
     test: {
       environment: "jsdom",
-      setupFiles: [path.resolve(__dirname, "../vitest.setup.ts")],
+      setupFiles: [path.resolve(__dirname, "vitest.setup.ts")],
       // e2e/ is Playwright-only; vitest would otherwise pick up *.spec.mjs
       // files there and fail to run them.
       exclude: ["e2e/**", "**/node_modules/**", "**/dist/**"],
