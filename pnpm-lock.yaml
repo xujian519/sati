@@ -80,8 +80,8 @@ importers:
         specifier: ^3.10.2
         version: 3.10.2
       juice:
-        specifier: ^12.1.3
-        version: 12.1.3
+        specifier: ^12.2.0
+        version: 12.2.0
       mupdf:
         specifier: ^1.28.0
         version: 1.28.0
@@ -4668,8 +4668,8 @@ packages:
   jszip@3.10.2:
     resolution: {integrity: sha512-3l+rb15IOWtUhU0H5MFqES/T6Kh7abYwjosBey/vD6hDt8zoEffkSC5Ws5SGtgVw3gBx2NEbhTeSW1+kWkpyTQ==}
 
-  juice@12.1.3:
-    resolution: {integrity: sha512-gf4p4NqkV6nqA/72EoP2XDcMYrflf1fup7ZMimSXFgH751L7+ztnl8Xg9Vd5OuUpUMp/EoD59VtjQ0sOIKaFPA==}
+  juice@12.2.0:
+    resolution: {integrity: sha512-xp5n2gclRLhJqbVkKIlQsoz5q2nhDfjaCExfh0XhJ7gs77nWDQg+cdDRVY1EBlcn3n8Lz3TBNFiorh9TxpJp2g==}
     engines: {node: '>=22.12.0'}
     hasBin: true
 
@@ -11432,7 +11432,7 @@ snapshots:
       readable-stream: 2.3.8
       setimmediate: 1.0.5
 
-  juice@12.1.3:
+  juice@12.2.0:
     dependencies:
       cheerio: 1.2.0
       commander: 14.0.3
