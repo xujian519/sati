@@ -44,5 +44,6 @@ systemPrompt: |-
 
 ## 协作
 
-- 供 `patent-agent` 在审查阶段调度
+- 供 `patent-agent` 在审查阶段调度：必须以 `subagent_type: "patent-reviewer"` 派发，不得用 `general-purpose` 在 prompt 里指定角色（否则只读约束失效）
+- 复核预算建议 `max_turns` 8–16、`max_tool_calls` 24–40；返回 `partial: true` 时结论视为临时意见
 - 可与 `patent-unified-eval` 技能配合做综合评估

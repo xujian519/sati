@@ -103,6 +103,7 @@ export function createReplayModelRuntime(fixtureDir: string, base: ModelRuntime)
     stream: replayStream,
     complete: (request, options) => base.complete(request, options),
     getCapabilities: (providerId, modelId) => base.getCapabilities(providerId, modelId),
+    getTokenLimitSources: (providerId, modelId) => base.getTokenLimitSources?.(providerId, modelId),
     getMultimodal: (providerId, modelId) => base.getMultimodal(providerId, modelId),
     getProviderProtocol: providerId => base.getProviderProtocol(providerId),
     getProviderBaseUrl: providerId => base.getProviderBaseUrl(providerId),

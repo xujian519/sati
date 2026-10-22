@@ -72,6 +72,9 @@ export type AgentSubagentTranscriptHooks = {
     turns: number;
     durationMs: number;
     errored?: boolean;
+    stopReason?: import("../../tool/index.js").SatiSubagentStopReason;
+    partial?: boolean;
+    toolCalls?: number;
   }): Promise<void>;
   subagentTranscriptResolver?(subagentId: string): {
     recordAcceptedInput(

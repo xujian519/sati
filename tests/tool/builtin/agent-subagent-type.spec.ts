@@ -49,6 +49,16 @@ function createFork(calls: string[]): SatiSubagentForkApi {
   };
 }
 
+const READ_ONLY_ROLES = new Set([
+  "patent-novelty-checker",
+  "patent-creativity-checker",
+  "patent-infringement-checker",
+  "patent-invalidity-checker",
+  "patent-quality-checker",
+  "patent-reviewer",
+  "adversarial-reviewer",
+]);
+
 /** 注册了 patent-* 角色的 fork（cap01 手册别名测试用）。 */
 function createPatentRoleFork(calls: string[]): SatiSubagentForkApi {
   const ids = [
@@ -64,11 +74,12 @@ function createPatentRoleFork(calls: string[]): SatiSubagentForkApi {
     "patent-retriever",
     "patent-quality-checker",
     "patent-reviewer",
+    "adversarial-reviewer",
   ];
   return {
     depth: 0,
     maxSubagentDepth: 1,
-    listDefinitions: () => ids.map(id => ({ id, description: id })),
+    listDefinitions: () => ids.map(id => ({ id, description: id, readOnly: READ_ONLY_ROLES.has(id) })),
     isAllowedDefinition: id => ids.includes(id),
     fork: async ({ definitionId }) => {
       calls.push(definitionId);
@@ -182,4 +193,115 @@ test("agent tool preserves unknown custom fallback subagent names", async () => 
 
   assert.equal(result.data?.subagentType, "CustomAgent");
   assert.deepEqual(requests, ["general-purpose"]);
+});
+
+test("general-purpose + prompt 委派只读角色 → 拒绝并提示改用 subagent_type", async () => {
+  const calls: string[] = [];
+  const tool = createAgentTool();
+  await assert.rejects(
+    () =>
+      tool.execute(
+        {
+          description: "adversarial review",
+          prompt: "你是 adversarial-reviewer，请对这份权利要求书做红队评审。",
+          subagent_type: "general-purpose",
+        },
+        baseContext(createPatentRoleFork(calls)),
+      ),
+    error =>
+      error instanceof Error &&
+      /read-only role "adversarial-reviewer"/.test(error.message) &&
+      /subagent_type/.test(error.message),
+  );
+  assert.deepEqual(calls, [], "拒绝后不得启动 fork");
+});
+
+test("general-purpose + 仅提及角色名（非委派）→ 不误伤", async () => {
+  const calls: string[] = [];
+  const tool = createAgentTool();
+  const result = await tool.execute(
+    {
+      description: "apply checklist",
+      prompt: "参照 patent-reviewer 的审查清单检查格式问题。",
+      subagent_type: "general-purpose",
+    },
+    baseContext(createPatentRoleFork(calls)),
+  );
+
+  assert.equal(result.data?.subagentType, "general-purpose");
+  assert.deepEqual(calls, ["general-purpose"]);
+});
+
+test("正确 subagent_type + 角色化 prompt → 按只读角色调度", async () => {
+  const calls: string[] = [];
+  const tool = createAgentTool();
+  const result = await tool.execute(
+    {
+      description: "adversarial review",
+      prompt: "你是 adversarial-reviewer，请做红队评审。",
+      subagent_type: "adversarial-reviewer",
+    },
+    baseContext(createPatentRoleFork(calls)),
+  );
+
+  assert.equal(result.data?.subagentType, "adversarial-reviewer");
+  assert.deepEqual(calls, ["adversarial-reviewer"]);
+});
+
+function createBudgetFork(captured: Array<Record<string, unknown>>): SatiSubagentForkApi {
+  const ids = ["general-purpose", "patent-reviewer"];
+  return {
+    depth: 0,
+    maxSubagentDepth: 1,
+    listDefinitions: () => ids.map(id => ({ id, description: id, readOnly: id === "patent-reviewer" })),
+    isAllowedDefinition: id => ids.includes(id),
+    fork: async args => {
+      captured.push({ maxTurns: args.maxTurns, maxToolCalls: args.maxToolCalls, timeoutMs: args.timeoutMs });
+      return {
+        markdown: "Scope: review\nResult: half done\nKey files: none\nFiles changed: none\nIssues: truncated",
+        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+        turns: 3,
+        durationMs: 42,
+        stopReason: "max_tool_calls",
+        partial: true,
+        toolCalls: 9,
+      };
+    },
+  };
+}
+
+test("复核预算透传给 fork，部分结果显式标注 partial", async () => {
+  const captured: Array<Record<string, unknown>> = [];
+  const tool = createAgentTool();
+  const result = await tool.execute(
+    {
+      description: "review",
+      prompt: "review claims",
+      subagent_type: "patent-reviewer",
+      max_turns: 8,
+      max_tool_calls: 24,
+      timeout_ms: 600_000,
+    },
+    baseContext(createBudgetFork(captured)),
+  );
+
+  assert.deepEqual(captured, [{ maxTurns: 8, maxToolCalls: 24, timeoutMs: 600_000 }]);
+  assert.equal(result.data?.stopReason, "max_tool_calls");
+  assert.equal(result.data?.partial, true);
+  assert.equal(result.data?.toolCalls, 9);
+  const text = result.content.find(block => block.type === "text");
+  assert.ok(text?.type === "text" && text.text.includes("[partial: max_tool_calls; turns=3; toolCalls=9]"));
+  assert.equal(result.metadata?.partial, true);
+});
+
+test("非法预算值按 invalid_tool_input 拒绝", async () => {
+  const tool = createAgentTool();
+  await assert.rejects(
+    () =>
+      tool.execute(
+        { description: "review", prompt: "review", subagent_type: "patent-reviewer", max_tool_calls: 0 },
+        baseContext(createBudgetFork([])),
+      ),
+    /max_tool_calls must be a positive integer/,
+  );
 });

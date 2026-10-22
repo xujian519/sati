@@ -84,6 +84,7 @@ export function createRecordingModelRuntime(inner: ModelRuntime, outDir: string)
     },
     complete: (request, options) => inner.complete(request, options),
     getCapabilities: (providerId, modelId) => inner.getCapabilities(providerId, modelId),
+    getTokenLimitSources: (providerId, modelId) => inner.getTokenLimitSources?.(providerId, modelId),
     getMultimodal: (providerId, modelId) => inner.getMultimodal(providerId, modelId),
     getProviderProtocol: providerId => inner.getProviderProtocol(providerId),
     getProviderBaseUrl: providerId => inner.getProviderBaseUrl(providerId),

@@ -39,6 +39,7 @@ export type {
   SatiToolResultContent,
   SatiToolRuntimeContext,
   SatiSubagentForkApi,
+  SatiSubagentStopReason,
   SatiWriteSnapshotEntry,
   SatiWriteSnapshotMap,
 } from "./protocol/types.js";

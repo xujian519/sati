@@ -513,3 +513,55 @@ test("read-only execute_code checks the real code instead of crashing on registr
   assert.equal(result.type, "error");
   assert.equal(result.type === "error" ? result.error.code : "", "ask_mode_violation");
 });
+
+test("maxToolCalls 在工具执行前中止并返回部分结果", async () => {
+  let executed = 0;
+  const registry = new ToolRegistry();
+  registry.register(
+    createNoopTool("read_file", () => {
+      executed += 1;
+      return true;
+    }),
+  );
+  const router: AgentRouterRuntime = {
+    decide: async ({ request }) => ({
+      provider: request.provider,
+      model: request.model,
+      scenarioType: "default",
+      isSubagent: true,
+      orchestrating: false,
+      resolvedFrom: "fallback",
+      mutations: {},
+    }),
+    execute: async function* () {
+      yield { type: "message_start", role: "assistant" } as const;
+      yield { type: "tool_call_end", toolCall: { id: "c1", name: "read_file", input: {} } } as const;
+      yield { type: "tool_call_end", toolCall: { id: "c2", name: "read_file", input: {} } } as const;
+      yield { type: "message_end", finishReason: "tool_call" } as const;
+    },
+    stream: async function* () {},
+  } as AgentRouterRuntime;
+
+  const session = new SubAgentSession({
+    definition: SUBAGENT_DEFINITIONS["general-purpose"],
+    directive: "Inspect the workspace repeatedly.",
+    parentConfig: parentConfig(),
+    parentDependencies: {
+      router,
+      tools: { registry, scheduler: {} as AgentRuntimeDependencies["tools"]["scheduler"] },
+    },
+    parentSessionId: "parent-session",
+    parentTurnId: "parent-turn",
+    subagentSessionId: "child-session",
+    subagentId: "child-agent",
+    maxToolCalls: 1,
+  });
+
+  const report = await session.run();
+
+  assert.equal(executed, 0, "超预算批次不得执行");
+  assert.equal(report.stopReason, "max_tool_calls");
+  assert.equal(report.partial, true);
+  assert.equal(report.toolCalls, 2);
+  assert.equal(report.markdown, "");
+});

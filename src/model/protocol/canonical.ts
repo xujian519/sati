@@ -293,12 +293,31 @@ export type CanonicalModelResponse = {
   raw?: unknown;
 };
 
+/**
+ * Token 上限的事实来源层（解析期确定）：
+ * config 显式声明 > window 覆盖层（探测/实测）> 内置 catalog > 协议默认。
+ *
+ * `protocol-default` 表示「不知道该模型的真实窗口」——它是兜底假设，
+ * 不是模型事实。子代理窗口解析据此决定是否可继承父级的已知窗口。
+ */
+export type ModelTokenLimitSource = "config" | "window" | "catalog" | "protocol-default";
+
+export type ModelTokenLimitSources = {
+  maxContextTokens: ModelTokenLimitSource;
+  maxOutputTokens: ModelTokenLimitSource;
+};
+
 export type ModelDefinition = {
   id: string;
   displayName?: string;
   capabilities: ModelCapabilities;
   multimodal: MultimodalConstraints;
   aliases?: string[];
+  /**
+   * 两个 token 上限各自的来源。缺失表示旧快照或外部构造的模型定义
+   * （消费方按「未知来源」处理，不猜测）。
+   */
+  tokenLimitSources?: ModelTokenLimitSources;
 };
 
 export type ProviderRetryConfig = {

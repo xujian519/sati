@@ -58,6 +58,8 @@ description: "专利代理与知识产权分析：专利检索、权利要求分
 
 角色已按 `domains` 裁剪工具（如检查类只读角色不可写文件），派发时遵循 HITL 强制确认点（事实/策略/定稿均须用户确认）。
 
+**复核/红队派发纪律**：复核类任务必须把角色 id 放进 `subagent_type`（`patent-reviewer` / `adversarial-reviewer` / 各 checker），不得用 `general-purpose` 再在 prompt 里写角色名——子代理的写权限、工具面与输出契约由 `subagent_type` 决定，prompt 里的角色名不产生任何限制。复核任务同时给显式预算（建议 `max_turns` 8–16、`max_tool_calls` 24–40、必要时 `timeout_ms`）；结果 `partial: true` 时只能当临时意见，需缩小范围或加预算重跑后再收口。
+
 ## 案卷迭代协议（多轮返工控制）
 
 当任务需要「交底书 → 申请文件」多轮迭代、且要控制返工轮次时，用 `patent_docket` 建立案卷并把阶段执行挂在 `flexible_plan` 上：

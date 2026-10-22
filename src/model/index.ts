@@ -93,6 +93,8 @@ export type {
   ModelConfig,
   ModelDefinition,
   ModelProtocol,
+  ModelTokenLimitSource,
+  ModelTokenLimitSources,
   ProviderConfig,
   ProviderRetryConfig,
 } from "./protocol/canonical.js";

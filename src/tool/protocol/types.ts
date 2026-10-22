@@ -49,10 +49,16 @@ export type SatiToolModelClient = {
  * `maxSubagentDepth` is the cap (default 1) — the `agent` tool raises
  * `subagent_depth_exceeded` when `depth >= maxSubagentDepth`.
  */
+/**
+ * 子代理终止原因。`partial` 语义只在非 `completed` 时成立：窗口/轮数/
+ * 工具调用预算或超时提前收尾，已产出的报告仍会回流父代理。
+ */
+export type SatiSubagentStopReason = "completed" | "max_turns" | "max_tool_calls" | "timed_out" | "aborted";
+
 export type SatiSubagentForkApi = {
   depth: number;
   maxSubagentDepth: number;
-  listDefinitions(): { id: string; description: string }[];
+  listDefinitions(): { id: string; description: string; readOnly?: boolean }[];
   isAllowedDefinition(id: string): boolean;
   fork(args: {
     definitionId: string;
@@ -61,12 +67,22 @@ export type SatiSubagentForkApi = {
     toolCallId?: string;
     abortSignal?: AbortSignal;
     timeoutMs?: number;
+    /** 子代理内部 AgentLoop 的最大轮数（含最后一次收尾轮）。 */
+    maxTurns?: number;
+    /** 子代理累计可执行的工具调用数上限；超限前的一批不再执行。 */
+    maxToolCalls?: number;
   }): Promise<{
     markdown: string;
     usage: CanonicalUsage;
     turns: number;
     durationMs: number;
     parsed?: Record<string, string>;
+    /** 缺省视为 `completed`（兼容既有实现）。 */
+    stopReason?: SatiSubagentStopReason;
+    /** 非 completed 终止时已产出部分报告（可能为空文本）。 */
+    partial?: boolean;
+    /** 实际发出（含被预算拦截的批次）的工具调用数。 */
+    toolCalls?: number;
   }>;
 };
 

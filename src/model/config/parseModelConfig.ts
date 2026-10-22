@@ -6,6 +6,8 @@ import type {
   ModelConfig,
   ModelDefinition,
   ModelProtocol,
+  ModelTokenLimitSource,
+  ModelTokenLimitSources,
   ProviderConfig,
   ProviderRetryConfig,
 } from "../protocol/canonical.js";
@@ -278,7 +280,12 @@ function parseModelDefinition(
   const catalogHit = lookupCatalogModel(providerId, modelId);
   const catalogModel = catalogHit.model;
 
-  const capabilities = parseCapabilities(protocol, model.capabilities, catalogModel?.capabilities, windowOverride);
+  const { capabilities, tokenLimitSources } = parseCapabilities(
+    protocol,
+    model.capabilities,
+    catalogModel?.capabilities,
+    windowOverride,
+  );
   const multimodal = parseMultimodal(protocol, model.multimodal, catalogModel?.multimodal);
 
   return {
@@ -287,6 +294,7 @@ function parseModelDefinition(
     capabilities,
     multimodal,
     aliases: readStringArray(model.aliases, "aliases"),
+    tokenLimitSources,
   };
 }
 
@@ -295,7 +303,7 @@ function parseCapabilities(
   rawCapabilities: unknown,
   catalogCapabilities?: ModelCapabilities,
   windowOverride?: ModelWindowEntry,
-): ModelCapabilities {
+): { capabilities: ModelCapabilities; tokenLimitSources: ModelTokenLimitSources } {
   const protocolDefaults =
     protocol === "anthropic"
       ? ANTHROPIC_DEFAULT_CAPABILITIES
@@ -315,9 +323,15 @@ function parseCapabilities(
             : {}),
           ...(windowOverride.maxOutputTokens !== undefined ? { maxOutputTokens: windowOverride.maxOutputTokens } : {}),
         };
+  // 来源逐字段记录：catalog 未命中时窗口只是协议兜底假设，不是模型事实。
+  const baseSource: ModelTokenLimitSource = catalogCapabilities ? "catalog" : "protocol-default";
+  const tokenLimitSources: ModelTokenLimitSources = {
+    maxContextTokens: windowOverride?.maxContextTokens !== undefined ? "window" : baseSource,
+    maxOutputTokens: windowOverride?.maxOutputTokens !== undefined ? "window" : baseSource,
+  };
 
   if (rawCapabilities === undefined) {
-    return defaults;
+    return { capabilities: defaults, tokenLimitSources };
   }
 
   if (!isRecord(rawCapabilities)) {
@@ -349,18 +363,25 @@ function parseCapabilities(
   const raw = rawCapabilities as Record<string, unknown>;
   if (raw.contextWindow !== undefined && capabilities.maxContextTokens === undefined) {
     overrides.maxContextTokens = readPositiveNumber(raw.contextWindow, "contextWindow");
+    tokenLimitSources.maxContextTokens = "config";
   }
 
   for (const key of ["maxContextTokens", "maxOutputTokens"] as const) {
     if (capabilities[key] !== undefined) {
       overrides[key] = readPositiveNumber(capabilities[key], key);
+      tokenLimitSources[key] = "config";
     }
   }
 
   return {
-    ...mergeCapabilities(defaults, overrides),
-    ...(capabilities.supportsThinking !== undefined ? { supportsThinkingExplicit: capabilities.supportsThinking } : {}),
-  } as ModelCapabilities;
+    capabilities: {
+      ...mergeCapabilities(defaults, overrides),
+      ...(capabilities.supportsThinking !== undefined
+        ? { supportsThinkingExplicit: capabilities.supportsThinking }
+        : {}),
+    } as ModelCapabilities,
+    tokenLimitSources,
+  };
 }
 
 function parseMultimodal(

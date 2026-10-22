@@ -4,7 +4,7 @@ import type {
   CanonicalModelEvent,
   CanonicalToolCall,
 } from "../../model/index.js";
-import type { SatiToolResult } from "../../tool/index.js";
+import type { SatiSubagentStopReason, SatiToolResult } from "../../tool/index.js";
 import type { TokenBudgetSnapshot } from "../../context/budget/TokenBudgetManager.js";
 import type { CompactionStatus } from "../../context/compaction/CompactionEngine.js";
 import type { RouterRetryProgressEvent } from "../../router/protocol/events.js";
@@ -117,6 +117,12 @@ export type AgentEvent =
       subagentType: string;
       success: boolean;
       durationMs: number;
+      /** 子代理实际内部轮数（成功/部分结果时可用；硬失败可能缺省）。 */
+      turns?: number;
+      stopReason?: SatiSubagentStopReason;
+      /** True when the report was cut short by a budget/timeout/abort. */
+      partial?: boolean;
+      toolCalls?: number;
     }
   | {
       type: "subagent_status";
