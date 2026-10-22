@@ -258,13 +258,14 @@ test("withEgoJsonSearch: ego JSON 命中后不再调用 vendor", async () => {
   assert.equal(vendorCalls, 0);
 });
 
-test("withEgoJsonSearch: 5 条真实 XHR fixture 均可命中（含公开号检索）", async () => {
+test("withEgoJsonSearch: 真实 XHR fixture 均可命中（4 关键词 + 2 公开号）", async () => {
   const fixtures: Array<[string, number]> = [
     ["real-01-phase-change.json", 123547],
     ["real-02-cn-thermal.json", 77907],
     ["real-03-assignee.json", 35615],
     ["real-04-thermal.json", 123172],
     ["real-05-publication.json", 1],
+    ["real-06-publication-2.json", 1],
   ];
   for (const [name, expectedTotal] of fixtures) {
     const search = withEgoJsonSearch(async () => makeVendorResult(), {
