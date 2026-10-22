@@ -94,6 +94,7 @@ export function getAdapter(): PatentKgAdapterRef | null {
       const currentMtime = statSync(patentKgDb).mtimeMs;
       if (currentMtime === cachedRef.mtimeMs) return cachedRef;
     } catch {
+      // 文件状态探测失败（不存在/权限问题）→ 保守返回缓存，避免阻塞查询
       return cachedRef;
     }
     // mtime 变化 → 重建
