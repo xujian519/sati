@@ -22,7 +22,7 @@ import { messageContent } from "../../model/protocol/clone.js";
 import type { AgentRuntimeConfig } from "../runtime/AgentRuntimeConfig.js";
 import type { AgentRuntimeDependencies } from "../runtime/AgentRuntimeDependencies.js";
 import { ToolRegistry } from "../../tool/registry/ToolRegistry.js";
-import type { SatiReadFileStateMap, SatiWriteSnapshotMap } from "../../tool/protocol/types.js";
+import type { SatiReadFileStateMap, SatiSubagentStopReason, SatiWriteSnapshotMap } from "../../tool/protocol/types.js";
 import { ConcurrentToolScheduler } from "../../tool/scheduler/ConcurrentToolScheduler.js";
 import { ToolRuntime } from "../../tool/execution/ToolRuntime.js";
 import { PermissionRuntime } from "../../permission/index.js";
@@ -57,6 +57,12 @@ export type SubAgentSessionOptions = {
   subagentId: string;
   /** Optional cap on AgentLoop turns inside the fork. Unbounded when omitted. */
   maxTurns?: number;
+  /**
+   * Optional cap on cumulative tool calls inside the fork. When a batch would
+   * exceed the cap, the batch is not executed and the run ends with a partial
+   * report (`stopReason: "max_tool_calls"`).
+   */
+  maxToolCalls?: number;
   /** Abort signal forwarded to the child loop. */
   abortSignal?: AbortSignal;
   /**
@@ -94,6 +100,12 @@ export type SubagentReport = {
   /** Number of internal turns taken. */
   turns: number;
   durationMs: number;
+  /** Why the run stopped. `completed` only when the loop finished normally. */
+  stopReason: SatiSubagentStopReason;
+  /** True when the report was cut short by a budget/timeout/abort. */
+  partial: boolean;
+  /** Cumulative tool calls emitted by the subagent (including a rejected batch). */
+  toolCalls: number;
 };
 
 export class SubAgentSession {
@@ -117,13 +129,23 @@ export class SubAgentSession {
     if (this.options.sidechainTranscript) {
       await this.options.sidechainTranscript.recordAcceptedInput(this.options.subagentSessionId, turnId, messages);
     }
+    // 工具调用预算走组合 AbortSignal：在 `tool_calls_detected`（工具执行前）
+    // 触发中止，AgentLoop 会走统一的 abortTurn 返回已累积的 messages，供
+    // 本方法提取部分报告。外部取消（用户/超时）仍由父 signal 传导。
+    const toolBudget = this.options.maxToolCalls !== undefined ? new AbortController() : undefined;
+    const abortSignal =
+      toolBudget && this.options.abortSignal
+        ? AbortSignal.any([this.options.abortSignal, toolBudget.signal])
+        : (toolBudget?.signal ?? this.options.abortSignal);
     const generator = loop.run({
       sessionId: this.options.subagentSessionId,
       turnId,
       messages,
       maxTurns: this.options.maxTurns,
-      abortSignal: this.options.abortSignal,
+      abortSignal,
     });
+    let toolCalls = 0;
+    let internalStopReason: Extract<SatiSubagentStopReason, "max_tool_calls"> | undefined;
     while (true) {
       const next = await generator.next();
       if (next.done) {
@@ -131,6 +153,18 @@ export class SubAgentSession {
         break;
       }
       const event = next.value;
+      if (event.type === "tool_calls_detected") {
+        toolCalls += event.calls.length;
+        if (this.options.maxToolCalls !== undefined && toolCalls > this.options.maxToolCalls) {
+          internalStopReason = "max_tool_calls";
+          toolBudget?.abort(
+            new Error(
+              `Subagent tool-call budget exceeded (max=${this.options.maxToolCalls}, requested=${toolCalls}); ` +
+                "the batch was not executed.",
+            ),
+          );
+        }
+      }
       this.forwardActivity(event);
       if (
         this.options.sidechainTranscript &&
@@ -146,7 +180,9 @@ export class SubAgentSession {
     if (!last) {
       throw new Error("SubAgentSession: AgentLoop returned no result");
     }
-    if (last.result.type === "error") {
+    // 预算触发的中止可能被底层归类为 error（取决于中止发生的阶段）；
+    // 此时仍按部分结果返回，而不是丢弃已产出的内容。
+    if (last.result.type === "error" && internalStopReason === undefined) {
       const details = last.result.errors?.map(error => error.message).join("; ");
       throw new Error(
         `SubAgentSession: subagent turn failed (${last.result.stopReason})${details ? `: ${details}` : ""}`,
@@ -154,6 +190,9 @@ export class SubAgentSession {
     }
     const text = extractFinalAssistantText(last.messages);
     const parsed = parseSummary(text);
+    const stopReason: SatiSubagentStopReason =
+      internalStopReason ??
+      (last.result.type === "max_turns" ? "max_turns" : last.result.type === "aborted" ? "aborted" : "completed");
     return {
       subagentId: this.options.subagentId,
       definitionId: this.options.definition.id,
@@ -162,6 +201,9 @@ export class SubAgentSession {
       usage: last.result.usage,
       turns: last.result.turns,
       durationMs: Date.now() - startedAt,
+      stopReason,
+      partial: stopReason !== "completed",
+      toolCalls,
     };
   }
 

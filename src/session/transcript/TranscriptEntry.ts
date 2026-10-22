@@ -204,6 +204,12 @@ export type AgentSubagentCompletedTranscriptEntry = AgentTranscriptEntryBase & {
   durationMs: number;
   /** True when the run errored (subagent emitted an error result). */
   errored?: boolean;
+  /** 终止原因（completed / max_turns / max_tool_calls / timed_out / aborted）。 */
+  stopReason?: import("../../tool/index.js").SatiSubagentStopReason;
+  /** True when the summary is a partial report cut short by budget/timeout/abort. */
+  partial?: boolean;
+  /** Cumulative tool calls emitted by the subagent. */
+  toolCalls?: number;
 };
 
 /**

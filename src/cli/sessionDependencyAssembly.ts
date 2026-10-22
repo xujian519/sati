@@ -276,6 +276,9 @@ export function buildSessionDependencies(deps: SessionDependenciesInput): Sessio
           turns: args.turns,
           durationMs: args.durationMs,
           errored: args.errored,
+          ...(args.stopReason !== undefined ? { stopReason: args.stopReason } : {}),
+          ...(args.partial !== undefined ? { partial: args.partial } : {}),
+          ...(args.toolCalls !== undefined ? { toolCalls: args.toolCalls } : {}),
         }),
       subagentTranscriptResolver: subagentId => {
         const handle = storage.transcript.forSubagent(subagentId, deps.now);
