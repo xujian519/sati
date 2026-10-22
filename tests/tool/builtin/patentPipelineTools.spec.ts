@@ -5,7 +5,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { makeToolContext } from "../context-fixture.js";
 import {
+  AtomRegistry,
   JsonFileWorkflowRunStore,
+  StageHandlerRegistry,
   patentInventivenessManifest,
   patentNoveltyManifest,
   runWorkflow,
@@ -14,6 +16,19 @@ import {
 } from "../../../src/patent/index.js";
 import { PlanTaskStateMachine, replanTasks, syncPlanToTasks, hashStep } from "../../../src/patent/plantask.js";
 import type { WorkflowStrategy } from "../../../src/patent/workflow/types.js";
+import type { WorkflowManifest } from "../../../src/patent/workflow/types.js";
+
+/** 构建空 handler 注册表 + 仅含契约的 atom 注册表：强制 atom 阶段回退 executor 路径。 */
+function emptyRegistriesFor(manifest: WorkflowManifest) {
+  const handlers = new StageHandlerRegistry();
+  const atoms = new AtomRegistry();
+  for (const stage of manifest.stages) {
+    if (stage.atom) {
+      atoms.register({ name: stage.atom, description: "test", category: "extract", inputSchema: [], outputSchema: [] });
+    }
+  }
+  return { handlers, atoms };
+}
 import { WorkerRegistry, validateWorkerOutput, defaultPatentWorkers } from "../../../src/patent/worker-contract.js";
 import { createPatentWorkflowTool, runRuleGate } from "../../../src/tool/builtin/patentWorkflowTool.js";
 import { createPatentPlanTaskTool } from "../../../src/tool/builtin/patentPlanTaskTool.js";
@@ -58,27 +73,38 @@ describe("patent workflow 执行器（workflow.ts 接线）", () => {
   it("patentNoveltyManifest 通过校验", () => {
     assert.doesNotThrow(() => validateWorkflowManifest(patentNoveltyManifest));
     assert.equal(patentNoveltyManifest.id, "patent_novelty_v1");
-    assert.equal(patentNoveltyManifest.stages.length, 5);
+    assert.equal(patentNoveltyManifest.stages.length, 6);
   });
 
   it("runWorkflow 全阶段有输出 → completed", async () => {
     const outputs = new Map([
       ["parse", "特征分解：A/B/C"],
+      ["generate_keywords", "关键词：自动化/分拣/装置"],
       ["search", "检索到 D1/D2"],
       ["compare", "单独对比：D1 未公开特征 B"],
       ["conclude", "新颖性结论：具备（置信度 high）"],
       ["approval", "人工确认通过"],
     ]);
-    const result = await runWorkflow(patentNoveltyManifest, {}, async stage => outputs.get(stage.id) ?? "");
+    const result = await runWorkflow(
+      patentNoveltyManifest,
+      {},
+      async stage => outputs.get(stage.id) ?? "",
+      emptyRegistriesFor(patentNoveltyManifest),
+    );
     assert.equal(result.completed, true);
     assert.equal(result.degradedSteps.length, 0);
-    assert.equal(result.stages.length, 5);
+    assert.equal(result.stages.length, 6);
   });
 
   it("runWorkflow 缺阶段输出 → degraded 且 completed=false", async () => {
-    const result = await runWorkflow(patentNoveltyManifest, {}, async () => "");
+    const result = await runWorkflow(
+      patentNoveltyManifest,
+      {},
+      async () => "",
+      emptyRegistriesFor(patentNoveltyManifest),
+    );
     assert.equal(result.completed, false);
-    assert.equal(result.degradedSteps.length, 5);
+    assert.equal(result.degradedSteps.length, 6);
   });
 
   it("validateWorkflowManifest 拒绝非法 manifest", () => {
@@ -171,7 +197,7 @@ describe("管线工具注册与执行（patent_workflow / patent_plan_task / pat
     const tool = createPatentWorkflowTool();
     const res = await tool.execute(
       {
-        outputs: ["parse", "search", "compare", "conclude", "approval"].map(stageId => ({
+        outputs: ["parse", "generate_keywords", "search", "compare", "conclude", "approval"].map(stageId => ({
           stageId,
           text: `阶段 ${stageId} 输出`,
         })),
@@ -180,7 +206,7 @@ describe("管线工具注册与执行（patent_workflow / patent_plan_task / pat
     );
     const text = textOf(res);
     assert.ok(text.includes("patent_workflow(patent_novelty_v1)"));
-    assert.ok(text.includes("5/5 阶段完成"));
+    assert.ok(text.includes("6/6 阶段完成"));
     assert.ok(text.includes("completed"));
   });
 
@@ -413,7 +439,12 @@ describe("管线工具注册与执行（patent_workflow / patent_plan_task / pat
 describe("patent inventiveness 工作流（patent_inventiveness_v1 接线）", () => {
   it("runWorkflow 全阶段有输出 → completed", async () => {
     const outputs = new Map(INVENTIVENESS_COMPLIANT_OUTPUTS.map(o => [o.stageId, o.text]));
-    const result = await runWorkflow(patentInventivenessManifest, {}, async stage => outputs.get(stage.id) ?? "");
+    const result = await runWorkflow(
+      patentInventivenessManifest,
+      {},
+      async stage => outputs.get(stage.id) ?? "",
+      emptyRegistriesFor(patentInventivenessManifest),
+    );
     assert.equal(result.completed, true);
     assert.equal(result.degradedSteps.length, 0);
     assert.equal(result.stages.length, 8);
@@ -486,7 +517,7 @@ describe("patent_workflow 工具：caseId 持久化（workflow-runs/ 子目录�
       const res = await tool.execute(
         {
           caseId: "case-001",
-          outputs: ["parse", "search", "compare", "conclude", "approval"].map(stageId => ({
+          outputs: ["parse", "generate_keywords", "search", "compare", "conclude", "approval"].map(stageId => ({
             stageId,
             text: `阶段 ${stageId} 输出`,
           })),
@@ -501,14 +532,14 @@ describe("patent_workflow 工具：caseId 持久化（workflow-runs/ 子目录�
       const loaded = await store.loadRun("case-001__patent_novelty_v1");
       assert.ok(loaded, "run 文件应可恢复");
       assert.equal(loaded?.manifestId, "patent_novelty_v1");
-      assert.equal(loaded?.stages.length, 5);
+      assert.equal(loaded?.stages.length, 6);
       // 同目录应顺带生成 Mermaid 计划文档
       const mmd = await readFile(
         join(dir, "data", "cases", "case-001", "workflow-runs", "case-001__patent_novelty_v1.mmd"),
         "utf8",
       );
       assert.ok(mmd.startsWith("flowchart TD"));
-      assert.ok(mmd.includes("parse --> search"));
+      assert.ok(mmd.includes("parse --> generate_keywords"));
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

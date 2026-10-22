@@ -49,12 +49,30 @@ test("validateWorkflowManifest rejects malformed manifests", () => {
 });
 
 test("runWorkflow executes all stages and reports completion", async () => {
-  const result = await runWorkflow(patentNoveltyManifest, { input: "一种自动化分拣装置" }, okExecutor);
+  // 空注册表：强制所有 atom 阶段回退 executor（测试 executor 路径，不依赖 provider）
+  const emptyHandlers = new StageHandlerRegistry();
+  const emptyAtoms = new AtomRegistry();
+  // 注册一个虚拟 atom 契约以满足 fail-fast 校验（阶段声明的 atom 必须在 atoms 里有契约）
+  for (const stage of patentNoveltyManifest.stages) {
+    if (stage.atom) {
+      emptyAtoms.register({
+        name: stage.atom,
+        description: "test",
+        category: "extract",
+        inputSchema: [],
+        outputSchema: [],
+      });
+    }
+  }
+  const result = await runWorkflow(patentNoveltyManifest, { input: "一种自动化分拣装置" }, okExecutor, {
+    handlers: emptyHandlers,
+    atoms: emptyAtoms,
+  });
   assert.equal(result.manifestId, "patent_novelty_v1");
   assert.equal(result.completed, true);
-  assert.equal(result.stages.length, 5);
+  assert.equal(result.stages.length, 6);
   assert.deepEqual(result.degradedSteps, []);
-  assert.match(result.summary, /5\/5 阶段完成/);
+  assert.match(result.summary, /6\/6 阶段完成/);
 });
 
 test("runWorkflow marks degraded stages without aborting", async () => {
@@ -62,7 +80,23 @@ test("runWorkflow marks degraded stages without aborting", async () => {
     if (stage.id === "compare") return Promise.resolve("");
     return Promise.resolve(`[${stage.id}] 完成`);
   };
-  const result = await runWorkflow(patentNoveltyManifest, {}, flakyExecutor);
+  const emptyHandlers = new StageHandlerRegistry();
+  const emptyAtoms = new AtomRegistry();
+  for (const stage of patentNoveltyManifest.stages) {
+    if (stage.atom) {
+      emptyAtoms.register({
+        name: stage.atom,
+        description: "test",
+        category: "extract",
+        inputSchema: [],
+        outputSchema: [],
+      });
+    }
+  }
+  const result = await runWorkflow(patentNoveltyManifest, {}, flakyExecutor, {
+    handlers: emptyHandlers,
+    atoms: emptyAtoms,
+  });
   assert.equal(result.completed, false);
   assert.deepEqual(result.degradedSteps, ["compare"]);
   assert.ok(result.stages.find(s => s.stageId === "compare")?.degraded);
@@ -88,16 +122,21 @@ test("runWorkflow retries failed stages up to maxRetries", async () => {
   assert.equal(calls, 3);
 });
 
-test("novelty manifest covers the full five-stage analysis chain", () => {
-  assert.equal(patentNoveltyManifest.stages.length, 5);
+test("novelty manifest covers the full six-stage analysis chain with atom declarations", () => {
+  assert.equal(patentNoveltyManifest.stages.length, 6);
   assert.deepEqual(
     patentNoveltyManifest.stages.map(s => s.id),
-    ["parse", "search", "compare", "conclude", "approval"],
+    ["parse", "generate_keywords", "search", "compare", "conclude", "approval"],
   );
   assert.equal(patentNoveltyManifest.caseType, "novelty_search");
   assert.deepEqual(
     patentNoveltyManifest.stages.map(s => s.strategy),
-    ["chain", "react", "chain", "chain", "chain"],
+    ["chain", "chain", "react", "chain", "chain", "chain"],
+  );
+  // 原子声明对齐 buildNoveltyGraph：extract → keywords → search → novelty → approval-gate
+  assert.deepEqual(
+    patentNoveltyManifest.stages.map(s => s.atom),
+    ["extract", "keywords", "search", "novelty", undefined, "approval-gate"],
   );
 });
 
@@ -160,7 +199,7 @@ test("runWorkflow：无 params 时 handler 执行态与共享 state 一致", asy
   assert.equal(result.stages[0]!.output, "from-ctx");
 });
 
-test("inventiveness manifest covers the full eight-stage three-step chain", () => {
+test("inventiveness manifest covers the full eight-stage three-step chain with atom declarations", () => {
   assert.equal(patentInventivenessManifest.id, "patent_inventiveness_v1");
   assert.equal(patentInventivenessManifest.name, "专利创造性分析");
   assert.equal(patentInventivenessManifest.caseType, "inventiveness_analysis");
@@ -173,10 +212,31 @@ test("inventiveness manifest covers the full eight-stage three-step chain", () =
     patentInventivenessManifest.stages.map(s => s.strategy),
     ["chain", "react", "chain", "chain", "chain", "chain", "chain", "chain"],
   );
+  // 原子声明对齐 buildInventivenessGraph：search + approval-gate；hint/secondary 用 reasoning
+  assert.deepEqual(
+    patentInventivenessManifest.stages.map(s => s.atom),
+    [undefined, "search", undefined, undefined, "reasoning", "reasoning", undefined, "approval-gate"],
+  );
 });
 
 test("runWorkflow executes inventiveness manifest stages and reports completion", async () => {
-  const result = await runWorkflow(patentInventivenessManifest, { input: "一种散热装置" }, okExecutor);
+  const emptyHandlers = new StageHandlerRegistry();
+  const emptyAtoms = new AtomRegistry();
+  for (const stage of patentInventivenessManifest.stages) {
+    if (stage.atom) {
+      emptyAtoms.register({
+        name: stage.atom,
+        description: "test",
+        category: "extract",
+        inputSchema: [],
+        outputSchema: [],
+      });
+    }
+  }
+  const result = await runWorkflow(patentInventivenessManifest, { input: "一种散热装置" }, okExecutor, {
+    handlers: emptyHandlers,
+    atoms: emptyAtoms,
+  });
   assert.equal(result.manifestId, "patent_inventiveness_v1");
   assert.equal(result.completed, true);
   assert.equal(result.stages.length, 8);
@@ -189,7 +249,23 @@ test("runWorkflow marks degraded inventiveness stage without aborting", async ()
     if (stage.id === "hint") return Promise.resolve("");
     return Promise.resolve(`[${stage.id}] 完成`);
   };
-  const result = await runWorkflow(patentInventivenessManifest, {}, flakyExecutor);
+  const emptyHandlers = new StageHandlerRegistry();
+  const emptyAtoms = new AtomRegistry();
+  for (const stage of patentInventivenessManifest.stages) {
+    if (stage.atom) {
+      emptyAtoms.register({
+        name: stage.atom,
+        description: "test",
+        category: "extract",
+        inputSchema: [],
+        outputSchema: [],
+      });
+    }
+  }
+  const result = await runWorkflow(patentInventivenessManifest, {}, flakyExecutor, {
+    handlers: emptyHandlers,
+    atoms: emptyAtoms,
+  });
   assert.equal(result.completed, false);
   assert.deepEqual(result.degradedSteps, ["hint"]);
   assert.ok(result.stages.find(s => s.stageId === "hint")?.degraded);

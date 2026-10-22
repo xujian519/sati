@@ -495,14 +495,15 @@ test("runWorkflow 向后兼容：executor 可选、无 atom 时走 executor", as
   assert.equal(result.completed, true); // requireAllSteps=false
 });
 
-test("patentNoveltyManifest 纯收口语义（无 atom 声明）", () => {
+test("patentNoveltyManifest 原子声明对齐 buildNoveltyGraph", () => {
   assert.deepEqual(
     patentNoveltyManifest.stages.map(s => s.strategy),
-    ["chain", "react", "chain", "chain", "chain"],
+    ["chain", "chain", "react", "chain", "chain", "chain"],
   );
-  // 内置 manifest 不声明 atom：消费方 patent_workflow 工具为"主代理产出→工具收口"语义。
+  // 原子声明对齐 buildNoveltyGraph：extract → keywords → search → novelty → approval-gate
+  // conclude 为收口模式（graph 侧同为自定义 LLM 节点，非 atom handler）
   assert.deepEqual(
     patentNoveltyManifest.stages.map(s => s.atom),
-    [undefined, undefined, undefined, undefined, undefined],
+    ["extract", "keywords", "search", "novelty", undefined, "approval-gate"],
   );
 });
