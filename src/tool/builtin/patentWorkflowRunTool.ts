@@ -50,8 +50,9 @@ export function createPatentWorkflowRunTool(
       "patent_disclosure_v1 (PFE extraction → prior-art search → per-feature novelty → review gate → claims draft), " +
       "patent_drafting_v1 (disclosure pipeline → prior-art compare → drafting: claims draft + specification draft + " +
       "deterministic spec validation + slop score gate; HITL at deconstruct/search/compare/disclosure/final). " +
-      "Graph path (graph=novelty|inventiveness|enablement): runs a full domain graph (LLM nodes + patent search + " +
+      "Graph path (graph=novelty|inventiveness|enablement|citation_check): runs a full domain graph (LLM nodes + patent search + " +
       "deterministic rule gate) in one call — e.g. graph=inventiveness runs the A22.3 three-step analysis end-to-end. " +
+      "citation_check is a pure-function graph (no LLM) that verifies citation grounding against search results. " +
       "Provide the input as 'input'. The review gate pauses the run (reports interrupted + checkpointId); re-invoking " +
       "with resumeCheckpointId continues from the pause point (the gate pauses again), while approveCheckpointId " +
       "grants the gate and resumes past it. Manifest path: approveStageIds skips approved gates on rerun; " +
@@ -72,10 +73,11 @@ export function createPatentWorkflowRunTool(
         },
         graph: {
           type: "string",
-          enum: ["novelty", "inventiveness", "enablement"],
+          enum: ["novelty", "inventiveness", "enablement", "citation_check"],
           description:
-            "Domain graph to run: novelty (A22.2), inventiveness (A22.3 three-step), enablement (A26.3). " +
-            "Runs all LLM/search/rule-gate nodes up to the approval gate, which pauses the run (HITL); " +
+            "Domain graph to run: novelty (A22.2), inventiveness (A22.3 three-step), enablement (A26.3), " +
+            "citation_check (pure-function citation grounding verification, no LLM). " +
+            "LLM graphs run all nodes up to the approval gate, which pauses the run (HITL); " +
             "re-invoke with resumeCheckpointId to continue (the gate pauses again until approved). " +
             "Mutually exclusive with manifestId.",
         },

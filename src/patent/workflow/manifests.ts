@@ -445,7 +445,8 @@ export const patentDraftingManifest: WorkflowManifest = {
     {
       id: "chemistry",
       strategy: "chain",
-      description: "化学式核验（主代理经 recognize_chemical_structure 完成后透传）",
+      description: "化学式核验（化学领域自动触发 SMILES/InChI 识别；非化学领域跳过）",
+      atom: "chemistry-analyze",
     },
     {
       id: "generate_keywords",

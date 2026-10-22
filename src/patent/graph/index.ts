@@ -44,6 +44,8 @@ export {
   extractEnablementResult,
   detectTechnicalDomain,
   type BuildEnablementGraphOptions,
+  buildCitationCheckGraph,
+  type BuildCitationCheckGraphOptions,
   handlerNode,
   llmNode,
   ruleGateNode,

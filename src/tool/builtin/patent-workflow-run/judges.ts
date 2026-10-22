@@ -54,6 +54,12 @@ export type JudgeSectionOptions = {
   interrupted: boolean;
   /** LLM 通道（judge 调用经 provider.callLLM，modelHint 透传 per-node 覆盖）。 */
   provider: StageProvider | undefined;
+  /**
+   * 退化标记：judgeModels 已配置但 modelHints 未配置（或缺少对应键），
+   * 所有 judge 实际命中同一默认模型，共识退化为同模型 N 次采样。
+   * 为 true 时在评估段落头部追加退化提示（不改变结构化数据）。
+   */
+  degradedToSingleModel?: boolean;
 };
 
 /**
@@ -119,7 +125,12 @@ export async function buildJudgeSection(opts: JudgeSectionOptions): Promise<stri
         },
       ],
     });
-    return `\n${renderConsensusText(verdict)}\n🔏 Verdict Envelope: overall=${envelope.overall} | hash=${envelope.hash.slice(0, 16)}…`;
+    const consensusLine = `\n${renderConsensusText(verdict)}\n🔏 Verdict Envelope: overall=${envelope.overall} | hash=${envelope.hash.slice(0, 16)}…`;
+    // 退化提示：judgeModels 已配置但 modelHints 缺失，所有 judge 实际命中同一默认模型。
+    const degradationNote = opts.degradedToSingleModel
+      ? "\n⚠️ 共识退化：未配置 patents.modelHints，所有 judge 使用同一模型（同模型 N 次采样，方差抑制能力为零）"
+      : "";
+    return `${degradationNote}${consensusLine}`;
   }
 
   // 单模型路径（向后兼容：judgeSamples）。

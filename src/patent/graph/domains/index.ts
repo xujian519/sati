@@ -24,6 +24,11 @@ import {
   detectTechnicalDomain,
   type BuildEnablementGraphOptions,
 } from "./enablement.js";
+import {
+  buildCitationCheckGraph,
+  CITATION_CHECK_INPUT_DECLARATIONS,
+  type BuildCitationCheckGraphOptions,
+} from "./citation-check.js";
 
 export {
   handlerNode,
@@ -47,12 +52,14 @@ export {
   detectTechnicalDomain,
   type BuildEnablementGraphOptions,
 };
+export { buildCitationCheckGraph, CITATION_CHECK_INPUT_DECLARATIONS, type BuildCitationCheckGraphOptions };
 
 /** 三性领域子图注册表（单一数据源：工具层/评测按名取构建函数与入口节点）。 */
 export const DOMAIN_GRAPHS = {
   novelty: { build: buildNoveltyGraph, entry: "extract" },
   inventiveness: { build: buildInventivenessGraph, entry: "parse" },
   enablement: { build: buildEnablementGraph, entry: "load" },
+  citation_check: { build: buildCitationCheckGraph, entry: "check" },
 } as const;
 
 /**
@@ -70,6 +77,9 @@ export const DOMAIN_INPUT_DECLARATIONS: Readonly<Record<DomainGraphName, Readonl
     },
     get enablement() {
       return ENABLEMENT_INPUT_DECLARATIONS;
+    },
+    get citation_check() {
+      return CITATION_CHECK_INPUT_DECLARATIONS;
     },
   };
 

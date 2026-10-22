@@ -7,7 +7,13 @@
  * - hint.evidence 为自由文本时仅提取专利号，不做标题/段落硬匹配；
  * - 无专利号时回退提取文档标识（对比文件N / 证据N / D<N>）做归一比对；
  * - prior_art 为空/检索降级时跳过硬校验（不双重惩罚）。
+ *
+ * W-02：封装为独立领域子图 buildCitationCheckGraph，支持 graph=citation_check 独立调用。
  */
+
+import { GraphBuilder } from "../engine.js";
+import type { GraphNode } from "../types.js";
+import { getStateArray } from "../state.js";
 
 /**
  * 专利号正则（国家代码 2 位 + 1-14 位数字 + 可选类型后缀）。
@@ -89,3 +95,48 @@ export function checkCitations(opts: { refTexts: readonly string[]; docs: readon
     report: `引用真实性校验：以下引用未在检索结果中找到对应对比文件: ${uncited.join("、")}（需核实引用或补充检索）`,
   };
 }
+
+// ---------------------------------------------------------------------------
+// W-02: 独立领域子图封装（graph=citation_check）
+// ---------------------------------------------------------------------------
+
+export type BuildCitationCheckGraphOptions = {
+  /** 溯源包装钩子（ProvenanceCollector.wrapNode）：addNode 统一入口，透传 GraphBuilder。 */
+  onAddNode?: (name: string, node: GraphNode) => GraphNode;
+};
+
+/**
+ * 引用真实性校验子图：单节点 check，读取 refTexts + docs 执行 checkCitations。
+ * 输入状态键：
+ * - refTexts: string[]（引用文本数组，如创造性结论各段）
+ * - docs: unknown[]（检索结果数组，如 prior_art）
+ *
+ * 输出状态键：
+ * - citation_check_grounded: boolean
+ * - citation_check_uncited: string[]
+ * - citation_check_report: string
+ */
+export function buildCitationCheckGraph(options: BuildCitationCheckGraphOptions = {}): GraphBuilder {
+  const builder = new GraphBuilder({ onAddNode: options.onAddNode });
+
+  builder.addNode("check", async ({ state }) => {
+    const refTexts = getStateArray(state, "refTexts") as string[];
+    const docs = getStateArray(state, "docs");
+    const result = checkCitations({ refTexts, docs });
+    return {
+      citation_check_grounded: result.grounded,
+      citation_check_uncited: result.uncited,
+      citation_check_report: result.report,
+    };
+  });
+
+  return builder;
+}
+
+/**
+ * 引用真实性校验子图节点输入声明表（溯源 derivedFrom 链）。
+ * check 节点读取 refTexts 和 docs 两个状态键。
+ */
+export const CITATION_CHECK_INPUT_DECLARATIONS: Readonly<Record<string, readonly string[]>> = {
+  check: ["refTexts", "docs"],
+};
