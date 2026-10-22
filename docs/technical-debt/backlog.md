@@ -2425,9 +2425,9 @@
 - [x] **P2**（P2.7）`src/cli/projectRuntimeFactory.ts` — `createProjectRuntimeResolver`（实测 428 → **77** 行；文件 577 → 235）（`ea361690a`；`emitBackgroundTaskCompletion` 与 `buildRouterEventBus` 外移 `projectRuntimeRouterEvents.ts`（141 行），模型/路由/插件层抽 `createModelAndRouterLayer`）
 - [x] **P2**（P2.7）`src/cli/projectRuntimeFactory.ts` — `resolve`（实测 320 → **73** 行；三段装配外移）（`ea361690a`；记忆/知识库 `projectRuntimeKnowledge.ts`（201 行：`createProjectMemoryLayer` + `createKnowledgeResolverLayer`）、工具表 `projectRuntimeTools.ts`（177 行：`createProjectTools`）；god fn **54 → 51**、≥400 存量 **27 → 25**）
 - [x] **P2**（P2.8）`src/adapters/channel/tui/app/TuiApp.tsx` — `TuiApp`（643 → **184 行** render 层；判据「拆 render/input/state 三层」达成）（`50f1eca3c`；按关注点拆四模块——`useTuiActions.ts`（state 层 284）+ `useTuiInput.ts`（input 层 318，288 行 `useInput` 逐分支搬运）+ `tuiCommands.ts`（`handleCommand`/`buildPermissionEntry`，删死参 `openViewer`）+ `gatewaySurface.ts`（`Pick<Gateway,7>` 窄面供测试注入）；行为零变化；god fn **51 → 50**、≥400 存量 **25 → 24**；文件脱 file-size 棘轮存量豁免 41 → 40；事件矩阵 `submitTurn 流 ×14 → ×15`（.tsx 消费点迁入 .ts 后被正确登记，生产者列零变化）；新增 `tests/adapters/tui-commands.spec.ts` 12 例；决策见 `docs/notes/implemented/2026-10-15-tui-app-three-layer-split.md`）
-- [ ] **P2** `src/web/client/webMessage.ts` — `applyWebGatewayEvent`（383 行）
-- [ ] **P2** `src/tool/execution/ToolRuntime.ts` — `execute`（388 行）
-- [ ] **P2** `src/patent/graph/domains/inventiveness.ts` — `buildInventivenessGraph`（342 行）
+- [x] **P2**（P2.9）`src/web/client/webMessage.ts` — `applyWebGatewayEvent`（383 → **11** 行；判据 ≤200 达成）（`1fd45f71`；全 23 种 `WebGatewayEvent` 进 required Record `WEB_EVENT_HANDLERS`，8 种静音帧显式 `ignoreEvent`；`appendDelta`/`liveMessage` 消样板；42/42 事件 A/B 字节一致 + `ok` 翻转负控制按预期转红；文件 567 → 605；决策见 `docs/notes/implemented/2026-10-22-sweep-p2-9-p2-10-tail-splits.md`）
+- [x] **P2**（P2.9）`src/tool/execution/ToolRuntime.ts` — `execute`（388 → **16** 行；判据 ≤200 达成）（`1fd45f71`；五阶段私有方法 `preflight`/`applyPreToolUseHooks`/`resolvePermission`/`runTool` 保持审计/事件/证据顺序；`toolErrorFormatting.ts`（69 行）与 `planModePreflight.ts`（77 行）外移使文件 710 → 683（≤800）；185 定向测试 + 2 负控制（alwaysAsk 声明式 allow、timeout 归一）各按预期 1 红后恢复；决策同上）
+- [x] **P2**（P2.10）`src/patent/graph/domains/inventiveness.ts` — `buildInventivenessGraph`（342 → **21** 行；判据「图构建声明化」达成）（`1fd45f71`；`STAGE_NODES`/`STAGE_EDGES` 表驱动，开关决议纯函数 `resolveGraphFlags`/`normalizeMaxRounds`；14/14 组合 `describe()` 逐字节一致、10/10 运行 state/degraded/interrupted/prompt 多重集一致；负控制 maxRounds=0 与 citationGate 各按预期 1/3 红；文件 633 → 696；决策同上）
 
 ### 38.2 ≥800 行文件（40 个：承接 14 + 未承接 26）
 
