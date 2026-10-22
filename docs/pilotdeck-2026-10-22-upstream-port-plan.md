@@ -1,6 +1,6 @@
 # Sati × PilotDeck 引入方案（2026-10-22 批次）
 
-Status: in progress（#654、#645 鉴权/Lark 域名与 IM 控制器、#665 已落地；ESM require 待落地）
+Status: 本批推荐项已落地（#654、#645 鉴权/Lark 域名/IM 控制器、#665、可选频道 ESM require）
 
 范围基线：上游 **v2026.10.13-r2（`783499f`，2026-10-13）+ #648/#649（2026-10-15）**，即
 `pilotdeck-2026-10-13-upstream-port-plan.md` 的实际已消耗边界；评估时点上游 **v2026.10.20**
@@ -14,7 +14,7 @@ Status: in progress（#654、#645 鉴权/Lark 域名与 IM 控制器、#665 已�
 | PR | 内容 | 判定 | 依据 |
 |---|---|---|---|
 | #654（#637 为其初版） | tree-sitter 解析 shell 命令与权限缺口 | **P0 已落地** | Sati 可复现换行只读绕过与 allow 跨命令匹配 |
-| #645 | IM 回复流式化 + 飞书鉴权/生命周期 + Slack/Telegram 可用 | **P0/P1 分片落地（鉴权、Lark 域名、控制器与飞书生命周期）** | 飞书 webhook 多种配置下接受未鉴权事件；控制器无节流/取消；ESM `require` 使频道不可用 |
+| #645 | IM 回复流式化 + 飞书鉴权/生命周期 + Slack/Telegram 可用 | **P0/P1 已落地（鉴权、Lark 域名、控制器、飞书生命周期、ESM require）** | 飞书 webhook 多种配置下接受未鉴权事件；控制器无节流/取消；ESM `require` 使频道不可用 |
 | #665 | 辅助模型请求不再强制关 thinking | **P1 已落地** | 两行；重放键不投影 thinking |
 | #642 / #653 | UploadStore 扩展名保留 | 不适用 | Sati 无 `src/gateway/dialog/UploadStore.ts`；`ui/server/services/uploads.js` 已保留原名与扩展名并用 `COPYFILE_EXCL` |
 | #650 | 桌面原生缩放指示器 | 不适用 | 桌面端已分叉 |
@@ -81,8 +81,13 @@ Status: in progress（#654、#645 鉴权/Lark 域名与 IM 控制器、#665 已�
 
 ### P1-3 可选频道 ESM `require`
 
-待落地。8 处裸 `require` 改 `createRequire(import.meta.url)`，恢复 discord/matrix/dingtalk/
-slack/email/sms/telegram 与 `ws` 回退路径。
+已落地。8 处裸 `require` 改为模块级 `createRequire(import.meta.url)`，覆盖 discord/matrix/
+dingtalk/slack/email/sms/telegram 与 `ws` 回退路径；保持可选 SDK 的惰性加载与「未安装可捕获」
+语义。回归判据 `tests/adapters/channel-esm-require.spec.ts`：静态锁定 8 个文件的声明顺序，
+运行期断言 `resolveWebSocketImpl()` 返回 `ws.WebSocket`。负控制：回退源文件后 2 例均转红；
+恢复后 2/2 绿；全量 `pnpm test` 5923 pass / 5 skipped / 0 fail、`pnpm check` green。
+决策记录：`docs/notes/implemented/2026-10-22-esm-optional-channel-require.md`。
+未验证：七个可选 SDK 不在依赖内，CI 不建立真实连接。
 
 ## 三、明确不做
 

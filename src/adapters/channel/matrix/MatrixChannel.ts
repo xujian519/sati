@@ -1,3 +1,4 @@
+import { createRequire } from "node:module";
 import { join } from "node:path";
 import { chunkText } from "../protocol/text.js";
 import type { Gateway, GatewayChannelKey } from "../../../gateway/index.js";
@@ -32,6 +33,9 @@ interface MatrixClientLike {
 }
 type MatrixClientCtor = new (homeserver: string, accessToken: string, storage: unknown) => MatrixClientLike;
 type SimpleFsStorageProviderCtor = new (path: string) => unknown;
+
+// 包是 ESM（"type": "module"），CommonJS 的 require 全局不存在；模块级 require 让可选 SDK 保持惰性加载。
+const require = createRequire(import.meta.url);
 
 let MatrixSdk: { MatrixClient: MatrixClientCtor; SimpleFsStorageProvider: SimpleFsStorageProviderCtor } | undefined;
 try {

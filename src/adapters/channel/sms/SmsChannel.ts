@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { createRequire } from "node:module";
 import type { Gateway, GatewayChannelKey } from "../../../gateway/index.js";
 import type { CronResultDelivery } from "../../../cron/index.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
@@ -18,6 +19,9 @@ interface TwilioClientLike {
   messages: { create(options: Record<string, unknown>): Promise<unknown> };
 }
 type TwilioFactory = (accountSid: string, authToken: string) => TwilioClientLike;
+
+// 包是 ESM（"type": "module"），CommonJS 的 require 全局不存在；模块级 require 让可选 SDK 保持惰性加载。
+const require = createRequire(import.meta.url);
 
 let twilioFactory: TwilioFactory | undefined;
 try {
