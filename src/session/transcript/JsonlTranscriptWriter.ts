@@ -490,6 +490,9 @@ export class JsonlTranscriptWriter implements AgentTranscriptWriter {
       turns: number;
       durationMs: number;
       errored?: boolean;
+      stopReason?: AgentSubagentCompletedTranscriptEntry["stopReason"];
+      partial?: boolean;
+      toolCalls?: number;
     },
   ): Promise<void> {
     const { preview, truncated } = truncatePreview(args.summary, SUBAGENT_SUMMARY_PREVIEW_BYTES);
@@ -504,6 +507,9 @@ export class JsonlTranscriptWriter implements AgentTranscriptWriter {
       turns: args.turns,
       durationMs: args.durationMs,
       errored: args.errored,
+      ...(args.stopReason !== undefined ? { stopReason: args.stopReason } : {}),
+      ...(args.partial !== undefined ? { partial: args.partial } : {}),
+      ...(args.toolCalls !== undefined ? { toolCalls: args.toolCalls } : {}),
     };
     return this.recordEntry(entry);
   }

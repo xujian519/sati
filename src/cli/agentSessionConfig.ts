@@ -16,6 +16,7 @@
 
 import type { SessionConfigOverride } from "../always-on/runtime/SessionConfigOverrides.js";
 import { type AgentRuntimeConfig, type CreateAgentSessionOptions } from "../agent/index.js";
+import { resolveSubagentTokenLimits } from "../agent/runtime/modelContextWindow.js";
 import { brandEnv, ENV_KEY } from "../env.js";
 import { injectMethodology, type MethodologyRegistry } from "../methodology/index.js";
 import { type ModelRuntime } from "../model/index.js";
@@ -129,8 +130,20 @@ export function buildAgentSessionConfig(deps: AgentSessionConfigInput): CreateAg
     let subagentMaxOutputTokens: number | undefined;
     try {
       const caps = runtime.model.getCapabilities(subagentModel.provider, subagentModel.model);
-      subagentMaxContextTokens = caps.maxContextTokens;
-      subagentMaxOutputTokens = caps.maxOutputTokens;
+      const sources = runtime.model.getTokenLimitSources?.(subagentModel.provider, subagentModel.model);
+      const resolved = resolveSubagentTokenLimits({
+        parentProvider: provider,
+        parentMaxContextTokens: maxContextTokens,
+        parentMaxOutputTokens: maxOutputTokens,
+        subagentProvider: subagentModel.provider,
+        subagentMaxContextTokens: caps.maxContextTokens,
+        subagentMaxOutputTokens: caps.maxOutputTokens,
+        subagentContextSource: sources?.maxContextTokens,
+        subagentOutputSource: sources?.maxOutputTokens,
+      });
+      subagentMaxContextTokens = resolved.maxContextTokens;
+      subagentMaxOutputTokens =
+        parsePositiveInt(brandEnv(deps.env, ENV_KEY.MAX_OUTPUT_TOKENS)) ?? resolved.maxOutputTokens;
     } catch {
       // Keep the override even if capability lookup fails.
     }
@@ -139,11 +152,7 @@ export function buildAgentSessionConfig(deps: AgentSessionConfigInput): CreateAg
       model: subagentModel.model,
       ...(subagentModelMultimodal ? { modelMultimodal: subagentModelMultimodal } : {}),
       ...(subagentMaxContextTokens !== undefined ? { maxContextTokens: subagentMaxContextTokens } : {}),
-      ...(subagentMaxOutputTokens !== undefined
-        ? {
-            maxOutputTokens: parsePositiveInt(brandEnv(deps.env, ENV_KEY.MAX_OUTPUT_TOKENS)) ?? subagentMaxOutputTokens,
-          }
-        : {}),
+      ...(subagentMaxOutputTokens !== undefined ? { maxOutputTokens: subagentMaxOutputTokens } : {}),
     };
   }
   return {

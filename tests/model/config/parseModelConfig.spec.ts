@@ -144,3 +144,81 @@ test("catalog env var still applies when the custom url equals the catalog endpo
 
   assert.equal(config.providers.openai.apiKey, "sk-env");
 });
+
+test("catalog 未命中的模型记录 protocol-default 来源（窗口是假设而非事实）", () => {
+  const config = parseModelConfig({
+    providers: {
+      deepseek: {
+        protocol: "openai",
+        url: "https://example.invalid/v1",
+        apiKey: "sk-test",
+        models: { "deepseek-flash": {} },
+      },
+    },
+  });
+  const model = config.providers.deepseek.models["deepseek-flash"];
+
+  assert.equal(model?.capabilities.maxContextTokens, 128_000);
+  assert.deepEqual(model?.tokenLimitSources, {
+    maxContextTokens: "protocol-default",
+    maxOutputTokens: "protocol-default",
+  });
+});
+
+test("catalog 命中的模型记录 catalog 来源", () => {
+  const config = parseModelConfig({
+    providers: {
+      deepseek: {
+        protocol: "openai",
+        url: "https://api.deepseek.com/v1",
+        apiKey: "sk-test",
+        models: { "deepseek-v4-flash": {} },
+      },
+    },
+  });
+  const model = config.providers.deepseek.models["deepseek-v4-flash"];
+
+  assert.deepEqual(model?.tokenLimitSources, {
+    maxContextTokens: "catalog",
+    maxOutputTokens: "catalog",
+  });
+});
+
+test("显式 contextWindow / maxOutputTokens 记录 config 来源", () => {
+  const config = parseModelConfig({
+    providers: {
+      deepseek: {
+        protocol: "openai",
+        url: "https://example.invalid/v1",
+        apiKey: "sk-test",
+        models: {
+          "deepseek-flash": { capabilities: { contextWindow: 1_000_000, maxOutputTokens: 65_536 } },
+        },
+      },
+    },
+  });
+  const model = config.providers.deepseek.models["deepseek-flash"];
+
+  assert.equal(model?.capabilities.maxContextTokens, 1_000_000);
+  assert.deepEqual(model?.tokenLimitSources, {
+    maxContextTokens: "config",
+    maxOutputTokens: "config",
+  });
+});
+
+test("仅声明一维上限时另一维保留原来源", () => {
+  const config = parseModelConfig({
+    providers: {
+      deepseek: {
+        protocol: "openai",
+        url: "https://example.invalid/v1",
+        apiKey: "sk-test",
+        models: { "deepseek-flash": { capabilities: { maxOutputTokens: 32_000 } } },
+      },
+    },
+  });
+  const model = config.providers.deepseek.models["deepseek-flash"];
+
+  assert.equal(model?.tokenLimitSources?.maxContextTokens, "protocol-default");
+  assert.equal(model?.tokenLimitSources?.maxOutputTokens, "config");
+});

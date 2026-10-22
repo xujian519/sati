@@ -13,7 +13,7 @@ description: 专利案持久团队组建模板。当 Sati 团队编排层可用�
 
 ## 前置条件
 
-- 环境提供 `team_*` 工具（Sati 团队编排层 M3 起全量可用：`team_create` / `team_add_member` / `team_remove_member` / `team_create_task` / `team_update_task` / `team_reassign_task` / `team_send_message` / `team_status` / `team_archive`；dsh 的 `agent_teams_*` 工具名在 Sati 侧对应为 `team_*`）；否则回退单会话 + `agent` 工具子代理（`subagent_type`，如 `patent-retriever` / `patent-reviewer`）专家互评。
+- 环境提供 `team_*` 工具（Sati 团队编排层 M3 起全量可用：`team_create` / `team_add_member` / `team_remove_member` / `team_create_task` / `team_update_task` / `team_reassign_task` / `team_send_message` / `team_status` / `team_archive`；dsh 的 `agent_teams_*` 工具名在 Sati 侧对应为 `team_*`）；否则回退单会话 + `agent` 工具子代理（`subagent_type`，如 `patent-retriever` / `patent-reviewer`）专家互评。**复核/红队任务必须用真实角色 id 作 `subagent_type`（如 `adversarial-reviewer` / `patent-reviewer`）；禁止用 `general-purpose` 再在 prompt 里写角色名——那样拿到的是通用代理的写权限与工具面，只读约束与输出契约全部失效。**
 - 一个 captain（主会话）同时只领导一个活跃团队；建队前确认无未收口的团队。
 - 团队成员默认继承 captain 的 LLM 路由与 effort，不指定 provider/model；仅当用户明确要求异构团队（如"检索用 X 模型"）时才传 provider + model。
 - 并发闸（**Sati 差异**）：dsh 单团队成员上限 8（插件 `maxMembers` 默认 8）在 Sati 无对应注册上限，改由调度器并发闸约束——`maxConcurrentMembers` 默认 4（deployment 可调），working 成员数达闸限不派新任务（成员邮箱仍投递，pending 任务排队等待空闲成员）；七个场景包成员数（6-7 人）可超过并发闸，按 DAG 依赖逐批分派即可。
@@ -154,6 +154,7 @@ description: 专利案持久团队组建模板。当 Sati 团队编排层可用�
 - 单一事实源：团队任务状态只是投影，事件日志与案卷产物落盘（`_matter-log.md`）为唯一事实源；成员完成即回报 captain。
 - 立场配对：复审/无效 = 请求方（申请人代理/无效请求人）× 防御方（专利权人）+ 合议组（裁判）；诉讼 = 专利权人（原告）× 被告代理人（抗辩）+ 裁判（裁决）+ 调查官（技术查明）。每个立场一个成员，不合并；对抗意见冲突由 captain 收口并说明取舍理由。
 - 角色边界：技术专家不评法律论证，代理人/请求人/被告不代写对方文书，裁判不参与任一方策略起草，案件管理员不评技术内容。
+- 复核派发纪律：复核角色经 `subagent_type` 真实调度（`patent-reviewer` / `adversarial-reviewer` / 各 checker），并显式给预算（建议 `max_turns` 8–16、`max_tool_calls` 24–40）；返回 `partial: true` 时只能当临时意见，需缩小复核范围或提高预算后重跑，不得当作完整结论收口。
 - 期限与流程：答复期限、复审 3 个月与恢复窗口、补正期限、送达日认定（电子送达不加 15 日，只有邮寄才有满 15 日推定）由案件管理员或 captain 核验，禁止心算——用 `patent_deadlines` 机械核算。
 - HITL 确认点不可跳过：权利要求布局、修改方案、无效理由组合、诉请金额、答复策略在动手前用 `ask_user_question` 确认或至少说明取舍理由。
 - 收口：全部任务完成后 `team_archive` 归档团队；归档保留完整成员与任务历史，可随时复查。

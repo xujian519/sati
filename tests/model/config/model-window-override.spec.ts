@@ -47,6 +47,7 @@ test("覆盖层高于协议默认，并汇总命中项供 UI 标注来源", () =
     windowOverrides: { "openai/custom-model": probeEntry(262144) },
   });
   assert.equal(config.providers.openai?.models["custom-model"]?.capabilities.maxContextTokens, 262144);
+  assert.equal(config.providers.openai?.models["custom-model"]?.tokenLimitSources?.maxContextTokens, "window");
   assert.deepEqual(Object.keys(config.windowOverrides ?? {}), ["openai/custom-model"]);
   assert.equal(config.windowOverrides?.["openai/custom-model"]?.source, "probe");
   assert.equal(config.windowOverrides?.["openai/custom-model"]?.via, "context_length");

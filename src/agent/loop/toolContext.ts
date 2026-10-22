@@ -8,6 +8,7 @@
 import type {
   SatiReadFileStateMap,
   SatiSubagentForkApi,
+  SatiSubagentStopReason,
   SatiToolRuntimeContext,
   SatiWriteSnapshotMap,
 } from "../../tool/index.js";
@@ -156,9 +157,19 @@ export class ToolContextFactory {
         listAllSubagentDefinitions().map(d => ({
           id: d.id,
           description: d.description,
+          readOnly: d.isReadOnly,
         })),
       isAllowedDefinition: (id: string) => getSubagentDefinition(id) !== undefined,
-      fork: async ({ definitionId, directive, subagentId, toolCallId, abortSignal, timeoutMs }) => {
+      fork: async ({
+        definitionId,
+        directive,
+        subagentId,
+        toolCallId,
+        abortSignal,
+        timeoutMs,
+        maxTurns,
+        maxToolCalls,
+      }) => {
         // Defer SubAgentSession import to avoid the runtime cycle (sub → loop → sub).
         const { SubAgentSession } = await import("../sub/SubAgentSession.js");
         const def = getSubagentDefinition(definitionId);
@@ -214,6 +225,8 @@ export class ToolContextFactory {
           parentTurnId: input.turnId,
           subagentSessionId,
           subagentId,
+          maxTurns,
+          maxToolCalls,
           abortSignal: composedAbort.signal,
           sidechainTranscript: sidechain
             ? {
@@ -223,13 +236,13 @@ export class ToolContextFactory {
             : undefined,
         });
 
+        const startedAt = Date.now();
         let report;
         try {
           report = await subSession.run();
-          if (composedAbort.timedOut()) {
-            throw new Error(`Subagent timed out after ${timeoutMs}ms.`);
-          }
         } catch (err) {
+          const timedOut = composedAbort.timedOut();
+          const durationMs = Date.now() - startedAt;
           composedAbort.cleanup();
           // 失败也排空 sidechain 写缓冲：子代理异常中断时已记录的 durable
           // 消息必须落盘（父 turn 的 subagent_completed 落盘前 sidechain 完整）。
@@ -240,23 +253,45 @@ export class ToolContextFactory {
             success: false,
             summary: err instanceof Error ? err.message : String(err),
             turns: 0,
-            durationMs: 0,
+            durationMs,
+            ...(timedOut ? { stopReason: "timed_out" as const, partial: true } : {}),
           });
+          // 超时是预算耗尽而非执行失败：返回部分结果（可能为空文本），
+          // 由 `agent` 工具在工具结果里明确标注 partial，父代理据此决定
+          // 是否重试或降级，而不是把整个子代理报告丢掉。
+          if (timedOut) {
+            return {
+              markdown: "",
+              usage: {},
+              turns: 0,
+              durationMs,
+              stopReason: "timed_out" as const,
+              partial: true,
+            };
+          }
           throw err;
         }
         composedAbort.cleanup();
-        // 成功收尾：排空 sidechain 写缓冲（无 turn_result 强制 flush，仅靠
+        // 收尾：排空 sidechain 写缓冲（无 turn_result 强制 flush，仅靠
         // 50ms 兜底定时器——进程在间隔内退出会丢 sidechain 尾条）。
         await sidechain?.flush?.();
 
+        const timedOut = composedAbort.timedOut();
+        const stopReason = timedOut ? ("timed_out" as const) : (report.stopReason ?? "completed");
+        const partial = report.partial || stopReason !== "completed";
         await this.finalizeSubagent(input, {
           subagentId,
           subagentType: def.id,
-          success: true,
-          summary: report.markdown,
+          success: !partial,
+          summary:
+            report.markdown ||
+            (partial ? `Subagent stopped early (${stopReason}) with no textual report.` : "Subagent returned no text."),
           usage: report.usage,
           turns: report.turns,
           durationMs: report.durationMs,
+          stopReason,
+          partial,
+          toolCalls: report.toolCalls,
         });
 
         return {
@@ -269,6 +304,9 @@ export class ToolContextFactory {
           // 避免 tool → agent/sub 依赖反转）；单步断言在类型上可证（Record 反向
           // 可赋给 5 键结构），运行时零变换。
           parsed: report.parsed as Record<string, string> | undefined,
+          stopReason,
+          partial,
+          toolCalls: report.toolCalls,
         };
       },
     };
@@ -285,6 +323,9 @@ export class ToolContextFactory {
       usage?: CanonicalUsage;
       turns: number;
       durationMs: number;
+      stopReason?: SatiSubagentStopReason;
+      partial?: boolean;
+      toolCalls?: number;
     },
   ): Promise<void> {
     const { dependencies } = this.host;
@@ -298,11 +339,16 @@ export class ToolContextFactory {
       turns: args.turns,
       durationMs: args.durationMs,
       errored: !args.success,
+      ...(args.stopReason !== undefined ? { stopReason: args.stopReason } : {}),
+      ...(args.partial !== undefined ? { partial: args.partial } : {}),
+      ...(args.toolCalls !== undefined ? { toolCalls: args.toolCalls } : {}),
     });
     await this.host.dispatchLifecycle(input, "SubagentStop", {
       subagentId: args.subagentId,
       subagentType: args.subagentType,
       success: args.success,
+      ...(args.stopReason !== undefined ? { stopReason: args.stopReason } : {}),
+      ...(args.partial !== undefined ? { partial: args.partial } : {}),
     });
     dependencies.eventEmitter?.({
       type: "subagent_completed",
@@ -312,6 +358,10 @@ export class ToolContextFactory {
       subagentType: args.subagentType,
       success: args.success,
       durationMs: args.durationMs,
+      turns: args.turns,
+      ...(args.stopReason !== undefined ? { stopReason: args.stopReason } : {}),
+      ...(args.partial !== undefined ? { partial: args.partial } : {}),
+      ...(args.toolCalls !== undefined ? { toolCalls: args.toolCalls } : {}),
     });
   }
 }
