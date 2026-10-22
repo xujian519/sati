@@ -1,6 +1,6 @@
 # Sati × PilotDeck 引入方案（2026-10-22 批次）
 
-Status: in progress（#654 已落地；#645 鉴权、#665、#645 控制器、ESM require 待落地）
+Status: in progress（#654、#645 鉴权与 Lark 域名已落地；#665、#645 控制器、ESM require 待落地）
 
 范围基线：上游 **v2026.10.13-r2（`783499f`，2026-10-13）+ #648/#649（2026-10-15）**，即
 `pilotdeck-2026-10-13-upstream-port-plan.md` 的实际已消耗边界；评估时点上游 **v2026.10.20**
@@ -38,8 +38,21 @@ Status: in progress（#654 已落地；#645 鉴权、#665、#645 控制器、ESM
 
 ### P0-2 #645 飞书 webhook 鉴权与 Lark REST 域名
 
-待落地。要点：headers 透传、配了密钥就必须校验、`x-lark-signature`、401 响应；REST base URL
-跟随 `domainName`；旧配置无密钥的迁移口径需在设置页/文档给出。
+已落地。要点：
+
+- 鉴权抽到新模块 `src/adapters/channel/feishu/feishu-webhook-auth.ts`：headers 透传、至少一种密钥、
+  token 常量时间比较、`x-lark-signature` 覆盖原始 body、加密 `url_verification` 的无签名例外。
+- 入站事件解析抽到 `feishu-inbound.ts`，让 `FeishuChannel.ts` 从 1404 行回落到 1286 行（存量文件
+  棘轮不再触发）。
+- 旧配置迁移口径：**fail closed**。`verifyToken`/`encryptKey` 都为空时回调返回 401，启动打 error；
+  设置页新增两个输入框与未配置警告，`/status` 只回布尔值，保存留空保持原值。
+- REST base URL 跟随 `domainName`（`open.feishu.cn` / `open.larksuite.com`）。
+- 决策记录：`docs/notes/implemented/2026-10-22-feishu-webhook-auth.md`。
+- 负控制：移除「无密钥拒绝」→ 1 条转红；允许缺 token → 2 条；跳过签名 → 4 条；域名硬编码回
+  Feishu → 1 条。
+- 验证：定向 10 例（含既有权限回复用例）、UI 全量 1486 pass、全量 `pnpm test` 5916 pass /
+  5 skipped / 0 fail、`pnpm check` green。
+- 未验证：未用真实飞书/Lark 租户发起回调；签名/AES 用本地等价报文验证，字段不符时表现为 401。
 
 ### P1-1 #665 辅助请求不再强制关 thinking
 

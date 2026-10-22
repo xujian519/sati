@@ -328,6 +328,88 @@ function jsonResponse(payload) {
   };
 }
 
+describe("gateway Feishu routes", () => {
+  it("reports webhook auth presence without echoing secrets", async () => {
+    const { request } = await createGatewayApp({
+      adapters: {
+        feishu: {
+          enabled: true,
+          appId: "cli_1234567890",
+          appSecret: "app-secret-value",
+          verifyToken: "verify-token-value",
+          encryptKey: "encrypt-key-value",
+        },
+      },
+    });
+
+    const status = await request("/api/gateway/status");
+
+    expect(status.feishu).toMatchObject({
+      enabled: true,
+      hasSecret: true,
+      hasVerifyToken: true,
+      hasEncryptKey: true,
+    });
+    const serialized = JSON.stringify(status);
+    expect(serialized).not.toContain("verify-token-value");
+    expect(serialized).not.toContain("encrypt-key-value");
+    expect(serialized).not.toContain("app-secret-value");
+  });
+
+  it("keeps existing webhook secrets on blank input and rotates them when provided", async () => {
+    const { request, configPath } = await createGatewayApp({
+      adapters: {
+        feishu: {
+          enabled: true,
+          appId: "cli_old",
+          appSecret: "old-app-secret",
+          verifyToken: "old-verify-token",
+          encryptKey: "old-encrypt-key",
+          connectionMode: "webhook",
+          domainName: "lark",
+        },
+      },
+    });
+
+    await request("/api/gateway/feishu/save", {
+      method: "POST",
+      body: JSON.stringify({
+        appId: "cli_new",
+        appSecret: "new-app-secret",
+        connectionMode: "webhook",
+        domainName: "lark",
+        verifyToken: "",
+        encryptKey: "",
+      }),
+    });
+
+    let config = parseYaml(readFileSync(configPath, "utf-8"));
+    expect(config.adapters.feishu).toMatchObject({
+      appId: "cli_new",
+      verifyToken: "old-verify-token",
+      encryptKey: "old-encrypt-key",
+    });
+
+    await request("/api/gateway/feishu/save", {
+      method: "POST",
+      body: JSON.stringify({
+        appId: "cli_new",
+        appSecret: "new-app-secret",
+        connectionMode: "webhook",
+        domainName: "lark",
+        verifyToken: "new-verify-token",
+        encryptKey: "new-encrypt-key",
+      }),
+    });
+
+    config = parseYaml(readFileSync(configPath, "utf-8"));
+    expect(config.adapters.feishu).toMatchObject({
+      verifyToken: "new-verify-token",
+      encryptKey: "new-encrypt-key",
+    });
+  });
+});
+
 describe("gateway QR image route", () => {
   async function qrRequest(app, path) {
     const server = app.listen(0);

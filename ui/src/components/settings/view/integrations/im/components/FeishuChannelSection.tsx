@@ -41,6 +41,8 @@ export default function FeishuChannelSection({ status, onSaved }: FeishuChannelS
   const [appSecret, setAppSecret] = useState("");
   const [domain, setDomain] = useState<"feishu" | "lark">("feishu");
   const [mode, setMode] = useState<"stream" | "webhook">("stream");
+  const [verifyToken, setVerifyToken] = useState("");
+  const [encryptKey, setEncryptKey] = useState("");
   const [testResult, setTestResult] = useState<TestResult>(null);
   const [testing, setTesting] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -138,6 +140,8 @@ export default function FeishuChannelSection({ status, onSaved }: FeishuChannelS
           appSecret,
           connectionMode: mode,
           domainName: domain,
+          verifyToken,
+          encryptKey,
         }),
       });
       const data = await res.json();
@@ -366,6 +370,47 @@ export default function FeishuChannelSection({ status, onSaved }: FeishuChannelS
                   className="h-9 w-full rounded-lg border border-border bg-muted px-3 font-mono text-[13px] text-foreground outline-hidden placeholder:text-muted-foreground/50 focus:border-ring focus:ring-1 focus:ring-ring"
                 />
               </label>
+
+              {mode === "webhook" && (
+                <>
+                  <label className="block space-y-1">
+                    <span className="text-xs font-medium text-muted-foreground">{t("gateway.feishu.verifyToken")}</span>
+                    <input
+                      type="password"
+                      value={verifyToken}
+                      onChange={e => setVerifyToken(e.target.value.trim())}
+                      placeholder={
+                        status.hasVerifyToken
+                          ? t("gateway.feishu.keepExistingSecret")
+                          : t("gateway.feishu.verifyTokenPlaceholder")
+                      }
+                      className="h-9 w-full rounded-lg border border-border bg-muted px-3 font-mono text-[13px] text-foreground outline-hidden placeholder:text-muted-foreground/50 focus:border-ring focus:ring-1 focus:ring-ring"
+                    />
+                  </label>
+
+                  <label className="block space-y-1">
+                    <span className="text-xs font-medium text-muted-foreground">{t("gateway.feishu.encryptKey")}</span>
+                    <input
+                      type="password"
+                      value={encryptKey}
+                      onChange={e => setEncryptKey(e.target.value.trim())}
+                      placeholder={
+                        status.hasEncryptKey
+                          ? t("gateway.feishu.keepExistingSecret")
+                          : t("gateway.feishu.encryptKeyPlaceholder")
+                      }
+                      className="h-9 w-full rounded-lg border border-border bg-muted px-3 font-mono text-[13px] text-foreground outline-hidden placeholder:text-muted-foreground/50 focus:border-ring focus:ring-1 focus:ring-ring"
+                    />
+                  </label>
+
+                  {!verifyToken && !encryptKey && !status.hasVerifyToken && !status.hasEncryptKey && (
+                    <div className="flex items-start gap-2 rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+                      <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                      <span>{t("gateway.feishu.webhookAuthWarning")}</span>
+                    </div>
+                  )}
+                </>
+              )}
 
               {testResult && (
                 <div

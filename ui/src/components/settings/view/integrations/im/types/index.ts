@@ -3,6 +3,8 @@ export type GatewayStatus = {
     enabled: boolean;
     appId: string;
     hasSecret: boolean;
+    hasVerifyToken: boolean;
+    hasEncryptKey: boolean;
     connectionMode: string;
     domainName: string;
   };

@@ -31,6 +31,7 @@ test("Feishu handles permission replies before the active chat drain finishes", 
   const sent: Array<{ chatId: string; text: string }> = [];
   const channel = new FeishuChannel({
     connectionMode: "webhook",
+    verifyToken: "test-token",
     send: async message => {
       sent.push(message);
     },
@@ -56,7 +57,7 @@ test("Feishu handles permission replies before the active chat drain finishes", 
   await channel.handleWebhook(
     {} as IncomingMessage,
     response as unknown as ServerResponse,
-    JSON.stringify({ chatId, text: "1", eventId: "reply-1" }),
+    JSON.stringify({ chatId, text: "1", eventId: "reply-1", token: "test-token" }),
   );
   await withTimeout(decided, 1_000);
 

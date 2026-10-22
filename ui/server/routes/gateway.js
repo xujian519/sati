@@ -178,6 +178,8 @@ router.get("/status", (_req, res) => {
         enabled: feishu.enabled === true,
         appId: feishu.appId ? maskValue(feishu.appId) : "",
         hasSecret: !!feishu.appSecret,
+        hasVerifyToken: !!feishu.verifyToken,
+        hasEncryptKey: !!feishu.encryptKey,
         connectionMode: feishu.connectionMode || "stream",
         domainName: feishu.domainName || "feishu",
       },
@@ -385,7 +387,7 @@ router.post("/feishu/qr-cancel", (req, res) => {
 });
 
 router.post("/feishu/save", async (req, res) => {
-  const { appId, appSecret, connectionMode, domainName } = req.body || {};
+  const { appId, appSecret, connectionMode, domainName, verifyToken, encryptKey } = req.body || {};
   if (!appId || !appSecret) {
     return res.status(400).json({ ok: false, error: "appId and appSecret are required" });
   }
@@ -402,6 +404,9 @@ router.post("/feishu/save", async (req, res) => {
           appSecret,
           connectionMode: connectionMode || previous.connectionMode || "stream",
           domainName: domainName || previous.domainName || "feishu",
+          // 空输入保持原值（密钥不回显，UI 无法预填）；填写新值即轮换。
+          ...(typeof verifyToken === "string" && verifyToken.trim() ? { verifyToken: verifyToken.trim() } : {}),
+          ...(typeof encryptKey === "string" && encryptKey.trim() ? { encryptKey: encryptKey.trim() } : {}),
         };
         return true;
       },
