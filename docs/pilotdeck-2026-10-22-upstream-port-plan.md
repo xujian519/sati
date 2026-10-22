@@ -1,6 +1,6 @@
 # Sati × PilotDeck 引入方案（2026-10-22 批次）
 
-Status: in progress（#654、#645 鉴权与 Lark 域名、#665 已落地；#645 控制器、ESM require 待落地）
+Status: in progress（#654、#645 鉴权/Lark 域名与 IM 控制器、#665 已落地；ESM require 待落地）
 
 范围基线：上游 **v2026.10.13-r2（`783499f`，2026-10-13）+ #648/#649（2026-10-15）**，即
 `pilotdeck-2026-10-13-upstream-port-plan.md` 的实际已消耗边界；评估时点上游 **v2026.10.20**
@@ -14,7 +14,7 @@ Status: in progress（#654、#645 鉴权与 Lark 域名、#665 已落地；#645 
 | PR | 内容 | 判定 | 依据 |
 |---|---|---|---|
 | #654（#637 为其初版） | tree-sitter 解析 shell 命令与权限缺口 | **P0 已落地** | Sati 可复现换行只读绕过与 allow 跨命令匹配 |
-| #645 | IM 回复流式化 + 飞书鉴权/生命周期 + Slack/Telegram 可用 | **P0/P1 分片落地** | 飞书 webhook 多种配置下接受未鉴权事件；控制器无节流/取消；ESM `require` 使频道不可用 |
+| #645 | IM 回复流式化 + 飞书鉴权/生命周期 + Slack/Telegram 可用 | **P0/P1 分片落地（鉴权、Lark 域名、控制器与飞书生命周期）** | 飞书 webhook 多种配置下接受未鉴权事件；控制器无节流/取消；ESM `require` 使频道不可用 |
 | #665 | 辅助模型请求不再强制关 thinking | **P1 已落地** | 两行；重放键不投影 thinking |
 | #642 / #653 | UploadStore 扩展名保留 | 不适用 | Sati 无 `src/gateway/dialog/UploadStore.ts`；`ui/server/services/uploads.js` 已保留原名与扩展名并用 `COPYFILE_EXCL` |
 | #650 | 桌面原生缩放指示器 | 不适用 | 桌面端已分叉 |
@@ -65,8 +65,19 @@ Status: in progress（#654、#645 鉴权与 Lark 域名、#665 已落地；#645 
 
 ### P1-2 #645 IM 回复控制器与频道生命周期
 
-待落地。节流（`minEditIntervalMs` / `maxEditsPerMessage`）、代码围栏保护、取消、非阻塞 append、
-`stop` 清理在途回合与定时器；飞书/微信共用控制器。
+已落地。
+
+- 控制器：非阻塞缓冲 + 合并调度、`minEditIntervalMs`（飞书 1.5s）、`maxEditsPerMessage`（飞书 20，
+  预留最终编辑后换新消息）、工具边界后台定稿、`cancel()`、FIFO `runExclusive`、代码围栏切分；
+  新增 `src/adapters/channel/protocol/ImCodeFences.ts` 与 4 例控制器测试（`im-live-reply-controller.spec.ts`）。
+- 飞书生命周期：`stopped`/`stopAbort`、`stop()` 取消 active reply/watchdog/入站批次并在 5s 上限内
+  中止在途回合、transport 校验当前回合、处理中表情并行发起、REST 经 `fetchApi` 继承停止信号；
+  新增 `tests/adapters/feishu-lifecycle.spec.ts`。
+- 负控制：旧控制器 → 3 条控制器用例转红；移除 `stopped = true` → 生命周期用例转红；恢复后定向
+  5 例、IM 相关 28 例全绿；全量 `pnpm test` 5921 pass / 5 skipped / 0 fail、`pnpm check` green。
+- 技术债：按门禁显式追认 `architecture-baseline.json`（控制器 1017→1241、FeishuChannel 1337→1388）。
+- 决策记录：`docs/notes/implemented/2026-10-22-im-reply-controller-lifecycle.md`。
+- 未验证：真实飞书 20 次编辑上限/节流；代码围栏保护尚无 Sati 频道 opt-in。
 
 ### P1-3 可选频道 ESM `require`
 

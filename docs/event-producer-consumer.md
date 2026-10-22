@@ -9,7 +9,7 @@ emit/dispatch/emitAgentEvent/emitEvent/emitForSession/sendNotification 字符串
 
 | 事件 | 生产者 | 消费者 |
 | --- | --- | --- |
-| agent_status | src/adapters/channel/feishu/FeishuChannel.ts:658, src/adapters/channel/weixin/WeixinChannel.ts:836, src/cli/projectRuntimeRouterEvents.ts:128, src/gateway/client/normalizers.ts:54 | src/gateway/client/InProcessGateway.ts:607, submitTurn 流 ×15 |
+| agent_status | src/adapters/channel/feishu/FeishuChannel.ts:730, src/adapters/channel/weixin/WeixinChannel.ts:836, src/cli/projectRuntimeRouterEvents.ts:128, src/gateway/client/normalizers.ts:54 | src/gateway/client/InProcessGateway.ts:607, submitTurn 流 ×15 |
 | approval_pending | src/cli/patentOutputGateFactory.ts:149 | submitTurn 流 ×15 |
 | approval_resolved | src/cli/patentOutputGateFactory.ts:77 | submitTurn 流 ×15 |
 | assistant_attachment | src/gateway/client/eventMapping.ts:370 | submitTurn 流 ×15 |
@@ -98,4 +98,4 @@ emit/dispatch/emitAgentEvent/emitEvent/emitForSession/sendNotification 字符串
 | 流入口 | 语汇 | 消费站点 |
 | --- | --- | --- |
 | submit | AgentEvent | src/gateway/client/InProcessGateway.ts:607 |
-| submitTurn | GatewayEvent | src/adapters/channel/api-server/ApiServerChannel.ts:364, src/adapters/channel/api-server/ApiServerChannel.ts:436, src/adapters/channel/cli/CliChannel.ts:77, src/adapters/channel/feishu/FeishuChannel.ts:611, src/adapters/channel/protocol/ImTurnProcessor.ts:78, src/adapters/channel/tui/TuiChannel.ts:76, src/adapters/channel/tui/app/useTuiActions.ts:231, src/adapters/channel/webhook/WebhookChannel.ts:282, src/adapters/channel/wecom/WeComChannel.ts:938, src/adapters/channel/weixin/WeixinChannel.ts:789, src/agent/team/member/member-waker.ts:77, src/always-on/runtime/DiscoveryFire.ts:961, src/cli/ProjectRuntimeRegistry.ts:526, src/cron/runtime/CronFire.ts:106, src/gateway/server/GatewayWsConnection.ts:185 |
+| submitTurn | GatewayEvent | src/adapters/channel/api-server/ApiServerChannel.ts:364, src/adapters/channel/api-server/ApiServerChannel.ts:436, src/adapters/channel/cli/CliChannel.ts:77, src/adapters/channel/feishu/FeishuChannel.ts:677, src/adapters/channel/protocol/ImTurnProcessor.ts:78, src/adapters/channel/tui/TuiChannel.ts:76, src/adapters/channel/tui/app/useTuiActions.ts:231, src/adapters/channel/webhook/WebhookChannel.ts:282, src/adapters/channel/wecom/WeComChannel.ts:938, src/adapters/channel/weixin/WeixinChannel.ts:789, src/agent/team/member/member-waker.ts:77, src/always-on/runtime/DiscoveryFire.ts:961, src/cli/ProjectRuntimeRegistry.ts:526, src/cron/runtime/CronFire.ts:106, src/gateway/server/GatewayWsConnection.ts:185 |

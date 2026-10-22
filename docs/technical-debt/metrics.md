@@ -7,9 +7,9 @@
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1141 / 198608 |
+| src TS 文件 / 行数 | 1142 / 198995 |
 | src JS 文件 | 0 |
-| tests 文件 | 661 |
+| tests 文件 | 663 |
 | ui/src 文件 / 行数 | 647 / 103082 |
 | ui/server 文件 / 行数 | 149 / 38773 |
 
@@ -105,11 +105,12 @@
 | `src/gateway/client/InProcessGateway.ts` | 1512 |
 | `src/adapters/channel/weixin/WeixinChannel.ts` | 1497 |
 | `ui/src/components/main-content-v2/SkillsV2.tsx` | 1441 |
+| `src/adapters/channel/feishu/FeishuChannel.ts` | 1389 |
 | `ui/src/stores/useSessionStore.ts` | 1348 |
 | `ui/src/components/main-content-v2/DashboardV2.tsx` | 1345 |
 | `ui/src/components/app-shell/SidebarV2.tsx` | 1323 |
 | `ui/src/components/chat-v2/processGrouping.ts` | 1294 |
-| `src/adapters/channel/feishu/FeishuChannel.ts` | 1287 |
+| `src/adapters/channel/protocol/ImLiveReplyController.ts` | 1255 |
 | `ui/src/components/chat-v2/MessagesPaneV2.render.test.tsx` | 1234 |
 | `ui/server/routes/config.js` | 1234 |
 | `ui/server/routes/agent.js` | 1228 |
@@ -124,7 +125,6 @@
 | `ui/server/routes/commands.js` | 1082 |
 | `src/always-on/runtime/DiscoveryFire.ts` | 1079 |
 | `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` | 1025 |
-| `src/adapters/channel/protocol/ImLiveReplyController.ts` | 1017 |
 | `src/gateway/protocol/types.ts` | 995 |
 | `src/context/DefaultContextRuntime.ts` | 969 |
 
@@ -160,7 +160,7 @@
 | session | 28 |
 | cli | 20 |
 | router | 20 |
-| adapters | 14 |
+| adapters | 16 |
 | always-on | 14 |
 | extension | 13 |
 | mcp | 13 |
@@ -183,7 +183,7 @@
 | runtime | 1 |
 | status | 1 |
 
-| **合计** | **634** |
+| **合计** | **636** |
 
 ## i18n en/zh-CN 对齐
 
