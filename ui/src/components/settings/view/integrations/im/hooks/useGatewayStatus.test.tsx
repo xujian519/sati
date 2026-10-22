@@ -16,6 +16,8 @@ function gatewayStatus(runtime: GatewayStatus["weixin"]["runtime"]): GatewayStat
       enabled: false,
       appId: "",
       hasSecret: false,
+      hasVerifyToken: false,
+      hasEncryptKey: false,
       connectionMode: "stream",
       domainName: "feishu",
     },

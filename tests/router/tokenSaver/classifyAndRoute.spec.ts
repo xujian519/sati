@@ -68,7 +68,7 @@ function lengthTruncatedResponse(text: string): CanonicalModelResponse {
   };
 }
 
-test("judge 成功时返回解析出的 tier，且请求不带显式 temperature", async () => {
+test("judge 成功时返回解析出的 tier，且请求不带显式 temperature 或 thinking 覆写", async () => {
   const calls: Array<{
     request: Parameters<ModelRuntime["complete"]>[0];
     options?: Parameters<ModelRuntime["complete"]>[1];
@@ -84,6 +84,7 @@ test("judge 成功时返回解析出的 tier，且请求不带显式 temperature
   assert.equal(decision?.failure, undefined);
   assert.equal(calls.length, 1);
   assert.equal("temperature" in calls[0]!.request, false);
+  assert.equal("thinking" in calls[0]!.request, false);
 });
 
 test("judge 超时时中止请求并返回带诊断的 fallback", async () => {

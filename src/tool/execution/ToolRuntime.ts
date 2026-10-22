@@ -4,6 +4,7 @@ import type { LifecycleRuntime, SatiHookEffect } from "../../lifecycle/index.js"
 import { normalizeToolError, SatiToolRuntimeError, toolError } from "../protocol/errors.js";
 import type { SatiToolErrorCode } from "../protocol/errors.js";
 import { getAskModeViolation } from "../askModeConstraints.js";
+import { preloadBashParser } from "../builtin/bash/parser.js";
 import {
   applyResultSizeLimit,
   type SatiToolErrorResult,
@@ -65,6 +66,10 @@ export class ToolRuntime {
     const startedAtDate = now(context);
     context = this.withNestedToolExecutor(context);
     const startedAt = startedAtDate.toISOString();
+
+    // plan/ask 模式与 bash 只读判定都是同步的，必须先备好 bash 语法；未就绪时
+    // isReadOnlyShellCommand 一律返回 false（fail-safe，退化为询问）。
+    await preloadBashParser();
 
     const preflight = await this.preflight(call, context, startedAt);
     if ("error" in preflight) return preflight.error;

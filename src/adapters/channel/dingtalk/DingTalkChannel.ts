@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { createRequire } from "node:module";
 import type { Gateway, GatewayChannelKey } from "../../../gateway/index.js";
 import type { CronResultDelivery } from "../../../cron/index.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
@@ -21,6 +22,9 @@ interface DingStreamClientLike {
   disconnect(): Promise<unknown> | void;
 }
 type DWClientCtor = new (options: { clientId: string; clientSecret: string; debug: boolean }) => DingStreamClientLike;
+
+// 包是 ESM（"type": "module"），CommonJS 的 require 全局不存在；模块级 require 让可选 SDK 保持惰性加载。
+const require = createRequire(import.meta.url);
 
 let DingStream: { DWClient: DWClientCtor; EventAck: { SUCCESS: unknown }; TOPIC_ROBOT: unknown } | null = null;
 try {

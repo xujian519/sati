@@ -1420,6 +1420,12 @@
         "lark": "larksuite.com（Lark）"
       },
       "connectionMode": "连接方式",
+      "verifyToken": "Verification Token",
+      "encryptKey": "Encrypt Key",
+      "verifyTokenPlaceholder": "事件订阅页面的 Verification Token",
+      "encryptKeyPlaceholder": "事件订阅页面的 Encrypt Key",
+      "keepExistingSecret": "已配置 — 留空保持不变",
+      "webhookAuthWarning": "Webhook 模式必须配置 Verification Token 或 Encrypt Key，否则所有回调都会被拒绝（401）。",
       "chooseMethod": "选择配置飞书机器人的方式：",
       "qrScan": "扫码创建",
       "qrScanDesc": "用飞书 App 扫码自动创建机器人",

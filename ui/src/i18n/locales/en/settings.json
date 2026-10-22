@@ -1486,6 +1486,12 @@
         "lark": "larksuite.com (Lark)"
       },
       "connectionMode": "Connection Mode",
+      "verifyToken": "Verification Token",
+      "encryptKey": "Encrypt Key",
+      "verifyTokenPlaceholder": "From Event Subscriptions",
+      "encryptKeyPlaceholder": "From Event Subscriptions",
+      "keepExistingSecret": "Configured — leave blank to keep",
+      "webhookAuthWarning": "Webhook mode requires a Verification Token or Encrypt Key. Without one, every callback is rejected with 401.",
       "chooseMethod": "Choose how to configure the Feishu bot:",
       "qrScan": "QR Code Scan",
       "qrScanDesc": "Scan with Feishu app to auto-create a bot",

@@ -7,11 +7,11 @@
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1138 / 198209 |
+| src TS 文件 / 行数 | 1142 / 199028 |
 | src JS 文件 | 0 |
-| tests 文件 | 658 |
-| ui/src 文件 / 行数 | 647 / 103033 |
-| ui/server 文件 / 行数 | 149 / 38686 |
+| tests 文件 | 664 |
+| ui/src 文件 / 行数 | 647 / 103082 |
+| ui/server 文件 / 行数 | 149 / 38773 |
 
 ## 指标口径
 
@@ -32,9 +32,9 @@
 | `as unknown as`（双重断言） | 29 | ui/src(22) · knowledge(5) · adapters(1) |
 | 裸 `console.*` | 6 | ui/server(6) |
 | 空 `catch {}` | 0 | — |
-| 无参 `catch {`（总计） | 699 | ui/server(157) · ui/src(125) · adapters(71) |
+| 无参 `catch {`（总计） | 700 | ui/server(157) · ui/src(125) · adapters(72) |
 | ↳ **无注释**（隐患类，目标） | **0** | — |
-| ↳ 已带意图注释 | 699 | — |
+| ↳ 已带意图注释 | 700 | — |
 | `TODO/HACK/FIXME/XXX` | 11 | always-on(4) · tests(4) · ui/src(2) |
 | 分层违规 `ui/server→src` | 15 | — |
 | 分层违规 `src→ui` | 0 | — |
@@ -65,6 +65,7 @@
 | `ui/src/components/chat/hooks/useChatComposerState.ts` | `useChatComposerState` | 462 | function |
 | `ui/src/components/settings/view/modelPool/components/ProviderCard.tsx` | `ProviderCard` | 447 | function |
 | `ui/src/components/chat-v2/MessageRowV2.tsx` | `MessageRowV2` | 429 | function |
+| `ui/src/components/settings/view/integrations/im/components/FeishuChannelSection.tsx` | `FeishuChannelSection` | 423 | function |
 | `ui/src/components/code-editor/view/subcomponents/DocxBuiltinPreview.tsx` | `DocxBuiltinPreview` | 422 | function |
 | `ui/src/components/chat-v2/processGrouping.test.ts` | `(anonymous)` | 409 | arrow |
 | `ui/src/types/contentReference.spec.ts` | `(anonymous)` | 408 | arrow |
@@ -76,7 +77,6 @@
 | `ui/src/components/app-shell/MainAreaV2.tsx` | `MainAreaV2Content` | 381 | function |
 | `ui/src/types/annotationReference.spec.ts` | `(anonymous)` | 381 | arrow |
 | `ui/src/components/chat/tools/components/InteractiveRenderers/AskUserQuestionPanel.tsx` | `AskUserQuestionPanel` | 378 | arrow |
-| `ui/src/components/settings/view/integrations/im/components/FeishuChannelSection.tsx` | `FeishuChannelSection` | 378 | function |
 | `ui/src/components/kanban/hooks/useBoardState.ts` | `useBoardState` | 368 | function |
 | `ui/src/components/chat/hooks/useFileMentions.tsx` | `useFileMentions` | 366 | function |
 | `ui/src/components/settings/view/agentRoute/components/RouterSection.tsx` | `RouterSection` | 357 | function |
@@ -105,11 +105,12 @@
 | `src/gateway/client/InProcessGateway.ts` | 1512 |
 | `src/adapters/channel/weixin/WeixinChannel.ts` | 1497 |
 | `ui/src/components/main-content-v2/SkillsV2.tsx` | 1441 |
+| `src/adapters/channel/feishu/FeishuChannel.ts` | 1389 |
 | `ui/src/stores/useSessionStore.ts` | 1348 |
 | `ui/src/components/main-content-v2/DashboardV2.tsx` | 1345 |
-| `src/adapters/channel/feishu/FeishuChannel.ts` | 1337 |
 | `ui/src/components/app-shell/SidebarV2.tsx` | 1323 |
 | `ui/src/components/chat-v2/processGrouping.ts` | 1294 |
+| `src/adapters/channel/protocol/ImLiveReplyController.ts` | 1255 |
 | `ui/src/components/chat-v2/MessagesPaneV2.render.test.tsx` | 1234 |
 | `ui/server/routes/config.js` | 1234 |
 | `ui/server/routes/agent.js` | 1228 |
@@ -124,7 +125,6 @@
 | `ui/server/routes/commands.js` | 1082 |
 | `src/always-on/runtime/DiscoveryFire.ts` | 1079 |
 | `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` | 1025 |
-| `src/adapters/channel/protocol/ImLiveReplyController.ts` | 1017 |
 | `src/gateway/protocol/types.ts` | 995 |
 | `src/context/DefaultContextRuntime.ts` | 969 |
 
@@ -151,7 +151,7 @@
 | 模块 | 测试文件 |
 |---|---|
 | patent | 152 |
-| tool | 72 |
+| tool | 73 |
 | agent | 61 |
 | knowledge | 41 |
 | context | 38 |
@@ -160,8 +160,8 @@
 | session | 28 |
 | cli | 20 |
 | router | 20 |
+| adapters | 17 |
 | always-on | 14 |
-| adapters | 13 |
 | extension | 13 |
 | mcp | 13 |
 | pilot | 13 |
@@ -169,7 +169,7 @@
 | rule | 10 |
 | web | 9 |
 | literature | 8 |
-| permission | 4 |
+| permission | 5 |
 | test-support | 4 |
 | shared | 3 |
 | telemetry | 3 |
@@ -183,7 +183,7 @@
 | runtime | 1 |
 | status | 1 |
 
-| **合计** | **631** |
+| **合计** | **637** |
 
 ## i18n en/zh-CN 对齐
 
@@ -198,7 +198,7 @@
 | kanban | 44 | 44 | 0 | 0 |
 | knowledgeDrafts | 10 | 10 | 0 | 0 |
 | routing | 64 | 64 | 0 | 0 |
-| settings | 1074 | 1074 | 0 | 0 |
+| settings | 1080 | 1080 | 0 | 0 |
 | sidebar | 125 | 125 | 0 | 0 |
 | stylePanel | 56 | 56 | 0 | 0 |
 | tasks | 94 | 94 | 0 | 0 |

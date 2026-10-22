@@ -1,3 +1,4 @@
+import { createRequire } from "node:module";
 import type { Gateway, GatewayChannelKey } from "../../../gateway/index.js";
 import type { CronResultDelivery } from "../../../cron/index.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
@@ -44,6 +45,9 @@ type CreateTransportFn = (config: {
   requireTLS: boolean;
   auth: { user: string; pass: string };
 }) => MailTransporterLike;
+
+// 包是 ESM（"type": "module"），CommonJS 的 require 全局不存在；模块级 require 让可选 SDK 保持惰性加载。
+const require = createRequire(import.meta.url);
 
 let ImapFlow: ImapFlowCtor | undefined;
 let nodemailer: { createTransport: CreateTransportFn } | undefined;

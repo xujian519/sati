@@ -2,13 +2,18 @@ import assert from "node:assert/strict";
 import { mkdir, mkdtemp, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import test from "node:test";
+import test, { before } from "node:test";
 import { matchPermissionRule } from "../../src/permission/policy/matchPermissionRule.js";
+import { preloadBashParser } from "../../src/tool/builtin/bash/parser.js";
 import {
   createDefaultPermissionContext,
   type PermissionContext,
   type PermissionRule,
 } from "../../src/permission/index.js";
+
+before(async () => {
+  await preloadBashParser();
+});
 
 function rule(overrides: Partial<PermissionRule> & { toolName: string }): PermissionRule {
   return { source: "user", behavior: "allow", ...overrides };

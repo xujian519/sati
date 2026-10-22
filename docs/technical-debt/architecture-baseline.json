@@ -5,12 +5,12 @@
     {
       "rule": "file-size",
       "file": "src/adapters/channel/feishu/FeishuChannel.ts",
-      "lines": 1337
+      "lines": 1389
     },
     {
       "rule": "file-size",
       "file": "src/adapters/channel/protocol/ImLiveReplyController.ts",
-      "lines": 1017
+      "lines": 1255
     },
     {
       "rule": "file-size",

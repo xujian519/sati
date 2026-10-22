@@ -51,6 +51,7 @@ test("full compaction can disable protected turn preservation", async () => {
   );
   assert.equal(hasThinking(summaryRequests[0]!.messages), true);
   assert.deepEqual(summaryRequests[0]!.cacheBreakpoints, []);
+  assert.equal("thinking" in summaryRequests[0]!, false);
   assert.match(
     summaryRequests[0]!.systemPrompt ?? "",
     /Summarize the conversation so far as a concise Markdown checkpoint handoff/,

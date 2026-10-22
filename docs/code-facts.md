@@ -46,7 +46,7 @@
 
 | 模块 | .ts/.tsx 文件数 | barrel | 职责 |
 | --- | --- | --- | --- |
-| `src/adapters/` | 100 | ✓ | IM 渠道适配器（21 个渠道 + Channel/render/SessionMapper） |
+| `src/adapters/` | 103 | ✓ | IM 渠道适配器（21 个渠道 + Channel/render/SessionMapper） |
 | `src/agent/` | 79 | ✓ | Agent 循环、会话、子代理与团队编排 |
 | `src/always-on/` | 38 | ✓ | 常驻后台执行（Discovery 计划/报告/工作周期） |
 | `src/board/` | 8 | ✓ | 项目看板（protocol/runtime/storage 三组，kanban_* 工具与网关方法组） |
@@ -76,7 +76,7 @@
 | `src/task/` | 4 | ✓ | 后台任务存储与运行时 |
 | `src/telemetry/` | 6 | ✓ | 遥测（analytics.v2 契约） |
 | `src/test-support/` | 7 | — | 测试基建（llm-replay 录制/重放 seam） |
-| `src/tool/` | 148 | ✓ | 工具系统（registry/execution/audit/builtin） |
+| `src/tool/` | 149 | ✓ | 工具系统（registry/execution/audit/builtin） |
 | `src/web/` | 13 | — | Web 服务端与浏览器客户端投影 |
 
 > 文件数按 **git 清单**统计（`git ls-files --cached --others --exclude-standard`，排除 `.d.ts`），

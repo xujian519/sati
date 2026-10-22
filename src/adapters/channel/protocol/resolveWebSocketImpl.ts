@@ -1,3 +1,8 @@
+import { createRequire } from "node:module";
+
+// 包是 ESM（"type": "module"），CommonJS 的 require 全局不存在；模块级 require 让可选依赖保持惰性加载。
+const require = createRequire(import.meta.url);
+
 /** WebSocket 构造器类型：以 `ws` 库的类型为准。 */
 export type WebSocketCtor = typeof import("ws").WebSocket;
 

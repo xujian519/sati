@@ -1,3 +1,4 @@
+import { createRequire } from "node:module";
 import type { Gateway, GatewayChannelKey } from "../../../gateway/index.js";
 import { chunkText } from "../protocol/text.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
@@ -35,6 +36,9 @@ interface SlackAppLike {
   };
 }
 type SlackAppCtor = new (options: { token: string; appToken: string; socketMode: boolean }) => SlackAppLike;
+
+// 包是 ESM（"type": "module"），CommonJS 的 require 全局不存在；模块级 require 让可选 SDK 保持惰性加载。
+const require = createRequire(import.meta.url);
 
 let BoltApp: SlackAppCtor | undefined;
 try {

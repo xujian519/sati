@@ -113,8 +113,10 @@
     "sharp": "^0.35.3",
     "slice-ansi": "^9.0.1",
     "string-width": "^8.3.0",
+    "tree-sitter-bash": "0.25.0",
     "turndown": "^7.2.4",
     "undici": "^8.11.2",
+    "web-tree-sitter": "0.25.10",
     "weixin-ilink": "^0.1.0",
     "ws": "^8.22.0",
     "yaml": "^2.9.1"
