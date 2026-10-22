@@ -325,23 +325,41 @@ function resolveVectorsDbLegacy(
  * 脚本升级，unified 上该脚本不适用（它只服务 patent_kg.db）。`like`（=表缺失或
  * prepare 失败）的成因也决定动作：表缺失靠重建，运行时无 FTS5 只能换环境。
  * 未上报探测明细（旧快照/未接线）时退回改造前的 legacy 口径文案。
+ *
+ * P2-1 重构：策略表驱动，替代嵌套 if-else，提升可读性与可维护性。
+ * 键格式：`${mode}|${schema}|${tablePresent}`，按优先级匹配（精确键 > 通配键）。
  */
+
+/** 策略表：mode × schema × tablePresent → 文案模板。 */
+const KG_FTS_DETAIL_TABLE: Record<string, string> = {
+  // trigram：最佳状态，无需提示
+  "trigram|unified|true": "trigram",
+  "trigram|legacy|true": "trigram",
+  "trigram|unified|false": "trigram",
+  "trigram|legacy|false": "trigram",
+  // unicode61：按 schema 分流治理建议
+  "unicode61|unified|true":
+    "unicode61（knowledge.db 的 kg_nodes_fts 非 trigram；重建：scripts/trim-knowledge-db.ts --rebuild-kg-fts）",
+  "unicode61|legacy|true": "unicode61（建议执行 scripts/migrate-kg-fts-trigram.mjs 升级 trigram）",
+  "unicode61|unified|false":
+    "unicode61（knowledge.db 的 kg_nodes_fts 非 trigram；重建：scripts/trim-knowledge-db.ts --rebuild-kg-fts）",
+  "unicode61|legacy|false": "unicode61（建议执行 scripts/migrate-kg-fts-trigram.mjs 升级 trigram）",
+  // like + 表缺失：重建建议按 schema 分流
+  "like|unified|false":
+    "库中无 KG FTS 表（检索已降级 LIKE）；该表由知识库导入管道生成，trim 的 --rebuild-kg-fts 仅重建已存在的表",
+  "like|legacy|false":
+    "库中无 KG FTS 表（检索已降级 LIKE）；重建：node scripts/migrate-kg-fts-trigram.mjs <patent_kg.db>",
+  // like + 表存在但 prepare 失败：运行时环境缺失 FTS5
+  "like|unified|true": "FTS5 不可用已回退 LIKE（如桌面端捆绑 Node 未编译 FTS5）",
+  "like|legacy|true": "FTS5 不可用已回退 LIKE（如桌面端捆绑 Node 未编译 FTS5）",
+};
+
 function kgFtsDetail(mode: KgFtsMode, probe: KgFtsProbe | undefined): string {
   if (mode === "trigram") return "trigram";
-  if (mode === "unicode61") {
-    if (probe?.schema === "unified") {
-      // knowledge.db 的 kg_nodes_fts 由 XiaoNuo 导入管道建；migrate 脚本只写
-      // patent_kg.db 的 nodes_fts*，故统一库提示重建入口而非 migrate。
-      return "unicode61（knowledge.db 的 kg_nodes_fts 非 trigram；重建：scripts/trim-knowledge-db.ts --rebuild-kg-fts）";
-    }
-    return "unicode61（建议执行 scripts/migrate-kg-fts-trigram.mjs 升级 trigram）";
-  }
-  if (probe && !probe.tablePresent) {
-    return probe.schema === "unified"
-      ? "库中无 KG FTS 表（检索已降级 LIKE）；该表由知识库导入管道生成，trim 的 --rebuild-kg-fts 仅重建已存在的表"
-      : "库中无 KG FTS 表（检索已降级 LIKE）；重建：node scripts/migrate-kg-fts-trigram.mjs <patent_kg.db>";
-  }
-  return "FTS5 不可用已回退 LIKE（如桌面端捆绑 Node 未编译 FTS5）";
+  const schema = probe?.schema ?? "legacy";
+  const tablePresent = probe ? String(probe.tablePresent) : "true";
+  const key = `${mode}|${schema}|${tablePresent}`;
+  return KG_FTS_DETAIL_TABLE[key] ?? "FTS5 不可用已回退 LIKE（如桌面端捆绑 Node 未编译 FTS5）";
 }
 
 /**

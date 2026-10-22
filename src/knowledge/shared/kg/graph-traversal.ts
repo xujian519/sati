@@ -23,6 +23,13 @@ export type KgPathEdge = {
 };
 
 export class GraphTraversal {
+  /**
+   * BFS 队列硬上限（P0-2 防护）：21 万节点图中，高度数节点（如"创造性"概念）
+   * 单层可扩展至数百邻居，5 层 BFS 队列理论上限 100^5。设置 10000 上限后
+   * 超出即返回 null（调用方按"不可达"处理），避免 OOM。
+   */
+  private static readonly BFS_MAX_QUEUE_SIZE = 10_000;
+
   constructor(
     private readonly stmts: {
       stmtNeighbors: StatementSync;
@@ -43,7 +50,13 @@ export class GraphTraversal {
     return rows.map(r => ({ targetId: r.target, relation: r.relation }));
   }
 
-  /** BFS 最短路径（有向图，沿出边遍历）。找不到返回 null。 */
+  /**
+   * BFS 最短路径（有向图，沿出边遍历）。找不到返回 null。
+   *
+   * 防护：队列规模超过 BFS_MAX_QUEUE_SIZE 时提前返回 null（高度数节点
+   * 扇出爆炸场景），避免 OOM。调用方（PatentKgAdapter.getCitationChain）
+   * 按"不可达"处理。
+   */
   bfsPath(fromId: string, toId: string, maxDepth = 5): KgPathEdge[] | null {
     if (fromId === toId) return [];
     const visited = new Set<string>([fromId]);
@@ -59,6 +72,8 @@ export class GraphTraversal {
         if (n.targetId === toId) return nextPath;
         visited.add(n.targetId);
         queue.push({ id: n.targetId, path: nextPath });
+        // 队列规模防护：高度数节点扇出爆炸时提前终止，避免 OOM。
+        if (queue.length > GraphTraversal.BFS_MAX_QUEUE_SIZE) return null;
       }
     }
     return null;

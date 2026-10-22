@@ -76,6 +76,10 @@ export type KnowledgeRuntimeStatsSnapshot = {
   caseLawFtsDegraded: boolean;
   /** 关键词检索 LIKE 回退累计次数（短词/未命中/FTS 降级等设计内路径）。 */
   likeFallbacks: number;
+  /** 语义矩阵异步加载发起次数（P1-5 可观测性）。 */
+  loadAttempts: number;
+  /** 语义矩阵异步加载成功次数（与 loadAttempts 差值=失败次数）。 */
+  loadSuccesses: number;
 };
 
 export class KnowledgeRuntimeStats {
@@ -96,6 +100,8 @@ export class KnowledgeRuntimeStats {
   private legalFtsDegraded = false;
   private caseLawFtsDegraded = false;
   private likeFallbacks = 0;
+  private loadAttempts = 0;
+  private loadSuccesses = 0;
 
   recordCacheHit(): void {
     this.cacheHits += 1;
@@ -175,6 +181,16 @@ export class KnowledgeRuntimeStats {
     this.likeFallbacks += 1;
   }
 
+  /** 语义矩阵异步加载发起一次（P1-5 可观测性：区分加载失败与查询失败）。 */
+  recordLoadAttempt(): void {
+    this.loadAttempts += 1;
+  }
+
+  /** 语义矩阵异步加载成功一次。 */
+  recordLoadSuccess(): void {
+    this.loadSuccesses += 1;
+  }
+
   /** 只读快照（每次新建对象，消费方可安全序列化）。 */
   snapshot(): KnowledgeRuntimeStatsSnapshot {
     return {
@@ -195,6 +211,8 @@ export class KnowledgeRuntimeStats {
       legalFtsDegraded: this.legalFtsDegraded,
       caseLawFtsDegraded: this.caseLawFtsDegraded,
       likeFallbacks: this.likeFallbacks,
+      loadAttempts: this.loadAttempts,
+      loadSuccesses: this.loadSuccesses,
     };
   }
 }

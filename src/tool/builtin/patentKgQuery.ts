@@ -1,3 +1,4 @@
+import { statSync } from "node:fs";
 import type { SatiToolDefinition } from "../protocol/types.js";
 import { resolveKnowledgeDbPaths } from "../../knowledge/config.js";
 import { KgStore } from "../../knowledge/shared/kg-store.js";
@@ -74,16 +75,37 @@ export type PatentKgAdapterRef = {
 };
 
 /** 模块级缓存单例（图谱为只读静态数据，避免每次调用重建连接）。 */
-let cachedRef: PatentKgAdapterRef | null = null;
+let cachedRef: (PatentKgAdapterRef & { mtimeMs: number }) | null = null;
+/** mtime 检查频率：每 32 次调用探测一次文件修改时间，避免每次 stat 系统调用。 */
+const MTIME_CHECK_INTERVAL = 32;
+let callCounter = 0;
 
 export function getAdapter(): PatentKgAdapterRef | null {
   const { patentKgDb } = resolveKnowledgeDbPaths();
   if (!patentKgDb) return null;
-  if (cachedRef && cachedRef.dbPath === patentKgDb) return cachedRef;
-  if (cachedRef) cachedRef.adapter.close();
+
+  // P2-4：文件 mtime 检查——数据库文件被外部替换（如 trim-knowledge-db.ts 重建后 mv 覆盖）
+  // 时 dbPath 不变但内容已变，缓存的 adapter 持有旧 SQLite 句柄。每 N 次调用探测 mtime，
+  // 变化时重建 adapter。statSync 失败（文件不存在/权限）时静默跳过，不影响正常流程。
+  callCounter += 1;
+  if (cachedRef && cachedRef.dbPath === patentKgDb) {
+    if (callCounter % MTIME_CHECK_INTERVAL !== 0) return cachedRef;
+    try {
+      const currentMtime = statSync(patentKgDb).mtimeMs;
+      if (currentMtime === cachedRef.mtimeMs) return cachedRef;
+    } catch {
+      return cachedRef;
+    }
+    // mtime 变化 → 重建
+    cachedRef.adapter.close();
+  } else if (cachedRef) {
+    cachedRef.adapter.close();
+  }
+
   try {
     const store = new KgStore(patentKgDb);
-    cachedRef = { adapter: new PatentKgAdapter(store), dbPath: patentKgDb };
+    const mtimeMs = statSync(patentKgDb).mtimeMs;
+    cachedRef = { adapter: new PatentKgAdapter(store), dbPath: patentKgDb, mtimeMs };
     return cachedRef;
   } catch {
     // 图谱库打开失败 → 返回 null，调用方按不可用处理。
