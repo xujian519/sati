@@ -1,6 +1,6 @@
 # Sati × PilotDeck 引入方案（2026-10-22 批次）
 
-Status: in progress（#654、#645 鉴权与 Lark 域名已落地；#665、#645 控制器、ESM require 待落地）
+Status: in progress（#654、#645 鉴权与 Lark 域名、#665 已落地；#645 控制器、ESM require 待落地）
 
 范围基线：上游 **v2026.10.13-r2（`783499f`，2026-10-13）+ #648/#649（2026-10-15）**，即
 `pilotdeck-2026-10-13-upstream-port-plan.md` 的实际已消耗边界；评估时点上游 **v2026.10.20**
@@ -15,7 +15,7 @@ Status: in progress（#654、#645 鉴权与 Lark 域名已落地；#665、#645 �
 |---|---|---|---|
 | #654（#637 为其初版） | tree-sitter 解析 shell 命令与权限缺口 | **P0 已落地** | Sati 可复现换行只读绕过与 allow 跨命令匹配 |
 | #645 | IM 回复流式化 + 飞书鉴权/生命周期 + Slack/Telegram 可用 | **P0/P1 分片落地** | 飞书 webhook 多种配置下接受未鉴权事件；控制器无节流/取消；ESM `require` 使频道不可用 |
-| #665 | 辅助模型请求不再强制关 thinking | **P1 待落地** | 两行；重放键不投影 thinking |
+| #665 | 辅助模型请求不再强制关 thinking | **P1 已落地** | 两行；重放键不投影 thinking |
 | #642 / #653 | UploadStore 扩展名保留 | 不适用 | Sati 无 `src/gateway/dialog/UploadStore.ts`；`ui/server/services/uploads.js` 已保留原名与扩展名并用 `COPYFILE_EXCL` |
 | #650 | 桌面原生缩放指示器 | 不适用 | 桌面端已分叉 |
 | #652 | Electron 下载限流 / Linux 包校验 | 不适用 | Sati 不维护 Linux，打包管线已分叉 |
@@ -56,8 +56,12 @@ Status: in progress（#654、#645 鉴权与 Lark 域名已落地；#665、#645 �
 
 ### P1-1 #665 辅助请求不再强制关 thinking
 
-待落地。删除 `CompactionEngine` 与 `classifyAndRoute` 两处 `thinking: { enabled: false }`，
-确认默认语义与成本影响。
+已落地。删除 `CompactionEngine` 摘要请求与 `classifyAndRoute` judge 请求中的
+`thinking: { enabled: false }`，让辅助请求继承模型默认 thinking 策略；不支持的模型不再因该字段
+被 provider 拒绝。回归断言见 `tests/context/compaction-engine.spec.ts` 与
+`tests/router/tokenSaver/classifyAndRoute.spec.ts`；负控制（加回覆写）对应 2 条转红；
+验证：定向 28 例、全量 `pnpm test` 5916 pass / 5 skipped / 0 fail、`pnpm check` green。
+决策记录：`docs/notes/implemented/2026-10-22-aux-thinking-policy.md`。
 
 ### P1-2 #645 IM 回复控制器与频道生命周期
 

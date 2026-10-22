@@ -419,7 +419,6 @@ export class CompactionEngine {
       systemPrompt: buildMarkdownSummarySystemPrompt(this.options.systemPrompt ?? COMPACT_SYSTEM_PROMPT_DEFAULT),
       maxOutputTokens: this.options.maxOutputTokens ?? COMPACT_MAX_OUTPUT_TOKENS,
       stream: true,
-      thinking: { enabled: false },
       cacheBreakpoints: [],
     };
 
