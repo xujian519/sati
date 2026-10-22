@@ -1,15 +1,9 @@
-import { isAbsolute, relative, resolve } from "node:path";
 import { PermissionRuntime } from "../../permission/index.js";
+import type { PermissionDecision } from "../../permission/index.js";
 import type { LifecycleRuntime, SatiHookEffect } from "../../lifecycle/index.js";
 import { normalizeToolError, SatiToolRuntimeError, toolError } from "../protocol/errors.js";
 import type { SatiToolErrorCode } from "../protocol/errors.js";
-import {
-  PLAN_MODE_ALLOWED_TOOLS,
-  buildPlanModeBashViolationMessage,
-  buildPlanModeViolationMessage,
-} from "../planModeConstraints.js";
 import { getAskModeViolation } from "../askModeConstraints.js";
-import { isReadOnlyShellCommand } from "../builtin/bash/permissions.js";
 import {
   applyResultSizeLimit,
   type SatiToolErrorResult,
@@ -18,9 +12,9 @@ import {
 } from "../protocol/result.js";
 import type {
   SatiToolCall,
+  SatiToolDefinition,
   SatiToolProgressEvent,
   SatiToolRuntimeContext,
-  SatiToolResultContent,
 } from "../protocol/types.js";
 import { receiptFromToolExecution } from "../protocol/evidence.js";
 import type { ToolRegistry } from "../registry/ToolRegistry.js";
@@ -32,6 +26,8 @@ import { validateToolInput } from "./validateToolInput.js";
 import { formatValidationError } from "./formatValidationError.js";
 import { buildToolErrorRecovery } from "./errorRecovery.js";
 import { repairToolName } from "./repairToolName.js";
+import { getPlanModeViolation } from "./planModePreflight.js";
+import { flattenToolOutputText, formatToolErrorContent } from "./toolErrorFormatting.js";
 
 /**
  * 审计记录非阻塞投递：同步实现立即执行；异步实现 fire-and-forget
@@ -46,6 +42,17 @@ function deliverAuditRecord(record: void | Promise<void> | undefined): void {
   }
 }
 
+/** 允许执行所需的权限结论（deny/cancel/ask 在 `resolvePermission` 内已转错误结果）。 */
+type AllowedDecision = Extract<PermissionDecision, { type: "allow" }>;
+
+type PreflightOutcome = { tool: SatiToolDefinition } | { error: SatiToolErrorResult };
+
+type PreparedInputOutcome = { input: unknown } | { error: SatiToolErrorResult };
+
+type PermissionOutcome = { decision: AllowedDecision; input: unknown } | { error: SatiToolErrorResult };
+
+type ResolvedPermission = { decision: AllowedDecision; input: unknown };
+
 export class ToolRuntime {
   constructor(
     private readonly registry: ToolRegistry,
@@ -56,24 +63,49 @@ export class ToolRuntime {
 
   async execute(call: SatiToolCall, context: SatiToolRuntimeContext): Promise<SatiToolResult> {
     const startedAtDate = now(context);
-    const runtimeContext: SatiToolRuntimeContext = context.executeTool
-      ? context
-      : {
-          ...context,
-          executeTool: (nestedCall, contextPatch) => {
-            runtimeContext.readFileState ??= new Map();
-            runtimeContext.writeSnapshots ??= new Map();
-            return this.execute(nestedCall, {
-              ...runtimeContext,
-              ...contextPatch,
-              readFileState: runtimeContext.readFileState,
-              writeSnapshots: runtimeContext.writeSnapshots,
-              executeTool: runtimeContext.executeTool,
-            });
-          },
-        };
-    context = runtimeContext;
+    context = this.withNestedToolExecutor(context);
     const startedAt = startedAtDate.toISOString();
+
+    const preflight = await this.preflight(call, context, startedAt);
+    if ("error" in preflight) return preflight.error;
+
+    const prepared = await this.applyPreToolUseHooks(preflight.tool, call, context, startedAt);
+    if ("error" in prepared) return prepared.error;
+
+    const permission = await this.resolvePermission(preflight.tool, call, prepared.input, context, startedAt);
+    if ("error" in permission) return permission.error;
+
+    return this.runTool(preflight.tool, call, permission, context, startedAt, startedAtDate);
+  }
+
+  /** 注入嵌套执行器：子工具调用共享同一份 readFileState / writeSnapshots。 */
+  private withNestedToolExecutor(context: SatiToolRuntimeContext): SatiToolRuntimeContext {
+    if (context.executeTool) {
+      return context;
+    }
+    const runtimeContext: SatiToolRuntimeContext = {
+      ...context,
+      executeTool: (nestedCall, contextPatch) => {
+        runtimeContext.readFileState ??= new Map();
+        runtimeContext.writeSnapshots ??= new Map();
+        return this.execute(nestedCall, {
+          ...runtimeContext,
+          ...contextPatch,
+          readFileState: runtimeContext.readFileState,
+          writeSnapshots: runtimeContext.writeSnapshots,
+          executeTool: runtimeContext.executeTool,
+        });
+      },
+    };
+    return runtimeContext;
+  }
+
+  /** 解析工具（含别名修复）并执行无副作用前置校验；失败即返回结构化错误结果。 */
+  private async preflight(
+    call: SatiToolCall,
+    context: SatiToolRuntimeContext,
+    startedAt: string,
+  ): Promise<PreflightOutcome> {
     let tool = this.registry.get(call.name);
     if (!tool) {
       const repaired = repairToolName(call.name, this.registry.list(), context.toolAliases);
@@ -83,65 +115,87 @@ export class ToolRuntime {
     }
     const toolName = tool?.name ?? call.name;
 
-    if (runtimeContext.abortSignal?.aborted) {
-      return this.errorResult(
-        call.id,
-        toolName,
-        "tool_aborted",
-        "Tool execution was aborted.",
-        startedAt,
-        runtimeContext,
-      );
+    if (context.abortSignal?.aborted) {
+      return {
+        error: await this.errorResult(
+          call.id,
+          toolName,
+          "tool_aborted",
+          "Tool execution was aborted.",
+          startedAt,
+          context,
+        ),
+      };
     }
 
     if (!tool) {
-      return this.errorResult(
-        call.id,
-        call.name,
-        "tool_not_found",
-        `Tool ${call.name} does not exist.`,
-        startedAt,
-        runtimeContext,
-      );
+      return {
+        error: await this.errorResult(
+          call.id,
+          call.name,
+          "tool_not_found",
+          `Tool ${call.name} does not exist.`,
+          startedAt,
+          context,
+        ),
+      };
     }
 
-    const planModeViolation = getPlanModeViolation(tool.name, call.input, runtimeContext);
+    const planModeViolation = getPlanModeViolation(tool.name, call.input, context);
     if (planModeViolation) {
-      return this.errorResult(call.id, tool.name, "plan_mode_violation", planModeViolation, startedAt, runtimeContext);
+      return {
+        error: await this.errorResult(call.id, tool.name, "plan_mode_violation", planModeViolation, startedAt, context),
+      };
     }
 
-    const askModeViolation = runtimeContext.runMode === "ask" ? getAskModeViolation(tool, call.input) : undefined;
+    const askModeViolation = context.runMode === "ask" ? getAskModeViolation(tool, call.input) : undefined;
     if (askModeViolation) {
-      return this.errorResult(call.id, tool.name, "ask_mode_violation", askModeViolation, startedAt, runtimeContext);
+      return {
+        error: await this.errorResult(call.id, tool.name, "ask_mode_violation", askModeViolation, startedAt, context),
+      };
     }
 
     const validation = validateToolInput(call.input, tool.inputSchema);
     if (!validation.ok) {
-      return this.errorResult(
-        call.id,
-        tool.name,
-        "invalid_tool_input",
-        formatValidationError(tool.name, validation.issues, {
-          maxOutputTokens: runtimeContext.maxOutputTokens,
-          outputTruncated: runtimeContext.outputTruncated,
-        }),
-        startedAt,
-        runtimeContext,
-        { issues: validation.issues },
-      );
+      return {
+        error: await this.errorResult(
+          call.id,
+          tool.name,
+          "invalid_tool_input",
+          formatValidationError(tool.name, validation.issues, {
+            maxOutputTokens: context.maxOutputTokens,
+            outputTruncated: context.outputTruncated,
+          }),
+          startedAt,
+          context,
+          { issues: validation.issues },
+        ),
+      };
     }
 
-    if (runtimeContext.permissionContext.canPrompt === false && requiresPromptCapability(tool, call.input)) {
-      return this.errorResult(
-        call.id,
-        tool.name,
-        "unsupported_tool",
-        `${tool.name} requires user interaction, but this session is running with prompts disabled.`,
-        startedAt,
-        runtimeContext,
-      );
+    if (context.permissionContext.canPrompt === false && requiresPromptCapability(tool, call.input)) {
+      return {
+        error: await this.errorResult(
+          call.id,
+          tool.name,
+          "unsupported_tool",
+          `${tool.name} requires user interaction, but this session is running with prompts disabled.`,
+          startedAt,
+          context,
+        ),
+      };
     }
 
+    return { tool };
+  }
+
+  /** PreToolUse hook + 工具自校验 + todo 门：可改写输入，也可直接拒绝。 */
+  private async applyPreToolUseHooks(
+    tool: SatiToolDefinition,
+    call: SatiToolCall,
+    context: SatiToolRuntimeContext,
+    startedAt: string,
+  ): Promise<PreparedInputOutcome> {
     let executeInput = call.input;
     const preToolResult = await this.dispatchLifecycle("PreToolUse", tool.name, call.id, executeInput, context);
     this.eventEmitter?.({
@@ -155,58 +209,77 @@ export class ToolRuntime {
     const prePermission = findEffect(preToolResult.effects, "permission_decision");
     const preDeny = prePermission?.behavior === "deny" ? prePermission : undefined;
     if (preBlock || preDeny) {
-      return this.errorResult(
-        call.id,
-        tool.name,
-        "permission_denied",
-        preBlock?.reason ?? preDeny?.reason ?? `PreToolUse hook denied ${tool.name}.`,
-        startedAt,
-        context,
-      );
+      return {
+        error: await this.errorResult(
+          call.id,
+          tool.name,
+          "permission_denied",
+          preBlock?.reason ?? preDeny?.reason ?? `PreToolUse hook denied ${tool.name}.`,
+          startedAt,
+          context,
+        ),
+      };
     }
     const updatedInput = findEffect(preToolResult.effects, "updated_tool_input");
     if (updatedInput) {
       executeInput = updatedInput.input;
       const updatedValidation = validateToolInput(executeInput, tool.inputSchema);
       if (!updatedValidation.ok) {
-        return this.errorResult(
-          call.id,
-          tool.name,
-          "invalid_tool_input",
-          `PreToolUse hook produced invalid input for ${tool.name}.
+        return {
+          error: await this.errorResult(
+            call.id,
+            tool.name,
+            "invalid_tool_input",
+            `PreToolUse hook produced invalid input for ${tool.name}.
 
 ${formatValidationError(tool.name, updatedValidation.issues, {
-  maxOutputTokens: runtimeContext.maxOutputTokens,
-  outputTruncated: runtimeContext.outputTruncated,
+  maxOutputTokens: context.maxOutputTokens,
+  outputTruncated: context.outputTruncated,
 })}`,
-          startedAt,
-          context,
-          { issues: updatedValidation.issues },
-        );
+            startedAt,
+            context,
+            { issues: updatedValidation.issues },
+          ),
+        };
       }
     }
 
     const toolValidation = await tool.validateInput?.(executeInput, context);
     if (toolValidation && !toolValidation.ok) {
-      return this.errorResult(
-        call.id,
-        tool.name,
-        "invalid_tool_input",
-        formatValidationError(tool.name, toolValidation.issues, {
-          maxOutputTokens: runtimeContext.maxOutputTokens,
-          outputTruncated: runtimeContext.outputTruncated,
-        }),
-        startedAt,
-        context,
-        { issues: toolValidation.issues },
-      );
+      return {
+        error: await this.errorResult(
+          call.id,
+          tool.name,
+          "invalid_tool_input",
+          formatValidationError(tool.name, toolValidation.issues, {
+            maxOutputTokens: context.maxOutputTokens,
+            outputTruncated: context.outputTruncated,
+          }),
+          startedAt,
+          context,
+          { issues: toolValidation.issues },
+        ),
+      };
     }
 
     const todoGateMessage = context.planTodo?.blockingMessageFor(tool.name, tool.isReadOnly(executeInput));
     if (todoGateMessage) {
-      return this.errorResult(call.id, tool.name, "tool_execution_failed", todoGateMessage, startedAt, context);
+      return {
+        error: await this.errorResult(call.id, tool.name, "tool_execution_failed", todoGateMessage, startedAt, context),
+      };
     }
 
+    return { input: executeInput };
+  }
+
+  /** 权限判定（含 PermissionRequest hook 改写）→ deny/cancel/ask 转错误结果，allow 继续执行。 */
+  private async resolvePermission(
+    tool: SatiToolDefinition,
+    call: SatiToolCall,
+    executeInput: unknown,
+    context: SatiToolRuntimeContext,
+    startedAt: string,
+  ): Promise<PermissionOutcome> {
     let decision = await this.permissionRuntime.decide(tool, executeInput, context, call.id);
     const alwaysAskLocked = decision.type === "ask" && decision.request.metadata?.alwaysAsk === true;
     if (decision.type === "ask") {
@@ -279,30 +352,48 @@ ${formatValidationError(tool.name, updatedValidation.issues, {
         decision.reason.type === "runtime" && decision.reason.message.includes("prompt")
           ? "permission_required"
           : "permission_denied";
-      return this.errorResult(call.id, tool.name, code, decision.message, startedAt, context);
+      return {
+        error: await this.errorResult(call.id, tool.name, code, decision.message, startedAt, context),
+      };
     }
 
     if (decision.type === "cancel") {
-      return this.errorResult(call.id, tool.name, "permission_cancelled", decision.message, startedAt, context);
+      return {
+        error: await this.errorResult(call.id, tool.name, "permission_cancelled", decision.message, startedAt, context),
+      };
     }
 
     if (decision.type === "ask") {
-      return this.errorResult(
-        call.id,
-        tool.name,
-        "permission_required",
-        `Permission is required to run ${tool.name}.`,
-        startedAt,
-        context,
-        { request: decision.request },
-      );
+      return {
+        error: await this.errorResult(
+          call.id,
+          tool.name,
+          "permission_required",
+          `Permission is required to run ${tool.name}.`,
+          startedAt,
+          context,
+          { request: decision.request },
+        ),
+      };
     }
 
-    executeInput = decision.updatedInput ?? executeInput;
+    return { decision, input: decision.updatedInput ?? executeInput };
+  }
+
+  /** 执行工具（超时熔合 / outputSchema 校验 / 后置 hook / 证据与审计），成功失败同一收口。 */
+  private async runTool(
+    tool: SatiToolDefinition,
+    call: SatiToolCall,
+    permission: ResolvedPermission,
+    context: SatiToolRuntimeContext,
+    startedAt: string,
+    startedAtDate: Date,
+  ): Promise<SatiToolResult> {
+    const executeInput = permission.input;
     const baseContext: SatiToolRuntimeContext = {
       ...context,
       currentToolCallId: call.id,
-      currentPermissionDecision: decision,
+      currentPermissionDecision: permission.decision,
     };
     // 阶段四 T6.1：registry 级超时强制——工具自报 timeoutMs 时，把 deadline
     // 熔合进执行 signal；到期以 TOOL_TIMEOUT 归一（合作式：忽略 signal 的
@@ -548,124 +639,6 @@ ${formatValidationError(tool.name, updatedValidation.issues, {
       }
     );
   }
-}
-
-/** 工具输出内容文本摘录（供证据 Receipt resultText）。 */
-function flattenToolOutputText(content: SatiToolResultContent[]): string {
-  return content
-    .map(block => {
-      if (block.type === "text") return block.text;
-      if (block.type === "json") return JSON.stringify(block.value);
-      if (block.type === "file") return block.path;
-      return "";
-    })
-    .join("\n")
-    .trim();
-}
-
-function formatToolErrorContent(recoveryMessage: string, details?: Record<string, unknown>): string {
-  const rawDetails = formatRawToolErrorDetails(details);
-  return rawDetails ? `${recoveryMessage}\n\n${rawDetails}` : recoveryMessage;
-}
-
-function formatRawToolErrorDetails(details?: Record<string, unknown>): string | undefined {
-  if (!details) {
-    return undefined;
-  }
-
-  const lines: string[] = [];
-  const command = readStringDetail(details, "command");
-  const exitCode = details.exitCode;
-  const timedOut = details.timedOut;
-  const durationMs = details.durationMs;
-
-  if (command || exitCode !== undefined || timedOut !== undefined || durationMs !== undefined) {
-    lines.push("Raw tool details:");
-    if (command) lines.push(`- command: ${command}`);
-    if (exitCode !== undefined) lines.push(`- exit_code: ${String(exitCode)}`);
-    if (timedOut !== undefined) lines.push(`- timed_out: ${String(timedOut)}`);
-    if (durationMs !== undefined) lines.push(`- duration_ms: ${String(durationMs)}`);
-  }
-
-  const diagnostic = readStringDetail(details, "diagnostic");
-  if (diagnostic) {
-    lines.push("", "Diagnostic:", diagnostic.trimEnd());
-  }
-
-  appendRawStream(lines, "stdout", readStringDetail(details, "stdout"));
-  appendRawStream(lines, "stderr", readStringDetail(details, "stderr"));
-
-  return lines.length > 0 ? lines.join("\n") : undefined;
-}
-
-function appendRawStream(lines: string[], label: "stdout" | "stderr", value: string | undefined): void {
-  if (!value || value.length === 0) {
-    return;
-  }
-  lines.push("", `${label}:`, value.trimEnd());
-}
-
-function readStringDetail(details: Record<string, unknown>, key: string): string | undefined {
-  const value = details[key];
-  return typeof value === "string" ? value : undefined;
-}
-
-function getPlanModeViolation(toolName: string, input: unknown, context: SatiToolRuntimeContext): string | undefined {
-  if (context.permissionMode !== "plan") {
-    return undefined;
-  }
-
-  if (!PLAN_MODE_ALLOWED_TOOLS.has(toolName)) {
-    return buildPlanModeViolationMessage(toolName);
-  }
-
-  if (toolName === "bash") {
-    const command = readStringProperty(input, "command");
-    if (!command || !isReadOnlyShellCommand(command)) {
-      return buildPlanModeBashViolationMessage(command ?? "");
-    }
-    return undefined;
-  }
-
-  if (toolName === "write_file" || toolName === "edit_file") {
-    const filePath = readStringProperty(input, "file_path") ?? readStringProperty(input, "filePath");
-    if (!isPlanMarkdownPath(filePath, context)) {
-      return buildPlanModeViolationMessage(toolName);
-    }
-  }
-
-  return undefined;
-}
-
-function readStringProperty(input: unknown, key: string): string | undefined {
-  if (!isRecord(input)) {
-    return undefined;
-  }
-  const value = input[key];
-  return typeof value === "string" ? value : undefined;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function isPlanMarkdownPath(filePath: string | undefined, context: SatiToolRuntimeContext): boolean {
-  if (!filePath || !context.planDirectory?.path) {
-    return false;
-  }
-  // resolve(cwd, filePath) 对绝对/相对输入统一产出规范化绝对路径，
-  // 无需先按 isAbsolute 分支再包一层 resolve。
-  const absolute = resolve(context.cwd, filePath);
-  if (!absolute.toLowerCase().endsWith(".md")) {
-    return false;
-  }
-  const relativeToPlanDir = relative(context.planDirectory.path, absolute);
-  return (
-    relativeToPlanDir !== "" &&
-    !isAbsolute(relativeToPlanDir) &&
-    !relativeToPlanDir.startsWith("..") &&
-    !relativeToPlanDir.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`)
-  );
 }
 
 function findEffect<Type extends SatiHookEffect["type"]>(
