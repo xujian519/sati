@@ -1,0 +1,138 @@
+name: Build Installers
+
+# 远程打包入口：在 GitHub 托管 runner 上构建 macOS arm64 DMG 与 Windows x64 EXE。
+# 触发方式：向 `ci/remote-installers*` 分支推送（工作流文件随该 ref 生效），或
+# 合并到默认分支后用 `gh workflow run build-installers.yml -f ref=vX.Y.Z` 手动触发。
+#
+# 无签名证书（仓库未配置 CSC_LINK / Apple 公证凭据）时只产出：
+#   macOS  ad-hoc 签名 DMG（用户需右键打开）
+#   Windows 未签名 EXE（SmartScreen 提示“未知发布者”）
+# 产物作为 Actions artifacts 保存，不创建 GitHub Release、不覆盖已有发布资产。
+on:
+  push:
+    branches:
+      - ci/remote-installers*
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Git tag or commit to build
+        required: true
+        default: v0.3.8
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-installers-${{ inputs.ref || github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  macos:
+    name: macOS arm64 DMG
+    runs-on: macos-14
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || 'v0.3.8' }}
+          fetch-depth: 0
+          lfs: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Enable pnpm (corepack)
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.32.1 --activate
+          pnpm --version
+
+      - name: Install dependencies
+        env:
+          npm_config_fetch_retries: "5"
+          npm_config_fetch_retry_mintimeout: "1000"
+          npm_config_fetch_retry_maxtimeout: "60000"
+        run: pnpm install --frozen-lockfile
+
+      # release.sh 的 pre-flight 要求 edgeclaw-memory-core/lib/index.js 已存在，
+      # 而该目录不入库（由 workspace build 生成），必须先构建。
+      - name: Build memory-core
+        run: pnpm --filter edgeclaw-memory-core build
+
+      # 测试门禁由同一 commit 的 CI 覆盖，打包不重复执行 pnpm test。
+      # --ad-hoc：无 Developer ID，跳过公证；--skip-publish：不上传 Release。
+      - name: Build ad-hoc DMG
+        run: bash apps/desktop/scripts/release.sh --ad-hoc --skip-tests --skip-publish
+
+      - name: Write checksums
+        run: |
+          cd apps/desktop/dist-electron
+          shasum -a 256 Sati-*-arm64.dmg | tee SHA256SUMS-macos.txt
+
+      - name: Upload DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: Sati-${{ inputs.ref || 'v0.3.8' }}-macos-arm64
+          path: |
+            apps/desktop/dist-electron/Sati-*-arm64.dmg
+            apps/desktop/dist-electron/SHA256SUMS-macos.txt
+            apps/desktop/dist-electron/install-sati.sh
+            apps/desktop/dist-electron/INSTALL.md
+          if-no-files-found: error
+          retention-days: 30
+
+  windows:
+    name: Windows x64 EXE
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || 'v0.3.8' }}
+          fetch-depth: 0
+          lfs: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Enable pnpm (corepack)
+        shell: bash
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.32.1 --activate
+          pnpm --version
+
+      - name: Install dependencies
+        shell: bash
+        env:
+          npm_config_fetch_retries: "5"
+          npm_config_fetch_retry_mintimeout: "1000"
+          npm_config_fetch_retry_maxtimeout: "60000"
+        # 与 build-win.bat 内部一致：native 依赖自带预编译产物，无需生命周期脚本。
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      # --skip-sign：无 Authenticode 证书；--skip-tests：测试门禁见同一 commit 的 CI；
+      # --skip-install：复用上一步已完成的安装。
+      - name: Build unsigned installer
+        shell: cmd
+        run: apps\desktop\scripts\build-win.bat --skip-sign --skip-tests --skip-install
+
+      - name: Write checksums
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem apps/desktop/dist-electron/Sati-*-win-x64.exe | Select-Object -First 1
+          if (-not $exe) { throw "installer not found" }
+          "$((Get-FileHash $exe.FullName -Algorithm SHA256).Hash.ToLower())  $($exe.Name)" |
+            Out-File -Encoding ascii apps/desktop/dist-electron/SHA256SUMS-windows.txt
+
+      - name: Upload EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: Sati-${{ inputs.ref || 'v0.3.8' }}-windows-x64
+          path: |
+            apps/desktop/dist-electron/Sati-*-win-x64.exe
+            apps/desktop/dist-electron/SHA256SUMS-windows.txt
+          if-no-files-found: error
+          retention-days: 30
