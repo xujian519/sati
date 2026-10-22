@@ -4,6 +4,11 @@
  * Live `WebGatewayEvent` and historical transcript replays are projected onto
  * the same `WebMessage[]` shape so the React UI does not have to branch on
  * "live vs history" code paths.
+ *
+ * P2.9（issue #646）：`applyWebGatewayEvent` 的 383 行 switch 改为**按事件种类查表**
+ * （WEB_EVENT_HANDLERS）。表为 `WebGatewayEvent` 全种类的 required Record——新增
+ * 帧种类时 typecheck 强制处置（帧面静音种类显式写 `ignoreEvent`），不再依赖
+ * switch default 的静默面。
  */
 
 import { isVisibleFailureStatusDetail } from "../../status/agentStatus.js";
@@ -165,388 +170,421 @@ function limitToolResultPreview(value: string | undefined): string | undefined {
   return `${value.slice(0, headLength)}\n\n... [UI preview truncated: ${value.length - MAX_WEB_TOOL_RESULT_PREVIEW_CHARS} characters omitted] ...\n\n${value.slice(-tailLength)}`;
 }
 
+type ReducerContext = {
+  sessionKey: string;
+  projectKey: string | undefined;
+  /** ISO timestamp shared by every message created while handling one frame. */
+  stamp: string;
+  newId: () => string;
+};
+
+function createReducerContext(options: WebMessageReducerOptions): ReducerContext {
+  const now = options.now ?? (() => new Date());
+  return {
+    sessionKey: options.sessionKey,
+    projectKey: options.projectKey,
+    stamp: now().toISOString(),
+    newId: options.newId ?? defaultNewId,
+  };
+}
+
+type LiveMessageFields = Omit<WebMessage, "id" | "sessionKey" | "projectKey" | "createdAt" | "provider" | "source">;
+
+function liveMessage(ctx: ReducerContext, fields: LiveMessageFields): WebMessage {
+  return {
+    id: ctx.newId(),
+    sessionKey: ctx.sessionKey,
+    projectKey: ctx.projectKey,
+    createdAt: ctx.stamp,
+    provider: "sati",
+    ...fields,
+    source: "live",
+  };
+}
+
+type WebEventHandler<K extends WebGatewayEvent["type"]> = (
+  state: WebMessageReducerState,
+  event: Extract<WebGatewayEvent, { type: K }>,
+  ctx: ReducerContext,
+) => WebMessageReducerState;
+
+type AnyWebEventHandler = (
+  state: WebMessageReducerState,
+  event: WebGatewayEvent,
+  ctx: ReducerContext,
+) => WebMessageReducerState;
+
 export function applyWebGatewayEvent(
   state: WebMessageReducerState,
   event: WebGatewayEvent,
   options: WebMessageReducerOptions,
 ): WebMessageReducerState {
-  const now = options.now ?? (() => new Date());
-  const newId = options.newId ?? defaultNewId;
-  const stamp = now().toISOString();
+  // 表为 required Record，正常路径必有表项；undefined 分支只承接运行时传入
+  // union 之外的旧帧类型，语义对齐旧 switch 的 default（原样返回）。
+  const handler = WEB_EVENT_HANDLERS[event.type] as AnyWebEventHandler | undefined;
+  if (handler === undefined) return state;
+  return handler(state, event, createReducerContext(options));
+}
 
-  switch (event.type) {
-    case "turn_started":
-      return {
-        ...state,
-        currentAssistantId: undefined,
-        currentThinkingId: undefined,
-        hasVisibleFailureStatus: false,
-      };
+/**
+ * WebGatewayEvent → reducer 表（P2.9）。帧面静音种类显式列 `ignoreEvent`
+ * （model_request_started / approval_* / config_changed / worktree_* /
+ * context_budget / team_event 由其他投影或宿主处理）。
+ */
+const WEB_EVENT_HANDLERS: { [K in WebGatewayEvent["type"]]: WebEventHandler<K> } = {
+  turn_started: handleTurnStarted,
+  model_request_started: ignoreEvent,
+  assistant_text_delta: handleAssistantTextDelta,
+  assistant_thinking_delta: handleAssistantThinkingDelta,
+  file_artifacts: handleFileArtifacts,
+  tool_call_started: handleToolCallStarted,
+  tool_call_finished: handleToolCallFinished,
+  tool_result_detail_available: handleToolResultDetailAvailable,
+  permission_request: handlePermissionRequest,
+  approval_pending: ignoreEvent,
+  approval_resolved: ignoreEvent,
+  elicitation_request: handleElicitationRequest,
+  elicitation_cancelled: handleElicitationCancelled,
+  structured_output: handleStructuredOutput,
+  plan_mode_changed: handlePlanModeChanged,
+  config_changed: ignoreEvent,
+  worktree_created: ignoreEvent,
+  worktree_removed: ignoreEvent,
+  context_budget: ignoreEvent,
+  agent_status: handleAgentStatus,
+  team_event: ignoreEvent,
+  turn_completed: handleTurnCompleted,
+  error: handleError,
+};
 
-    case "assistant_text_delta": {
-      if (!event.text) {
-        return state;
-      }
-      if (state.currentAssistantId) {
-        return {
-          ...state,
-          messages: state.messages.map(m =>
-            m.id === state.currentAssistantId ? { ...m, text: `${m.text ?? ""}${event.text}` } : m,
-          ),
-        };
-      }
-      const id = newId();
-      const message: WebMessage = {
-        id,
-        sessionKey: options.sessionKey,
-        projectKey: options.projectKey,
-        createdAt: stamp,
-        provider: "sati",
-        role: "assistant",
-        kind: "text",
-        text: event.text,
-        source: "live",
-      };
-      return {
-        ...state,
-        messages: [...state.messages, message],
-        currentAssistantId: id,
-      };
-    }
-
-    case "assistant_thinking_delta": {
-      if (!event.text) {
-        return state;
-      }
-      if (state.currentThinkingId) {
-        return {
-          ...state,
-          messages: state.messages.map(m =>
-            m.id === state.currentThinkingId ? { ...m, text: `${m.text ?? ""}${event.text}` } : m,
-          ),
-        };
-      }
-      const id = newId();
-      const message: WebMessage = {
-        id,
-        sessionKey: options.sessionKey,
-        projectKey: options.projectKey,
-        createdAt: stamp,
-        provider: "sati",
-        role: "assistant",
-        kind: "thinking",
-        text: event.text,
-        source: "live",
-      };
-      return {
-        ...state,
-        messages: [...state.messages, message],
-        currentThinkingId: id,
-      };
-    }
-
-    case "file_artifacts": {
-      const id = newId();
-      const message: WebMessage = {
-        id,
-        sessionKey: options.sessionKey,
-        projectKey: options.projectKey,
-        createdAt: stamp,
-        provider: "sati",
-        role: "assistant",
-        kind: "file_artifacts",
-        artifacts: event.artifacts,
-        source: "live",
-      };
-      return { ...state, messages: [...state.messages, message] };
-    }
-
-    case "tool_call_started": {
-      const id = newId();
-      const message: WebMessage = {
-        id,
-        sessionKey: options.sessionKey,
-        projectKey: options.projectKey,
-        createdAt: stamp,
-        provider: "sati",
-        role: "tool",
-        kind: "tool_use",
-        toolCallId: event.toolCallId,
-        toolName: normalizeToolDisplayName(event.name),
-        text: event.argsPreview,
-        source: "live",
-      };
-      return {
-        ...state,
-        messages: [...state.messages, message],
-        toolMessageByCallId: {
-          ...state.toolMessageByCallId,
-          [event.toolCallId]: id,
-        },
-        currentAssistantId: undefined,
-      };
-    }
-
-    case "tool_call_finished": {
-      const normalizedErrorCode = normalizeToolErrorCode(event.errorCode, event.resultPreview);
-      const eventImages =
-        Array.isArray(event.images) && event.images.length > 0
-          ? event.images.map(image => ({
-              data: `data:${image.mimeType};base64,${image.data}`,
-              mimeType: image.mimeType,
-            }))
-          : undefined;
-      const matchedId = state.toolMessageByCallId[event.toolCallId];
-      if (matchedId) {
-        return {
-          ...state,
-          messages: state.messages.map(m =>
-            m.id === matchedId
-              ? {
-                  ...m,
-                  kind: "tool_result",
-                  ok: event.ok,
-                  text: limitToolResultPreview(event.resultPreview) ?? m.text,
-                  ...(eventImages ? { images: eventImages } : {}),
-                  ...(normalizedErrorCode && { errorCode: normalizedErrorCode }),
-                  ...(event.data !== undefined ? { payload: event.data } : {}),
-                }
-              : m,
-          ),
-        };
-      }
-      const id = newId();
-      const message: WebMessage = {
-        id,
-        sessionKey: options.sessionKey,
-        projectKey: options.projectKey,
-        createdAt: stamp,
-        provider: "sati",
-        role: "tool",
-        kind: "tool_result",
-        toolCallId: event.toolCallId,
-        ok: event.ok,
-        text: limitToolResultPreview(event.resultPreview),
-        ...(eventImages ? { images: eventImages } : {}),
-        ...(normalizedErrorCode && { errorCode: normalizedErrorCode }),
-        ...(event.data !== undefined ? { payload: event.data } : {}),
-        source: "live",
-      };
-      return {
-        ...state,
-        messages: [...state.messages, message],
-      };
-    }
-
-    case "tool_result_detail_available": {
-      const matchedId = state.toolMessageByCallId[event.toolCallId];
-      if (!matchedId) {
-        return state;
-      }
-      return {
-        ...state,
-        messages: state.messages.map(m =>
-          m.id === matchedId
-            ? {
-                ...m,
-                ...(event.resultPath ? { resultPath: event.resultPath } : {}),
-              }
-            : m,
-        ),
-      };
-    }
-
-    case "permission_request": {
-      const id = newId();
-      const message: WebMessage = {
-        id,
-        sessionKey: options.sessionKey,
-        projectKey: options.projectKey,
-        createdAt: stamp,
-        provider: "sati",
-        role: "permission",
-        kind: "permission_request",
-        requestId: event.requestId,
-        toolName: event.toolName,
-        payload: event.payload,
-        source: "live",
-      };
-      return {
-        ...state,
-        messages: [...state.messages, message],
-        currentAssistantId: undefined,
-      };
-    }
-
-    case "elicitation_request": {
-      const id = newId();
-      const message: WebMessage = {
-        id,
-        sessionKey: options.sessionKey,
-        projectKey: options.projectKey,
-        createdAt: stamp,
-        provider: "sati",
-        role: "system",
-        kind: "elicitation_request",
-        requestId: event.requestId,
-        toolCallId: event.toolCallId,
-        toolName: event.toolName,
-        payload: {
-          questions: event.questions,
-          previewFormat: event.previewFormat,
-          metadata: event.metadata,
-        },
-        source: "live",
-      };
-      return {
-        ...state,
-        messages: [...state.messages, message],
-        currentAssistantId: undefined,
-      };
-    }
-
-    case "elicitation_cancelled":
-      return {
-        ...state,
-        messages: state.messages.map(m =>
-          m.kind === "elicitation_request" && m.requestId === event.requestId
-            ? { ...m, kind: "status", role: "system", text: "elicitation cancelled" }
-            : m,
-        ),
-      };
-
-    case "structured_output": {
-      const id = newId();
-      const message: WebMessage = {
-        id,
-        sessionKey: options.sessionKey,
-        projectKey: options.projectKey,
-        createdAt: stamp,
-        provider: "sati",
-        role: "system",
-        kind: "structured_output",
-        payload: event.payload,
-        source: "live",
-      };
-      return { ...state, messages: [...state.messages, message] };
-    }
-
-    case "plan_mode_changed": {
-      const id = newId();
-      const message: WebMessage = {
-        id,
-        sessionKey: options.sessionKey,
-        projectKey: options.projectKey,
-        createdAt: stamp,
-        provider: "sati",
-        role: "system",
-        kind: "status",
-        text: `mode → ${event.mode}`,
-        source: "live",
-      };
-      return { ...state, messages: [...state.messages, message] };
-    }
-
-    case "turn_completed": {
-      const id = newId();
-      const message: WebMessage = {
-        id,
-        sessionKey: options.sessionKey,
-        projectKey: options.projectKey,
-        createdAt: stamp,
-        provider: "sati",
-        role: "system",
-        kind: "complete",
-        usage: event.usage,
-        finishReason: event.finishReason,
-        source: "live",
-      };
-      return {
-        ...state,
-        messages: [...state.messages, message],
-        currentAssistantId: undefined,
-        currentThinkingId: undefined,
-      };
-    }
-
-    case "agent_status": {
-      const isErrorStatus = isErrorAgentStatusEvent(event);
-      if (!isErrorStatus && !STATUS_AGENT_STATUS_EVENTS.has(event.event)) {
-        return state;
-      }
-      const detail = event.detail ?? {};
-      const kind = isErrorStatus ? "error" : "status";
-      const text =
-        typeof detail.message === "string" && detail.message.length > 0
-          ? detail.message
-          : kind === "error"
-            ? "The model stream ended unexpectedly, so the response may be incomplete."
-            : "This turn ended before producing a standard assistant response.";
-      const id = newId();
-      const message: WebMessage = {
-        id,
-        sessionKey: options.sessionKey,
-        projectKey: options.projectKey,
-        createdAt: stamp,
-        provider: "sati",
-        role: kind === "error" ? "error" : "system",
-        kind,
-        text,
-        ...(isI18nDescriptor(detail.messageI18n) ? { contentI18n: detail.messageI18n } : {}),
-        ...(isI18nDescriptor(detail.userHintI18n) ? { userHintI18n: detail.userHintI18n } : {}),
-        payload: {
-          event: event.event,
-          detail,
-          ...(typeof detail.userHint === "string" ? { userHint: detail.userHint } : {}),
-          ...(isI18nDescriptor(detail.messageI18n) ? { contentI18n: detail.messageI18n } : {}),
-          ...(isI18nDescriptor(detail.userHintI18n) ? { userHintI18n: detail.userHintI18n } : {}),
-        },
-        source: "live",
-      };
-      return {
-        ...state,
-        messages: [...state.messages, message],
-        currentAssistantId: undefined,
-        currentThinkingId: undefined,
-        hasVisibleFailureStatus: state.hasVisibleFailureStatus || (kind === "error" && detail.visible !== false),
-      };
-    }
-
-    case "error": {
-      if (state.hasVisibleFailureStatus) {
-        return {
-          ...state,
-          currentAssistantId: undefined,
-          currentThinkingId: undefined,
-        };
-      }
-      const id = newId();
-      const message: WebMessage = {
-        id,
-        sessionKey: options.sessionKey,
-        projectKey: options.projectKey,
-        createdAt: stamp,
-        provider: "sati",
-        role: "error",
-        kind: "error",
-        text: event.message,
-        payload: {
-          code: event.code,
-          recoverable: event.recoverable,
-          ...(event.userHint ? { userHint: event.userHint } : {}),
-        },
-        source: "live",
-      };
-      return {
-        ...state,
-        messages: [...state.messages, message],
-        currentAssistantId: undefined,
-        currentThinkingId: undefined,
-      };
-    }
-  }
-
+/** 帧面静音：该帧在其他投影路径消费，不进入 WebMessage 列表。 */
+function ignoreEvent(state: WebMessageReducerState): WebMessageReducerState {
   return state;
+}
+
+function handleTurnStarted(state: WebMessageReducerState): WebMessageReducerState {
+  return {
+    ...state,
+    currentAssistantId: undefined,
+    currentThinkingId: undefined,
+    hasVisibleFailureStatus: false,
+  };
+}
+
+function handleAssistantTextDelta(
+  state: WebMessageReducerState,
+  event: Extract<WebGatewayEvent, { type: "assistant_text_delta" }>,
+  ctx: ReducerContext,
+): WebMessageReducerState {
+  return appendDelta(state, ctx, event.text, "text", "currentAssistantId");
+}
+
+function handleAssistantThinkingDelta(
+  state: WebMessageReducerState,
+  event: Extract<WebGatewayEvent, { type: "assistant_thinking_delta" }>,
+  ctx: ReducerContext,
+): WebMessageReducerState {
+  return appendDelta(state, ctx, event.text, "thinking", "currentThinkingId");
+}
+
+/** 文本/思考增量：已有当前消息则追加，否则新建一条并登记为当前消息。 */
+function appendDelta(
+  state: WebMessageReducerState,
+  ctx: ReducerContext,
+  text: string,
+  kind: "text" | "thinking",
+  currentKey: "currentAssistantId" | "currentThinkingId",
+): WebMessageReducerState {
+  if (!text) {
+    return state;
+  }
+  const currentId = state[currentKey];
+  if (currentId) {
+    return {
+      ...state,
+      messages: state.messages.map(m => (m.id === currentId ? { ...m, text: `${m.text ?? ""}${text}` } : m)),
+    };
+  }
+  const message = liveMessage(ctx, { role: "assistant", kind, text });
+  return {
+    ...state,
+    messages: [...state.messages, message],
+    [currentKey]: message.id,
+  };
+}
+
+function handleFileArtifacts(
+  state: WebMessageReducerState,
+  event: Extract<WebGatewayEvent, { type: "file_artifacts" }>,
+  ctx: ReducerContext,
+): WebMessageReducerState {
+  const message = liveMessage(ctx, { role: "assistant", kind: "file_artifacts", artifacts: event.artifacts });
+  return { ...state, messages: [...state.messages, message] };
+}
+
+function handleToolCallStarted(
+  state: WebMessageReducerState,
+  event: Extract<WebGatewayEvent, { type: "tool_call_started" }>,
+  ctx: ReducerContext,
+): WebMessageReducerState {
+  const message = liveMessage(ctx, {
+    role: "tool",
+    kind: "tool_use",
+    toolCallId: event.toolCallId,
+    toolName: normalizeToolDisplayName(event.name),
+    text: event.argsPreview,
+  });
+  return {
+    ...state,
+    messages: [...state.messages, message],
+    toolMessageByCallId: {
+      ...state.toolMessageByCallId,
+      [event.toolCallId]: message.id,
+    },
+    currentAssistantId: undefined,
+  };
+}
+
+function handleToolCallFinished(
+  state: WebMessageReducerState,
+  event: Extract<WebGatewayEvent, { type: "tool_call_finished" }>,
+  ctx: ReducerContext,
+): WebMessageReducerState {
+  const normalizedErrorCode = normalizeToolErrorCode(event.errorCode, event.resultPreview);
+  const images = toLiveImages(event.images);
+  const matchedId = state.toolMessageByCallId[event.toolCallId];
+  if (matchedId) {
+    return {
+      ...state,
+      messages: state.messages.map(m =>
+        m.id === matchedId
+          ? {
+              ...m,
+              kind: "tool_result",
+              ok: event.ok,
+              text: limitToolResultPreview(event.resultPreview) ?? m.text,
+              ...(images ? { images } : {}),
+              ...(normalizedErrorCode && { errorCode: normalizedErrorCode }),
+              ...(event.data !== undefined ? { payload: event.data } : {}),
+            }
+          : m,
+      ),
+    };
+  }
+  const message = liveMessage(ctx, {
+    role: "tool",
+    kind: "tool_result",
+    toolCallId: event.toolCallId,
+    ok: event.ok,
+    text: limitToolResultPreview(event.resultPreview),
+    ...(images ? { images } : {}),
+    ...(normalizedErrorCode && { errorCode: normalizedErrorCode }),
+    ...(event.data !== undefined ? { payload: event.data } : {}),
+  });
+  return {
+    ...state,
+    messages: [...state.messages, message],
+  };
+}
+
+function toLiveImages(
+  images: Extract<WebGatewayEvent, { type: "tool_call_finished" }>["images"],
+): WebMessage["images"] {
+  if (!Array.isArray(images) || images.length === 0) {
+    return undefined;
+  }
+  return images.map(image => ({
+    data: `data:${image.mimeType};base64,${image.data}`,
+    mimeType: image.mimeType,
+  }));
+}
+
+function handleToolResultDetailAvailable(
+  state: WebMessageReducerState,
+  event: Extract<WebGatewayEvent, { type: "tool_result_detail_available" }>,
+): WebMessageReducerState {
+  const matchedId = state.toolMessageByCallId[event.toolCallId];
+  if (!matchedId) {
+    return state;
+  }
+  return {
+    ...state,
+    messages: state.messages.map(m =>
+      m.id === matchedId
+        ? {
+            ...m,
+            ...(event.resultPath ? { resultPath: event.resultPath } : {}),
+          }
+        : m,
+    ),
+  };
+}
+
+function handlePermissionRequest(
+  state: WebMessageReducerState,
+  event: Extract<WebGatewayEvent, { type: "permission_request" }>,
+  ctx: ReducerContext,
+): WebMessageReducerState {
+  const message = liveMessage(ctx, {
+    role: "permission",
+    kind: "permission_request",
+    requestId: event.requestId,
+    toolName: event.toolName,
+    payload: event.payload,
+  });
+  return {
+    ...state,
+    messages: [...state.messages, message],
+    currentAssistantId: undefined,
+  };
+}
+
+function handleElicitationRequest(
+  state: WebMessageReducerState,
+  event: Extract<WebGatewayEvent, { type: "elicitation_request" }>,
+  ctx: ReducerContext,
+): WebMessageReducerState {
+  const message = liveMessage(ctx, {
+    role: "system",
+    kind: "elicitation_request",
+    requestId: event.requestId,
+    toolCallId: event.toolCallId,
+    toolName: event.toolName,
+    payload: {
+      questions: event.questions,
+      previewFormat: event.previewFormat,
+      metadata: event.metadata,
+    },
+  });
+  return {
+    ...state,
+    messages: [...state.messages, message],
+    currentAssistantId: undefined,
+  };
+}
+
+function handleElicitationCancelled(
+  state: WebMessageReducerState,
+  event: Extract<WebGatewayEvent, { type: "elicitation_cancelled" }>,
+): WebMessageReducerState {
+  return {
+    ...state,
+    messages: state.messages.map(m =>
+      m.kind === "elicitation_request" && m.requestId === event.requestId
+        ? { ...m, kind: "status", role: "system", text: "elicitation cancelled" }
+        : m,
+    ),
+  };
+}
+
+function handleStructuredOutput(
+  state: WebMessageReducerState,
+  event: Extract<WebGatewayEvent, { type: "structured_output" }>,
+  ctx: ReducerContext,
+): WebMessageReducerState {
+  const message = liveMessage(ctx, { role: "system", kind: "structured_output", payload: event.payload });
+  return { ...state, messages: [...state.messages, message] };
+}
+
+function handlePlanModeChanged(
+  state: WebMessageReducerState,
+  event: Extract<WebGatewayEvent, { type: "plan_mode_changed" }>,
+  ctx: ReducerContext,
+): WebMessageReducerState {
+  const message = liveMessage(ctx, { role: "system", kind: "status", text: `mode → ${event.mode}` });
+  return { ...state, messages: [...state.messages, message] };
+}
+
+function handleTurnCompleted(
+  state: WebMessageReducerState,
+  event: Extract<WebGatewayEvent, { type: "turn_completed" }>,
+  ctx: ReducerContext,
+): WebMessageReducerState {
+  const message = liveMessage(ctx, {
+    role: "system",
+    kind: "complete",
+    usage: event.usage,
+    finishReason: event.finishReason,
+  });
+  return {
+    ...state,
+    messages: [...state.messages, message],
+    currentAssistantId: undefined,
+    currentThinkingId: undefined,
+  };
+}
+
+function handleAgentStatus(
+  state: WebMessageReducerState,
+  event: Extract<WebGatewayEvent, { type: "agent_status" }>,
+  ctx: ReducerContext,
+): WebMessageReducerState {
+  const isErrorStatus = isErrorAgentStatusEvent(event);
+  if (!isErrorStatus && !STATUS_AGENT_STATUS_EVENTS.has(event.event)) {
+    return state;
+  }
+  const detail = event.detail ?? {};
+  const kind = isErrorStatus ? "error" : "status";
+  const message = liveMessage(ctx, {
+    role: kind === "error" ? "error" : "system",
+    kind,
+    text: agentStatusText(detail, kind),
+    ...(isI18nDescriptor(detail.messageI18n) ? { contentI18n: detail.messageI18n } : {}),
+    ...(isI18nDescriptor(detail.userHintI18n) ? { userHintI18n: detail.userHintI18n } : {}),
+    payload: {
+      event: event.event,
+      detail,
+      ...(typeof detail.userHint === "string" ? { userHint: detail.userHint } : {}),
+      ...(isI18nDescriptor(detail.messageI18n) ? { contentI18n: detail.messageI18n } : {}),
+      ...(isI18nDescriptor(detail.userHintI18n) ? { userHintI18n: detail.userHintI18n } : {}),
+    },
+  });
+  return {
+    ...state,
+    messages: [...state.messages, message],
+    currentAssistantId: undefined,
+    currentThinkingId: undefined,
+    hasVisibleFailureStatus: state.hasVisibleFailureStatus || (kind === "error" && detail.visible !== false),
+  };
+}
+
+function agentStatusText(detail: Record<string, unknown>, kind: "error" | "status"): string {
+  if (typeof detail.message === "string" && detail.message.length > 0) {
+    return detail.message;
+  }
+  return kind === "error"
+    ? "The model stream ended unexpectedly, so the response may be incomplete."
+    : "This turn ended before producing a standard assistant response.";
+}
+
+function handleError(
+  state: WebMessageReducerState,
+  event: Extract<WebGatewayEvent, { type: "error" }>,
+  ctx: ReducerContext,
+): WebMessageReducerState {
+  if (state.hasVisibleFailureStatus) {
+    return {
+      ...state,
+      currentAssistantId: undefined,
+      currentThinkingId: undefined,
+    };
+  }
+  const message = liveMessage(ctx, {
+    role: "error",
+    kind: "error",
+    text: event.message,
+    payload: {
+      code: event.code,
+      recoverable: event.recoverable,
+      ...(event.userHint ? { userHint: event.userHint } : {}),
+    },
+  });
+  return {
+    ...state,
+    messages: [...state.messages, message],
+    currentAssistantId: undefined,
+    currentThinkingId: undefined,
+  };
 }
 
 function defaultNewId(): string {
