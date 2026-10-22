@@ -1,0 +1,262 @@
+{
+  "results": {
+    "total_num_results": 1,
+    "total_num_pages": 1,
+    "many_results": false,
+    "num_page": 0,
+    "cluster": [
+      {
+        "result": [
+          {
+            "id": "patent/CN110752416B/en",
+            "rank": 0,
+            "patent": {
+              "title": " Lithium battery pack thermal management system and control method",
+              "snippet": " The invention discloses a lithium battery pack thermal management system, which includes a battery pack, a sealing and heat preservation device, a heating device and a cooling device, detects the voltage, current and temperature of each single battery in real time, estimates the SOC and SOH values &hellip;",
+              "priority_date": "2019-10-25",
+              "filing_date": "2019-10-25",
+              "grant_date": "2021-09-10",
+              "publication_date": "2021-09-10",
+              "inventor": "全睿",
+              "assignee": "湖北工业大学",
+              "publication_number": "CN110752416B",
+              "language": "en",
+              "thumbnail": "b3/1b/28/e997b305aea8b3/HDA0003181412650000011.png",
+              "pdf": "94/62/6b/3cb3e27fbd8266/CN110752416B.pdf",
+              "figures": [
+                {
+                  "thumbnail": "95/b0/5e/abe8563043306a/HDA0003181412650000011.png",
+                  "full": "58/ac/57/b180e380ae6ddf/HDA0003181412650000011.png"
+                },
+                {
+                  "thumbnail": "2a/cf/4a/41b652833f67ba/HDA0003181412650000021.png",
+                  "full": "9f/1e/d6/01a3bccba88631/HDA0003181412650000021.png"
+                },
+                {
+                  "thumbnail": "6d/54/16/887b0c7811efc4/HDA0003181412650000022.png",
+                  "full": "c6/3d/55/ffc2354f74ee9d/HDA0003181412650000022.png"
+                },
+                {
+                  "thumbnail": "49/73/60/f5971dbcf32873/HDA0003181412650000031.png",
+                  "full": "c8/0d/eb/ad90ca4ad92ee8/HDA0003181412650000031.png"
+                },
+                {
+                  "thumbnail": "72/a9/be/9d42004a83f124/HDA0003181412650000032.png",
+                  "full": "05/09/3e/7900621ee007b7/HDA0003181412650000032.png"
+                },
+                {
+                  "thumbnail": "52/c2/16/64ac0496b3ff4c/HDA0003181412650000041.png",
+                  "full": "02/b5/8f/e0ac5b4185d998/HDA0003181412650000041.png"
+                },
+                {
+                  "thumbnail": "b8/00/00/7486a4e5e39772/HDA0003181412650000042.png",
+                  "full": "d4/63/9e/fe52772e331fd6/HDA0003181412650000042.png"
+                },
+                {
+                  "thumbnail": "0a/cd/c6/413a2918048123/HDA0003181412650000051.png",
+                  "full": "e6/6b/a0/7b8e6f46617e73/HDA0003181412650000051.png"
+                }
+              ],
+              "family_metadata": {
+                "aggregated": {
+                  "country_status": [
+                    {
+                      "country_code": "CN",
+                      "best_patent_stage": {
+                        "state": "ACTIVE"
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "is_similar_document": false,
+            "entity_matches": {
+              "additional": 0
+            },
+            "measure_matches": {}
+          }
+        ]
+      }
+    ],
+    "chem_exhausted": false,
+    "summary": {
+      "assignee": [
+        {
+          "key": "湖北工业大学",
+          "value": 1000,
+          "frequency": [
+            {
+              "key": "2019-2022",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "Total",
+          "value": 1000,
+          "frequency": [
+            {
+              "key": "2019-2022",
+              "value": 1
+            }
+          ]
+        }
+      ],
+      "inventor": [
+        {
+          "key": "曾亮",
+          "value": 1000,
+          "frequency": [
+            {
+              "key": "2019-2022",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "吴帆",
+          "value": 1000,
+          "frequency": [
+            {
+              "key": "2019-2022",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "常雨芳",
+          "value": 1000,
+          "frequency": [
+            {
+              "key": "2019-2022",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "谭保华",
+          "value": 1000,
+          "frequency": [
+            {
+              "key": "2019-2022",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "黄文聪",
+          "value": 1000,
+          "frequency": [
+            {
+              "key": "2019-2022",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "王珊珊",
+          "value": 1000,
+          "frequency": [
+            {
+              "key": "2019-2022",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "Total",
+          "value": 1000,
+          "frequency": [
+            {
+              "key": "2019-2022",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "全睿",
+          "value": 1000,
+          "frequency": [
+            {
+              "key": "2019-2022",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "王成继",
+          "value": 1000,
+          "frequency": [
+            {
+              "key": "2019-2022",
+              "value": 1
+            }
+          ]
+        }
+      ],
+      "cpc": [
+        {
+          "key": "A62C",
+          "value": 1000,
+          "frequency": [
+            {
+              "key": "2019-2022",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "B60L",
+          "value": 1000,
+          "frequency": [
+            {
+              "key": "2019-2022",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "H01M",
+          "value": 1000,
+          "frequency": [
+            {
+              "key": "2019-2022",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "Y02E",
+          "value": 1000,
+          "frequency": [
+            {
+              "key": "2019-2022",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "Y02T",
+          "value": 1000,
+          "frequency": [
+            {
+              "key": "2019-2022",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "Total",
+          "value": 1000,
+          "frequency": [
+            {
+              "key": "2019-2022",
+              "value": 1
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

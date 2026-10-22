@@ -168,8 +168,24 @@ describe("isSearchResultCacheable / isScrapeResultCacheable", () => {
     assert.equal(isSearchResultCacheable(makeSearchResult({ warnings: ["检索超时 (30000ms)"] })), false);
     assert.equal(isSearchResultCacheable(makeSearchResult({ warnings: ["查询条件为空"] })), false);
   });
-  it("解析类 warning 仍可缓存（非致命）", () => {
-    assert.equal(isSearchResultCacheable(makeSearchResult({ warnings: ["搜索结果页未解析到任何结果"] })), true);
+  it("解析类 warning 不可缓存（#710：页面结构变化不等于真 0 命中）", () => {
+    assert.equal(isSearchResultCacheable(makeSearchResult({ warnings: ["搜索结果页未解析到任何结果"] })), false);
+    assert.equal(
+      isSearchResultCacheable(makeSearchResult({ warnings: ["搜索结果页未解析到任何结果（页面结构可能变化）"] })),
+      false,
+    );
+    assert.equal(
+      isSearchResultCacheable(makeSearchResult({ warnings: ["PARSE_ERROR: XHR JSON 缺少 results 信封"] })),
+      false,
+    );
+  });
+  it("真 0 命中（total=0 且无解析 warning）可缓存", () => {
+    assert.equal(
+      isSearchResultCacheable(
+        makeSearchResult({ hits: [], total: 0, warnings: ["检索式无命中（Google Patents total=0）"] }),
+      ),
+      true,
+    );
   });
   it("点查 success=true 可缓存，其余不可", () => {
     assert.equal(isScrapeResultCacheable(makeScrapeResult()), true);
@@ -195,6 +211,31 @@ describe("cachedSearchPatents / cachedScrapePatent", () => {
     await wrapped("thermal");
     await wrapped("thermal", { limit: 10 }); // 同 limit → 同 key
     assert.equal(calls, 1);
+  });
+
+  it("缓存状态通过 cache.hit/ageMs 透出（首次 miss，二次 hit）", async () => {
+    const impl = async () => makeSearchResult();
+    const wrapped = cachedSearchPatents(impl);
+    const first = await wrapped("thermal");
+    assert.equal(first.cache.hit, false);
+    await new Promise(resolve => setTimeout(resolve, 2));
+    const second = await wrapped("thermal");
+    assert.equal(second.cache.hit, true);
+    assert.equal(typeof second.cache.ageMs, "number");
+    assert.equal(second.cache.ageMs! >= 0, true);
+  });
+
+  it("透传 signal/timeout 到底层 impl（此前只转发 limit）", async () => {
+    const controller = new AbortController();
+    let received: { signal?: AbortSignal; timeout?: number } = {};
+    const impl = async (_query: string, opts?: { signal?: AbortSignal; timeout?: number }) => {
+      received = opts ?? {};
+      return makeSearchResult();
+    };
+    const wrapped = cachedSearchPatents(impl);
+    await wrapped("thermal", { signal: controller.signal, timeout: 1234 });
+    assert.equal(received.signal, controller.signal);
+    assert.equal(received.timeout, 1234);
   });
 
   it("不同 limit 使用不同 key", async () => {

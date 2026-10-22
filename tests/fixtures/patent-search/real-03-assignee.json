@@ -1,0 +1,2118 @@
+{
+  "results": {
+    "total_num_results": 35615,
+    "total_num_pages": 98,
+    "many_results": false,
+    "num_page": 0,
+    "cluster": [
+      {
+        "result": [
+          {
+            "id": "patent/JP6414951B2/en",
+            "rank": 0,
+            "patent": {
+              "title": " Battery system and battery system management method",
+              "snippet": " A plurality of slave controllers, and a master controller coupled to the plurality of slave controllers; Each of the plurality of slave controllers is coupled to a corresponding battery module and has a corresponding slave controller identifier; The slave controller identifier is assigned by a &hellip;",
+              "priority_date": "2013-06-05",
+              "filing_date": "2014-05-27",
+              "grant_date": "2018-10-31",
+              "publication_date": "2018-10-31",
+              "inventor": "太 成 尹",
+              "assignee": "三星エスディアイ株式会社Samsung SDI Co., Ltd.",
+              "publication_number": "JP6414951B2",
+              "language": "en",
+              "thumbnail": "c0/a8/15/7c05cd085d1eb6/0006414951-2.png",
+              "pdf": "71/dd/a6/f976a3c2f4cfac/JP6414951B2.pdf",
+              "figures": [
+                {
+                  "thumbnail": "c9/19/58/3e06a0b6ea3a41/0006414951-2.png",
+                  "full": "81/14/ee/57e5e0245503d7/0006414951-2.png"
+                },
+                {
+                  "thumbnail": "a5/e8/f7/e102eddd489b53/0006414951-3.png",
+                  "full": "db/74/65/b4453c8008fd16/0006414951-3.png"
+                },
+                {
+                  "thumbnail": "ca/ed/e2/4e5746749794bc/0006414951-4.png",
+                  "full": "d9/f1/92/da0fdf7c0b36b8/0006414951-4.png"
+                },
+                {
+                  "thumbnail": "2c/65/a8/d654124b529c37/0006414951-5.png",
+                  "full": "09/e4/ab/082a097fbbe245/0006414951-5.png"
+                },
+                {
+                  "thumbnail": "d7/b0/e0/54de67d7b62277/0006414951-6.png",
+                  "full": "5a/9d/c8/2b57548cf7f0be/0006414951-6.png"
+                },
+                {
+                  "thumbnail": "0f/96/f9/c691682913045f/0006414951-7.png",
+                  "full": "c5/ea/d5/f0a7cb3ec2b303/0006414951-7.png"
+                },
+                {
+                  "thumbnail": "13/d0/89/c5c71be9abe0be/0006414951-8.png",
+                  "full": "e2/95/10/8e796dde131029/0006414951-8.png"
+                },
+                {
+                  "thumbnail": "cf/21/6d/a4e915089e7510/0006414951-9.png",
+                  "full": "8c/e8/bf/170508df56f8d7/0006414951-9.png"
+                },
+                {
+                  "thumbnail": "5f/ee/86/bf56097ef6d165/0006414951-10.png",
+                  "full": "26/e1/ff/e04b7526dd89eb/0006414951-10.png"
+                },
+                {
+                  "thumbnail": "27/eb/dc/3ef111e3795efb/0006414951-11.png",
+                  "full": "fd/79/e3/2d45a68384a87e/0006414951-11.png"
+                },
+                {
+                  "thumbnail": "50/a4/ef/f6cab1d49b7696/0006414951-12.png",
+                  "full": "ce/ef/f0/ce39f36588e698/0006414951-12.png"
+                },
+                {
+                  "thumbnail": "90/68/2e/90a4ddfa4a3405/0006414951-13.png",
+                  "full": "0d/41/ff/84de8fabae297c/0006414951-13.png"
+                },
+                {
+                  "thumbnail": "f4/ad/e9/3689751a3b9175/0006414951-14.png",
+                  "full": "78/9c/d4/a80697b27f3a33/0006414951-14.png"
+                },
+                {
+                  "thumbnail": "f3/3c/fd/8093a4255fd17a/0006414951-15.png",
+                  "full": "50/5d/98/02554e1a847acb/0006414951-15.png"
+                },
+                {
+                  "thumbnail": "3c/e2/dc/ea9114ddfcb9ad/0006414951-16.png",
+                  "full": "e3/58/88/cebfc8d7fa719f/0006414951-16.png"
+                },
+                {
+                  "thumbnail": "e9/a4/19/2912376e2293e4/0006414951-17.png",
+                  "full": "d7/fe/a5/f1526f30976bd5/0006414951-17.png"
+                },
+                {
+                  "thumbnail": "68/f7/bb/959cf64e0fbff7/0006414951-18.png",
+                  "full": "0f/16/59/a458f907754ec8/0006414951-18.png"
+                },
+                {
+                  "thumbnail": "30/62/2b/2731672889041c/0006414951-19.png",
+                  "full": "46/0e/21/e9738753e0914e/0006414951-19.png"
+                },
+                {
+                  "thumbnail": "d3/c1/4a/6556541d367ff4/0006414951-20.png",
+                  "full": "63/83/dc/3e934dbfa11b2c/0006414951-20.png"
+                },
+                {
+                  "thumbnail": "db/f9/8d/198fe9c7d875b2/0006414951-21.png",
+                  "full": "2b/ca/42/60803c85b86c19/0006414951-21.png"
+                },
+                {
+                  "thumbnail": "d1/7a/a4/e0e3bef87a968b/0006414951-22.png",
+                  "full": "fb/09/10/a02f349cd88a2b/0006414951-22.png"
+                },
+                {
+                  "thumbnail": "78/03/4e/faa7e557eb03d0/0006414951-23.png",
+                  "full": "d0/08/64/918b599dc40381/0006414951-23.png"
+                },
+                {
+                  "thumbnail": "44/68/89/ab7ea8e154dfd7/0006414951-24.png",
+                  "full": "1b/45/57/6b19bb33d8bb03/0006414951-24.png"
+                },
+                {
+                  "thumbnail": "54/6e/74/8d2f4848e9308f/0006414951-25.png",
+                  "full": "70/73/fb/bd9a4ef95ea642/0006414951-25.png"
+                },
+                {
+                  "thumbnail": "e9/3f/c6/64f919eff1ade9/0006414951-26.png",
+                  "full": "f2/51/2c/8259512191df7d/0006414951-26.png"
+                }
+              ],
+              "family_metadata": {
+                "aggregated": {
+                  "country_status": [
+                    {
+                      "country_code": "EP",
+                      "best_patent_stage": {
+                        "state": "ACTIVE"
+                      }
+                    },
+                    {
+                      "country_code": "US",
+                      "best_patent_stage": {
+                        "state": "ACTIVE"
+                      }
+                    },
+                    {
+                      "country_code": "CN",
+                      "best_patent_stage": {
+                        "state": "ACTIVE"
+                      }
+                    },
+                    {
+                      "country_code": "JP",
+                      "best_patent_stage": {
+                        "state": "ACTIVE"
+                      }
+                    },
+                    {
+                      "country_code": "KR",
+                      "best_patent_stage": {
+                        "state": "ACTIVE"
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "is_similar_document": false,
+            "entity_matches": {
+              "additional": 0
+            },
+            "measure_matches": {}
+          },
+          {
+            "id": "patent/US11628351B2/en",
+            "rank": 1,
+            "patent": {
+              "title": " Blockchain",
+              "snippet": " An Internet of Thing (IoT) device includes a camera coupled to a processor; and a wireless transceiver coupled to the processor. Blockchain smart contracts can be used with the device to facilitate secure operation.",
+              "priority_date": "2016-05-02",
+              "filing_date": "2021-10-08",
+              "grant_date": "2023-04-18",
+              "publication_date": "2023-04-18",
+              "inventor": "Bao Tran",
+              "assignee": "Bao Tran",
+              "publication_number": "US11628351B2",
+              "language": "en",
+              "thumbnail": "f6/57/e2/70846d4c9dc8f1/US11628351-20230418-D00000.png",
+              "pdf": "eb/dc/b6/38abdc6cac5fc4/US11628351.pdf",
+              "figures": [
+                {
+                  "thumbnail": "b1/17/9e/5637240c4d7fde/US11628351-20230418-D00000.png",
+                  "full": "d9/5e/8d/81bfb1fac90c0c/US11628351-20230418-D00000.png"
+                },
+                {
+                  "thumbnail": "ac/0e/bf/f2d480c6c1fb4c/US11628351-20230418-D00001.png",
+                  "full": "1f/39/70/a9d41b6842ff6c/US11628351-20230418-D00001.png"
+                },
+                {
+                  "thumbnail": "a8/06/4b/7e4bfe003fb70a/US11628351-20230418-D00002.png",
+                  "full": "66/74/f3/305b61cdb4f967/US11628351-20230418-D00002.png"
+                },
+                {
+                  "thumbnail": "f9/12/03/9a7c3607fb844a/US11628351-20230418-D00003.png",
+                  "full": "e2/1b/de/28f747c8031b8b/US11628351-20230418-D00003.png"
+                },
+                {
+                  "thumbnail": "5b/f6/ca/c12e138c649ad3/US11628351-20230418-D00004.png",
+                  "full": "58/7f/18/1dfcae821d892f/US11628351-20230418-D00004.png"
+                },
+                {
+                  "thumbnail": "28/44/98/41ff47c07ba63d/US11628351-20230418-D00005.png",
+                  "full": "a0/53/67/921324a5e52a67/US11628351-20230418-D00005.png"
+                },
+                {
+                  "thumbnail": "ae/93/70/5030398ddc94fe/US11628351-20230418-D00006.png",
+                  "full": "08/42/fc/d444d60a48d2fc/US11628351-20230418-D00006.png"
+                },
+                {
+                  "thumbnail": "81/ee/f8/d4fff9ddbaf220/US11628351-20230418-D00007.png",
+                  "full": "52/dc/28/065528492d7e21/US11628351-20230418-D00007.png"
+                },
+                {
+                  "thumbnail": "36/59/c8/8509072ec8c8cf/US11628351-20230418-D00008.png",
+                  "full": "05/14/ae/f0d5a2494515a7/US11628351-20230418-D00008.png"
+                },
+                {
+                  "thumbnail": "57/d1/04/8358db4fef3b3c/US11628351-20230418-D00009.png",
+                  "full": "76/a8/5d/e60b9f67ccd5b5/US11628351-20230418-D00009.png"
+                },
+                {
+                  "thumbnail": "2f/d1/7a/7ebd456c55c274/US11628351-20230418-D00010.png",
+                  "full": "85/19/a1/332ce92a92576c/US11628351-20230418-D00010.png"
+                },
+                {
+                  "thumbnail": "ff/91/d8/b1d46b060d9614/US11628351-20230418-D00011.png",
+                  "full": "a7/fd/06/d40f7f700fb65b/US11628351-20230418-D00011.png"
+                },
+                {
+                  "thumbnail": "ab/77/d2/574558a3833953/US11628351-20230418-D00012.png",
+                  "full": "ff/eb/9e/4d1bae4cc08031/US11628351-20230418-D00012.png"
+                },
+                {
+                  "thumbnail": "6a/8a/13/9962f4ff5a46dd/US11628351-20230418-D00013.png",
+                  "full": "09/c9/b7/0bd6f705ddb005/US11628351-20230418-D00013.png"
+                },
+                {
+                  "thumbnail": "bd/9b/67/4614cfa7419382/US11628351-20230418-D00014.png",
+                  "full": "da/79/a8/f7c29b91a85f3c/US11628351-20230418-D00014.png"
+                },
+                {
+                  "thumbnail": "54/56/4b/4b85108ab13113/US11628351-20230418-D00015.png",
+                  "full": "e5/f7/86/67cbe35efd332f/US11628351-20230418-D00015.png"
+                },
+                {
+                  "thumbnail": "ff/49/d9/0c4496db7f1559/US11628351-20230418-D00016.png",
+                  "full": "c9/3e/bc/0102884e49c19d/US11628351-20230418-D00016.png"
+                },
+                {
+                  "thumbnail": "ad/1b/e3/9a9dfc608e7e8d/US11628351-20230418-D00017.png",
+                  "full": "04/e5/61/1a0c5986653878/US11628351-20230418-D00017.png"
+                },
+                {
+                  "thumbnail": "cd/80/63/9a19b7994ba0ad/US11628351-20230418-D00018.png",
+                  "full": "7f/2f/54/1f121597534822/US11628351-20230418-D00018.png"
+                },
+                {
+                  "thumbnail": "e5/31/69/c38fba52c33c7e/US11628351-20230418-D00019.png",
+                  "full": "de/e8/aa/801587b0a0ce7a/US11628351-20230418-D00019.png"
+                },
+                {
+                  "thumbnail": "e4/ea/d1/b6928c518f0f86/US11628351-20230418-D00020.png",
+                  "full": "55/f4/6e/f553eb369b6a02/US11628351-20230418-D00020.png"
+                },
+                {
+                  "thumbnail": "20/60/6b/6e98437124a3be/US11628351-20230418-D00021.png",
+                  "full": "fa/22/f8/4bc34afb00a6f8/US11628351-20230418-D00021.png"
+                },
+                {
+                  "thumbnail": "3f/4a/d1/2e3724553f99ec/US11628351-20230418-D00022.png",
+                  "full": "9d/f9/8d/7db035d198c85e/US11628351-20230418-D00022.png"
+                },
+                {
+                  "thumbnail": "69/56/fb/4191fedeb25ff8/US11628351-20230418-D00023.png",
+                  "full": "cb/1a/30/6ffaafa240c089/US11628351-20230418-D00023.png"
+                },
+                {
+                  "thumbnail": "ba/fc/d3/c1aba54df255ea/US11628351-20230418-D00024.png",
+                  "full": "78/94/fb/556c05b7027aeb/US11628351-20230418-D00024.png"
+                },
+                {
+                  "thumbnail": "cd/cf/d6/54a9c9d5a25268/US11628351-20230418-D00025.png",
+                  "full": "57/ea/f6/4a1fb99a1ccad6/US11628351-20230418-D00025.png"
+                },
+                {
+                  "thumbnail": "1f/b6/19/166cf8e0f999a7/US11628351-20230418-D00026.png",
+                  "full": "a3/86/1f/1a27bf1bf6bfe5/US11628351-20230418-D00026.png"
+                },
+                {
+                  "thumbnail": "ae/a8/fc/5867e3a2d7a44f/US11628351-20230418-D00027.png",
+                  "full": "e3/37/52/22d3bd017142b0/US11628351-20230418-D00027.png"
+                },
+                {
+                  "thumbnail": "51/c5/b5/afd9fa01ac35f3/US11628351-20230418-D00028.png",
+                  "full": "52/c3/06/4580737279f284/US11628351-20230418-D00028.png"
+                },
+                {
+                  "thumbnail": "ce/6b/d7/c818d194018016/US11628351-20230418-D00029.png",
+                  "full": "99/a1/22/3b1e428738f57a/US11628351-20230418-D00029.png"
+                },
+                {
+                  "thumbnail": "dc/57/ea/c3b3d4f6e353d6/US11628351-20230418-D00030.png",
+                  "full": "1b/8b/01/6dc6fffbd7caaa/US11628351-20230418-D00030.png"
+                }
+              ],
+              "family_metadata": {
+                "aggregated": {
+                  "country_status": [
+                    {
+                      "country_code": "US",
+                      "best_patent_stage": {
+                        "state": "ACTIVE"
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "is_similar_document": false,
+            "entity_matches": {
+              "additional": 0
+            },
+            "measure_matches": {}
+          },
+          {
+            "id": "patent/US11547940B2/en",
+            "rank": 2,
+            "patent": {
+              "title": " Systems and methods for dynamically generating event cards from message streams",
+              "snippet": " Systems and methods for dynamically generating event cards from message streams is provided. A system receives a message of a sequence of messages from a content source, determine, from the message, the game condition of the game, compare the game condition with a previous game condition and &hellip;",
+              "priority_date": "2017-09-07",
+              "filing_date": "2020-08-17",
+              "grant_date": "2023-01-10",
+              "publication_date": "2023-01-10",
+              "inventor": "Daniel Kesack",
+              "assignee": "DraftKings, Inc.",
+              "publication_number": "US11547940B2",
+              "language": "en",
+              "thumbnail": "6b/38/84/ff40c6f152af1e/US11547940-20230110-D00000.png",
+              "pdf": "ab/bd/60/68c6ae7df62f31/US11547940.pdf",
+              "figures": [
+                {
+                  "thumbnail": "54/8b/b0/0ffb5a5c7d27fc/US11547940-20230110-D00000.png",
+                  "full": "1c/f3/06/3761ae235ded60/US11547940-20230110-D00000.png"
+                },
+                {
+                  "thumbnail": "b8/68/d7/922461dee3c1cc/US11547940-20230110-D00001.png",
+                  "full": "f2/f1/b4/b4e0ba894946d7/US11547940-20230110-D00001.png"
+                },
+                {
+                  "thumbnail": "a7/3c/a0/24a30077e17635/US11547940-20230110-D00002.png",
+                  "full": "80/3b/ee/1d04b1af9121e9/US11547940-20230110-D00002.png"
+                },
+                {
+                  "thumbnail": "24/3c/c6/b0262826431262/US11547940-20230110-D00003.png",
+                  "full": "d2/fc/81/cdfc60e463342e/US11547940-20230110-D00003.png"
+                },
+                {
+                  "thumbnail": "3d/da/94/a41eb834e4d768/US11547940-20230110-D00004.png",
+                  "full": "d3/ea/3c/1742a8f19e5901/US11547940-20230110-D00004.png"
+                },
+                {
+                  "thumbnail": "1e/d1/d3/a995a6aa0359ac/US11547940-20230110-D00005.png",
+                  "full": "2e/54/d1/479ca884cd17db/US11547940-20230110-D00005.png"
+                },
+                {
+                  "thumbnail": "7e/90/e6/036b11155b3487/US11547940-20230110-D00006.png",
+                  "full": "c5/bf/c4/6008a7dec408e1/US11547940-20230110-D00006.png"
+                },
+                {
+                  "thumbnail": "3c/d3/e3/6c7ce83be80ec0/US11547940-20230110-D00007.png",
+                  "full": "27/99/24/07686f5ae2049b/US11547940-20230110-D00007.png"
+                },
+                {
+                  "thumbnail": "98/9b/77/91f1fbe231305a/US11547940-20230110-D00008.png",
+                  "full": "3a/37/88/9e75356e9679c4/US11547940-20230110-D00008.png"
+                },
+                {
+                  "thumbnail": "44/e0/90/ace39de47b3c9d/US11547940-20230110-D00009.png",
+                  "full": "a6/21/4c/3638d2012a1e23/US11547940-20230110-D00009.png"
+                },
+                {
+                  "thumbnail": "9d/95/e2/243a2f93c8ccd0/US11547940-20230110-D00010.png",
+                  "full": "82/91/68/8bdeb822c5acbb/US11547940-20230110-D00010.png"
+                },
+                {
+                  "thumbnail": "cf/b6/9f/725812f8297247/US11547940-20230110-D00011.png",
+                  "full": "80/a8/ba/18a5c79858516e/US11547940-20230110-D00011.png"
+                },
+                {
+                  "thumbnail": "94/b7/66/2971d72dcacbf6/US11547940-20230110-D00012.png",
+                  "full": "fc/3d/a8/bc8ea046f2412f/US11547940-20230110-D00012.png"
+                },
+                {
+                  "thumbnail": "f6/da/6e/d2b69adefdd55f/US11547940-20230110-D00013.png",
+                  "full": "5a/56/05/acf7effabdef19/US11547940-20230110-D00013.png"
+                },
+                {
+                  "thumbnail": "bd/eb/46/d0705a6f07663f/US11547940-20230110-D00014.png",
+                  "full": "51/bf/9c/4272aa150e46ef/US11547940-20230110-D00014.png"
+                },
+                {
+                  "thumbnail": "d7/c9/73/324e574e77740b/US11547940-20230110-D00015.png",
+                  "full": "d5/fd/bf/13493a37ce62d8/US11547940-20230110-D00015.png"
+                },
+                {
+                  "thumbnail": "86/a3/33/600c94a6dbd8d4/US11547940-20230110-D00016.png",
+                  "full": "a9/41/28/f278790c170773/US11547940-20230110-D00016.png"
+                },
+                {
+                  "thumbnail": "bf/7b/a1/8acb764d521490/US11547940-20230110-D00017.png",
+                  "full": "59/02/9b/78eff411c89ce6/US11547940-20230110-D00017.png"
+                },
+                {
+                  "thumbnail": "b3/4c/0b/9c4c21fae2f941/US11547940-20230110-D00018.png",
+                  "full": "d6/42/47/cf0839052ff4cc/US11547940-20230110-D00018.png"
+                },
+                {
+                  "thumbnail": "71/9a/99/6a9db2972863ef/US11547940-20230110-D00019.png",
+                  "full": "f5/da/c6/dfbfc1708d1091/US11547940-20230110-D00019.png"
+                },
+                {
+                  "thumbnail": "ff/cd/9a/c5c72a545eaa07/US11547940-20230110-D00020.png",
+                  "full": "f1/a2/21/24b57c5d4732e5/US11547940-20230110-D00020.png"
+                },
+                {
+                  "thumbnail": "8c/13/f4/8c7ce8a86d2f07/US11547940-20230110-D00021.png",
+                  "full": "97/fc/13/667aef6eddec07/US11547940-20230110-D00021.png"
+                },
+                {
+                  "thumbnail": "d3/75/cf/eb70a35ee81ad8/US11547940-20230110-D00022.png",
+                  "full": "b9/54/40/828923dc06d55e/US11547940-20230110-D00022.png"
+                },
+                {
+                  "thumbnail": "77/aa/1e/34761c857e0fdc/US11547940-20230110-D00023.png",
+                  "full": "c8/6a/a7/3c1b2b14fd2d4c/US11547940-20230110-D00023.png"
+                }
+              ],
+              "family_metadata": {
+                "aggregated": {
+                  "country_status": [
+                    {
+                      "country_code": "US",
+                      "best_patent_stage": {
+                        "state": "ACTIVE"
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "is_similar_document": false,
+            "entity_matches": {
+              "additional": 0
+            },
+            "measure_matches": {}
+          }
+        ]
+      }
+    ],
+    "chem_exhausted": false,
+    "summary": {
+      "assignee": [
+        {
+          "key": "Total",
+          "value": 1000,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 63
+            },
+            {
+              "key": "2022-2025",
+              "value": 320
+            },
+            {
+              "key": "2019-2022",
+              "value": 275
+            },
+            {
+              "key": "2016-2019",
+              "value": 125
+            },
+            {
+              "key": "2013-2016",
+              "value": 71
+            },
+            {
+              "key": "2010-2013",
+              "value": 63
+            },
+            {
+              "key": "2007-2010",
+              "value": 23
+            },
+            {
+              "key": "2004-2007",
+              "value": 6
+            },
+            {
+              "key": "2001-2004",
+              "value": 8
+            },
+            {
+              "key": "1998-2001",
+              "value": 5
+            },
+            {
+              "key": "1995-1998",
+              "value": 3
+            },
+            {
+              "key": "1992-1995",
+              "value": 2
+            },
+            {
+              "key": "1989-1992",
+              "value": 8
+            },
+            {
+              "key": "1986-1989",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "Samsung Electronics Co., Ltd.",
+          "value": 361,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 26
+            },
+            {
+              "key": "2022-2025",
+              "value": 167
+            },
+            {
+              "key": "2019-2022",
+              "value": 88
+            },
+            {
+              "key": "2016-2019",
+              "value": 36
+            },
+            {
+              "key": "2013-2016",
+              "value": 11
+            },
+            {
+              "key": "2010-2013",
+              "value": 14
+            },
+            {
+              "key": "2007-2010",
+              "value": 4
+            },
+            {
+              "key": "2004-2007",
+              "value": 1
+            },
+            {
+              "key": "2001-2004",
+              "value": 2
+            },
+            {
+              "key": "1995-1998",
+              "value": 1
+            },
+            {
+              "key": "1989-1992",
+              "value": 2
+            }
+          ]
+        },
+        {
+          "key": "Pure Storage, Inc.",
+          "value": 125,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 7
+            },
+            {
+              "key": "2022-2025",
+              "value": 56
+            },
+            {
+              "key": "2019-2022",
+              "value": 59
+            }
+          ]
+        },
+        {
+          "key": "삼성전자주식회사",
+          "value": 121,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 8
+            },
+            {
+              "key": "2022-2025",
+              "value": 32
+            },
+            {
+              "key": "2019-2022",
+              "value": 25
+            },
+            {
+              "key": "2016-2019",
+              "value": 23
+            },
+            {
+              "key": "2013-2016",
+              "value": 20
+            },
+            {
+              "key": "2010-2013",
+              "value": 6
+            },
+            {
+              "key": "2007-2010",
+              "value": 3
+            },
+            {
+              "key": "2004-2007",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "Samsung Electronics Co., Ltd",
+          "value": 68,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 14
+            },
+            {
+              "key": "2019-2022",
+              "value": 33
+            },
+            {
+              "key": "2016-2019",
+              "value": 13
+            },
+            {
+              "key": "2013-2016",
+              "value": 6
+            },
+            {
+              "key": "2007-2010",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "삼성전자 주식회사",
+          "value": 33,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 16
+            },
+            {
+              "key": "2022-2025",
+              "value": 7
+            },
+            {
+              "key": "2019-2022",
+              "value": 8
+            },
+            {
+              "key": "2016-2019",
+              "value": 1
+            },
+            {
+              "key": "2010-2013",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "三星电子株式会社",
+          "value": 28,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 3
+            },
+            {
+              "key": "2019-2022",
+              "value": 11
+            },
+            {
+              "key": "2016-2019",
+              "value": 8
+            },
+            {
+              "key": "2013-2016",
+              "value": 4
+            },
+            {
+              "key": "2010-2013",
+              "value": 1
+            },
+            {
+              "key": "2004-2007",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "Samsung Sdi Co., Ltd.",
+          "value": 21,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 2
+            },
+            {
+              "key": "2022-2025",
+              "value": 1
+            },
+            {
+              "key": "2013-2016",
+              "value": 2
+            },
+            {
+              "key": "2010-2013",
+              "value": 16
+            }
+          ]
+        },
+        {
+          "key": "Robert Bosch Gmbh",
+          "value": 17,
+          "frequency": [
+            {
+              "key": "2013-2016",
+              "value": 1
+            },
+            {
+              "key": "2010-2013",
+              "value": 16
+            }
+          ]
+        },
+        {
+          "key": "김기주",
+          "value": 14,
+          "frequency": [
+            {
+              "key": "2010-2013",
+              "value": 3
+            },
+            {
+              "key": "2007-2010",
+              "value": 11
+            }
+          ]
+        },
+        {
+          "key": "Avaya Inc.",
+          "value": 9,
+          "frequency": [
+            {
+              "key": "2016-2019",
+              "value": 9
+            }
+          ]
+        },
+        {
+          "key": "南韓商三星電子股份有限公司",
+          "value": 8,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 4
+            },
+            {
+              "key": "2019-2022",
+              "value": 2
+            },
+            {
+              "key": "2016-2019",
+              "value": 2
+            }
+          ]
+        },
+        {
+          "key": "净睿存储股份有限公司",
+          "value": 7,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 3
+            },
+            {
+              "key": "2019-2022",
+              "value": 4
+            }
+          ]
+        },
+        {
+          "key": "Grid Systems Corporation",
+          "value": 7,
+          "frequency": [
+            {
+              "key": "1992-1995",
+              "value": 1
+            },
+            {
+              "key": "1989-1992",
+              "value": 6
+            }
+          ]
+        },
+        {
+          "key": "三星Sdi株式会社",
+          "value": 6,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 1
+            },
+            {
+              "key": "2019-2022",
+              "value": 2
+            },
+            {
+              "key": "2013-2016",
+              "value": 1
+            },
+            {
+              "key": "2010-2013",
+              "value": 2
+            }
+          ]
+        },
+        {
+          "key": "O/D Vision Inc.",
+          "value": 6,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 6
+            }
+          ]
+        },
+        {
+          "key": "Samsung Electronics Co Ltd",
+          "value": 6,
+          "frequency": [
+            {
+              "key": "2016-2019",
+              "value": 3
+            },
+            {
+              "key": "2013-2016",
+              "value": 2
+            },
+            {
+              "key": "1995-1998",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "三星電子株式会社",
+          "value": 5,
+          "frequency": [
+            {
+              "key": "2016-2019",
+              "value": 1
+            },
+            {
+              "key": "2013-2016",
+              "value": 2
+            },
+            {
+              "key": "2004-2007",
+              "value": 1
+            },
+            {
+              "key": "1992-1995",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "김민겸",
+          "value": 5,
+          "frequency": [
+            {
+              "key": "2019-2022",
+              "value": 2
+            },
+            {
+              "key": "2016-2019",
+              "value": 1
+            },
+            {
+              "key": "2001-2004",
+              "value": 2
+            }
+          ]
+        },
+        {
+          "key": "삼성에스디아이 주식회사",
+          "value": 4,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 3
+            },
+            {
+              "key": "2001-2004",
+              "value": 1
+            }
+          ]
+        }
+      ],
+      "inventor": [
+        {
+          "key": "Total",
+          "value": 1000,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 63
+            },
+            {
+              "key": "2022-2025",
+              "value": 320
+            },
+            {
+              "key": "2019-2022",
+              "value": 275
+            },
+            {
+              "key": "2016-2019",
+              "value": 125
+            },
+            {
+              "key": "2013-2016",
+              "value": 71
+            },
+            {
+              "key": "2010-2013",
+              "value": 63
+            },
+            {
+              "key": "2007-2010",
+              "value": 23
+            },
+            {
+              "key": "2004-2007",
+              "value": 6
+            },
+            {
+              "key": "2001-2004",
+              "value": 8
+            },
+            {
+              "key": "1998-2001",
+              "value": 5
+            },
+            {
+              "key": "1995-1998",
+              "value": 3
+            },
+            {
+              "key": "1992-1995",
+              "value": 2
+            },
+            {
+              "key": "1989-1992",
+              "value": 8
+            },
+            {
+              "key": "1986-1989",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "Hyoungju JI",
+          "value": 127,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 14
+            },
+            {
+              "key": "2022-2025",
+              "value": 81
+            },
+            {
+              "key": "2019-2022",
+              "value": 29
+            }
+          ]
+        },
+        {
+          "key": "Youngrok Jang",
+          "value": 115,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 16
+            },
+            {
+              "key": "2022-2025",
+              "value": 73
+            },
+            {
+              "key": "2019-2022",
+              "value": 23
+            }
+          ]
+        },
+        {
+          "key": "Seongmok LIM",
+          "value": 87,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 12
+            },
+            {
+              "key": "2022-2025",
+              "value": 70
+            },
+            {
+              "key": "2019-2022",
+              "value": 3
+            }
+          ]
+        },
+        {
+          "key": "Taehyoung Kim",
+          "value": 76,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 14
+            },
+            {
+              "key": "2019-2022",
+              "value": 57
+            },
+            {
+              "key": "2016-2019",
+              "value": 3
+            }
+          ]
+        },
+        {
+          "key": "Kyungjun CHOI",
+          "value": 72,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 10
+            },
+            {
+              "key": "2022-2025",
+              "value": 61
+            }
+          ]
+        },
+        {
+          "key": "Ameha Tsegaye ABEBE",
+          "value": 61,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 5
+            },
+            {
+              "key": "2022-2025",
+              "value": 55
+            }
+          ]
+        },
+        {
+          "key": "Hoondong NOH",
+          "value": 49,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 1
+            },
+            {
+              "key": "2022-2025",
+              "value": 12
+            },
+            {
+              "key": "2019-2022",
+              "value": 34
+            },
+            {
+              "key": "2016-2019",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "Jinhyun Park",
+          "value": 43,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 1
+            },
+            {
+              "key": "2022-2025",
+              "value": 10
+            },
+            {
+              "key": "2019-2022",
+              "value": 31
+            }
+          ]
+        },
+        {
+          "key": "Seunghoon Choi",
+          "value": 43,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 10
+            },
+            {
+              "key": "2019-2022",
+              "value": 28
+            },
+            {
+              "key": "2016-2019",
+              "value": 4
+            }
+          ]
+        },
+        {
+          "key": "Jinyoung Oh",
+          "value": 42,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 11
+            },
+            {
+              "key": "2019-2022",
+              "value": 27
+            },
+            {
+              "key": "2016-2019",
+              "value": 3
+            }
+          ]
+        },
+        {
+          "key": "Hyoungju Ji",
+          "value": 41,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 2
+            },
+            {
+              "key": "2022-2025",
+              "value": 31
+            },
+            {
+              "key": "2019-2022",
+              "value": 7
+            }
+          ]
+        },
+        {
+          "key": "지형주",
+          "value": 40,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 9
+            },
+            {
+              "key": "2022-2025",
+              "value": 17
+            },
+            {
+              "key": "2019-2022",
+              "value": 13
+            }
+          ]
+        },
+        {
+          "key": "Ronald Karr",
+          "value": 40,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 2
+            },
+            {
+              "key": "2022-2025",
+              "value": 25
+            },
+            {
+              "key": "2019-2022",
+              "value": 12
+            }
+          ]
+        },
+        {
+          "key": "Youngbum KIM",
+          "value": 39,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 12
+            },
+            {
+              "key": "2019-2022",
+              "value": 25
+            },
+            {
+              "key": "2016-2019",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "Youngrok JANG",
+          "value": 35,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 2
+            },
+            {
+              "key": "2022-2025",
+              "value": 29
+            },
+            {
+              "key": "2019-2022",
+              "value": 4
+            }
+          ]
+        },
+        {
+          "key": "장영록",
+          "value": 33,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 8
+            },
+            {
+              "key": "2022-2025",
+              "value": 15
+            },
+            {
+              "key": "2019-2022",
+              "value": 10
+            }
+          ]
+        },
+        {
+          "key": "Jinkyu KANG",
+          "value": 23,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 6
+            },
+            {
+              "key": "2019-2022",
+              "value": 17
+            }
+          ]
+        },
+        {
+          "key": "Younsun KIM",
+          "value": 22,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 2
+            },
+            {
+              "key": "2022-2025",
+              "value": 7
+            },
+            {
+              "key": "2019-2022",
+              "value": 12
+            },
+            {
+              "key": "2016-2019",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "Sungjin Park",
+          "value": 21,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 4
+            },
+            {
+              "key": "2022-2025",
+              "value": 12
+            },
+            {
+              "key": "2019-2022",
+              "value": 4
+            },
+            {
+              "key": "2016-2019",
+              "value": 1
+            }
+          ]
+        }
+      ],
+      "cpc": [
+        {
+          "key": "Total",
+          "value": 1000,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 63
+            },
+            {
+              "key": "2022-2025",
+              "value": 320
+            },
+            {
+              "key": "2019-2022",
+              "value": 275
+            },
+            {
+              "key": "2016-2019",
+              "value": 125
+            },
+            {
+              "key": "2013-2016",
+              "value": 71
+            },
+            {
+              "key": "2010-2013",
+              "value": 63
+            },
+            {
+              "key": "2007-2010",
+              "value": 23
+            },
+            {
+              "key": "2004-2007",
+              "value": 6
+            },
+            {
+              "key": "2001-2004",
+              "value": 8
+            },
+            {
+              "key": "1998-2001",
+              "value": 5
+            },
+            {
+              "key": "1995-1998",
+              "value": 3
+            },
+            {
+              "key": "1992-1995",
+              "value": 2
+            },
+            {
+              "key": "1989-1992",
+              "value": 8
+            },
+            {
+              "key": "1986-1989",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "H04W",
+          "value": 525,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 41
+            },
+            {
+              "key": "2022-2025",
+              "value": 207
+            },
+            {
+              "key": "2019-2022",
+              "value": 156
+            },
+            {
+              "key": "2016-2019",
+              "value": 46
+            },
+            {
+              "key": "2013-2016",
+              "value": 26
+            },
+            {
+              "key": "2010-2013",
+              "value": 18
+            },
+            {
+              "key": "2007-2010",
+              "value": 8
+            },
+            {
+              "key": "2004-2007",
+              "value": 5
+            },
+            {
+              "key": "2001-2004",
+              "value": 1
+            },
+            {
+              "key": "1998-2001",
+              "value": 1
+            },
+            {
+              "key": "1995-1998",
+              "value": 1
+            },
+            {
+              "key": "1989-1992",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "H04L",
+          "value": 484,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 35
+            },
+            {
+              "key": "2022-2025",
+              "value": 201
+            },
+            {
+              "key": "2019-2022",
+              "value": 166
+            },
+            {
+              "key": "2016-2019",
+              "value": 35
+            },
+            {
+              "key": "2013-2016",
+              "value": 13
+            },
+            {
+              "key": "2010-2013",
+              "value": 10
+            },
+            {
+              "key": "2007-2010",
+              "value": 7
+            },
+            {
+              "key": "2004-2007",
+              "value": 3
+            },
+            {
+              "key": "1992-1995",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "G06F",
+          "value": 310,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 18
+            },
+            {
+              "key": "2022-2025",
+              "value": 82
+            },
+            {
+              "key": "2019-2022",
+              "value": 91
+            },
+            {
+              "key": "2016-2019",
+              "value": 50
+            },
+            {
+              "key": "2013-2016",
+              "value": 27
+            },
+            {
+              "key": "2010-2013",
+              "value": 8
+            },
+            {
+              "key": "2007-2010",
+              "value": 13
+            },
+            {
+              "key": "2001-2004",
+              "value": 2
+            },
+            {
+              "key": "1998-2001",
+              "value": 1
+            },
+            {
+              "key": "1995-1998",
+              "value": 2
+            },
+            {
+              "key": "1992-1995",
+              "value": 1
+            },
+            {
+              "key": "1989-1992",
+              "value": 6
+            },
+            {
+              "key": "1986-1989",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "H04B",
+          "value": 216,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 21
+            },
+            {
+              "key": "2022-2025",
+              "value": 102
+            },
+            {
+              "key": "2019-2022",
+              "value": 55
+            },
+            {
+              "key": "2016-2019",
+              "value": 11
+            },
+            {
+              "key": "2013-2016",
+              "value": 3
+            },
+            {
+              "key": "2010-2013",
+              "value": 12
+            },
+            {
+              "key": "2007-2010",
+              "value": 3
+            },
+            {
+              "key": "2001-2004",
+              "value": 2
+            },
+            {
+              "key": "1998-2001",
+              "value": 1
+            },
+            {
+              "key": "1989-1992",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "Y02D",
+          "value": 139,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 4
+            },
+            {
+              "key": "2022-2025",
+              "value": 26
+            },
+            {
+              "key": "2019-2022",
+              "value": 62
+            },
+            {
+              "key": "2016-2019",
+              "value": 11
+            },
+            {
+              "key": "2013-2016",
+              "value": 18
+            },
+            {
+              "key": "2010-2013",
+              "value": 8
+            },
+            {
+              "key": "2007-2010",
+              "value": 3
+            },
+            {
+              "key": "2004-2007",
+              "value": 2
+            },
+            {
+              "key": "1995-1998",
+              "value": 1
+            },
+            {
+              "key": "1989-1992",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "G06Q",
+          "value": 49,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 2
+            },
+            {
+              "key": "2022-2025",
+              "value": 12
+            },
+            {
+              "key": "2019-2022",
+              "value": 9
+            },
+            {
+              "key": "2016-2019",
+              "value": 17
+            },
+            {
+              "key": "2013-2016",
+              "value": 8
+            }
+          ]
+        },
+        {
+          "key": "H04M",
+          "value": 49,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 1
+            },
+            {
+              "key": "2019-2022",
+              "value": 4
+            },
+            {
+              "key": "2016-2019",
+              "value": 16
+            },
+            {
+              "key": "2013-2016",
+              "value": 9
+            },
+            {
+              "key": "2010-2013",
+              "value": 4
+            },
+            {
+              "key": "2007-2010",
+              "value": 10
+            },
+            {
+              "key": "2004-2007",
+              "value": 1
+            },
+            {
+              "key": "2001-2004",
+              "value": 2
+            },
+            {
+              "key": "1989-1992",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "H02J",
+          "value": 43,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 1
+            },
+            {
+              "key": "2022-2025",
+              "value": 5
+            },
+            {
+              "key": "2019-2022",
+              "value": 5
+            },
+            {
+              "key": "2016-2019",
+              "value": 5
+            },
+            {
+              "key": "2013-2016",
+              "value": 3
+            },
+            {
+              "key": "2010-2013",
+              "value": 19
+            },
+            {
+              "key": "2001-2004",
+              "value": 2
+            },
+            {
+              "key": "1989-1992",
+              "value": 2
+            }
+          ]
+        },
+        {
+          "key": "H01M",
+          "value": 41,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 2
+            },
+            {
+              "key": "2022-2025",
+              "value": 4
+            },
+            {
+              "key": "2019-2022",
+              "value": 5
+            },
+            {
+              "key": "2016-2019",
+              "value": 3
+            },
+            {
+              "key": "2013-2016",
+              "value": 2
+            },
+            {
+              "key": "2010-2013",
+              "value": 20
+            },
+            {
+              "key": "2001-2004",
+              "value": 1
+            },
+            {
+              "key": "1998-2001",
+              "value": 1
+            },
+            {
+              "key": "1989-1992",
+              "value": 2
+            }
+          ]
+        },
+        {
+          "key": "Y02E",
+          "value": 40,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 1
+            },
+            {
+              "key": "2022-2025",
+              "value": 3
+            },
+            {
+              "key": "2019-2022",
+              "value": 3
+            },
+            {
+              "key": "2016-2019",
+              "value": 4
+            },
+            {
+              "key": "2013-2016",
+              "value": 3
+            },
+            {
+              "key": "2010-2013",
+              "value": 21
+            },
+            {
+              "key": "2001-2004",
+              "value": 1
+            },
+            {
+              "key": "1998-2001",
+              "value": 1
+            },
+            {
+              "key": "1989-1992",
+              "value": 2
+            }
+          ]
+        },
+        {
+          "key": "G06N",
+          "value": 36,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 7
+            },
+            {
+              "key": "2022-2025",
+              "value": 13
+            },
+            {
+              "key": "2019-2022",
+              "value": 9
+            },
+            {
+              "key": "2016-2019",
+              "value": 4
+            },
+            {
+              "key": "2013-2016",
+              "value": 1
+            },
+            {
+              "key": "2010-2013",
+              "value": 2
+            }
+          ]
+        },
+        {
+          "key": "A61B",
+          "value": 25,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 1
+            },
+            {
+              "key": "2022-2025",
+              "value": 6
+            },
+            {
+              "key": "2019-2022",
+              "value": 5
+            },
+            {
+              "key": "2016-2019",
+              "value": 10
+            },
+            {
+              "key": "2013-2016",
+              "value": 2
+            },
+            {
+              "key": "2007-2010",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "H04J",
+          "value": 24,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 2
+            },
+            {
+              "key": "2022-2025",
+              "value": 6
+            },
+            {
+              "key": "2019-2022",
+              "value": 9
+            },
+            {
+              "key": "2016-2019",
+              "value": 5
+            },
+            {
+              "key": "2010-2013",
+              "value": 1
+            },
+            {
+              "key": "2007-2010",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "G01R",
+          "value": 23,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 1
+            },
+            {
+              "key": "2022-2025",
+              "value": 3
+            },
+            {
+              "key": "2019-2022",
+              "value": 4
+            },
+            {
+              "key": "2016-2019",
+              "value": 3
+            },
+            {
+              "key": "2010-2013",
+              "value": 7
+            },
+            {
+              "key": "2001-2004",
+              "value": 2
+            },
+            {
+              "key": "1998-2001",
+              "value": 2
+            },
+            {
+              "key": "1989-1992",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "B60L",
+          "value": 20,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 4
+            },
+            {
+              "key": "2019-2022",
+              "value": 1
+            },
+            {
+              "key": "2016-2019",
+              "value": 2
+            },
+            {
+              "key": "2013-2016",
+              "value": 2
+            },
+            {
+              "key": "2010-2013",
+              "value": 11
+            }
+          ]
+        },
+        {
+          "key": "G06V",
+          "value": 20,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 1
+            },
+            {
+              "key": "2022-2025",
+              "value": 9
+            },
+            {
+              "key": "2019-2022",
+              "value": 4
+            },
+            {
+              "key": "2016-2019",
+              "value": 6
+            }
+          ]
+        },
+        {
+          "key": "G16H",
+          "value": 20,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 3
+            },
+            {
+              "key": "2022-2025",
+              "value": 6
+            },
+            {
+              "key": "2019-2022",
+              "value": 2
+            },
+            {
+              "key": "2016-2019",
+              "value": 6
+            },
+            {
+              "key": "2013-2016",
+              "value": 2
+            },
+            {
+              "key": "2007-2010",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "G06T",
+          "value": 20,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 2
+            },
+            {
+              "key": "2022-2025",
+              "value": 4
+            },
+            {
+              "key": "2019-2022",
+              "value": 4
+            },
+            {
+              "key": "2016-2019",
+              "value": 9
+            },
+            {
+              "key": "1995-1998",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "H04N",
+          "value": 19,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 1
+            },
+            {
+              "key": "2019-2022",
+              "value": 4
+            },
+            {
+              "key": "2016-2019",
+              "value": 11
+            },
+            {
+              "key": "2007-2010",
+              "value": 1
+            },
+            {
+              "key": "1995-1998",
+              "value": 1
+            },
+            {
+              "key": "1992-1995",
+              "value": 1
+            }
+          ]
+        }
+      ]
+    },
+    "landscape": {
+      "related_landscapes": [
+        {
+          "name": "Engineering & Computer Science",
+          "landscape_type": "AREA"
+        },
+        {
+          "name": "Signal Processing",
+          "landscape_type": "AREA"
+        },
+        {
+          "name": "Computer Networks & Wireless Communication",
+          "landscape_type": "AREA"
+        }
+      ]
+    }
+  }
+}

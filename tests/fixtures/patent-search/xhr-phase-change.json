@@ -1,0 +1,31 @@
+{
+  "results": {
+    "total_num_results": 1284,
+    "cluster": [
+      {
+        "result": [
+          {
+            "patent": {
+              "publication_number": "CN115690481A",
+              "title": "一种相变储热散热器",
+              "assignee_current": "华为技术有限公司",
+              "publication_date": "2023-02-03",
+              "priority_date": "2021-08-27",
+              "abstract": "本发明公开了一种相变储热散热器，包括壳体、相变材料与散热翅片。"
+            }
+          },
+          {
+            "patent": {
+              "publication_number": "US11452699B2",
+              "title": "Thermal management system",
+              "assignee_current": "Apple Inc.",
+              "publication_date": "2022-09-27",
+              "priority_date": "2019-12-31",
+              "abstract": "A thermal management system using a phase change material."
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

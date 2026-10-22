@@ -79,13 +79,47 @@ describe("patent_search 工具", () => {
     );
   });
 
-  it("真实零结果（无失败警告）作为数据返回", async () => {
+  it("真实零结果（total=0 且无解析警告）作为数据返回", async () => {
     const tool = createPatentSearchTool({
-      search: async () => makeSearchResult({ hits: [], total: 0, warnings: ["搜索结果页未解析到任何结果"] }),
+      search: async () =>
+        makeSearchResult({ hits: [], total: 0, warnings: ["检索式无命中（Google Patents total=0）"] }),
     });
     const res = await tool.execute({ query: "zzz nonexistent" }, context);
     assert.equal(res.metadata?.count, 0);
     assert.equal((res.data as { hits: unknown[] }).hits.length, 0);
+    // 注入实现未声明来源：明确标 unknown，不伪装成真实检索成功。
+    assert.equal((res.data as { dataSource: string }).dataSource, "unknown");
+    assert.deepEqual((res.data as { cache: { hit: boolean } }).cache, { hit: false });
+  });
+
+  it("PARSE_ERROR → tool_execution_failed（不被当成 0 命中）", async () => {
+    const tool = createPatentSearchTool({
+      search: async () =>
+        makeSearchResult({ hits: [], total: 0, warnings: ["PARSE_ERROR: XHR JSON 缺少 results 信封"] }),
+    });
+    await assert.rejects(
+      tool.execute({ query: "thermal" }, context),
+      err =>
+        err instanceof SatiToolRuntimeError && err.code === "tool_execution_failed" && /PARSE_ERROR/.test(err.message),
+    );
+  });
+
+  it("透出 dataSource 与 cache 元数据", async () => {
+    const tool = createPatentSearchTool({
+      search: async () => ({
+        ...makeSearchResult(),
+        dataSource: "ego-json" as const,
+        cache: { hit: true, ageMs: 1234 },
+      }),
+    });
+    const res = await tool.execute({ query: "thermal" }, context);
+    const data = res.data as { dataSource: string; cache: { hit: boolean; ageMs?: number } };
+    assert.equal(data.dataSource, "ego-json");
+    assert.equal(data.cache.hit, true);
+    assert.equal(data.cache.ageMs, 1234);
+    assert.equal(res.metadata?.dataSource, "ego-json");
+    assert.equal(res.metadata?.cacheHit, true);
+    assert.equal(res.metadata?.cacheAgeMs, 1234);
   });
 });
 

@@ -1,0 +1,228 @@
+{
+  "results": {
+    "total_num_results": 1,
+    "total_num_pages": 1,
+    "many_results": false,
+    "num_page": 0,
+    "cluster": [
+      {
+        "result": [
+          {
+            "id": "patent/US11452699B2/en",
+            "rank": 0,
+            "patent": {
+              "title": " Method of treating or preventing tumors of the central nervous system",
+              "snippet": " The invention provides methods and compositions for treatment of a subject with a central nervous system (CNS) tumor comprising administration of Coenzyme Q10 (CoQ10), particularly when the subject exhibits at least one CNS abnormality as a result of the tumor.",
+              "priority_date": "2011-04-04",
+              "filing_date": "2019-06-18",
+              "grant_date": "2022-09-27",
+              "publication_date": "2022-09-27",
+              "inventor": "Joaquin J. Jimenez",
+              "assignee": "Berg Llc",
+              "publication_number": "US11452699B2",
+              "language": "en",
+              "thumbnail": "ea/4d/24/69a650671a9f33/US11452699-20220927-D00000.png",
+              "pdf": "bf/d8/a1/2a8554110407a4/US11452699.pdf",
+              "figures": [
+                {
+                  "thumbnail": "2f/d7/c5/ed9ff8584f40af/US11452699-20220927-D00000.png",
+                  "full": "94/69/d5/3a587000a1633d/US11452699-20220927-D00000.png"
+                },
+                {
+                  "thumbnail": "a3/ef/c8/d89fb8256c9c4c/US11452699-20220927-D00001.png",
+                  "full": "fc/90/4a/f9864efda4edfb/US11452699-20220927-D00001.png"
+                },
+                {
+                  "thumbnail": "a1/90/96/23807649e7bf88/US11452699-20220927-D00002.png",
+                  "full": "f5/d4/98/c2fce9b28ba71d/US11452699-20220927-D00002.png"
+                },
+                {
+                  "thumbnail": "0e/5d/a2/eb27af08d1e0b9/US11452699-20220927-D00003.png",
+                  "full": "9c/bd/a4/35038208006bdf/US11452699-20220927-D00003.png"
+                },
+                {
+                  "thumbnail": "15/2a/dc/3664ad75e8786c/US11452699-20220927-D00004.png",
+                  "full": "35/50/77/08b983912a29bb/US11452699-20220927-D00004.png"
+                }
+              ],
+              "family_metadata": {
+                "aggregated": {
+                  "country_status": [
+                    {
+                      "country_code": "WO",
+                      "best_patent_stage": {
+                        "state": "NOT_ACTIVE"
+                      }
+                    },
+                    {
+                      "country_code": "EP",
+                      "best_patent_stage": {
+                        "state": "ACTIVE"
+                      }
+                    },
+                    {
+                      "country_code": "US",
+                      "best_patent_stage": {
+                        "state": "ACTIVE"
+                      }
+                    },
+                    {
+                      "country_code": "CN",
+                      "best_patent_stage": {
+                        "state": "ACTIVE"
+                      }
+                    },
+                    {
+                      "country_code": "JP",
+                      "best_patent_stage": {
+                        "state": "ACTIVE"
+                      }
+                    },
+                    {
+                      "country_code": "KR",
+                      "best_patent_stage": {
+                        "state": "ACTIVE"
+                      }
+                    },
+                    {
+                      "country_code": "AU",
+                      "best_patent_stage": {
+                        "state": "ACTIVE"
+                      }
+                    },
+                    {
+                      "country_code": "CA",
+                      "best_patent_stage": {
+                        "state": "ACTIVE"
+                      }
+                    },
+                    {
+                      "country_code": "ES",
+                      "best_patent_stage": {
+                        "state": "ACTIVE"
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "is_similar_document": false,
+            "entity_matches": {
+              "additional": 0
+            },
+            "measure_matches": {}
+          }
+        ]
+      }
+    ],
+    "chem_exhausted": false,
+    "summary": {
+      "assignee": [
+        {
+          "key": "Berg Llc",
+          "value": 1000,
+          "frequency": [
+            {
+              "key": "2019-2022",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "Total",
+          "value": 1000,
+          "frequency": [
+            {
+              "key": "2019-2022",
+              "value": 1
+            }
+          ]
+        }
+      ],
+      "inventor": [
+        {
+          "key": "Joaquin J. Jimenez",
+          "value": 1000,
+          "frequency": [
+            {
+              "key": "2019-2022",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "Niven Rajin Narain",
+          "value": 1000,
+          "frequency": [
+            {
+              "key": "2019-2022",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "Rangaprasad Sarangarajan",
+          "value": 1000,
+          "frequency": [
+            {
+              "key": "2019-2022",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "John Patrick McCook",
+          "value": 1000,
+          "frequency": [
+            {
+              "key": "2019-2022",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "Total",
+          "value": 1000,
+          "frequency": [
+            {
+              "key": "2019-2022",
+              "value": 1
+            }
+          ]
+        }
+      ],
+      "cpc": [
+        {
+          "key": "A61K",
+          "value": 1000,
+          "frequency": [
+            {
+              "key": "2019-2022",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "A61P",
+          "value": 1000,
+          "frequency": [
+            {
+              "key": "2019-2022",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "Total",
+          "value": 1000,
+          "frequency": [
+            {
+              "key": "2019-2022",
+              "value": 1
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,1596 @@
+{
+  "results": {
+    "total_num_results": 77907,
+    "total_num_pages": 98,
+    "many_results": false,
+    "num_page": 0,
+    "cluster": [
+      {
+        "result": [
+          {
+            "id": "patent/CN110752416B/zh",
+            "rank": 0,
+            "patent": {
+              "title": " 锂电池包热管理系统及控制方法",
+              "snippet": " 本发明公开了一种锂电池包热管理系统，包括电池包、密封保温装置、加热装置及冷却装置，实时检测各个单电池的电压、电流和温度，实时估算电池包的SOC和SOH值，当单电池温度较高时控制散热器和水泵对电池包进行冷却，当环境温度较低时关闭散热器和水泵，同时由密封保温装置和加热装置将电池包温度维持在零度以上，当电池包出现热失控时自动切断电池包的电能输出同时管理单元控制灭火器进行快速灭火操作。同时当电池包温度过高时，自保护复合开关中温度探头检测到温度过高时，温度开关自行断开，形成自保护。并对其SOH值和热失控进行提前预警，在出现热失控时进行自保护，防止自燃和火灾事故发生，可提高纯电动汽车的安全性。",
+              "priority_date": "2019-10-25",
+              "filing_date": "2019-10-25",
+              "grant_date": "2021-09-10",
+              "publication_date": "2021-09-10",
+              "inventor": "全睿",
+              "assignee": "湖北工业大学",
+              "publication_number": "CN110752416B",
+              "language": "zh",
+              "thumbnail": "b3/1b/28/e997b305aea8b3/HDA0003181412650000011.png",
+              "pdf": "94/62/6b/3cb3e27fbd8266/CN110752416B.pdf",
+              "figures": [
+                {
+                  "thumbnail": "95/b0/5e/abe8563043306a/HDA0003181412650000011.png",
+                  "full": "58/ac/57/b180e380ae6ddf/HDA0003181412650000011.png"
+                },
+                {
+                  "thumbnail": "2a/cf/4a/41b652833f67ba/HDA0003181412650000021.png",
+                  "full": "9f/1e/d6/01a3bccba88631/HDA0003181412650000021.png"
+                },
+                {
+                  "thumbnail": "6d/54/16/887b0c7811efc4/HDA0003181412650000022.png",
+                  "full": "c6/3d/55/ffc2354f74ee9d/HDA0003181412650000022.png"
+                },
+                {
+                  "thumbnail": "49/73/60/f5971dbcf32873/HDA0003181412650000031.png",
+                  "full": "c8/0d/eb/ad90ca4ad92ee8/HDA0003181412650000031.png"
+                },
+                {
+                  "thumbnail": "72/a9/be/9d42004a83f124/HDA0003181412650000032.png",
+                  "full": "05/09/3e/7900621ee007b7/HDA0003181412650000032.png"
+                },
+                {
+                  "thumbnail": "52/c2/16/64ac0496b3ff4c/HDA0003181412650000041.png",
+                  "full": "02/b5/8f/e0ac5b4185d998/HDA0003181412650000041.png"
+                },
+                {
+                  "thumbnail": "b8/00/00/7486a4e5e39772/HDA0003181412650000042.png",
+                  "full": "d4/63/9e/fe52772e331fd6/HDA0003181412650000042.png"
+                },
+                {
+                  "thumbnail": "0a/cd/c6/413a2918048123/HDA0003181412650000051.png",
+                  "full": "e6/6b/a0/7b8e6f46617e73/HDA0003181412650000051.png"
+                }
+              ],
+              "family_metadata": {
+                "aggregated": {
+                  "country_status": [
+                    {
+                      "country_code": "CN",
+                      "best_patent_stage": {
+                        "state": "ACTIVE"
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "is_similar_document": false,
+            "entity_matches": {
+              "additional": 0
+            },
+            "measure_matches": {}
+          },
+          {
+            "id": "patent/CN105393651B/zh",
+            "rank": 1,
+            "patent": {
+              "title": " 电子设备和控制电子设备的方法",
+              "snippet": " 提供了一种电子设备，其包括：发热部；储热部；配置为检测所述储热部的储热量的检测部；和配置为基于由所述检测部检测的储热量控制所述发热部的操作的控制部。",
+              "priority_date": "2013-06-27",
+              "filing_date": "2014-06-20",
+              "grant_date": "2019-04-16",
+              "publication_date": "2019-04-16",
+              "inventor": "矢岛正",
+              "assignee": "索尼公司",
+              "publication_number": "CN105393651B",
+              "language": "zh",
+              "thumbnail": "",
+              "pdf": "fc/82/e1/c2346bafbe9a7e/CN105393651B.pdf",
+              "family_metadata": {
+                "aggregated": {
+                  "country_status": [
+                    {
+                      "country_code": "WO",
+                      "best_patent_stage": {
+                        "state": "NOT_ACTIVE"
+                      }
+                    },
+                    {
+                      "country_code": "US",
+                      "best_patent_stage": {
+                        "state": "ACTIVE"
+                      }
+                    },
+                    {
+                      "country_code": "CN",
+                      "best_patent_stage": {
+                        "state": "ACTIVE"
+                      }
+                    },
+                    {
+                      "country_code": "JP",
+                      "best_patent_stage": {
+                        "state": "ACTIVE"
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "is_similar_document": false,
+            "entity_matches": {
+              "additional": 0
+            },
+            "measure_matches": {}
+          },
+          {
+            "id": "patent/CN109564907B/zh",
+            "rank": 2,
+            "patent": {
+              "title": " 用于电子设备的包括热存储能力的多层散热器件",
+              "snippet": " 一种散热器件包括第一散热层、第二散热层、第一间隔物、第二间隔物、第一相变材料(PCM)和第二相变材料(PCM)。第一散热层包括第一散热器表面和第二散热器表面。第二散热层包括第三散热器表面和第四散热器表面。第一间隔物耦合到第一散热层和第二散热层。第二间隔物耦合到第一散热层和第二散热层。第一PCM位于第一散热层和第二散热层之间。第一PCM被第一间隔物包围。第二PCM位于第一散热层、第二散热层、第一间隔物和第二间隔物之间。",
+              "priority_date": "2016-08-02",
+              "filing_date": "2017-07-12",
+              "grant_date": "2020-03-06",
+              "publication_date": "2020-03-06",
+              "inventor": "J·罗萨莱斯",
+              "assignee": "高通股份有限公司",
+              "publication_number": "CN109564907B",
+              "language": "zh",
+              "thumbnail": "a0/70/67/61e11012673d37/HDA0001961621500000011.png",
+              "pdf": "e6/84/65/008fed04e4397f/CN109564907B.pdf",
+              "figures": [
+                {
+                  "thumbnail": "3a/31/3e/0d91e942fd050b/HDA0001961621500000011.png",
+                  "full": "e6/1a/df/40abe1a33530ef/HDA0001961621500000011.png"
+                },
+                {
+                  "thumbnail": "9a/88/42/03a13872b824a4/HDA0001961621500000012.png",
+                  "full": "f6/83/6f/c1187bd019d452/HDA0001961621500000012.png"
+                },
+                {
+                  "thumbnail": "11/5f/16/edca45d28f3647/HDA0001961621500000013.png",
+                  "full": "29/21/71/02d2689573600a/HDA0001961621500000013.png"
+                },
+                {
+                  "thumbnail": "0e/68/85/81e19cbe3c5e25/HDA0001961621500000021.png",
+                  "full": "36/0d/07/ea01d904c899ef/HDA0001961621500000021.png"
+                },
+                {
+                  "thumbnail": "e1/ad/89/870b1a19b63bde/HDA0001961621500000022.png",
+                  "full": "a1/f5/3c/b67b4d490a4b1c/HDA0001961621500000022.png"
+                },
+                {
+                  "thumbnail": "36/47/a9/1ade61ea00e0d9/HDA0001961621500000031.png",
+                  "full": "8d/d0/8b/211e5de388d050/HDA0001961621500000031.png"
+                },
+                {
+                  "thumbnail": "e1/fa/23/1be0f920e6b40f/HDA0001961621500000041.png",
+                  "full": "a9/aa/ac/76fd65b7de4d4c/HDA0001961621500000041.png"
+                },
+                {
+                  "thumbnail": "30/32/82/8cbc0f2c2e9e60/HDA0001961621500000051.png",
+                  "full": "88/ff/6f/52764e6dd4d271/HDA0001961621500000051.png"
+                },
+                {
+                  "thumbnail": "6d/8a/f6/e341802aefa840/HDA0001961621500000061.png",
+                  "full": "d7/1e/58/344f5abd79f766/HDA0001961621500000061.png"
+                },
+                {
+                  "thumbnail": "39/fc/26/1fdfe254e600e2/HDA0001961621500000071.png",
+                  "full": "2c/7a/46/c20eba8abffe25/HDA0001961621500000071.png"
+                },
+                {
+                  "thumbnail": "35/d4/b2/da16a2e1d2bf5d/HDA0001961621500000081.png",
+                  "full": "5f/fc/19/6a1072b8d5677f/HDA0001961621500000081.png"
+                },
+                {
+                  "thumbnail": "b3/58/5f/999d798b6268ab/HDA0001961621500000091.png",
+                  "full": "e6/8a/01/26c761973db713/HDA0001961621500000091.png"
+                },
+                {
+                  "thumbnail": "da/07/f4/632482cb76511f/HDA0001961621500000101.png",
+                  "full": "df/56/df/24ad7d5dff01b7/HDA0001961621500000101.png"
+                },
+                {
+                  "thumbnail": "0d/86/0e/9a032b50ddd943/HDA0001961621500000111.png",
+                  "full": "fe/29/a5/644fe961ea8b7f/HDA0001961621500000111.png"
+                },
+                {
+                  "thumbnail": "19/e5/c5/352e81e31a35b1/HDA0001961621500000121.png",
+                  "full": "cd/a0/1a/b06c5fd3625314/HDA0001961621500000121.png"
+                },
+                {
+                  "thumbnail": "63/71/b8/e93799f9b1d712/HDA0001961621500000131.png",
+                  "full": "3f/af/09/108b93ce711485/HDA0001961621500000131.png"
+                }
+              ],
+              "family_metadata": {
+                "aggregated": {
+                  "country_status": [
+                    {
+                      "country_code": "WO",
+                      "best_patent_stage": {
+                        "state": "NOT_ACTIVE"
+                      }
+                    },
+                    {
+                      "country_code": "EP",
+                      "best_patent_stage": {
+                        "state": "ACTIVE"
+                      }
+                    },
+                    {
+                      "country_code": "US",
+                      "best_patent_stage": {
+                        "state": "ACTIVE"
+                      }
+                    },
+                    {
+                      "country_code": "CN",
+                      "best_patent_stage": {
+                        "state": "ACTIVE"
+                      }
+                    },
+                    {
+                      "country_code": "JP",
+                      "best_patent_stage": {
+                        "state": "ACTIVE"
+                      }
+                    },
+                    {
+                      "country_code": "KR",
+                      "best_patent_stage": {
+                        "state": "ACTIVE"
+                      }
+                    },
+                    {
+                      "country_code": "BR",
+                      "best_patent_stage": {
+                        "state": "NOT_ACTIVE"
+                      }
+                    },
+                    {
+                      "country_code": "CA",
+                      "best_patent_stage": {
+                        "state": "ACTIVE"
+                      }
+                    },
+                    {
+                      "country_code": "ES",
+                      "best_patent_stage": {
+                        "state": "ACTIVE"
+                      }
+                    },
+                    {
+                      "country_code": "TW",
+                      "best_patent_stage": {
+                        "state": "ACTIVE"
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "is_similar_document": false,
+            "entity_matches": {
+              "additional": 0
+            },
+            "measure_matches": {}
+          }
+        ]
+      }
+    ],
+    "chem_exhausted": false,
+    "summary": {
+      "assignee": [
+        {
+          "key": "Total",
+          "value": 1000,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 171
+            },
+            {
+              "key": "2022-2025",
+              "value": 236
+            },
+            {
+              "key": "2019-2022",
+              "value": 238
+            },
+            {
+              "key": "2016-2019",
+              "value": 174
+            },
+            {
+              "key": "2013-2016",
+              "value": 89
+            },
+            {
+              "key": "2010-2013",
+              "value": 31
+            },
+            {
+              "key": "2007-2010",
+              "value": 19
+            },
+            {
+              "key": "2004-2007",
+              "value": 9
+            },
+            {
+              "key": "2001-2004",
+              "value": 3
+            },
+            {
+              "key": "1998-2001",
+              "value": 3
+            }
+          ]
+        },
+        {
+          "key": "西安交通大学",
+          "value": 13,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 2
+            },
+            {
+              "key": "2022-2025",
+              "value": 5
+            },
+            {
+              "key": "2019-2022",
+              "value": 3
+            },
+            {
+              "key": "2016-2019",
+              "value": 2
+            },
+            {
+              "key": "2013-2016",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "浙江大学",
+          "value": 12,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 4
+            },
+            {
+              "key": "2019-2022",
+              "value": 3
+            },
+            {
+              "key": "2016-2019",
+              "value": 1
+            },
+            {
+              "key": "2013-2016",
+              "value": 4
+            }
+          ]
+        },
+        {
+          "key": "国家电网有限公司",
+          "value": 11,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 1
+            },
+            {
+              "key": "2022-2025",
+              "value": 2
+            },
+            {
+              "key": "2019-2022",
+              "value": 3
+            },
+            {
+              "key": "2016-2019",
+              "value": 5
+            }
+          ]
+        },
+        {
+          "key": "江苏启能新能源材料有限公司",
+          "value": 11,
+          "frequency": [
+            {
+              "key": "2019-2022",
+              "value": 3
+            },
+            {
+              "key": "2016-2019",
+              "value": 2
+            },
+            {
+              "key": "2013-2016",
+              "value": 6
+            }
+          ]
+        },
+        {
+          "key": "河北工业大学",
+          "value": 10,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 8
+            },
+            {
+              "key": "2019-2022",
+              "value": 2
+            }
+          ]
+        },
+        {
+          "key": "江苏大学",
+          "value": 10,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 1
+            },
+            {
+              "key": "2022-2025",
+              "value": 3
+            },
+            {
+              "key": "2019-2022",
+              "value": 4
+            },
+            {
+              "key": "2016-2019",
+              "value": 2
+            }
+          ]
+        },
+        {
+          "key": "湖州明朔光电科技有限公司",
+          "value": 10,
+          "frequency": [
+            {
+              "key": "2016-2019",
+              "value": 9
+            },
+            {
+              "key": "2013-2016",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "东旭光电科技股份有限公司",
+          "value": 9,
+          "frequency": [
+            {
+              "key": "2016-2019",
+              "value": 9
+            }
+          ]
+        },
+        {
+          "key": "华中科技大学",
+          "value": 9,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 2
+            },
+            {
+              "key": "2022-2025",
+              "value": 3
+            },
+            {
+              "key": "2019-2022",
+              "value": 2
+            },
+            {
+              "key": "2016-2019",
+              "value": 1
+            },
+            {
+              "key": "2013-2016",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "湖北赛格瑞新能源科技有限公司",
+          "value": 9,
+          "frequency": [
+            {
+              "key": "2019-2022",
+              "value": 9
+            }
+          ]
+        },
+        {
+          "key": "上海交通大学",
+          "value": 9,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 3
+            },
+            {
+              "key": "2019-2022",
+              "value": 1
+            },
+            {
+              "key": "2016-2019",
+              "value": 2
+            },
+            {
+              "key": "2013-2016",
+              "value": 1
+            },
+            {
+              "key": "2010-2013",
+              "value": 1
+            },
+            {
+              "key": "1998-2001",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "西南电子技术研究所（中国电子科技集团公司第十研究所）",
+          "value": 8,
+          "frequency": [
+            {
+              "key": "2019-2022",
+              "value": 5
+            },
+            {
+              "key": "2016-2019",
+              "value": 3
+            }
+          ]
+        },
+        {
+          "key": "东南大学",
+          "value": 8,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 4
+            },
+            {
+              "key": "2019-2022",
+              "value": 2
+            },
+            {
+              "key": "2013-2016",
+              "value": 2
+            }
+          ]
+        },
+        {
+          "key": "田海金",
+          "value": 8,
+          "frequency": [
+            {
+              "key": "2013-2016",
+              "value": 4
+            },
+            {
+              "key": "2007-2010",
+              "value": 4
+            }
+          ]
+        },
+        {
+          "key": "全球能源互联网欧洲研究院",
+          "value": 8,
+          "frequency": [
+            {
+              "key": "2016-2019",
+              "value": 8
+            }
+          ]
+        },
+        {
+          "key": "北京中热能源科技有限公司",
+          "value": 8,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 8
+            }
+          ]
+        },
+        {
+          "key": "四川荣创新能动力系统有限公司",
+          "value": 8,
+          "frequency": [
+            {
+              "key": "2019-2022",
+              "value": 8
+            }
+          ]
+        },
+        {
+          "key": "上海理工大学",
+          "value": 7,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 1
+            },
+            {
+              "key": "2016-2019",
+              "value": 3
+            },
+            {
+              "key": "2010-2013",
+              "value": 1
+            },
+            {
+              "key": "2004-2007",
+              "value": 2
+            }
+          ]
+        },
+        {
+          "key": "中国科学院电工研究所",
+          "value": 7,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 1
+            },
+            {
+              "key": "2022-2025",
+              "value": 5
+            },
+            {
+              "key": "2016-2019",
+              "value": 1
+            }
+          ]
+        }
+      ],
+      "inventor": [
+        {
+          "key": "Total",
+          "value": 1000,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 171
+            },
+            {
+              "key": "2022-2025",
+              "value": 236
+            },
+            {
+              "key": "2019-2022",
+              "value": 238
+            },
+            {
+              "key": "2016-2019",
+              "value": 174
+            },
+            {
+              "key": "2013-2016",
+              "value": 89
+            },
+            {
+              "key": "2010-2013",
+              "value": 31
+            },
+            {
+              "key": "2007-2010",
+              "value": 19
+            },
+            {
+              "key": "2004-2007",
+              "value": 9
+            },
+            {
+              "key": "2001-2004",
+              "value": 3
+            },
+            {
+              "key": "1998-2001",
+              "value": 3
+            }
+          ]
+        },
+        {
+          "key": "陈威",
+          "value": 16,
+          "frequency": [
+            {
+              "key": "2019-2022",
+              "value": 3
+            },
+            {
+              "key": "2016-2019",
+              "value": 12
+            },
+            {
+              "key": "2013-2016",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "雷宪章",
+          "value": 10,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 1
+            },
+            {
+              "key": "2022-2025",
+              "value": 1
+            },
+            {
+              "key": "2016-2019",
+              "value": 8
+            }
+          ]
+        },
+        {
+          "key": "樊希安",
+          "value": 9,
+          "frequency": [
+            {
+              "key": "2019-2022",
+              "value": 9
+            }
+          ]
+        },
+        {
+          "key": "江程鹏",
+          "value": 9,
+          "frequency": [
+            {
+              "key": "2019-2022",
+              "value": 9
+            }
+          ]
+        },
+        {
+          "key": "赵吕龙",
+          "value": 9,
+          "frequency": [
+            {
+              "key": "2019-2022",
+              "value": 9
+            }
+          ]
+        },
+        {
+          "key": "刘长江",
+          "value": 9,
+          "frequency": [
+            {
+              "key": "2019-2022",
+              "value": 9
+            }
+          ]
+        },
+        {
+          "key": "谯耕",
+          "value": 9,
+          "frequency": [
+            {
+              "key": "2016-2019",
+              "value": 9
+            }
+          ]
+        },
+        {
+          "key": "廖明建",
+          "value": 9,
+          "frequency": [
+            {
+              "key": "2019-2022",
+              "value": 9
+            }
+          ]
+        },
+        {
+          "key": "杨春华",
+          "value": 8,
+          "frequency": [
+            {
+              "key": "2019-2022",
+              "value": 8
+            }
+          ]
+        },
+        {
+          "key": "丁玉龙",
+          "value": 8,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 1
+            },
+            {
+              "key": "2016-2019",
+              "value": 7
+            }
+          ]
+        },
+        {
+          "key": "祝长宇",
+          "value": 8,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 8
+            }
+          ]
+        },
+        {
+          "key": "田海金",
+          "value": 8,
+          "frequency": [
+            {
+              "key": "2013-2016",
+              "value": 4
+            },
+            {
+              "key": "2007-2010",
+              "value": 4
+            }
+          ]
+        },
+        {
+          "key": "张伟明",
+          "value": 8,
+          "frequency": [
+            {
+              "key": "2019-2022",
+              "value": 8
+            }
+          ]
+        },
+        {
+          "key": "陶诗涌",
+          "value": 8,
+          "frequency": [
+            {
+              "key": "2019-2022",
+              "value": 8
+            }
+          ]
+        },
+        {
+          "key": "丁式平",
+          "value": 8,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 8
+            }
+          ]
+        },
+        {
+          "key": "祝帝文",
+          "value": 8,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 8
+            }
+          ]
+        },
+        {
+          "key": "周丽彬",
+          "value": 8,
+          "frequency": [
+            {
+              "key": "2016-2019",
+              "value": 8
+            }
+          ]
+        },
+        {
+          "key": "孔祥飞",
+          "value": 7,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 1
+            },
+            {
+              "key": "2022-2025",
+              "value": 5
+            },
+            {
+              "key": "2019-2022",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "江维",
+          "value": 6,
+          "frequency": [
+            {
+              "key": "2016-2019",
+              "value": 6
+            }
+          ]
+        }
+      ],
+      "cpc": [
+        {
+          "key": "Total",
+          "value": 1000,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 171
+            },
+            {
+              "key": "2022-2025",
+              "value": 236
+            },
+            {
+              "key": "2019-2022",
+              "value": 238
+            },
+            {
+              "key": "2016-2019",
+              "value": 174
+            },
+            {
+              "key": "2013-2016",
+              "value": 89
+            },
+            {
+              "key": "2010-2013",
+              "value": 31
+            },
+            {
+              "key": "2007-2010",
+              "value": 19
+            },
+            {
+              "key": "2004-2007",
+              "value": 9
+            },
+            {
+              "key": "2001-2004",
+              "value": 3
+            },
+            {
+              "key": "1998-2001",
+              "value": 3
+            }
+          ]
+        },
+        {
+          "key": "Y02E",
+          "value": 433,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 41
+            },
+            {
+              "key": "2022-2025",
+              "value": 103
+            },
+            {
+              "key": "2019-2022",
+              "value": 144
+            },
+            {
+              "key": "2016-2019",
+              "value": 71
+            },
+            {
+              "key": "2013-2016",
+              "value": 33
+            },
+            {
+              "key": "2010-2013",
+              "value": 16
+            },
+            {
+              "key": "2007-2010",
+              "value": 7
+            },
+            {
+              "key": "2004-2007",
+              "value": 4
+            },
+            {
+              "key": "2001-2004",
+              "value": 1
+            },
+            {
+              "key": "1998-2001",
+              "value": 2
+            }
+          ]
+        },
+        {
+          "key": "F28D",
+          "value": 126,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 25
+            },
+            {
+              "key": "2022-2025",
+              "value": 34
+            },
+            {
+              "key": "2019-2022",
+              "value": 33
+            },
+            {
+              "key": "2016-2019",
+              "value": 19
+            },
+            {
+              "key": "2013-2016",
+              "value": 5
+            },
+            {
+              "key": "2010-2013",
+              "value": 4
+            },
+            {
+              "key": "2007-2010",
+              "value": 1
+            },
+            {
+              "key": "2001-2004",
+              "value": 1
+            },
+            {
+              "key": "1998-2001",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "Y02B",
+          "value": 90,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 4
+            },
+            {
+              "key": "2022-2025",
+              "value": 8
+            },
+            {
+              "key": "2019-2022",
+              "value": 30
+            },
+            {
+              "key": "2016-2019",
+              "value": 20
+            },
+            {
+              "key": "2013-2016",
+              "value": 10
+            },
+            {
+              "key": "2010-2013",
+              "value": 6
+            },
+            {
+              "key": "2007-2010",
+              "value": 8
+            },
+            {
+              "key": "2004-2007",
+              "value": 1
+            },
+            {
+              "key": "1998-2001",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "F24D",
+          "value": 88,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 8
+            },
+            {
+              "key": "2022-2025",
+              "value": 27
+            },
+            {
+              "key": "2019-2022",
+              "value": 29
+            },
+            {
+              "key": "2016-2019",
+              "value": 20
+            },
+            {
+              "key": "2013-2016",
+              "value": 1
+            },
+            {
+              "key": "1998-2001",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "H01M",
+          "value": 72,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 9
+            },
+            {
+              "key": "2022-2025",
+              "value": 22
+            },
+            {
+              "key": "2019-2022",
+              "value": 27
+            },
+            {
+              "key": "2016-2019",
+              "value": 10
+            },
+            {
+              "key": "2013-2016",
+              "value": 2
+            },
+            {
+              "key": "2010-2013",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "H05K",
+          "value": 64,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 13
+            },
+            {
+              "key": "2022-2025",
+              "value": 26
+            },
+            {
+              "key": "2019-2022",
+              "value": 16
+            },
+            {
+              "key": "2016-2019",
+              "value": 6
+            },
+            {
+              "key": "2013-2016",
+              "value": 2
+            }
+          ]
+        },
+        {
+          "key": "F24S",
+          "value": 56,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 9
+            },
+            {
+              "key": "2022-2025",
+              "value": 9
+            },
+            {
+              "key": "2019-2022",
+              "value": 24
+            },
+            {
+              "key": "2016-2019",
+              "value": 6
+            },
+            {
+              "key": "2013-2016",
+              "value": 4
+            },
+            {
+              "key": "2007-2010",
+              "value": 2
+            },
+            {
+              "key": "1998-2001",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "C09K",
+          "value": 49,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 3
+            },
+            {
+              "key": "2022-2025",
+              "value": 13
+            },
+            {
+              "key": "2019-2022",
+              "value": 15
+            },
+            {
+              "key": "2016-2019",
+              "value": 13
+            },
+            {
+              "key": "2013-2016",
+              "value": 2
+            },
+            {
+              "key": "2010-2013",
+              "value": 1
+            },
+            {
+              "key": "2007-2010",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "F25B",
+          "value": 45,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 10
+            },
+            {
+              "key": "2022-2025",
+              "value": 15
+            },
+            {
+              "key": "2019-2022",
+              "value": 13
+            },
+            {
+              "key": "2016-2019",
+              "value": 5
+            },
+            {
+              "key": "2007-2010",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "Y02A",
+          "value": 34,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 4
+            },
+            {
+              "key": "2022-2025",
+              "value": 3
+            },
+            {
+              "key": "2019-2022",
+              "value": 9
+            },
+            {
+              "key": "2016-2019",
+              "value": 8
+            },
+            {
+              "key": "2013-2016",
+              "value": 5
+            },
+            {
+              "key": "2010-2013",
+              "value": 4
+            },
+            {
+              "key": "2007-2010",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "Y02T",
+          "value": 32,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 1
+            },
+            {
+              "key": "2022-2025",
+              "value": 6
+            },
+            {
+              "key": "2019-2022",
+              "value": 12
+            },
+            {
+              "key": "2016-2019",
+              "value": 7
+            },
+            {
+              "key": "2013-2016",
+              "value": 5
+            },
+            {
+              "key": "2004-2007",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "B60H",
+          "value": 28,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 6
+            },
+            {
+              "key": "2022-2025",
+              "value": 11
+            },
+            {
+              "key": "2019-2022",
+              "value": 5
+            },
+            {
+              "key": "2016-2019",
+              "value": 5
+            },
+            {
+              "key": "2010-2013",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "H02J",
+          "value": 24,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 4
+            },
+            {
+              "key": "2022-2025",
+              "value": 9
+            },
+            {
+              "key": "2019-2022",
+              "value": 8
+            },
+            {
+              "key": "2016-2019",
+              "value": 2
+            },
+            {
+              "key": "2013-2016",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "F28F",
+          "value": 24,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 5
+            },
+            {
+              "key": "2022-2025",
+              "value": 6
+            },
+            {
+              "key": "2019-2022",
+              "value": 5
+            },
+            {
+              "key": "2016-2019",
+              "value": 6
+            },
+            {
+              "key": "2010-2013",
+              "value": 2
+            }
+          ]
+        },
+        {
+          "key": "H02S",
+          "value": 22,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 4
+            },
+            {
+              "key": "2022-2025",
+              "value": 6
+            },
+            {
+              "key": "2019-2022",
+              "value": 8
+            },
+            {
+              "key": "2016-2019",
+              "value": 3
+            },
+            {
+              "key": "2013-2016",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "H10W",
+          "value": 20,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 5
+            },
+            {
+              "key": "2022-2025",
+              "value": 5
+            },
+            {
+              "key": "2019-2022",
+              "value": 3
+            },
+            {
+              "key": "2016-2019",
+              "value": 4
+            },
+            {
+              "key": "2013-2016",
+              "value": 2
+            },
+            {
+              "key": "2001-2004",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "G06F",
+          "value": 20,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 8
+            },
+            {
+              "key": "2022-2025",
+              "value": 7
+            },
+            {
+              "key": "2019-2022",
+              "value": 3
+            },
+            {
+              "key": "2016-2019",
+              "value": 2
+            }
+          ]
+        },
+        {
+          "key": "Y02P",
+          "value": 20,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 2
+            },
+            {
+              "key": "2022-2025",
+              "value": 2
+            },
+            {
+              "key": "2019-2022",
+              "value": 4
+            },
+            {
+              "key": "2016-2019",
+              "value": 3
+            },
+            {
+              "key": "2013-2016",
+              "value": 6
+            },
+            {
+              "key": "2010-2013",
+              "value": 2
+            },
+            {
+              "key": "2007-2010",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "H02N",
+          "value": 20,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 6
+            },
+            {
+              "key": "2022-2025",
+              "value": 6
+            },
+            {
+              "key": "2019-2022",
+              "value": 5
+            },
+            {
+              "key": "2016-2019",
+              "value": 2
+            },
+            {
+              "key": "2013-2016",
+              "value": 1
+            }
+          ]
+        }
+      ]
+    },
+    "landscape": {
+      "related_landscapes": [
+        {
+          "name": "Engineering & Computer Science",
+          "landscape_type": "AREA"
+        },
+        {
+          "name": "Physics & Mathematics",
+          "landscape_type": "AREA"
+        },
+        {
+          "name": "Thermal Sciences",
+          "landscape_type": "AREA"
+        }
+      ]
+    }
+  }
+}

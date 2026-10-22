@@ -14,7 +14,15 @@
  * 作为原子 search 阶段的检索器；测试亦可注入 mock（tests/tool/builtin/patentWorkflowRun.spec.ts）。
  */
 
-import { searchPatents as searchPatentsImpl } from "nuo-patent";
+import {
+  fetchHtmlWithEgoBrowser,
+  isEgoBrowserAvailable,
+  parseSearchResultsJson,
+  searchPatents as searchPatentsImpl,
+  type Logger,
+  type PatentSearchOptions,
+  type PatentSearchResult,
+} from "nuo-patent";
 import type { StageProvider } from "../../atoms/index.js";
 import type { ConnectorRegistry } from "../../../literature/index.js";
 import { cachedSearchPatents } from "./patentCache.js";
@@ -31,7 +39,7 @@ export type CreateNuoSearchProviderOptions = {
  * 避免 workflow 多阶段/多轮重复 spawn ego-browser。
  */
 export function createNuoSearchProvider(options?: CreateNuoSearchProviderOptions): StageProvider {
-  const search = options?.search ? options.search : cachedSearchPatents(searchPatentsImpl);
+  const search = options?.search ? options.search : cachedSearchPatents(withEgoJsonSearch(searchPatentsImpl));
 
   return {
     search: async (query, opts) => {
@@ -45,6 +53,215 @@ export function createNuoSearchProvider(options?: CreateNuoSearchProviderOptions
         publication_date: h.publication_date || undefined,
       }));
     },
+  };
+}
+
+/**
+ * 检索数据来源：
+ * - `ego-json`：ego-browser 取回 XHR JSON（Chromium 把 JSON 包进 <pre>，需先解包）；
+ * - `native-json`：ego 不可用时用原生 fetch 直取 XHR JSON；
+ * - `vendor`：JSON 主路径失败后的 nuo-patent 回退（XHR + HTML 搜索页）；
+ * - `unknown`：调用方注入的检索实现未声明来源。
+ */
+export type PatentSearchDataSource = "ego-json" | "native-json" | "vendor" | "unknown";
+
+/** Sati 侧附加的检索元数据（不改变 nuo-patent 的命中结构）。 */
+export type SourcedPatentSearchResult = PatentSearchResult & {
+  dataSource?: PatentSearchDataSource;
+  cache?: { hit: boolean; ageMs?: number };
+};
+
+/** Google Patents XHR 检索端点（与 nuo-patent 内部一致，但抓取方式由本适配层控制）。 */
+const GOOGLE_PATENTS_XHR_URL = "https://patents.google.com/xhr/query";
+const DEFAULT_SEARCH_TIMEOUT_MS = 30_000;
+
+/** 构造 XHR 检索 URL（`num` 与 nuo-patent 一致，夹在 1-50）。 */
+export function buildGooglePatentsXhrUrl(query: string, limit: number): string {
+  const trimmed = query.trim();
+  const clamped = Math.min(Math.max(Math.floor(limit), 1), 50);
+  return `${GOOGLE_PATENTS_XHR_URL}?url=${encodeURIComponent(`q=${trimmed}`)}&exp=&num=${clamped}`;
+}
+
+const NAMED_ENTITIES: Record<string, string> = {
+  amp: "&",
+  lt: "<",
+  gt: ">",
+  quot: '"',
+  apos: "'",
+  nbsp: " ",
+};
+
+/** 解码 JSON 载荷中常见的 HTML 实体（`<pre>` 内文本可能被转义）。 */
+export function decodeHtmlEntities(text: string): string {
+  return text.replace(/&(#x[0-9a-fA-F]+|#[0-9]+|[a-zA-Z]+);/g, (match, body: string) => {
+    if (body.startsWith("#x") || body.startsWith("#X")) {
+      const code = Number.parseInt(body.slice(2), 16);
+      return Number.isFinite(code) && code >= 0 && code <= 0x10ffff ? String.fromCodePoint(code) : match;
+    }
+    if (body.startsWith("#")) {
+      const code = Number.parseInt(body.slice(1), 10);
+      return Number.isFinite(code) && code >= 0 && code <= 0x10ffff ? String.fromCodePoint(code) : match;
+    }
+    return NAMED_ENTITIES[body] ?? match;
+  });
+}
+
+/**
+ * 从 ego-browser 返回的页面正文中提取 JSON 文本。
+ *
+ * Chromium 在顶层导航到 `application/json` 时会把响应体包进 `<pre>`，
+ * 因此 `document.documentElement.outerHTML` 不是裸 JSON。兼容三种形态：
+ * 裸 JSON、`<pre>` 包裹、以及完整 HTML 中的 JSON 文本片段。
+ */
+export function extractJsonText(raw: string): string {
+  const trimmed = raw.trim();
+  if (trimmed.startsWith("{") || trimmed.startsWith("[")) return trimmed;
+
+  const pre = /<pre[^>]*>([\s\S]*?)<\/pre>/i.exec(trimmed);
+  if (pre?.[1] !== undefined) {
+    const text = decodeHtmlEntities(pre[1]).trim();
+    if (text.startsWith("{") || text.startsWith("[")) return text;
+  }
+
+  const first = trimmed.indexOf("{");
+  const last = trimmed.lastIndexOf("}");
+  if (first >= 0 && last > first) {
+    const candidate = decodeHtmlEntities(trimmed.slice(first, last + 1)).trim();
+    if (candidate.startsWith("{")) return candidate;
+  }
+  throw new Error("响应不是 JSON（未找到可用 JSON 载荷）");
+}
+
+/** XHR JSON 是否带 `results` 信封（缺信封说明抓到的不是检索响应）。 */
+function hasResultsEnvelope(value: unknown): boolean {
+  if (value === null || typeof value !== "object") return false;
+  const results = (value as { results?: unknown }).results;
+  return results !== null && typeof results === "object";
+}
+
+/** 原生 fetch 直取 XHR JSON（非 macOS / ego 不可用时的主路径）。 */
+async function fetchJsonTextNative(
+  url: string,
+  options: { signal?: AbortSignal; timeout: number; fetchImpl?: typeof fetch },
+): Promise<string> {
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const timeoutSignal = AbortSignal.timeout(options.timeout);
+  const signal = options.signal ? AbortSignal.any([options.signal, timeoutSignal]) : timeoutSignal;
+  const response = await fetchImpl(url, {
+    signal,
+    headers: { "User-Agent": "Mozilla/5.0", Accept: "application/json" },
+  });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  return await response.text();
+}
+
+export type EgoJsonSearchOptions = {
+  /** 测试注入：直接返回 XHR URL 的响应正文（不触网）。 */
+  fetchText?: (url: string, options: { signal?: AbortSignal; timeout: number; logger?: Logger }) => Promise<string>;
+  /** 测试注入：覆盖 ego 可用性探测。 */
+  egoAvailable?: () => boolean;
+  /** 测试注入：原生 fetch 实现。 */
+  fetchImpl?: typeof fetch;
+  /** 单次请求超时（ms），默认沿用调用方 timeout，再退到 30000。 */
+  timeoutMs?: number;
+  /** 日志（缺省静默，与 nuo-patent 一致）。 */
+  logger?: Logger;
+  /** 关闭 JSON 主路径（直接走 vendor）；缺省开启。 */
+  enabled?: boolean;
+};
+
+/**
+ * 在 nuo-patent `searchPatents` 之前加一层 JSON 主路径。
+ *
+ * 动机（#710）：vendor 的 `fetchHtml` 经 ego-browser 取回的是网页 outerHTML，
+ * 顶层 JSON 被 Chromium 包进 `<pre>`，`JSON.parse` 必然失败；随后回退 HTML
+ * 搜索页，而 Google Patents 已移除 microdata，解析 0 条 → 静默返回空结果。
+ * 本包装先用 ego/原生 fetch 取回 XHR JSON，解包后交给 `parseSearchResultsJson`，
+ * 从而区分「结构性解析失败」（PARSE_ERROR）与「真实 0 命中」（total=0）。
+ */
+export function withEgoJsonSearch(
+  vendorSearch: (query: string, options?: PatentSearchOptions) => Promise<PatentSearchResult>,
+  options: EgoJsonSearchOptions = {},
+): (query: string, searchOptions?: PatentSearchOptions) => Promise<SourcedPatentSearchResult> {
+  const timeoutMs = options.timeoutMs ?? DEFAULT_SEARCH_TIMEOUT_MS;
+  const egoAvailable = options.egoAvailable ?? isEgoBrowserAvailable;
+
+  const fallbackToVendor = async (
+    query: string,
+    searchOptions: PatentSearchOptions | undefined,
+    message: string,
+    structural: boolean,
+  ): Promise<SourcedPatentSearchResult> => {
+    const vendored = await vendorSearch(query, searchOptions);
+    const vendorParseFailure = vendored.warnings.some(w => /搜索结果页未解析到任何结果|页面结构可能变化/.test(w));
+    const warnings = [...vendored.warnings];
+    if (vendored.hits.length > 0) {
+      warnings.push(`JSON 主路径失败，已回退 vendor 解析：${message}`);
+    } else if (structural || vendorParseFailure) {
+      // 已确认是解析/结构问题：升级为可行动错误，禁止把失败呈现成 0 命中。
+      warnings.unshift(`PARSE_ERROR: ${message}`);
+    }
+    return { ...vendored, warnings, dataSource: "vendor" };
+  };
+
+  return async (query, searchOptions) => {
+    if (options.enabled === false) {
+      return fallbackToVendor(query, searchOptions, "JSON 主路径已禁用", false);
+    }
+    if (query.trim().length === 0) {
+      return fallbackToVendor(query, searchOptions, "查询条件为空", false);
+    }
+
+    const limit = Math.min(Math.max(Math.floor(searchOptions?.limit ?? 10), 1), 50);
+    const url = buildGooglePatentsXhrUrl(query, limit);
+    const requestOptions = {
+      signal: searchOptions?.signal,
+      timeout: searchOptions?.timeout ?? timeoutMs,
+      logger: searchOptions?.logger ?? options.logger,
+    };
+    const useEgo = options.fetchText !== undefined || egoAvailable();
+    const dataSource: "ego-json" | "native-json" = useEgo ? "ego-json" : "native-json";
+
+    let text: string;
+    try {
+      if (options.fetchText !== undefined) {
+        text = await options.fetchText(url, requestOptions);
+      } else if (useEgo) {
+        text = await fetchHtmlWithEgoBrowser(url, requestOptions);
+      } else {
+        text = await fetchJsonTextNative(url, {
+          signal: requestOptions.signal,
+          timeout: requestOptions.timeout,
+          fetchImpl: options.fetchImpl,
+        });
+      }
+    } catch (error) {
+      if (searchOptions?.signal?.aborted) {
+        return { query, total: 0, hits: [], warnings: ["请求已被取消"], dataSource };
+      }
+      return fallbackToVendor(query, searchOptions, error instanceof Error ? error.message : String(error), false);
+    }
+
+    try {
+      const payload: unknown = JSON.parse(extractJsonText(text));
+      if (!hasResultsEnvelope(payload)) throw new Error("XHR JSON 缺少 results 信封");
+      const { total, hits } = parseSearchResultsJson(payload);
+      // Google 对部分查询会忽略 xhr `num` 参数（固定返回 10 条），这里按调用方 limit 截断。
+      if (hits.length > 0) return { query, total, hits: hits.slice(0, limit), warnings: [], dataSource };
+      if (total > 0) {
+        throw new Error(`XHR JSON 报告 ${total} 条命中但解析出 0 条（cluster 结构可能变化）`);
+      }
+      // 信封完整且 total=0：这是可判定的真实零命中，不再回退 HTML。
+      return {
+        query,
+        total: 0,
+        hits: [],
+        warnings: ["检索式无命中（Google Patents total=0）"],
+        dataSource,
+      };
+    } catch (error) {
+      return fallbackToVendor(query, searchOptions, error instanceof Error ? error.message : String(error), true);
+    }
   };
 }
 

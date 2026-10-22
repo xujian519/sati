@@ -1,11 +1,18 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import test from "node:test";
+import type { PatentSearchResult } from "nuo-patent";
 import { ConnectorRegistry } from "../../../../src/literature/index.js";
 import type { Connector, ConnectorHit } from "../../../../src/literature/index.js";
 import {
+  buildGooglePatentsXhrUrl,
   createMultiSourceSearchProvider,
   createNuoSearchProvider,
   createPaperSearchSource,
+  decodeHtmlEntities,
+  extractJsonText,
+  withEgoJsonSearch,
 } from "../../../../src/patent/data/nuo/searchProvider.js";
 
 /** 构造 nuo-patent 形状的检索命中。 */
@@ -198,4 +205,185 @@ test("paperSource: 同一论文多库收录按归一化 title 去重（url 跨�
     docs.map(d => d.title),
     ["Attention Is All You Need", "Another Paper"],
   );
+});
+
+// ---------------------------------------------------------------------------
+// #710：JSON 主路径（ego outerHTML 解包 + PARSE_ERROR 判定）
+// ---------------------------------------------------------------------------
+
+const FIXTURE_DIR = resolve(process.cwd(), "tests/fixtures/patent-search");
+const readFixture = (name: string): string => readFileSync(resolve(FIXTURE_DIR, name), "utf8");
+
+function makeVendorResult(overrides: Partial<PatentSearchResult> = {}): PatentSearchResult {
+  return { query: "q", total: 0, hits: [], warnings: [], ...overrides };
+}
+
+test("decodeHtmlEntities: 命名实体与数字实体", () => {
+  assert.equal(decodeHtmlEntities("a&amp;b&lt;c&gt;d&quot;e&#39;f&#x2F;g"), "a&b<c>d\"e'f/g");
+});
+
+test("extractJsonText: <pre> 包裹的 JSON 可解包并解码实体", () => {
+  const parsed = JSON.parse(extractJsonText(readFixture("xhr-html-wrapper.html"))) as {
+    results: { total_num_results: number };
+  };
+  assert.equal(parsed.results.total_num_results, 1);
+});
+
+test("extractJsonText: 裸 JSON 原样返回；非 JSON 页面抛错", () => {
+  assert.equal(extractJsonText('{"results":{}}'), '{"results":{}}');
+  assert.throws(() => extractJsonText("<html><body>captcha</body></html>"), /不是 JSON/);
+});
+
+test("buildGooglePatentsXhrUrl: 编码查询并把 limit 夹到 1-50", () => {
+  const url = buildGooglePatentsXhrUrl("phase change", 999);
+  assert.equal(url.includes("num=50"), true);
+  assert.equal(url.includes("q%3Dphase%20change"), true);
+  assert.equal(buildGooglePatentsXhrUrl("x", 0).includes("num=1"), true);
+});
+
+test("withEgoJsonSearch: ego JSON 命中后不再调用 vendor", async () => {
+  let vendorCalls = 0;
+  const search = withEgoJsonSearch(
+    async () => {
+      vendorCalls += 1;
+      return makeVendorResult();
+    },
+    { fetchText: async () => readFixture("xhr-phase-change.json") },
+  );
+  const result = await search("phase change", { limit: 5 });
+  assert.equal(result.dataSource, "ego-json");
+  assert.equal(result.total, 1284);
+  assert.equal(result.hits.length, 2);
+  assert.equal(result.hits[0]!.assignee, "华为技术有限公司");
+  assert.equal(vendorCalls, 0);
+});
+
+test("withEgoJsonSearch: 真实 XHR fixture 均可命中（4 关键词 + 2 公开号）", async () => {
+  const fixtures: Array<[string, number]> = [
+    ["real-01-phase-change.json", 123547],
+    ["real-02-cn-thermal.json", 77907],
+    ["real-03-assignee.json", 35615],
+    ["real-04-thermal.json", 123172],
+    ["real-05-publication.json", 1],
+    ["real-06-publication-2.json", 1],
+  ];
+  for (const [name, expectedTotal] of fixtures) {
+    const search = withEgoJsonSearch(async () => makeVendorResult(), {
+      fetchText: async () => readFixture(name),
+    });
+    const result = await search("fixture query", { limit: 3 });
+    assert.equal(result.dataSource, "ego-json", name);
+    assert.equal(result.total, expectedTotal, name);
+    assert.ok(result.hits.length >= 1, `${name} 应至少 1 条命中`);
+    assert.ok(result.hits.length <= 3, `${name} 应遵守 limit`);
+  }
+});
+
+test("withEgoJsonSearch: Google 忽略 num 时仍按 limit 截断", async () => {
+  const search = withEgoJsonSearch(async () => makeVendorResult(), {
+    fetchText: async () => readFixture("xhr-phase-change.json"),
+  });
+  const result = await search("phase change", { limit: 1 });
+  assert.equal(result.hits.length, 1);
+  assert.equal(result.total, 1284);
+});
+
+test("withEgoJsonSearch: 解包 ego outerHTML 中的 <pre> JSON", async () => {
+  const search = withEgoJsonSearch(async () => makeVendorResult(), {
+    fetchText: async () => readFixture("xhr-html-wrapper.html"),
+  });
+  const result = await search("thermal", {});
+  assert.equal(result.hits.length, 1);
+  assert.equal(result.hits[0]!.title, "Thermal & management system");
+});
+
+test("withEgoJsonSearch: total=0 判定真实零命中（不回退 vendor）", async () => {
+  let vendorCalls = 0;
+  const search = withEgoJsonSearch(
+    async () => {
+      vendorCalls += 1;
+      return makeVendorResult();
+    },
+    { fetchText: async () => readFixture("xhr-zero.json") },
+  );
+  const result = await search("zzz nonexistent", {});
+  assert.equal(result.dataSource, "ego-json");
+  assert.equal(result.hits.length, 0);
+  assert.equal(
+    result.warnings.some(w => w.includes("无命中")),
+    true,
+  );
+  assert.equal(vendorCalls, 0);
+});
+
+test("withEgoJsonSearch: total>0 但 0 条命中 → PARSE_ERROR（不冒充 0 命中）", async () => {
+  let vendorCalls = 0;
+  const search = withEgoJsonSearch(
+    async () => {
+      vendorCalls += 1;
+      return makeVendorResult({ warnings: ["搜索结果页未解析到任何结果（页面结构可能变化）"] });
+    },
+    { fetchText: async () => '{"results":{"total_num_results":42,"cluster":[]}}' },
+  );
+  const result = await search("q", {});
+  assert.equal(result.warnings[0]!.startsWith("PARSE_ERROR"), true);
+  assert.equal(result.dataSource, "vendor");
+  assert.equal(vendorCalls, 1);
+});
+
+test("withEgoJsonSearch: JSON 抓取失败但 vendor 有命中 → 保留命中并标注回退", async () => {
+  const search = withEgoJsonSearch(async () => makeVendorResult({ total: 1, hits: [hit()] }), {
+    fetchText: async () => {
+      throw new Error("ego down");
+    },
+  });
+  const result = await search("q", {});
+  assert.equal(result.dataSource, "vendor");
+  assert.equal(result.hits.length, 1);
+  assert.equal(
+    result.warnings.some(w => w.includes("已回退 vendor")),
+    true,
+  );
+});
+
+test("withEgoJsonSearch: 两路都解析失败 → PARSE_ERROR", async () => {
+  const search = withEgoJsonSearch(
+    async () => makeVendorResult({ warnings: ["搜索结果页未解析到任何结果（页面结构可能变化）"] }),
+    {
+      fetchText: async () => {
+        throw new Error("ego down");
+      },
+    },
+  );
+  const result = await search("q", {});
+  assert.equal(result.warnings[0]!.startsWith("PARSE_ERROR"), true);
+});
+
+test("withEgoJsonSearch: ego 不可用时走原生 fetch JSON", async () => {
+  const search = withEgoJsonSearch(async () => makeVendorResult(), {
+    egoAvailable: () => false,
+    fetchImpl: async () => new Response(readFixture("xhr-phase-change.json"), { status: 200 }),
+  });
+  const result = await search("phase change", {});
+  assert.equal(result.dataSource, "native-json");
+  assert.equal(result.hits.length, 2);
+});
+
+test("withEgoJsonSearch: 中止信号 → 请求已被取消（不静默 0 命中）", async () => {
+  const controller = new AbortController();
+  controller.abort();
+  const search = withEgoJsonSearch(async () => makeVendorResult(), {
+    fetchText: async () => {
+      throw new Error("aborted");
+    },
+  });
+  const result = await search("q", { signal: controller.signal });
+  assert.deepEqual(result.warnings, ["请求已被取消"]);
+});
+
+test("withEgoJsonSearch: enabled=false 直接走 vendor", async () => {
+  const search = withEgoJsonSearch(async () => makeVendorResult({ total: 1, hits: [hit()] }), { enabled: false });
+  const result = await search("q", {});
+  assert.equal(result.dataSource, "vendor");
+  assert.equal(result.hits.length, 1);
 });
