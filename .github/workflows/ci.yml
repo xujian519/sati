@@ -49,7 +49,18 @@ jobs:
       - name: Enable pnpm (corepack)
         run: |
           corepack enable
-          corepack prepare pnpm@10.32.1 --activate
+          # registry.npmjs.org 偶发 503（2026-10-22 两次命中）；corepack 自身不重试，
+          # 单次抖动会把整条 CI 判红。有界指数退避，持续不可用仍失败。
+          for attempt in 1 2 3 4 5; do
+            if corepack prepare pnpm@10.32.1 --activate; then
+              break
+            fi
+            if [ "$attempt" -eq 5 ]; then
+              echo "::error::corepack prepare pnpm@10.32.1 failed after $attempt attempts"
+              exit 1
+            fi
+            sleep $((attempt * 5))
+          done
           pnpm --version
 
       - name: Install dependencies
@@ -119,7 +130,18 @@ jobs:
       - name: Enable pnpm (corepack)
         run: |
           corepack enable
-          corepack prepare pnpm@10.32.1 --activate
+          # registry.npmjs.org 偶发 503（2026-10-22 两次命中）；corepack 自身不重试，
+          # 单次抖动会把整条 CI 判红。有界指数退避，持续不可用仍失败。
+          for attempt in 1 2 3 4 5; do
+            if corepack prepare pnpm@10.32.1 --activate; then
+              break
+            fi
+            if [ "$attempt" -eq 5 ]; then
+              echo "::error::corepack prepare pnpm@10.32.1 failed after $attempt attempts"
+              exit 1
+            fi
+            sleep $((attempt * 5))
+          done
           pnpm --version
 
       - name: Install dependencies
