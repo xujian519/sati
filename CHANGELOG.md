@@ -2,6 +2,45 @@
 
 本文件按版本记录 Sati 的重要变更。桌面端版本号（`release(desktop)`）与根 `package.json` 由 `scripts/bump-version.mjs` 同步维护。
 
+## v0.3.8 - 2026-10-22
+
+> **版本目标（2026-10-22）**：专利业务闭环 + IM/权限安全加固——专利期限、官费、法条核验与申请文件 docx 五件套/成品核验全部落地；同步上游 PilotDeck #654/#645/#665，堵住 bash 跨命令授权、飞书未鉴权 webhook，补齐 IM 回复节流/编辑预算与频道生命周期，并恢复可选 IM 渠道；同期完成可维护性 sweep P2.8–P2.10。
+
+### Feat
+
+- feat(patent): 申请文件 docx 输出——按模板自带的 Word 母版出五件套（#684）
+- feat(patent): 申请文件 docx 成品核验——写完读回来对一遍（#685）
+- feat(patent): `patent_deadlines` 法定期限计算——期限第一次可以机械核算（#687）
+- feat(patent): `patent_fees` 官费计价——把「该缴多少钱」变成对带出处的费率表做算术（#688）
+- feat(legal): `law_verify` 法条引用核验——条号是否成立第一次有了机械判据（#686）
+- feat(agent): 子代理窗口按模型能力解析，`agent` 工具支持 `max_turns`/`max_tool_calls`/`timeout_ms` 复核预算并返回 `partial` 部分结果（#701）
+
+### Fix
+
+- fix(permission): bash 权限按解析树判定，堵住换行只读绕过与 `git *` 跨命令授权（上游 #654）
+- fix(feishu): webhook 强制校验 `verifyToken`/`encryptKey`（至少其一，未通过 401），REST 按 `domainName` 切换飞书/Lark 域名（上游 #645）
+- fix(im): 回复控制器改非阻塞合并编辑，飞书编辑预算用尽前换新消息，按格式化长度切分且不拆代码围栏；`stop()` 中止在途回合/REST/定时器并丢弃迟到事件（上游 #645）
+- fix(im): 可选频道改用 `createRequire(import.meta.url)`，恢复 discord/matrix/dingtalk/slack/email/sms/telegram 与 `ws` 的惰性加载（上游 #645）
+- fix(router): 压缩摘要与 tokenSaver judge 不再强制 `thinking: false`，继承模型默认策略，避免不支持关闭推理的模型被拒绝（上游 #665）
+- fix(security): ui/server 跨站来源收窄——CORS 与 WebSocket Origin 统一判定，拒止第三方网页跨域读写本机 API（#680）
+- fix(ui): 项目文件 root 只认项目注册表、`edit_file` 按字面量写入、工作区创建失败不递归删除；`git`/`taskmaster` 写面与 Host/Origin 守卫收口（上游 #620/#626/#648）（#689）
+- fix(ui): 全局注册 testing-library cleanup，消除测试收尾 `window` 未定义 flake（#700）
+- fix(ci): corepack 安装 pnpm 增加有界重试（#703）
+
+### Refactor
+
+- refactor(techdebt): sweep P2.8——TuiApp render/input/state 三层拆分（god fn ≥400 25→24）（#679）
+- refactor(arch): sweep P2.9/P2.10——`applyWebGatewayEvent` 383→11 行、`ToolRuntime.execute` 388→16 行、`buildInventivenessGraph` 342→21 行（#702）
+
+### Docs
+
+- docs(port): PilotDeck 2026-10-22 批次方案与五份决策记录（bash 权限、飞书鉴权、thinking 策略、IM 生命周期、ESM require）（#704）
+- docs(techdebt): sweep P2.8–P2.10 台账回填与技术债/架构基线刷新（#679 #702）
+
+### Chore
+
+- chore(deps): 升级 univerjs 组（13 项）、react 组（2 项）、shell-quote 1.12.0、katex 0.19.0、postcss 8.5.30、juice 12.2.0、react-i18next 17.0.19、react-syntax-highlighter 16.1.2、globals 17.13.0、simple-git-hooks 2.14.0（#690–#699）
+
 ## v0.3.7 - 2026-10-15
 
 > **版本目标（2026-10-15）**：知识工作流收口 + 凭据/日志加固——知识草稿链路（召回日志 → 草稿闸门 → 确认面板）与运行期笔记迁出 `knowledge.db` 至 Sati 自有 `sati-notes.db` 全部落地；同期收紧日志与 URL 票据两处凭据面，并继续可维护性 sweep 的 P2.3–P2.7 五个批次（单体入口与 god function 再降一档）。
