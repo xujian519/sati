@@ -1,5 +1,6 @@
 import path from "node:path";
 import { realpathSync } from "node:fs";
+import { hasBashLineContinuation, splitBashCommands } from "../../tool/builtin/bash/parser.js";
 import { resolveRealWritePath } from "../../tool/builtin/filesystem/pathSafety.js";
 import type { PermissionContext, PermissionRule } from "../protocol/types.js";
 
@@ -65,7 +66,7 @@ function matchRulePattern(
   if (rule.pattern.startsWith(TEXT_PATTERN_PREFIX)) {
     return matchTextPattern(rule.pattern.slice(TEXT_PATTERN_PREFIX.length), input);
   }
-  if (toolName === "bash") return matchBashPattern(rule.pattern, input);
+  if (toolName === "bash") return matchBashPattern(rule, input);
   if (FILE_PATH_PATTERN_TOOLS.has(toolName)) return matchFilePathPattern(rule.pattern, input, context);
   return true;
 }
@@ -108,11 +109,23 @@ function collectStringValues(value: unknown, out: string[], seen: Set<object>): 
   }
 }
 
-function matchBashPattern(pattern: string, input: unknown): boolean {
+function matchBashPattern(rule: PermissionRule, input: unknown): boolean {
   const command = readCommand(input);
-  if (!command) return false;
-  const normalizedPattern = pattern.replace(/:\*$/, "*");
-  return wildcardToRegExp(normalizedPattern).test(command);
+  if (!command || !rule.pattern) return false;
+  const pattern = wildcardToRegExp(rule.pattern.replace(/:\*$/, "*"), "s");
+  // allow 规则必须覆盖脚本里的每一条简单命令（换行、子 shell、命令替换里的都算），
+  // 而 ask/deny 只要任一命令命中即可。无法解析的脚本一律不放行。
+  const parsed = splitBashCommands(command);
+  if (rule.behavior === "allow") {
+    return (
+      parsed !== undefined &&
+      !hasBashLineContinuation(command) &&
+      !parsed.hasError &&
+      parsed.commands.length > 0 &&
+      parsed.commands.every(part => pattern.test(part))
+    );
+  }
+  return pattern.test(command) || (parsed?.commands.some(part => pattern.test(part)) ?? false);
 }
 
 function readCommand(input: unknown): string {
@@ -191,7 +204,7 @@ function normalizePathForPattern(value: string): string {
   return value.replace(/\\/g, "/");
 }
 
-function wildcardToRegExp(pattern: string): RegExp {
+function wildcardToRegExp(pattern: string, flags = ""): RegExp {
   const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*");
-  return new RegExp(`^${escaped}$`);
+  return new RegExp(`^${escaped}$`, flags);
 }

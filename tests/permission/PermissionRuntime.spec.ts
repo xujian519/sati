@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { before } from "node:test";
 import { PermissionRuntime, createDefaultPermissionContext, type PermissionRule } from "../../src/permission/index.js";
+import { preloadBashParser } from "../../src/tool/builtin/bash/parser.js";
 import type { SatiToolDefinition, SatiToolRuntimeContext } from "../../src/tool/index.js";
+
+before(async () => {
+  await preloadBashParser();
+});
 
 function makeTool(
   name: string,

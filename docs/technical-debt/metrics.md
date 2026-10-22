@@ -7,9 +7,9 @@
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1138 / 198209 |
+| src TS 文件 / 行数 | 1139 / 198488 |
 | src JS 文件 | 0 |
-| tests 文件 | 658 |
+| tests 文件 | 660 |
 | ui/src 文件 / 行数 | 647 / 103033 |
 | ui/server 文件 / 行数 | 149 / 38686 |
 
@@ -151,7 +151,7 @@
 | 模块 | 测试文件 |
 |---|---|
 | patent | 152 |
-| tool | 72 |
+| tool | 73 |
 | agent | 61 |
 | knowledge | 41 |
 | context | 38 |
@@ -169,7 +169,7 @@
 | rule | 10 |
 | web | 9 |
 | literature | 8 |
-| permission | 4 |
+| permission | 5 |
 | test-support | 4 |
 | shared | 3 |
 | telemetry | 3 |
@@ -183,7 +183,7 @@
 | runtime | 1 |
 | status | 1 |
 
-| **合计** | **631** |
+| **合计** | **633** |
 
 ## i18n en/zh-CN 对齐
 

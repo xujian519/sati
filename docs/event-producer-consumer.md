@@ -41,12 +41,12 @@ emit/dispatch/emitAgentEvent/emitEvent/emitForSession/sendNotification 字符串
 | model_event | src/agent/loop/AgentLoop.ts:506 | src/gateway/client/InProcessGateway.ts:607 |
 | model_recovery_failed | - | src/gateway/client/InProcessGateway.ts:607 |
 | model_request_started | src/agent/loop/AgentLoop.ts:389 | src/gateway/client/InProcessGateway.ts:607, submitTurn 流 ×15 |
-| permission_denied | src/tool/execution/ToolRuntime.ts:344 | src/gateway/client/InProcessGateway.ts:607 |
+| permission_denied | src/tool/execution/ToolRuntime.ts:349 | src/gateway/client/InProcessGateway.ts:607 |
 | permission_request | src/gateway/permission/createGatewayPermissionHook.ts:85 | submitTurn 流 ×15 |
-| permission_requested | src/tool/execution/ToolRuntime.ts:297 | src/gateway/client/InProcessGateway.ts:607 |
+| permission_requested | src/tool/execution/ToolRuntime.ts:302 | src/gateway/client/InProcessGateway.ts:607 |
 | plan_mode_changed | - | submitTurn 流 ×15 |
-| post_tool_execute | src/tool/execution/ToolRuntime.ts:447, src/tool/execution/ToolRuntime.ts:503 | src/gateway/client/InProcessGateway.ts:607 |
-| pre_tool_execute | src/tool/execution/ToolRuntime.ts:201 | src/gateway/client/InProcessGateway.ts:607 |
+| post_tool_execute | src/tool/execution/ToolRuntime.ts:452, src/tool/execution/ToolRuntime.ts:508 | src/gateway/client/InProcessGateway.ts:607 |
+| pre_tool_execute | src/tool/execution/ToolRuntime.ts:206 | src/gateway/client/InProcessGateway.ts:607 |
 | retry_progress | - | src/gateway/client/InProcessGateway.ts:607 |
 | session_aborted | - | src/gateway/client/InProcessGateway.ts:607 |
 | session_ended | src/agent/session/AgentSession.ts:180 | src/gateway/client/InProcessGateway.ts:607 |
