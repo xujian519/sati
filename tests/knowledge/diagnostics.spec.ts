@@ -82,6 +82,8 @@ function statsSnapshot(overrides: Partial<KnowledgeRuntimeStatsSnapshot> = {}): 
     legalFtsDegraded: false,
     caseLawFtsDegraded: false,
     likeFallbacks: 0,
+    loadAttempts: 0,
+    loadSuccesses: 0,
     ...overrides,
   };
 }

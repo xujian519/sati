@@ -34,13 +34,108 @@ export type KgSearchOptions = {
   mode?: "phrase" | "or";
 };
 
+// ---------------------------------------------------------------------------
+// LRU 缓存（双向链表 + Map，O(1) get/set/evict，无迭代器分配）
+//
+// 替代原先 Map 模拟 LRU（delete + set 刷新访问序 + keys().next() 淘汰）
+// 的实现：Map.keys() 每次创建迭代器对象，高频淘汰时 GC 压力显著。
+// ---------------------------------------------------------------------------
+
+type LruNode<K, V> = {
+  key: K;
+  value: V;
+  prev?: LruNode<K, V>;
+  next?: LruNode<K, V>;
+};
+
+class LruCache<K, V> {
+  private readonly map = new Map<K, LruNode<K, V>>();
+  private head?: LruNode<K, V>;
+  private tail?: LruNode<K, V>;
+
+  constructor(private readonly maxSize: number) {}
+
+  get(key: K): V | undefined {
+    const node = this.map.get(key);
+    if (!node) return undefined;
+    this.moveToHead(node);
+    return node.value;
+  }
+
+  has(key: K): boolean {
+    return this.map.has(key);
+  }
+
+  set(key: K, value: V): void {
+    const existing = this.map.get(key);
+    if (existing) {
+      existing.value = value;
+      this.moveToHead(existing);
+      return;
+    }
+    const node: LruNode<K, V> = { key, value };
+    this.map.set(key, node);
+    this.addToHead(node);
+    if (this.map.size > this.maxSize) {
+      const evicted = this.removeTail();
+      if (evicted) this.map.delete(evicted.key);
+    }
+  }
+
+  get size(): number {
+    return this.map.size;
+  }
+
+  clear(): void {
+    this.map.clear();
+    this.head = undefined;
+    this.tail = undefined;
+  }
+
+  private addToHead(node: LruNode<K, V>): void {
+    node.prev = undefined;
+    node.next = this.head;
+    if (this.head) this.head.prev = node;
+    this.head = node;
+    if (!this.tail) this.tail = node;
+  }
+
+  private removeNode(node: LruNode<K, V>): void {
+    if (node.prev) node.prev.next = node.next;
+    else this.head = node.next;
+    if (node.next) node.next.prev = node.prev;
+    else this.tail = node.prev;
+    node.prev = undefined;
+    node.next = undefined;
+  }
+
+  private moveToHead(node: LruNode<K, V>): void {
+    if (node === this.head) return;
+    this.removeNode(node);
+    this.addToHead(node);
+  }
+
+  private removeTail(): LruNode<K, V> | undefined {
+    if (!this.tail) return undefined;
+    const evicted = this.tail;
+    this.removeNode(evicted);
+    return evicted;
+  }
+}
+
 export class KgStore {
   private readonly db: DatabaseSync;
-  private readonly nodeCache = new Map<string, KgNode | undefined>();
+  /** 节点 LRU 缓存：双向链表 + Map，O(1) 淘汰无迭代器分配（P0-1 优化）。 */
+  private readonly nodeCache: LruCache<string, KgNode | undefined>;
   /** 节点缓存 LRU 上限：防 116K 节点无界膨胀（设计为"轻量缓存"，全量驻留无意义）。 */
   private static readonly NODE_CACHE_MAX = 8192;
   /** 生效的 schema：unified=knowledge.db（kg_nodes），legacy=patent_kg.db（nodes）。 */
   private readonly schema: KgSchema;
+  /**
+   * 节点表名（构造时由 schema 固化，避免每次查询重复判断）。
+   * 值由 introspectKgStore 控制（"kg_nodes" | "nodes"），非用户输入。
+   */
+  private readonly nodeTable: string;
   /** 表结构探测结果：trigram FTS 表优先（scripts/migrate-kg-fts-trigram.mjs 生成），否则 unicode61 旧表；无 FTS 时为 null。 */
   private readonly ftsTable: string | null;
   /** 命中 FTS 表的实际 tokenizer（建表 SQL 判定，见 schema-introspector）。 */
@@ -60,6 +155,8 @@ export class KgStore {
       const introspected = introspectKgStore(opened.db, dbPath);
       this.db = opened.db;
       this.schema = introspected.schema;
+      this.nodeTable = introspected.schema === "unified" ? "kg_nodes" : "nodes";
+      this.nodeCache = new LruCache(KgStore.NODE_CACHE_MAX);
       this.ftsTable = introspected.ftsTable;
       this.ftsTokenizer = introspected.ftsTokenizer;
       this.stmtGetNode = introspected.statements.stmtGetNode;
@@ -104,22 +201,14 @@ export class KgStore {
     return { schema: this.schema, tablePresent: this.ftsTable !== null };
   }
 
-  /** 按 id 查询节点（带 LRU 缓存，上限 NODE_CACHE_MAX）。 */
+  /** 按 id 查询节点（带 LRU 缓存，上限 NODE_CACHE_MAX；O(1) 淘汰无迭代器分配）。 */
   getNode(id: string): KgNode | undefined {
     if (this.nodeCache.has(id)) {
-      const cached = this.nodeCache.get(id);
-      // LRU：命中刷新访问顺序（Map 迭代序 = 插入序）
-      this.nodeCache.delete(id);
-      this.nodeCache.set(id, cached);
-      return cached;
+      return this.nodeCache.get(id);
     }
     const row = this.stmtGetNode.get(id) as NodeRow | undefined;
     const node = row ? toNode(row) : undefined;
     this.nodeCache.set(id, node);
-    if (this.nodeCache.size > KgStore.NODE_CACHE_MAX) {
-      const oldest = this.nodeCache.keys().next().value;
-      if (oldest !== undefined) this.nodeCache.delete(oldest);
-    }
     return node;
   }
 
@@ -186,8 +275,8 @@ export class KgStore {
       return [pattern, pattern, pattern];
     });
     params.push(limit);
-    const nodeTable = this.schema === "unified" ? "kg_nodes" : "nodes";
-    return this.db.prepare(`SELECT id FROM ${nodeTable} WHERE ${clause} LIMIT ?`).all(...params) as Array<{
+    // nodeTable 由构造时 schema 固化（值来自 introspectKgStore，非用户输入）。
+    return this.db.prepare(`SELECT id FROM ${this.nodeTable} WHERE ${clause} LIMIT ?`).all(...params) as Array<{
       id: string;
     }>;
   }

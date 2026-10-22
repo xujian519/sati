@@ -188,44 +188,21 @@ export class PatentMemoryProvider implements MemoryResolver {
     const diagnostics: MemoryDiagnostic[] = [];
     const blocks: string[] = [];
 
-    // 1. IPC 分类 → 注入审查标准（多重分类：置信度达门槛的部并行注入）
-    if (this.enableStandards) {
-      const classification = classifyIpc(input.query);
-      // 门槛：confidence >= MULTI_CLASSIFY_MIN_CONFIDENCE（与部级命中 ≥2 词等价），
-      // 或大类命中达标（detailConfidence >= IPC_DETAIL_MIN_CONFIDENCE，≈ 大类 ≥2 词）——
-      // 后者覆盖"部级单命中但大类多命中"的典型专利 query（如"汽车座椅"部级仅 1 词、
-      // B60 大类 3 词）。单关键词碰巧命中不注入，避免普通对话被注入 IPC 审查标准；
-      // 无命中默认 B/0.15 低于门槛也不注入。最多并行注入 multiSectionLimit 个部。
-      const candidates = classification.filter(
-        c =>
-          c.confidence >= MULTI_CLASSIFY_MIN_CONFIDENCE ||
-          (c.detailConfidence !== undefined && c.detailConfidence >= IPC_DETAIL_MIN_CONFIDENCE),
-      );
-      const effectiveCandidates = withProfileBoost(candidates, classification, input.knowledgeProfile?.ipcSections);
-      for (const cand of effectiveCandidates.slice(0, this.multiSectionLimit)) {
-        // 两级分类：大类命中置信度达标（≈ 大类关键词 ≥2 个）时精注入大类卡片，
-        // 否则回退部级注入（向后兼容；未列入高频大类的部永远走回退）。
-        const cards =
-          cand.detail && cand.detailConfidence !== undefined && cand.detailConfidence >= IPC_DETAIL_MIN_CONFIDENCE
-            ? queryIpcDetail(cand.detail)
-            : queryIpcStandards(cand.section);
-        const limited = this.standardsLimit > 0 ? cards.slice(0, this.standardsLimit) : cards;
-        if (limited.length > 0) {
-          const text = formatStandardsAsContext(limited);
-          blocks.push(`<ipc-standards section="${cand.section}">\n${text}\n</ipc-standards>`);
-        }
-        if (isHighConfidence(cand.confidence)) {
-          diagnostics.push({
-            code: "memory_ipc_classified",
-            message: `IPC 分类 ${cand.section}${cand.detail ? `/${cand.detail}` : ""} 高置信度（${cand.confidence.toFixed(2)}）`,
-            severity: "info",
-          });
-        }
-      }
-    }
+    // 1 + 2 并行：IPC 分类（纯 CPU 关键词匹配，~1-5ms）与知识图谱检索
+    // （SQL + 可选 rerank，~10-500ms）互不依赖，并行执行减少总延迟。
+    // P1-4 优化：此前串行执行，总延迟 = IPC + Graph；并行后总延迟 ≈ max(IPC, Graph)。
+    const ipcPromise = this.enableStandards
+      ? Promise.resolve(this.buildIpcBlocks(input))
+      : Promise.resolve({ blocks: [] as string[], diagnostics: [] as MemoryDiagnostic[] });
+    const graphPromise = this.queryGraph(input);
 
-    // 2. 知识图谱检索（关键词 + 可选语义，RRF 融合；query 足够长才触发）
-    const graphNodes = await this.queryGraph(input);
+    const [{ blocks: ipcBlocks, diagnostics: ipcDiagnostics }, graphNodes] = await Promise.all([
+      ipcPromise,
+      graphPromise,
+    ]);
+
+    blocks.push(...ipcBlocks);
+    diagnostics.push(...ipcDiagnostics);
     if (graphNodes.length > 0) {
       const lines = graphNodes.map(hit => {
         const label = hit.node.name || hit.node.title || hit.node.id;
@@ -251,6 +228,52 @@ export class PatentMemoryProvider implements MemoryResolver {
       this.cache.set(cacheKey, systemContext ?? "");
     }
     return { systemContext, diagnostics };
+  }
+
+  /**
+   * IPC 分类 → 注入审查标准（纯同步 CPU 关键词匹配）。
+   *
+   * 从 retrieve 抽出以便与图谱检索并行执行（P1-4）。
+   */
+  private buildIpcBlocks(input: MemoryRetrieveInput): {
+    blocks: string[];
+    diagnostics: MemoryDiagnostic[];
+  } {
+    const blocks: string[] = [];
+    const diagnostics: MemoryDiagnostic[] = [];
+    const classification = classifyIpc(input.query);
+    // 门槛：confidence >= MULTI_CLASSIFY_MIN_CONFIDENCE（与部级命中 ≥2 词等价），
+    // 或大类命中达标（detailConfidence >= IPC_DETAIL_MIN_CONFIDENCE，≈ 大类 ≥2 词）——
+    // 后者覆盖"部级单命中但大类多命中"的典型专利 query（如"汽车座椅"部级仅 1 词、
+    // B60 大类 3 词）。单关键词碰巧命中不注入，避免普通对话被注入 IPC 审查标准；
+    // 无命中默认 B/0.15 低于门槛也不注入。最多并行注入 multiSectionLimit 个部。
+    const candidates = classification.filter(
+      c =>
+        c.confidence >= MULTI_CLASSIFY_MIN_CONFIDENCE ||
+        (c.detailConfidence !== undefined && c.detailConfidence >= IPC_DETAIL_MIN_CONFIDENCE),
+    );
+    const effectiveCandidates = withProfileBoost(candidates, classification, input.knowledgeProfile?.ipcSections);
+    for (const cand of effectiveCandidates.slice(0, this.multiSectionLimit)) {
+      // 两级分类：大类命中置信度达标（≈ 大类关键词 ≥2 个）时精注入大类卡片，
+      // 否则回退部级注入（向后兼容；未列入高频大类的部永远走回退）。
+      const cards =
+        cand.detail && cand.detailConfidence !== undefined && cand.detailConfidence >= IPC_DETAIL_MIN_CONFIDENCE
+          ? queryIpcDetail(cand.detail)
+          : queryIpcStandards(cand.section);
+      const limited = this.standardsLimit > 0 ? cards.slice(0, this.standardsLimit) : cards;
+      if (limited.length > 0) {
+        const text = formatStandardsAsContext(limited);
+        blocks.push(`<ipc-standards section="${cand.section}">\n${text}\n</ipc-standards>`);
+      }
+      if (isHighConfidence(cand.confidence)) {
+        diagnostics.push({
+          code: "memory_ipc_classified",
+          message: `IPC 分类 ${cand.section}${cand.detail ? `/${cand.detail}` : ""} 高置信度（${cand.confidence.toFixed(2)}）`,
+          severity: "info",
+        });
+      }
+    }
+    return { blocks, diagnostics };
   }
 
   async captureTurn(_input: MemoryCaptureTurnInput): Promise<void> {

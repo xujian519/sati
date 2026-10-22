@@ -23,6 +23,7 @@ import { DatabaseSync } from "node:sqlite";
 import { quantizeInt8 } from "../../context/vector/cosine.js";
 import { openKnowledgeDb } from "./db-version.js";
 import { KNOWLEDGE_DB } from "./schema-versions.js";
+import type { KnowledgeRuntimeStats } from "./knowledge-stats.js";
 import {
   emptyChunkMatrix,
   loadChunkMatrix,
@@ -51,6 +52,8 @@ export type KnowledgeEmbeddingSearchOptions = {
    * （144K chunk 量化实测 1-5s 事件循环阻塞）。测试用。
    */
   syncLoad?: boolean;
+  /** 运行时状态聚合（可选）：加载发起/成功打点，供诊断观测加载健康度（P1-5）。 */
+  stats?: KnowledgeRuntimeStats;
 };
 
 // 进程级共享矩阵缓存：同一 dbPath+docTypes 的 int8 量化矩阵只加载一次。
@@ -98,6 +101,8 @@ export class KnowledgeEmbeddingSearch {
   private readonly filterParams: string[];
   /** 同步加载开关（env SATI_EMBEDDINGS_SYNC_LOAD=1 或构造注入 true 回滚旧行为）。 */
   private readonly syncLoad: boolean;
+  /** 运行时状态聚合（可选）：加载发起/成功打点。 */
+  private readonly stats?: KnowledgeRuntimeStats;
   private data?: Int8ChunkMatrix;
   /** 异步预热单飞 promise（并发预热只触发一次；失败重置可重试）。 */
   private loadingPromise?: Promise<Int8ChunkMatrix>;
@@ -111,6 +116,7 @@ export class KnowledgeEmbeddingSearch {
     this.docTypes = options.docTypes;
     this.dbPath = options.dbPath;
     this.syncLoad = options.syncLoad ?? process.env.SATI_EMBEDDINGS_SYNC_LOAD === "1";
+    this.stats = options.stats;
 
     const filterList = this.docTypes && this.docTypes.length > 0 ? this.docTypes : undefined;
     this.joinSql = filterList ? " JOIN documents d ON d.id = e.document_id" : "";
@@ -225,18 +231,31 @@ export class KnowledgeEmbeddingSearch {
    * 异步预热（P4，默认路径）：分页加载每页间让出事件循环（见
    * loadChunkMatrixAsync），不阻塞启动/请求。单飞：并发调用共享同一次加载；
    * 失败吞错并重置单飞（下次可重试），返回空矩阵不抛——预热失败仅降级语义路。
-   * gateway 启动后经 setTimeout 主动调用；search 未 ready 时也会触发兜底。
+   * gateway 启动后经 setTimeout 主动调用；search 未 ready 时也会触发兆底。
+   *
+   * P1-5 可观测性：加载发起与成功均打点 stats，诊断端可观测加载健康度。
    */
   loadAsync(): Promise<Int8ChunkMatrix> {
     if (this.data) return Promise.resolve(this.data);
-    this.loadingPromise ??= this.loadAsyncInner().catch(error => {
-      this.loadingPromise = undefined;
-      this.lastLoadFailureAt = Date.now();
-      this.logger?.warn?.(
-        `[knowledge-embeddings] 异步预热失败，语义路降级跳过: ${error instanceof Error ? error.message : String(error)}`,
+    // P1-5 可观测性 + 单飞守卫：计数器仅在 ??= 实际发起新加载时递增，
+    // 避免并发调用方重复打点导致 loadAttempts 语义漂移。
+    this.loadingPromise ??= (() => {
+      this.stats?.recordLoadAttempt();
+      return this.loadAsyncInner().then(
+        data => {
+          this.stats?.recordLoadSuccess();
+          return data;
+        },
+        error => {
+          this.loadingPromise = undefined;
+          this.lastLoadFailureAt = Date.now();
+          this.logger?.warn?.(
+            `[knowledge-embeddings] 异步预热失败，语义路降级跳过: ${error instanceof Error ? error.message : String(error)}`,
+          );
+          return this.data ?? emptyChunkMatrix(this.dimensions);
+        },
       );
-      return this.data ?? emptyChunkMatrix(this.dimensions);
-    });
+    })();
     return this.loadingPromise;
   }
 
