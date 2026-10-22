@@ -1,0 +1,1265 @@
+{
+  "results": {
+    "total_num_results": 123172,
+    "total_num_pages": 99,
+    "many_results": false,
+    "num_page": 0,
+    "cluster": [
+      {
+        "result": [
+          {
+            "id": "patent/US20240164055A1/en",
+            "rank": 0,
+            "patent": {
+              "title": " Fluid management system for mobile charging system",
+              "snippet": " a <b>thermal management system</b> comprising a thermal management loop and a microgrid loop, the <b>thermal management system</b> configured to fluidly couple to the first vehicle battery system to form a first vehicle loop, the <b>thermal management system</b> configured to fluidly couple to the second vehicle &hellip;",
+              "priority_date": "2021-07-27",
+              "filing_date": "2024-01-23",
+              "publication_date": "2024-05-16",
+              "inventor": "Michael Armstrong",
+              "assignee": "Electric Power Systems, Inc.",
+              "publication_number": "US20240164055A1",
+              "language": "en",
+              "thumbnail": "22/72/1c/60843eda24ee9e/US20240164055A1-20240516-D00000.png",
+              "pdf": "ab/84/3a/b3521517c515f1/US20240164055A1.pdf",
+              "figures": [
+                {
+                  "thumbnail": "ba/e0/0c/f9b6a66c0380fc/US20240164055A1-20240516-D00000.png",
+                  "full": "e2/d9/07/4ee2306ab27a8c/US20240164055A1-20240516-D00000.png"
+                },
+                {
+                  "thumbnail": "7a/4d/91/41489023730621/US20240164055A1-20240516-D00001.png",
+                  "full": "67/d7/76/0409668073985d/US20240164055A1-20240516-D00001.png"
+                },
+                {
+                  "thumbnail": "c6/84/c0/d7806d1c0d50eb/US20240164055A1-20240516-D00002.png",
+                  "full": "b6/d9/d0/fe35ee13e9c398/US20240164055A1-20240516-D00002.png"
+                },
+                {
+                  "thumbnail": "fd/b4/0d/151fe963e071cc/US20240164055A1-20240516-D00003.png",
+                  "full": "44/2a/58/96fc3fa4fd9ce6/US20240164055A1-20240516-D00003.png"
+                },
+                {
+                  "thumbnail": "a9/63/81/2233fcbc55be8e/US20240164055A1-20240516-D00004.png",
+                  "full": "2b/4d/c5/6f1819b1345fdb/US20240164055A1-20240516-D00004.png"
+                },
+                {
+                  "thumbnail": "9c/7b/28/0b366d7cbc9d10/US20240164055A1-20240516-D00005.png",
+                  "full": "b5/a9/8d/17f87e32bfa6bb/US20240164055A1-20240516-D00005.png"
+                },
+                {
+                  "thumbnail": "ab/74/a8/a00179239a0df7/US20240164055A1-20240516-D00006.png",
+                  "full": "6f/d2/3b/c442507af345c3/US20240164055A1-20240516-D00006.png"
+                },
+                {
+                  "thumbnail": "c8/29/ca/56dab338f9609b/US20240164055A1-20240516-D00007.png",
+                  "full": "a6/39/66/f6afd55b8d85af/US20240164055A1-20240516-D00007.png"
+                },
+                {
+                  "thumbnail": "5c/cd/92/6ca61e0d60b945/US20240164055A1-20240516-D00008.png",
+                  "full": "40/a4/9e/ef644a6e34448c/US20240164055A1-20240516-D00008.png"
+                }
+              ],
+              "family_metadata": {
+                "aggregated": {
+                  "country_status": [
+                    {
+                      "country_code": "WO",
+                      "best_patent_stage": {
+                        "state": "NOT_ACTIVE"
+                      }
+                    },
+                    {
+                      "country_code": "EP",
+                      "best_patent_stage": {
+                        "state": "ACTIVE"
+                      }
+                    },
+                    {
+                      "country_code": "US",
+                      "best_patent_stage": {
+                        "state": "ACTIVE"
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "is_similar_document": false,
+            "entity_matches": {
+              "additional": 0
+            },
+            "measure_matches": {}
+          },
+          {
+            "id": "patent/US10912229B1/en",
+            "rank": 1,
+            "patent": {
+              "title": " Cooling system for high density racks with multi-function heat exchangers",
+              "snippet": " A cooling system and a multi-function heat exchanger design for electronics racks has one or more liquid-to-liquid heat exchangers (or their functions) and one or more liquid-to-air heat exchangers (or their functions). Each liquid-to-liquid heat exchanger has a rack-liquid channel, and an &hellip;",
+              "priority_date": "2019-08-15",
+              "filing_date": "2019-08-15",
+              "grant_date": "2021-02-02",
+              "publication_date": "2021-02-02",
+              "inventor": "Tianyi Gao",
+              "assignee": "Baidu Usa Llc",
+              "publication_number": "US10912229B1",
+              "language": "en",
+              "thumbnail": "d9/7a/b7/7d2ea14bdd2fe7/US10912229-20210202-D00000.png",
+              "pdf": "70/7d/d7/e5f34189b09ea2/US10912229.pdf",
+              "figures": [
+                {
+                  "thumbnail": "c8/d7/07/b6d904157c4f04/US10912229-20210202-D00000.png",
+                  "full": "d7/17/0d/3383bb1c0af654/US10912229-20210202-D00000.png"
+                },
+                {
+                  "thumbnail": "52/2d/0e/69d0d8f50015da/US10912229-20210202-D00001.png",
+                  "full": "1e/83/7a/9cc404691e837e/US10912229-20210202-D00001.png"
+                },
+                {
+                  "thumbnail": "67/be/a6/034109bd7221f0/US10912229-20210202-D00002.png",
+                  "full": "3a/47/a5/3d82e398338df8/US10912229-20210202-D00002.png"
+                },
+                {
+                  "thumbnail": "23/94/3b/80a1aa223df9e0/US10912229-20210202-D00003.png",
+                  "full": "86/4a/07/9e0be9fd71ebeb/US10912229-20210202-D00003.png"
+                },
+                {
+                  "thumbnail": "e8/3e/6f/8bbad2b50fe731/US10912229-20210202-D00004.png",
+                  "full": "fb/29/14/9303aae423e815/US10912229-20210202-D00004.png"
+                },
+                {
+                  "thumbnail": "64/4e/4b/80ccfe178b8c86/US10912229-20210202-D00005.png",
+                  "full": "7b/bc/93/e123c4f3672525/US10912229-20210202-D00005.png"
+                },
+                {
+                  "thumbnail": "e6/75/a8/20196901bf8827/US10912229-20210202-D00006.png",
+                  "full": "5b/ed/4d/502d706599260c/US10912229-20210202-D00006.png"
+                },
+                {
+                  "thumbnail": "19/ab/6b/b805c42b3d1f70/US10912229-20210202-D00007.png",
+                  "full": "08/9e/52/c294e4c55bb505/US10912229-20210202-D00007.png"
+                }
+              ],
+              "family_metadata": {
+                "aggregated": {
+                  "country_status": [
+                    {
+                      "country_code": "US",
+                      "best_patent_stage": {
+                        "state": "ACTIVE"
+                      }
+                    },
+                    {
+                      "country_code": "CN",
+                      "best_patent_stage": {
+                        "state": "ACTIVE"
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "is_similar_document": false,
+            "entity_matches": {
+              "additional": 0
+            },
+            "measure_matches": {}
+          },
+          {
+            "id": "patent/US10784546B2/en",
+            "rank": 2,
+            "patent": {
+              "title": " Thermoelectric-based <b>thermal management system</b>",
+              "snippet": " Disclosed embodiments include thermoelectric-based <b>thermal management systems</b> and methods configured to heat and/or cool an electrical device. <b>Thermal management systems</b> can include at least one electrical conductor in electrical and thermal communication with a temperature-sensitive region of the &hellip;",
+              "priority_date": "2013-01-30",
+              "filing_date": "2019-04-18",
+              "grant_date": "2020-09-22",
+              "publication_date": "2020-09-22",
+              "inventor": "Alfred Piggott",
+              "assignee": "Gentherm Incorporated",
+              "publication_number": "US10784546B2",
+              "language": "en",
+              "thumbnail": "77/15/97/06cf1c6140cd96/US10784546-20200922-D00000.png",
+              "pdf": "96/11/8e/e6990cee9b3c9a/US10784546.pdf",
+              "figures": [
+                {
+                  "thumbnail": "66/2e/34/55888ac5427643/US10784546-20200922-D00000.png",
+                  "full": "a4/10/f0/dad827fe9fe0d1/US10784546-20200922-D00000.png"
+                },
+                {
+                  "thumbnail": "76/b8/46/ae1b431fd0e124/US10784546-20200922-D00001.png",
+                  "full": "4e/9f/a9/a4664144d1f974/US10784546-20200922-D00001.png"
+                },
+                {
+                  "thumbnail": "86/de/b8/b8b5d9513e30df/US10784546-20200922-D00002.png",
+                  "full": "d5/20/2d/8410bcf4c49035/US10784546-20200922-D00002.png"
+                },
+                {
+                  "thumbnail": "a5/34/5e/e75549021c92c7/US10784546-20200922-D00003.png",
+                  "full": "d1/f7/b4/267138b7625f1a/US10784546-20200922-D00003.png"
+                },
+                {
+                  "thumbnail": "74/36/6c/4dba4caf983290/US10784546-20200922-D00004.png",
+                  "full": "dc/d3/1f/2b90a47a658b6c/US10784546-20200922-D00004.png"
+                },
+                {
+                  "thumbnail": "0b/1d/b9/9e0b357abe1e07/US10784546-20200922-D00005.png",
+                  "full": "fd/a0/76/1271728664e7e8/US10784546-20200922-D00005.png"
+                },
+                {
+                  "thumbnail": "4d/a7/d0/28c1101df3d4ba/US10784546-20200922-D00006.png",
+                  "full": "6f/d9/8c/cd40def9a5b288/US10784546-20200922-D00006.png"
+                },
+                {
+                  "thumbnail": "6e/15/9d/44d6b2d7174da1/US10784546-20200922-D00007.png",
+                  "full": "c7/39/c1/b7b3cf1aba91c4/US10784546-20200922-D00007.png"
+                },
+                {
+                  "thumbnail": "14/90/12/eab4a963b8e2bc/US10784546-20200922-D00008.png",
+                  "full": "5e/14/32/61cfcea0fd3184/US10784546-20200922-D00008.png"
+                },
+                {
+                  "thumbnail": "5d/4a/ba/d529e668cbc936/US10784546-20200922-D00009.png",
+                  "full": "55/63/20/f90396639391dd/US10784546-20200922-D00009.png"
+                },
+                {
+                  "thumbnail": "2d/3f/7b/9e82ff3f3db116/US10784546-20200922-D00010.png",
+                  "full": "1f/6b/87/46f739cb0de0a8/US10784546-20200922-D00010.png"
+                },
+                {
+                  "thumbnail": "9d/78/33/9c7c4cf1643449/US10784546-20200922-D00011.png",
+                  "full": "27/f8/01/767718ccb41b4b/US10784546-20200922-D00011.png"
+                },
+                {
+                  "thumbnail": "dd/89/d3/fc1501ee518100/US10784546-20200922-D00012.png",
+                  "full": "8e/16/59/4b61f81910280e/US10784546-20200922-D00012.png"
+                },
+                {
+                  "thumbnail": "3d/58/d8/105736d58fc933/US10784546-20200922-D00013.png",
+                  "full": "ea/a7/00/92f3b9b20a4a13/US10784546-20200922-D00013.png"
+                },
+                {
+                  "thumbnail": "b2/63/e3/ce9a41a7eb188c/US10784546-20200922-D00014.png",
+                  "full": "7a/7e/9f/52e2484711d7b0/US10784546-20200922-D00014.png"
+                },
+                {
+                  "thumbnail": "b5/7b/6b/73e4201048b415/US10784546-20200922-D00015.png",
+                  "full": "00/f5/aa/1ce9f1a726b005/US10784546-20200922-D00015.png"
+                }
+              ],
+              "family_metadata": {
+                "aggregated": {
+                  "country_status": [
+                    {
+                      "country_code": "WO",
+                      "best_patent_stage": {
+                        "state": "NOT_ACTIVE"
+                      }
+                    },
+                    {
+                      "country_code": "US",
+                      "best_patent_stage": {
+                        "state": "ACTIVE"
+                      }
+                    },
+                    {
+                      "country_code": "CN",
+                      "best_patent_stage": {
+                        "state": "ACTIVE"
+                      }
+                    },
+                    {
+                      "country_code": "JP",
+                      "best_patent_stage": {
+                        "state": "ACTIVE"
+                      }
+                    },
+                    {
+                      "country_code": "KR",
+                      "best_patent_stage": {
+                        "state": "ACTIVE"
+                      }
+                    },
+                    {
+                      "country_code": "DE",
+                      "best_patent_stage": {
+                        "state": "NOT_ACTIVE"
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "is_similar_document": false,
+            "entity_matches": {
+              "additional": 0
+            },
+            "measure_matches": {}
+          }
+        ]
+      }
+    ],
+    "chem_exhausted": false,
+    "summary": {
+      "assignee": [
+        {
+          "key": "Total",
+          "value": 1000,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 24
+            },
+            {
+              "key": "2022-2025",
+              "value": 323
+            },
+            {
+              "key": "2019-2022",
+              "value": 621
+            },
+            {
+              "key": "2016-2019",
+              "value": 17
+            }
+          ]
+        },
+        {
+          "key": "General Electric Company",
+          "value": 18,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 4
+            },
+            {
+              "key": "2019-2022",
+              "value": 12
+            },
+            {
+              "key": "2016-2019",
+              "value": 2
+            }
+          ]
+        },
+        {
+          "key": "Ford Global Technologies, Llc",
+          "value": 17,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 4
+            },
+            {
+              "key": "2019-2022",
+              "value": 13
+            }
+          ]
+        },
+        {
+          "key": "Oshkosh Corporation",
+          "value": 14,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 1
+            },
+            {
+              "key": "2022-2025",
+              "value": 13
+            }
+          ]
+        },
+        {
+          "key": "Hyundai Motor Company",
+          "value": 14,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 3
+            },
+            {
+              "key": "2019-2022",
+              "value": 11
+            }
+          ]
+        },
+        {
+          "key": "宁德时代新能源科技股份有限公司",
+          "value": 12,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 3
+            },
+            {
+              "key": "2019-2022",
+              "value": 9
+            }
+          ]
+        },
+        {
+          "key": "Cilag Gmbh International",
+          "value": 10,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 5
+            },
+            {
+              "key": "2019-2022",
+              "value": 5
+            }
+          ]
+        },
+        {
+          "key": "Hyperfine Operations, Inc.",
+          "value": 9,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 4
+            },
+            {
+              "key": "2019-2022",
+              "value": 5
+            }
+          ]
+        },
+        {
+          "key": "Ix Innovation Llc",
+          "value": 9,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 9
+            }
+          ]
+        },
+        {
+          "key": "Kia Motors Corporation",
+          "value": 8,
+          "frequency": [
+            {
+              "key": "2019-2022",
+              "value": 8
+            }
+          ]
+        },
+        {
+          "key": "Intel Corporation",
+          "value": 8,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 2
+            },
+            {
+              "key": "2019-2022",
+              "value": 6
+            }
+          ]
+        },
+        {
+          "key": "吉林大学",
+          "value": 8,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 1
+            },
+            {
+              "key": "2019-2022",
+              "value": 7
+            }
+          ]
+        },
+        {
+          "key": "比亚迪股份有限公司",
+          "value": 8,
+          "frequency": [
+            {
+              "key": "2019-2022",
+              "value": 7
+            },
+            {
+              "key": "2016-2019",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "广州小鹏汽车科技有限公司",
+          "value": 7,
+          "frequency": [
+            {
+              "key": "2019-2022",
+              "value": 7
+            }
+          ]
+        },
+        {
+          "key": "Contemporary Amperex Technology Co., Limited",
+          "value": 7,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 1
+            },
+            {
+              "key": "2019-2022",
+              "value": 6
+            }
+          ]
+        },
+        {
+          "key": "中国第一汽车股份有限公司",
+          "value": 7,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 1
+            },
+            {
+              "key": "2019-2022",
+              "value": 6
+            }
+          ]
+        },
+        {
+          "key": "通用电气公司",
+          "value": 7,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 3
+            },
+            {
+              "key": "2019-2022",
+              "value": 4
+            }
+          ]
+        },
+        {
+          "key": "Apple Inc.",
+          "value": 7,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 2
+            },
+            {
+              "key": "2019-2022",
+              "value": 4
+            },
+            {
+              "key": "2016-2019",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "Cilag GmbH International",
+          "value": 6,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 6
+            }
+          ]
+        },
+        {
+          "key": "Quantumscape Battery, Inc.",
+          "value": 6,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 4
+            },
+            {
+              "key": "2019-2022",
+              "value": 2
+            }
+          ]
+        }
+      ],
+      "inventor": [
+        {
+          "key": "Total",
+          "value": 1000,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 24
+            },
+            {
+              "key": "2022-2025",
+              "value": 323
+            },
+            {
+              "key": "2019-2022",
+              "value": 621
+            },
+            {
+              "key": "2016-2019",
+              "value": 17
+            }
+          ]
+        },
+        {
+          "key": "Jason L. Harris",
+          "value": 12,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 9
+            },
+            {
+              "key": "2019-2022",
+              "value": 3
+            }
+          ]
+        },
+        {
+          "key": "Patrick L. Creamer",
+          "value": 10,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 6
+            },
+            {
+              "key": "2019-2022",
+              "value": 4
+            }
+          ]
+        },
+        {
+          "key": "Frederick E. Shelton, IV",
+          "value": 10,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 5
+            },
+            {
+              "key": "2019-2022",
+              "value": 5
+            }
+          ]
+        },
+        {
+          "key": "Jeffrey Roh",
+          "value": 10,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 10
+            }
+          ]
+        },
+        {
+          "key": "John Cronin",
+          "value": 9,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 9
+            }
+          ]
+        },
+        {
+          "key": "Justin Esterberg",
+          "value": 9,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 9
+            }
+          ]
+        },
+        {
+          "key": "Seth Cronin",
+          "value": 9,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 9
+            }
+          ]
+        },
+        {
+          "key": "Brandon Wayne Miller",
+          "value": 8,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 3
+            },
+            {
+              "key": "2019-2022",
+              "value": 4
+            },
+            {
+              "key": "2016-2019",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "Joshua D. Rocholl",
+          "value": 8,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 1
+            },
+            {
+              "key": "2022-2025",
+              "value": 7
+            }
+          ]
+        },
+        {
+          "key": "Michael John Baker",
+          "value": 8,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 8
+            }
+          ]
+        },
+        {
+          "key": "Chad K. Smith",
+          "value": 8,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 1
+            },
+            {
+              "key": "2022-2025",
+              "value": 7
+            }
+          ]
+        },
+        {
+          "key": "Jacob Mertel",
+          "value": 7,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 1
+            },
+            {
+              "key": "2019-2022",
+              "value": 6
+            }
+          ]
+        },
+        {
+          "key": "Shane R. Adams",
+          "value": 7,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 5
+            },
+            {
+              "key": "2019-2022",
+              "value": 2
+            }
+          ]
+        },
+        {
+          "key": "Emily Davis",
+          "value": 7,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 1
+            },
+            {
+              "key": "2022-2025",
+              "value": 6
+            }
+          ]
+        },
+        {
+          "key": "Clinton T. Weckwerth",
+          "value": 7,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 1
+            },
+            {
+              "key": "2022-2025",
+              "value": 6
+            }
+          ]
+        },
+        {
+          "key": "Morgan R. Hunter",
+          "value": 7,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 4
+            },
+            {
+              "key": "2019-2022",
+              "value": 3
+            }
+          ]
+        },
+        {
+          "key": "John David Enright",
+          "value": 7,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 1
+            },
+            {
+              "key": "2019-2022",
+              "value": 6
+            }
+          ]
+        },
+        {
+          "key": "Michael Stephen Poole",
+          "value": 6,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 3
+            },
+            {
+              "key": "2019-2022",
+              "value": 3
+            }
+          ]
+        },
+        {
+          "key": "Jeremy Christopher Jordan",
+          "value": 6,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 2
+            },
+            {
+              "key": "2019-2022",
+              "value": 4
+            }
+          ]
+        }
+      ],
+      "cpc": [
+        {
+          "key": "Total",
+          "value": 1000,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 24
+            },
+            {
+              "key": "2022-2025",
+              "value": 323
+            },
+            {
+              "key": "2019-2022",
+              "value": 621
+            },
+            {
+              "key": "2016-2019",
+              "value": 17
+            }
+          ]
+        },
+        {
+          "key": "Y02E",
+          "value": 325,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 7
+            },
+            {
+              "key": "2022-2025",
+              "value": 89
+            },
+            {
+              "key": "2019-2022",
+              "value": 216
+            },
+            {
+              "key": "2016-2019",
+              "value": 9
+            }
+          ]
+        },
+        {
+          "key": "H01M",
+          "value": 319,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 4
+            },
+            {
+              "key": "2022-2025",
+              "value": 94
+            },
+            {
+              "key": "2019-2022",
+              "value": 209
+            },
+            {
+              "key": "2016-2019",
+              "value": 8
+            }
+          ]
+        },
+        {
+          "key": "Y02T",
+          "value": 311,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 90
+            },
+            {
+              "key": "2019-2022",
+              "value": 208
+            },
+            {
+              "key": "2016-2019",
+              "value": 9
+            }
+          ]
+        },
+        {
+          "key": "B60L",
+          "value": 254,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 75
+            },
+            {
+              "key": "2019-2022",
+              "value": 168
+            },
+            {
+              "key": "2016-2019",
+              "value": 8
+            }
+          ]
+        },
+        {
+          "key": "B60H",
+          "value": 156,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 34
+            },
+            {
+              "key": "2019-2022",
+              "value": 117
+            },
+            {
+              "key": "2016-2019",
+              "value": 3
+            }
+          ]
+        },
+        {
+          "key": "G06F",
+          "value": 128,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 8
+            },
+            {
+              "key": "2022-2025",
+              "value": 41
+            },
+            {
+              "key": "2019-2022",
+              "value": 76
+            },
+            {
+              "key": "2016-2019",
+              "value": 2
+            }
+          ]
+        },
+        {
+          "key": "B60K",
+          "value": 114,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 37
+            },
+            {
+              "key": "2019-2022",
+              "value": 73
+            },
+            {
+              "key": "2016-2019",
+              "value": 3
+            }
+          ]
+        },
+        {
+          "key": "H05K",
+          "value": 105,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 41
+            },
+            {
+              "key": "2019-2022",
+              "value": 61
+            },
+            {
+              "key": "2016-2019",
+              "value": 2
+            }
+          ]
+        },
+        {
+          "key": "H02J",
+          "value": 95,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 3
+            },
+            {
+              "key": "2022-2025",
+              "value": 37
+            },
+            {
+              "key": "2019-2022",
+              "value": 51
+            },
+            {
+              "key": "2016-2019",
+              "value": 3
+            }
+          ]
+        },
+        {
+          "key": "G01R",
+          "value": 72,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 3
+            },
+            {
+              "key": "2022-2025",
+              "value": 19
+            },
+            {
+              "key": "2019-2022",
+              "value": 48
+            },
+            {
+              "key": "2016-2019",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "B60Y",
+          "value": 61,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 25
+            },
+            {
+              "key": "2019-2022",
+              "value": 34
+            },
+            {
+              "key": "2016-2019",
+              "value": 2
+            }
+          ]
+        },
+        {
+          "key": "A61B",
+          "value": 53,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 31
+            },
+            {
+              "key": "2019-2022",
+              "value": 22
+            }
+          ]
+        },
+        {
+          "key": "B64D",
+          "value": 52,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 24
+            },
+            {
+              "key": "2019-2022",
+              "value": 27
+            },
+            {
+              "key": "2016-2019",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "G06N",
+          "value": 52,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 9
+            },
+            {
+              "key": "2022-2025",
+              "value": 14
+            },
+            {
+              "key": "2019-2022",
+              "value": 28
+            },
+            {
+              "key": "2016-2019",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "Y02P",
+          "value": 51,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 12
+            },
+            {
+              "key": "2019-2022",
+              "value": 39
+            }
+          ]
+        },
+        {
+          "key": "H10W",
+          "value": 49,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 18
+            },
+            {
+              "key": "2019-2022",
+              "value": 30
+            },
+            {
+              "key": "2016-2019",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "G05B",
+          "value": 48,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 4
+            },
+            {
+              "key": "2022-2025",
+              "value": 13
+            },
+            {
+              "key": "2019-2022",
+              "value": 30
+            },
+            {
+              "key": "2016-2019",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "F05D",
+          "value": 47,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 17
+            },
+            {
+              "key": "2019-2022",
+              "value": 28
+            },
+            {
+              "key": "2016-2019",
+              "value": 2
+            }
+          ]
+        },
+        {
+          "key": "F02C",
+          "value": 44,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 16
+            },
+            {
+              "key": "2019-2022",
+              "value": 26
+            },
+            {
+              "key": "2016-2019",
+              "value": 2
+            }
+          ]
+        }
+      ]
+    },
+    "landscape": {
+      "related_landscapes": [
+        {
+          "name": "Engineering & Computer Science",
+          "landscape_type": "AREA"
+        },
+        {
+          "name": "Physics & Mathematics",
+          "landscape_type": "AREA"
+        },
+        {
+          "name": "Chemical & Material Sciences",
+          "landscape_type": "AREA"
+        }
+      ]
+    }
+  }
+}

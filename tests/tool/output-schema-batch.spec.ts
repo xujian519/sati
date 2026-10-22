@@ -48,6 +48,8 @@ const SAMPLE_DATA: Record<string, unknown> = {
       },
     ],
     warnings: [],
+    dataSource: "ego-json",
+    cache: { hit: true, ageMs: 1200 },
   },
   patent_case_search: {
     total: 1,

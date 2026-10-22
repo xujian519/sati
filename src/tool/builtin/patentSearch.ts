@@ -8,6 +8,11 @@
 
 import { searchPatents as searchPatentsImpl, type PatentSearchHit } from "nuo-patent";
 import { cachedSearchPatents } from "../../patent/data/nuo/patentCache.js";
+import {
+  withEgoJsonSearch,
+  type PatentSearchDataSource,
+  type SourcedPatentSearchResult,
+} from "../../patent/data/nuo/searchProvider.js";
 import { SatiToolRuntimeError } from "../protocol/errors.js";
 import type { SatiToolDefinition } from "../protocol/types.js";
 
@@ -34,6 +39,10 @@ export type PatentSearchOutput = {
   hits: PatentSearchHitItem[];
   /** 非致命警告（解析降级/部分字段缺失） */
   warnings: string[];
+  /** 数据来源：ego JSON / 原生 fetch JSON / vendor 回退 / 注入实现未知 */
+  dataSource: PatentSearchDataSource;
+  /** 缓存命中状态（命中时附条目年龄） */
+  cache: { hit: boolean; ageMs?: number };
 };
 
 export type CreatePatentSearchToolOptions = {
@@ -110,7 +119,7 @@ export function createPatentSearchTool(
   // 默认实现包一层 LRU 缓存 + 并发合并：同一检索式在 TTL 内重复调用（agent
   // 重试/多工具并行）直接命中，不再 spawn ego-browser / 打 Google。
   // 测试注入的 mock search 原样使用（不套缓存，保持行为可预期）。
-  const search = options?.search ? options.search : cachedSearchPatents(searchPatentsImpl);
+  const search = options?.search ? options.search : cachedSearchPatents(withEgoJsonSearch(searchPatentsImpl));
 
   return {
     name: "patent_search",
@@ -146,7 +155,7 @@ export function createPatentSearchTool(
     },
     outputSchema: {
       type: "object",
-      required: ["query", "total", "hits", "warnings"],
+      required: ["query", "total", "hits", "warnings", "dataSource", "cache"],
       additionalProperties: false,
       properties: {
         query: { type: "string" },
@@ -169,6 +178,16 @@ export function createPatentSearchTool(
           },
         },
         warnings: { type: "array", items: { type: "string" } },
+        dataSource: { type: "string", enum: ["ego-json", "native-json", "vendor", "unknown"] },
+        cache: {
+          type: "object",
+          required: ["hit"],
+          additionalProperties: false,
+          properties: {
+            hit: { type: "boolean" },
+            ageMs: { type: "number" },
+          },
+        },
       },
     },
     isReadOnly: () => true,
@@ -187,8 +206,12 @@ export function createPatentSearchTool(
         signal: context.abortSignal,
       });
 
-      // 区分"源错误"与"无结果"：失败类警告抛结构化错误，解析类警告透出。
-      const failure = result.warnings.find(w => /^(查询条件为空|检索超时|检索失败)/.test(w));
+      // 区分"源错误""解析失败"与"无结果"：前两者抛结构化错误，后者作为数据返回。
+      const parseFailure = result.warnings.find(w => w.startsWith("PARSE_ERROR"));
+      if (parseFailure) {
+        throw new SatiToolRuntimeError("tool_execution_failed", parseFailure, { tool: "patent_search", query });
+      }
+      const failure = result.warnings.find(w => /^(查询条件为空|检索超时|检索失败|请求已被取消)/.test(w));
       if (failure) {
         if (failure.startsWith("检索超时")) {
           throw new SatiToolRuntimeError("tool_timeout", failure, { tool: "patent_search", query });
@@ -202,6 +225,9 @@ export function createPatentSearchTool(
       // P2-06：family 去重——同基号（公开/授权变体）只留 publicationDate 最新一篇。
       const { hits: dedupedHits, warnings } = dedupeByFamily(result.hits, result.warnings);
       const hits = dedupedHits.map(toItem);
+      const sourced = result as SourcedPatentSearchResult;
+      const dataSource: PatentSearchDataSource = sourced.dataSource ?? "unknown";
+      const cache = sourced.cache ?? { hit: false };
       const lines = hits.map(h =>
         [
           `## ${h.title || h.patent}`,
@@ -221,8 +247,14 @@ export function createPatentSearchTool(
             ),
           },
         ],
-        data: { query, total: result.total, hits, warnings },
-        metadata: { query, count: hits.length },
+        data: { query, total: result.total, hits, warnings, dataSource, cache },
+        metadata: {
+          query,
+          count: hits.length,
+          dataSource,
+          cacheHit: cache.hit,
+          ...(cache.ageMs !== undefined ? { cacheAgeMs: cache.ageMs } : {}),
+        },
       };
     },
   };

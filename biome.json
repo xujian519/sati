@@ -15,6 +15,7 @@
       "!apps/desktop/electron-dist/**",
       "!.codegraph/**",
       "!.dsh/**",
+      "!.worktrees/**",
       "!ui/public/**",
       "!ui/src/index.css",
       "!skills/**",

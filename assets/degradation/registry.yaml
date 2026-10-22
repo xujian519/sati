@@ -222,6 +222,15 @@ entries:
     observability: "warnings"
     negativeDrill: tests/tool/builtin/patentSearch.spec.ts
 
+  - id: patent-search-parse-error
+    component: src/patent/data/nuo/searchProvider.ts
+    dependency: "Google Patents XHR JSON 主路径（ego outerHTML 解包 / 原生 fetch）"
+    failDirection: closed
+    degradedBehavior: "JSON 结构性解析失败 → PARSE_ERROR（工具层 tool_execution_failed），不回退 HTML 冒充 0 命中；缓存跳过写入"
+    degradedImpact: "模型收到明确解析错误而非空结果；解析故障不再被 TTL 固化"
+    observability: "PARSE_ERROR warning + 结构化错误码 tool_execution_failed + dataSource=vendor"
+    negativeDrill: tests/patent/data/nuo/searchProvider.spec.ts
+
   - id: patent-pdf-download-entry-fallback
     component: src/tool/builtin/patent-pdf-download/fetchFallback.ts
     dependency: "专利 PDF 下载（浏览器驱动 + fetch 兜底）"

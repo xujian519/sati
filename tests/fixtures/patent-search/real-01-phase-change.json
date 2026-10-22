@@ -1,0 +1,1631 @@
+{
+  "results": {
+    "total_num_results": 123547,
+    "total_num_pages": 99,
+    "many_results": false,
+    "num_page": 0,
+    "cluster": [
+      {
+        "result": [
+          {
+            "id": "patent/US11378282B2/en",
+            "rank": 0,
+            "patent": {
+              "title": " Energy storage systems",
+              "snippet": " There is herein described energy storage systems. More particularly, there is herein described <b>thermal</b> energy storage systems and use of energy storable material such as <b>phase change material</b> in the provision of <b>heating</b> and/or cooling systems in, for example, domestic dwellings.",
+              "priority_date": "2009-11-16",
+              "filing_date": "2020-01-12",
+              "grant_date": "2022-07-05",
+              "publication_date": "2022-07-05",
+              "inventor": "John Field",
+              "assignee": "Sunamp Limited",
+              "publication_number": "US11378282B2",
+              "language": "en",
+              "thumbnail": "56/4d/6e/2e82afee6afe65/US11378282-20220705-D00000.png",
+              "pdf": "04/a3/e0/9093fd626d7e8f/US11378282.pdf",
+              "figures": [
+                {
+                  "thumbnail": "cc/e2/65/71ceb19316c87a/US11378282-20220705-D00000.png",
+                  "full": "4d/ff/0f/8769c5b75eede4/US11378282-20220705-D00000.png"
+                },
+                {
+                  "thumbnail": "98/68/64/cd8ca8eb52deb7/US11378282-20220705-D00001.png",
+                  "full": "95/a6/f6/1151186c953c53/US11378282-20220705-D00001.png"
+                },
+                {
+                  "thumbnail": "0c/bf/3c/7ba63beca9d3e1/US11378282-20220705-D00002.png",
+                  "full": "08/82/fd/ca1600206616ec/US11378282-20220705-D00002.png"
+                },
+                {
+                  "thumbnail": "ff/02/b9/1c8633d09c5e88/US11378282-20220705-D00003.png",
+                  "full": "e6/66/ed/ca7391f9668f79/US11378282-20220705-D00003.png"
+                },
+                {
+                  "thumbnail": "f6/7f/43/49c1da7fb6ef2c/US11378282-20220705-D00004.png",
+                  "full": "02/7b/39/1d6d21599178ad/US11378282-20220705-D00004.png"
+                },
+                {
+                  "thumbnail": "85/24/4e/546305c8de9595/US11378282-20220705-D00005.png",
+                  "full": "f9/97/f7/2c0680e70a73b1/US11378282-20220705-D00005.png"
+                },
+                {
+                  "thumbnail": "b9/1f/23/3f8c06a0e6c596/US11378282-20220705-D00006.png",
+                  "full": "1d/79/2e/ac361ff8968112/US11378282-20220705-D00006.png"
+                },
+                {
+                  "thumbnail": "32/c5/68/3a127a08b3c396/US11378282-20220705-D00007.png",
+                  "full": "c9/5b/9e/cf9220298d524e/US11378282-20220705-D00007.png"
+                },
+                {
+                  "thumbnail": "d1/3b/7b/c795150dd4a1bf/US11378282-20220705-D00008.png",
+                  "full": "0e/17/4d/f1268b1bbcfc80/US11378282-20220705-D00008.png"
+                },
+                {
+                  "thumbnail": "b2/11/ed/decf93fdf415e6/US11378282-20220705-D00009.png",
+                  "full": "82/77/c9/1f1692f753b112/US11378282-20220705-D00009.png"
+                },
+                {
+                  "thumbnail": "70/6d/f8/5888e382e1cb9c/US11378282-20220705-D00010.png",
+                  "full": "99/d5/14/6c49e36db5af25/US11378282-20220705-D00010.png"
+                },
+                {
+                  "thumbnail": "c5/dc/4f/13ae7d1964907a/US11378282-20220705-D00011.png",
+                  "full": "bf/6e/84/d7c3bc04b2244d/US11378282-20220705-D00011.png"
+                },
+                {
+                  "thumbnail": "2e/14/1c/0dc2d09fe36ac3/US11378282-20220705-D00012.png",
+                  "full": "36/e5/b4/515a8a3747e190/US11378282-20220705-D00012.png"
+                },
+                {
+                  "thumbnail": "8f/f7/48/1a2e9e797b3298/US11378282-20220705-D00013.png",
+                  "full": "26/4d/66/bae7a284636865/US11378282-20220705-D00013.png"
+                },
+                {
+                  "thumbnail": "52/09/64/6ef0d94808f161/US11378282-20220705-D00014.png",
+                  "full": "2a/a8/f1/3ba22a7487c61c/US11378282-20220705-D00014.png"
+                },
+                {
+                  "thumbnail": "b4/e9/07/a19b60b31d73f9/US11378282-20220705-D00015.png",
+                  "full": "e5/63/a9/dc02a4fdb7c5ee/US11378282-20220705-D00015.png"
+                },
+                {
+                  "thumbnail": "85/d0/94/666b90187ddcaa/US11378282-20220705-D00016.png",
+                  "full": "8c/6c/b6/41e9b732f71e40/US11378282-20220705-D00016.png"
+                },
+                {
+                  "thumbnail": "33/d0/21/addab1c3c62242/US11378282-20220705-D00017.png",
+                  "full": "4f/26/cf/a3a863a8587660/US11378282-20220705-D00017.png"
+                },
+                {
+                  "thumbnail": "ca/c0/8f/ff60dd851cf0fb/US11378282-20220705-D00018.png",
+                  "full": "a7/5c/3a/60defbd77c2045/US11378282-20220705-D00018.png"
+                },
+                {
+                  "thumbnail": "b4/dd/eb/312fe177e6623d/US11378282-20220705-D00019.png",
+                  "full": "84/d2/b1/af4277d800b721/US11378282-20220705-D00019.png"
+                },
+                {
+                  "thumbnail": "3d/cf/9c/54cdcfa6a00d24/US11378282-20220705-D00020.png",
+                  "full": "26/29/cc/8e406b99faf2c6/US11378282-20220705-D00020.png"
+                },
+                {
+                  "thumbnail": "fc/2d/c2/f5adc09e119128/US11378282-20220705-D00021.png",
+                  "full": "6f/12/01/7e124b336416a4/US11378282-20220705-D00021.png"
+                },
+                {
+                  "thumbnail": "f4/f0/cc/abce4dd14d1eb3/US11378282-20220705-D00022.png",
+                  "full": "82/0f/03/ac14c51737dc47/US11378282-20220705-D00022.png"
+                },
+                {
+                  "thumbnail": "d0/41/50/4755d3cb8e7695/US11378282-20220705-D00023.png",
+                  "full": "1a/ff/1b/afb46e185ba32c/US11378282-20220705-D00023.png"
+                },
+                {
+                  "thumbnail": "d8/55/03/ec19b2286804b1/US11378282-20220705-D00024.png",
+                  "full": "7b/87/82/55f3fb4ffabf7a/US11378282-20220705-D00024.png"
+                },
+                {
+                  "thumbnail": "25/03/64/c167bed04ba9a7/US11378282-20220705-D00025.png",
+                  "full": "92/2c/6c/c7c2e5704318e2/US11378282-20220705-D00025.png"
+                },
+                {
+                  "thumbnail": "f9/a9/9b/8b2b1ed28f9d1f/US11378282-20220705-D00026.png",
+                  "full": "af/81/78/6858078ffb9dc8/US11378282-20220705-D00026.png"
+                },
+                {
+                  "thumbnail": "9e/9b/f5/58284313df0885/US11378282-20220705-D00027.png",
+                  "full": "aa/57/9e/29b26eb6ab21ab/US11378282-20220705-D00027.png"
+                },
+                {
+                  "thumbnail": "35/e9/5b/4a935c80dd90de/US11378282-20220705-D00028.png",
+                  "full": "07/06/58/40b51e8102dd21/US11378282-20220705-D00028.png"
+                },
+                {
+                  "thumbnail": "23/e1/a2/e3fcdc0040478e/US11378282-20220705-D00029.png",
+                  "full": "a8/d9/f1/8783cd76c918d8/US11378282-20220705-D00029.png"
+                },
+                {
+                  "thumbnail": "da/61/10/025709b72ff7b4/US11378282-20220705-D00030.png",
+                  "full": "86/8f/08/37bd942c600d8c/US11378282-20220705-D00030.png"
+                },
+                {
+                  "thumbnail": "02/70/9e/d2b55eafd2d587/US11378282-20220705-D00031.png",
+                  "full": "d6/f3/23/82d208afe2a5ee/US11378282-20220705-D00031.png"
+                },
+                {
+                  "thumbnail": "d2/3f/56/b0b2a42c40bada/US11378282-20220705-D00032.png",
+                  "full": "1c/40/dd/49ed7543ad707f/US11378282-20220705-D00032.png"
+                },
+                {
+                  "thumbnail": "46/21/ae/a3bd03a0627948/US11378282-20220705-D00033.png",
+                  "full": "16/ef/f2/3384f66f0478fd/US11378282-20220705-D00033.png"
+                },
+                {
+                  "thumbnail": "26/49/f5/bd4d75492360a9/US11378282-20220705-D00034.png",
+                  "full": "57/36/74/90c5741543aaa6/US11378282-20220705-D00034.png"
+                },
+                {
+                  "thumbnail": "58/84/8b/feaacdfd29da18/US11378282-20220705-D00035.png",
+                  "full": "98/92/2f/e2fdb5cd8cba4c/US11378282-20220705-D00035.png"
+                },
+                {
+                  "thumbnail": "b8/dc/0e/2cd249ba963ea8/US11378282-20220705-D00036.png",
+                  "full": "85/38/1f/b29bf32bd13aa5/US11378282-20220705-D00036.png"
+                },
+                {
+                  "thumbnail": "ca/30/ab/50bd3c87e342af/US11378282-20220705-D00037.png",
+                  "full": "c6/90/cd/b556388473e6d7/US11378282-20220705-D00037.png"
+                }
+              ],
+              "family_metadata": {
+                "aggregated": {
+                  "country_status": [
+                    {
+                      "country_code": "WO",
+                      "best_patent_stage": {
+                        "state": "NOT_ACTIVE"
+                      }
+                    },
+                    {
+                      "country_code": "EP",
+                      "best_patent_stage": {
+                        "state": "ACTIVE"
+                      }
+                    },
+                    {
+                      "country_code": "US",
+                      "best_patent_stage": {
+                        "state": "ACTIVE"
+                      }
+                    },
+                    {
+                      "country_code": "CN",
+                      "best_patent_stage": {
+                        "state": "ACTIVE"
+                      }
+                    },
+                    {
+                      "country_code": "KR",
+                      "best_patent_stage": {
+                        "state": "ACTIVE"
+                      }
+                    },
+                    {
+                      "country_code": "DK",
+                      "best_patent_stage": {
+                        "state": "ACTIVE"
+                      }
+                    },
+                    {
+                      "country_code": "ES",
+                      "best_patent_stage": {
+                        "state": "ACTIVE"
+                      }
+                    },
+                    {
+                      "country_code": "GB",
+                      "best_patent_stage": {
+                        "state": "NOT_ACTIVE"
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "is_similar_document": false,
+            "entity_matches": {
+              "additional": 0
+            },
+            "measure_matches": {}
+          },
+          {
+            "id": "patent/US20260163112A1/en",
+            "rank": 1,
+            "patent": {
+              "title": " <b>Thermal</b> management system and device",
+              "snippet": " 15 . The <b>thermal</b> management system according to claim 14 wherein the fire-retardant material comprises at least one of a metal foam, a carbon foam, a graphite foam, a carbon-graphite foam, a melamine carbon foam, or melamine fibers. 16 . A <b>thermal</b> management system for exothermic devices, comprising:",
+              "priority_date": "2019-03-22",
+              "filing_date": "2025-07-14",
+              "publication_date": "2026-06-11",
+              "inventor": "Siddique Ali Khateeb Razack",
+              "assignee": "Siddique Ali Khateeb Razack",
+              "publication_number": "US20260163112A1",
+              "language": "en",
+              "thumbnail": "60x80/US20260163112A1/US20260163112A1-20260611-D00000.png",
+              "pdf": "",
+              "figures": [
+                {
+                  "thumbnail": "thumbnails/US20260163112A1/US20260163112A1-20260611-D00000.png",
+                  "full": "US20260163112A1/US20260163112A1-20260611-D00000.png"
+                },
+                {
+                  "thumbnail": "thumbnails/US20260163112A1/US20260163112A1-20260611-D00001.png",
+                  "full": "US20260163112A1/US20260163112A1-20260611-D00001.png"
+                },
+                {
+                  "thumbnail": "thumbnails/US20260163112A1/US20260163112A1-20260611-D00002.png",
+                  "full": "US20260163112A1/US20260163112A1-20260611-D00002.png"
+                },
+                {
+                  "thumbnail": "thumbnails/US20260163112A1/US20260163112A1-20260611-D00003.png",
+                  "full": "US20260163112A1/US20260163112A1-20260611-D00003.png"
+                },
+                {
+                  "thumbnail": "thumbnails/US20260163112A1/US20260163112A1-20260611-D00004.png",
+                  "full": "US20260163112A1/US20260163112A1-20260611-D00004.png"
+                },
+                {
+                  "thumbnail": "thumbnails/US20260163112A1/US20260163112A1-20260611-D00005.png",
+                  "full": "US20260163112A1/US20260163112A1-20260611-D00005.png"
+                },
+                {
+                  "thumbnail": "thumbnails/US20260163112A1/US20260163112A1-20260611-D00006.png",
+                  "full": "US20260163112A1/US20260163112A1-20260611-D00006.png"
+                },
+                {
+                  "thumbnail": "thumbnails/US20260163112A1/US20260163112A1-20260611-D00007.png",
+                  "full": "US20260163112A1/US20260163112A1-20260611-D00007.png"
+                },
+                {
+                  "thumbnail": "thumbnails/US20260163112A1/US20260163112A1-20260611-D00008.png",
+                  "full": "US20260163112A1/US20260163112A1-20260611-D00008.png"
+                },
+                {
+                  "thumbnail": "thumbnails/US20260163112A1/US20260163112A1-20260611-D00009.png",
+                  "full": "US20260163112A1/US20260163112A1-20260611-D00009.png"
+                },
+                {
+                  "thumbnail": "thumbnails/US20260163112A1/US20260163112A1-20260611-D00010.png",
+                  "full": "US20260163112A1/US20260163112A1-20260611-D00010.png"
+                },
+                {
+                  "thumbnail": "thumbnails/US20260163112A1/US20260163112A1-20260611-D00011.png",
+                  "full": "US20260163112A1/US20260163112A1-20260611-D00011.png"
+                },
+                {
+                  "thumbnail": "thumbnails/US20260163112A1/US20260163112A1-20260611-D00012.png",
+                  "full": "US20260163112A1/US20260163112A1-20260611-D00012.png"
+                },
+                {
+                  "thumbnail": "thumbnails/US20260163112A1/US20260163112A1-20260611-D00013.png",
+                  "full": "US20260163112A1/US20260163112A1-20260611-D00013.png"
+                },
+                {
+                  "thumbnail": "thumbnails/US20260163112A1/US20260163112A1-20260611-D00014.png",
+                  "full": "US20260163112A1/US20260163112A1-20260611-D00014.png"
+                },
+                {
+                  "thumbnail": "thumbnails/US20260163112A1/US20260163112A1-20260611-D00015.png",
+                  "full": "US20260163112A1/US20260163112A1-20260611-D00015.png"
+                },
+                {
+                  "thumbnail": "thumbnails/US20260163112A1/US20260163112A1-20260611-D00016.png",
+                  "full": "US20260163112A1/US20260163112A1-20260611-D00016.png"
+                },
+                {
+                  "thumbnail": "thumbnails/US20260163112A1/US20260163112A1-20260611-D00017.png",
+                  "full": "US20260163112A1/US20260163112A1-20260611-D00017.png"
+                },
+                {
+                  "thumbnail": "thumbnails/US20260163112A1/US20260163112A1-20260611-D00018.png",
+                  "full": "US20260163112A1/US20260163112A1-20260611-D00018.png"
+                },
+                {
+                  "thumbnail": "thumbnails/US20260163112A1/US20260163112A1-20260611-D00019.png",
+                  "full": "US20260163112A1/US20260163112A1-20260611-D00019.png"
+                },
+                {
+                  "thumbnail": "thumbnails/US20260163112A1/US20260163112A1-20260611-D00020.png",
+                  "full": "US20260163112A1/US20260163112A1-20260611-D00020.png"
+                },
+                {
+                  "thumbnail": "thumbnails/US20260163112A1/US20260163112A1-20260611-D00021.png",
+                  "full": "US20260163112A1/US20260163112A1-20260611-D00021.png"
+                },
+                {
+                  "thumbnail": "thumbnails/US20260163112A1/US20260163112A1-20260611-D00022.png",
+                  "full": "US20260163112A1/US20260163112A1-20260611-D00022.png"
+                },
+                {
+                  "thumbnail": "thumbnails/US20260163112A1/US20260163112A1-20260611-D00023.png",
+                  "full": "US20260163112A1/US20260163112A1-20260611-D00023.png"
+                },
+                {
+                  "thumbnail": "thumbnails/US20260163112A1/US20260163112A1-20260611-D00024.png",
+                  "full": "US20260163112A1/US20260163112A1-20260611-D00024.png"
+                },
+                {
+                  "thumbnail": "thumbnails/US20260163112A1/US20260163112A1-20260611-D00025.png",
+                  "full": "US20260163112A1/US20260163112A1-20260611-D00025.png"
+                },
+                {
+                  "thumbnail": "thumbnails/US20260163112A1/US20260163112A1-20260611-D00026.png",
+                  "full": "US20260163112A1/US20260163112A1-20260611-D00026.png"
+                },
+                {
+                  "thumbnail": "thumbnails/US20260163112A1/US20260163112A1-20260611-D00027.png",
+                  "full": "US20260163112A1/US20260163112A1-20260611-D00027.png"
+                },
+                {
+                  "thumbnail": "thumbnails/US20260163112A1/US20260163112A1-20260611-D00028.png",
+                  "full": "US20260163112A1/US20260163112A1-20260611-D00028.png"
+                },
+                {
+                  "thumbnail": "thumbnails/US20260163112A1/US20260163112A1-20260611-D00029.png",
+                  "full": "US20260163112A1/US20260163112A1-20260611-D00029.png"
+                },
+                {
+                  "thumbnail": "thumbnails/US20260163112A1/US20260163112A1-20260611-D00030.png",
+                  "full": "US20260163112A1/US20260163112A1-20260611-D00030.png"
+                },
+                {
+                  "thumbnail": "thumbnails/US20260163112A1/US20260163112A1-20260611-D00031.png",
+                  "full": "US20260163112A1/US20260163112A1-20260611-D00031.png"
+                },
+                {
+                  "thumbnail": "thumbnails/US20260163112A1/US20260163112A1-20260611-D00032.png",
+                  "full": "US20260163112A1/US20260163112A1-20260611-D00032.png"
+                },
+                {
+                  "thumbnail": "thumbnails/US20260163112A1/US20260163112A1-20260611-D00033.png",
+                  "full": "US20260163112A1/US20260163112A1-20260611-D00033.png"
+                },
+                {
+                  "thumbnail": "thumbnails/US20260163112A1/US20260163112A1-20260611-D00034.png",
+                  "full": "US20260163112A1/US20260163112A1-20260611-D00034.png"
+                },
+                {
+                  "thumbnail": "thumbnails/US20260163112A1/US20260163112A1-20260611-D00035.png",
+                  "full": "US20260163112A1/US20260163112A1-20260611-D00035.png"
+                },
+                {
+                  "thumbnail": "thumbnails/US20260163112A1/US20260163112A1-20260611-D00036.png",
+                  "full": "US20260163112A1/US20260163112A1-20260611-D00036.png"
+                },
+                {
+                  "thumbnail": "thumbnails/US20260163112A1/US20260163112A1-20260611-D00037.png",
+                  "full": "US20260163112A1/US20260163112A1-20260611-D00037.png"
+                },
+                {
+                  "thumbnail": "thumbnails/US20260163112A1/US20260163112A1-20260611-D00038.png",
+                  "full": "US20260163112A1/US20260163112A1-20260611-D00038.png"
+                },
+                {
+                  "thumbnail": "thumbnails/US20260163112A1/US20260163112A1-20260611-D00039.png",
+                  "full": "US20260163112A1/US20260163112A1-20260611-D00039.png"
+                },
+                {
+                  "thumbnail": "thumbnails/US20260163112A1/US20260163112A1-20260611-D00040.png",
+                  "full": "US20260163112A1/US20260163112A1-20260611-D00040.png"
+                },
+                {
+                  "thumbnail": "thumbnails/US20260163112A1/US20260163112A1-20260611-D00041.png",
+                  "full": "US20260163112A1/US20260163112A1-20260611-D00041.png"
+                },
+                {
+                  "thumbnail": "thumbnails/US20260163112A1/US20260163112A1-20260611-D00042.png",
+                  "full": "US20260163112A1/US20260163112A1-20260611-D00042.png"
+                },
+                {
+                  "thumbnail": "thumbnails/US20260163112A1/US20260163112A1-20260611-D00043.png",
+                  "full": "US20260163112A1/US20260163112A1-20260611-D00043.png"
+                },
+                {
+                  "thumbnail": "thumbnails/US20260163112A1/US20260163112A1-20260611-D00044.png",
+                  "full": "US20260163112A1/US20260163112A1-20260611-D00044.png"
+                }
+              ],
+              "family_metadata": {
+                "aggregated": {
+                  "country_status": [
+                    {
+                      "country_code": "WO",
+                      "best_patent_stage": {
+                        "state": "NOT_ACTIVE"
+                      }
+                    },
+                    {
+                      "country_code": "EP",
+                      "best_patent_stage": {
+                        "state": "ACTIVE"
+                      }
+                    },
+                    {
+                      "country_code": "US",
+                      "best_patent_stage": {
+                        "state": "ACTIVE"
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "is_similar_document": false,
+            "entity_matches": {
+              "additional": 0
+            },
+            "measure_matches": {}
+          },
+          {
+            "id": "patent/CN112771345B/en",
+            "rank": 2,
+            "patent": {
+              "title": " <b>Thermal</b> management structure with integrated channels",
+              "snippet": " 8. The assembly of claim 7: -wherein the battery (64) is arranged in <b>heat</b> exchange with the tray on a first side of the battery, the channel (11) being connected to a first supply (77) of fluid to be circulated through the channel, and, -the assembly further comprises a cooling plate (69) in &hellip;",
+              "priority_date": "2018-08-31",
+              "filing_date": "2019-09-02",
+              "grant_date": "2023-01-13",
+              "publication_date": "2023-01-13",
+              "inventor": "法布里塞·乔帕德",
+              "assignee": "哈金森公司",
+              "publication_number": "CN112771345B",
+              "language": "en",
+              "thumbnail": "2e/f0/ce/b539f988628077/HDA0002992313810000011.png",
+              "pdf": "8a/ea/79/0fa0583ec2ab75/CN112771345B.pdf",
+              "figures": [
+                {
+                  "thumbnail": "1a/df/c1/d6fb94900c0013/HDA0002992313810000011.png",
+                  "full": "de/08/f4/eb5e42bc936cfb/HDA0002992313810000011.png"
+                },
+                {
+                  "thumbnail": "48/35/f9/f2f3cb575260c0/HDA0002992313810000012.png",
+                  "full": "57/b1/f1/2d056b9a5dcaa4/HDA0002992313810000012.png"
+                },
+                {
+                  "thumbnail": "c3/a2/2b/9a35cb8d98bd88/HDA0002992313810000013.png",
+                  "full": "1f/8f/8b/0dcc10daa3b526/HDA0002992313810000013.png"
+                },
+                {
+                  "thumbnail": "1c/b9/ab/57371b41284744/HDA0002992313810000021.png",
+                  "full": "d6/ec/9c/fe505470e3892f/HDA0002992313810000021.png"
+                },
+                {
+                  "thumbnail": "15/6f/76/9ac750f0bf0cca/HDA0002992313810000031.png",
+                  "full": "02/a4/ee/5c17fc9226bb2f/HDA0002992313810000031.png"
+                },
+                {
+                  "thumbnail": "fc/d9/ba/885608c9e1036b/HDA0002992313810000032.png",
+                  "full": "01/45/91/af6fb8ca388542/HDA0002992313810000032.png"
+                },
+                {
+                  "thumbnail": "e1/0e/4e/9a72b01227380c/HDA0002992313810000033.png",
+                  "full": "f1/2b/e6/5ddac18c1a980c/HDA0002992313810000033.png"
+                },
+                {
+                  "thumbnail": "10/d9/eb/804cdced384ecf/HDA0002992313810000041.png",
+                  "full": "51/01/26/363ad6d7ba82e4/HDA0002992313810000041.png"
+                },
+                {
+                  "thumbnail": "09/e3/4e/99dd86f1489f87/HDA0002992313810000042.png",
+                  "full": "f9/90/7a/4be0318b413c02/HDA0002992313810000042.png"
+                },
+                {
+                  "thumbnail": "63/32/6d/0867ce5b4ee684/HDA0002992313810000051.png",
+                  "full": "26/bb/61/788def000f5a76/HDA0002992313810000051.png"
+                },
+                {
+                  "thumbnail": "63/f9/09/97eaf67b856482/HDA0002992313810000052.png",
+                  "full": "39/29/70/945ce0c02d1c80/HDA0002992313810000052.png"
+                },
+                {
+                  "thumbnail": "c8/33/91/c3a1f56461d3f0/HDA0002992313810000061.png",
+                  "full": "72/88/34/b863cb62e83097/HDA0002992313810000061.png"
+                },
+                {
+                  "thumbnail": "5e/50/a6/5fff2843f3202e/HDA0002992313810000062.png",
+                  "full": "18/07/7b/33cb5a06b1439d/HDA0002992313810000062.png"
+                },
+                {
+                  "thumbnail": "50/8a/1b/22f589bf95f2f4/HDA0002992313810000071.png",
+                  "full": "64/4c/04/ef8b59bdc763c3/HDA0002992313810000071.png"
+                },
+                {
+                  "thumbnail": "a2/04/f6/cd9c17f8e420fc/HDA0002992313810000081.png",
+                  "full": "1b/f5/ad/a011351f779248/HDA0002992313810000081.png"
+                }
+              ],
+              "family_metadata": {
+                "aggregated": {
+                  "country_status": [
+                    {
+                      "country_code": "WO",
+                      "best_patent_stage": {
+                        "state": "NOT_ACTIVE"
+                      }
+                    },
+                    {
+                      "country_code": "EP",
+                      "best_patent_stage": {
+                        "state": "ACTIVE"
+                      }
+                    },
+                    {
+                      "country_code": "US",
+                      "best_patent_stage": {
+                        "state": "ACTIVE"
+                      }
+                    },
+                    {
+                      "country_code": "CN",
+                      "best_patent_stage": {
+                        "state": "ACTIVE"
+                      }
+                    },
+                    {
+                      "country_code": "FR",
+                      "best_patent_stage": {
+                        "state": "ACTIVE"
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "is_similar_document": false,
+            "entity_matches": {
+              "additional": 0
+            },
+            "measure_matches": {}
+          }
+        ]
+      }
+    ],
+    "chem_exhausted": false,
+    "summary": {
+      "assignee": [
+        {
+          "key": "Total",
+          "value": 1000,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 36
+            },
+            {
+              "key": "2022-2025",
+              "value": 288
+            },
+            {
+              "key": "2019-2022",
+              "value": 539
+            },
+            {
+              "key": "2016-2019",
+              "value": 125
+            }
+          ]
+        },
+        {
+          "key": "Intel Corporation",
+          "value": 37,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 8
+            },
+            {
+              "key": "2019-2022",
+              "value": 27
+            },
+            {
+              "key": "2016-2019",
+              "value": 2
+            }
+          ]
+        },
+        {
+          "key": "Canon Kabushiki Kaisha",
+          "value": 21,
+          "frequency": [
+            {
+              "key": "2019-2022",
+              "value": 15
+            },
+            {
+              "key": "2016-2019",
+              "value": 6
+            }
+          ]
+        },
+        {
+          "key": "Cold Chain Technologies, Llc",
+          "value": 11,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 3
+            },
+            {
+              "key": "2019-2022",
+              "value": 8
+            }
+          ]
+        },
+        {
+          "key": "佳能株式会社",
+          "value": 10,
+          "frequency": [
+            {
+              "key": "2019-2022",
+              "value": 8
+            },
+            {
+              "key": "2016-2019",
+              "value": 2
+            }
+          ]
+        },
+        {
+          "key": "Micron Technology, Inc.",
+          "value": 10,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 2
+            },
+            {
+              "key": "2019-2022",
+              "value": 6
+            },
+            {
+              "key": "2016-2019",
+              "value": 2
+            }
+          ]
+        },
+        {
+          "key": "Samsung Electronics Co., Ltd.",
+          "value": 10,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 1
+            },
+            {
+              "key": "2019-2022",
+              "value": 7
+            },
+            {
+              "key": "2016-2019",
+              "value": 2
+            }
+          ]
+        },
+        {
+          "key": "Ember Technologies, Inc.",
+          "value": 9,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 2
+            },
+            {
+              "key": "2019-2022",
+              "value": 5
+            },
+            {
+              "key": "2016-2019",
+              "value": 2
+            }
+          ]
+        },
+        {
+          "key": "キヤノン株式会社",
+          "value": 8,
+          "frequency": [
+            {
+              "key": "2019-2022",
+              "value": 6
+            },
+            {
+              "key": "2016-2019",
+              "value": 2
+            }
+          ]
+        },
+        {
+          "key": "Ａｇｃ株式会社",
+          "value": 7,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 1
+            },
+            {
+              "key": "2019-2022",
+              "value": 4
+            },
+            {
+              "key": "2016-2019",
+              "value": 2
+            }
+          ]
+        },
+        {
+          "key": "Malta Inc.",
+          "value": 6,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 2
+            },
+            {
+              "key": "2019-2022",
+              "value": 4
+            }
+          ]
+        },
+        {
+          "key": "Corning Incorporated",
+          "value": 5,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 2
+            },
+            {
+              "key": "2019-2022",
+              "value": 3
+            }
+          ]
+        },
+        {
+          "key": "Asml Netherlands B.V.",
+          "value": 5,
+          "frequency": [
+            {
+              "key": "2019-2022",
+              "value": 4
+            },
+            {
+              "key": "2016-2019",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "株式会社半導体エネルギー研究所",
+          "value": 5,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 1
+            },
+            {
+              "key": "2019-2022",
+              "value": 3
+            },
+            {
+              "key": "2016-2019",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "Aspen Aerogels, Inc.",
+          "value": 5,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 2
+            },
+            {
+              "key": "2022-2025",
+              "value": 2
+            },
+            {
+              "key": "2019-2022",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "International Business Machines Corporation",
+          "value": 5,
+          "frequency": [
+            {
+              "key": "2019-2022",
+              "value": 5
+            }
+          ]
+        },
+        {
+          "key": "Virginia Tech Intellectual Properties, Inc.",
+          "value": 5,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 1
+            },
+            {
+              "key": "2019-2022",
+              "value": 4
+            }
+          ]
+        },
+        {
+          "key": "Western Digital Technologies, Inc.",
+          "value": 5,
+          "frequency": [
+            {
+              "key": "2019-2022",
+              "value": 5
+            }
+          ]
+        },
+        {
+          "key": "Murata Manufacturing Co., Ltd.",
+          "value": 4,
+          "frequency": [
+            {
+              "key": "2019-2022",
+              "value": 3
+            },
+            {
+              "key": "2016-2019",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "Massachusetts Institute Of Technology",
+          "value": 4,
+          "frequency": [
+            {
+              "key": "2019-2022",
+              "value": 4
+            }
+          ]
+        }
+      ],
+      "inventor": [
+        {
+          "key": "Total",
+          "value": 1000,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 36
+            },
+            {
+              "key": "2022-2025",
+              "value": 288
+            },
+            {
+              "key": "2019-2022",
+              "value": 539
+            },
+            {
+              "key": "2016-2019",
+              "value": 125
+            }
+          ]
+        },
+        {
+          "key": "Clayton Alexander",
+          "value": 9,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 2
+            },
+            {
+              "key": "2019-2022",
+              "value": 5
+            },
+            {
+              "key": "2016-2019",
+              "value": 2
+            }
+          ]
+        },
+        {
+          "key": "正人 福島",
+          "value": 8,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 1
+            },
+            {
+              "key": "2019-2022",
+              "value": 5
+            },
+            {
+              "key": "2016-2019",
+              "value": 2
+            }
+          ]
+        },
+        {
+          "key": "Philippe Larochelle",
+          "value": 7,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 2
+            },
+            {
+              "key": "2019-2022",
+              "value": 5
+            }
+          ]
+        },
+        {
+          "key": "Mikko Juhani Timperi",
+          "value": 7,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 2
+            },
+            {
+              "key": "2019-2022",
+              "value": 5
+            }
+          ]
+        },
+        {
+          "key": "Daren John Leith",
+          "value": 7,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 2
+            },
+            {
+              "key": "2019-2022",
+              "value": 5
+            }
+          ]
+        },
+        {
+          "key": "Christopher Thomas Wakeham",
+          "value": 7,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 2
+            },
+            {
+              "key": "2019-2022",
+              "value": 5
+            }
+          ]
+        },
+        {
+          "key": "豪明 荒井",
+          "value": 6,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 1
+            },
+            {
+              "key": "2019-2022",
+              "value": 5
+            }
+          ]
+        },
+        {
+          "key": "Takeshi Hashimoto",
+          "value": 6,
+          "frequency": [
+            {
+              "key": "2019-2022",
+              "value": 4
+            },
+            {
+              "key": "2016-2019",
+              "value": 2
+            }
+          ]
+        },
+        {
+          "key": "真維 田坂",
+          "value": 6,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 1
+            },
+            {
+              "key": "2019-2022",
+              "value": 5
+            }
+          ]
+        },
+        {
+          "key": "宏明 光岡",
+          "value": 6,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 1
+            },
+            {
+              "key": "2019-2022",
+              "value": 5
+            }
+          ]
+        },
+        {
+          "key": "Francesc Guim Bernat",
+          "value": 6,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 2
+            },
+            {
+              "key": "2019-2022",
+              "value": 4
+            }
+          ]
+        },
+        {
+          "key": "Takeshi Ohtsu",
+          "value": 5,
+          "frequency": [
+            {
+              "key": "2019-2022",
+              "value": 4
+            },
+            {
+              "key": "2016-2019",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "Raj Apte",
+          "value": 5,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 2
+            },
+            {
+              "key": "2019-2022",
+              "value": 3
+            }
+          ]
+        },
+        {
+          "key": "Yadong Li",
+          "value": 5,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 2
+            },
+            {
+              "key": "2019-2022",
+              "value": 3
+            }
+          ]
+        },
+        {
+          "key": "Rafael V. Davalos",
+          "value": 5,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 1
+            },
+            {
+              "key": "2019-2022",
+              "value": 4
+            }
+          ]
+        },
+        {
+          "key": "松井崇",
+          "value": 5,
+          "frequency": [
+            {
+              "key": "2019-2022",
+              "value": 4
+            },
+            {
+              "key": "2016-2019",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "key": "Takashi Matsui",
+          "value": 5,
+          "frequency": [
+            {
+              "key": "2019-2022",
+              "value": 5
+            }
+          ]
+        },
+        {
+          "key": "大祐 白川",
+          "value": 4,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 1
+            },
+            {
+              "key": "2019-2022",
+              "value": 3
+            }
+          ]
+        },
+        {
+          "key": "Jacob William Emmert",
+          "value": 4,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 1
+            },
+            {
+              "key": "2019-2022",
+              "value": 3
+            }
+          ]
+        }
+      ],
+      "cpc": [
+        {
+          "key": "Total",
+          "value": 1000,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 36
+            },
+            {
+              "key": "2022-2025",
+              "value": 288
+            },
+            {
+              "key": "2019-2022",
+              "value": 539
+            },
+            {
+              "key": "2016-2019",
+              "value": 125
+            }
+          ]
+        },
+        {
+          "key": "Y02E",
+          "value": 205,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 8
+            },
+            {
+              "key": "2022-2025",
+              "value": 71
+            },
+            {
+              "key": "2019-2022",
+              "value": 106
+            },
+            {
+              "key": "2016-2019",
+              "value": 18
+            }
+          ]
+        },
+        {
+          "key": "H10W",
+          "value": 112,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 1
+            },
+            {
+              "key": "2022-2025",
+              "value": 30
+            },
+            {
+              "key": "2019-2022",
+              "value": 68
+            },
+            {
+              "key": "2016-2019",
+              "value": 12
+            }
+          ]
+        },
+        {
+          "key": "H01M",
+          "value": 111,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 4
+            },
+            {
+              "key": "2022-2025",
+              "value": 36
+            },
+            {
+              "key": "2019-2022",
+              "value": 58
+            },
+            {
+              "key": "2016-2019",
+              "value": 12
+            }
+          ]
+        },
+        {
+          "key": "G06F",
+          "value": 105,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 4
+            },
+            {
+              "key": "2022-2025",
+              "value": 23
+            },
+            {
+              "key": "2019-2022",
+              "value": 69
+            },
+            {
+              "key": "2016-2019",
+              "value": 8
+            }
+          ]
+        },
+        {
+          "key": "H05K",
+          "value": 86,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 3
+            },
+            {
+              "key": "2022-2025",
+              "value": 23
+            },
+            {
+              "key": "2019-2022",
+              "value": 49
+            },
+            {
+              "key": "2016-2019",
+              "value": 10
+            }
+          ]
+        },
+        {
+          "key": "A61B",
+          "value": 79,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 5
+            },
+            {
+              "key": "2022-2025",
+              "value": 23
+            },
+            {
+              "key": "2019-2022",
+              "value": 41
+            },
+            {
+              "key": "2016-2019",
+              "value": 10
+            }
+          ]
+        },
+        {
+          "key": "F28D",
+          "value": 73,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 4
+            },
+            {
+              "key": "2022-2025",
+              "value": 22
+            },
+            {
+              "key": "2019-2022",
+              "value": 37
+            },
+            {
+              "key": "2016-2019",
+              "value": 10
+            }
+          ]
+        },
+        {
+          "key": "G01N",
+          "value": 67,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 1
+            },
+            {
+              "key": "2022-2025",
+              "value": 22
+            },
+            {
+              "key": "2019-2022",
+              "value": 37
+            },
+            {
+              "key": "2016-2019",
+              "value": 7
+            }
+          ]
+        },
+        {
+          "key": "Y02P",
+          "value": 62,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 1
+            },
+            {
+              "key": "2022-2025",
+              "value": 19
+            },
+            {
+              "key": "2019-2022",
+              "value": 32
+            },
+            {
+              "key": "2016-2019",
+              "value": 10
+            }
+          ]
+        },
+        {
+          "key": "Y02T",
+          "value": 54,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 2
+            },
+            {
+              "key": "2022-2025",
+              "value": 17
+            },
+            {
+              "key": "2019-2022",
+              "value": 26
+            },
+            {
+              "key": "2016-2019",
+              "value": 9
+            }
+          ]
+        },
+        {
+          "key": "F25B",
+          "value": 49,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 10
+            },
+            {
+              "key": "2019-2022",
+              "value": 29
+            },
+            {
+              "key": "2016-2019",
+              "value": 10
+            }
+          ]
+        },
+        {
+          "key": "C09K",
+          "value": 48,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 4
+            },
+            {
+              "key": "2022-2025",
+              "value": 8
+            },
+            {
+              "key": "2019-2022",
+              "value": 25
+            },
+            {
+              "key": "2016-2019",
+              "value": 11
+            }
+          ]
+        },
+        {
+          "key": "F28F",
+          "value": 47,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 3
+            },
+            {
+              "key": "2022-2025",
+              "value": 14
+            },
+            {
+              "key": "2019-2022",
+              "value": 25
+            },
+            {
+              "key": "2016-2019",
+              "value": 5
+            }
+          ]
+        },
+        {
+          "key": "H10N",
+          "value": 46,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 4
+            },
+            {
+              "key": "2019-2022",
+              "value": 33
+            },
+            {
+              "key": "2016-2019",
+              "value": 9
+            }
+          ]
+        },
+        {
+          "key": "H10B",
+          "value": 45,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 5
+            },
+            {
+              "key": "2019-2022",
+              "value": 32
+            },
+            {
+              "key": "2016-2019",
+              "value": 8
+            }
+          ]
+        },
+        {
+          "key": "A61M",
+          "value": 42,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 2
+            },
+            {
+              "key": "2022-2025",
+              "value": 11
+            },
+            {
+              "key": "2019-2022",
+              "value": 24
+            },
+            {
+              "key": "2016-2019",
+              "value": 5
+            }
+          ]
+        },
+        {
+          "key": "G03G",
+          "value": 40,
+          "frequency": [
+            {
+              "key": "2019-2022",
+              "value": 30
+            },
+            {
+              "key": "2016-2019",
+              "value": 10
+            }
+          ]
+        },
+        {
+          "key": "G11C",
+          "value": 40,
+          "frequency": [
+            {
+              "key": "2025-2028",
+              "value": 1
+            },
+            {
+              "key": "2022-2025",
+              "value": 6
+            },
+            {
+              "key": "2019-2022",
+              "value": 27
+            },
+            {
+              "key": "2016-2019",
+              "value": 6
+            }
+          ]
+        },
+        {
+          "key": "B01L",
+          "value": 40,
+          "frequency": [
+            {
+              "key": "2022-2025",
+              "value": 13
+            },
+            {
+              "key": "2019-2022",
+              "value": 22
+            },
+            {
+              "key": "2016-2019",
+              "value": 5
+            }
+          ]
+        }
+      ]
+    },
+    "landscape": {
+      "related_landscapes": [
+        {
+          "name": "Engineering & Computer Science",
+          "landscape_type": "AREA"
+        },
+        {
+          "name": "Physics & Mathematics",
+          "landscape_type": "AREA"
+        },
+        {
+          "name": "Chemical & Material Sciences",
+          "landscape_type": "AREA"
+        }
+      ]
+    }
+  }
+}

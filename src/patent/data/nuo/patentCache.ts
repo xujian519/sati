@@ -11,13 +11,13 @@
  *   - LRU 结果缓存（懒过期，读时剔除）；
  *   - in-flight 合并：同一 key 的并发调用共享同一次底层请求（agent 多工具并行
  *     或重试场景避免重复打源）；
- *   - 失败不缓存：仅缓存"成功"结果，网络错误/超时/0 命中不污染缓存。
+ *   - 失败不缓存：仅缓存"成功"结果，网络错误/超时/解析失败不污染缓存。
  *
  * 与 `src/tool/builtin/web/urlContentCache.ts` 的差异：后者按 URL 缓存字节流，
  * 本模块按业务 key 缓存结构化结果，并额外做并发去重。
  */
 
-import type { PatentSearchResult, ScrapeResult } from "nuo-patent";
+import type { PatentSearchOptions, PatentSearchResult, ScrapeResult } from "nuo-patent";
 
 export type PatentCacheOptions<T> = {
   /** 条目 TTL（毫秒），默认 10 分钟。 */
@@ -28,7 +28,10 @@ export type PatentCacheOptions<T> = {
   ttlFor?: (key: string, value: T) => number | undefined;
 };
 
-type CacheNode<T> = { value: T; expiresAt: number };
+type CacheNode<T> = { value: T; expiresAt: number; storedAt: number };
+
+/** 缓存查询结果：value + 是否命中 + 命中条目年龄（未命中时无 ageMs）。 */
+export type CacheLookup<T> = { value: T; hit: boolean; ageMs?: number };
 
 /**
  * 通用异步结果缓存：LRU + TTL + in-flight 合并。
@@ -54,16 +57,29 @@ export class AsyncResultCache<T> {
    * （用于"网络错误/空结果不缓存"语义）。
    */
   async getOrLoad(key: string, loader: () => Promise<T>, shouldCache?: (value: T) => boolean): Promise<T> {
+    return (await this.getOrLoadWithMeta(key, loader, shouldCache)).value;
+  }
+
+  /**
+   * 同 `getOrLoad`，但额外返回缓存命中状态与条目年龄（供工具层透出 cacheHit/cacheAge）。
+   * in-flight 合并（并发同 key 共享请求）按未命中计——数据是新鲜的，不是缓存读。
+   */
+  async getOrLoadWithMeta(
+    key: string,
+    loader: () => Promise<T>,
+    shouldCache?: (value: T) => boolean,
+  ): Promise<CacheLookup<T>> {
     const pending = this.inflight.get(key);
-    if (pending) return pending;
+    if (pending) return { value: await pending, hit: false };
 
     const node = this.map.get(key);
     if (node) {
-      if (Date.now() < node.expiresAt) {
+      const now = Date.now();
+      if (now < node.expiresAt) {
         // LRU 触摸：删除重插，移到队尾（最新）。
         this.map.delete(key);
         this.map.set(key, node);
-        return node.value;
+        return { value: node.value, hit: true, ageMs: now - node.storedAt };
       }
       this.map.delete(key);
     }
@@ -82,7 +98,7 @@ export class AsyncResultCache<T> {
     );
     this.inflight.set(key, promise);
     try {
-      return await promise;
+      return { value: await promise, hit: false };
     } finally {
       this.inflight.delete(key);
     }
@@ -99,7 +115,8 @@ export class AsyncResultCache<T> {
       this.map.delete(oldestKey);
     }
     const ttlMs = this.ttlFor?.(key, value) ?? this.ttlMs;
-    this.map.set(key, { value, expiresAt: Date.now() + ttlMs });
+    const now = Date.now();
+    this.map.set(key, { value, expiresAt: now + ttlMs, storedAt: now });
   }
 
   /** 清空缓存（含在途合并表）。测试/显式失效用。 */
@@ -113,10 +130,17 @@ export class AsyncResultCache<T> {
   }
 }
 
-/** 检索结果是否为"可缓存"的成功态：无失败类 warning（与 patentSearch 工具判定一致）。 */
+/**
+ * 失败类 warning（逐条匹配）：这些结果不可缓存，下次重试仍可触达源。
+ * `PARSE_ERROR` 来自 JSON 主路径的结构性解析失败（#710），缓存会把故障固化 2h。
+ */
+const UNCACHEABLE_WARNING_RE = /^(查询条件为空|检索超时|检索失败|请求已被取消|PARSE_ERROR)/;
+/** 页面结构变化导致 0 命中：与真 0 命中不可区分，同样不可缓存。 */
+const PAGE_STRUCTURE_WARNING_RE = /搜索结果页未解析到任何结果|页面结构可能变化/;
+
+/** 检索结果是否为"可缓存"的成功态：无失败类/解析类 warning。 */
 export function isSearchResultCacheable(result: PatentSearchResult): boolean {
-  const failure = result.warnings.find(w => /^(查询条件为空|检索超时|检索失败)/.test(w));
-  return !failure;
+  return !result.warnings.some(w => UNCACHEABLE_WARNING_RE.test(w) || PAGE_STRUCTURE_WARNING_RE.test(w));
 }
 
 /** 点查结果是否为"可缓存"的成功态。 */
@@ -183,10 +207,10 @@ export function resetPatentCacheSingletons(): void {
  * 无自定义 options 时按 impl 身份共享进程级缓存（同一 impl 跨 registry 重建
  * 存活，不同 impl 互不污染）；传 options（测试/特殊 TTL）时新建独立缓存。
  */
-export function cachedSearchPatents(
-  impl: (query: string, options?: { limit?: number }) => Promise<PatentSearchResult>,
+export function cachedSearchPatents<R extends PatentSearchResult = PatentSearchResult>(
+  impl: (query: string, options?: PatentSearchOptions) => Promise<R>,
   options: PatentCacheOptions<PatentSearchResult> = {},
-): (query: string, options?: { limit?: number }) => Promise<PatentSearchResult> {
+): (query: string, options?: PatentSearchOptions) => Promise<R & { cache: { hit: boolean; ageMs?: number } }> {
   const hasCustomOptions = Object.keys(options).length > 0;
   let cache: AsyncResultCache<PatentSearchResult> | undefined;
   if (hasCustomOptions) {
@@ -200,7 +224,15 @@ export function cachedSearchPatents(
   }
   return async (query, opts) => {
     const limit = opts?.limit ?? 10;
-    return cache.getOrLoad(searchCacheKey(query, limit), () => impl(query, { limit }), isSearchResultCacheable);
+    // 透传 signal/timeout/logger：此前只转发 limit，导致工具层的中止信号失效。
+    const lookup = await cache.getOrLoadWithMeta(
+      searchCacheKey(query, limit),
+      () => impl(query, { ...opts, limit }),
+      isSearchResultCacheable,
+    );
+    const cacheMeta =
+      lookup.hit && lookup.ageMs !== undefined ? { hit: true, ageMs: lookup.ageMs } : { hit: lookup.hit };
+    return { ...(lookup.value as R), cache: cacheMeta };
   };
 }
 
