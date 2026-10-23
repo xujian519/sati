@@ -5,6 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { KnowledgeLawSearch } from "../../src/knowledge/legal/knowledge-law-search.js";
+import { createLawSearchTool } from "../../src/knowledge/legal/law-search-tool.js";
+import { makeToolContext } from "../tool/context-fixture.js";
 
 /**
  * KnowledgeLawSearch 测试（knowledge.db 法规后端）。
@@ -95,6 +97,20 @@ test("knowledge-law-search: FTS 命中并按文档去重", t => {
   // A1：条款级命中应带出 article 字段（chunk.heading → 条款解析）
   assert.equal(hits[0]!.article, "第二十六条");
   assert.equal(hits[0]!.articleBase, "第26条");
+});
+
+test("knowledge-law-search: 接入 law_search 后未知效力标待核验——toRecord 回归的端到端负控制", async t => {
+  const search = withStore(t);
+  const tool = createLawSearchTool(
+    () => ({ engine: search, dbPath: "fixture" }),
+    () => new Map(),
+  );
+  const result = await tool.execute({ query: "第二十六条" }, makeToolContext());
+  assert.ok(result.data);
+  const hit = result.data.results[0]!;
+  assert.equal(hit.expired, undefined, "toRecord 不得写回 expired=0");
+  assert.equal(hit.status, "待核验");
+  assert.equal(hit.statusSource, "unknown");
 });
 
 test("knowledge-law-search: LIKE 降级打在内容表——contentless 虚表 LIKE 零结果陷阱回归", t => {

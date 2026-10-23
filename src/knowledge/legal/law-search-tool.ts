@@ -86,26 +86,28 @@ function getVersionMeta(): Map<string, LawVersionMeta> {
 }
 
 /**
- * 版本状态标注：按位置（computeEffectiveStatus）+ 失效标志 + 离线 meta 权威覆盖。
+ * 版本状态标注：按位置（computeEffectiveStatus）+ 失效标志 + 离线 meta 覆盖。
  *
- * 优先级：meta 文件判定（离线治理，权威） > expired 失效标志（laws-full 硬数据）
- * > 版本位置（查询结果动态判定，仅同名多版本时有值）。
+ * 优先级：meta 的「已废止/待核验」（离线治理结论） > expired=1（laws-full 硬数据）
+ * > 版本位置（仅同名多版本时有值） > meta 的「现行有效/已被修订」 > expired=0（不标）
+ * > 待核验（无任何来源）。
  *
- * expired 缺失（knowledge.db 无该列）且无位置信息时标「待核验」并回报
- * statusSource=unknown——不得回落成「现行有效」（#731）。
+ * 单版本且 meta 明确给出状态时采用 meta（避免明明有离线结论却回落「待核验」），
+ * 但 meta 不得把 expired=1 改写成「现行有效」——冲突时保留更强的失效证据。
+ * expired 缺失（knowledge.db 无该列）且无其它来源时标「待核验」并回报
+ * statusSource=unknown，不得回落成「现行有效」（#731）。
  */
 function resolveVersionStatus(
   position: LawStatus | undefined,
   expired: number | undefined,
   metaStatus: LawStatus | undefined,
 ): { status?: LawStatus; statusSource: LawStatusSource } {
-  // 有版本位置时，meta 的「现行有效」不覆盖旧版本的「已被修订」；
-  // 无位置（单版本）时 meta 全量权威，避免明明有离线结论却回落「待核验」。
-  if (metaStatus !== undefined && (position === undefined || metaStatus === "已废止" || metaStatus === "待核验")) {
+  if (metaStatus === "已废止" || metaStatus === "待核验") {
     return { status: metaStatus, statusSource: "version-meta" };
   }
   if (expired === 1) return { status: "已废止", statusSource: "db" };
   if (position !== undefined) return { status: position, statusSource: "db" };
+  if (metaStatus !== undefined) return { status: metaStatus, statusSource: "version-meta" };
   if (expired === 0) return { status: undefined, statusSource: "db" };
   return { status: "待核验", statusSource: "unknown" };
 }
@@ -213,7 +215,8 @@ export function createLawSearchTool(
           merged.push({
             ...r,
             ...(status === undefined ? {} : { status }),
-            ...(status === "已被修订" ? { supersededBy: latestLabel } : {}),
+            // 单版本可能经 meta 得到「已被修订」，此时没有后继版本可指向，不写自指 supersededBy。
+            ...(status === "已被修订" && versions.length > 1 ? { supersededBy: latestLabel } : {}),
             statusSource,
           });
         });

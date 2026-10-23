@@ -16,6 +16,8 @@ Status: implemented
 
 当 `expired` 缺失且没有版本位置可判定时，`status` 标为「待核验」，不再留空让下游自行默认成现行有效。记忆渲染层只在 `expired === 1` 时派生「已废止」，`undefined` 不参与失效判定。
 
+状态来源按固定优先级合成，冲突时保留更强证据：离线 meta 的「已废止 / 待核验」→ `expired === 1` → 同名多版本的位置判定（现行有效 / 已被修订）→ 离线 meta 的「现行有效 / 已被修订」→ `expired === 0`（不标状态）→ 无来源时「待核验」。因此单版本记录可以采用 meta 的明确结论，但 meta 不能把 `expired === 1` 改写成「现行有效」；单版本 meta「已被修订」也不会生成指向自己的 `supersededBy`。
+
 ## Alternatives considered
 
 - **保留 `expired: 0` 并在工具描述里提示不可信** — 提示词约束挡不住下游程序按字段值判断，伪事实仍会传播。
@@ -25,4 +27,6 @@ Status: implemented
 
 ## Consequences
 
-knowledge.db 的单版本检索结果会显式显示「待核验」，比此前的静默留空更吵，但可被检索与审计。新增 `statusSource` 是输出字段，`law_search` 的 `inputSchema` 未变，不需要重录 llm-replay。legacy laws-full 的行为保持不变。
+knowledge.db 的单版本检索结果会显式显示「待核验」，比此前的静默留空更吵，但可被检索与审计。新增 `statusSource` 是输出字段；`law_search` 的 `inputSchema` 未变，且当前 llm-replay fixture 没有执行该工具，因此不需要重录（若未来 fixture 实际调用 `law_search`，输出字段变化会进入下一轮请求消息，届时需重录）。
+
+legacy laws-full 的 `expired` 0/1 仍原样透传；单版本记录遇到离线 meta 的明确结论时，`status` 会按上述优先级采用 meta（此前只采用「已废止 / 待核验」），这是让已有离线结论不被「待核验」掩盖的有意收窄。`expired === 1` 的失效结论始终优先于正向 meta。
