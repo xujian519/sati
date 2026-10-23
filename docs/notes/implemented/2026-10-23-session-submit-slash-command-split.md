@@ -50,7 +50,7 @@ sweep 基线（`a3c35684b`）的 chat 主链路上还有三个 ≥300 行的 hoo
   3. `groupCommandsForDisplay` 的 `frequent` 排到 `builtin` 之后 → **1 红 / 9 绿**。
   4. `rewind` 的 `steps * 2` 改为 `steps` → **1 红 / 9 绿**。
 - **类型 A（状态层重构，无渲染路径变更）**：按 checklist 不跑浏览器 A/B；jsdom 直测 + token 证明 + 负控制为验收面。
-- **门禁**：`pnpm check`、`pnpm test`（5977 / 5972 pass / 0 fail / 5 skip）、`pnpm test:pr-tooling`（197/197）、`pnpm --filter sati-ui test`（203 文件 / 1575 例）全绿；首次全量 UI 跑出现 1 例未捕获名称的失败，随后连续 3 次全量与 5 次三文件定向跑均 33/33 绿（判定为既有偶发，未改行为）。
+- **门禁**：`pnpm check`、`pnpm test`（5977 / 5972 pass / 0 fail / 5 skip）、`pnpm test:pr-tooling`（197/197）、`pnpm --filter sati-ui test`（203 文件 / 1575 例）全绿。全量 UI 套件与其它门禁**并发**执行时曾出现 2 文件 / 8 例超时（未捕获用例名），改串行后连续 4 次全量 1575/1575 绿；拆分相关三文件另有 5 次定向 33/33 绿。
 - **生成物**：`measure:update` 反映 ui/src 697 → **705** 文件、105574 → **106907** 行（5 个新源文件 + 3 个新测试文件；测试文件经 `git add -f` 入库后计入基线，以 `metrics.md` 为唯一事实源）；`as unknown as` 维持 **29**（新增测试未引入双重断言）；`check:architecture-boundaries` fresh（无 ≥800 行新文件，豁免维持 35 条）。
 
 ## Consequences
