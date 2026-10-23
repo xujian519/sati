@@ -1,11 +1,6 @@
-import { memo, useMemo, useRef, useState, type ReactNode } from "react";
+import { memo, useMemo, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import type { TFunction } from "i18next";
-import { AlertTriangle, Check, ChevronRight, Copy, GitBranch, Loader2, Pencil, RotateCcw } from "lucide-react";
 import type { DiffLine } from "../chat/utils/messageTransforms";
-import { copyTextToClipboard } from "../../utils/clipboard";
-import { UI_TIMEOUTS } from "../../constants/timeouts";
-import { cn } from "../../lib/utils.js";
 import type { Project, SessionProvider } from "../../types/app";
 import { DOCUMENT_SELECTION_ATTACHMENT_KIND, type DocumentSelectionReference } from "../../types/documentSelection";
 import {
@@ -15,21 +10,23 @@ import {
 } from "../../types/contentReference";
 import type {
   ChatAttachment,
+  ChatImage,
   ChatMessage,
   SatiPermissionSuggestion,
   SessionPermissionGrantResult,
 } from "../chat/types/types";
 import MessageComponent from "../chat/view/subcomponents/MessageComponent";
-import ImageLightbox, { type LightboxImage } from "../chat/view/subcomponents/ImageLightbox";
-import { Markdown } from "../chat/view/subcomponents/Markdown";
 import { formatUsageLimitText } from "../chat/utils/chatFormatting";
-import { ProcessTrace } from "./ProcessTrace";
-import { processSummaryToTrace, type ProcessAttachment } from "./processGrouping";
+import type { ProcessAttachment } from "./processGrouping";
 import SubagentCard from "./SubagentCard";
 import { useTypewriter } from "./useTypewriter";
-import DocumentReferenceChip from "./DocumentReferenceChip";
 import { linkifyFilePathsOutsideCode } from "./linkifyFilePathsOutsideCode";
-import { AgentFileArtifactGroup, UserAttachmentCards } from "./MessageFileCards";
+import { AssistantMessageRow } from "./messageRow/AssistantMessageRow";
+import { hasAssistantBody } from "./messageRow/messageRowVisibility";
+import { ErrorMessageRow } from "./messageRow/ErrorMessageRow";
+import { ProcessAttachmentRow, ProcessSummaryRow } from "./messageRow/MessageProcessRows";
+import { ThinkingMessageRow } from "./messageRow/ThinkingMessageRow";
+import { UserMessageRow } from "./messageRow/UserMessageRow";
 
 function attachmentToDocumentReference(attachment: ChatAttachment): ContentReference | null {
   const structured = normalizeContentReference(attachment.contentReference);
@@ -165,7 +162,7 @@ function MessageRowV2({
       ),
     [documentReferenceAttachments],
   );
-  const messageImages = useMemo(
+  const messageImages: ChatImage[] = useMemo(
     () =>
       Array.isArray(message.images)
         ? message.images.filter(
@@ -183,7 +180,6 @@ function MessageRowV2({
       ),
     [messageAttachments],
   );
-  const [userImageLightbox, setUserImageLightbox] = useState<number | null>(null);
   const hasForkUnsupportedContent =
     Boolean(message.forkUnsupportedContent) || messageImages.length > 0 || messageAttachments.length > 0;
 
@@ -279,467 +275,78 @@ function MessageRowV2({
     );
   }
 
-  const isUser = message.type === "user";
-  const isError = message.type === "error";
-
   // User: right-aligned grey bubble.
-  if (isUser) {
-    const lightboxImages: LightboxImage[] = messageImages.map(image => ({
-      data: image.data,
-      name: image.name,
-      mimeType: image.mimeType,
-    }));
+  if (message.type === "user") {
     return withProcessRows(
-      <div className="group/user-msg flex w-full items-end justify-end gap-1.5">
-        {onFork ? (
-          <ForkMessageButton
-            carriedMessageCount={forkCarriedMessageCount}
-            disabled={forkDisabled || isSessionRunning || !message.entryId || hasForkUnsupportedContent}
-            disabledReason={
-              hasForkUnsupportedContent
-                ? String(
-                    message.forkUnsupportedReason ||
-                      t("fork.unsupportedAttachments", {
-                        defaultValue: "Forking messages with attachments or media is not supported yet",
-                      }),
-                  )
-                : undefined
-            }
-            onFork={() => {
-              if (message.entryId && !hasForkUnsupportedContent) onFork(message, forkCarriedMessageCount);
-            }}
-            t={t}
-          />
-        ) : null}
-        {onEditLastUserMessage && isLastUserMessage && !hasForkUnsupportedContent ? (
-          <HoverActionButton
-            icon={<Pencil className="h-3.5 w-3.5" strokeWidth={2} />}
-            label={t("input.editLastTurn", { defaultValue: "Edit message" })}
-            disabled={Boolean(isSessionRunning || !message.entryId)}
-            onClick={() => onEditLastUserMessage(message)}
-            variant="user-hover"
-          />
-        ) : null}
-        <div className="max-w-[78%] min-w-0 overflow-hidden rounded-[20px] bg-gradient-to-br from-neutral-100 to-neutral-100/70 px-4 py-2.5 text-[14px] leading-relaxed text-neutral-900 shadow-[0_1px_2px_rgba(15,23,42,0.04)] dark:from-neutral-800 dark:to-neutral-800/70 dark:text-neutral-100 dark:shadow-[0_1px_2px_rgba(0,0,0,0.2)]">
-          {message.isStreaming && !formattedContent ? (
-            <span className="inline-block h-4 w-2 animate-pulse bg-neutral-400 dark:bg-neutral-500" />
-          ) : (
-            <>
-              {documentReferenceAttachments.length > 0 ? (
-                <div
-                  className={
-                    formattedContent || fileAttachments.length > 0
-                      ? "mb-2 flex flex-wrap gap-2"
-                      : "flex flex-wrap gap-2"
-                  }
-                >
-                  {documentReferenceAttachments.map(reference => (
-                    <DocumentReferenceChip
-                      key={reference.id}
-                      reference={reference}
-                      summaryLength={100}
-                      className="bg-white/80 dark:bg-neutral-900/55"
-                      onOpen={onFileOpen ? () => onFileOpen(reference.source.relativePath) : undefined}
-                    />
-                  ))}
-                </div>
-              ) : null}
-              {fileAttachments.length > 0 ? (
-                <div className={formattedContent ? "mb-2" : undefined}>
-                  <UserAttachmentCards attachments={fileAttachments} project={selectedProject} onBrowse={onFileOpen} />
-                </div>
-              ) : null}
-              {messageImages.length > 0 ? (
-                <div className={formattedContent ? "mb-2 grid grid-cols-1 gap-2" : "grid grid-cols-1 gap-2"}>
-                  {messageImages.map((image, index) => (
-                    <button
-                      type="button"
-                      key={`${image.name || "image"}-${index}`}
-                      onClick={() => setUserImageLightbox(index)}
-                      className="block w-72 max-w-full overflow-hidden rounded-xl border border-neutral-200 bg-white/70 focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:outline-hidden dark:border-neutral-700 dark:bg-neutral-900/40"
-                      aria-label={image.name ? `Preview ${image.name}` : "Preview image"}
-                    >
-                      <img
-                        src={image.data}
-                        alt={image.name || "Uploaded image"}
-                        className="block h-auto max-h-64 w-full cursor-zoom-in object-contain transition-opacity hover:opacity-90"
-                        loading="lazy"
-                      />
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-              {formattedContent ? (
-                <Markdown
-                  className="prose prose-sm max-w-none min-w-0 [overflow-wrap:anywhere] prose-neutral dark:prose-invert prose-p:my-1 prose-ol:my-1 prose-ul:my-1 prose-li:my-0"
-                  projectName={selectedProject?.name}
-                  onFileOpen={onFileOpen}
-                >
-                  {formattedContent}
-                </Markdown>
-              ) : null}
-            </>
-          )}
-        </div>
-        {userImageLightbox !== null && lightboxImages.length > 0 ? (
-          <ImageLightbox
-            images={lightboxImages}
-            startIndex={userImageLightbox}
-            onClose={() => setUserImageLightbox(null)}
-          />
-        ) : null}
-      </div>,
+      <UserMessageRow
+        message={message}
+        formattedContent={formattedContent}
+        messageImages={messageImages}
+        documentReferenceAttachments={documentReferenceAttachments}
+        fileAttachments={fileAttachments}
+        selectedProject={selectedProject}
+        onFileOpen={onFileOpen}
+        onFork={onFork}
+        forkCarriedMessageCount={forkCarriedMessageCount}
+        forkDisabled={forkDisabled}
+        isSessionRunning={isSessionRunning}
+        hasForkUnsupportedContent={hasForkUnsupportedContent}
+        onEditLastUserMessage={onEditLastUserMessage}
+        isLastUserMessage={isLastUserMessage}
+        t={t}
+      />,
     );
   }
 
   // Error: full-width red banner with warning glyph.
-  if (isError) {
+  if (message.type === "error") {
     return withProcessRows(
-      <div className="flex gap-3">
-        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-red-500/10 text-red-500">
-          <AlertTriangle className="h-3.5 w-3.5" strokeWidth={2} />
-        </div>
-        <div className="min-w-0 flex-1 pt-0.5 text-[14px] leading-relaxed text-red-500">
-          <Markdown projectName={selectedProject?.name} onFileOpen={onFileOpen}>
-            {formattedContent}
-          </Markdown>
-        </div>
-      </div>,
+      <ErrorMessageRow formattedContent={formattedContent} selectedProject={selectedProject} onFileOpen={onFileOpen} />,
     );
   }
 
   if (message.isThinking) {
     if (!showThinking) return null;
-    const isThinkingStreaming = !!message.isStreaming;
-
-    if (inlineThinking) {
-      // Inline mode: unified <details> with typewriter animation + blue theme
-      return withProcessRows(
-        <div className="min-w-0 text-[14px] leading-relaxed">
-          <details
-            className="group"
-            open={(isThinkingStreaming ? thinkingDisplayText.length > 12 : false) || undefined}
-          >
-            <summary className="flex cursor-pointer items-center gap-1.5 text-[13px] font-medium text-brand-600/70 select-none hover:text-brand-700 dark:text-brand-400/70 dark:hover:text-brand-300">
-              {isThinkingStreaming ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2} />
-              ) : (
-                <ChevronRight className="h-3.5 w-3.5 transition-transform group-open:rotate-90" strokeWidth={2} />
-              )}
-              <span>
-                {isThinkingStreaming
-                  ? t("thinking.title", { defaultValue: "Thinking..." })
-                  : t("thinking.completed", { defaultValue: "Thought process" })}
-              </span>
-            </summary>
-            <div
-              className={`mt-1.5 max-h-64 overflow-y-auto border-l-2 pl-3 text-[13px] ${
-                isThinkingStreaming
-                  ? "border-brand-400/50 text-neutral-600 dark:border-brand-500/40 dark:text-neutral-300"
-                  : "border-brand-400/30 text-neutral-600 dark:border-brand-500/30 dark:text-neutral-400"
-              }`}
-            >
-              <Markdown projectName={selectedProject?.name} onFileOpen={onFileOpen} isStreaming={isThinkingStreaming}>
-                {isThinkingStreaming ? thinkingDisplayText : formattedContent}
-              </Markdown>
-            </div>
-          </details>
-        </div>,
-      );
-    }
-
-    // Default (status-bar preview mode): simple collapsible accordion
     return withProcessRows(
-      <div className="min-w-0 text-[14px] leading-relaxed">
-        <details className="group">
-          <summary className="flex cursor-pointer items-center gap-1.5 text-[13px] font-medium text-neutral-500 select-none hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-200">
-            <ChevronRight className="h-3.5 w-3.5 transition-transform group-open:rotate-90" strokeWidth={2} />
-            <span>{t("thinking.completed", { defaultValue: "Thought process" })}</span>
-          </summary>
-          <div className="mt-1.5 max-h-64 overflow-y-auto border-l-2 border-neutral-300 pl-3 text-[13px] text-neutral-500 dark:border-neutral-700 dark:text-neutral-400">
-            <Markdown projectName={selectedProject?.name} onFileOpen={onFileOpen}>
-              {formattedContent}
-            </Markdown>
-          </div>
-        </details>
-      </div>,
+      <ThinkingMessageRow
+        isStreaming={!!message.isStreaming}
+        inlineThinking={inlineThinking}
+        thinkingDisplayText={thinkingDisplayText}
+        formattedContent={formattedContent}
+        selectedProject={selectedProject}
+        onFileOpen={onFileOpen}
+        t={t}
+      />,
     );
   }
 
   // Assistant: plain prose, no avatar and no bubble.
-  const hasAssistantProse = linkedContentDisplayText.trim().length > 0;
-  const assistantArtifacts = Array.isArray(message.artifacts) ? message.artifacts : [];
-  const showStreamingCursor = Boolean(message.isStreaming && !contentDisplayText);
-  const resolvedShowAssistantActions = showAssistantActions ?? true;
-  const showAssistantCopyButton = resolvedShowAssistantActions && hasAssistantProse;
-  const canRenderAssistantForkButton = Boolean(resolvedShowAssistantActions && onFork && hasAssistantProse);
-  const canRenderAssistantRegenerateButton = Boolean(
-    resolvedShowAssistantActions && onRegenerateLastTurn && isLastAssistantMessage && hasAssistantProse,
-  );
-  const shouldRenderAssistantActions =
-    showAssistantCopyButton || canRenderAssistantForkButton || canRenderAssistantRegenerateButton;
-  const assistantForkDisabled = Boolean(forkDisabled || isSessionRunning || message.isStreaming || !message.entryId);
-  const assistantBody =
-    hasAssistantProse || showStreamingCursor || assistantArtifacts.length > 0 ? (
-      <div className="min-w-0 text-[14px] leading-relaxed text-neutral-900 dark:text-neutral-100">
-        {showStreamingCursor ? (
-          <span className="inline-block h-4 w-2 animate-pulse bg-neutral-400 dark:bg-neutral-500" />
-        ) : (
-          <Markdown
-            className="prose prose-sm max-w-none prose-neutral dark:prose-invert prose-headings:mt-4 prose-headings:mb-2 prose-h2:text-lg prose-h3:text-base prose-p:my-2 prose-pre:my-3 prose-ol:my-2 prose-ul:my-2 prose-table:my-0 prose-hr:my-4"
-            projectName={selectedProject?.name}
-            onFileOpen={onFileOpen}
-            isStreaming={message.isStreaming}
-          >
-            {linkedContentDisplayText}
-          </Markdown>
-        )}
-        {assistantArtifacts.length > 0 ? (
-          <AgentFileArtifactGroup artifacts={assistantArtifacts} project={selectedProject} onBrowse={onFileOpen} />
-        ) : null}
-        {shouldRenderAssistantActions ? (
-          <div className="mt-1.5 flex justify-end gap-1">
-            {canRenderAssistantRegenerateButton ? (
-              <HoverActionButton
-                icon={<RotateCcw className="h-3.5 w-3.5" strokeWidth={2} />}
-                label={t("input.regenerateLastTurn", { defaultValue: "Regenerate" })}
-                disabled={Boolean(isSessionRunning || message.isStreaming || !message.entryId)}
-                onClick={() => onRegenerateLastTurn?.(message)}
-                variant="action-row"
-              />
-            ) : null}
-            {canRenderAssistantForkButton ? (
-              <ForkMessageButton
-                carriedMessageCount={forkCarriedMessageCount}
-                disabled={assistantForkDisabled}
-                onFork={() => {
-                  if (!assistantForkDisabled && message.entryId) onFork?.(message, forkCarriedMessageCount);
-                }}
-                t={t}
-                variant="action-row"
-              />
-            ) : null}
-            {showAssistantCopyButton ? <CopyMarkdownButton content={formattedContent} /> : null}
-          </div>
-        ) : null}
-      </div>
-    ) : null;
-
-  if (!assistantBody && beforeProcessAttachments.length === 0 && afterProcessAttachments.length === 0) {
+  if (
+    !hasAssistantBody(message, contentDisplayText) &&
+    beforeProcessAttachments.length === 0 &&
+    afterProcessAttachments.length === 0
+  ) {
     return null;
   }
 
-  return withProcessRows(assistantBody);
-}
-
-function CopyMarkdownButton({ content }: { content: string }) {
-  const [copied, setCopied] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const handleClick = async () => {
-    const ok = await copyTextToClipboard(content);
-    if (!ok) return;
-    setCopied(true);
-    if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => setCopied(false), UI_TIMEOUTS.COPY_FEEDBACK_RESET_MS);
-  };
-
-  return (
-    <button
-      type="button"
-      onClick={handleClick}
-      className="rounded p-1 text-neutral-400 transition-colors hover:text-neutral-600 dark:text-neutral-500 dark:hover:text-neutral-300"
-      aria-label={copied ? "Copied" : "Copy"}
-      title={copied ? "Copied" : "Copy"}
-    >
-      {copied ? <Check className="h-3.5 w-3.5" strokeWidth={2} /> : <Copy className="h-3.5 w-3.5" strokeWidth={2} />}
-    </button>
-  );
-}
-
-function HoverActionButton({
-  icon,
-  label,
-  disabled = false,
-  onClick,
-  variant = "action-row",
-}: {
-  icon: ReactNode;
-  label: string;
-  disabled?: boolean;
-  onClick: () => void;
-  variant?: "user-hover" | "action-row";
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className={cn(
-        variant === "user-hover"
-          ? "mb-1 rounded-md p-1.5 text-neutral-400 opacity-0 transition-all group-hover/user-msg:opacity-100 focus-visible:opacity-100"
-          : "rounded p-1 text-neutral-400 transition-colors hover:text-neutral-600 dark:text-neutral-500 dark:hover:text-neutral-300",
-        disabled
-          ? "cursor-not-allowed opacity-30"
-          : variant === "user-hover"
-            ? "hover:bg-neutral-200/80 hover:text-neutral-700 dark:hover:bg-neutral-700 dark:hover:text-neutral-200"
-            : undefined,
-      )}
-      aria-label={label}
-      title={label}
-    >
-      {icon}
-    </button>
-  );
-}
-
-function ForkMessageButton({
-  carriedMessageCount,
-  disabled,
-  disabledReason,
-  onFork,
-  t,
-  variant = "user-hover",
-}: {
-  carriedMessageCount: number;
-  disabled?: boolean;
-  disabledReason?: string;
-  onFork: () => void;
-  t: TFunction;
-  variant?: "user-hover" | "action-row";
-}) {
-  const title =
-    disabledReason ??
-    t("fork.fromHere", {
-      count: carriedMessageCount,
-      defaultValue: `Fork from here · carries ${carriedMessageCount} messages`,
-    });
-
-  return (
-    <button
-      type="button"
-      onClick={onFork}
-      disabled={disabled}
-      className={cn(
-        variant === "user-hover"
-          ? "mb-1 rounded-md p-1.5 text-neutral-400 opacity-0 transition-all group-hover/user-msg:opacity-100 focus-visible:opacity-100"
-          : "rounded p-1 text-neutral-400 transition-colors hover:text-neutral-600 dark:text-neutral-500 dark:hover:text-neutral-300",
-        disabled
-          ? "cursor-not-allowed opacity-30"
-          : variant === "user-hover"
-            ? "hover:bg-neutral-200/80 hover:text-neutral-700 dark:hover:bg-neutral-700 dark:hover:text-neutral-200"
-            : undefined,
-      )}
-      aria-label={title}
-      title={title}
-    >
-      <GitBranch className="h-3.5 w-3.5" strokeWidth={2} />
-    </button>
+  return withProcessRows(
+    <AssistantMessageRow
+      message={message}
+      linkedContentDisplayText={linkedContentDisplayText}
+      contentDisplayText={contentDisplayText}
+      formattedContent={formattedContent}
+      selectedProject={selectedProject}
+      onFileOpen={onFileOpen}
+      onFork={onFork}
+      forkCarriedMessageCount={forkCarriedMessageCount}
+      forkDisabled={forkDisabled}
+      isSessionRunning={isSessionRunning}
+      showAssistantActions={showAssistantActions}
+      onRegenerateLastTurn={onRegenerateLastTurn}
+      isLastAssistantMessage={isLastAssistantMessage}
+      t={t}
+    />,
   );
 }
 
 export default memo(MessageRowV2);
-
-function ProcessSummaryRow({
-  message,
-  processKey,
-  detailMessages = [],
-  renderDetailMessage,
-  isProcessExpanded,
-  onProcessExpandedChange,
-  t,
-}: {
-  message: ChatMessage;
-  processKey?: string;
-  detailMessages?: ChatMessage[];
-  renderDetailMessage?: (message: ChatMessage, index: number) => ReactNode;
-  isProcessExpanded?: (processKey: string, defaultExpanded?: boolean) => boolean;
-  onProcessExpandedChange?: (processKey: string, expanded: boolean) => void;
-  t: TFunction<"chat">;
-}) {
-  const trace = useMemo(() => processSummaryToTrace(message, t), [message, t]);
-  const detailSteps = detailMessages.length > 0 && renderDetailMessage ? [] : trace.steps;
-  const resolvedProcessKey = processKey || message.id || message.runId || message.activityId;
-  const expanded = resolvedProcessKey ? isProcessExpanded?.(resolvedProcessKey, false) : undefined;
-
-  return (
-    <ProcessTrace
-      label={trace.label}
-      collapsedDetail={trace.collapsedDetail}
-      statusLabel={trace.statusLabel}
-      status={trace.status}
-      metrics={trace.metrics}
-      steps={detailSteps}
-      expanded={expanded}
-      onExpandedChange={
-        resolvedProcessKey ? nextExpanded => onProcessExpandedChange?.(resolvedProcessKey, nextExpanded) : undefined
-      }
-    >
-      {detailMessages.length > 0 && renderDetailMessage
-        ? detailMessages.map((detailMessage, index) => renderDetailMessage(detailMessage, index))
-        : null}
-    </ProcessTrace>
-  );
-}
-
-function ProcessAttachmentRow({
-  attachment,
-  renderDetail,
-  isProcessExpanded,
-  onProcessExpandedChange,
-  t,
-}: {
-  attachment: ProcessAttachment;
-  renderDetail: (message: ChatMessage, index: number) => ReactNode;
-  isProcessExpanded?: (processKey: string, defaultExpanded?: boolean) => boolean;
-  onProcessExpandedChange?: (processKey: string, expanded: boolean) => void;
-  t: TFunction<"chat">;
-}) {
-  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
-  const lightboxImages: LightboxImage[] = useMemo(
-    () =>
-      attachment.inlineImages.map(image => ({
-        data: image.data,
-        name: image.name,
-        mimeType: image.mimeType,
-      })),
-    [attachment.inlineImages],
-  );
-
-  return (
-    <div className="flex min-w-0 flex-col items-start gap-2">
-      <ProcessSummaryRow
-        message={attachment.processSummary}
-        processKey={attachment.id}
-        detailMessages={attachment.processDetailMessages}
-        renderDetailMessage={renderDetail}
-        isProcessExpanded={isProcessExpanded}
-        onProcessExpandedChange={onProcessExpandedChange}
-        t={t}
-      />
-      {lightboxImages.length > 0 ? (
-        <div className="flex max-w-full flex-wrap gap-2">
-          {lightboxImages.map((image, idx) => (
-            <button
-              type="button"
-              key={`${attachment.inlineImages[idx].toolId || "tool-image"}-${idx}`}
-              onClick={() => setLightboxIndex(idx)}
-              className="block overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-xs transition hover:shadow-md focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:outline-hidden dark:border-neutral-700 dark:bg-neutral-900"
-              aria-label={image.name ? `Preview ${image.name}` : "Preview image"}
-            >
-              <img
-                src={image.data}
-                alt={image.name || "Tool result image"}
-                className="block h-auto max-h-72 max-w-xs cursor-zoom-in object-contain"
-                loading="lazy"
-              />
-            </button>
-          ))}
-        </div>
-      ) : null}
-      {lightboxIndex !== null && lightboxImages.length > 0 ? (
-        <ImageLightbox images={lightboxImages} startIndex={lightboxIndex} onClose={() => setLightboxIndex(null)} />
-      ) : null}
-    </div>
-  );
-}

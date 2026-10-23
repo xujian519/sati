@@ -1,7 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { DiffLine } from "../../utils/messageTransforms";
-import SessionProviderLogo from "../../../llm-logo-provider/SessionProviderLogo";
 import type { ChatMessage, SatiPermissionSuggestion, Provider, SessionPermissionGrantResult } from "../../types/types";
 import { formatUsageLimitText } from "../../utils/chatFormatting";
 import type { Project } from "../../../../types/app";
@@ -13,6 +12,8 @@ import MessageCopyControl from "./MessageCopyControl";
 import ImageLightbox, { type LightboxImage } from "./ImageLightbox";
 import ToolResultBlock from "./ToolResultBlock";
 import InteractivePromptBlock from "./InteractivePromptBlock";
+import { MessageHeaderRow } from "./MessageHeaderRow";
+import { TaskNotificationRow } from "./TaskNotificationRow";
 type MessageComponentProps = {
   message: ChatMessage;
   prevMessage: ChatMessage | null;
@@ -43,25 +44,6 @@ function translateDescriptor(t: ReturnType<typeof useTranslation>["t"], descript
     params && typeof params === "object" && !Array.isArray(params) ? (params as Record<string, unknown>) : {};
   return t(key, { ...interpolation, defaultValue: fallback });
 }
-
-function resolveHeaderTypeLabel(
-  t: ReturnType<typeof useTranslation>["t"],
-  messageType: string,
-  provider: Provider | string,
-): string {
-  if (messageType === "error") return t("messageTypes.error");
-  if (messageType === "tool") return t("messageTypes.tool");
-  if (provider === "cursor") return t("messageTypes.cursor");
-  if (provider === "codex") return t("messageTypes.codex");
-  if (provider === "gemini") return t("messageTypes.gemini");
-  return t("messageTypes.sati");
-}
-
-const TASK_STATUS_DOT_STYLES: Record<string, string> = {
-  completed: "bg-green-500",
-  failed: "bg-red-500",
-  error: "bg-red-500",
-};
 
 const MessageComponent = memo(
   ({
@@ -171,53 +153,15 @@ const MessageComponent = memo(
             <span className="h-px flex-1 bg-border/60" />
           </div>
         ) : message.isTaskNotification ? (
-          <div className="w-full">
-            <div className="rounded-xl border border-border/50 bg-muted/20 px-3 py-2 text-sm">
-              <div className="flex items-start gap-2">
-                <span
-                  className={`mt-1 inline-block h-1.5 w-1.5 flex-shrink-0 rounded-full ${
-                    TASK_STATUS_DOT_STYLES[message.taskStatus ?? ""] ?? "bg-amber-500"
-                  }`}
-                />
-                <div className="min-w-0 flex-1">
-                  <div className="break-words text-foreground">{messageContent}</div>
-                  {(message.taskStatus || message.taskId) && (
-                    <div className="mt-1 flex flex-wrap gap-1 text-[11px] text-muted-foreground">
-                      {message.taskStatus && (
-                        <span className="rounded bg-background/80 px-1.5 py-0.5">{message.taskStatus}</span>
-                      )}
-                      {message.taskId && (
-                        <span className="rounded bg-background/80 px-1.5 py-0.5">{message.taskId}</span>
-                      )}
-                    </div>
-                  )}
-                </div>
-                <span className="flex-shrink-0 text-xs text-muted-foreground">{formattedTime}</span>
-              </div>
-            </div>
-          </div>
+          <TaskNotificationRow
+            messageContent={messageContent}
+            formattedTime={formattedTime}
+            taskStatus={message.taskStatus}
+            taskId={message.taskId}
+          />
         ) : (
           <div className="w-full">
-            {!hideHeader && !isGrouped && (
-              <div className="mb-2 flex items-center space-x-3">
-                {message.type === "error" ? (
-                  <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-red-600 text-sm text-white">
-                    !
-                  </div>
-                ) : message.type === "tool" ? (
-                  <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-gray-600 text-sm text-white dark:bg-gray-700">
-                    🔧
-                  </div>
-                ) : (
-                  <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full p-1 text-sm text-white">
-                    <SessionProviderLogo provider={provider} className="h-full w-full" />
-                  </div>
-                )}
-                <div className="text-sm font-medium text-gray-900 dark:text-white">
-                  {resolveHeaderTypeLabel(t, message.type, provider)}
-                </div>
-              </div>
-            )}
+            {!hideHeader && !isGrouped && <MessageHeaderRow messageType={message.type} provider={provider} t={t} />}
 
             <div className="w-full">
               {message.isToolUse ? (
