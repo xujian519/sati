@@ -36,3 +36,17 @@ export const ALLOWED_ORIGINS = new Set(
     .map(s => s.trim())
     .filter(Boolean),
 );
+
+/**
+ * 本机免登录模式下的显式 Host 信任名单（#748）。
+ * `SATI_TRUSTED_HOSTS` 为逗号/空格分隔的主机名或 IP（如 `192.168.1.5 sati.lan`）。
+ * 默认只信任环回名字；绑定 `HOST=0.0.0.0` 或经局域网 / 自定义域名访问时，须把访问名登记在此，
+ * 否则 HTTP 返回 403、WebSocket 拒绝握手。
+ * @type {ReadonlySet<string>}
+ */
+export const TRUSTED_HOSTS = new Set(
+  (process.env.SATI_TRUSTED_HOSTS || "")
+    .split(/[\s,]+/)
+    .map(s => s.trim())
+    .filter(Boolean),
+);

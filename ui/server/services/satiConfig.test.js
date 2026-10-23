@@ -50,6 +50,13 @@ describe("readSatiConfigFile fallback behavior", () => {
     });
   });
 
+  it("defaults the Web UI bind host to loopback (#748)", () => {
+    expect(buildDefaultSatiConfig().webui.runtime.host).toBe("127.0.0.1");
+    useTempConfig(null);
+
+    expect(readSatiConfigFile().config.webui.runtime.host).toBe("127.0.0.1");
+  });
+
   it("returns defaults when the config file is missing", () => {
     const configPath = useTempConfig(null);
 

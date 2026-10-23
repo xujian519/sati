@@ -101,6 +101,32 @@ describe("/ws connection logging", () => {
   });
 });
 
+describe("/ws handshake origin guard", () => {
+  afterEach(() => {
+    delete process.env.SATI_TRUSTED_HOSTS;
+  });
+
+  it("拒绝未登记的非环回 Host（默认只信任环回）", async () => {
+    const harness = await startChatServer();
+    try {
+      await expect(harness.connect("lan", { headers: { host: "192.168.1.5:3001" } })).rejects.toThrow();
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it("SATI_TRUSTED_HOSTS 登记后放行同一 Host", async () => {
+    process.env.SATI_TRUSTED_HOSTS = "192.168.1.5";
+    const harness = await startChatServer();
+    try {
+      const client = await harness.connect("lan", { headers: { host: "192.168.1.5:3001" } });
+      expect(client.socket.readyState).toBe(WebSocket.OPEN);
+    } finally {
+      await harness.close();
+    }
+  });
+});
+
 async function startChatServer() {
   vi.resetModules();
   const infoCalls = [];
@@ -146,7 +172,8 @@ async function startChatServer() {
 
   return {
     infoCalls,
-    connect: label => connectClient(`ws://127.0.0.1:${port}/ws?token=test`, label),
+    port,
+    connect: (label, options) => connectClient(`ws://127.0.0.1:${port}/ws?token=test`, label, options),
     waitForWatchers: async (sessionId, expected) => {
       // `getWatchers()` 返回 Set（不是数组）
       await waitFor(() => sessionWatchRegistry.getWatchers(sessionId).size >= expected);
@@ -163,8 +190,8 @@ async function startChatServer() {
   };
 }
 
-function connectClient(url, label) {
-  const socket = new WebSocket(url);
+function connectClient(url, label, options) {
+  const socket = new WebSocket(url, options);
   openSockets.push(socket);
   const client = { label, frames: [], socket, send: payload => socket.send(payload) };
   socket.on("message", raw => {

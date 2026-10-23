@@ -51,7 +51,7 @@ import urlTicketRoutes from "./routes/url-ticket.js";
 import { validateApiKey, authenticateToken } from "./middleware/auth.js";
 import { corsPolicy } from "./middleware/corsPolicy.js";
 import { createLocalOriginGuard } from "./middleware/localOriginGuard.js";
-import { DISABLE_LOCAL_AUTH, IS_PLATFORM } from "./constants/config.js";
+import { DISABLE_LOCAL_AUTH, IS_PLATFORM, TRUSTED_HOSTS } from "./constants/config.js";
 import { getConnectableHost } from "../shared/networkHosts.js";
 import { createChatWebSocketServer, getBrowserActiveKeys } from "./websocket/chat.js";
 import { startTeamPresenceHeartbeat } from "./team-presence.js";
@@ -86,16 +86,13 @@ app.use(corsPolicy());
 
 // 第二层（本机免登录模式）：corsPolicy 的同源判据在 DNS rebinding 下会放行
 // —— 攻击页自身跑在同端口（http://evil.com:3001）时，其 Origin 与 Host 同为主机名
-// evil.com，于是被判为「同源」。本层要求 Host 与 Origin 各自都是本机可达名
-// （环回 / 私有地址 / 本机主机名 / SATI_TRUSTED_HOSTS），rebinding 页无论端口都过不去。
+// evil.com，于是被判为「同源」。本层要求 Host 与 Origin 各自都是环回名字或
+// SATI_TRUSTED_HOSTS 显式登记的名字；私有地址/本机主机名不再隐式信任（#748）。
 // 托管部署（IS_PLATFORM）有真实 JWT 且 Host 是公网域名，故那里不启用。
 app.use(
   createLocalOriginGuard({
     enabled: DISABLE_LOCAL_AUTH && !IS_PLATFORM,
-    trustedHosts: (process.env.SATI_TRUSTED_HOSTS ?? "")
-      .split(",")
-      .map(entry => entry.trim())
-      .filter(Boolean),
+    trustedHosts: TRUSTED_HOSTS,
   }),
 );
 app.use(
