@@ -68,13 +68,26 @@ export type ValidateSpecificationOutput = {
 };
 
 /** 必需章节（结构与 Mady requiredSections 一致）。 */
-const REQUIRED_SECTIONS: Array<{ name: string; pattern: RegExp }> = [
-  { name: "技术领域", pattern: /^#{1,3}\s*技术领域/m },
-  { name: "背景技术", pattern: /^#{1,3}\s*背景技术/m },
-  { name: "发明内容", pattern: /^#{1,3}\s*发明内容/m },
-  { name: "附图说明", pattern: /^#{1,3}\s*附图说明/m },
-  { name: "具体实施方式", pattern: /^#{1,3}\s*具体实施方式/m },
-];
+const REQUIRED_SECTIONS = ["技术领域", "背景技术", "发明内容", "附图说明", "具体实施方式"] as const;
+
+type RequiredSection = (typeof REQUIRED_SECTIONS)[number];
+
+/**
+ * 章节标题识别（行首、整行匹配）：Markdown `#`–`######`、纯文本、编号
+ * （`一、` / `1.` / `（一）`）、方括号（`【技术领域】`）、行尾冒号。
+ * 正文中出现章节名（如「本发明属于技术领域」）不会被误判。
+ */
+const SECTION_HEADING_RE = new RegExp(
+  String.raw`^(?:#{1,6}\s*)?` +
+    String.raw`(?:[（(]\s*[一二三四五六七八九十百]+\s*[）)]\s*|[一二三四五六七八九十百]+\s*[、.]\s*|\d+\s*[、.]\s*)?` +
+    String.raw`[【\[]?\s*(技术领域|背景技术|发明内容|附图说明|具体实施方式)\s*[】\]]?\s*[:：]?\s*$`,
+);
+
+/** 识别单个行是否为章节标题；返回章节名，否则 undefined。 */
+export function matchSectionHeading(line: string): RequiredSection | undefined {
+  const match = SECTION_HEADING_RE.exec(line.trim());
+  return match?.[1] as RequiredSection | undefined;
+}
 
 const VAGUE_TERMS = ["约", "大致", "可能", "优选", "例如", "大约", "左右", "较好"];
 
@@ -320,6 +333,7 @@ export function createValidateSpecificationTool(): SatiToolDefinition<
       "验证专利说明书是否符合撰写要求，包括结构完整性、发明名称长度、摘要长度、模糊表述、附图说明一致性、" +
       "权利要求特征覆盖（A26.4）、数值范围端点与中间值实施例、效果数据定量性、化学领域表征数据、摘要关键词与摘要附图等检查。" +
       "文本含 SMILES 时附加合法性抽检（RDKit 校验，warning 级）。" +
+      "章节标题支持 Markdown（#–######）、纯文本、编号（一、/1./（一））与方括号（【技术领域】）格式。" +
       "在说明书初稿完成后使用；可传入权利要求书全文（claims）与技术领域（tech_domain）以启用实质校验。",
     kind: "custom",
     inputSchema: {
@@ -389,12 +403,13 @@ export function validateSpecification(input: ValidateSpecificationInput): Valida
   const text = input.text ?? "";
   const title = input.title?.trim() ?? "";
 
-  // 1) 结构完整性：五部分章节齐全
-  const present = new Set<string>();
-  for (const sec of REQUIRED_SECTIONS) {
-    if (sec.pattern.test(text)) present.add(sec.name);
+  // 1) 结构完整性：五部分章节齐全（Markdown / 纯文本 / 编号 / 方括号标题均可）
+  const present = new Set<RequiredSection>();
+  for (const line of text.split(/\r?\n/)) {
+    const section = matchSectionHeading(line);
+    if (section !== undefined) present.add(section);
   }
-  const missing = REQUIRED_SECTIONS.map(s => s.name).filter(n => !present.has(n));
+  const missing = REQUIRED_SECTIONS.filter(n => !present.has(n));
   if (text.trim().length > 0 && missing.length > 0) {
     violations.push({
       rule: "sections",
@@ -579,11 +594,19 @@ export function validateSpecification(input: ValidateSpecificationInput): Valida
   };
 }
 
-const DRAWING_SECTION_RE = /^#{1,3}\s*附图说明\s*\n([\s\S]*?)(?=^#{1,3}\s|\s*$)/m;
-
-/** 提取附图说明章节正文（无该章节时返回空串）。 */
+/** 提取附图说明章节正文（无该章节时返回空串；标题识别与结构检查同源）。 */
 function getDrawingSection(text: string): string {
-  return text.match(DRAWING_SECTION_RE)?.[1] ?? "";
+  const lines = text.split(/\r?\n/);
+  let start = -1;
+  for (let i = 0; i < lines.length; i += 1) {
+    const section = matchSectionHeading(lines[i] ?? "");
+    if (start === -1) {
+      if (section === "附图说明") start = i + 1;
+      continue;
+    }
+    if (section !== undefined) return lines.slice(start, i).join("\n");
+  }
+  return start === -1 ? "" : lines.slice(start).join("\n");
 }
 
 /** 统计附图说明章节内的"图N"引用数（避免把附图说明自身计入正文引用）。 */
