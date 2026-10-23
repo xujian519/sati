@@ -11,7 +11,7 @@ import path from "path";
 import crypto from "crypto";
 import bcrypt from "bcrypt";
 import { spawn } from "child_process";
-import { getConnectableHost } from "../../shared/networkHosts.js";
+import { getConnectableHost, isLoopbackHost } from "../../shared/networkHosts.js";
 import { getOpenUrlSpawnCommand } from "../utils/processSpawn.js";
 import { initializeDatabase, userDb } from "../database/db.js";
 import { configureWebPush } from "./vapid-keys.js";
@@ -20,7 +20,7 @@ import { setupProjectsWatcher } from "./projects-watcher.js";
 import { closeMemoryServices, startMemoryScheduler, stopMemoryScheduler } from "./memoryService.js";
 import { startEnabledPluginServers, stopAllPlugins } from "../utils/plugin-process-manager.js";
 import { startSatiConfigWatcher, stopSatiConfigWatcher } from "./satiConfigWatcher.js";
-import { DISABLE_LOCAL_AUTH } from "../constants/config.js";
+import { DISABLE_LOCAL_AUTH, IS_PLATFORM, TRUSTED_HOSTS } from "../constants/config.js";
 
 const __dirname = import.meta.dirname;
 
@@ -46,7 +46,9 @@ const c = {
 
 // Helper function to convert permissions to rwx format
 const SERVER_PORT = process.env.SERVER_PORT || 3001;
-const HOST = process.env.HOST || "0.0.0.0";
+// 默认只绑环回（#748）：局域网访问需显式 HOST=0.0.0.0 / 网卡地址，并把访问名登记进
+// SATI_TRUSTED_HOSTS（本机免登录模式的来源守卫只信任环回与显式名单）。
+const HOST = process.env.HOST || "127.0.0.1";
 const DISPLAY_HOST = getConnectableHost(HOST);
 const VITE_PORT = process.env.VITE_PORT || 5173;
 
@@ -158,6 +160,16 @@ async function startServer(server) {
           logger.info("");
           logger.info(`${c.info("[INFO]")} Server URL:  ${c.bright("http://" + DISPLAY_HOST + ":" + boundPort)}`);
           logger.info(`${c.info("[INFO]")} Installed at: ${c.dim(appInstallPath)}`);
+          if (DISABLE_LOCAL_AUTH && !IS_PLATFORM && !isLoopbackHost(HOST)) {
+            const trusted = [...TRUSTED_HOSTS];
+            logger.warn(
+              `${c.warn("[WARN]")} Web UI login is disabled and the server is bound to ${HOST}. ` +
+                (trusted.length
+                  ? `Non-loopback requests are accepted only for: ${trusted.join(", ")}.`
+                  : "Non-loopback requests will be rejected (HTTP 403 / WebSocket handshake). " +
+                    `Set SATI_TRUSTED_HOSTS=<lan-ip-or-hostname> to allow them, or use HOST=127.0.0.1 for local-only.`),
+            );
+          }
           logger.info(`${c.tip("[TIP]")}  Run "sati status" for full configuration details`);
           logger.info("");
 

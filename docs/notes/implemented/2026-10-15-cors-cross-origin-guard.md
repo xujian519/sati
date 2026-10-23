@@ -2,6 +2,9 @@
 
 Status: implemented
 
+> 后续变更（2026-10-23）：默认绑定改为 `127.0.0.1`，非环回 Host 须显式登记，见
+> `2026-10-23-loopback-default-and-explicit-lan-trust.md`。
+
 关联 Issue: #625
 
 ## Problem

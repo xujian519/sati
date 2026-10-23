@@ -2,6 +2,9 @@
 
 Status: implemented
 
+> 后续变更（2026-10-23）：默认绑定改为 `127.0.0.1`，私有地址 / 本机主机名不再隐式可信，
+> 须显式登记 `SATI_TRUSTED_HOSTS`；见 `2026-10-23-loopback-default-and-explicit-lan-trust.md`。
+
 ## Problem
 
 上一批把「项目文件路由族的 root 只认项目注册表」落了地，代码审查指出三条与本批同一威胁模型、

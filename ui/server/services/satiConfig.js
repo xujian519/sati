@@ -90,7 +90,7 @@ export function buildDefaultSatiConfig() {
     },
     webui: {
       runtime: {
-        host: "0.0.0.0",
+        host: "127.0.0.1",
         serverPort: 3001,
         vitePort: 5173,
         apiTimeoutMs: 120000,
@@ -471,7 +471,7 @@ function buildRuntimeEnv(config, sourceConfig = null) {
   const env = {
     SERVER_PORT: process.env.SERVER_PORT || String(runtime.serverPort ?? 3001),
     VITE_PORT: process.env.VITE_PORT || String(runtime.vitePort ?? 5173),
-    HOST: process.env.HOST || String(runtime.host ?? "0.0.0.0"),
+    HOST: process.env.HOST || String(runtime.host ?? "127.0.0.1"),
     API_TIMEOUT_MS: String(runtime.apiTimeoutMs ?? 120000),
     SATI_MEMORY_ENABLED: normalized.memory?.enabled ? "1" : "0",
   };

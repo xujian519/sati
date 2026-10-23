@@ -4,6 +4,7 @@
  *
  * 判据是「浏览器里任意网页不能调用本机 API」这条不变式：跨站 `fetch` 一定带 `Origin`（本轮判据
  * 的核心输入），而对 `127.0.0.1` 的跨站请求里 `Host` 仍是本机地址，因此两条判据必须同时成立才放行。
+ * 默认只信任环回名字；私有地址 / 本机主机名须显式登记在 `SATI_TRUSTED_HOSTS`（#748）。
  * 负控制：把守卫 `enabled: false`（即关闭）时，跨站请求确实进得来——见最后一组用例。
  */
 import express from "express";
@@ -63,21 +64,23 @@ describe("extractHostname", () => {
 });
 
 describe("isTrustedLocalHost", () => {
-  const options = { selfHostname: "my-mac", trustedHosts: [] };
+  const options = { trustedHosts: [] };
 
   it.each([
     ["localhost:3001", true],
     ["127.0.0.1:3001", true],
     ["127.9.9.9", true],
     ["::1", true],
-    ["192.168.1.5:3001", true],
-    ["10.0.0.7:3001", true],
-    ["172.20.1.1", true],
-    ["169.254.1.1", true],
-    ["fe80::1", true],
-    ["fd00::1", true],
-    ["my-mac:3001", true],
-    ["my-mac.local:3001", true],
+    ["app.localhost:3001", true],
+    // 非环回的本机可达名不再隐式信任：须显式登记（#748）
+    ["192.168.1.5:3001", false],
+    ["10.0.0.7:3001", false],
+    ["172.20.1.1", false],
+    ["169.254.1.1", false],
+    ["fe80::1", false],
+    ["fd00::1", false],
+    ["my-mac:3001", false],
+    ["my-mac.local:3001", false],
     // DNS rebinding：攻击者的域名解析到 127.0.0.1，Host 仍是那个域名
     ["evil.com", false],
     ["evil.com:3001", false],
@@ -89,10 +92,13 @@ describe("isTrustedLocalHost", () => {
     expect(isTrustedLocalHost(host, options)).toBe(expected);
   });
 
-  it("显式列出的主机名被信任（非常规部署的逃生口）", () => {
-    expect(isTrustedLocalHost("ui.internal:3001", { selfHostname: "my-mac", trustedHosts: ["ui.internal"] })).toBe(
-      true,
-    );
+  it("显式列出的非环回名字被信任（局域网 / 反代 / 自定义域名的逃生口）", () => {
+    const trusted = { trustedHosts: ["192.168.1.5", "ui.internal", "sati.lan:3001"] };
+    expect(isTrustedLocalHost("192.168.1.5:3001", trusted)).toBe(true);
+    expect(isTrustedLocalHost("ui.internal:3001", trusted)).toBe(true);
+    expect(isTrustedLocalHost("sati.lan", trusted)).toBe(true);
+    // 名单外的其它非环回名字仍拒。
+    expect(isTrustedLocalHost("10.0.0.7:3001", trusted)).toBe(false);
   });
 });
 
@@ -106,7 +112,14 @@ describe("isTrustedRequestSource", () => {
     expect(isTrustedRequestSource({ host: "localhost:3001", origin: "http://localhost:5173" })).toBe(true);
     expect(isTrustedRequestSource({ host: "localhost:3001", origin: "http://127.0.0.1:5173" })).toBe(true);
     expect(isTrustedRequestSource({ host: "127.0.0.1:3001", origin: "http://127.0.0.1:3001" })).toBe(true);
-    expect(isTrustedRequestSource({ host: "127.0.0.1:3001", origin: "http://192.168.1.5:5173" })).toBe(true);
+  });
+
+  it("非环回来源默认拒绝，显式登记后放行", () => {
+    const lan = { host: "192.168.1.5:3001", origin: "http://192.168.1.5:5173" };
+    expect(isTrustedRequestSource(lan)).toBe(false);
+    expect(isTrustedRequestSource(lan, { trustedHosts: ["192.168.1.5"] })).toBe(true);
+    expect(isTrustedRequestSource({ host: "sati.lan:3001" }, { trustedHosts: ["sati.lan"] })).toBe(true);
+    expect(isTrustedRequestSource({ host: "sati.lan:3001" }, { trustedHosts: ["other.lan"] })).toBe(false);
   });
 
   it.each([
@@ -126,7 +139,7 @@ describe("isTrustedRequestSource", () => {
   });
 
   it("显式列出的名字同时用于 Host 与 Origin（反代/自定义域名的逃生口）", () => {
-    const options = { selfHostname: "my-mac", trustedHosts: ["app.example.com"] };
+    const options = { trustedHosts: ["app.example.com"] };
     expect(isTrustedRequestSource({ host: "127.0.0.1:3001", origin: "https://app.example.com" }, options)).toBe(true);
     expect(isTrustedRequestSource({ host: "app.example.com", origin: "https://app.example.com" }, options)).toBe(true);
   });
@@ -134,10 +147,10 @@ describe("isTrustedRequestSource", () => {
 
 describe("中间件行为", () => {
   function start({ enabled, ...options }) {
-    return serve([createLocalOriginGuard({ enabled, selfHostname: "my-mac", ...options })]);
+    return serve([createLocalOriginGuard({ enabled, ...options })]);
   }
 
-  it("启用后只放行本机来源，公网来源与 rebinding 一律 403", async () => {
+  it("启用后只放行环回来源，公网来源、非环回 Host 与 rebinding 一律 403", async () => {
     const { port, close } = await start({ enabled: true });
     try {
       const allowed = await nativeFetch(`http://127.0.0.1:${port}/api/probe`, {
@@ -162,6 +175,27 @@ describe("中间件行为", () => {
       const rebound = await rawGet(port, "/api/probe", { host: "evil.com" });
       expect(rebound.status).toBe(403);
       expect(rebound.body).toContain("UNTRUSTED_REQUEST_ORIGIN");
+
+      // 局域网直连（Host 为私有地址）：默认不再隐式信任。
+      const lan = await rawGet(port, "/api/probe", { host: "192.168.1.5:3001" });
+      expect(lan.status).toBe(403);
+      expect(lan.body).toContain("UNTRUSTED_REQUEST_ORIGIN");
+    } finally {
+      await close();
+    }
+  });
+
+  it("显式登记的非环回 Host 放行（局域网 / 反代部署）", async () => {
+    const { port, close } = await start({ enabled: true, trustedHosts: ["192.168.1.5"] });
+    try {
+      const lan = await rawGet(port, "/api/probe", {
+        host: "192.168.1.5:3001",
+        origin: "http://192.168.1.5:3001",
+      });
+      expect(lan.status).toBe(200);
+
+      const other = await rawGet(port, "/api/probe", { host: "10.0.0.7:3001" });
+      expect(other.status).toBe(403);
     } finally {
       await close();
     }
@@ -197,10 +231,7 @@ describe("与 corsPolicy 叠加", () => {
   });
 
   it("两层叠加后拒绝，且本机同源请求不受影响", async () => {
-    const { port, close } = await serve([
-      corsPolicy(new Set()),
-      createLocalOriginGuard({ enabled: true, selfHostname: "my-mac" }),
-    ]);
+    const { port, close } = await serve([corsPolicy(new Set()), createLocalOriginGuard({ enabled: true })]);
     try {
       const blocked = await rawGet(port, "/api/probe", rebinding);
       expect(blocked.status).toBe(403);
