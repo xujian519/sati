@@ -10,6 +10,7 @@ import {
   createValidateSpecificationTool,
   extractClaimFeatures,
   extractNumericValues,
+  matchSectionHeading,
   validateSpecification,
   type SpecViolation,
 } from "../../../src/tool/builtin/validateSpecification.js";
@@ -56,6 +57,87 @@ test("validate_specification flags missing sections and long title", () => {
   assert.match(sectionViolation?.message ?? "", /缺少必要章节：背景技术、发明内容、附图说明、具体实施方式/);
   const titleViolation = result.violations.find(v => v.rule === "title_length");
   assert.ok(titleViolation, "should flag title length");
+});
+
+const PLAIN_SPEC = [
+  "技术领域",
+  "本发明涉及机械技术领域。",
+  "背景技术",
+  "现有技术存在效率低下的问题。",
+  "发明内容",
+  "本发明提供一种装置，包括壳体、驱动单元。",
+  "附图说明",
+  "图1为本发明实施例的整体结构示意图。",
+  "具体实施方式",
+  "实施例1：如图1所示，驱动单元采用伺服电机。",
+].join("\n");
+
+test("validate_specification: 纯文本标准说明书不再被判五节全缺（#711）", () => {
+  const result = validateSpecification({ text: PLAIN_SPEC });
+  assert.equal(
+    result.violations.some(v => v.rule === "sections"),
+    false,
+    JSON.stringify(result.violations),
+  );
+  assert.equal(result.passed, true);
+});
+
+test("validate_specification: 编号与方括号标题均可识别", () => {
+  const mixed = [
+    "一、技术领域",
+    "本发明涉及机械技术领域。",
+    "1. 背景技术",
+    "现有技术存在效率低下的问题。",
+    "（一）发明内容",
+    "本发明提供一种装置，包括壳体、驱动单元。",
+    "【附图说明】",
+    "图1为本发明实施例的整体结构示意图。",
+    "###### 具体实施方式",
+    "实施例1：如图1所示，驱动单元采用伺服电机。",
+  ].join("\n");
+  const result = validateSpecification({ text: mixed });
+  assert.equal(
+    result.violations.some(v => v.rule === "sections"),
+    false,
+    JSON.stringify(result.violations),
+  );
+  assert.equal(result.passed, true);
+});
+
+test("validate_specification: 只缺附图说明时仅报该节", () => {
+  const text = PLAIN_SPEC.replace("附图说明\n图1为本发明实施例的整体结构示意图。\n", "");
+  const result = validateSpecification({ text });
+  const sectionViolation = result.violations.find(v => v.rule === "sections");
+  assert.ok(sectionViolation);
+  assert.match(sectionViolation?.message ?? "", /缺少必要章节：附图说明$/);
+});
+
+test("validate_specification: 正文出现章节名但无标题时不误判为存在", () => {
+  const text = PLAIN_SPEC.replace("技术领域\n本发明涉及机械技术领域。\n", "背景技术\n本发明属于技术领域。\n");
+  const result = validateSpecification({ text });
+  const sectionViolation = result.violations.find(v => v.rule === "sections");
+  assert.ok(sectionViolation);
+  assert.match(sectionViolation?.message ?? "", /缺少必要章节：技术领域/);
+});
+
+test("matchSectionHeading: 支持的标题形态与正文误命中", () => {
+  assert.equal(matchSectionHeading("## 技术领域"), "技术领域");
+  assert.equal(matchSectionHeading("###### 具体实施方式"), "具体实施方式");
+  assert.equal(matchSectionHeading("背景技术"), "背景技术");
+  assert.equal(matchSectionHeading("1. 发明内容"), "发明内容");
+  assert.equal(matchSectionHeading("一、附图说明"), "附图说明");
+  assert.equal(matchSectionHeading("（一）技术领域"), "技术领域");
+  assert.equal(matchSectionHeading("【技术领域】"), "技术领域");
+  assert.equal(matchSectionHeading("技术领域："), "技术领域");
+  assert.equal(matchSectionHeading("本发明属于技术领域。"), undefined);
+});
+
+test("matchSectionHeading: Markdown 标题允许别名/说明后缀（保持历史前缀语义）", () => {
+  assert.equal(matchSectionHeading("## 技术领域（Technical Field）"), "技术领域");
+  assert.equal(matchSectionHeading("## 技术领域：本发明涉及机械领域"), "技术领域");
+  assert.equal(matchSectionHeading("  ## 背景技术  "), "背景技术");
+  // 纯文本仍要求整行只有章节标题，正文中的「技术领域：」不算标题。
+  assert.equal(matchSectionHeading("技术领域：本发明涉及机械领域"), undefined);
 });
 
 test("validate_specification flags vague terms and drawing inconsistencies", () => {
@@ -264,6 +346,21 @@ const SPEC_WITH_DRAWINGS = [
 
 test("checkFigureMarkConsistency: 标号一致时无违规", () => {
   const violations = checkFigureMarkConsistency(SPEC_WITH_DRAWINGS, [makeFigureAnalysis()]);
+  assert.equal(violations.length, 0, JSON.stringify(violations));
+});
+
+test("checkFigureMarkConsistency: 纯文本附图说明标题同样可提取章节正文（#711）", () => {
+  const plain = SPEC_WITH_DRAWINGS.replace(/^# /gm, "");
+  const violations = checkFigureMarkConsistency(plain, [makeFigureAnalysis()]);
+  assert.equal(violations.length, 0, JSON.stringify(violations));
+});
+
+test("checkFigureMarkConsistency: 非五节 Markdown 标题构成附图说明边界（不吞入正文）", () => {
+  const spec = SPEC_WITH_DRAWINGS.replace(
+    "# 具体实施方式",
+    "# 有益效果\n本装置在厚度范围：3-5 mm 时效果最佳。\n# 具体实施方式",
+  );
+  const violations = checkFigureMarkConsistency(spec, [makeFigureAnalysis()]);
   assert.equal(violations.length, 0, JSON.stringify(violations));
 });
 
