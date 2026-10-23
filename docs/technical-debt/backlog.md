@@ -2358,7 +2358,7 @@
 
 **B2 · chat 主链路（D24–D29，子件先、枢纽后）**
 
-- [ ] **B2.1** `ui/src/components/chat-v2/MessagesPaneV2.tsx` — `MessagesPaneV2`（824 行）
+- [x] **B2.1** `ui/src/components/chat-v2/MessagesPaneV2.tsx` — `MessagesPaneV2`（824 → **338** 行；判据 ≤350 达成）（`285b463f1`；文件 **1183 → 360** 行，file-size 存量豁免 **37 → 36**（BF-18 脱表）；按原 hook 连续区间外置六个 hook/模块 + 类型/纯函数两文件——interaction 61 / subagent projection 64 / renderable timeline 218 / live status 59 / renderers 249 / search&layout 77，最大新函数 249 行；展开后 hook 调用顺序 41 tokens 完全一致、JSX return 332 tokens 逐 token 相同；证明 74/74；决策见 `docs/notes/implemented/2026-10-23-messages-pane-render-split.md`）
 - [ ] **B2.2** `ui/src/components/chat-v2/ComposerV2.tsx` — `ComposerV2`（741 行）
 - [ ] **B2.3** `ui/src/components/chat-v2/MessageRowV2.tsx` — `MessageRowV2`（429 行）
 - [ ] **B2.3** `ui/src/components/chat-v2/SubagentDetailMessageFlow.tsx` — `SubagentDetailMessageFlow`（309 行）
@@ -2429,7 +2429,7 @@
 - [x] **P2**（P2.9）`src/tool/execution/ToolRuntime.ts` — `execute`（388 → **16** 行；判据 ≤200 达成）（`1fd45f71`；五阶段私有方法 `preflight`/`applyPreToolUseHooks`/`resolvePermission`/`runTool` 保持审计/事件/证据顺序；`toolErrorFormatting.ts`（69 行）与 `planModePreflight.ts`（77 行）外移使文件 710 → 683（≤800）；185 定向测试 + 2 负控制（alwaysAsk 声明式 allow、timeout 归一）各按预期 1 红后恢复；决策同上）
 - [x] **P2**（P2.10）`src/patent/graph/domains/inventiveness.ts` — `buildInventivenessGraph`（342 → **21** 行；判据「图构建声明化」达成）（`1fd45f71`；`STAGE_NODES`/`STAGE_EDGES` 表驱动，开关决议纯函数 `resolveGraphFlags`/`normalizeMaxRounds`；14/14 组合 `describe()` 逐字节一致、10/10 运行 state/degraded/interrupted/prompt 多重集一致；负控制 maxRounds=0 与 citationGate 各按预期 1/3 红；文件 633 → 696；决策同上）
 
-### 38.2 ≥800 行文件（37 个：承接 11 + 未承接 26）
+### 38.2 ≥800 行文件（36 个：承接 10 + 未承接 26）
 
 > 承接 = 计划条目的拆分会使该文件降到 800 以下或另有明确目标；未承接 = 转 §38.3 的 sweep 后条目（**不进 45/50 天承诺面**，不静默）。注：`InProcessGateway.ts` 只拆函数不拆文件，故按未承接计。
 > *（P2.7 回填：原表 42 个 = 承接 16 + 未承接 26；`src/cli/sati.ts` 经 P2.7 降到 14 行已不在表内，故承接 16 → 15、总数 42 → 41，与 `architecture-baseline.json` 存量豁免 42 → 41 同步。）*
@@ -2437,6 +2437,7 @@
 > *（B1.1 回填：`ui/src/stores/useSessionStore.ts` 经 B1.1 降到 133 行已不在表内，故承接 14 → 13、总数 40 → 39，与 `architecture-baseline.json` 存量豁免 40 → 39 同步。）*
 > *（B1.2 回填：`ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` 经 B1.2 降到 114 行已不在表内，故承接 13 → 12、总数 39 → 38，与 `architecture-baseline.json` 存量豁免 39 → 38 同步。）*
 > *（B1.3 回填：`ui/src/hooks/useProjectsState.ts` 经 B1.3 降到 586 行已不在表内，故承接 12 → 11、总数 38 → 37，与 `architecture-baseline.json` 存量豁免 38 → 37 同步。）*
+> *（B2.1 回填：`ui/src/components/chat-v2/MessagesPaneV2.tsx` 经 B2.1 降到 360 行已不在表内，故承接 11 → 10、总数 37 → 36，与 `architecture-baseline.json` 存量豁免 37 → 36 同步。）*
 
 - [ ] **BF-01** `ui/server/sati-bridge.js` — 2347 行 · 未承接 → PS-01
 - [ ] **BF-02** `src/adapters/channel/wecom/WeComChannel.ts` — 1763 行 · 未承接 → PS-02
@@ -2455,7 +2456,7 @@
 - [ ] **BF-15** `ui/server/routes/config.js` — 1233 行 · 未承接 → PS-10
 - [ ] **BF-16** `ui/server/routes/agent.js` — 1223 行 · 未承接 → PS-11
 - [ ] **BF-17** `ui/src/components/chat-v2/ComposerV2.tsx` — 1187 行 · 承接：**B2.2**
-- [ ] **BF-18** `ui/src/components/chat-v2/MessagesPaneV2.tsx` — 1182 行 · 承接：**B2.1**
+- [x] **BF-18** `ui/src/components/chat-v2/MessagesPaneV2.tsx` — 1182 行 · 承接：**B2.1** —— **已交付（2026-10-23，`285b463f1`）：1183 → 360 行**（脱表，见 §38.2 抬头回填；`MessagesPaneV2` 824 → 338 行，逻辑迁入六个 hook/模块 + 类型/纯函数两文件）
 - [ ] **BF-19** `ui/server/routes/taskmaster.js` — 1178 行 · 未承接 → PS-12
 - [ ] **BF-20** `src/agent/loop/AgentLoop.ts` — 1149 行 · 未承接 → PS-13
 - [ ] **BF-21** `ui/src/components/main-content-v2/CronV2.tsx` — 1129 行 · 承接：**B4.4**
