@@ -8,6 +8,8 @@ import { CopyMarkdownButton, ForkMessageButton, HoverActionButton } from "./Mess
 
 export type AssistantMessageRowProps = {
   message: ChatMessage;
+  /** 由父级用 hasAssistantBody 单点判定，子组件只负责渲染。 */
+  hasBody: boolean;
   linkedContentDisplayText: string;
   contentDisplayText: string;
   formattedContent: string;
@@ -25,6 +27,7 @@ export type AssistantMessageRowProps = {
 
 export function AssistantMessageRow({
   message,
+  hasBody,
   linkedContentDisplayText,
   contentDisplayText,
   formattedContent,
@@ -52,9 +55,7 @@ export function AssistantMessageRow({
     showAssistantCopyButton || canRenderAssistantForkButton || canRenderAssistantRegenerateButton;
   const assistantForkDisabled = Boolean(forkDisabled || isSessionRunning || message.isStreaming || !message.entryId);
 
-  if (!hasAssistantProse && !showStreamingCursor && assistantArtifacts.length === 0) {
-    return null;
-  }
+  if (!hasBody) return null;
 
   return (
     <div className="min-w-0 text-[14px] leading-relaxed text-neutral-900 dark:text-neutral-100">

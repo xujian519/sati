@@ -321,17 +321,15 @@ function MessageRowV2({
   }
 
   // Assistant: plain prose, no avatar and no bubble.
-  if (
-    !hasAssistantBody(message, contentDisplayText) &&
-    beforeProcessAttachments.length === 0 &&
-    afterProcessAttachments.length === 0
-  ) {
+  const assistantHasBody = hasAssistantBody(message, contentDisplayText);
+  if (!assistantHasBody && beforeProcessAttachments.length === 0 && afterProcessAttachments.length === 0) {
     return null;
   }
 
   return withProcessRows(
     <AssistantMessageRow
       message={message}
+      hasBody={assistantHasBody}
       linkedContentDisplayText={linkedContentDisplayText}
       contentDisplayText={contentDisplayText}
       formattedContent={formattedContent}

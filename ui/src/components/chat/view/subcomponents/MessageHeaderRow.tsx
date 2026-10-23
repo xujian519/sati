@@ -1,19 +1,7 @@
 import type { useTranslation } from "react-i18next";
 import SessionProviderLogo from "../../../llm-logo-provider/SessionProviderLogo";
 import type { Provider } from "../../types/types";
-
-function resolveHeaderTypeLabel(
-  t: ReturnType<typeof useTranslation>["t"],
-  messageType: string,
-  provider: Provider | string,
-): string {
-  if (messageType === "error") return t("messageTypes.error");
-  if (messageType === "tool") return t("messageTypes.tool");
-  if (provider === "cursor") return t("messageTypes.cursor");
-  if (provider === "codex") return t("messageTypes.codex");
-  if (provider === "gemini") return t("messageTypes.gemini");
-  return t("messageTypes.sati");
-}
+import { resolveHeaderTypeLabel } from "./messageHeaderLabel";
 
 export function MessageHeaderRow({
   messageType,
