@@ -307,6 +307,12 @@ export type SatiToolRuntimeContext = {
   currentPermissionDecision?: Extract<PermissionDecision, { type: "allow" }>;
   now?: () => Date;
   env?: NodeJS.ProcessEnv;
+  /**
+   * @internal 测试缝：写盘前（真实落点已解析、目标尚未打开）执行，用于确定性
+   * 模拟「解析与落盘之间软链被重指 / 目标被换入硬链接」的 TOCTOU 场景。
+   * 生产路径不注入（见 tests/tool/write-race-hardlink.spec.ts）。
+   */
+  __testBeforeWrite?: () => void | Promise<void>;
   maxResultBytes?: number;
   /**
    * True when the caller routes tool results through a context runtime that

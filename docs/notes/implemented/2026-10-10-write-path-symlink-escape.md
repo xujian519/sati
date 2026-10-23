@@ -31,6 +31,13 @@ Status: implemented
 
 上一版断言「该短路同时承载用户显式批准写外部目录这条合法路径，单独收紧会连合法外部写入一起拒掉」——**这个判断是错的**：词法本就在 root 外的目标走 `!root` 分支，根本不经过这道闸；能越过这道闸的只有「词法在 root 内、真实落点在 root 外」。判据已把这条钉住：`a session allow rule for an outside folder still authorizes writes there` 现在一路执行到落盘，断言文件确实写在工作区外。与上游的偏离也随之显式化：逃逸目标由上游的 `ask` 改为 `deny`（`tests/tool/write-symlink-escape.spec.ts` 三处 pin 与两条用例名同步改，文件内注明偏离原因）。
 
+**2026-10-23 追加（残余面 3、4 收口，Issue #643 关闭）**：
+
+- **TOCTOU**：新增 `src/tool/builtin/filesystem/writeTarget.ts`——落盘前**重新**解析真实落点（`resolveVerifiedWriteTarget`），并记录打开前看到的目标身份（dev/ino）。`writeTextFile` 改为打开**已解析的真实路径**（不是调用方的词法路径）：解析后软链被重指也改不了去路；`O_NOFOLLOW` 拒绝末级组件在窗口内变成软链；新建走 `O_CREAT|O_EXCL`，目标在窗口内出现即失败；打开后 `fstat(fd)` 与解析时的 dev/ino 对拍，并再解析一次词法路径，落点变了就中止；新建的文件在任一复核失败时按 inode 回滚（只删自己创建的那个）。测试缝为 `SatiToolRuntimeContext.__testBeforeWrite`（`@internal`，生产不注入），用于在「解析完成、目标尚未打开」的瞬间确定性重指软链/换入硬链接。
+- **硬链接**：不体现在任何 realpath 里，因此按 `nlink` 判。**策略（2026-10-23 产品决定）：工作区内已存在且 `nlink > 1` 的写目标一律拒绝**，错误信息说明如何解除链接（复制后写副本，或先删多余链接）。权限层（`checkFilesystemWritePermission`）先判一次以免「先问后拒」，执行层在打开后还会用 `fstat` 再判一次（含解析后新挂上的链接）。词法在 root 外的显式外部写入不受此限；`bypassPermissions` 与软链闸一致不介入（用户显式选择「全都批准」）。
+- **共用路径**：`edit_notebook` 原先自写「写盘 + stat + 快照 + notifier」序列，现改为复用 `finalizeWorkspaceFileWrite`，因此同样受上述两道复核约束。
+- **判据**：`tests/tool/write-race-hardlink.spec.ts`（7 例：软链重指不跟随、新建文件回滚、目标被换成软链、两种工具对已有硬链接的拒绝、窗口内新建硬链接、普通文件回归）+ `tests/tool/edit-notebook-write.spec.ts`（2 例：notebook 走受守卫的写盘、硬链接 notebook 被拒）；原 `tests/tool/write-symlink-escape.spec.ts` 105 例保持全绿。
+
 ## Alternatives considered
 
 - **只修 `pathSafety`（不动权限规则）** —— 工具调用前的授权决策来自 `PermissionRuntime`，allow 规则命中即放行；工具自身的 pathSafety 只在「显式放行」后的落盘前兜底。只修一层会让 allow 规则继续把逃逸路径判成合法授权，是「授权层放行、执行层拒绝」的分裂语义。
@@ -41,15 +48,20 @@ Status: implemented
 - **让写工具各自 realpath** —— 六处写工具（write/edit/notebook/figure/chemical/writePermissions）各写一份，判定必然漂移；收在 pathSafety 单点。
 - **逃逸仍给审批，只把 prompt 里的目标换成真实落点** —— 要让它自洽，`matchPermissionRule` 的路径 pattern 得同时能对**真实落点**匹配（否则「允许这个文件夹」这条会话授予对软链路径永不生效，只是换了一种误导），授权面就从「词法位置」扩到「真实位置」，改动面比它要防的残余风险还大。而「直接写真实路径」已经提供同一能力（外部目录审批照旧、会话授予照旧），删掉这个假象入口没有能力损失。
 - **保留 `ask`、只让执行层拒（接受「问一次再拒一次」）** —— 用户点「允许」后写入仍失败，不可兑现的提问本身即误导（不静默：要么能兑现，要么不提）。
-- **把 TOCTOU 与硬链接一并收口** —— 本次未做：两者分别需要 fd 级复核（open 后比对 dev/ino，得先加测试缝）与「`nlink > 1` 该拒还是该问」的产品取舍，且可达性不同（都要求本地并发写入者或预先存在的硬链接），单独立项见 Issue #643。
+- **TOCTOU 只把「解析 → 写入」的窗口缩小（落盘前再解析一次，不做 fd 复核）** —— 只能把窗口从「权限校验到落盘」缩到「重解析到落盘」；窗口内重指/替换仍然成立，且无法在新文件落错后回滚。fd 级复核（dev/ino + `O_NOFOLLOW` + `O_EXCL` + 回滚）把「打开的是不是解析时那个 inode」变成可判定的事实，代价只是新增一个只读的测试缝。
+- **硬链接改成 `ask`（批准后可写）** —— 需要把「这次批准针对的是硬链接」贯穿到执行层，并与 allow 规则/会话授予的短路顺序配合；且批准后写入仍会同步修改工作区外的同一 inode，「允许一次」的语义无法限定影响范围。拒绝更自洽：用户要写，先复制（断开链接）即可，能力没有损失。
+- **硬链接静默接受、只写进文档** —— 工作区边界就此对「预先存在的硬链接」失效，且失败模式是静默改到工作区外，没有任何可观测信号。与「降级但不静默」冲突。
+- **硬链接一律拒绝（含显式外部路径）** —— 会把用户明确批准的外部写入也一起拒掉；策略只应作用于「词法在 root 内」这条会产生边界错觉的路径。
 
 ## Consequences
 
-- **换来**：写权限与 OS 实际落点一致——工作区内软链（含悬空/循环/换名）不再能逃逸，allow 规则不再覆盖逃逸路径；`.git`/`node_modules`/`dist` 保护不再可被换名软链绕过。
+- **换来**：写权限与 OS 实际落点一致——工作区内软链（含悬空/循环/换名）不再能逃逸，allow 规则不再覆盖逃逸路径；`.git`/`node_modules`/`dist` 保护不再可被换名软链绕过；写入打开的是解析时那个 inode（解析后被重指/替换的目标会被拒绝或回滚）；工作区内带其他硬链接的文件不再能把写入同步带出工作区。
 - **付出 / 行为变化**：
+  - **工作区内已存在且 `nlink > 1` 的文件不能直接改写**（复制后写副本可解除）。这是 2026-10-23 的产品取舍，见上「硬链接」。
+  - 写入改为按真实路径打开并做 fd 复核：极端情况下（目标在窗口内被替换/重指）错误信息为 `Path … changed between permission resolution and the write. Read it again and retry.`（`path_not_allowed`）。
   - 循环软链目标（跳数 > 40）由「词法放行」变为显式拒绝 `path_not_allowed`（含 "too many symbolic links"）——方向安全，但错误信息是新的。
   - **根不存在时**真实落点不可比：`roots` 侧的 `safeRealpath` 失败会退回词法根，此时 allow 规则可能**不**命中（fail-safe）。这在真实运行中不出现（工作区必然存在），但会命中「用假 cwd 写用例」的测试——`tests/permission/match-permission-rule.spec.ts` 里两条用例因此改用真实临时目录（`/home` 在本机是指向 `/System/Volumes/Data/home` 的软链，假 cwd 会与真实落点解析分叉）。这是夹具修正，不是语义放宽。
   - 读路径不受影响（`mustExist` 分支原本就有真实路径包含性校验）。
 - **未覆盖（明示）**：`bash` 不消费 pathSafety（越权由 `PermissionRuntime` 与 bash 规则管），本次不在范围内；`ToolGuardRegistry` 的单调拒绝链未改动，但相关权限面测试（`PermissionRuntime` / `tool-guard` / `settings` / `policy-bridge`）已作为回归跑过。
-- **未覆盖（明示，Issue #643 保持打开的部分）**：解析与落盘之间软链可被重新指向（TOCTOU，只做了一次解析）、硬链接不在任何 `realpath` 里体现。两者都要求本地并发写入者或预先存在的硬链接（不是模型一次调用就能构成的），修复代价见上「Alternatives considered」末条。
-- **未覆盖（明示）**：`bypassPermissions` 模式仍可绕过这道闸——该模式是用户显式选择「全都批准」，在 `pathSafety` 顶部即返回（只保留保护目录判定），保持原样。
+- **残余（明示，需要本地并发写入者）**：TOCTOU 的窗口已从「权限校验 → 落盘」缩到「打开目标 → 打开后复查」，并由 fd 身份复核兜住软链重指与目标替换；但如果本地攻击者能在**恰好**打开文件的那一瞬把真实路径上的祖先目录换成软链、并在打开后复查前换回，Node 没有 `openat`/`F_GETPATH` 可用，仍无法原子地证明 fd 落在哪个目录。硬链接同理：`fstat` 复查之后、写入之前新挂的链接无法拦截。两者都不再是「模型一次调用就能构成」的路径，且失败模式已从静默越界改为可观测拒绝。
+- **未覆盖（明示）**：`bypassPermissions` 模式仍可绕过软链闸与硬链接策略——该模式是用户显式选择「全都批准」，在 `pathSafety` 顶部即返回（只保留保护目录判定），保持原样。

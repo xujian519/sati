@@ -1,15 +1,10 @@
-import { readFile, stat } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import type { SatiToolDefinition } from "../protocol/types.js";
 import { SatiToolRuntimeError } from "../protocol/errors.js";
 import { resolveSatiWorkspacePath } from "./filesystem/pathSafety.js";
 import { isNotebookPath } from "./filesystem/fileTypeSafety.js";
-import { writeTextFile } from "./filesystem/writeTextFile.js";
-import {
-  ensureWriteSnapshotFresh,
-  invalidateReadFileState,
-  recordWriteSnapshot,
-  validateWriteSnapshotFresh,
-} from "./filesystem/writeSnapshots.js";
+import { finalizeWorkspaceFileWrite } from "./filesystem/writeFinalize.js";
+import { ensureWriteSnapshotFresh, validateWriteSnapshotFresh } from "./filesystem/writeSnapshots.js";
 
 type NotebookCell = {
   id?: string;
@@ -288,20 +283,12 @@ export function createEditNotebookTool(): SatiToolDefinition<EditNotebookInput, 
       }
 
       const updatedContent = `${JSON.stringify(notebook, null, 1)}\n`;
-      await writeTextFile(resolved.absolutePath, updatedContent, { allowOverwrite: true });
-      const fileStat = await stat(resolved.absolutePath);
-      invalidateReadFileState(context, resolved.absolutePath);
-      recordWriteSnapshot(context, resolved.absolutePath, updatedContent, Math.floor(fileStat.mtimeMs));
-
-      const update = {
-        absolutePath: resolved.absolutePath,
-        relativePath: resolved.relativePath,
-        root: resolved.root,
-        content: updatedContent,
-        previousContent: originalContent,
-      };
-      await context.fileUpdateNotifier?.didChange?.(update);
-      await context.fileUpdateNotifier?.didSave?.(update);
+      const { mtimeMs } = await finalizeWorkspaceFileWrite(
+        context,
+        { absolutePath: resolved.absolutePath, relativePath: resolved.relativePath, root: resolved.root },
+        updatedContent,
+        originalContent,
+      );
 
       const output: EditNotebookOutput = {
         notebook_path: resolved.absolutePath,
@@ -324,7 +311,7 @@ export function createEditNotebookTool(): SatiToolDefinition<EditNotebookInput, 
         data: output,
         metadata: {
           bytesWritten: Buffer.byteLength(updatedContent, "utf8"),
-          mtimeMs: Math.floor(fileStat.mtimeMs),
+          mtimeMs,
         },
       };
     },
