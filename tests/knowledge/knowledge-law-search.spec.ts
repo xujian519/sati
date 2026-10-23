@@ -89,6 +89,8 @@ test("knowledge-law-search: FTS 命中并按文档去重", t => {
   assert.equal(hits.length, 1, "一文档一行（去重）");
   assert.equal(hits[0]!.name, "中华人民共和国专利法");
   assert.equal(hits[0]!.level, "法律");
+  // #731：documents 表没有 expired 列，未知必须保持 undefined，不得伪造成 0（现行有效）。
+  assert.equal(hits[0]!.expired, undefined);
   assert.ok(hits[0]!.content!.includes("说明书应当"), "content 应为命中/最长 chunk");
   // A1：条款级命中应带出 article 字段（chunk.heading → 条款解析）
   assert.equal(hits[0]!.article, "第二十六条");

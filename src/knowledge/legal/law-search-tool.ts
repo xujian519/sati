@@ -25,9 +25,17 @@ export type LawSearchToolInput = {
   limit?: number;
 };
 
+/** 效力状态来源：db=数据源硬字段（expired/publish），version-meta=离线版本沿革，unknown=未提供。 */
+export type LawStatusSource = "db" | "version-meta" | "unknown";
+
+export type LawSearchToolResult = LawRecord & {
+  snippet?: string;
+  statusSource: LawStatusSource;
+};
+
 export type LawSearchToolOutput = {
   total: number;
-  results: Array<LawRecord & { snippet?: string }>;
+  results: LawSearchToolResult[];
   dbPath?: string;
 };
 
@@ -81,17 +89,25 @@ function getVersionMeta(): Map<string, LawVersionMeta> {
  * 版本状态标注：按位置（computeEffectiveStatus）+ 失效标志 + 离线 meta 权威覆盖。
  *
  * 优先级：meta 文件判定（离线治理，权威） > expired 失效标志（laws-full 硬数据）
- * > 版本位置（查询结果动态判定，仅同名多版本时有值）。单版本非过期且无 meta
- * 时返回 undefined（不标，避免噪音）。
+ * > 版本位置（查询结果动态判定，仅同名多版本时有值）。
+ *
+ * expired 缺失（knowledge.db 无该列）且无位置信息时标「待核验」并回报
+ * statusSource=unknown——不得回落成「现行有效」（#731）。
  */
 function resolveVersionStatus(
   position: LawStatus | undefined,
-  expired: number,
+  expired: number | undefined,
   metaStatus: LawStatus | undefined,
-): LawStatus | undefined {
-  if (metaStatus === "已废止" || metaStatus === "待核验") return metaStatus;
-  if (expired === 1) return "已废止";
-  return position;
+): { status?: LawStatus; statusSource: LawStatusSource } {
+  // 有版本位置时，meta 的「现行有效」不覆盖旧版本的「已被修订」；
+  // 无位置（单版本）时 meta 全量权威，避免明明有离线结论却回落「待核验」。
+  if (metaStatus !== undefined && (position === undefined || metaStatus === "已废止" || metaStatus === "待核验")) {
+    return { status: metaStatus, statusSource: "version-meta" };
+  }
+  if (expired === 1) return { status: "已废止", statusSource: "db" };
+  if (position !== undefined) return { status: position, statusSource: "db" };
+  if (expired === 0) return { status: undefined, statusSource: "db" };
+  return { status: "待核验", statusSource: "unknown" };
 }
 
 export function createLawSearchTool(
@@ -176,7 +192,7 @@ export function createLawSearchTool(
       }
 
       const versionMeta = getVersionMetaFn();
-      const merged: Array<LawRecord & { snippet?: string }> = [];
+      const merged: LawSearchToolResult[] = [];
       const seen = new Set<string>();
       // 「不同法律名」配额：同名多版本不挤占不同法律（同名全部版本都展示，
       // 保留版本沿革价值，但每个 name 只占 1 席配额——不同法律数 ≤ limit）。
@@ -193,9 +209,13 @@ export function createLawSearchTool(
           // 位置状态经 computeEffectiveStatus 判定（生产接线，收口内联重复）；
           // 单版本时 position 为 undefined（不标，避免噪音）。
           const position = versions.length > 1 ? computeEffectiveStatus(dates, r.publish ?? "") : undefined;
-          const status = resolveVersionStatus(position, r.expired, metaStatus);
-          const base = status === undefined ? r : { ...r, status };
-          merged.push(status === "已被修订" ? { ...base, supersededBy: latestLabel } : base);
+          const { status, statusSource } = resolveVersionStatus(position, r.expired, metaStatus);
+          merged.push({
+            ...r,
+            ...(status === undefined ? {} : { status }),
+            ...(status === "已被修订" ? { supersededBy: latestLabel } : {}),
+            statusSource,
+          });
         });
       }
 
@@ -207,9 +227,13 @@ export function createLawSearchTool(
         seen.add(r.name);
         nameCount += 1;
         const metaStatus = versionMeta.get(r.name)?.status;
-        const status = resolveVersionStatus(undefined, r.expired, metaStatus);
-        const base = status === undefined ? r : { ...r, status };
-        merged.push({ ...base, content: r.content ? truncateContent(r.content) : undefined });
+        const { status, statusSource } = resolveVersionStatus(undefined, r.expired, metaStatus);
+        merged.push({
+          ...r,
+          ...(status === undefined ? {} : { status }),
+          content: r.content ? truncateContent(r.content) : undefined,
+          statusSource,
+        });
       }
 
       const output: LawSearchToolOutput = {

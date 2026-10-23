@@ -13,13 +13,13 @@ import { makeToolContext } from "../../tool/context-fixture.js";
  * 显式传空 map 保证确定性）。
  */
 
-function rec(name: string, publish: string | undefined, expired = 0, level = "法律"): LawRecord {
+function rec(name: string, publish: string | undefined, expired: number | null = 0, level = "法律"): LawRecord {
   return {
     id: `${name}_${publish ?? "unknown"}`,
     level,
     name,
     publish,
-    expired,
+    ...(expired === null ? {} : { expired }),
     categoryId: 0,
     content: `${name} 全文内容`,
   };
@@ -98,6 +98,19 @@ test("law_search: 单版本非过期法不标 status", async () => {
   assert.ok(result.data);
   assert.equal(result.data.results.length, 1);
   assert.equal(result.data.results[0]!.status, undefined);
+  assert.equal(result.data.results[0]!.statusSource, "db");
+});
+
+test("law_search: expired 缺失时标待核验，不得回落现行有效（#731）", async () => {
+  const tool = createLawSearchTool(
+    () => ({ engine: new FakeEngine([], [rec("中华人民共和国专利法", "2020-10-17", null)]), dbPath: "fake" }),
+    emptyMeta,
+  );
+  const result = await tool.execute({ query: "专利法" }, makeToolContext());
+  assert.ok(result.data);
+  assert.equal(result.data.results[0]!.expired, undefined, "未知不得被写成 0");
+  assert.equal(result.data.results[0]!.status, "待核验");
+  assert.equal(result.data.results[0]!.statusSource, "unknown");
 });
 
 test("law_search: 命中已失效法（expired=1）标已废止——单版本也标注", async () => {
@@ -106,6 +119,7 @@ test("law_search: 命中已失效法（expired=1）标已废止——单版本�
   const result = await tool.execute({ query: "外资企业法" }, makeToolContext());
   assert.ok(result.data);
   assert.equal(result.data.results[0]!.status, "已废止");
+  assert.equal(result.data.results[0]!.statusSource, "db");
 });
 
 test("law_search: 全文检索命中过期法时同样补已废止标注", async () => {
@@ -133,7 +147,26 @@ test("law_search: 离线 meta 权威覆盖（已废止）优先于 expired/位�
   assert.ok(result.data);
   for (const r of result.data.results) {
     assert.equal(r.status, "已废止", "meta 已废止应覆盖位置标注");
+    assert.equal(r.statusSource, "version-meta");
   }
+});
+
+test("law_search: 离线 meta「现行有效」在单版本时作为权威来源（#731）", async () => {
+  const meta = new Map<string, LawVersionMeta>();
+  meta.set("中华人民共和国专利法", {
+    name: "中华人民共和国专利法",
+    status: "现行有效",
+    promulgatedDate: "2020-10-17",
+    events: [],
+  });
+  const tool = createLawSearchTool(
+    () => ({ engine: new FakeEngine([], [rec("中华人民共和国专利法", "2020-10-17", null)]), dbPath: "fake" }),
+    () => meta,
+  );
+  const result = await tool.execute({ query: "专利法" }, makeToolContext());
+  assert.ok(result.data);
+  assert.equal(result.data.results[0]!.status, "现行有效");
+  assert.equal(result.data.results[0]!.statusSource, "version-meta");
 });
 
 test("law_search: limit 封顶为 20 且名称配额不超限", async () => {

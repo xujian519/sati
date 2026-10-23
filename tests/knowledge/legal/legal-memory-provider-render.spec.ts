@@ -83,6 +83,12 @@ test("legal-memory: expired=1 无 status 时派生已废止标注", async () => 
   assert.ok(ctx.includes("已失效（已废止）"));
 });
 
+test("legal-memory: expired 缺失（未知）不派生已废止标注（#731）", async () => {
+  const ctx = await render([rec({ expired: undefined })]);
+  assert.ok(ctx);
+  assert.ok(!ctx.includes("已失效"), "未知效力状态不得被渲染成已废止");
+});
+
 test("legal-memory: 地方性法规渲染「需人工复核」标注", async () => {
   const ctx = await render([rec({ level: "地方性法规", localRegulation: true, name: "北京市专利保护办法" })]);
   assert.ok(ctx);
