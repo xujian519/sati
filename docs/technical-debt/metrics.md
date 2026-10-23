@@ -10,7 +10,7 @@
 | src TS 文件 / 行数 | 1143 / 199908 |
 | src JS 文件 | 0 |
 | tests 文件 | 666 |
-| ui/src 文件 / 行数 | 647 / 103082 |
+| ui/src 文件 / 行数 | 653 / 103223 |
 | ui/server 文件 / 行数 | 149 / 38773 |
 
 ## 指标口径
@@ -58,7 +58,6 @@
 | `ui/src/components/onboarding/view/subcomponents/LlmConfigurationStep.tsx` | `LlmConfigurationStep` | 633 | function |
 | `ui/src/components/app-shell/AppShellV2.tsx` | `AppShellV2` | 632 | function |
 | `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` | `(anonymous)` | 624 | arrow |
-| `ui/src/stores/useSessionStore.ts` | `createSessionActions` | 624 | function |
 | `ui/src/components/main-content/view/MainContent.tsx` | `SplitBody` | 573 | function |
 | `ui/src/components/chat/hooks/useSessionSubmit.ts` | `useSessionSubmit` | 528 | function |
 | `ui/src/components/main-content-v2/CronV2.tsx` | `CronFormView` | 476 | function |
@@ -106,7 +105,6 @@
 | `src/adapters/channel/weixin/WeixinChannel.ts` | 1497 |
 | `ui/src/components/main-content-v2/SkillsV2.tsx` | 1441 |
 | `src/adapters/channel/feishu/FeishuChannel.ts` | 1389 |
-| `ui/src/stores/useSessionStore.ts` | 1348 |
 | `ui/src/components/main-content-v2/DashboardV2.tsx` | 1345 |
 | `ui/src/components/app-shell/SidebarV2.tsx` | 1323 |
 | `ui/src/components/chat-v2/processGrouping.ts` | 1294 |
@@ -127,6 +125,7 @@
 | `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` | 1025 |
 | `src/gateway/protocol/types.ts` | 995 |
 | `src/context/DefaultContextRuntime.ts` | 969 |
+| `ui/src/components/main-content-v2/FilesV2.tsx` | 945 |
 
 ## vendored 子包（单列，不计入上述规模与排名）
 

@@ -196,11 +196,6 @@
       "rule": "file-size",
       "file": "ui/src/hooks/useProjectsState.ts",
       "lines": 901
-    },
-    {
-      "rule": "file-size",
-      "file": "ui/src/stores/useSessionStore.ts",
-      "lines": 1348
     }
   ]
 }
