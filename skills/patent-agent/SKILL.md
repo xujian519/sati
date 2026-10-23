@@ -66,8 +66,8 @@ description: "专利代理与知识产权分析：专利检索、权利要求分
 
 1. **立案**：`patent_docket(action=create, caseId, caseType)`；`triage` 得到派工（`draft`/`revise`/`finalize_ready`/`escalate_human`）。
 2. **执行**：按派工用 `flexible_plan` 跑阶段（`create`→`run`→逐阶段 `confirm`）。发现上游缺陷时 `rollback` 到该阶段重做——即触发新一轮修订。
-3. **缺口闭环**：每轮把「无法确认的事实/待补材料」经 `set_gaps` 登记为缺口问题（`{id, question, source}`）。**不得为凑齐文件补造事实：不确定的一律进缺口清单，不写入正文**。
-4. **记账 + 留档**：`record_revision(answered=[缺口id或原文], artifacts=[{name,path}])` 记一轮并把阶段产物另存到 `revisions/round-N/`（旧稿不动，修订记录独立留档）。回答必须匹配已登记缺口。
+3. **缺口闭环**：每轮把「无法确认的事实/待补材料」经 `patent_docket(action="set_gaps", ...)` 登记为缺口问题（`{id, question, source}`）。**不得为凑齐文件补造事实：不确定的一律进缺口清单，不写入正文**。
+4. **记账 + 留档**：`patent_docket(action="record_revision", answered=[缺口id或原文], artifacts=[{name,path}])` 记一轮并把阶段产物另存到 `revisions/round-N/`（旧稿不动，修订记录独立留档）。回答必须匹配已登记缺口。
 5. **轮次上限与升级**：修订轮次默认上限 3（`maxRounds` 可调）。达上限仍有未决缺口时 `triage → escalate_human`，**停止自动修订、转人工**，不得静默继续。
 6. **定稿门控**：`finalize` 在未决缺口清零前会被拒（fail-closed）；且必须至少记过一轮修订。
 

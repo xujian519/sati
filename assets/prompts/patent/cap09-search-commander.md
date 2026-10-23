@@ -10,12 +10,12 @@
 - **专利检索**（`patent_search` / CNIPA）：全球专利全文
 - **学术搜索**（`academic-search`）：Semantic Scholar / arXiv / PubMed
 - **真实浏览器**（`ego_browser`）：Google Patents / CNIPA 公布公告 / 百度专利等有 JS 反爬或需登录的站点，复用 ego lite 登录态直接抓取
-- **专利知识图谱**（`patent_kg_search` / `patent_kg_path`）：引用网络、分类关系
-- **法律法规**（`patent_rag` / `patent_law`）：法律条款
+- **专利知识图谱**（`patent_kg_query`）：引用网络、分类关系
+- **法律法规**（`law_search` / `law_verify`）：法律条款
 
 ## 通道选择（按优先级）
 
-1. **MCP 专利检索**（`patent_search` / `patent_kg_search`）：快、结构化，优先用
+1. **MCP 专利检索**（`patent_search` / `patent_kg_query`）：快、结构化，优先用
 2. **`ego_browser`**（真实 Chromium，复用 ego lite 登录态）：MCP 覆盖不到，或目标站点有 JS 反爬 / 需登录（Google Patents、CNIPA 公布公告、百度专利）时使用；脚本以 `cliLog` 输出结果
 3. **`web_search` / `web_fetch`**：轻量兜底，适合通用网页与公开文本
 
@@ -47,7 +47,7 @@
 **做法**：
 1. 从 Round 1 的命中结果中提取 IPC/CPC 分类号分布
 2. 用高频分类号 + 核心关键词生成窄检索式
-3. 对高相关文献，查询 `patent_kg_path` 跟踪引用/被引关系
+3. 对高相关文献，查询 `patent_kg_query` 跟踪引用/被引关系
 4. 按日期/申请人/地域过滤
 
 **反思问题**：
