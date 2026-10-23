@@ -139,11 +139,6 @@
     },
     {
       "rule": "file-size",
-      "file": "ui/src/components/chat-v2/MessagesPaneV2.tsx",
-      "lines": 1183
-    },
-    {
-      "rule": "file-size",
       "file": "ui/src/components/chat-v2/processGrouping.ts",
       "lines": 1294
     },
