@@ -134,13 +134,8 @@
     },
     {
       "rule": "file-size",
-      "file": "ui/src/components/chat-v2/ComposerV2.tsx",
-      "lines": 1188
-    },
-    {
-      "rule": "file-size",
       "file": "ui/src/components/chat-v2/MessagesPaneV2.render.test.tsx",
-      "lines": 1234
+      "lines": 1235
     },
     {
       "rule": "file-size",

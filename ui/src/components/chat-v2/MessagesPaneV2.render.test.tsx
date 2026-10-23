@@ -5,7 +5,8 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { ChatMessage, ChatRunMode, SatiWorkStatus } from "../chat/types/types";
 import MessagesPaneV2 from "./MessagesPaneV2";
 import { buildPrefixOffsets, getVirtualMessageWindow } from "./messageVirtualization";
-import { ContextStatusPopover, getContextStatus } from "./ComposerV2";
+import { ContextStatusPopover } from "./ContextStatusPopover";
+import { getContextStatus } from "./contextStatus";
 
 beforeAll(() => {
   class ResizeObserverMock {
