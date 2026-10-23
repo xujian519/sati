@@ -10,7 +10,7 @@
 | src TS 文件 / 行数 | 1143 / 199908 |
 | src JS 文件 | 0 |
 | tests 文件 | 666 |
-| ui/src 文件 / 行数 | 659 / 103486 |
+| ui/src 文件 / 行数 | 664 / 103986 |
 | ui/server 文件 / 行数 | 149 / 38773 |
 
 ## 指标口径
@@ -53,7 +53,6 @@
 | `ui/src/components/git-panel/hooks/useGitPanelController.ts` | `useGitPanelController` | 704 | function |
 | `ui/src/components/main-content-v2/skills/import/ImportFromFolder.tsx` | `ImportFromFolder` | 688 | function |
 | `ui/src/components/chat-v2/ChatInterfaceV2.tsx` | `ChatInterfaceV2` | 668 | function |
-| `ui/src/hooks/useProjectsState.ts` | `useProjectsState` | 647 | function |
 | `ui/src/components/onboarding/view/subcomponents/LlmConfigurationStep.tsx` | `LlmConfigurationStep` | 633 | function |
 | `ui/src/components/app-shell/AppShellV2.tsx` | `AppShellV2` | 632 | function |
 | `ui/src/components/main-content/view/MainContent.tsx` | `SplitBody` | 573 | function |
@@ -75,6 +74,7 @@
 | `ui/src/types/annotationReference.spec.ts` | `(anonymous)` | 381 | arrow |
 | `ui/src/components/chat/tools/components/InteractiveRenderers/AskUserQuestionPanel.tsx` | `AskUserQuestionPanel` | 378 | arrow |
 | `ui/src/components/kanban/hooks/useBoardState.ts` | `useBoardState` | 368 | function |
+| `ui/src/hooks/useProjectsState.ts` | `useProjectsState` | 367 | function |
 | `ui/src/components/chat/hooks/useFileMentions.tsx` | `useFileMentions` | 366 | function |
 | `ui/src/components/settings/view/agentRoute/components/RouterSection.tsx` | `RouterSection` | 357 | function |
 | `ui/src/stores/useSessionStore.actions.test.tsx` | `(anonymous)` | 354 | arrow |

@@ -186,11 +186,6 @@
       "rule": "file-size",
       "file": "ui/src/components/main-content/view/MainContent.tsx",
       "lines": 1111
-    },
-    {
-      "rule": "file-size",
-      "file": "ui/src/hooks/useProjectsState.ts",
-      "lines": 901
     }
   ]
 }
