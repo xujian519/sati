@@ -132,6 +132,14 @@ test("matchSectionHeading: 支持的标题形态与正文误命中", () => {
   assert.equal(matchSectionHeading("本发明属于技术领域。"), undefined);
 });
 
+test("matchSectionHeading: Markdown 标题允许别名/说明后缀（保持历史前缀语义）", () => {
+  assert.equal(matchSectionHeading("## 技术领域（Technical Field）"), "技术领域");
+  assert.equal(matchSectionHeading("## 技术领域：本发明涉及机械领域"), "技术领域");
+  assert.equal(matchSectionHeading("  ## 背景技术  "), "背景技术");
+  // 纯文本仍要求整行只有章节标题，正文中的「技术领域：」不算标题。
+  assert.equal(matchSectionHeading("技术领域：本发明涉及机械领域"), undefined);
+});
+
 test("validate_specification flags vague terms and drawing inconsistencies", () => {
   const result = validateSpecification({
     text: GOOD_SPEC.replace("驱动单元采用伺服电机", "驱动单元优选采用伺服电机"),
@@ -344,6 +352,15 @@ test("checkFigureMarkConsistency: 标号一致时无违规", () => {
 test("checkFigureMarkConsistency: 纯文本附图说明标题同样可提取章节正文（#711）", () => {
   const plain = SPEC_WITH_DRAWINGS.replace(/^# /gm, "");
   const violations = checkFigureMarkConsistency(plain, [makeFigureAnalysis()]);
+  assert.equal(violations.length, 0, JSON.stringify(violations));
+});
+
+test("checkFigureMarkConsistency: 非五节 Markdown 标题构成附图说明边界（不吞入正文）", () => {
+  const spec = SPEC_WITH_DRAWINGS.replace(
+    "# 具体实施方式",
+    "# 有益效果\n本装置在厚度范围：3-5 mm 时效果最佳。\n# 具体实施方式",
+  );
+  const violations = checkFigureMarkConsistency(spec, [makeFigureAnalysis()]);
   assert.equal(violations.length, 0, JSON.stringify(violations));
 });
 

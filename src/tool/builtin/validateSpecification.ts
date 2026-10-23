@@ -6,8 +6,12 @@ import {
   checkEffectQuantification,
   checkNumericRangeCoverage,
   formatRange,
+  isMarkdownHeading,
+  matchSectionHeading,
   normalizeUnit,
+  SPEC_SECTION_NAMES,
   UNITS,
+  type SpecSectionName,
 } from "../../patent/spec/checks.js";
 import type { TechDomain } from "./draftClaims.js";
 export {
@@ -15,9 +19,13 @@ export {
   checkNumericRangeCoverage,
   extractNumericRanges,
   extractNumericValues,
+  isMarkdownHeading,
+  matchSectionHeading,
   normalizeUnit,
+  SPEC_SECTION_NAMES,
   UNITS,
   type NumericRange,
+  type SpecSectionName,
 } from "../../patent/spec/checks.js";
 
 /**
@@ -66,28 +74,6 @@ export type ValidateSpecificationOutput = {
   score: number;
   violations: SpecViolation[];
 };
-
-/** 必需章节（结构与 Mady requiredSections 一致）。 */
-const REQUIRED_SECTIONS = ["技术领域", "背景技术", "发明内容", "附图说明", "具体实施方式"] as const;
-
-type RequiredSection = (typeof REQUIRED_SECTIONS)[number];
-
-/**
- * 章节标题识别（行首、整行匹配）：Markdown `#`–`######`、纯文本、编号
- * （`一、` / `1.` / `（一）`）、方括号（`【技术领域】`）、行尾冒号。
- * 正文中出现章节名（如「本发明属于技术领域」）不会被误判。
- */
-const SECTION_HEADING_RE = new RegExp(
-  String.raw`^(?:#{1,6}\s*)?` +
-    String.raw`(?:[（(]\s*[一二三四五六七八九十百]+\s*[）)]\s*|[一二三四五六七八九十百]+\s*[、.]\s*|\d+\s*[、.]\s*)?` +
-    String.raw`[【\[]?\s*(技术领域|背景技术|发明内容|附图说明|具体实施方式)\s*[】\]]?\s*[:：]?\s*$`,
-);
-
-/** 识别单个行是否为章节标题；返回章节名，否则 undefined。 */
-export function matchSectionHeading(line: string): RequiredSection | undefined {
-  const match = SECTION_HEADING_RE.exec(line.trim());
-  return match?.[1] as RequiredSection | undefined;
-}
 
 const VAGUE_TERMS = ["约", "大致", "可能", "优选", "例如", "大约", "左右", "较好"];
 
@@ -404,12 +390,12 @@ export function validateSpecification(input: ValidateSpecificationInput): Valida
   const title = input.title?.trim() ?? "";
 
   // 1) 结构完整性：五部分章节齐全（Markdown / 纯文本 / 编号 / 方括号标题均可）
-  const present = new Set<RequiredSection>();
+  const present = new Set<SpecSectionName>();
   for (const line of text.split(/\r?\n/)) {
     const section = matchSectionHeading(line);
     if (section !== undefined) present.add(section);
   }
-  const missing = REQUIRED_SECTIONS.filter(n => !present.has(n));
+  const missing = SPEC_SECTION_NAMES.filter(n => !present.has(n));
   if (text.trim().length > 0 && missing.length > 0) {
     violations.push({
       rule: "sections",
@@ -599,12 +585,15 @@ function getDrawingSection(text: string): string {
   const lines = text.split(/\r?\n/);
   let start = -1;
   for (let i = 0; i < lines.length; i += 1) {
-    const section = matchSectionHeading(lines[i] ?? "");
+    const line = lines[i] ?? "";
+    const section = matchSectionHeading(line);
     if (start === -1) {
       if (section === "附图说明") start = i + 1;
       continue;
     }
-    if (section !== undefined) return lines.slice(start, i).join("\n");
+    // 任意 Markdown 标题都构成章节边界（如「## 有益效果」），否则后续正文会被
+    // 吞进附图说明，产生伪造的悬空标号或漏标（#711 回归）。
+    if (section !== undefined || isMarkdownHeading(line)) return lines.slice(start, i).join("\n");
   }
   return start === -1 ? "" : lines.slice(start).join("\n");
 }

@@ -107,19 +107,53 @@ export function checkEffectQuantification(text: string): string[] {
 }
 
 // =============================================================================
-// 说明书章节完整性检测（五部分，对齐 validate_specification 的 REQUIRED_SECTIONS）
+// 说明书章节标题识别（五部分，validate_specification 与 draft-spec 原子共用）
 // =============================================================================
 
-/** 说明书必需章节（标题正则，与 validate_specification 工具层一致）。 */
-export const REQUIRED_SPEC_SECTIONS: ReadonlyArray<{ name: string; pattern: RegExp }> = [
-  { name: "技术领域", pattern: /^#{1,3}\s*技术领域/m },
-  { name: "背景技术", pattern: /^#{1,3}\s*背景技术/m },
-  { name: "发明内容", pattern: /^#{1,3}\s*发明内容/m },
-  { name: "附图说明", pattern: /^#{1,3}\s*附图说明/m },
-  { name: "具体实施方式", pattern: /^#{1,3}\s*具体实施方式/m },
-];
+/** 说明书必需章节（顺序即撰写顺序）。 */
+export const SPEC_SECTION_NAMES = ["技术领域", "背景技术", "发明内容", "附图说明", "具体实施方式"] as const;
+
+export type SpecSectionName = (typeof SPEC_SECTION_NAMES)[number];
+
+/** 可选章节编号：`一、` / `1.` / `（一）`。 */
+const SECTION_NUMBERING = String.raw`(?:[（(]\s*[一二三四五六七八九十百]+\s*[）)]\s*|[一二三四五六七八九十百]+\s*[、.]\s*|\d+\s*[、.]\s*)?`;
+
+const SECTION_NAMES_PATTERN = SPEC_SECTION_NAMES.join("|");
+
+/**
+ * Markdown 标题：`#`–`######`，标题名后允许紧跟别名/说明
+ * （`## 技术领域（Technical Field）`），与历史前缀匹配语义一致。
+ */
+const MARKDOWN_HEADING_RE = new RegExp(String.raw`^#{1,6}\s*${SECTION_NUMBERING}[【\[]?\s*(${SECTION_NAMES_PATTERN})`);
+
+/** 纯文本标题：整行匹配，正文中出现章节名（「本发明属于技术领域」）不会被误判。 */
+const PLAIN_HEADING_RE = new RegExp(
+  String.raw`^${SECTION_NUMBERING}[【\[]?\s*(${SECTION_NAMES_PATTERN})\s*[】\]]?\s*[:：]?\s*$`,
+);
+
+/**
+ * 识别单行是否为说明书章节标题；返回章节名，否则 undefined。
+ * 支持 Markdown、纯文本、编号、方括号与行尾冒号。
+ */
+export function matchSectionHeading(line: string): SpecSectionName | undefined {
+  const trimmed = line.trim();
+  const markdown = MARKDOWN_HEADING_RE.exec(trimmed);
+  if (markdown) return markdown[1] as SpecSectionName;
+  const plain = PLAIN_HEADING_RE.exec(trimmed);
+  return plain?.[1] as SpecSectionName | undefined;
+}
+
+/** 是否为 Markdown 标题行（用于章节正文边界，避免把下一节正文吞进本节）。 */
+export function isMarkdownHeading(line: string): boolean {
+  return /^#{1,6}\s*\S/.test(line.trim());
+}
 
 /** 返回缺失的说明书章节名列表（空数组 = 五部分齐全）。 */
 export function checkSectionCompleteness(text: string): string[] {
-  return REQUIRED_SPEC_SECTIONS.filter(section => !section.pattern.test(text)).map(section => section.name);
+  const present = new Set<SpecSectionName>();
+  for (const line of text.split(/\r?\n/)) {
+    const section = matchSectionHeading(line);
+    if (section !== undefined) present.add(section);
+  }
+  return SPEC_SECTION_NAMES.filter(name => !present.has(name));
 }
