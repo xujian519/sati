@@ -43,7 +43,7 @@ sweep 基线（`a3c35684b`）上，chat 主链路还剩三个 ≥300 行的单�
 - **只拆 `MessageRowV2`，另两件手工压缩到 299 行** —— 落选。`SubagentDetailMessageFlow` 与 `MessageComponent` 超出判据分别只有 9 / 35 行，但靠删除空行/合并语句达标属于「为指标而改」，反而把两段完整职责留在原地；按职责搬出两块纯展示代码更有长期价值。
 - **把四个分支做成 `renderUserMessage` 之类的普通函数** —— 落选。user 分支有 lightbox `useState`，普通函数无法合法持有 hook；做成组件还能让 lightbox 状态随分支卸载自然重置，与拆分前一致。
 - **把 `MessageRowV2` 的附件派生也搬进子组件** —— 落选。`messageImages` 依赖 `documentReferenceAttachments` 的 region 图片名集合，且 `hasForkUnsupportedContent` 同时被 user 和 assistant 分支消费；搬进任一子组件都会重复计算或在兄弟间传递。
-- **新增 `messageRow/index.ts` barrel** —— 落选。五个文件都是单组件，直接路径导入更利于 tree-shaking 与依赖追踪，也避免 barrel 成为新的循环入口。
+- **新增 `messageRow/index.ts` barrel** —— 落选。六个组件文件都是单组件，直接路径导入更利于 tree-shaking 与依赖追踪，也避免 barrel 成为新的循环入口。
 
 ## Verification
 
