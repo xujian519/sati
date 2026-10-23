@@ -10,7 +10,7 @@
 | src TS 文件 / 行数 | 1144 / 200144 |
 | src JS 文件 | 0 |
 | tests 文件 | 668 |
-| ui/src 文件 / 行数 | 697 / 105574 |
+| ui/src 文件 / 行数 | 705 / 106907 |
 | ui/server 文件 / 行数 | 149 / 38859 |
 
 ## 指标口径
@@ -54,7 +54,6 @@
 | `ui/src/components/onboarding/view/subcomponents/LlmConfigurationStep.tsx` | `LlmConfigurationStep` | 633 | function |
 | `ui/src/components/app-shell/AppShellV2.tsx` | `AppShellV2` | 632 | function |
 | `ui/src/components/main-content/view/MainContent.tsx` | `SplitBody` | 573 | function |
-| `ui/src/components/chat/hooks/useSessionSubmit.ts` | `useSessionSubmit` | 528 | function |
 | `ui/src/components/main-content-v2/CronV2.tsx` | `CronFormView` | 476 | function |
 | `ui/src/components/chat/hooks/useChatComposerState.ts` | `useChatComposerState` | 462 | function |
 | `ui/src/components/settings/view/modelPool/components/ProviderCard.tsx` | `ProviderCard` | 447 | function |
@@ -64,7 +63,6 @@
 | `ui/src/types/contentReference.spec.ts` | `(anonymous)` | 408 | arrow |
 | `ui/src/components/code-editor/view/subcomponents/SpreadsheetInteractivePreview.tsx` | `SpreadsheetInteractivePreview` | 407 | function |
 | `ui/src/components/settings/view/agentSearch/components/ToolsSection.tsx` | `ToolsSection` | 399 | function |
-| `ui/src/components/chat/hooks/useSlashCommands.ts` | `useSlashCommands` | 395 | function |
 | `ui/src/components/settings/view/integrations/im/components/WeComChannelSection.tsx` | `WeComChannelSection` | 395 | function |
 | `ui/src/components/chat-v2/ComposerV2.tsx` | `ComposerV2` | 387 | function |
 | `ui/src/components/main-content-v2/CronV2.test.tsx` | `(anonymous)` | 384 | arrow |
@@ -81,7 +79,6 @@
 | `ui/src/components/main-content-v2/PlansAndCronJobs.tsx` | `PlansAndCronJobs` | 334 | function |
 | `ui/src/components/main-content-v2/DashboardV2.tsx` | `DashboardV2` | 332 | function |
 | `ui/src/hooks/useSatiConfig.ts` | `useSatiConfigState` | 332 | function |
-| `ui/src/components/chat/hooks/useSlashCommandExecute.ts` | `useSlashCommandExecute` | 331 | function |
 | `ui/src/components/code-editor/view/CodeEditor.tsx` | `CodeEditor` | 326 | function |
 | `ui/src/components/annotation/view/Annotator.tsx` | `Annotator` | 322 | function |
 | `src/tool/builtin/patentFigureProject.ts` | `createPatentFigureProjectTool` | 313 | function |
