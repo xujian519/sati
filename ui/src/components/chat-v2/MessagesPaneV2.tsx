@@ -1,152 +1,21 @@
-import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Dispatch, RefObject, SetStateAction } from "react";
+import { memo } from "react";
 import { useTranslation } from "react-i18next";
 import { GitBranch } from "lucide-react";
-import type { DiffLine } from "../chat/utils/messageTransforms";
-import { recordUiDiagnostic, reloadUi } from "../../lib/uiDiagnostics";
-import { UI_TIMEOUTS } from "../../constants/timeouts";
-import type {
-  ChatMessage,
-  ChatRunMode,
-  ClaudeWorkStatus,
-  SatiWorkStatus,
-  SatiPermissionSuggestion,
-  SessionPermissionGrantResult,
-} from "../chat/types/types";
-import type { SessionStore } from "../../stores/useSessionStore";
-import {
-  getSessionRequestParams,
-  isReadOnlySession,
-  type Project,
-  type ProjectSession,
-  type SessionProvider,
-} from "../../types/app";
-import { getIntrinsicMessageKey } from "../chat/utils/messageKeys";
-import { estimateMessageItemHeight, MeasuredMessageItem, useMessageVirtualization } from "./messageVirtualization";
+import { reloadUi } from "../../lib/uiDiagnostics";
+import { isReadOnlySession } from "../../types/app";
 import { MessagesPanePlaceholder, resolveMessagesPanePlaceholder } from "./MessagesPanePlaceholder";
-import MessageRowV2 from "./MessageRowV2";
-import SubagentDetailModal from "./SubagentDetailModal";
 import ChatHistorySearchBar from "./ChatHistorySearchBar";
-import { useRegisterChatHistorySearchControls } from "./ChatHistorySearchController";
-import { useChatHistorySearch } from "./useChatHistorySearch";
-import type { SearchableChatMessageInput } from "./chatHistorySearchUtils";
-import { useSubagentMessages } from "./useSubagentMessages";
-import { ProcessLiveStatus, ProcessRunHeader, StreamingThinkingPreview, type ProcessTraceStep } from "./ProcessTrace";
-import { formatProcessDuration } from "./processTraceUtils";
-import {
-  buildRenderableMessageItems,
-  getLastMessageTurnStart,
-  getLiveProcessDetailMessages,
-  getLiveProcessGroupStep,
-  getLiveProcessGroups,
-  getWebFetchWaitingStep,
-  isEmptyAssistantShell,
-  isProcessMessage,
-  shouldRenderLiveProcessGroup,
-  shouldShowWebFetchWaitingHint,
-  splitLiveProcessGroupDetailMessages,
-  type LiveProcessGroup,
-  type RenderableMessageItem,
-} from "./processGrouping";
-
-type MessagesPaneV2Props = {
-  scrollContainerRef: RefObject<HTMLDivElement | null>;
-  onWheel: () => void;
-  onTouchMove: () => void;
-  isLoadingSessionMessages: boolean;
-  sessionLoadError?: string | null;
-  onRetrySessionLoad?: () => void;
-  chatMessages: ChatMessage[];
-  activityMessages?: ChatMessage[];
-  visibleMessages: ChatMessage[];
-  visibleMessageCount: number;
-  hasMoreMessages: boolean;
-  totalMessages: number;
-  loadEarlierMessages: () => void;
-  loadAllMessages: () => void;
-  allMessagesLoaded: boolean;
-  provider: SessionProvider;
-  selectedProject: Project | null;
-  selectedSession: ProjectSession | null;
-  createDiff: (oldStr: string, newStr: string) => DiffLine[];
-  onFileOpen?: (filePath: string, diffInfo?: unknown) => void;
-  onShowSettings?: () => void;
-  onGrantSessionToolPermission?: (
-    suggestion: SatiPermissionSuggestion,
-  ) => SessionPermissionGrantResult | null | undefined;
-  autoExpandTools?: boolean;
-  showRawParameters?: boolean;
-  showThinking?: boolean;
-  inlineThinking?: boolean;
-  setInput: Dispatch<SetStateAction<string>>;
-  isAssistantWorking?: boolean;
-  workingStatus?: ClaudeWorkStatus | SatiWorkStatus | null;
-  runMode?: ChatRunMode;
-  planModeActive?: boolean;
-  sessionStore?: SessionStore;
-  onFork?: (message: ChatMessage, carriedMessageCount: number) => void;
-  forkDisabled?: boolean;
-  forkParentSessionTitle?: string | null;
-  // 协议 1.7：最后一条 user/assistant 消息的编辑/重新生成动作。
-  onEditLastUserMessage?: (message: ChatMessage) => void;
-  onRegenerateLastTurn?: (message: ChatMessage) => void;
-};
-
-type KeyedRenderableMessageItem = RenderableMessageItem & {
-  itemKey: string;
-  renderIndex: number;
-  estimatedHeight: number;
-};
-
-function isStreamingThinkingMessage(message: ChatMessage): boolean {
-  return Boolean(message.isThinking && String(message.id || "").startsWith("__streaming_thinking_"));
-}
-
-function isRenderableAssistantProse(message: ChatMessage): boolean {
-  return (
-    message.type === "assistant" &&
-    !message.isToolUse &&
-    !message.isThinking &&
-    !message.isStreaming &&
-    !message.isInteractivePrompt &&
-    !message.isSubagentContainer &&
-    !message.isTaskNotification &&
-    !message.isAgentActivity &&
-    !message.isAgentActivitySummary &&
-    typeof message.content === "string" &&
-    message.content.trim().length > 0
-  );
-}
-
-function isSubagentThinkingPlaceholder(message: ChatMessage): boolean {
-  const id = String(message.id || "");
-  return Boolean(message.isThinking && (id.startsWith("subagent_thinking_") || id.startsWith("__subagent_thinking_")));
-}
-
-function countCarriedMessagesBefore(messages: ChatMessage[], originalIndex: number): number {
-  return messages
-    .slice(0, originalIndex)
-    .filter(message => message.type === "user" || message.type === "assistant" || message.isToolUse).length;
-}
-
-function countForkCarriedMessages(messages: ChatMessage[], originalIndex: number, message: ChatMessage): number {
-  if (message.type !== "assistant") {
-    return message.type === "user" ? countCarriedMessagesBefore(messages, originalIndex) : 0;
-  }
-
-  let forkTargetIndex = -1;
-  for (let index = originalIndex; index >= 0; index -= 1) {
-    if (messages[index]?.type === "user") {
-      forkTargetIndex = index;
-      break;
-    }
-  }
-  return countCarriedMessagesBefore(messages, forkTargetIndex >= 0 ? forkTargetIndex : originalIndex);
-}
-
-function isForkedChatSession(session: ProjectSession | null): boolean {
-  return Boolean(session?.parentSessionId && !isReadOnlySession(session));
-}
+import SubagentDetailModal from "./SubagentDetailModal";
+import { ProcessLiveStatus, StreamingThinkingPreview } from "./ProcessTrace";
+import { LiveProcessHeader } from "./messagesPaneLiveStatus";
+import { isForkedChatSession } from "./messagesPaneHelpers";
+import { useMessagesPaneInteractionState } from "./useMessagesPaneInteractionState";
+import { useSubagentActivityProjection } from "./useSubagentActivityProjection";
+import { useRenderableMessageTimeline } from "./useRenderableMessageTimeline";
+import { useLiveStatusView } from "./useLiveStatusView";
+import { useMessagesPaneRenderers } from "./useMessagesPaneRenderers";
+import { useMessagesPaneSearchAndLayout } from "./useMessagesPaneSearchAndLayout";
+import type { MessagesPaneV2Props } from "./messagesPaneTypes";
 
 function MessagesPaneV2({
   scrollContainerRef,
@@ -191,62 +60,18 @@ function MessagesPaneV2({
   const { t } = useTranslation("chat");
   // 布局告警文案与 ErrorBoundary 共用 common 命名空间的 uiText 段。
   const { t: tCommon } = useTranslation("common");
-  const messageKeyMapRef = useRef<WeakMap<ChatMessage, string>>(new WeakMap());
-  const generatedMessageKeyCounterRef = useRef(0);
-  // P3-4 增量缓存：{消息前缀, isAssistantWorking, 构建结果}。命中时返回缓存引用，
-  // 使 renderableMessageItems 引用在流式 process tick 间稳定（见下方 useMemo）。
-  const renderableItemsCacheRef = useRef<{
-    messages: ChatMessage[];
-    isAssistantWorking: boolean;
-    result: RenderableMessageItem[];
-  } | null>(null);
-  const [expandedProcessRows, setExpandedProcessRows] = useState<Map<string, boolean>>(() => new Map());
-  const [openSubagentId, setOpenSubagentId] = useState<string | null>(null);
-
-  const handleOpenSubagentDetail = useCallback((subagentId: string) => {
-    setOpenSubagentId(subagentId);
-  }, []);
+  const {
+    renderableItemsCacheRef,
+    openSubagentId,
+    setOpenSubagentId,
+    handleOpenSubagentDetail,
+    getMessageKey,
+    isProcessExpanded,
+    handleProcessExpandedChange,
+  } = useMessagesPaneInteractionState();
 
   const sessionId = selectedSession?.id ?? null;
   const projectPath = selectedProject?.fullPath || selectedProject?.path || undefined;
-
-  const getMessageKey = useCallback((message: ChatMessage, index: number) => {
-    const existingKey = messageKeyMapRef.current.get(message);
-    if (existingKey) return existingKey;
-
-    const intrinsicKey = getIntrinsicMessageKey(message);
-    if (intrinsicKey) {
-      messageKeyMapRef.current.set(message, intrinsicKey);
-      return intrinsicKey;
-    }
-
-    generatedMessageKeyCounterRef.current += 1;
-    const candidateKey = `message-generated-${index}-${generatedMessageKeyCounterRef.current}`;
-    messageKeyMapRef.current.set(message, candidateKey);
-    return candidateKey;
-  }, []);
-
-  const isProcessExpanded = useCallback(
-    (processKey: string, defaultExpanded = false) => expandedProcessRows.get(processKey) ?? defaultExpanded,
-    [expandedProcessRows],
-  );
-
-  const handleProcessExpandedChange = useCallback((processKey: string, expanded: boolean) => {
-    setExpandedProcessRows(currentRows => {
-      const currentExpanded = currentRows.get(processKey) ?? false;
-      if (currentExpanded === expanded) {
-        return currentRows;
-      }
-
-      const nextRows = new Map(currentRows);
-      if (expanded) {
-        nextRows.set(processKey, true);
-      } else {
-        nextRows.delete(processKey);
-      }
-      return nextRows;
-    });
-  }, []);
 
   const suggestedPrompts: string[] = [
     t("emptyChat.prompts.plan", { defaultValue: "Plan a refactor for this project" }),
@@ -268,555 +93,113 @@ function MessagesPaneV2({
     isForkedSession: isForkedChatSession(selectedSession),
   });
 
-  const liveActivities = useMemo(() => activityMessages.filter(message => message.isAgentActivity), [activityMessages]);
-  const subagentActivities = useMemo(() => liveActivities.filter(isSubagentActivity), [liveActivities]);
-  const nonSubagentLiveActivities = useMemo(
-    () => liveActivities.filter(activity => !isSubagentActivity(activity)),
-    [liveActivities],
-  );
-  const subagentActivityById = useMemo(() => {
-    const byId = new Map<string, ChatMessage>();
-    for (const activity of subagentActivities) {
-      const rawId = activity.activityId || activity.runId || "";
-      const subagentId = rawId.startsWith("subagent:") ? rawId.slice("subagent:".length) : "";
-      if (subagentId) {
-        byId.set(subagentId, activity);
-      }
-    }
-    return byId;
-  }, [subagentActivities]);
-  const subagentThinkingByIdRef = useRef(new Map<string, string>());
-  const subagentThinkingById = (() => {
-    if (!sessionId || !sessionStore) {
-      if (subagentThinkingByIdRef.current.size === 0) return subagentThinkingByIdRef.current;
-      subagentThinkingByIdRef.current = new Map();
-      return subagentThinkingByIdRef.current;
-    }
-    const prev = subagentThinkingByIdRef.current;
-    let changed = false;
-    const next = new Map<string, string>();
-    for (const [subagentId, activity] of subagentActivityById) {
-      const state = String(activity.state || "");
-      if (["completed", "failed", "cancelled"].includes(state)) continue;
-      const msgs = sessionStore.getSubagentDetailMessages?.(sessionId, subagentId) ?? [];
-      for (let i = msgs.length - 1; i >= 0; i--) {
-        const m = msgs[i];
-        if (m.id.startsWith("__subagent_thinking_") && m.content?.trim()) {
-          next.set(subagentId, m.content);
-          if (prev.get(subagentId) !== m.content) changed = true;
-          break;
-        }
-      }
-    }
-    if (!changed && prev.size === next.size) return prev;
-    subagentThinkingByIdRef.current = next;
-    return next;
-  })();
-  const openSubagentActivity = openSubagentId ? subagentActivityById.get(openSubagentId) : undefined;
-  const isOpenSubagentRunning = Boolean(
-    openSubagentActivity && !["completed", "failed", "cancelled"].includes(String(openSubagentActivity.state || "")),
-  );
-  const sessionRequestParams = useMemo(() => getSessionRequestParams(selectedSession), [selectedSession]);
-  const subagentDetail = useSubagentMessages(
-    openSubagentId ? sessionId : null,
-    openSubagentId,
-    projectPath,
-    sessionStore,
-    openSubagentActivity?.state,
-    sessionRequestParams,
-  );
-  const renderableMessages = useMemo(() => {
-    const lastUserIndex = isAssistantWorking
-      ? visibleMessages.reduce((lastIndex, message, index) => (message.type === "user" ? index : lastIndex), -1)
-      : -1;
-    const filtered = visibleMessages.filter(
-      (message, index) =>
-        !message.isAgentActivity &&
-        !isSubagentThinkingPlaceholder(message) &&
-        !(isAssistantWorking && message.isThinking && !message.isStreaming && index < lastUserIndex) &&
-        !(!inlineThinking && isStreamingThinkingMessage(message)) &&
-        !(message.isThinking && !showThinking),
-    );
-    return filtered;
-  }, [visibleMessages, showThinking, inlineThinking, isAssistantWorking]);
-  // 协议 1.7：定位最后一条可编辑 user 消息与最后一条可重新生成 assistant 消息
-  // （流式中的候选不稳定，排除；entryId 缺失的历史行也不提供动作）。
-  const lastTurnActionIndices = useMemo(() => {
-    let userIndex = -1;
-    let assistantIndex = -1;
-    renderableMessages.forEach((message, index) => {
-      if (message.isStreaming || !message.entryId) return;
-      if (message.type === "user" && String(message.content ?? "").trim()) userIndex = index;
-      if (message.type === "assistant" && String(message.content ?? "").trim()) assistantIndex = index;
-    });
-    return { userIndex, assistantIndex };
-  }, [renderableMessages]);
-  const liveProcessDetailMessages = useMemo(
-    () => (isAssistantWorking ? getLiveProcessDetailMessages(renderableMessages) : []),
-    [isAssistantWorking, renderableMessages],
-  );
-  const liveProcessGroups = useMemo(
-    () =>
-      isAssistantWorking
-        ? getLiveProcessGroups(renderableMessages, { isAssistantWorking }).filter(group =>
-            shouldRenderLiveProcessGroup(group, runMode),
-          )
-        : [],
-    [isAssistantWorking, renderableMessages, runMode],
-  );
-  const liveProcessGroupsByAnchor = useMemo(() => {
-    const groupsByAnchor = new Map<number, LiveProcessGroup[]>();
-    for (const group of liveProcessGroups) {
-      const groups = groupsByAnchor.get(group.afterOriginalIndex) || [];
-      groups.push(group);
-      groupsByAnchor.set(group.afterOriginalIndex, groups);
-    }
-    return groupsByAnchor;
-  }, [liveProcessGroups]);
-  const renderableMessageItems = useMemo(() => {
-    const cached = renderableItemsCacheRef.current;
-    if (
-      cached !== null &&
-      cached.isAssistantWorking === isAssistantWorking &&
-      renderableMessages.length > cached.messages.length
-    ) {
-      const prev = cached.messages;
-      let prefixMatches = true;
-      for (let index = 0; index < prev.length; index += 1) {
-        if (prev[index] !== renderableMessages[index]) {
-          prefixMatches = false;
-          break;
-        }
-      }
-      if (prefixMatches) {
-        // 增量安全条件（可证明输出不变）：
-        //  a) 新增消息全部可折叠/过滤（process 消息被 live 折叠、shell 空壳被
-        //     filter 移除）→ 不产生新 item；user/prose/流式 thinking 等
-        //     → 可能产生 item，全量重算（保守）。
-        //  b) 旧输出中最后 turn 无 item（liveTurn 的折叠判定依赖 liveTurn 内
-        //     全部消息——新增 process 消息可能使旧 standalone thinking 组
-        //     转为折叠，因此最后 turn 已有 item 时必须全量）。
-        // 满足 a+b 时旧结果引用可直接复用，下游 keyedMessageItems /
-        // measuredItemHeights / prefixOffsets 全部级联命中。
-        let appendedOnlyCollapsible = true;
-        for (let index = prev.length; index < renderableMessages.length; index += 1) {
-          const message = renderableMessages[index];
-          if (message && (isProcessMessage(message) || isEmptyAssistantShell(message))) continue;
-          appendedOnlyCollapsible = false;
-          break;
-        }
-        const lastTurnStart = getLastMessageTurnStart(prev);
-        let lastTurnHasItems = false;
-        for (let index = cached.result.length - 1; index >= 0; index -= 1) {
-          if (cached.result[index].originalIndex < lastTurnStart) break;
-          lastTurnHasItems = true;
-          break;
-        }
-        if (appendedOnlyCollapsible && !lastTurnHasItems) {
-          renderableItemsCacheRef.current = { messages: renderableMessages, isAssistantWorking, result: cached.result };
-          return cached.result;
-        }
-      }
-    }
-    const result = buildRenderableMessageItems(renderableMessages, { isAssistantWorking });
-    renderableItemsCacheRef.current = { messages: renderableMessages, isAssistantWorking, result };
-    return result;
-  }, [isAssistantWorking, renderableMessages]);
-  const keyedMessageItems = useMemo<KeyedRenderableMessageItem[]>(
-    () =>
-      renderableMessageItems.map((item, index) => ({
-        ...item,
-        itemKey: getMessageKey(item.message, index),
-        renderIndex: index,
-        estimatedHeight: estimateMessageItemHeight(item),
-      })),
-    [getMessageKey, renderableMessageItems],
-  );
   const {
+    subagentActivities,
+    nonSubagentLiveActivities,
+    subagentActivityById,
+    subagentThinkingById,
+    openSubagentActivity,
+    isOpenSubagentRunning,
+  } = useSubagentActivityProjection({ activityMessages, openSubagentId, sessionId, sessionStore });
+
+  const {
+    subagentDetail,
+    renderableMessages,
+    lastTurnActionIndices,
+    liveProcessDetailMessages,
+    liveProcessGroups,
+    liveProcessGroupsByAnchor,
+    keyedMessageItems,
     measuredItemHeights,
     shouldVirtualizeMessages,
     virtualWindow,
     windowedMessageItems,
     handleMeasuredItemHeight,
-  } = useMessageVirtualization({ keyedItems: keyedMessageItems, scrollContainerRef });
-
-  const liveProcessHeaderIndex = useMemo(() => {
-    if (!isAssistantWorking) return -1;
-    for (let index = keyedMessageItems.length - 1; index >= 0; index -= 1) {
-      if (keyedMessageItems[index].message.type === "user") {
-        return Math.min(index + 1, keyedMessageItems.length);
-      }
-    }
-    return keyedMessageItems.length > 0 ? 0 : -1;
-  }, [isAssistantWorking, keyedMessageItems]);
-  // The current turn's "started at" is anchored to the latest user message's
-  // timestamp (set by the composer when the user submits). This is the only
-  // signal that survives a page refresh and reliably resets between turns —
-  // activity-based timing is unreliable because `activityMessages` accumulates
-  // across turns in the session store.
-  const liveProcessStartedAtMs = useMemo(() => {
-    if (!isAssistantWorking || liveProcessHeaderIndex <= 0) return null;
-    const anchorMessage = keyedMessageItems[liveProcessHeaderIndex - 1]?.message;
-    if (anchorMessage?.type !== "user" || anchorMessage.timestamp == null) return null;
-    const parsed = Date.parse(String(anchorMessage.timestamp));
-    return Number.isFinite(parsed) ? parsed : null;
-  }, [isAssistantWorking, keyedMessageItems, liveProcessHeaderIndex]);
-  const hasLiveAssistantContent = useMemo(() => {
-    if (!isAssistantWorking || liveProcessHeaderIndex < 0) return false;
-    return keyedMessageItems
-      .slice(liveProcessHeaderIndex)
-      .some(
-        item =>
-          item.message.type === "assistant" &&
-          !item.message.isThinking &&
-          !item.message.isToolUse &&
-          typeof item.message.content === "string" &&
-          item.message.content.trim().length > 0,
-      );
-  }, [isAssistantWorking, keyedMessageItems, liveProcessHeaderIndex]);
-  const hasPendingToolUse = useMemo(() => {
-    if (!isAssistantWorking || liveProcessHeaderIndex < 0) return false;
-    const liveItems = keyedMessageItems.slice(liveProcessHeaderIndex);
-    let lastToolUseIdx = -1;
-    for (let index = liveItems.length - 1; index >= 0; index -= 1) {
-      if (liveItems[index]?.message.isToolUse) {
-        lastToolUseIdx = index;
-        break;
-      }
-    }
-    if (lastToolUseIdx < 0) return false;
-    const hasContentAfterTool = liveItems
-      .slice(lastToolUseIdx + 1)
-      .some(
-        item =>
-          item.message.type === "assistant" &&
-          !item.message.isThinking &&
-          !item.message.isToolUse &&
-          typeof item.message.content === "string" &&
-          item.message.content.trim().length > 0,
-      );
-    return !hasContentAfterTool;
-  }, [isAssistantWorking, keyedMessageItems, liveProcessHeaderIndex]);
-  const runningSubagentActivity = useMemo(
-    () => [...subagentActivities].reverse().find(isRunningActivity) || null,
-    [subagentActivities],
-  );
-  const streamingThinkingContent = useMemo(() => {
-    if (!showThinking || !isAssistantWorking) {
-      return null;
-    }
-    for (let i = visibleMessages.length - 1; i >= 0; i--) {
-      const msg = visibleMessages[i];
-      if (isStreamingThinkingMessage(msg) && typeof msg.content === "string" && msg.content.trim()) {
-        return msg.content;
-      }
-      if (msg.type === "user") break;
-    }
-    return null;
-  }, [showThinking, isAssistantWorking, visibleMessages]);
-  const liveStatusStep = useMemo<ProcessTraceStep>(() => {
-    if (streamingThinkingContent) {
-      return {
-        id: "live-thinking",
-        title: t("working.thinking", { defaultValue: "thinking" }),
-        phase: "thinking",
-        state: "running",
-      };
-    }
-    if (runningSubagentActivity) {
-      return {
-        id: runningSubagentActivity.activityId || runningSubagentActivity.id || "live-subagent-waiting",
-        title: t("working.waitingForSubagent", { defaultValue: "Waiting for subagent" }),
-        phase: "subagent",
-        state: "running",
-        toolName: "agent",
-      };
-    }
-    return getLiveStatusStep(nonSubagentLiveActivities, workingStatus, hasLiveAssistantContent, hasPendingToolUse, t);
-  }, [
+    liveProcessHeaderIndex,
+    liveProcessStartedAtMs,
     hasLiveAssistantContent,
     hasPendingToolUse,
+  } = useRenderableMessageTimeline({
+    selectedSession,
+    openSubagentId,
+    sessionId,
+    projectPath,
+    sessionStore,
+    openSubagentActivityState: openSubagentActivity?.state,
+    visibleMessages,
+    showThinking,
+    inlineThinking,
+    isAssistantWorking,
+    runMode,
+    renderableItemsCacheRef,
+    getMessageKey,
+    scrollContainerRef,
+  });
+
+  const { streamingThinkingContent, liveStatusStep } = useLiveStatusView({
+    subagentActivities,
+    showThinking,
+    isAssistantWorking,
+    visibleMessages,
     nonSubagentLiveActivities,
-    runningSubagentActivity,
-    streamingThinkingContent,
-    t,
     workingStatus,
-  ]);
+    hasLiveAssistantContent,
+    hasPendingToolUse,
+    t,
+  });
   const hasOpenEndedLiveProcessGroup = liveProcessGroups.some(group => group.isRunning);
   const shouldRenderBottomLiveStatus = isAssistantWorking && !hasOpenEndedLiveProcessGroup;
 
-  const renderLiveProcessDetailMessages = useCallback(
-    (detailMessages: ChatMessage[], groupId: string) =>
-      detailMessages.map((message: ChatMessage, index: number) => (
-        <MessageRowV2
-          key={`${groupId}-${getMessageKey(message, index)}`}
-          message={message}
-          prevMessage={index > 0 ? detailMessages[index - 1] : null}
-          nextMessage={index < detailMessages.length - 1 ? detailMessages[index + 1] : null}
-          provider={provider}
-          selectedProject={selectedProject}
-          createDiff={createDiff}
-          onFileOpen={onFileOpen}
-          onShowSettings={onShowSettings}
-          onGrantSessionToolPermission={onGrantSessionToolPermission}
-          autoExpandTools={autoExpandTools}
-          showRawParameters={showRawParameters}
-          showThinking={showThinking}
-          inlineThinking={inlineThinking}
-          isProcessExpanded={isProcessExpanded}
-          onProcessExpandedChange={handleProcessExpandedChange}
-          onOpenSubagentDetail={handleOpenSubagentDetail}
-          subagentActivityById={subagentActivityById}
-          subagentThinkingById={subagentThinkingById}
-          isSessionRunning={isAssistantWorking}
-        />
-      )),
-    [
-      autoExpandTools,
-      createDiff,
-      getMessageKey,
-      handleOpenSubagentDetail,
-      inlineThinking,
-      onFileOpen,
-      onGrantSessionToolPermission,
-      onShowSettings,
-      provider,
-      selectedProject,
-      subagentActivityById,
-      subagentThinkingById,
-      isProcessExpanded,
-      handleProcessExpandedChange,
-      showRawParameters,
-      showThinking,
-      isAssistantWorking,
-    ],
-  );
+  const { renderLiveProcessDetailMessages, renderMessageItem } = useMessagesPaneRenderers({
+    getMessageKey,
+    provider,
+    selectedProject,
+    createDiff,
+    onFileOpen,
+    onShowSettings,
+    onGrantSessionToolPermission,
+    autoExpandTools,
+    showRawParameters,
+    showThinking,
+    inlineThinking,
+    isProcessExpanded,
+    handleProcessExpandedChange,
+    handleOpenSubagentDetail,
+    subagentActivityById,
+    subagentThinkingById,
+    isAssistantWorking,
+    onFork,
+    forkDisabled,
+    onEditLastUserMessage,
+    onRegenerateLastTurn,
+    liveProcessGroups,
+    t,
+    resolvedPlanModeActive,
+    liveStatusStep,
+    keyedMessageItems,
+    renderableMessages,
+    liveProcessGroupsByAnchor,
+    liveProcessHeaderIndex,
+    liveProcessStartedAtMs,
+    nonSubagentLiveActivities,
+    handleMeasuredItemHeight,
+    lastTurnActionIndices,
+  });
 
-  const renderLiveProcessGroup = useCallback(
-    (group: LiveProcessGroup, index: number) => {
-      const isLatestGroup = liveProcessGroups[liveProcessGroups.length - 1]?.id === group.id;
-      const step = getLiveProcessGroupStep(group, t, group.isRunning && isLatestGroup ? liveStatusStep : null);
-      const showWebFetchWaiting = shouldShowWebFetchWaitingHint(group, resolvedPlanModeActive);
-      const expanded = isProcessExpanded(group.id);
-      const { beforeStatusMessages, statusDetailMessages } = splitLiveProcessGroupDetailMessages(group);
-      return (
-        <Fragment key={group.id || `${group.afterOriginalIndex}-${index}`}>
-          {expanded && beforeStatusMessages.length > 0 ? (
-            <div className="pl-5">
-              {renderLiveProcessDetailMessages(beforeStatusMessages, `${group.id}-before-status`)}
-            </div>
-          ) : null}
-          <ProcessLiveStatus
-            step={step}
-            compact
-            expanded={expanded}
-            onExpandedChange={expanded => handleProcessExpandedChange(group.id, expanded)}
-          >
-            {statusDetailMessages.length > 0 ? renderLiveProcessDetailMessages(statusDetailMessages, group.id) : null}
-          </ProcessLiveStatus>
-          {showWebFetchWaiting ? <ProcessLiveStatus step={getWebFetchWaitingStep(group.id, t)} compact /> : null}
-        </Fragment>
-      );
-    },
-    [
-      handleProcessExpandedChange,
-      isProcessExpanded,
-      liveProcessGroups,
-      liveStatusStep,
-      resolvedPlanModeActive,
-      renderLiveProcessDetailMessages,
-      t,
-    ],
-  );
-
-  const renderMessageItem = useCallback(
-    (item: KeyedRenderableMessageItem) => {
-      const previousMessage = item.renderIndex > 0 ? keyedMessageItems[item.renderIndex - 1].message : null;
-      const nextMessage =
-        item.renderIndex < keyedMessageItems.length - 1 ? keyedMessageItems[item.renderIndex + 1].message : null;
-      const isLast = !isAssistantWorking && item.renderIndex === keyedMessageItems.length - 1;
-      const forkCarriedMessageCount = countForkCarriedMessages(renderableMessages, item.originalIndex, item.message);
-      const anchoredLiveGroups = liveProcessGroupsByAnchor.get(item.originalIndex) || [];
-      const rendersLiveHeaderAfterItem = item.renderIndex === liveProcessHeaderIndex - 1;
-      const showAssistantActions = (() => {
-        if (!isRenderableAssistantProse(item.message)) {
-          return false;
-        }
-        if (isAssistantWorking && item.renderIndex >= liveProcessHeaderIndex) {
-          return false;
-        }
-
-        for (let index = item.renderIndex + 1; index < keyedMessageItems.length; index += 1) {
-          const candidate = keyedMessageItems[index]?.message;
-          if (!candidate) {
-            continue;
-          }
-          if (candidate.type === "user") {
-            break;
-          }
-          if (candidate.type === "error") {
-            return false;
-          }
-          if (isRenderableAssistantProse(candidate)) {
-            return false;
-          }
-        }
-        return true;
-      })();
-
-      return (
-        <Fragment key={item.itemKey}>
-          {liveProcessHeaderIndex === 0 && item.renderIndex === 0 ? (
-            <LiveProcessHeader activities={nonSubagentLiveActivities} startedAtMs={liveProcessStartedAtMs} t={t} />
-          ) : null}
-          <MeasuredMessageItem
-            itemKey={item.itemKey}
-            message={item.message}
-            isLast={isLast}
-            compactBottomSpacing={anchoredLiveGroups.length > 0 || rendersLiveHeaderAfterItem}
-            onHeightChange={handleMeasuredItemHeight}
-          >
-            {item.beforeRunAttachment ? (
-              <CompletedProcessHeader durationMs={item.beforeRunAttachment.durationMs} t={t} />
-            ) : null}
-            <MessageRowV2
-              message={item.message}
-              prevMessage={previousMessage}
-              nextMessage={nextMessage}
-              beforeProcessAttachments={item.beforeProcessAttachments}
-              afterProcessAttachments={item.afterProcessAttachments}
-              provider={provider}
-              selectedProject={selectedProject}
-              createDiff={createDiff}
-              onFileOpen={onFileOpen}
-              onShowSettings={onShowSettings}
-              onGrantSessionToolPermission={onGrantSessionToolPermission}
-              autoExpandTools={autoExpandTools}
-              showRawParameters={showRawParameters}
-              showThinking={showThinking}
-              inlineThinking={inlineThinking}
-              isProcessExpanded={isProcessExpanded}
-              onProcessExpandedChange={handleProcessExpandedChange}
-              onOpenSubagentDetail={handleOpenSubagentDetail}
-              subagentActivityById={subagentActivityById}
-              subagentThinkingById={subagentThinkingById}
-              isSessionRunning={isAssistantWorking}
-              onFork={onFork}
-              forkCarriedMessageCount={forkCarriedMessageCount}
-              forkDisabled={forkDisabled}
-              showAssistantActions={showAssistantActions}
-              onEditLastUserMessage={onEditLastUserMessage}
-              onRegenerateLastTurn={onRegenerateLastTurn}
-              isLastUserMessage={item.renderIndex === lastTurnActionIndices.userIndex}
-              isLastAssistantMessage={item.renderIndex === lastTurnActionIndices.assistantIndex}
-            />
-            {rendersLiveHeaderAfterItem ? (
-              <LiveProcessHeader activities={nonSubagentLiveActivities} startedAtMs={liveProcessStartedAtMs} t={t} />
-            ) : null}
-            {item.afterRunAttachment ? (
-              <CompletedProcessHeader durationMs={item.afterRunAttachment.durationMs} t={t} />
-            ) : null}
-            {anchoredLiveGroups.length > 0 ? (
-              <div className="mt-2 flex min-w-0 flex-col gap-2">{anchoredLiveGroups.map(renderLiveProcessGroup)}</div>
-            ) : null}
-          </MeasuredMessageItem>
-        </Fragment>
-      );
-    },
-    [
-      autoExpandTools,
-      createDiff,
-      handleMeasuredItemHeight,
-      handleOpenSubagentDetail,
-      handleProcessExpandedChange,
-      inlineThinking,
-      isProcessExpanded,
-      isAssistantWorking,
-      keyedMessageItems,
-      renderableMessages,
-      nonSubagentLiveActivities,
-      liveProcessGroupsByAnchor,
-      liveProcessHeaderIndex,
-      liveProcessStartedAtMs,
-      onFileOpen,
-      onFork,
-      forkDisabled,
-      onEditLastUserMessage,
-      onRegenerateLastTurn,
-      lastTurnActionIndices,
-      onGrantSessionToolPermission,
-      onShowSettings,
-      provider,
-      renderLiveProcessGroup,
-      selectedProject,
-      showRawParameters,
-      showThinking,
-      subagentActivityById,
-      subagentThinkingById,
-      t,
-    ],
-  );
-
-  const keyedMessagesForSearch = useMemo<SearchableChatMessageInput[]>(() => {
-    return keyedMessageItems.map(item => ({
-      message: item.message,
-      messageKey: item.itemKey,
-      messageIndex: item.renderIndex,
-    }));
-  }, [keyedMessageItems]);
-
-  const chatHistorySearch = useChatHistorySearch({
+  const { chatHistorySearch, searchIsRenderedByShell, hasLayoutWarning } = useMessagesPaneSearchAndLayout({
     scrollContainerRef,
-    keyedMessages: keyedMessagesForSearch,
+    keyedMessageItems,
     measuredItemHeights,
     allMessagesLoaded,
     hasMoreMessages,
     loadAllMessages,
     sessionId,
-    renderWindowKey: `${virtualWindow.startIndex}:${virtualWindow.endIndex}`,
-  });
-  const searchIsRenderedByShell = useRegisterChatHistorySearchControls(chatHistorySearch);
-  const [hasLayoutWarning, setHasLayoutWarning] = useState(false);
-  useEffect(() => {
-    setHasLayoutWarning(false);
-    if (isAssistantWorking || isLoadingSessionMessages || keyedMessageItems.length === 0) return;
-    // 等布局稳定后再判定。隐藏标签页/面板、空会话都不算渲染故障（上游 #568）。
-    // 依赖只放稳定的标量签名：放进 keyedMessageItems 的数组身份或滚动窗口会让
-    // 流式输出/滚动期间每次渲染都重置计时器，"稳定后 800ms" 永不成立，探测形同虚设。
-    // 依赖不含滚动 → 触发时不再读当时的虚拟窗口（已过期），改读实时 DOM 行数。
-    const timer = window.setTimeout(() => {
-      const node = scrollContainerRef.current;
-      if (!node || node.clientHeight <= 0 || !node.getClientRects().length || document.visibilityState === "hidden") {
-        return;
-      }
-      const viewport = node.getBoundingClientRect();
-      const rows = Array.from(node.querySelectorAll<HTMLElement>("[data-message-key]"));
-      const hasVisibleRow = rows.some(row => {
-        const rect = row.getBoundingClientRect();
-        return rect.height > 0 && rect.bottom > viewport.top && rect.top < viewport.bottom;
-      });
-      if (hasVisibleRow) return;
-      // 只记计数/位置，不落消息内容（诊断缓冲不得含 prompt / 正文）。
-      recordUiDiagnostic("chat-empty-viewport", {
-        messages: chatMessages.length,
-        renderItems: keyedMessageItems.length,
-        renderedRows: rows.length,
-        scrollTop: node.scrollTop,
-        scrollHeight: node.scrollHeight,
-        viewportHeight: node.clientHeight,
-        virtualized: shouldVirtualizeMessages,
-      });
-      setHasLayoutWarning(true);
-    }, UI_TIMEOUTS.LAYOUT_STABILITY_PROBE_MS);
-    return () => window.clearTimeout(timer);
-  }, [
+    virtualWindow,
     isAssistantWorking,
     isLoadingSessionMessages,
-    keyedMessageItems.length,
-    chatMessages.length,
-    scrollContainerRef,
+    chatMessages,
     shouldVirtualizeMessages,
-  ]);
+  });
 
   return (
     <div className="relative min-h-0 flex-1 overflow-hidden">
@@ -974,209 +357,3 @@ function MessagesPaneV2({
 }
 
 export default memo(MessagesPaneV2);
-
-function isSubagentActivity(activity: ChatMessage): boolean {
-  const activityId = String(activity.activityId || activity.runId || "");
-  return activity.phase === "subagent" || activityId.startsWith("subagent:");
-}
-
-function isRunningActivity(activity: ChatMessage): boolean {
-  return !["completed", "failed", "cancelled"].includes(String(activity.state || "running"));
-}
-
-function getLatestActivity(activities: ChatMessage[]): ChatMessage | null {
-  const byId = new Map<string, ChatMessage>();
-  for (const activity of activities) {
-    const key = activity.activityId || activity.id || `${activity.runId}-${activity.timestamp}`;
-    byId.set(key, activity);
-  }
-  const latest = Array.from(byId.values());
-  return [...latest].reverse().find(activity => activity.state === "running") || null;
-}
-
-function activityToLiveStep(activity: ChatMessage): ProcessTraceStep {
-  return {
-    id: activity.activityId || activity.id,
-    title: activity.title || activity.content || activity.toolName || "",
-    detail: activity.detail || "",
-    state: activity.state || "running",
-    severity: activity.severity,
-    phase: activity.phase,
-    toolName: activity.toolName,
-  };
-}
-
-function getLiveStatusStep(
-  activities: ChatMessage[],
-  workingStatus: ClaudeWorkStatus | SatiWorkStatus | null | undefined,
-  hasAssistantContent: boolean,
-  hasPendingToolUse: boolean,
-  t: (key: string, options?: Record<string, unknown>) => string,
-): ProcessTraceStep {
-  const latestActivity = getLatestActivity(activities);
-  if (latestActivity) {
-    return activityToLiveStep(latestActivity);
-  }
-
-  const retryProgress = (workingStatus as SatiWorkStatus | null | undefined)?.retryProgress;
-  if (retryProgress) {
-    const parts: string[] = [];
-    if (retryProgress.reason) parts.push(retryProgress.reason);
-    if (retryProgress.provider) parts.push(retryProgress.provider);
-    if (retryProgress.model) parts.push(retryProgress.model);
-    const delayStr = retryProgress.delayMs ? ` (${Math.round(retryProgress.delayMs / 1000)}s)` : "";
-    return {
-      id: "live-retry",
-      title: t("working.retrying", {
-        defaultValue: "Reconnecting {{attempt}}/{{max}}{{delay}}",
-        attempt: retryProgress.attempt,
-        max: retryProgress.maxAttempts,
-        delay: delayStr,
-      }),
-      detail: parts.join(" · "),
-      phase: "retry",
-      state: "running",
-      severity: "warning",
-    };
-  }
-
-  if (workingStatus?.compactProgress) {
-    const progress = workingStatus.compactProgress;
-    // 失败/中断的压缩不是「正在压缩」：给出对应标题与 severity，否则用户看到的是
-    // 一个永远转圈的「Compacting context...」（上游 #570 移植）。
-    let title = t("working.compacting", { defaultValue: "Compacting context..." });
-    let severity: "error" | undefined;
-    if (progress.state === "cancelled") {
-      title = t("working.compactCancelled", { defaultValue: "Context compaction stopped" });
-      severity = "error";
-    } else if (progress.state === "failed") {
-      title = t("working.compactFailed", { defaultValue: "Context compaction failed" });
-      severity = "error";
-    }
-    return {
-      id: "live-compact",
-      title,
-      detail: progress.label || progress.stage || "",
-      phase: "compact",
-      state: progress.state || "running",
-      ...(severity ? { severity } : {}),
-    };
-  }
-
-  const rawStatus = String(workingStatus?.text || "").toLowerCase();
-  if (rawStatus.includes("model_request_started")) {
-    if (hasPendingToolUse) {
-      return {
-        id: "live-tool-exec",
-        title: t("working.executingTool", { defaultValue: "Running tool..." }),
-        phase: "tool",
-        state: "running",
-      };
-    }
-    return {
-      id: "live-model-call",
-      title: t("working.callingModel", { defaultValue: "Calling model..." }),
-      phase: "generation",
-      state: "running",
-    };
-  }
-  if (rawStatus.includes("permission")) {
-    return {
-      id: "live-permission",
-      title: t("working.waitingForPermission", { defaultValue: "Waiting for permission" }),
-      phase: "permission",
-      state: "running",
-      severity: "warning",
-    };
-  }
-  if (rawStatus.includes("compact")) {
-    return {
-      id: "live-compact",
-      title: t("working.compacting", { defaultValue: "Compacting context..." }),
-      phase: "compact",
-      state: "running",
-    };
-  }
-
-  return hasAssistantContent
-    ? {
-        id: "live-generation",
-        title: t("working.generating", { defaultValue: "Generating response" }),
-        phase: "generation",
-        state: "running",
-      }
-    : {
-        id: "live-thinking",
-        title: t("working.thinking", { defaultValue: "Connecting..." }),
-        phase: "thinking",
-        state: "running",
-      };
-}
-
-function getLiveProcessStartedAtMs(activities: ChatMessage[], fallbackStartedAtMs: number): number {
-  if (activities.length === 0) return fallbackStartedAtMs;
-
-  // `activityMessages` accumulates across turns in the session store, so the
-  // raw list can include activities from previous runs. Scope the start time
-  // to the current run by anchoring on the most recently received activity's
-  // `runId` and picking the earliest start within that run.
-  const latestActivity = activities[activities.length - 1];
-  const latestRunId = latestActivity?.runId;
-  const currentRunActivities = latestRunId ? activities.filter(activity => activity.runId === latestRunId) : activities;
-
-  let earliestMs = Number.POSITIVE_INFINITY;
-  for (const activity of currentRunActivities) {
-    const value = activity.startedAt || activity.timestamp;
-    const parsed = value ? Date.parse(String(value)) : NaN;
-    if (Number.isFinite(parsed) && parsed < earliestMs) {
-      earliestMs = parsed;
-    }
-  }
-  return Number.isFinite(earliestMs) ? earliestMs : fallbackStartedAtMs;
-}
-
-function LiveProcessHeader({
-  activities,
-  startedAtMs,
-  t,
-}: {
-  activities: ChatMessage[];
-  startedAtMs: number | null;
-  t: (key: string, options?: Record<string, unknown>) => string;
-}) {
-  const fallbackStartedAtRef = useRef(Date.now());
-  const [nowMs, setNowMs] = useState(() => Date.now());
-
-  useEffect(() => {
-    const timer = window.setInterval(() => setNowMs(Date.now()), UI_TIMEOUTS.LIVE_ELAPSED_TICK_MS);
-    return () => window.clearInterval(timer);
-  }, []);
-
-  const elapsedMs = useMemo(() => {
-    const effectiveStartedAtMs = startedAtMs ?? getLiveProcessStartedAtMs(activities, fallbackStartedAtRef.current);
-    return Math.max(0, nowMs - effectiveStartedAtMs);
-  }, [activities, nowMs, startedAtMs]);
-  const duration = formatProcessDuration(elapsedMs);
-  const label = t("process.summary.processed", {
-    duration,
-    defaultValue: `Processed ${duration}`,
-  });
-
-  return <ProcessRunHeader label={label} />;
-}
-
-function CompletedProcessHeader({
-  durationMs,
-  t,
-}: {
-  durationMs: number;
-  t: (key: string, options?: Record<string, unknown>) => string;
-}) {
-  const duration = formatProcessDuration(durationMs);
-  const label = t("process.summary.processed", {
-    duration,
-    defaultValue: `Processed ${duration}`,
-  });
-
-  return <ProcessRunHeader label={label} />;
-}

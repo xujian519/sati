@@ -10,7 +10,7 @@
 | src TS 文件 / 行数 | 1143 / 199908 |
 | src JS 文件 | 0 |
 | tests 文件 | 666 |
-| ui/src 文件 / 行数 | 664 / 103986 |
+| ui/src 文件 / 行数 | 673 / 104390 |
 | ui/server 文件 / 行数 | 149 / 38773 |
 
 ## 指标口径
@@ -48,7 +48,6 @@
 | `ui/src/components/app-shell/SidebarV2.tsx` | `SidebarV2` | 1014 | function |
 | `ui/src/components/chat-v2/MessagesPaneV2.render.test.tsx` | `(anonymous)` | 943 | arrow |
 | `ui/src/components/main-content-v2/FilesV2.tsx` | `FilesV2` | 832 | function |
-| `ui/src/components/chat-v2/MessagesPaneV2.tsx` | `MessagesPaneV2` | 824 | function |
 | `ui/src/components/chat-v2/ComposerV2.tsx` | `ComposerV2` | 741 | function |
 | `ui/src/components/git-panel/hooks/useGitPanelController.ts` | `useGitPanelController` | 704 | function |
 | `ui/src/components/main-content-v2/skills/import/ImportFromFolder.tsx` | `ImportFromFolder` | 688 | function |
@@ -79,6 +78,7 @@
 | `ui/src/components/settings/view/agentRoute/components/RouterSection.tsx` | `RouterSection` | 357 | function |
 | `ui/src/stores/useSessionStore.actions.test.tsx` | `(anonymous)` | 354 | arrow |
 | `ui/src/components/main-content/view/MainContent.tsx` | `MainContent` | 346 | function |
+| `ui/src/components/chat-v2/MessagesPaneV2.tsx` | `MessagesPaneV2` | 338 | function |
 | `ui/src/components/chat/view/subcomponents/MessageComponent.tsx` | `(anonymous)` | 335 | arrow |
 | `ui/src/components/main-content-v2/PlansAndCronJobs.tsx` | `PlansAndCronJobs` | 334 | function |
 | `ui/src/components/main-content-v2/DashboardV2.tsx` | `DashboardV2` | 332 | function |
@@ -111,7 +111,6 @@
 | `ui/server/routes/config.js` | 1234 |
 | `ui/server/routes/agent.js` | 1228 |
 | `ui/src/components/chat-v2/ComposerV2.tsx` | 1188 |
-| `ui/src/components/chat-v2/MessagesPaneV2.tsx` | 1183 |
 | `ui/server/routes/taskmaster.js` | 1152 |
 | `src/agent/loop/AgentLoop.ts` | 1150 |
 | `ui/src/components/main-content-v2/CronV2.tsx` | 1130 |
@@ -124,6 +123,7 @@
 | `src/context/DefaultContextRuntime.ts` | 969 |
 | `ui/src/components/main-content-v2/FilesV2.tsx` | 945 |
 | `src/pilot/config/loadPilotConfig.ts` | 922 |
+| `src/patent/figuregen/inkscape-renderer.ts` | 916 |
 
 ## vendored 子包（单列，不计入上述规模与排名）
 
