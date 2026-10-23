@@ -1,25 +1,30 @@
 #!/usr/bin/env node
 // check-patent-sop-references.mjs
-// 专利 SOP 引用完整性门禁：校验 cap01 编排手册与 patent workflow YAML 引用的
-// 工具 / subagent_type / worker 在代码中真实存在，防"纸面 SOP 与代码脱节"回潮。
+// 专利 SOP 引用完整性门禁：校验提示词、技能、规则文档与 workflow YAML 引用的
+// 工具 / subagent_type / worker / manifest / atom 在代码中真实存在，防"纸面 SOP 与代码脱节"回潮。
 //
 // 背景（2026-08）：审计发现 cap01-orchestrator.md 引用 6 个不存在的工具
 // （plan_workflow/list_workers/suggest_checkers/run_checker_review/run_patent_rules/
 // list_checkers）、7 个未注册 worker（project-probe/rule-explorer 等），且
 // subagent_type 命名与注册名双轨（technical_analyzer vs patent-analyzer）。
-// 迭代二 T5/T7 已处理命名与手册；本脚本把"引用必须真实存在"固化为门禁。
+// 迭代二 T5/T7 已处理命名与手册；#714 把扫描面从 cap01 扩到全部 patent 提示词、
+// SKILL.md 与 rules 文档，并把"引用必须真实存在"固化为门禁。
 //
-// 校验数据源：
-//  - assets/prompts/patent/cap01-orchestrator.md（全部 `code` 标识符）
+// 校验数据源（#714 起）：
+//  - assets/prompts/patent/**/*.md —— tool 形引用，cap01 额外校验连字符角色/worker
+//  - skills/**/SKILL.md —— tool 形引用（references/*.md 暂不扫）
+//  - rules/**/*.md —— tool 形引用
 //  - assets/workflows/patent/*.yaml（worker: 字段）
+// 扫描面必须存在且非空：目录改名或资产未发布时 fail-loud，不得静默变绿。
 // 权威清单（静态文本提取，不依赖 TS 解析）：
-//  - 工具：src/tool/builtin/*.ts + src/knowledge/legal/law-search-tool.ts 的 name: "…"
-//  - subagent_type：内置 4 个 + skills/*/SKILL.md（type: role）的 name + 别名键
+//  - 工具：src/tool/builtin/**/*.ts + src/literature/tool/**/*.ts + src/knowledge/legal/**/*.ts
+//    的 name: "…" 与 *_TOOL_NAME 常量
+//  - subagent_type：内置 4 个 + skills/**/SKILL.md（type: role）的 name + 别名键
 //  - worker：src/patent/worker-contract.ts defaultPatentWorkers 的 name
 // 白名单：文档性/规划性引用（字段名、外部 CLI、规划中的 worker/角色）。
 //
 // 挂载：根 package.json lint 脚本末尾（与 check:event-matrix 同处）。
-// 用法：node scripts/check-patent-sop-references.mjs
+// 用法：node scripts/check-patent-sop-references.mjs [--root <repo-root>]
 
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -27,6 +32,10 @@ import { fileURLToPath } from "node:url";
 
 const DEFAULT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const ROOT_ARG_INDEX = process.argv.indexOf("--root");
+if (ROOT_ARG_INDEX >= 0 && process.argv[ROOT_ARG_INDEX + 1] === undefined) {
+  console.error("用法: node scripts/check-patent-sop-references.mjs [--root <repo-root>]");
+  process.exit(1);
+}
 const REPO_ROOT = ROOT_ARG_INDEX >= 0 ? resolve(process.argv[ROOT_ARG_INDEX + 1]) : DEFAULT_ROOT;
 const SRC_ROOT = join(REPO_ROOT, "src");
 
@@ -125,10 +134,20 @@ function collectAtomNames() {
 // ---------------------------------------------------------------------------
 
 /**
- * 文档中的工具形引用：反引号内、至少含一个下划线的 snake_case token。
+ * 文档中的工具形引用：反引号内、至少含一个下划线的 snake_case token，
+ * 允许调用式后缀（`patent_case_search({ query: ... })`）。
  * 扫描面：patent 提示词、全部 SKILL.md、规则文档（#714 起从 cap01 单点扩面）。
  */
-const TOOL_IDENTIFIER_RE = /`([a-z][a-z0-9]*(?:_[a-z0-9]+)+)`/g;
+const TOOL_IDENTIFIER_RE = /`([a-z][a-z0-9]*(?:_[a-z0-9]+)+)(?:\([^`]*\))?`/g;
+
+/**
+ * cap01 手册的宽口径标识符：允许连字符，保留对角色/worker 的既有校验
+ * （`patent-analyzer`、`probe-worker`）。其他文档只用工具形 token，避免
+ * 把第三方技能名（`skill-creator` 等）误判为幽灵引用。
+ */
+const MANUAL_IDENTIFIER_RE = /`([a-z][a-z0-9_-]{1,60})(?:\([^`]*\))?`/g;
+
+const MANUAL_PATH = join(REPO_ROOT, "assets", "prompts", "patent", "cap01-orchestrator.md");
 
 export function collectToolIdentifiers(markdown) {
   const refs = [];
@@ -148,12 +167,26 @@ function collectMarkdownRefs() {
   const refs = [];
   for (const file of files) {
     const text = readFileSync(file, "utf8");
-    for (const m of text.matchAll(TOOL_IDENTIFIER_RE)) {
+    const pattern = file === MANUAL_PATH ? MANUAL_IDENTIFIER_RE : TOOL_IDENTIFIER_RE;
+    for (const m of text.matchAll(pattern)) {
       const line = text.slice(0, m.index ?? 0).split("\n").length;
       refs.push({ ref: m[1], location: `${relativeToRoot(file)}:${line}` });
     }
   }
   return refs;
+}
+
+/** 扫描面必须存在且非空：目录改名或资产未发布时 fail-loud（#714）。 */
+function collectEmptySurfaces() {
+  const surfaces = [
+    ["assets/prompts/patent", ".md"],
+    ["skills", "SKILL.md"],
+    ["rules", ".md"],
+    ["assets/workflows/patent", ".yaml"],
+  ];
+  return surfaces
+    .filter(([dir, suffix]) => collectFiles(join(REPO_ROOT, dir), suffix).length === 0)
+    .map(([dir, suffix]) => `扫描面为空或不存在：${dir}/**/*${suffix}`);
 }
 
 function relativeToRoot(file) {
@@ -208,7 +241,6 @@ const ALLOWLIST = new Set([
   // 外部 CLI / 浏览器 / 描述性引用
   "markitdown",
   "webfetch",
-  "ego_browser",
   "ego_lite",
   // reasoning-* 推理 worker（规划中，见 cap01 §3.3）
   "reasoning-prior-art-identification",
@@ -267,7 +299,6 @@ const ALLOWLIST = new Set([
   "review_pending",
   "finalize_ready",
   "escalate_human",
-  "set_gaps",
   "recall_check",
   "refine_query",
   "citation_gate",
@@ -318,6 +349,7 @@ function main() {
   const workers = collectWorkers();
   const manifestIds = collectManifestIds();
   const atomNames = collectAtomNames();
+  const missing = [...collectEmptySurfaces()];
 
   /** 已知幽灵引用的建议替代项（只用于报错提示，不参与放行判定）。 */
   const REFERENCE_SUGGESTIONS = {
@@ -325,8 +357,6 @@ function main() {
     patent_kg_path: "patent_kg_query",
     patent_rag: "law_search / law_verify",
     patent_law: "law_search / law_verify",
-    get_patent_metadata: "patent_metadata",
-    figure_generate: "patent_figure_generate",
   };
 
   const suggestionFor = ref => {
@@ -337,7 +367,6 @@ function main() {
     return sameFamily.length > 0 ? `（同前缀工具：${sameFamily.slice(0, 3).join(", ")}）` : "";
   };
 
-  const missing = [];
   const classify = ref => {
     if (toolNames.has(ref)) return "tool";
     if (subagentTypes.has(ref)) return "subagent_type";

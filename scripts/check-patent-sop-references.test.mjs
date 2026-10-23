@@ -36,6 +36,8 @@ function seedTree(t) {
   );
   write(root, "src/patent/workflow/manifests.ts", 'export const m = {\n  id: "patent_demo_v1",\n};\n');
   write(root, "assets/prompts/patent/cap09-search-commander.md", "# CAP09\n\n使用 `patent_real_tool`。\n");
+  write(root, "skills/demo/SKILL.md", "---\nname: demo\n---\n\n使用 `patent_real_tool`。\n");
+  write(root, "rules/README.md", "# 规则\n\n使用 `patent_real_tool`。\n");
   write(root, "assets/workflows/patent/demo.yaml", "stages:\n  - worker: probe-worker\n");
   return root;
 }
@@ -44,11 +46,11 @@ function run(root) {
   return spawnSync(process.execPath, [SCRIPT, "--root", root], { encoding: "utf8" });
 }
 
-test("collectToolIdentifiers: 只收反引号内的 snake_case token", () => {
+test("collectToolIdentifiers: 收反引号内的 snake_case token 与调用式引用", () => {
   const refs = collectToolIdentifiers(
-    "`patent_real_tool` `subagent_type` `google-patents-search` `single` `patent-ghost`",
+    "`patent_real_tool` `patent_case_search({ query: ... })` `subagent_type` `google-patents-search` `single` `patent-ghost`",
   );
-  assert.deepEqual(refs, ["patent_real_tool", "subagent_type"]);
+  assert.deepEqual(refs, ["patent_real_tool", "patent_case_search", "subagent_type"]);
 });
 
 test("干净 fixture → fresh", t => {
@@ -98,4 +100,45 @@ test("同前缀工具 → 报错附带疑似替代项", t => {
   const result = run(root);
   assert.equal(result.status, 1);
   assert.match(result.stderr, /同前缀工具：patent_real_tool/);
+});
+
+test("调用式幽灵工具名 → 失败（不只匹配裸 token）", t => {
+  const root = seedTree(t);
+  write(
+    root,
+    "assets/prompts/patent/cap09-search-commander.md",
+    '# CAP09\n\n调用 `patent_ghost_tool({ query: "x" })`。\n',
+  );
+  const result = run(root);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /cap09-search-commander\.md:3: 未知引用 "patent_ghost_tool"/);
+});
+
+test("cap01 中的连字符幽灵角色/worker → 失败（保留旧扫描口径）", t => {
+  const root = seedTree(t);
+  write(
+    root,
+    "assets/prompts/patent/cap01-orchestrator.md",
+    "# CAP01\n\n派发 `patent-ghost-role`，worker `ghost-worker`。\n",
+  );
+  const result = run(root);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /patent-ghost-role/);
+  assert.match(result.stderr, /ghost-worker/);
+});
+
+test("扫描面缺失 → fail-loud，不得静默 fresh", t => {
+  const root = seedTree(t);
+  rmSync(join(root, "rules"), { recursive: true, force: true });
+  const result = run(root);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /扫描面为空或不存在：rules/);
+});
+
+test("已知幽灵映射 → 精确替代项", t => {
+  const root = seedTree(t);
+  write(root, "assets/prompts/patent/cap09-search-commander.md", "# CAP09\n\n使用 `patent_kg_search`。\n");
+  const result = run(root);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /疑似替代：patent_kg_query/);
 });
