@@ -112,3 +112,44 @@ test("ruleGateNode: 无预计算失败时 novelty/enablement 判级不受影响�
   assert.equal(delta.rule_gate_verdict, "blocked");
   assert.ok(!(delta.rule_gate_failures as string[]).includes("US9999999B2"));
 });
+
+// ---------------------------------------------------------------------------
+// W-02: buildCitationCheckGraph 独立子图
+// ---------------------------------------------------------------------------
+
+import { buildCitationCheckGraph } from "../../../src/patent/graph/domains/citation-check.js";
+
+test("buildCitationCheckGraph: 引用全部接地 → citation_check_grounded=true", async () => {
+  const graph = buildCitationCheckGraph().compile("check");
+  const result = await graph.run({
+    refTexts: ["最接近现有技术为 US11452699B2"],
+    docs: [{ title: "标题", url: "https://patents.google.com/patent/US11452699B2" }],
+  });
+  assert.equal(result.completed, true);
+  assert.equal(result.state.citation_check_grounded, true);
+  assert.deepEqual(result.state.citation_check_uncited, []);
+  assert.match(String(result.state.citation_check_report), /全部接地/);
+});
+
+test("buildCitationCheckGraph: 引用未接地 → citation_check_grounded=false + uncited 列出", async () => {
+  const graph = buildCitationCheckGraph().compile("check");
+  const result = await graph.run({
+    refTexts: ["对比文件3 公开了该特征"],
+    docs: [{ title: "对比文件1", url: "https://example.com/D1" }],
+  });
+  assert.equal(result.completed, true);
+  assert.equal(result.state.citation_check_grounded, false);
+  assert.deepEqual(result.state.citation_check_uncited, ["D3"]);
+  assert.match(String(result.state.citation_check_report), /未在检索结果中找到/);
+});
+
+test("buildCitationCheckGraph: 检索结果为空 → fail-open（跳过硬校验）", async () => {
+  const graph = buildCitationCheckGraph().compile("check");
+  const result = await graph.run({
+    refTexts: ["对比文件1 公开了该特征"],
+    docs: [],
+  });
+  assert.equal(result.completed, true);
+  assert.equal(result.state.citation_check_grounded, true);
+  assert.match(String(result.state.citation_check_report), /检索结果为空/);
+});

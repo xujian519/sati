@@ -12,17 +12,26 @@ validation:
 stages:
   - id: parse
     strategy: chain
+    atom: extract
     description: 解析技术交底书，提取技术特征
+  - id: generate_keywords
+    strategy: chain
+    atom: keywords
+    description: 生成检索关键词（上位/下位/同义词）
   - id: search
     strategy: react
+    atom: search
+    worker: patent-search-commander
     description: 检索现有技术文献
   - id: compare
     strategy: chain
+    atom: novelty
     description: 逐项对比技术特征与现有技术（单独对比原则）
   - id: conclude
     strategy: chain
-    description: 生成新颖性分析结论（附置信度）
+    description: 生成新颖性分析结论（附置信度）（收口模式：graph 侧同为自定义 LLM 节点，非 atom handler）
   - id: approval
     strategy: chain
+    atom: approval-gate
     description: 人工确认分析结论
 

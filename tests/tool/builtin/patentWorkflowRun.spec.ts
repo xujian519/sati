@@ -497,6 +497,40 @@ test("buildJudgeSection：中断 / 无结论 / 无 LLM → 跳过评分", async 
   assert.match(noLlm, /无 LLM 通道/);
 });
 
+test("buildJudgeSection：degradedToSingleModel → 共识退化提示附在输出头部", async () => {
+  const provider: StageProvider = {
+    callLLM: async () => JSON.stringify({ score: 0.75, rationale: "r" }),
+  };
+  // 退化场景：judgeModels 已配置但 modelHints 缺失
+  const degraded = await buildJudgeSection({
+    ...judgeSectionBase(),
+    judges: [
+      { judgeId: "judge:judge-a", modelHint: "judge-a" },
+      { judgeId: "judge:judge-b", modelHint: "judge-b" },
+    ],
+    provider,
+    degradedToSingleModel: true,
+  });
+  assert.match(degraded, /⚠️ 共识退化/);
+  assert.match(degraded, /未配置 patents\.modelHints/);
+  assert.match(degraded, /同模型 N 次采样/);
+  // 退化提示不影响共识结果
+  assert.match(degraded, /🧭 共识判定/);
+
+  // 非退化场景：无提示
+  const normal = await buildJudgeSection({
+    ...judgeSectionBase(),
+    judges: [
+      { judgeId: "judge:judge-a", modelHint: "judge-a" },
+      { judgeId: "judge:judge-b", modelHint: "judge-b" },
+    ],
+    provider,
+    degradedToSingleModel: false,
+  });
+  assert.doesNotMatch(normal, /⚠️ 共识退化/);
+  assert.match(normal, /🧭 共识判定/);
+});
+
 /** inventiveness 三步法 prompt 响应器。 */
 function inventivenessResponder(prompt: string): string {
   if (prompt.includes("覆盖度")) {

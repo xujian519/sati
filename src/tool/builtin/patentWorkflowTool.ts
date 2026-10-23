@@ -30,7 +30,7 @@ export type PatentWorkflowStageOutput = {
 };
 
 export type PatentWorkflowInput = {
-  /** 工作流 manifest id（缺省 "patent_novelty_v1" = 内置专利新颖性分析五阶段）。 */
+  /** 工作流 manifest id（缺省 "patent_novelty_v1" = 内置专利新颖性分析六阶段）。 */
   manifestId?: string;
   /** 各阶段输出（缺省按顺序对应 manifest 全部阶段）。 */
   outputs?: PatentWorkflowStageOutput[];
@@ -170,7 +170,7 @@ export function renderWorkflowResultText(opts: {
  * `patent_workflow` — 声明式专利工作流执行工具。
  *
  * 按内置/自定义 WorkflowManifest 的声明式阶段顺序执行：
- * 主代理按 manifest 各阶段（解析→检索→对比→结论→人工确认）逐步完成分析，
+ * 主代理按 manifest 各阶段（解析→关键词→检索→对比→结论→人工确认）逐步完成分析，
  * 将各阶段文本传入本工具做结果组装、完整性校验（degraded 标记）与摘要生成。
  * 确定性执行，无 LLM 调用；用于专利新颖性分析等结构化流程的产物收口。
  *

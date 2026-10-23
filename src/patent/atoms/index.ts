@@ -123,6 +123,7 @@ export function registerBuiltinAtoms(): void {
   globalAtomRegistry.register(builtin.figureGateAtom);
   globalAtomRegistry.register(builtin.claimChartAtom);
   globalAtomRegistry.register(builtin.claimEmbodimentMapperAtom);
+  globalAtomRegistry.register(builtin.chemistryAnalyzeAtom);
 
   globalStageHandlerRegistry.register(new builtin.SearchHandler());
   globalStageHandlerRegistry.register(new builtin.ExtractHandler());
@@ -141,4 +142,5 @@ export function registerBuiltinAtoms(): void {
   globalStageHandlerRegistry.register(new builtin.FigureGateHandler());
   globalStageHandlerRegistry.register(new builtin.ClaimChartHandler());
   globalStageHandlerRegistry.register(new builtin.ClaimEmbodimentMapperHandler());
+  globalStageHandlerRegistry.register(new builtin.ChemistryAnalyzeHandler());
 }

@@ -7,22 +7,55 @@
 import type { WorkflowManifest } from "./types.js";
 
 /**
- * 内置：专利新颖性分析五阶段 manifest（镜像 Mady patent_novelty.yaml 与 novelty_chain 模板）。
+ * 内置：专利新颖性分析六阶段 manifest（镜像 Mady patent_novelty.yaml 与 novelty_chain 模板）。
  *
- * 注意：本 manifest **不声明 atom** —— 其消费方 patent_workflow 工具采用"主代理产出
- * 文本 → 工具收口校验"语义（确定性、无 LLM）。需要原子自动执行时，调用方应定义
- * 带 atom 的自定义 manifest，并注入已注册内置原子的注册表与 provider（见 src/patent/atoms）。
+ * 原子声明对齐 buildNoveltyGraph 的 atom handler 覆盖：extract → keywords → search →
+ * novelty（compare 节点）→ approval-gate。conclude 阶段为报告生成（graph 侧同为自定义
+ * LLM 节点 concludeNode，非 atom handler），保持收口模式。
+ *
+ * 注意：需要原子自动执行时，消费方须注入 provider（LLM/检索器）与内置原子注册表
+ *（registerBuiltinAtoms）。收口阶段（conclude）由主代理按阶段描述产出文本，消费方
+ * patent_workflow 工具按 caseType 映射规则门校验。
  */
 export const patentNoveltyManifest: WorkflowManifest = {
   id: "patent_novelty_v1",
   name: "专利新颖性分析",
   caseType: "novelty_search",
   stages: [
-    { id: "parse", strategy: "chain", description: "解析技术交底书，提取技术特征" },
-    { id: "search", strategy: "react", description: "检索现有技术文献" },
-    { id: "compare", strategy: "chain", description: "逐项对比技术特征与现有技术（单独对比原则）" },
-    { id: "conclude", strategy: "chain", description: "生成新颖性分析结论（附置信度）" },
-    { id: "approval", strategy: "chain", description: "人工确认分析结论" },
+    {
+      id: "parse",
+      strategy: "chain",
+      description: "解析技术交底书，提取技术特征",
+      atom: "extract",
+      params: { extraction_type: "提取技术特征（严格输出 features 数组）", output_key: "features" },
+    },
+    { id: "generate_keywords", strategy: "chain", description: "生成检索关键词（上位/下位/同义词）", atom: "keywords" },
+    {
+      id: "search",
+      strategy: "react",
+      description: "检索现有技术文献",
+      atom: "search",
+      worker: "patent-search-commander",
+    },
+    {
+      id: "compare",
+      strategy: "chain",
+      description: "逐项对比技术特征与现有技术（单独对比原则）",
+      atom: "novelty",
+      params: { novelty_scope: "单独对比原则（新颖性，专利法 A22.2）" },
+    },
+    {
+      id: "conclude",
+      strategy: "chain",
+      description: "生成新颖性分析结论（附置信度）（收口模式：graph 侧同为自定义 LLM 节点，非 atom handler）",
+    },
+    {
+      id: "approval",
+      strategy: "chain",
+      description: "人工确认分析结论",
+      atom: "approval-gate",
+      params: { review_context: "新颖性分析结论需人工确认" },
+    },
   ],
   validation: { requireAllSteps: true, maxRetries: 2 },
 };
@@ -131,12 +164,15 @@ export const patentDisclosureManifest: WorkflowManifest = {
  * 展开为三阶段（最接近现有技术 → 区别特征与实际解决的技术问题 → 技术启示）
  * → 辅助判断因素复核 → 结论与反事后诸葛亮自检 → 人工确认（HITL）。
  *
- * 注意：本 manifest **不声明 atom**（与 patent_novelty_v1 一致）——消费方
- * patent_workflow 工具采用"主代理产出文本 → 工具收口校验"语义（确定性、无
- * LLM）；收口时按 caseType inventiveness_analysis 映射 patent_inventiveness 域
- * 规则门（9 条：三步法/实际解决技术问题/公知常识路径/多文件结合/技术启示/
- * 惯用手段/用途限定/预料不到效果）。需要原子自动执行时，调用方应定义带 atom
- * 的自定义 manifest，并注入已注册内置原子的注册表与 provider（见 src/patent/atoms）。
+ * 原子声明对齐 buildInventivenessGraph 的 atom handler 覆盖：search + approval-gate。
+ * hint/secondary 使用 reasoning 原子（自由文本推理，graph 侧为带 JSON Schema 的
+ * 专用 LLM 节点，输出格式不同但语义等价）。parse/closest/diff/conclude 为收口模式
+ * （graph 侧同为专用 LLM/确定性节点，非通用 atom handler）。
+ *
+ * 注意：收口阶段由主代理按阶段描述产出文本，消费方 patent_workflow 工具按
+ * caseType inventiveness_analysis 映射 patent_inventiveness 域规则门（9 条：
+ * 三步法/实际解决技术问题/公知常识路径/多文件结合/技术启示/惯用手段/用途限定/
+ * 预料不到效果）。
  */
 export const patentInventivenessManifest: WorkflowManifest = {
   id: "patent_inventiveness_v1",
@@ -146,31 +182,69 @@ export const patentInventivenessManifest: WorkflowManifest = {
     {
       id: "parse",
       strategy: "chain",
-      description: "解析权利要求/技术方案，构建所属领域技术人员画像，确定申请日/优先权日时间基准",
+      description:
+        "解析权利要求/技术方案，构建所属领域技术人员画像，确定申请日/优先权日时间基准（收口模式：graph 侧为专用 LLM 节点 parseNode，非通用 atom）",
     },
     {
       id: "search",
       strategy: "react",
       description: "检索现有技术文献，筛选最接近现有技术候选（技术领域→技术问题→发明构思）",
+      atom: "search",
+      worker: "patent-search-commander",
     },
-    { id: "closest", strategy: "chain", description: "三步法 Step1：确定最接近的现有技术（候选多时逐个试判）" },
+    {
+      id: "closest",
+      strategy: "chain",
+      description:
+        "三步法 Step1：确定最接近的现有技术（候选多时逐个试判）（收口模式：graph 侧为专用 LLM 节点 closestNode）",
+    },
     {
       id: "diff",
       strategy: "chain",
-      description: "三步法 Step2：实质对比确定区别技术特征，客观确定实际解决的技术问题（不得包含解决手段）",
+      description:
+        "三步法 Step2：实质对比确定区别技术特征，客观确定实际解决的技术问题（不得包含解决手段）（收口模式：graph 侧为专用 LLM 节点 diffNode）",
     },
     {
       id: "hint",
       strategy: "chain",
       description: "三步法 Step3：技术启示判断（改进动机/结合启示/公知常识/发明构思/逻辑推理与有限试验）",
+      atom: "reasoning",
+      params: {
+        reasoning_prompt:
+          "三步法第三步：判断要求保护的发明对本领域技术人员是否显而易见。" +
+          "技术启示来源：改进动机/结合启示（D1+D2 能否结合、有无技术障碍）/公知常识/逻辑推理与有限试验。" +
+          "发明类型差异化：组合/选择/转用/要素变更/开拓性/改进发明。" +
+          "输出：obvious（是否显而易见）、motivation（改进动机）、evidence（证据）、dissenting_factors（相反因素）。",
+      },
     },
     {
       id: "secondary",
       strategy: "chain",
       description: "辅助判断因素复核（预料不到的技术效果/长期渴望难题/克服技术偏见/商业成功）",
+      atom: "reasoning",
+      params: {
+        reasoning_prompt:
+          "辅助判断因素复核：" +
+          "- 预料不到的技术效果（须有量化数据支撑）" +
+          "- 解决了长期渴望解决的技术问题" +
+          "- 克服了技术偏见" +
+          "- 商业成功（如有，须证明与发明特征有因果关系）" +
+          "输出：unexpected_effect（预料不到效果）、long_felt_need（长期渴望）、technical_prejudice（技术偏见）、commercial_success（商业成功）。",
+      },
     },
-    { id: "conclude", strategy: "chain", description: "生成创造性结论（高/中/低/无，附置信度）+ 反事后诸葛亮自检" },
-    { id: "approval", strategy: "chain", description: "人工确认分析结论（HITL）" },
+    {
+      id: "conclude",
+      strategy: "chain",
+      description:
+        "生成创造性结论（高/中/低/无，附置信度）+ 反事后诸葛亮自检（收口模式：graph 侧同为专用 LLM 节点 concludeNode）",
+    },
+    {
+      id: "approval",
+      strategy: "chain",
+      description: "人工确认分析结论（HITL）",
+      atom: "approval-gate",
+      params: { review_context: "创造性分析结论需人工确认（HITL）" },
+    },
   ],
   validation: { requireAllSteps: true, maxRetries: 2 },
 };
@@ -371,7 +445,8 @@ export const patentDraftingManifest: WorkflowManifest = {
     {
       id: "chemistry",
       strategy: "chain",
-      description: "化学式核验（主代理经 recognize_chemical_structure 完成后透传）",
+      description: "化学式核验（化学领域自动触发 SMILES/InChI 识别；非化学领域跳过）",
+      atom: "chemistry-analyze",
     },
     {
       id: "generate_keywords",

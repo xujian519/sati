@@ -55,7 +55,8 @@ stages:
     description: 附图分析（主代理经 analyze_patent_figure 完成后透传）
   - id: chemistry
     strategy: chain
-    description: 化学式核验（主代理经 recognize_chemical_structure 完成后透传）
+    atom: chemistry-analyze
+    description: 化学式核验（化学领域自动触发 SMILES/InChI 识别；非化学领域跳过）
   - id: generate_keywords
     strategy: chain
     atom: keywords

@@ -26,7 +26,7 @@ import { openProvenanceCollector } from "./provenance.js";
 import type { PatentWorkflowRunDeps, PatentWorkflowRunInput } from "./types.js";
 
 // ---------------------------------------------------------------------------
-// 图模式：领域子图自动执行（graph=novelty|inventiveness|enablement）
+// 图模式：领域子图自动执行（graph=novelty|inventiveness|enablement|citation_check）
 // ---------------------------------------------------------------------------
 
 export type GraphExecuteContext = {
@@ -246,17 +246,22 @@ export async function executeGraphRun(
   // LLM Judge 双轨质量分（P2-3）→ 第三刀升级：judgeModels 提供时走多模型共识链
   // （collectJudgeVotes → resolveConsensus → Verdict Envelope）；否则保留单模型
   // N 采样中位数（judgeSamples，向后兼容）。均附在结果尾部、不改变规则门判级。
+  const judges = assembleGraphJudges(input, deps);
+  // 退化检测：judgeModels 已配置但 modelHints 缺失（或无对应键），所有 judge 实际命中同一默认模型。
+  const degradedToSingleModel =
+    (input.judgeModels?.length ?? 0) > 0 && input.judgeModels!.every(hint => deps.modelHints?.[hint] === undefined);
   const judgeNote = await buildJudgeSection({
     graphName,
     input: input.input,
     report: String(result.state.inventiveness_conclusion ?? ""),
     ruleGateVerdict: String(result.state.rule_gate_verdict ?? "unknown"),
     ruleGateDomains: Array.isArray(result.state.rule_gate_domains) ? (result.state.rule_gate_domains as string[]) : [],
-    judges: assembleGraphJudges(input, deps),
+    judges,
     samples: input.judgeSamples ?? 1,
     singleModelFallback: input.judgeSamples ?? 0,
     interrupted: result.interrupted !== undefined,
     provider,
+    degradedToSingleModel,
   });
 
   return {
