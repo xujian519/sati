@@ -103,9 +103,9 @@ describe("annotation sidecar read", () => {
 });
 
 /**
- * 发布门控（D6）：`kind:"html"` 侧车的写入默认关闭。开启前任何写入都必须被拒绝——
+ * 发布门控（D6）：`kind:"html"` 侧车自 2026-10-23 起默认允许写入；仅显式关闭时拒绝——
  * 旧版读者读到未知 kind 会视为「从未标注」，并在保存时静默覆盖（H0 #6 实测，
- * 见 docs/notes/implemented/2026-10-08-html-annotation.md）。
+ * 见 docs/notes/implemented/2026-10-23-html-annotation-gate-opened.md）。
  */
 describe("html annotation write gate", () => {
   const HTML_PATH = `${DIR}/report.html`;
@@ -119,12 +119,23 @@ describe("html annotation write gate", () => {
     vi.unstubAllEnvs();
   });
 
-  it("refuses to save an html sidecar while the gate is closed (default)", async () => {
+  it("saves an html sidecar by default", async () => {
+    mocks.saveFile.mockResolvedValue({ ok: true });
+
+    await expect(saveAnnotation("proj", HTML_PATH, documentFor(HTML_PATH, "html"))).resolves.toBe(
+      `${HTML_PATH}.annot.json`,
+    );
+    expect(mocks.saveFile).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses to save an html sidecar when explicitly disabled", async () => {
+    vi.stubEnv("VITE_ENABLE_HTML_ANNOTATION", "false");
+
     await expect(saveAnnotation("proj", HTML_PATH, documentFor(HTML_PATH, "html"))).rejects.toThrow(/not enabled/);
     expect(mocks.saveFile).not.toHaveBeenCalled();
   });
 
-  it("saves the sidecar once the gate is enabled", async () => {
+  it("still saves the sidecar when the flag is explicitly true", async () => {
     vi.stubEnv("VITE_ENABLE_HTML_ANNOTATION", "true");
     mocks.saveFile.mockResolvedValue({ ok: true });
 
@@ -135,6 +146,7 @@ describe("html annotation write gate", () => {
   });
 
   it("leaves non-html surfaces untouched by the gate", async () => {
+    vi.stubEnv("VITE_ENABLE_HTML_ANNOTATION", "false");
     mocks.saveFile.mockResolvedValue({ ok: true });
 
     await expect(saveAnnotation("proj", SVG_PATH, documentFor(SVG_PATH, "figure-svg"))).resolves.toBe(

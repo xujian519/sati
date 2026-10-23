@@ -57,8 +57,9 @@ export async function saveAnnotation(
   targetPath: string,
   document: AnnotationDocument,
 ): Promise<string> {
-  // 发布门控（D6）：所有读者升级前不写 `kind:"html"`——旧版读者会把未知 kind 视为
-  // 「从未标注」，并在下一次保存时静默覆盖这份侧车（H0 #6 实测）。
+  // 发布门控（D6）：默认允许写 `kind:"html"`（2026-10-23 起）；仍有多版本共存且未确认
+  // 读者升级时，用 `VITE_ENABLE_HTML_ANNOTATION=false` 关闭——旧版读者会把未知 kind
+  // 视为「从未标注」，并在下一次保存时静默覆盖这份侧车（H0 #6 实测）。
   if (document.target.kind === "html" && !isHtmlAnnotationKindWriteEnabled()) {
     throw new Error("HTML annotations cannot be saved yet: the HTML annotation gate is not enabled");
   }

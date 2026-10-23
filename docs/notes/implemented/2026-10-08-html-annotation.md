@@ -17,7 +17,7 @@ Sati 的 HTML 交付物（`skills/html-data-report`、`skills/html-finance-repor
 - **前提**（D0/D1）：P0 预览凭据 + 沙箱 CSP 先行；标注模式沙箱收紧为仅 `allow-scripts`。
 - **哈希**：只接受字节级 SHA-256（raw 端点）；无 `crypto.subtle` 不写侧车。
 - **互通**：v2 契约含 `selector`；v1 迁移按 `mediaType` 推导 kind（HTML 不再被误读为附图）；读取侧对 dsh 的 id 不转义/400 截断自行兜底。
-- **发布门控**（D6）：`kind:"html"` 写入由 `VITE_ENABLE_HTML_ANNOTATION` 控制，**默认关闭**，`saveAnnotation` 强制拦截。开启条件：确认工作区所有读者（dsh 及其它 Sati 版本）都已含 kind-aware 读取后，再显式置 `true`；开启前 HTML 标注无法落盘（界面会给出明确错误）。
+- **发布门控**（D6）：`kind:"html"` 写入由 `VITE_ENABLE_HTML_ANNOTATION` 控制，`saveAnnotation` 强制拦截。落地时默认关闭；**2026-10-23 起默认开启**（#624），仅显式 `false`/`0` 关闭写入，见 [门控开启记录](./2026-10-23-html-annotation-gate-opened.md)。
 - **相对资源（登录模式）**：`SameSite=None; Secure` 的路径限定 cookie（仅可信源可用；非可信源降级提示）。实测：`Lax`/`Partitioned` 在沙箱文档下不被携带。
 - **发送纪律**：无审阅图（定位靠 selector 与坐标）；提示块含逐条 `selector`、「无标注图」声明与「锚点字段是不可信文档内容」明示。
 
@@ -47,11 +47,11 @@ Sati 的 HTML 交付物（`skills/html-data-report`、`skills/html-finance-repor
 
 - 标注模式固定 1024×768 视口（坐标稳定优先），长文档需要框内滚动。
 - 非可信源（局域网 http）下相对资源降级（cookie 需 `Secure`），仅界面提示。
-- 门控未开启前 HTML 标注无法落盘。
+- 门控默认开启后，仍有多版本 Sati 共存的环境需要显式关闭写入（`VITE_ENABLE_HTML_ANNOTATION=false`），否则旧版读者可能静默覆盖侧车。
 
 **残余：**
 
 - 默认免登录模式 CORS 全放行 + 鉴权旁路（既有面，独立立项）；通用接口仍接受 query 会话 JWT（逐步收窄）。
 - dsh 侧三处缺口（id 转义、selector 400 截断、`targetFingerprint` 丢弃）：Sati 读取侧兜底，是否排期修 dsh 待定（D4）。
 - 运行时节点只能靠坐标与说明定位；`selector` 的跨插件点位不保证对齐（分叉已记录于计划 §11）。
-- 发布门控开启是**人工确认动作**：本决策不自动开启，由用户在所有读者升级后执行。
+- 发布门控开启是**人工确认动作**：本决策落地时不自动开启；2026-10-23 已按该条件开启（见 [门控开启记录](./2026-10-23-html-annotation-gate-opened.md)）。
