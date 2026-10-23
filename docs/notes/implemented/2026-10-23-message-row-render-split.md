@@ -24,6 +24,7 @@ sweep 基线（`a3c35684b`）上，chat 主链路还剩三个 ≥300 行的单�
 | `chat-v2/messageRow/ErrorMessageRow.tsx` | 26 | error 红色横幅 |
 | `chat-v2/messageRow/MessageProcessRows.tsx` | 110 | `ProcessSummaryRow` / `ProcessAttachmentRow`（原同文件模块级函数） |
 | `chat-v2/messageRow/MessageRowActions.tsx` | 112 | `CopyMarkdownButton` / `HoverActionButton` / `ForkMessageButton`（原同文件模块级函数） |
+| `chat-v2/messageRow/messageRowVisibility.ts` | 8 | `hasAssistantBody` 单点判定（父级 null 短路与子组件共用；存放于独立模块以满足 react-refresh 只导出组件的约束） |
 | `chat-v2/subagentDetailKeys.ts` | 11 | `getMessageKey` / `isStreamingSubagentThinkingMessage`（两文件共用） |
 | `chat-v2/subagentDetailRenderers.tsx` | 103 | `useLiveProcessGroupRenderers`：live group 详情与分组渲染两个 `useCallback` |
 | `chat/view/subcomponents/MessageHeaderRow.tsx` | 47 | 消息头部（头像 / 类型标签），`resolveHeaderTypeLabel` 随迁 |
