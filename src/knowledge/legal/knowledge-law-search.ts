@@ -335,7 +335,8 @@ export class KnowledgeLawSearch implements LegalSearchSource {
       id: row.document_id,
       level,
       name: row.title,
-      expired: 0,
+      // knowledge.db 的 documents 表没有 expired 列：省略即「未知」，
+      // 不得用 0 伪造成「现行有效」（#731）。
       categoryId: 0,
       content: content.length > 0 ? content : undefined,
       categoryName: "法律法规",

@@ -78,7 +78,13 @@ export {
 export { WikiCardVectorIndex, type WikiCardVectorIndexOptions } from "./patent/wiki-card-vector-index.js";
 export { LegalSearchEngine, type LegalSearchOptions } from "./legal/legal-search.js";
 export { KnowledgeLawSearch, type KnowledgeLawSearchOptions } from "./legal/knowledge-law-search.js";
-export { createLawSearchTool, type LawSearchToolInput, type LawSearchToolOutput } from "./legal/law-search-tool.js";
+export {
+  createLawSearchTool,
+  type LawSearchToolInput,
+  type LawSearchToolOutput,
+  type LawSearchToolResult,
+  type LawStatusSource,
+} from "./legal/law-search-tool.js";
 export {
   createLawVerifyTool,
   renderLawVerifyReport,

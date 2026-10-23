@@ -21,8 +21,8 @@ export type LawRecord = {
   filename?: string;
   /** 发布日期 YYYY-MM-DD */
   publish?: string;
-  /** 是否已失效（0=现行有效, 1=已失效） */
-  expired: number;
+  /** 是否已失效（0=现行有效, 1=已失效）；undefined = 数据源未提供该字段（未知，不得当作现行有效） */
+  expired?: number;
   /** 分类外键 */
   categoryId: number;
   /** 副标题（如民法典各编名） */
