@@ -12,6 +12,10 @@ import type {
 } from "../types/app";
 import { isBackgroundTaskSession } from "../types/app";
 import { UI_TIMEOUTS } from "../constants/timeouts";
+import { getProjectSessions, isTemporarySessionId, normalizeSessionId } from "./projectSessionUtils";
+import { useProjectOptimisticUpdates } from "./useProjectOptimisticUpdates";
+import { useProjectSelectionActions } from "./useProjectSelectionActions";
+import { useProjectSettingsPanel } from "./useProjectSettingsPanel";
 
 type UseProjectsStateArgs = {
   sessionId?: string;
@@ -24,9 +28,6 @@ type UseProjectsStateArgs = {
 type FetchProjectsOptions = {
   showLoadingState?: boolean;
 };
-
-const PROJECT_SESSION_PREVIEW_LIMIT = 5;
-const SESSION_PAGE_SIZE = 30;
 
 const serialize = (value: unknown) => JSON.stringify(value ?? null);
 
@@ -79,22 +80,6 @@ export const projectsHaveChanges = (prevProjects: Project[], nextProjects: Proje
   });
 };
 
-const getProjectSessions = (project: Project): ProjectSession[] => project.sessions ?? [];
-
-// Local-only placeholders we prepend to a project's session list the moment
-// the user submits a new-session message, so the sidebar reflects it without
-// waiting for the server's debounced `projects_updated` round-trip. They are
-// carried forward across `projects_updated` events (so an unrelated update
-// fired between submit and chokidar can't flicker them away) and replaced
-// in-place via `replaceOptimisticInProjects` once the real id arrives via
-// `session_created`, or dropped via `dropOptimisticInProjects` on
-// completion/abort if no real id was ever assigned.
-const isTemporarySessionId = (id: unknown): boolean => typeof id === "string" && id.startsWith("new-session-");
-
-// On Windows, session keys like `web:s_<uuid>` are sanitized to `web-s_<uuid>`
-// for disk storage. Normalize to the disk form so that in-memory state
-// (from session_created) matches server listings (from filenames).
-const normalizeSessionId = (id: string): string => id.replace(/^web:s_/, "web-s_");
 const sessionTranscriptFilename = (id: string): string => `${normalizeSessionId(id)}.jsonl`;
 
 export const preserveLoadedSessions = (prevProjects: Project[], nextProjects: Project[]): Project[] =>
@@ -161,25 +146,6 @@ export function applyProjectsSocketUpdate(prevProjects: Project[], updatedProjec
 const mergeFetchedProjects = (prevProjects: Project[], freshProjects: Project[]): Project[] => {
   if (!projectsHaveChanges(prevProjects, freshProjects)) return prevProjects;
   return preserveLoadedSessions(prevProjects, freshProjects);
-};
-
-const resetProjectSessionPreview = (project: Project): Project => {
-  const sessions = project.sessions ?? [];
-  if (sessions.length <= PROJECT_SESSION_PREVIEW_LIMIT) {
-    return project;
-  }
-
-  const total = typeof project.sessionMeta?.total === "number" ? project.sessionMeta.total : sessions.length;
-
-  return {
-    ...project,
-    sessions: sessions.slice(0, PROJECT_SESSION_PREVIEW_LIMIT),
-    sessionMeta: {
-      ...(project.sessionMeta ?? {}),
-      total,
-      hasMore: total > PROJECT_SESSION_PREVIEW_LIMIT,
-    },
-  };
 };
 
 const isUpdateAdditive = (
@@ -275,8 +241,7 @@ export function useProjectsState({
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
   const [loadingProgress, setLoadingProgress] = useState<LoadingProgress | null>(null);
   const [isInputFocused, setIsInputFocused] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
-  const [settingsInitialTab, setSettingsInitialTab] = useState("appearance");
+  const { showSettings, setShowSettings, settingsInitialTab, openSettings } = useProjectSettingsPanel();
   const [externalMessageUpdate, setExternalMessageUpdate] = useState(0);
 
   const loadingProgressTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -321,11 +286,6 @@ export function useProjectsState({
     // Keep chat view stable while still syncing sidebar/session metadata in background.
     await fetchProjects({ showLoadingState: false });
   }, [fetchProjects]);
-
-  const openSettings = useCallback((tab = "appearance") => {
-    setSettingsInitialTab(tab);
-    setShowSettings(true);
-  }, []);
 
   useEffect(() => {
     void fetchProjects();
@@ -481,170 +441,30 @@ export function useProjectsState({
     };
   }, []);
 
-  useEffect(() => {
-    if (!sessionId || projects.length === 0) {
-      return;
-    }
-
-    for (const project of projects) {
-      const session = project.sessions?.find(s => s.id === sessionId);
-      if (session) {
-        if (selectedProject?.name !== project.name) {
-          setSelectedProject(project);
-        }
-        if (selectedSession?.id !== sessionId) {
-          setSelectedSession(session);
-        }
-        return;
-      }
-    }
-  }, [sessionId, projects, selectedProject?.name, selectedSession?.id]);
-
-  const handleProjectSelect = useCallback(
-    (project: Project) => {
-      const previewProject = resetProjectSessionPreview(project);
-      setSelectedProject(previewProject);
-      setSelectedSession(null);
-      setProjects(prevProjects => prevProjects.map(resetProjectSessionPreview));
-      navigate("/");
-
-      if (isMobile) {
-        setSidebarOpen(false);
-      }
-    },
-    [isMobile, navigate],
-  );
-
-  const handleSessionSelect = useCallback(
-    (session: ProjectSession) => {
-      setSelectedSession(session);
-
-      if (activeTab === "tasks" || activeTab === "preview") {
-        setActiveTab("chat");
-      }
-
-      if (isMobile) {
-        const sessionProjectName = session.__projectName;
-        const currentProjectName = selectedProject?.name;
-
-        if (sessionProjectName !== currentProjectName) {
-          setSidebarOpen(false);
-        }
-      }
-
-      navigate(`/session/${session.id}`);
-    },
-    [activeTab, isMobile, navigate, selectedProject?.name],
-  );
-
-  const handleNewSession = useCallback(
-    (project: Project) => {
-      setSelectedProject(project);
-      setSelectedSession(null);
-      setActiveTab("chat");
-      navigate("/");
-
-      if (isMobile) {
-        setSidebarOpen(false);
-      }
-    },
-    [isMobile, navigate],
-  );
-
-  const handleSessionDelete = useCallback(
-    (sessionIdToDelete: string) => {
-      if (selectedSession?.id === sessionIdToDelete) {
-        setSelectedSession(null);
-        navigate("/");
-      }
-
-      setProjects(prevProjects =>
-        prevProjects.map(project => {
-          const hadSession = getProjectSessions(project).some(session => session.id === sessionIdToDelete);
-
-          return {
-            ...project,
-            sessions: getProjectSessions(project).filter(session => session.id !== sessionIdToDelete),
-            sessionMeta: {
-              ...project.sessionMeta,
-              total: hadSession ? Math.max(0, (project.sessionMeta?.total ?? 0) - 1) : project.sessionMeta?.total,
-            },
-          };
-        }),
-      );
-    },
-    [navigate, selectedSession?.id],
-  );
-
-  // The /api/projects payload caps each project's sessions array at 5 for a
-  // snappy first paint. Sidebar exposes a "Load more" affordance backed by
-  // this action: it pages through /api/projects/:name/sessions?limit=&offset=
-  // names so the button can render a loading state and reject re-entrancy.
-  const loadingMoreSessionsRef = useRef<Set<string>>(new Set());
-  const [loadingMoreProjectIds, setLoadingMoreProjectIds] = useState<Set<string>>(new Set());
-
-  const setProjectLoading = useCallback((projectName: string, loading: boolean) => {
-    if (loading) loadingMoreSessionsRef.current.add(projectName);
-    else loadingMoreSessionsRef.current.delete(projectName);
-    setLoadingMoreProjectIds(new Set(loadingMoreSessionsRef.current));
-  }, []);
-
-  const loadMoreSessions = useCallback(
-    async (projectName: string) => {
-      if (!projectName) return;
-      if (loadingMoreSessionsRef.current.has(projectName)) return;
-
-      const project = projectsRef.current.find(p => p.name === projectName);
-      if (!project) return;
-      if (project.sessionMeta?.hasMore === false) return;
-
-      const offset = getProjectSessions(project).length;
-      setProjectLoading(projectName, true);
-
-      try {
-        const response = await api.sessions(projectName, SESSION_PAGE_SIZE, offset);
-        if (!response.ok) {
-          throw new Error(`Failed to load sessions: ${response.status}`);
-        }
-        const data = (await response.json()) as {
-          sessions?: ProjectSession[];
-          hasMore?: boolean;
-          total?: number;
-        };
-        const incoming = Array.isArray(data.sessions) ? data.sessions : [];
-
-        const mergeSessions = (existing: ProjectSession[]): ProjectSession[] => {
-          const seen = new Set(existing.map(s => normalizeSessionId(s.id)));
-          const merged = [...existing];
-          for (const session of incoming) {
-            if (!session?.id || seen.has(normalizeSessionId(session.id))) continue;
-            seen.add(normalizeSessionId(session.id));
-            merged.push(session);
-          }
-          return merged;
-        };
-
-        const applyToProject = (target: Project): Project => ({
-          ...target,
-          sessions: mergeSessions(target.sessions ?? []),
-          sessionMeta: {
-            ...(target.sessionMeta ?? {}),
-            hasMore: Boolean(data.hasMore),
-            total: typeof data.total === "number" ? data.total : target.sessionMeta?.total,
-          },
-        });
-
-        setProjects(prevProjects => prevProjects.map(p => (p.name === projectName ? applyToProject(p) : p)));
-
-        setSelectedProject(prev => (prev && prev.name === projectName ? applyToProject(prev) : prev));
-      } catch (error) {
-        logError("loadMoreSessions failed for project", projectName, error);
-      } finally {
-        setProjectLoading(projectName, false);
-      }
-    },
-    [setProjectLoading],
-  );
+  const {
+    loadingMoreProjectIds,
+    handleProjectSelect,
+    handleSessionSelect,
+    handleNewSession,
+    handleSessionDelete,
+    handleProjectDelete,
+    handleDeselectProject,
+    loadMoreSessions,
+  } = useProjectSelectionActions({
+    sessionId,
+    projects,
+    selectedProject,
+    selectedSession,
+    setProjects,
+    setSelectedProject,
+    setSelectedSession,
+    setActiveTab,
+    setSidebarOpen,
+    projectsRef,
+    navigate,
+    isMobile,
+    activeTab,
+  });
 
   const handleSidebarRefresh = useCallback(async () => {
     try {
@@ -682,147 +502,12 @@ export function useProjectsState({
     }
   }, [selectedProject, selectedSession]);
 
-  const handleProjectDelete = useCallback(
-    (projectName: string) => {
-      if (selectedProject?.name === projectName) {
-        setSelectedProject(null);
-        setSelectedSession(null);
-        navigate("/");
-      }
-
-      setProjects(prevProjects => prevProjects.filter(project => project.name !== projectName));
-    },
-    [navigate, selectedProject?.name],
-  );
-
-  const handleDeselectProject = useCallback(() => {
-    setSelectedProject(null);
-    setSelectedSession(null);
-    setProjects(prevProjects => prevProjects.map(resetProjectSessionPreview));
-    navigate("/");
-  }, [navigate]);
-
-  // Shared idiom for the optimistic sidebar transforms below: apply the same
-  // per-project map to the project list and to the selected project. `apply`
-  // must be idempotent per project and return the same reference when the
-  // project is untouched so unchanged state doesn't re-render.
-  const applyProjectTransform = useCallback((apply: (project: Project) => Project) => {
-    setProjects(prev => prev.map(apply));
-    setSelectedProject(prev => (prev ? apply(prev) : prev));
-  }, []);
-
-  // Optimistic sidebar update for the moment a user submits a message.
-  // We do NOT wait for the server's chokidar-debounced `projects_updated`
-  // round-trip — instead we either bump the existing session's lastActivity
-  // (so "sort by date" reorders immediately) or prepend a placeholder
-  // entry for a brand-new session. The placeholder uses a `new-session-*`
-  // id and is filtered out automatically the next time `preserveLoadedSessions`
-  // runs against a server payload.
-  const bumpSessionActivity = useCallback(
-    (projectName: string, sessionId: string, optimisticTitle?: string) => {
-      if (!projectName || !sessionId) return;
-      const now = new Date().toISOString();
-
-      const apply = (project: Project): Project => {
-        if (project.name !== projectName) return project;
-        const sessions = project.sessions ?? [];
-        const idx = sessions.findIndex(s => s.id === sessionId);
-
-        if (idx >= 0) {
-          const bumped: ProjectSession = {
-            ...sessions[idx],
-            updated_at: now,
-            lastActivity: now,
-          };
-          const reordered = [bumped, ...sessions.slice(0, idx), ...sessions.slice(idx + 1)];
-          return { ...project, lastActivity: now, sessions: reordered };
-        }
-
-        const trimmedTitle = (optimisticTitle ?? "").replace(/\s+/g, " ").trim();
-        const placeholder: ProjectSession = {
-          id: sessionId,
-          title: trimmedTitle ? trimmedTitle.slice(0, 80) : "New session",
-          created_at: now,
-          updated_at: now,
-          lastActivity: now,
-          messageCount: 0,
-          __projectName: projectName,
-        };
-        return {
-          ...project,
-          lastActivity: now,
-          sessions: [placeholder, ...sessions],
-          sessionMeta: {
-            ...(project.sessionMeta ?? {}),
-            total:
-              typeof project.sessionMeta?.total === "number"
-                ? project.sessionMeta.total + 1
-                : project.sessionMeta?.total,
-          },
-        };
-      };
-
-      applyProjectTransform(apply);
-    },
-    [applyProjectTransform],
-  );
-
-  // Swap a `new-session-*` placeholder for the real id the server just
-  // assigned (fired on `session_created`). We replace in-place so the row
-  // doesn't flicker, and dedupe if `projects_updated` already brought the
-  // real session in.
-  const replaceOptimisticInProjects = useCallback(
-    (realSessionId: string) => {
-      if (!realSessionId || isTemporarySessionId(realSessionId)) return;
-      const apply = (project: Project): Project => {
-        const sessions = project.sessions ?? [];
-        const tempIdx = sessions.findIndex(s => isTemporarySessionId(s.id));
-        if (tempIdx < 0) return project;
-        const realExists = sessions.some(s => s.id === realSessionId);
-        if (realExists) {
-          return {
-            ...project,
-            sessions: sessions.filter(s => !isTemporarySessionId(s.id)),
-          };
-        }
-        const replaced: ProjectSession = { ...sessions[tempIdx], id: realSessionId };
-        return {
-          ...project,
-          sessions: sessions.map((s, i) => (i === tempIdx ? replaced : s)),
-        };
-      };
-      applyProjectTransform(apply);
-    },
-    [applyProjectTransform],
-  );
-
-  // Drop any optimistic placeholders for a given session id. Used when a
-  // session goes inactive without ever receiving a real id (errors, aborts
-  // before the agent emitted `session_created`).
-  const dropOptimisticInProjects = useCallback(
-    (sessionId: string) => {
-      if (!sessionId || !isTemporarySessionId(sessionId)) return;
-      const apply = (project: Project): Project => {
-        const sessions = project.sessions ?? [];
-        if (!sessions.some(s => s.id === sessionId)) return project;
-        return {
-          ...project,
-          sessions: sessions.filter(s => s.id !== sessionId),
-        };
-      };
-      applyProjectTransform(apply);
-    },
-    [applyProjectTransform],
-  );
-
-  const handleResetProjectSessionPreview = useCallback(
-    (projectName: string) => {
-      const apply = (project: Project): Project =>
-        project.name === projectName ? resetProjectSessionPreview(project) : project;
-      applyProjectTransform(apply);
-    },
-    [applyProjectTransform],
-  );
+  const {
+    bumpSessionActivity,
+    replaceOptimisticInProjects,
+    dropOptimisticInProjects,
+    handleResetProjectSessionPreview,
+  } = useProjectOptimisticUpdates({ setProjects, setSelectedProject });
 
   const sidebarSharedProps = useMemo(
     () => ({
@@ -857,6 +542,7 @@ export function useProjectsState({
       settingsInitialTab,
       selectedProject,
       selectedSession,
+      setShowSettings,
       showSettings,
     ],
   );
