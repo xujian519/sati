@@ -1,29 +1,10 @@
-/* eslint-disable react-refresh/only-export-components -- 组件与工具函数（getContextStatus 等）按设计同文件导出 */
 import { useTranslation } from "react-i18next";
-import type { TFunction } from "i18next";
 import { useEffect, useState } from "react";
 import type { ChangeEvent, ClipboardEvent, FormEvent, KeyboardEvent, MouseEvent, ReactNode, RefObject } from "react";
-import {
-  ArrowUp,
-  AtSign,
-  Brain,
-  Bot,
-  Check,
-  ChevronDown,
-  CircleGauge,
-  CircleHelp,
-  Hand,
-  ListChecks,
-  Loader2,
-  Paperclip,
-  ShieldAlert,
-  Square,
-  type LucideIcon,
-} from "lucide-react";
+import { AtSign, Loader2, Paperclip, Square } from "lucide-react";
 import type { ChatRunMode, PendingApproval, PendingPermissionRequest, PermissionMode } from "../chat/types/types";
-import { MAX_ATTACHMENTS_ERROR_KEY } from "../chat/hooks/useAttachmentUpload";
-import { thinkingModes, type ThinkingModeId } from "../chat/constants/thinkingModes";
-import { getEffectiveThinkingMode, type ThinkingModeAvailability } from "../chat/constants/thinkingModeAvailability";
+import type { ThinkingModeId } from "../chat/constants/thinkingModes";
+import type { ThinkingModeAvailability } from "../chat/constants/thinkingModeAvailability";
 import PermissionRequestsBanner from "../chat/view/subcomponents/PermissionRequestsBanner";
 import ApprovalRequestsBanner from "../chat/view/subcomponents/ApprovalRequestsBanner";
 import ImageAttachment from "../chat/view/subcomponents/ImageAttachment";
@@ -31,6 +12,14 @@ import CommandMenu from "../chat/view/subcomponents/CommandMenu";
 import { cn } from "../../lib/utils.js";
 import type { ContentReference } from "../../types/contentReference";
 import DocumentReferenceChip from "./DocumentReferenceChip";
+import ComposerBusySendNotice from "./ComposerBusySendNotice";
+import ComposerPermissionSelector from "./ComposerPermissionSelector";
+import ComposerRunModeSelector from "./ComposerRunModeSelector";
+import ComposerSubmitButton from "./ComposerSubmitButton";
+import ComposerThinkingSelector from "./ComposerThinkingSelector";
+import { ContextStatusPopover } from "./ContextStatusPopover";
+import ContextWindowIndicator from "./ContextWindowIndicator";
+import { useComposerDerivedState } from "./useComposerDerivedState";
 
 interface MentionableFile {
   name: string;
@@ -129,321 +118,6 @@ export type ComposerV2Props = {
   chromeless?: boolean;
 };
 
-type ContextStatus = {
-  known: boolean;
-  used: number;
-  total: number;
-  displayTotal: number;
-  percent: number;
-  percentLabel: string;
-  usedLabel: string;
-  totalLabel: string;
-  /**
-   * system prompt + 工具 schema 的固定开销，以及由它推出的对话用量。服务端未给
-   * 固定开销（压缩重建的历史预算、旧帧）时两者为 undefined——此时不展示拆分行，
-   * 只显示合计，行为与拆分前一致。
-   */
-  fixedOverhead?: { tokens: number; label: string; percent: number };
-  conversation?: { tokens: number; label: string; percent: number };
-  state: "ok" | "warning" | "blocking" | "unknown";
-  tone: "normal" | "amber" | "red" | "unknown";
-};
-
-type PermissionModeOption = {
-  mode: PermissionMode;
-  Icon: LucideIcon;
-  labelKey: string;
-  defaultLabel: string;
-  descriptionKey: string;
-  defaultDescription: string;
-};
-
-const PERMISSION_MODE_OPTIONS: PermissionModeOption[] = [
-  {
-    mode: "default",
-    Icon: Hand,
-    labelKey: "input.permissions.default",
-    defaultLabel: "Default Permissions",
-    descriptionKey: "input.permissions.defaultDescription",
-    defaultDescription: "Ask before risky operations",
-  },
-  {
-    mode: "bypassPermissions",
-    Icon: ShieldAlert,
-    labelKey: "input.permissions.bypassPermissions",
-    defaultLabel: "Full Access",
-    descriptionKey: "input.permissions.bypassPermissionsDescription",
-    defaultDescription: "Skip confirmations and allow full access",
-  },
-];
-
-type RunModeOption = {
-  mode: ChatRunMode;
-  Icon: LucideIcon;
-  labelKey: string;
-  defaultLabel: string;
-};
-
-const RUN_MODE_OPTIONS: RunModeOption[] = [
-  {
-    mode: "agent",
-    Icon: Bot,
-    labelKey: "input.runModes.agent",
-    defaultLabel: "Agent",
-  },
-  {
-    mode: "plan",
-    Icon: ListChecks,
-    labelKey: "input.runModes.plan",
-    defaultLabel: "Plan",
-  },
-  {
-    mode: "ask",
-    Icon: CircleHelp,
-    labelKey: "input.runModes.ask",
-    defaultLabel: "Ask",
-  },
-];
-
-const BLOCKING_PERMISSION_TOOLS = new Set(["AskUserQuestion", "ExitPlanMode", "ExitPlanModeV2", "exit_plan_mode"]);
-
-/** 上下文用量按钮/徽章按 tone 查表取样式（tone 四值完备）。 */
-const CONTEXT_TONE_TRIGGER_STYLES: Record<ContextStatus["tone"], string> = {
-  red: "text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30",
-  amber: "text-amber-600 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/30",
-  normal: "text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800",
-  unknown: "text-neutral-400 hover:bg-neutral-100 dark:text-neutral-500 dark:hover:bg-neutral-800",
-};
-
-const CONTEXT_TONE_BADGE_STYLES: Record<ContextStatus["tone"], string> = {
-  red: "bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-300",
-  amber: "bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300",
-  normal: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300",
-  unknown: "bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400",
-};
-
-function readNumber(value: unknown): number | null {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "string" && value.trim()) {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-  return null;
-}
-
-function formatTokenCount(value: number): string {
-  if (value >= 1_000_000) {
-    return `${(value / 1_000_000).toFixed(value >= 10_000_000 ? 0 : 1)}M`;
-  }
-  if (value >= 1_000) {
-    return `${(value / 1_000).toFixed(value >= 100_000 ? 0 : 1)}k`;
-  }
-  return value.toLocaleString();
-}
-
-function formatContextPercentLabel(percent: number): string {
-  if (!Number.isFinite(percent) || percent <= 0) {
-    return "0%";
-  }
-  if (percent > 100) {
-    return "100%+";
-  }
-  return `${percent}%`;
-}
-
-/** 服务器下发的 snapshot 状态优先于本地百分比阈值（blocking→red、warning→amber）。 */
-function resolveContextTone(snapshotState: string | null, percent: number): ContextStatus["tone"] {
-  if (snapshotState === "blocking") return "red";
-  if (snapshotState === "warning") return "amber";
-  if (percent >= 95) return "red";
-  if (percent >= 80) return "amber";
-  return "normal";
-}
-
-/**
- * 上下文用量气泡：合计 + 固定开销/对话用量拆分（服务端给出固定开销时）。
- *
- * 从 `ComposerV2` 抽出的独立组件——气泡文案自成一体，留在主组件里只会让
- * 已超长的渲染函数继续变长。
- */
-export function ContextStatusPopover({ status, title, t }: { status: ContextStatus; title: string; t: TFunction }) {
-  const usedText = t("input.contextStatusUsed", {
-    used: status.used.toLocaleString(),
-    total: status.displayTotal.toLocaleString(),
-    defaultValue: `${status.used.toLocaleString()} tokens used out of ${status.displayTotal.toLocaleString()}.`,
-  }) as string;
-  const sliceValue = (tokens: string, percent: number) =>
-    t("input.contextStatusSliceValue", {
-      tokens,
-      percent,
-      defaultValue: "{{tokens}} ({{percent}}%)",
-    }) as string;
-  return (
-    <div
-      role="status"
-      className="absolute right-0 bottom-full z-50 mb-2 w-64 max-w-[100vw] rounded-lg border border-neutral-200 bg-white p-3 text-left text-[12px] leading-5 text-neutral-700 shadow-lg dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-200"
-    >
-      <div className="mb-1 flex items-center justify-between gap-2">
-        <span className="font-medium text-neutral-900 dark:text-neutral-100">{title}</span>
-        <span
-          className={cn(
-            "rounded-full px-2 py-0.5 text-[11px] font-medium tabular-nums",
-            CONTEXT_TONE_BADGE_STYLES[status.tone],
-          )}
-        >
-          {status.known ? status.percentLabel : "--"}
-        </span>
-      </div>
-      {status.known ? (
-        <>
-          <div className="text-neutral-500 dark:text-neutral-400">{usedText}</div>
-          {status.fixedOverhead && status.conversation ? (
-            <ul className="mt-2 space-y-1">
-              <li className="flex items-center justify-between gap-2 text-neutral-500 dark:text-neutral-400">
-                <span>{t("input.contextStatusFixed", { defaultValue: "Prompt & tools (fixed)" })}</span>
-                <span className="shrink-0 tabular-nums">
-                  {sliceValue(status.fixedOverhead.label, status.fixedOverhead.percent)}
-                </span>
-              </li>
-              <li className="flex items-center justify-between gap-2 text-neutral-500 dark:text-neutral-400">
-                <span>{t("input.contextStatusConversation", { defaultValue: "Conversation" })}</span>
-                <span className="shrink-0 tabular-nums">
-                  {sliceValue(status.conversation.label, status.conversation.percent)}
-                </span>
-              </li>
-            </ul>
-          ) : null}
-          <div className="mt-2 text-neutral-500 dark:text-neutral-400">
-            {t("input.contextStatusAutoCompact", {
-              defaultValue: "Auto compact runs when the conversation approaches the configured limit.",
-            })}
-          </div>
-          {status.state === "blocking" ? (
-            <div className="mt-2 text-red-600 dark:text-red-300">
-              {t("input.contextStatusBlockingBody", {
-                defaultValue: "Compaction ran, but the context is still over the limit.",
-              })}
-            </div>
-          ) : null}
-        </>
-      ) : (
-        <div className="text-neutral-500 dark:text-neutral-400">
-          {t("input.contextStatusUnknownBody", {
-            defaultValue: "No token budget has been reported yet. It will appear after the next model response.",
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function resolveSendTitle(args: {
-  isSubmitPending: boolean;
-  hasUploadingImages: boolean;
-  isBusySendConfirmed: boolean;
-  isBusySendQueued: boolean;
-  isLoading: boolean;
-  t: TFunction<"chat">;
-}): string {
-  const { t } = args;
-  if (args.isSubmitPending || args.hasUploadingImages) {
-    return t("input.sending", { defaultValue: "Sending..." }) as string;
-  }
-  if (args.isBusySendConfirmed) {
-    return t("input.queuedSendConfirmed", { defaultValue: "Stopping current turn — sending next message" }) as string;
-  }
-  if (args.isBusySendQueued) {
-    return t("input.queuedSendConfirm", {
-      defaultValue: "Queued — click send again to stop this turn and send now",
-    }) as string;
-  }
-  if (args.isLoading) {
-    return t("input.queueSend", { defaultValue: "Queue message" }) as string;
-  }
-  return t("input.send", { defaultValue: "Send" }) as string;
-}
-
-export function getContextStatus(tokenBudget?: Record<string, unknown> | null): ContextStatus {
-  const used = readNumber(tokenBudget?.displayUsed) ?? readNumber(tokenBudget?.used) ?? 0;
-  const total = readNumber(tokenBudget?.total) ?? 0;
-  const effectiveTotal = readNumber(tokenBudget?.effectiveTotal);
-  const windowTotal = total > 0 ? total : 0;
-  const budgetTotal = effectiveTotal && effectiveTotal > 0 ? effectiveTotal : 0;
-  const displayTotal = windowTotal > 0 ? windowTotal : budgetTotal;
-  if (displayTotal <= 0) {
-    return {
-      known: false,
-      used: 0,
-      total: 0,
-      displayTotal: 0,
-      percent: 0,
-      percentLabel: "0%",
-      usedLabel: "--",
-      totalLabel: "--",
-      state: "unknown",
-      tone: "unknown",
-    };
-  }
-
-  // 百分比与「x / y」必须同分母：都用模型完整上下文窗口（缺 total 时退回扣掉输出
-  // 预留的可用预算），否则同一句提示里会出现「39%。已用 38.2k / 131k tokens」这种
-  // 自相矛盾的两个比例。
-  const percent = Math.max(0, Math.round((used / displayTotal) * 100));
-  // 策略严重度是另一个问题，且这个百分比不展示给用户：服务端 snapshot 带 state 时
-  // 以它为准，缺失时（历史回放路径可能不带）才退回用「逼近自动压缩线」的可用预算
-  // 算阈值，避免窗口口径的百分把压缩线的告警吃掉。
-  const policyTotal = effectiveTotal && effectiveTotal > 0 ? effectiveTotal : displayTotal;
-  const policyPercent = Math.max(0, Math.round((used / policyTotal) * 100));
-  const snapshotState = typeof tokenBudget?.state === "string" ? tokenBudget.state : null;
-  const tone = resolveContextTone(snapshotState, policyPercent);
-  const { fixedOverhead, conversation } = splitFixedOverhead(
-    readNumber(tokenBudget?.fixedOverheadTokens),
-    used,
-    displayTotal,
-  );
-  return {
-    known: true,
-    used,
-    total,
-    displayTotal,
-    percent,
-    percentLabel: formatContextPercentLabel(percent),
-    usedLabel: formatTokenCount(used),
-    totalLabel: formatTokenCount(displayTotal),
-    ...(fixedOverhead && conversation ? { fixedOverhead, conversation } : {}),
-    state: snapshotState === "blocking" || snapshotState === "warning" ? snapshotState : "ok",
-    tone,
-  };
-}
-
-/**
- * 把「已用」拆成固定开销（system prompt + 工具 schema）与对话用量。
- *
- * 服务端的固定开销是本地估算，而合计可能来自供应商计数——两者不同源时以合计为准，
- * 固定开销会被夹到不超过合计，保证两行数字恒等于合计本身（不出现三行互相矛盾）。
- * 缺失或非正值的固定开销视为「未拆分」，返回空对象，调用方退回只显示合计。
- */
-function splitFixedOverhead(
-  fixedOverheadTokens: number | null,
-  used: number,
-  displayTotal: number,
-): {
-  fixedOverhead?: ContextStatus["fixedOverhead"];
-  conversation?: ContextStatus["conversation"];
-} {
-  if (fixedOverheadTokens === null || fixedOverheadTokens <= 0 || used <= 0) {
-    return {};
-  }
-  const overhead = Math.min(Math.round(fixedOverheadTokens), used);
-  const conversationTokens = used - overhead;
-  const slice = (tokens: number) => ({
-    tokens,
-    label: formatTokenCount(tokens),
-    percent: Math.max(0, Math.round((tokens / displayTotal) * 100)),
-  });
-  return { fixedOverhead: slice(overhead), conversation: slice(conversationTokens) };
-}
-
 export default function ComposerV2({
   input,
   placeholder,
@@ -521,56 +195,41 @@ export default function ComposerV2({
     }
   }, [permissionSelectorDisabled]);
 
-  const hasBlockingPermissionPanel = pendingPermissionRequests.some(request =>
-    BLOCKING_PERMISSION_TOOLS.has(request.toolName),
-  );
-
-  const hasDraftContent = input.trim().length > 0 || attachedImages.length > 0 || documentReferences.length > 0;
-  const hasUploadingImages = uploadingImages.size > 0;
-  const attachmentLimitError = imageErrors.get(MAX_ATTACHMENTS_ERROR_KEY);
-  const disabled = !hasDraftContent || isSubmitPending || hasUploadingImages;
-  const showAbortButton = isLoading && canAbortSession && !hasDraftContent;
-  const sendTitle = resolveSendTitle({
+  const {
+    hasBlockingPermissionPanel,
+    attachmentLimitError,
+    disabled,
+    showAbortButton,
+    sendTitle,
+    contextStatus,
+    effectiveThinkingMode,
+    selectedThinkingMode,
+    SelectedThinkingIcon,
+    SelectedRunModeIcon,
+    selectedRunModeLabel,
+    SelectedPermissionIcon,
+    selectedPermissionLabel,
+    contextStatusTitle,
+    contextWindowTitle,
+  } = useComposerDerivedState({
+    input,
+    attachedImages,
+    documentReferences,
+    uploadingImages,
+    imageErrors,
+    pendingPermissionRequests,
     isSubmitPending,
-    hasUploadingImages,
+    isLoading,
+    canAbortSession,
     isBusySendConfirmed,
     isBusySendQueued,
-    isLoading,
+    tokenBudget,
+    thinkingMode,
+    thinkingModeAvailability,
+    permissionMode,
+    runMode,
     t,
   });
-  const contextStatus = getContextStatus(tokenBudget);
-  const effectiveThinkingMode = getEffectiveThinkingMode(thinkingMode, thinkingModeAvailability);
-  const selectedThinkingMode = thinkingModes.find(option => option.id === effectiveThinkingMode) || thinkingModes[0];
-  const SelectedThinkingIcon = selectedThinkingMode.icon || Brain;
-  const selectedPermissionOption =
-    PERMISSION_MODE_OPTIONS.find(option => option.mode === permissionMode) || PERMISSION_MODE_OPTIONS[0];
-  const selectedRunModeOption = RUN_MODE_OPTIONS.find(option => option.mode === runMode) || RUN_MODE_OPTIONS[0];
-  const SelectedRunModeIcon = selectedRunModeOption.Icon;
-  const selectedRunModeLabel = t(selectedRunModeOption.labelKey, {
-    defaultValue: selectedRunModeOption.defaultLabel,
-  }) as string;
-  const SelectedPermissionIcon = selectedPermissionOption.Icon;
-  const selectedPermissionLabel = t(selectedPermissionOption.labelKey, {
-    defaultValue: selectedPermissionOption.defaultLabel,
-  }) as string;
-  const contextStatusTitle = contextStatus.known
-    ? contextStatus.state === "blocking"
-      ? (t("input.contextStatusBlocking", {
-          percentLabel: contextStatus.percentLabel,
-          used: contextStatus.usedLabel,
-          total: contextStatus.totalLabel,
-          defaultValue: `${contextStatus.percentLabel} used. ${contextStatus.usedLabel} tokens used out of ${contextStatus.totalLabel}. Auto compact ran, but the context is still over the limit.`,
-        }) as string)
-      : (t("input.contextStatus", {
-          percentLabel: contextStatus.percentLabel,
-          used: contextStatus.usedLabel,
-          total: contextStatus.totalLabel,
-          defaultValue: `${contextStatus.percentLabel} used. ${contextStatus.usedLabel} tokens used out of ${contextStatus.totalLabel}. Auto compact runs near the limit.`,
-        }) as string)
-    : (t("input.contextStatusUnknown", {
-        defaultValue: "Context usage unknown. It will appear after the next model response.",
-      }) as string);
-  const contextWindowTitle = t("input.contextStatusTitle", { defaultValue: "Context window" }) as string;
 
   return (
     <div
@@ -729,122 +388,16 @@ export default function ComposerV2({
 
               <div className="pd-composer-control-row flex flex-wrap items-center gap-x-1 gap-y-1 px-1 pt-1.5 pb-0.5">
                 <div className="pd-composer-toolbar-left flex min-w-0 flex-1 flex-wrap items-center gap-0.5">
-                  <div
-                    className="relative mr-1"
-                    onBlur={event => {
-                      const nextTarget = event.relatedTarget as Node | null;
-                      if (!nextTarget || !event.currentTarget.contains(nextTarget)) {
-                        setIsRunModeMenuOpen(false);
-                      }
-                    }}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => setIsRunModeMenuOpen(open => !open)}
-                      className={cn(
-                        "pd-composer-icon-button inline-flex h-7 max-w-[108px] items-center justify-center gap-1.5 rounded-md px-2 text-[12px] font-medium transition sm:max-w-[140px]",
-                        "text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800",
-                      )}
-                      title={
-                        t("input.runModes.change", {
-                          defaultValue: "Select run mode",
-                        }) as string
-                      }
-                      aria-haspopup="menu"
-                      aria-expanded={isRunModeMenuOpen}
-                    >
-                      <SelectedRunModeIcon className="h-4 w-4 shrink-0" strokeWidth={1.9} />
-                      <span className="pd-composer-run-label truncate">{selectedRunModeLabel}</span>
-                      <ChevronDown
-                        className={cn(
-                          "pd-composer-control-chevron h-3.5 w-3.5 shrink-0 transition-transform",
-                          isRunModeMenuOpen && "rotate-180",
-                        )}
-                        strokeWidth={2}
-                      />
-                    </button>
-                    {isRunModeMenuOpen ? (
-                      <div
-                        role="menu"
-                        className="absolute bottom-full left-0 z-50 mb-2 w-56 rounded-xl border border-neutral-200 bg-white p-1.5 text-left shadow-lg dark:border-neutral-800 dark:bg-neutral-900"
-                      >
-                        {RUN_MODE_OPTIONS.map(option => {
-                          const Icon = option.Icon;
-                          const isSelected = runMode === option.mode;
-                          const isPlan = option.mode === "plan";
-                          const isAsk = option.mode === "ask";
-                          const optionDisabled = isPlan && !planModeAvailable;
-                          const label = t(option.labelKey, {
-                            defaultValue: option.defaultLabel,
-                          }) as string;
-                          const description = isPlan
-                            ? (t("input.runModes.planDescription", {
-                                defaultValue: "Generate a plan first, then execute after confirmation",
-                              }) as string)
-                            : isAsk
-                              ? (t("input.runModes.askDescription", {
-                                  defaultValue: "Only answers questions without modifying files",
-                                }) as string)
-                              : (t("input.runModes.agentDescription", {
-                                  defaultValue: "Directly process and execute the task",
-                                }) as string);
-
-                          return (
-                            <button
-                              key={option.mode}
-                              type="button"
-                              role="menuitemradio"
-                              aria-checked={isSelected}
-                              disabled={optionDisabled}
-                              onMouseDown={event => event.preventDefault()}
-                              onClick={() => {
-                                if (optionDisabled) return;
-                                onRunModeChange(option.mode);
-                                setIsRunModeMenuOpen(false);
-                              }}
-                              className={cn(
-                                "flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left transition",
-                                isSelected
-                                  ? "bg-neutral-100 dark:bg-neutral-800"
-                                  : "hover:bg-neutral-50 dark:hover:bg-neutral-800/70",
-                                optionDisabled && "cursor-not-allowed opacity-45",
-                              )}
-                            >
-                              <Icon
-                                className="h-4 w-4 shrink-0 text-neutral-500 dark:text-neutral-400"
-                                strokeWidth={1.9}
-                              />
-                              <span className="min-w-0 flex-1">
-                                <span
-                                  className={cn(
-                                    "block truncate text-[13px]",
-                                    isSelected
-                                      ? "font-bold text-neutral-900 dark:text-neutral-100"
-                                      : "font-medium text-neutral-700 dark:text-neutral-300",
-                                  )}
-                                >
-                                  {label}
-                                </span>
-                                <span className="block truncate text-[11px] text-neutral-500 dark:text-neutral-400">
-                                  {optionDisabled
-                                    ? t("input.runModes.planUnavailable", {
-                                        defaultValue: "Plan mode is only available for Anthropic models.",
-                                      })
-                                    : description}
-                                </span>
-                              </span>
-                              {isSelected ? (
-                                <Check
-                                  className="h-4 w-4 shrink-0 text-neutral-500 dark:text-neutral-300"
-                                  strokeWidth={2}
-                                />
-                              ) : null}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    ) : null}
-                  </div>
+                  <ComposerRunModeSelector
+                    isRunModeMenuOpen={isRunModeMenuOpen}
+                    setIsRunModeMenuOpen={setIsRunModeMenuOpen}
+                    runMode={runMode}
+                    onRunModeChange={onRunModeChange}
+                    planModeAvailable={planModeAvailable}
+                    selectedRunModeLabel={selectedRunModeLabel}
+                    SelectedRunModeIcon={SelectedRunModeIcon}
+                    t={t}
+                  />
                   <button
                     type="button"
                     onClick={openImagePicker}
@@ -861,181 +414,34 @@ export default function ComposerV2({
                   >
                     <AtSign className="h-4 w-4" strokeWidth={1.75} />
                   </button>
-                  <div
-                    className="relative"
-                    onBlur={event => {
-                      const nextTarget = event.relatedTarget as Node | null;
-                      if (!nextTarget || !event.currentTarget.contains(nextTarget)) {
-                        setIsPermissionMenuOpen(false);
-                      }
-                    }}
-                  >
-                    <button
-                      type="button"
-                      disabled={permissionSelectorDisabled}
-                      onClick={() => {
-                        if (permissionSelectorDisabled) return;
-                        setIsPermissionMenuOpen(open => !open);
-                      }}
-                      className={cn(
-                        "pd-composer-icon-button inline-flex h-7 max-w-[132px] items-center justify-center gap-1.5 rounded-md px-2 text-[12px] font-medium transition sm:max-w-[190px]",
-                        permissionSelectorDisabled
-                          ? "cursor-not-allowed text-neutral-400 opacity-45 dark:text-neutral-500"
-                          : permissionMode === "bypassPermissions"
-                            ? "text-amber-600 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/30"
-                            : "text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800",
-                      )}
-                      title={
-                        t("input.permissions.change", {
-                          defaultValue: "Select permission mode",
-                        }) as string
-                      }
-                      aria-haspopup="menu"
-                      aria-expanded={permissionSelectorDisabled ? false : isPermissionMenuOpen}
-                    >
-                      <SelectedPermissionIcon className="h-4 w-4 shrink-0" strokeWidth={1.9} />
-                      <span className="pd-composer-permission-label truncate">{selectedPermissionLabel}</span>
-                      <ChevronDown
-                        className={cn(
-                          "pd-composer-control-chevron h-3.5 w-3.5 shrink-0 transition-transform",
-                          isPermissionMenuOpen && "rotate-180",
-                        )}
-                        strokeWidth={2}
-                      />
-                    </button>
-                    {isPermissionMenuOpen ? (
-                      <div
-                        role="menu"
-                        className="absolute bottom-full left-0 z-50 mb-2 w-60 rounded-xl border border-neutral-200 bg-white p-1.5 text-left shadow-lg dark:border-neutral-800 dark:bg-neutral-900"
-                      >
-                        {PERMISSION_MODE_OPTIONS.map(option => {
-                          const Icon = option.Icon;
-                          const isSelected = permissionMode === option.mode;
-                          const isDangerous = option.mode === "bypassPermissions";
-                          const label = t(option.labelKey, {
-                            defaultValue: option.defaultLabel,
-                          }) as string;
-                          const description = t(option.descriptionKey, {
-                            defaultValue: option.defaultDescription,
-                          }) as string;
-
-                          return (
-                            <button
-                              key={option.mode}
-                              type="button"
-                              role="menuitemradio"
-                              aria-checked={isSelected}
-                              onMouseDown={event => event.preventDefault()}
-                              onClick={() => {
-                                onPermissionModeChange(option.mode);
-                                setIsPermissionMenuOpen(false);
-                              }}
-                              className={cn(
-                                "flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left transition",
-                                isSelected
-                                  ? "bg-neutral-100 dark:bg-neutral-800"
-                                  : "hover:bg-neutral-50 dark:hover:bg-neutral-800/70",
-                              )}
-                            >
-                              <Icon
-                                className={cn(
-                                  "h-4 w-4 shrink-0",
-                                  isDangerous
-                                    ? "text-amber-600 dark:text-amber-400"
-                                    : "text-neutral-500 dark:text-neutral-400",
-                                )}
-                                strokeWidth={1.9}
-                              />
-                              <span className="min-w-0 flex-1">
-                                <span
-                                  className={cn(
-                                    "block truncate text-[13px] font-medium",
-                                    isDangerous
-                                      ? "text-amber-700 dark:text-amber-300"
-                                      : "text-neutral-900 dark:text-neutral-100",
-                                  )}
-                                >
-                                  {label}
-                                </span>
-                                <span className="block truncate text-[11px] text-neutral-500 dark:text-neutral-400">
-                                  {description}
-                                </span>
-                              </span>
-                              {isSelected ? (
-                                <Check
-                                  className="h-4 w-4 shrink-0 text-neutral-500 dark:text-neutral-300"
-                                  strokeWidth={2}
-                                />
-                              ) : null}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    ) : null}
-                  </div>
+                  <ComposerPermissionSelector
+                    isPermissionMenuOpen={isPermissionMenuOpen}
+                    setIsPermissionMenuOpen={setIsPermissionMenuOpen}
+                    permissionSelectorDisabled={permissionSelectorDisabled}
+                    permissionMode={permissionMode}
+                    onPermissionModeChange={onPermissionModeChange}
+                    selectedPermissionLabel={selectedPermissionLabel}
+                    SelectedPermissionIcon={SelectedPermissionIcon}
+                    t={t}
+                  />
                 </div>
 
-                {isBusySendQueued ? (
-                  <div className="hidden min-w-0 flex-1 items-center justify-end gap-1 px-2 text-[12px] text-amber-700 sm:flex dark:text-amber-300">
-                    <span className="truncate rounded-full bg-amber-50 px-2 py-1 dark:bg-amber-950/30">
-                      {isBusySendConfirmed
-                        ? t("input.queuedSendConfirmedInline", { defaultValue: "Stopping current turn; sending next" })
-                        : t("input.queuedSendConfirmInline", {
-                            defaultValue: "Queued; click again to stop this turn and send now",
-                          })}
-                    </span>
-                    {canSteerBusySend && onSteerBusySendQueue ? (
-                      <button
-                        type="button"
-                        onClick={onSteerBusySendQueue}
-                        className="rounded-full px-2 py-1 text-amber-700 transition hover:bg-amber-100 dark:text-amber-300 dark:hover:bg-amber-950/50"
-                        title={
-                          t("input.steerQueuedSend", {
-                            defaultValue: "Steer instead — inject into the running turn without stopping it",
-                          }) as string
-                        }
-                      >
-                        {t("input.steerQueuedSendShort", { defaultValue: "Steer" })}
-                      </button>
-                    ) : null}
-                    <button
-                      type="button"
-                      onClick={onCancelBusySendQueue}
-                      className="rounded-full px-2 py-1 text-amber-700 transition hover:bg-amber-100 dark:text-amber-300 dark:hover:bg-amber-950/50"
-                      title={t("input.cancelQueuedSend", { defaultValue: "Cancel queued message" }) as string}
-                    >
-                      {t("input.cancelQueuedSendShort", { defaultValue: "Cancel" })}
-                    </button>
-                  </div>
-                ) : null}
+                <ComposerBusySendNotice
+                  isBusySendQueued={isBusySendQueued}
+                  isBusySendConfirmed={isBusySendConfirmed}
+                  canSteerBusySend={canSteerBusySend}
+                  onSteerBusySendQueue={onSteerBusySendQueue}
+                  onCancelBusySendQueue={onCancelBusySendQueue}
+                  t={t}
+                />
 
                 <div className="pd-composer-toolbar-right relative ml-auto flex shrink-0 items-center gap-1">
-                  <div
-                    className="relative"
-                    onBlur={event => {
-                      const nextTarget = event.relatedTarget as Node | null;
-                      if (!nextTarget || !event.currentTarget.contains(nextTarget)) {
-                        setIsContextPopoverOpen(false);
-                      }
-                    }}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => setIsContextPopoverOpen(open => !open)}
-                      className={cn(
-                        "pd-composer-icon-button inline-flex h-7 min-w-[44px] items-center justify-center gap-1 rounded-md px-1.5 text-[11px] tabular-nums transition",
-                        CONTEXT_TONE_TRIGGER_STYLES[contextStatus.tone],
-                      )}
-                      title={contextStatusTitle}
-                      aria-label={contextStatusTitle}
-                      aria-expanded={isContextPopoverOpen}
-                    >
-                      <CircleGauge className="h-4 w-4" strokeWidth={1.75} />
-                      <span className="pd-composer-context-label">
-                        {contextStatus.known ? contextStatus.percentLabel : "--"}
-                      </span>
-                    </button>
-                  </div>
+                  <ContextWindowIndicator
+                    isContextPopoverOpen={isContextPopoverOpen}
+                    setIsContextPopoverOpen={setIsContextPopoverOpen}
+                    contextStatus={contextStatus}
+                    contextStatusTitle={contextStatusTitle}
+                  />
                   {/*
                     气泡挂在整条工具条（`relative`）而非按钮上：按钮 44px 宽时 `right-0`
                     会让 256px 的气泡左溢出被助手面板的 `overflow-hidden` 裁掉（窄面板下
@@ -1045,85 +451,17 @@ export default function ComposerV2({
                     <ContextStatusPopover status={contextStatus} title={contextWindowTitle} t={t} />
                   ) : null}
 
-                  <div
-                    className="relative"
-                    onBlur={event => {
-                      const nextTarget = event.relatedTarget as Node | null;
-                      if (!nextTarget || !event.currentTarget.contains(nextTarget)) {
-                        setIsThinkingModeMenuOpen(false);
-                      }
-                    }}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => setIsThinkingModeMenuOpen(open => !open)}
-                      className={cn(
-                        "pd-composer-icon-button inline-flex h-7 max-w-[116px] items-center justify-center gap-1.5 rounded-md px-2 text-[12px] font-medium transition sm:max-w-[140px]",
-                        effectiveThinkingMode === "default"
-                          ? "text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
-                          : "text-purple-600 hover:bg-purple-50 dark:text-purple-300 dark:hover:bg-purple-950/30",
-                      )}
-                      title={t("input.thinking.change", { defaultValue: "Select thinking strength" }) as string}
-                      aria-haspopup="menu"
-                      aria-expanded={isThinkingModeMenuOpen}
-                    >
-                      <SelectedThinkingIcon className="h-4 w-4 shrink-0" strokeWidth={1.9} />
-                      <span className="pd-composer-thinking-label truncate">{selectedThinkingMode.name}</span>
-                      <ChevronDown
-                        className={cn(
-                          "pd-composer-control-chevron h-3.5 w-3.5 shrink-0 transition-transform",
-                          isThinkingModeMenuOpen && "rotate-180",
-                        )}
-                        strokeWidth={2}
-                      />
-                    </button>
-                    {isThinkingModeMenuOpen ? (
-                      <div
-                        role="menu"
-                        className="absolute right-0 bottom-full z-50 mb-2 w-64 rounded-xl border border-neutral-200 bg-white p-1.5 text-left shadow-lg dark:border-neutral-800 dark:bg-neutral-900"
-                      >
-                        {thinkingModes.map(option => {
-                          const Icon = option.icon || Brain;
-                          const isSelected = option.id === thinkingMode;
-                          const unavailableReason = thinkingModeAvailability[option.id];
-                          return (
-                            <button
-                              key={option.id}
-                              type="button"
-                              role="menuitemradio"
-                              aria-checked={isSelected}
-                              disabled={Boolean(unavailableReason)}
-                              onClick={() => {
-                                if (unavailableReason) return;
-                                onThinkingModeChange(option.id);
-                                setIsThinkingModeMenuOpen(false);
-                              }}
-                              className={cn(
-                                "flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left transition",
-                                isSelected
-                                  ? "bg-neutral-100 text-neutral-950 dark:bg-neutral-800 dark:text-neutral-50"
-                                  : "text-neutral-700 hover:bg-neutral-50 dark:text-neutral-200 dark:hover:bg-neutral-800/70",
-                                unavailableReason &&
-                                  "cursor-not-allowed opacity-45 hover:bg-transparent dark:hover:bg-transparent",
-                              )}
-                              title={option.name}
-                            >
-                              <Icon className={cn("h-4 w-4 shrink-0", option.color)} strokeWidth={1.9} />
-                              <span className="min-w-0 flex-1">
-                                <span className="block text-[13px] font-medium">{option.name}</span>
-                              </span>
-                              {isSelected ? (
-                                <Check
-                                  className="h-4 w-4 shrink-0 text-neutral-500 dark:text-neutral-300"
-                                  strokeWidth={2}
-                                />
-                              ) : null}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    ) : null}
-                  </div>
+                  <ComposerThinkingSelector
+                    isThinkingModeMenuOpen={isThinkingModeMenuOpen}
+                    setIsThinkingModeMenuOpen={setIsThinkingModeMenuOpen}
+                    effectiveThinkingMode={effectiveThinkingMode}
+                    selectedThinkingMode={selectedThinkingMode}
+                    SelectedThinkingIcon={SelectedThinkingIcon}
+                    thinkingMode={thinkingMode}
+                    thinkingModeAvailability={thinkingModeAvailability}
+                    onThinkingModeChange={onThinkingModeChange}
+                    t={t}
+                  />
 
                   {showAbortButton ? (
                     <button
@@ -1150,32 +488,14 @@ export default function ComposerV2({
                       )}
                     </button>
                   ) : null}
-                  <button
-                    type="submit"
+                  <ComposerSubmitButton
                     disabled={disabled}
-                    aria-busy={isSubmitPending || hasUploadingImages || isBusySendConfirmed}
-                    className={cn(
-                      "inline-flex h-8 w-8 items-center justify-center rounded-lg text-white transition-all duration-200",
-                      "bg-gradient-to-b from-brand-500 to-brand-600",
-                      "shadow-[0_2px_8px_-2px_rgba(79,156,255,0.4),inset_0_1px_0_rgba(255,255,255,0.15)]",
-                      "hover:from-brand-600 hover:to-brand-700 hover:shadow-[0_4px_12px_-2px_rgba(79,156,255,0.5),inset_0_1px_0_rgba(255,255,255,0.15)]",
-                      "disabled:opacity-40 disabled:shadow-none",
-                      "dark:from-brand-500 dark:to-brand-600",
-                      isBusySendQueued &&
-                        "from-amber-500 to-amber-600 shadow-[0_2px_8px_-2px_rgba(245,158,11,0.4)] hover:from-amber-600 hover:to-amber-700 dark:from-amber-400 dark:to-amber-500 dark:text-neutral-950 dark:hover:from-amber-300 dark:hover:to-amber-400",
-                      isBusySendConfirmed && "cursor-wait",
-                      (isSubmitPending || hasUploadingImages) && "cursor-wait",
-                    )}
-                    title={sendTitle}
-                  >
-                    {isSubmitPending || hasUploadingImages || isBusySendConfirmed ? (
-                      <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.25} />
-                    ) : isBusySendQueued ? (
-                      <Check className="h-4 w-4" strokeWidth={2.25} />
-                    ) : (
-                      <ArrowUp className="h-4 w-4" strokeWidth={2} />
-                    )}
-                  </button>
+                    isSubmitPending={isSubmitPending}
+                    hasUploadingImages={uploadingImages.size > 0}
+                    isBusySendConfirmed={isBusySendConfirmed}
+                    isBusySendQueued={isBusySendQueued}
+                    sendTitle={sendTitle}
+                  />
                 </div>
               </div>
             </div>
