@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Dispatch, KeyboardEvent, RefObject, SetStateAction } from "react";
+import type { Dispatch, RefObject, SetStateAction } from "react";
 import { logError } from "../../../utils/logging";
 import { api } from "../../../utils/api";
-import { isImeEnterEvent } from "../../../utils/ime";
 import {
   ADD_WORKSPACE_FILE_MENTION_EVENT,
   hasWorkspaceFileMention,
@@ -11,6 +10,11 @@ import {
 } from "../../../utils/workspaceFileMention";
 import { escapeRegExp } from "../utils/chatFormatting";
 import type { Project } from "../../../types/app";
+import {
+  type FileMentionKeyEvent,
+  handleFileMentionsKeyDown as handleFileMentionsKeyDownImpl,
+} from "./fileMentionInteractions";
+import { syncMentionDropdown } from "./mentionDropdownState";
 
 interface ProjectFileNode {
   name: string;
@@ -157,35 +161,15 @@ export function useFileMentions({
   }, [showFileDropdown, fetchProjectFiles]);
 
   useEffect(() => {
-    const textBeforeCursor = input.slice(0, cursorPosition);
-    const lastAtIndex = textBeforeCursor.lastIndexOf("@");
-
-    if (lastAtIndex === -1) {
-      setShowFileDropdown(false);
-      setAtSymbolPosition(-1);
-      return;
-    }
-
-    const textAfterAt = textBeforeCursor.slice(lastAtIndex + 1);
-    if (textAfterAt.includes(" ")) {
-      setShowFileDropdown(false);
-      setAtSymbolPosition(-1);
-      return;
-    }
-
-    setAtSymbolPosition(lastAtIndex);
-    setShowFileDropdown(true);
-    setSelectedFileIndex(-1);
-
-    const matchingFiles = fileList
-      .filter(
-        file =>
-          file.name.toLowerCase().includes(textAfterAt.toLowerCase()) ||
-          file.path.toLowerCase().includes(textAfterAt.toLowerCase()),
-      )
-      .slice(0, 10);
-
-    setFilteredFiles(matchingFiles);
+    syncMentionDropdown({
+      input,
+      cursorPosition,
+      fileList,
+      setShowFileDropdown,
+      setAtSymbolPosition,
+      setSelectedFileIndex,
+      setFilteredFiles,
+    });
   }, [input, cursorPosition, fileList]);
 
   const activeFileMentions = useMemo(() => {
@@ -311,91 +295,23 @@ export function useFileMentions({
   );
 
   const handleFileMentionsKeyDown = useCallback(
-    (event: KeyboardEvent<HTMLTextAreaElement>): boolean => {
-      if ((event.key === "Backspace" || event.key === "Delete") && sortedFileMentions.length > 0) {
-        const textarea = textareaRef.current;
-        const selectionStart = textarea?.selectionStart ?? cursorPosition;
-        const selectionEnd = textarea?.selectionEnd ?? selectionStart;
-        if (selectionStart === selectionEnd) {
-          const mentionRanges = sortedFileMentions.flatMap(mention => {
-            const ranges: Array<{ mention: string; start: number; end: number }> = [];
-            let searchFrom = 0;
-            while (searchFrom <= input.length - mention.length) {
-              const start = input.indexOf(mention, searchFrom);
-              if (start === -1) break;
-              const end = start + mention.length;
-              const hasLeadingBoundary = start === 0 || /\s/.test(input[start - 1]);
-              const hasTrailingBoundary = end === input.length || /\s/.test(input[end]);
-              if (hasLeadingBoundary && hasTrailingBoundary) ranges.push({ mention, start, end });
-              searchFrom = Math.max(end, start + 1);
-            }
-            return ranges;
-          });
-          const range = mentionRanges.find(({ start, end }) =>
-            event.key === "Backspace"
-              ? selectionStart === end || (selectionStart === end + 1 && /\s/.test(input[end] || ""))
-              : selectionStart === start || (selectionStart + 1 === start && /\s/.test(input[selectionStart] || "")),
-          );
-
-          if (range) {
-            event.preventDefault();
-            let removeStart = range.start;
-            let removeEnd = range.end;
-            if (/\s/.test(input[removeEnd] || "")) {
-              removeEnd += 1;
-            } else if (removeStart > 0 && /\s/.test(input[removeStart - 1] || "")) {
-              removeStart -= 1;
-            }
-            const nextInput = `${input.slice(0, removeStart)}${input.slice(removeEnd)}`;
-            setInput(nextInput);
-            setCursorPosition(removeStart);
-            setFileMentions(mentions =>
-              mentions.filter(mention => mention !== range.mention || hasWorkspaceFileMention(nextInput, mention)),
-            );
-            focusMention(removeStart);
-            setShowFileDropdown(false);
-            return true;
-          }
-        }
-      }
-
-      if (!showFileDropdown || filteredFiles.length === 0) {
-        return false;
-      }
-
-      if (event.key === "ArrowDown") {
-        event.preventDefault();
-        setSelectedFileIndex(previousIndex => (previousIndex < filteredFiles.length - 1 ? previousIndex + 1 : 0));
-        return true;
-      }
-
-      if (event.key === "ArrowUp") {
-        event.preventDefault();
-        setSelectedFileIndex(previousIndex => (previousIndex > 0 ? previousIndex - 1 : filteredFiles.length - 1));
-        return true;
-      }
-
-      if (event.key === "Tab" || event.key === "Enter") {
-        if (isImeEnterEvent(event)) {
-          return false;
-        }
-        event.preventDefault();
-        if (selectedFileIndex >= 0) {
-          selectFile(filteredFiles[selectedFileIndex]);
-        } else if (filteredFiles.length > 0) {
-          selectFile(filteredFiles[0]);
-        }
-        return true;
-      }
-
-      if (event.key === "Escape") {
-        event.preventDefault();
-        setShowFileDropdown(false);
-        return true;
-      }
-
-      return false;
-    },
+    (event: FileMentionKeyEvent): boolean =>
+      handleFileMentionsKeyDownImpl(event, {
+        cursorPosition,
+        filteredFiles,
+        focusMention,
+        input,
+        selectFile,
+        selectedFileIndex,
+        setCursorPosition,
+        setFileMentions,
+        setInput,
+        setSelectedFileIndex,
+        setShowFileDropdown,
+        showFileDropdown,
+        sortedFileMentions,
+        textareaRef,
+      }),
     [
       cursorPosition,
       filteredFiles,

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect } from "react";
+import React from "react";
 import { Check, ChevronLeft, HelpCircle } from "lucide-react";
 import type { PermissionPanelProps } from "../../configs/permissionPanelRegistry";
 import type { Question } from "../../../types/types";
@@ -6,6 +6,7 @@ import { Button } from "../../../../ui/button";
 import { Input } from "../../../../ui/input";
 import { cn } from "../../../../../lib/utils.js";
 import { isImeEnterEvent } from "../../../../../utils/ime";
+import { useQuestionPanel } from "./useQuestionPanel";
 
 function normalizeOption(option: unknown) {
   if (!option || typeof option !== "object") return null;
@@ -42,147 +43,24 @@ function normalizeQuestions(value: unknown): Question[] {
 }
 
 export const AskUserQuestionPanel: React.FC<PermissionPanelProps> = ({ request, onDecision }) => {
-  const input = request.input as { questions?: unknown } | undefined;
-  const questions = normalizeQuestions(input?.questions);
-
-  const [currentStep, setCurrentStep] = useState(0);
-  const [selections, setSelections] = useState<Map<number, Set<string>>>(() => new Map());
-  const [otherTexts, setOtherTexts] = useState<Map<number, string>>(() => new Map());
-  const [otherActive, setOtherActive] = useState<Map<number, boolean>>(() => new Map());
-  const [mounted, setMounted] = useState(false);
-
-  const containerRef = useRef<HTMLDivElement>(null);
-  const otherInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    requestAnimationFrame(() => setMounted(true));
-  }, []);
-
-  // Focus the container for keyboard events when step changes
-  useEffect(() => {
-    if (!otherActive.get(currentStep)) {
-      containerRef.current?.focus();
-    }
-  }, [currentStep, otherActive]);
-
-  useEffect(() => {
-    if (otherActive.get(currentStep)) {
-      otherInputRef.current?.focus();
-    }
-  }, [otherActive, currentStep]);
-
-  const toggleOption = useCallback((qIdx: number, label: string, multiSelect: boolean) => {
-    setSelections(prev => {
-      const next = new Map(prev);
-      const current = new Set(next.get(qIdx) || []);
-      if (multiSelect) {
-        if (current.has(label)) current.delete(label);
-        else current.add(label);
-      } else {
-        current.clear();
-        current.add(label);
-        setOtherActive(p => {
-          const n = new Map(p);
-          n.set(qIdx, false);
-          return n;
-        });
-      }
-      next.set(qIdx, current);
-      return next;
-    });
-  }, []);
-
-  const toggleOther = useCallback((qIdx: number, multiSelect: boolean) => {
-    setOtherActive(prev => {
-      const next = new Map(prev);
-      const wasActive = next.get(qIdx) || false;
-      next.set(qIdx, !wasActive);
-      if (!multiSelect && !wasActive) {
-        setSelections(p => {
-          const n = new Map(p);
-          n.set(qIdx, new Set());
-          return n;
-        });
-      }
-      return next;
-    });
-  }, []);
-
-  const setOtherText = useCallback((qIdx: number, text: string) => {
-    setOtherTexts(prev => {
-      const next = new Map(prev);
-      next.set(qIdx, text);
-      return next;
-    });
-  }, []);
-
-  const buildAnswers = useCallback(() => {
-    const answers: Record<string, string> = {};
-    questions.forEach((q, idx) => {
-      const selected = Array.from(selections.get(idx) || []);
-      const isOther = otherActive.get(idx) || false;
-      const otherText = (otherTexts.get(idx) || "").trim();
-      if (isOther && otherText) selected.push(otherText);
-      if (selected.length > 0) answers[q.question] = selected.join(", ");
-    });
-    return answers;
-  }, [questions, selections, otherActive, otherTexts]);
-
-  const handleSubmit = useCallback(() => {
-    onDecision(request.requestId, { allow: true, updatedInput: { ...input, answers: buildAnswers() } });
-  }, [onDecision, request.requestId, input, buildAnswers]);
-
-  const handleSkip = useCallback(() => {
-    onDecision(request.requestId, { allow: true, updatedInput: { ...input, answers: {} } });
-  }, [onDecision, request.requestId, input]);
-
-  // Keyboard handler for number keys and navigation
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      // Don't capture keys when typing in the "Other" input
-      if (e.target instanceof HTMLInputElement) return;
-
-      const q = questions[currentStep];
-      if (!q) return;
-      const multi = q.multiSelect || false;
-      const optCount = q.options.length;
-
-      // Number keys 1-9 for options
-      const num = parseInt(e.key);
-      if (!isNaN(num) && num >= 1 && num <= optCount) {
-        e.preventDefault();
-        toggleOption(currentStep, q.options[num - 1].label, multi);
-        return;
-      }
-
-      // 0 for "Other"
-      if (e.key === "0") {
-        e.preventDefault();
-        toggleOther(currentStep, multi);
-        return;
-      }
-
-      // Enter to advance / submit
-      if (e.key === "Enter") {
-        if (isImeEnterEvent(e)) {
-          return;
-        }
-        e.preventDefault();
-        const isLast = currentStep === questions.length - 1;
-        if (isLast) handleSubmit();
-        else setCurrentStep(s => s + 1);
-        return;
-      }
-
-      // Escape to skip
-      if (e.key === "Escape") {
-        e.preventDefault();
-        handleSkip();
-        return;
-      }
-    },
-    [currentStep, questions, toggleOption, toggleOther, handleSubmit, handleSkip],
-  );
+  const questions = normalizeQuestions((request.input as { questions?: unknown } | undefined)?.questions);
+  const {
+    currentStep,
+    setCurrentStep,
+    selections,
+    otherTexts,
+    otherActive,
+    mounted,
+    containerRef,
+    otherInputRef,
+    toggleOption,
+    toggleOther,
+    setOtherText,
+    buildAnswers,
+    handleSubmit,
+    handleSkip,
+    handleKeyDown,
+  } = useQuestionPanel({ request, onDecision, questions });
 
   if (questions.length === 0) return null;
 
