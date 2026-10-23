@@ -10,7 +10,7 @@
 | src TS 文件 / 行数 | 1143 / 199908 |
 | src JS 文件 | 0 |
 | tests 文件 | 666 |
-| ui/src 文件 / 行数 | 653 / 103223 |
+| ui/src 文件 / 行数 | 659 / 103486 |
 | ui/server 文件 / 行数 | 149 / 38773 |
 
 ## 指标口径
@@ -50,14 +50,12 @@
 | `ui/src/components/main-content-v2/FilesV2.tsx` | `FilesV2` | 832 | function |
 | `ui/src/components/chat-v2/MessagesPaneV2.tsx` | `MessagesPaneV2` | 824 | function |
 | `ui/src/components/chat-v2/ComposerV2.tsx` | `ComposerV2` | 741 | function |
-| `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` | `useChatRealtimeHandlers` | 721 | function |
 | `ui/src/components/git-panel/hooks/useGitPanelController.ts` | `useGitPanelController` | 704 | function |
 | `ui/src/components/main-content-v2/skills/import/ImportFromFolder.tsx` | `ImportFromFolder` | 688 | function |
 | `ui/src/components/chat-v2/ChatInterfaceV2.tsx` | `ChatInterfaceV2` | 668 | function |
 | `ui/src/hooks/useProjectsState.ts` | `useProjectsState` | 647 | function |
 | `ui/src/components/onboarding/view/subcomponents/LlmConfigurationStep.tsx` | `LlmConfigurationStep` | 633 | function |
 | `ui/src/components/app-shell/AppShellV2.tsx` | `AppShellV2` | 632 | function |
-| `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` | `(anonymous)` | 624 | arrow |
 | `ui/src/components/main-content/view/MainContent.tsx` | `SplitBody` | 573 | function |
 | `ui/src/components/chat/hooks/useSessionSubmit.ts` | `useSessionSubmit` | 528 | function |
 | `ui/src/components/main-content-v2/CronV2.tsx` | `CronFormView` | 476 | function |
@@ -122,10 +120,10 @@
 | `src/model/streaming/streamModel.ts` | 1085 |
 | `ui/server/routes/commands.js` | 1082 |
 | `src/always-on/runtime/DiscoveryFire.ts` | 1079 |
-| `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` | 1025 |
 | `src/gateway/protocol/types.ts` | 995 |
 | `src/context/DefaultContextRuntime.ts` | 969 |
 | `ui/src/components/main-content-v2/FilesV2.tsx` | 945 |
+| `src/pilot/config/loadPilotConfig.ts` | 922 |
 
 ## vendored 子包（单列，不计入上述规模与排名）
 
