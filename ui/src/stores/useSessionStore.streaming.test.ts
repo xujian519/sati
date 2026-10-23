@@ -3,7 +3,7 @@ import type { SessionProvider } from "../types/app";
 import {
   getActiveTurnReplayMessagesToApply,
   getDuplicateAssistantStreamTextState,
-} from "../components/chat/hooks/useChatRealtimeHandlers";
+} from "../components/chat/hooks/chatRealtimeMessageUtils";
 import {
   computeMerged,
   createRafNotifyScheduler,

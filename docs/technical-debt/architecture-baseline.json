@@ -154,11 +154,6 @@
     },
     {
       "rule": "file-size",
-      "file": "ui/src/components/chat/hooks/useChatRealtimeHandlers.ts",
-      "lines": 1025
-    },
-    {
-      "rule": "file-size",
       "file": "ui/src/components/chat/tools/configs/toolConfigs.ts",
       "lines": 864
     },
