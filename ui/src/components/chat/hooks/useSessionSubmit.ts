@@ -1,27 +1,13 @@
 import { useCallback, useEffect, type RefObject } from "react";
-import { authenticatedFetch } from "../../../utils/api";
 import { UI_TIMEOUTS } from "../../../constants/timeouts";
-import { logError } from "../../../utils/logging";
-import {
-  CONTENT_REFERENCE_ATTACHMENT_KIND,
-  contentReferenceImage,
-  formatContentReferencePromptBlock,
-  serializableReference,
-  type ContentReference,
-} from "../../../types/contentReference";
+import { type ContentReference } from "../../../types/contentReference";
 import { getEffectiveThinkingMode } from "../constants/thinkingModeAvailability";
 import { thinkingModeToConfig, type ThinkingModeId } from "../constants/thinkingModes";
-import {
-  createTemporarySessionId,
-  getNotificationSessionSummary,
-  isTemporarySessionId,
-  startSessionCommand,
-} from "../utils/sessionLauncher";
-import { safeLocalStorage } from "../utils/chatStorage";
-import type { ChatAttachment, ChatImage, ChatMessage } from "../types/types";
 import type { SlashCommand } from "./useSlashCommands";
 import { createFakeSubmitEvent, type ComposerSubmitHandler, type MinimalSubmitEvent } from "./composerSubmit";
 import type { QueuedBusySendSnapshot, UseChatComposerStateArgs } from "./useChatComposerState";
+import { submitSession } from "./sessionSubmitHandler";
+import { readToolsSettings } from "./sessionSubmitUtils";
 
 /**
  * 提交生命周期：`handleSubmit` 本体、`handleSubmitRef` 的回填、空闲时补发排队的提交、
@@ -42,13 +28,6 @@ import type { QueuedBusySendSnapshot, UseChatComposerStateArgs } from "./useChat
  * `cancelBusySendQueue` 被更早的权限层与更晚的输入层共同使用，而本层必须等在斜杠层之后，
  * 把状态搬进来就会再把环绕回去。故按"状态在父级、逻辑在 hook"的口径接收它们。
  */
-
-type UploadedAttachmentFile = {
-  name: string;
-  path: string;
-  size?: number;
-  mimeType?: string;
-};
 
 type SessionSubmitOptions = Pick<
   UseChatComposerStateArgs,
@@ -281,292 +260,54 @@ export function useSessionSubmit({
   );
 
   const handleSubmit = useCallback(
-    async (event: MinimalSubmitEvent) => {
-      event.preventDefault();
-      const queuedSnapshot = queuedBusySendSnapshotRef.current;
-      const currentInput = queuedSnapshot?.input ?? inputValueRef.current;
-      const submitAttachedImages = queuedSnapshot?.attachedImages ?? attachedImages;
-      const submitDocumentReferences = queuedSnapshot?.documentReferences ?? documentReferences;
-      const hasDocumentReferences = submitDocumentReferences.length > 0;
-      const hasAttachments = submitAttachedImages.length > 0 || hasDocumentReferences;
-      if ((!currentInput.trim() && !hasAttachments) || !selectedProject) {
-        return;
-      }
-
-      if (isLoading && !isBusySendQueued) {
-        queuedBusySendRef.current = true;
-        queuedBusySendConfirmedRef.current = false;
-        queuedBusySendSnapshotRef.current = {
-          input: currentInput,
-          attachedImages: [...attachedImages],
-          documentReferences: [...documentReferences],
-        };
-        setIsBusySendQueued(true);
-        setIsBusySendConfirmed(false);
-        return;
-      }
-
-      if (isLoading && isBusySendQueued) {
-        queuedBusySendSnapshotRef.current = {
-          input: currentInput,
-          attachedImages: submitAttachedImages,
-          documentReferences: submitDocumentReferences,
-        };
-
-        const targetSessionId = resolveConcreteSessionId();
-
-        if (!canAbortSession || !targetSessionId) {
-          return;
-        }
-
-        queuedBusySendSnapshotRef.current = {
-          ...queuedBusySendSnapshotRef.current,
-          forceStart: true,
-        };
-        queuedBusySendConfirmedRef.current = true;
-        setIsBusySendConfirmed(true);
-        sendMessage({
-          type: "abort-session",
-          sessionId: targetSessionId,
-          provider: "sati",
-        });
-        setCanAbortSession(false);
-        setIsAborting(true);
-        return;
-      }
-
-      queuedBusySendRef.current = false;
-      queuedBusySendConfirmedRef.current = false;
-      queuedBusySendSnapshotRef.current = null;
-      setIsBusySendQueued(false);
-      setIsBusySendConfirmed(false);
-
-      // 协议 1.7：编辑模式拦截——改发 edit-last-turn 帧（服务端遮蔽旧 turn
-      // 后同帧续跑新文本），不做 slash 拦截（编辑文本允许以 / 开头按原文发送）。
-      const editLastTurnTarget = editLastTurnTargetRef.current;
-      if (editLastTurnTarget) {
-        const editText = currentInput.trim();
-        if (!editText || !selectedProject) {
-          editLastTurnTargetRef.current = null;
-          return;
-        }
-        const projectPath = selectedProject.fullPath || selectedProject.path || "";
-        const toolsSettings = readToolsSettings();
-        const effectiveThinkingMode = getEffectiveThinkingMode(thinkingMode, thinkingModeAvailability);
-        sendMessage({
-          type: "edit-last-turn",
-          sessionId: editLastTurnTarget.sessionId,
-          text: editText,
-          options: {
-            sessionId: editLastTurnTarget.sessionId,
-            projectPath,
-            cwd: projectPath,
-            toolsSettings,
-            runMode,
-            permissionMode,
-            ...(basePermissionMode ? { basePermissionMode } : {}),
-            ...(model ? { model } : {}),
-            thinking: thinkingModeToConfig(effectiveThinkingMode),
-          },
-        });
-        editLastTurnTargetRef.current = null;
-        addMessage(
-          {
-            type: "user",
-            content: editText,
-            timestamp: new Date(),
-          },
-          editLastTurnTarget.sessionId,
-        );
-        setIsLoading(true);
-        setCanAbortSession(true);
-        setClaudeStatus({ text: "Processing", tokens: 0, can_interrupt: true });
-        setIsUserScrolledUp(false);
-        setTimeout(() => scrollToBottom(), UI_TIMEOUTS.CHAT_SEND_SCROLL_SETTLE_MS);
-        onSessionActive?.(editLastTurnTarget.sessionId);
-        onSessionProcessing?.(editLastTurnTarget.sessionId);
-        applyInputValue("");
-        resetAttachmentState();
-        resetCommandMenuState();
-        setIsTextareaExpanded(false);
-        if (textareaRef.current) {
-          textareaRef.current.style.height = "auto";
-        }
-        return;
-      }
-
-      // Intercept slash commands: if input starts with /commandName, execute as command with args.
-      // Skip when handleCustomCommand just pushed a passthrough back into the
-      // input box — we already executed it once and want this submit to flow
-      // through as a normal user message.
-      const trimmedInput = currentInput.trim();
-      if (skipSlashDetectionOnceRef.current) {
-        skipSlashDetectionOnceRef.current = false;
-      } else if (trimmedInput.startsWith("/")) {
-        const commandName = trimmedInput.match(/^(\S+)/)?.[1] ?? trimmedInput;
-        const matchedCommand = slashCommands.find((cmd: SlashCommand) => cmd.name === commandName);
-        if (matchedCommand) {
-          executeCommand(matchedCommand, trimmedInput);
-          applyInputValue("");
-          resetAttachmentState();
-          resetCommandMenuState();
-          setIsTextareaExpanded(false);
-          if (textareaRef.current) {
-            textareaRef.current.style.height = "auto";
-          }
-          return;
-        }
-      }
-
-      const userVisibleInput =
-        currentInput.trim() || (hasDocumentReferences ? referenceOnlyPrompt : "Please review the attached file(s).");
-      let messageContent = userVisibleInput;
-
-      // Pin the target session before any await so attachment upload cannot
-      // race with a sidebar session switch and leak the optimistic bubble.
-      const pendingSessionIdAtSubmit = pendingViewSessionRef.current?.sessionId ?? null;
-      const canResumeCurrentSession =
-        Boolean(currentSessionId) && (Boolean(selectedSession?.id) || pendingSessionIdAtSubmit === currentSessionId);
-      const submitTargetSessionId = selectedSession?.id || (canResumeCurrentSession ? currentSessionId : null);
-      const submitSelectedSession = selectedSession;
-      if (!submitTargetSessionId || isTemporarySessionId(submitTargetSessionId)) {
-        pendingNewSessionThinkingModeRef.current = thinkingMode;
-      }
-
-      // Optimistic sidebar refresh — fire BEFORE the attachment upload so
-      // the sidebar reorders/spawns the row the instant the user clicks
-      // send, not after the network round-trip. We resolve a stable
-      // session id here (real id when resuming; otherwise a temporary
-      // `new-session-*` placeholder that will be replaced by
-      // `preserveLoadedSessions` once the server's `projects_updated`
-      // arrives with the real id).
-      const optimisticSessionId = submitTargetSessionId || createTemporarySessionId();
-      if (selectedProject?.name) {
-        onSessionActivityBump?.(selectedProject.name, optimisticSessionId, userVisibleInput);
-      }
-
-      let uploadedImages: unknown[] = [];
-      let uploadedFiles: UploadedAttachmentFile[] = [];
-      if (submitAttachedImages.length > 0) {
-        const formData = new FormData();
-        submitAttachedImages.forEach(file => {
-          formData.append("attachments", file);
-        });
-
-        try {
-          const response = await authenticatedFetch(
-            `/api/projects/${encodeURIComponent(selectedProject.name)}/upload-attachments`,
-            {
-              method: "POST",
-              headers: {},
-              body: formData,
-            },
-          );
-
-          if (!response.ok) {
-            throw new Error("Failed to upload attachments");
-          }
-
-          const result = await response.json();
-          uploadedImages = Array.isArray(result.images) ? result.images : [];
-          uploadedFiles = Array.isArray(result.files) ? result.files : [];
-        } catch (error) {
-          const message = error instanceof Error ? error.message : "Unknown error";
-          logError("Attachment upload failed:", error);
-          addMessage(
-            {
-              type: "error",
-              content: `Failed to upload attachments: ${message}`,
-              timestamp: new Date(),
-            },
-            submitTargetSessionId,
-          );
-          return;
-        }
-      }
-
-      const referenceImages = submitDocumentReferences
-        .map(contentReferenceImage)
-        .filter((image): image is NonNullable<typeof image> => Boolean(image));
-      uploadedImages = [...uploadedImages, ...referenceImages];
-      const documentReferenceAttachments = submitDocumentReferences.map(contentReferenceToAttachment);
-      messageContent = `${messageContent}${buildAttachmentPathNote(uploadedFiles)}${formatContentReferencePromptBlock(submitDocumentReferences)}`;
-
-      const effectiveSessionId = submitTargetSessionId;
-      const sessionToActivate = effectiveSessionId || optimisticSessionId;
-
-      const userMessage: ChatMessage = {
-        type: "user",
-        content: userVisibleInput,
-        images: uploadedImages as ChatImage[],
-        attachments: [...uploadedFiles, ...documentReferenceAttachments],
-        timestamp: new Date(),
-      };
-
-      addMessage(userMessage, submitTargetSessionId);
-      setIsLoading(true); // Processing banner starts
-      setCanAbortSession(true);
-      setClaudeStatus({
-        text: "Processing",
-        tokens: 0,
-        can_interrupt: true,
-      });
-
-      setIsUserScrolledUp(false);
-      setTimeout(() => scrollToBottom(), UI_TIMEOUTS.CHAT_SEND_SCROLL_SETTLE_MS);
-
-      if (!effectiveSessionId && !submitSelectedSession?.id) {
-        if (typeof window !== "undefined") {
-          // Reset stale pending IDs from previous interrupted runs before creating a new one.
-          sessionStorage.removeItem("pendingSessionId");
-        }
-        pendingViewSessionRef.current = { sessionId: null, startedAt: Date.now() };
-      }
-      onSessionActive?.(sessionToActivate);
-      if (effectiveSessionId && !isTemporarySessionId(effectiveSessionId)) {
-        onSessionProcessing?.(effectiveSessionId);
-      }
-
-      // Sati-only: a single localStorage entry (`sati-settings`)
-      // tracks tool consent + skip-permissions for every chat. The legacy
-      // per-provider keys (`cursor-tools-settings`, `codex-settings`,
-      // `gemini-settings`) are no longer read or written.
-      const toolsSettings = readToolsSettings();
-      const sessionSummary = getNotificationSessionSummary(submitSelectedSession, userVisibleInput);
-      const effectiveThinkingMode = getEffectiveThinkingMode(thinkingMode, thinkingModeAvailability);
-
-      startSessionCommand({
-        sendMessage,
+    (event: MinimalSubmitEvent) =>
+      submitSession(event, {
         selectedProject,
-        command: messageContent,
-        userVisibleInput,
-        sessionId: effectiveSessionId,
-        temporarySessionId: sessionToActivate,
-        toolsSettings,
+        selectedSession,
+        currentSessionId,
+        isLoading,
+        canAbortSession,
+        thinkingMode,
+        pendingNewSessionThinkingModeRef,
+        activeDraftStorageKeyRef,
         runMode,
         permissionMode,
         basePermissionMode,
         model,
-        thinking: thinkingModeToConfig(effectiveThinkingMode),
-        sessionSummary,
-        images: uploadedImages,
-        attachments: [...uploadedFiles, ...documentReferenceAttachments],
-        forceStart: queuedSnapshot?.forceStart === true,
-      });
-
-      applyInputValue("");
-      resetCommandMenuState();
-      resetAttachmentState();
-      setIsTextareaExpanded(false);
-
-      if (textareaRef.current) {
-        textareaRef.current.style.height = "auto";
-      }
-
-      if (activeDraftStorageKeyRef.current) {
-        safeLocalStorage.removeItem(activeDraftStorageKeyRef.current);
-      }
-    },
+        thinkingModeAvailability,
+        sendMessage,
+        addMessage,
+        setIsLoading,
+        setCanAbortSession,
+        setIsAborting,
+        setClaudeStatus,
+        setIsUserScrolledUp,
+        onSessionActive,
+        onSessionProcessing,
+        onSessionActivityBump,
+        pendingViewSessionRef,
+        referenceOnlyPrompt,
+        scrollToBottom,
+        executeCommand,
+        skipSlashDetectionOnceRef,
+        slashCommands,
+        resetCommandMenuState,
+        setIsTextareaExpanded,
+        inputValueRef,
+        attachedImages,
+        documentReferences,
+        resetAttachmentState,
+        applyInputValue,
+        resolveConcreteSessionId,
+        editLastTurnTargetRef,
+        textareaRef,
+        queuedBusySendRef,
+        queuedBusySendConfirmedRef,
+        queuedBusySendSnapshotRef,
+        isBusySendQueued,
+        setIsBusySendQueued,
+        setIsBusySendConfirmed,
+      }),
     [
       applyInputValue,
       resetAttachmentState,
@@ -645,48 +386,4 @@ export function useSessionSubmit({
   ]);
 
   return { handleSubmit, steerBusySendQueue, canSteerBusySend, beginEditLastTurn, regenerateLastTurn };
-}
-
-function buildAttachmentPathNote(files: UploadedAttachmentFile[]): string {
-  if (!files.length) {
-    return "";
-  }
-
-  const lines = files.map(file => `- ${file.name}: ${file.path}`);
-  return `\n\n[Files attached by user and available for reading in the project:]\n${lines.join("\n")}`;
-}
-
-/**
- * 读取工具授权设置（`sati-settings`）；损坏时告警并回退全保守默认值。
- * 注意 fallback 有意不含 `projectSortOrder`（存量行为，消费方按缺省容错），
- * 故不标注 `SatiSettings` 返回类型。
- */
-function readToolsSettings() {
-  try {
-    const savedSettings = safeLocalStorage.getItem("sati-settings");
-    if (savedSettings) {
-      return JSON.parse(savedSettings);
-    }
-  } catch (error) {
-    logError("Error loading tools settings:", error);
-  }
-
-  return {
-    allowedTools: [],
-    disallowedTools: [],
-    skipPermissions: false,
-  };
-}
-
-function contentReferenceToAttachment(reference: ContentReference): ChatAttachment {
-  return {
-    kind: CONTENT_REFERENCE_ATTACHMENT_KIND,
-    name: reference.source.fileName,
-    path: reference.source.relativePath,
-    fileName: reference.source.fileName,
-    filePath: reference.source.relativePath,
-    contentReference: serializableReference(reference),
-    createdAt: reference.createdAt,
-    mimeType: "application/vnd.sati.content-reference+json",
-  };
 }
