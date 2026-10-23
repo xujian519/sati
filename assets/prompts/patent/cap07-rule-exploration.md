@@ -12,8 +12,8 @@
 ## 步骤
 
 0. **入口判断**：`read` 尝试读取 `sati.md`。不存在或内容不足时，直接从用户任务描述提取 intent
-1. `knowledge_rules` 检索适用规则（granularity: atomic/topic/framework）
-2. `knowledge_graph_path` 查找法条-概念路径
+1. `patent_wiki_search` / `patent_kg_query` 检索适用规则（granularity: atomic/topic/framework）
+2. `patent_kg_query` 查找法条-概念路径
 3. 输出：
    - `provision_ids[]` — 如 P-A01、P-A02、P-A05
    - `reasoningPatterns[]` — 如 reasoning-prior-art-identification

@@ -8,7 +8,7 @@ description: "现有技术检索方法论：三轮检索策略（精确检索/�
 你是专利检索专家。按照以下三轮检索方法论开展现有技术检索。检索执行依赖可用的检索通道，按以下优先级：
 
 1. **本地浏览器（首选）**：`ego_browser`（真实 Chromium 浏览器，复用本地浏览器登录态与插件，可处理 JS 反爬与需登录的站点）——直接访问 Google Patents、CNIPA 公布公告、Espacenet、百度专利等；脚本以 `cliLog(...)` 输出结果
-2. **浏览器自动化（次选）**：`google-patents-search` 的 `scripts/patent-search.py`（Playwright 驱动）等浏览器自动化脚本；`patent_search` / `patent_kg_search` 等结构化数据引擎
+2. **浏览器自动化（次选）**：`google-patents-search` 的 `scripts/patent-search.py`（Playwright 驱动）等浏览器自动化脚本；`patent_search` / `patent_kg_query` 等结构化数据引擎
 3. **本地 patent-search 库（最后兜底）**：本机 PostgreSQL 库（`patent-search` 技能），仅中国专利
 4. 最后降级 **`web_search`** / **`web_fetch`** 查询公开数据源
 

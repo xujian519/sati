@@ -21,11 +21,13 @@
 // 挂载：根 package.json lint 脚本末尾（与 check:event-matrix 同处）。
 // 用法：node scripts/check-patent-sop-references.mjs
 
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const DEFAULT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const ROOT_ARG_INDEX = process.argv.indexOf("--root");
+const REPO_ROOT = ROOT_ARG_INDEX >= 0 ? resolve(process.argv[ROOT_ARG_INDEX + 1]) : DEFAULT_ROOT;
 const SRC_ROOT = join(REPO_ROOT, "src");
 
 // ---------------------------------------------------------------------------
@@ -34,6 +36,7 @@ const SRC_ROOT = join(REPO_ROOT, "src");
 
 /** 递归收集目录下所有匹配后缀的文件。 */
 function collectFiles(dir, suffix) {
+  if (!existsSync(dir)) return [];
   const out = [];
   for (const entry of readdirSync(dir)) {
     const full = join(dir, entry);
@@ -46,16 +49,20 @@ function collectFiles(dir, suffix) {
   return out;
 }
 
-/** 提取工具注册名：src/tool/builtin/*.ts 与 law-search-tool.ts 的 name: "…"。 */
+/** 提取工具注册名：builtin / literature / legal 的 name: "…" 与 *_TOOL_NAME 常量。 */
 function collectToolNames() {
   const files = [
     ...collectFiles(join(SRC_ROOT, "tool", "builtin"), ".ts"),
-    join(SRC_ROOT, "knowledge", "legal", "law-search-tool.ts"),
+    ...collectFiles(join(SRC_ROOT, "literature", "tool"), ".ts"),
+    ...collectFiles(join(SRC_ROOT, "knowledge", "legal"), ".ts"),
   ];
   const names = new Set();
   for (const file of files) {
     const text = readFileSync(file, "utf8");
     for (const m of text.matchAll(/name:\s*"([a-z][a-z0-9_]{1,60})"/g)) {
+      names.add(m[1]);
+    }
+    for (const m of text.matchAll(/TOOL_NAME\s*=\s*"([a-z][a-z0-9_]{1,60})"/g)) {
       names.add(m[1]);
     }
   }
@@ -117,20 +124,47 @@ function collectAtomNames() {
 // 引用提取
 // ---------------------------------------------------------------------------
 
-/** cap01 手册中全部 `code` 标识符（小写开头，字母/数字/下划线/连字符）。 */
-function collectManualRefs() {
-  const text = readFileSync(join(REPO_ROOT, "assets", "prompts", "patent", "cap01-orchestrator.md"), "utf8");
-  const refs = new Set();
-  for (const m of text.matchAll(/`([a-z][a-z0-9_-]{1,60})`/g)) {
-    refs.add(m[1]);
+/**
+ * 文档中的工具形引用：反引号内、至少含一个下划线的 snake_case token。
+ * 扫描面：patent 提示词、全部 SKILL.md、规则文档（#714 起从 cap01 单点扩面）。
+ */
+const TOOL_IDENTIFIER_RE = /`([a-z][a-z0-9]*(?:_[a-z0-9]+)+)`/g;
+
+export function collectToolIdentifiers(markdown) {
+  const refs = [];
+  for (const m of markdown.matchAll(TOOL_IDENTIFIER_RE)) {
+    refs.push(m[1]);
   }
   return refs;
+}
+
+/** 收集全部文档引用（带文件:行，便于定位）。 */
+function collectMarkdownRefs() {
+  const files = [
+    ...collectFiles(join(REPO_ROOT, "assets", "prompts", "patent"), ".md"),
+    ...collectFiles(join(REPO_ROOT, "skills"), "SKILL.md"),
+    ...collectFiles(join(REPO_ROOT, "rules"), ".md"),
+  ];
+  const refs = [];
+  for (const file of files) {
+    const text = readFileSync(file, "utf8");
+    for (const m of text.matchAll(TOOL_IDENTIFIER_RE)) {
+      const line = text.slice(0, m.index ?? 0).split("\n").length;
+      refs.push({ ref: m[1], location: `${relativeToRoot(file)}:${line}` });
+    }
+  }
+  return refs;
+}
+
+function relativeToRoot(file) {
+  return file.startsWith(`${REPO_ROOT}/`) ? file.slice(REPO_ROOT.length + 1) : file;
 }
 
 /** workflow YAML 的 worker 字段引用。 */
 function collectYamlWorkers() {
   const dir = join(REPO_ROOT, "assets", "workflows", "patent");
   const refs = new Set();
+  if (!existsSync(dir)) return refs;
   for (const file of readdirSync(dir).filter(f => f.endsWith(".yaml"))) {
     const text = readFileSync(join(dir, file), "utf8");
     for (const m of text.matchAll(/^\s*worker:\s*([a-z][a-z0-9_-]*)/gm)) {
@@ -221,48 +255,124 @@ const ALLOWLIST = new Set([
   // 规划中的 orchestrator 角色（无 SKILL.md，见 cap01 头注）
   "patent_orchestrator",
   "patent-orchestrator",
+  // 提示词输入变量 / 输出字段（非工具，扫描扩面后登记）
+  "legal_basis",
+  "claim_text",
+  "prior_art_context",
+  "technical_field",
+  "examiner_rejection",
+  "image_path",
+  "claim_context",
+  "figure_analysis",
+  "review_pending",
+  "finalize_ready",
+  "escalate_human",
+  "set_gaps",
+  "recall_check",
+  "refine_query",
+  "citation_gate",
+  // 工具参数 / 运行配置 / 技能元数据字段
+  "max_turns",
+  "max_tool_calls",
+  "timeout_ms",
+  "total_tokens",
+  "duration_ms",
+  "without_skill",
+  "best_description",
+  "available_skills",
+  "figure_count",
+  "figure_no",
+  "svg_paths",
+  "at_mm",
+  "label_offset_mm",
+  // 规则引擎的 check.type / 阶段名 / 领域名（非工具）
+  "keyword_blocklist",
+  "pattern_analysis",
+  "structural_analysis",
+  "citation_analysis",
+  "fix_suggestion",
+  "pre_execution",
+  "post_execution",
+  "approval_pending",
+  "patent_novelty",
+  "patent_inventiveness",
+  // workflow 阶段 id（非工具）
+  "figure_generate",
+  // 第三方站点工具 / 环境变量 / 平台字段
+  "get_patent_metadata",
+  "present_files",
+  "https_proxy",
+  "http_proxy",
+  "in_trash",
+  "meeting_notes",
+  "data_source_id",
 ]);
 
 // ---------------------------------------------------------------------------
 // 主流程
 // ---------------------------------------------------------------------------
 
-const toolNames = collectToolNames();
-const subagentTypes = collectSubagentTypes();
-const workers = collectWorkers();
-const manifestIds = collectManifestIds();
-const atomNames = collectAtomNames();
+function main() {
+  const toolNames = collectToolNames();
+  const subagentTypes = collectSubagentTypes();
+  const workers = collectWorkers();
+  const manifestIds = collectManifestIds();
+  const atomNames = collectAtomNames();
 
-const missing = [];
-const classify = ref => {
-  if (toolNames.has(ref)) return "tool";
-  if (subagentTypes.has(ref)) return "subagent_type";
-  if (workers.has(ref)) return "worker";
-  if (manifestIds.has(ref)) return "manifest";
-  if (atomNames.has(ref)) return "atom";
-  return undefined;
-};
+  /** 已知幽灵引用的建议替代项（只用于报错提示，不参与放行判定）。 */
+  const REFERENCE_SUGGESTIONS = {
+    patent_kg_search: "patent_kg_query",
+    patent_kg_path: "patent_kg_query",
+    patent_rag: "law_search / law_verify",
+    patent_law: "law_search / law_verify",
+    get_patent_metadata: "patent_metadata",
+    figure_generate: "patent_figure_generate",
+  };
 
-for (const ref of collectManualRefs()) {
-  if (classify(ref) === undefined && !ALLOWLIST.has(ref)) {
-    missing.push(`cap01-orchestrator.md: 未知引用 "${ref}"（工具/角色/worker 均未命中，白名单未覆盖）`);
+  const suggestionFor = ref => {
+    const exact = REFERENCE_SUGGESTIONS[ref];
+    if (exact) return `（疑似替代：${exact}）`;
+    const prefix = ref.slice(0, ref.lastIndexOf("_") + 1);
+    const sameFamily = [...toolNames].filter(name => name.startsWith(prefix));
+    return sameFamily.length > 0 ? `（同前缀工具：${sameFamily.slice(0, 3).join(", ")}）` : "";
+  };
+
+  const missing = [];
+  const classify = ref => {
+    if (toolNames.has(ref)) return "tool";
+    if (subagentTypes.has(ref)) return "subagent_type";
+    if (workers.has(ref)) return "worker";
+    if (manifestIds.has(ref)) return "manifest";
+    if (atomNames.has(ref)) return "atom";
+    return undefined;
+  };
+
+  for (const { ref, location } of collectMarkdownRefs()) {
+    if (classify(ref) === undefined && !ALLOWLIST.has(ref)) {
+      missing.push(`${location}: 未知引用 "${ref}"（工具/角色/worker 均未命中，白名单未覆盖）${suggestionFor(ref)}`);
+    }
   }
-}
-for (const ref of collectYamlWorkers()) {
-  if (classify(ref) === undefined && !ALLOWLIST.has(ref)) {
-    missing.push(`workflow yaml: 未知 worker "${ref}"`);
+  for (const ref of collectYamlWorkers()) {
+    if (classify(ref) === undefined && !ALLOWLIST.has(ref)) {
+      missing.push(`workflow yaml: 未知 worker "${ref}"`);
+    }
   }
+  return { missing, counts: { tools: toolNames.size, subagentTypes: subagentTypes.size, workers: workers.size } };
 }
 
-if (missing.length > 0) {
-  console.error(`check-patent-sop-references: ${missing.length} 处引用未在代码中登记：`);
-  for (const line of missing) console.error(`  - ${line}`);
-  console.error(
-    "处理方式：① 真实存在的引用加入权威清单提取（工具 name/角色 SKILL.md/worker 契约）；" +
-      "② 规划中的引用加入白名单并注明迭代；③ 幽灵引用应删除而非入白名单。",
+const isMain = process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (isMain) {
+  const { missing, counts } = main();
+  if (missing.length > 0) {
+    console.error(`check-patent-sop-references: ${missing.length} 处引用未在代码中登记：`);
+    for (const line of missing) console.error(`  - ${line}`);
+    console.error(
+      "处理方式：① 真实存在的引用加入权威清单提取（工具 name/角色 SKILL.md/worker 契约）；" +
+        "② 规划中的引用加入白名单并注明迭代；③ 幽灵引用应删除而非入白名单。",
+    );
+    process.exit(1);
+  }
+  console.log(
+    `check-patent-sop-references: fresh（tools=${counts.tools}, subagent_types=${counts.subagentTypes}, workers=${counts.workers}）`,
   );
-  process.exit(1);
 }
-console.log(
-  `check-patent-sop-references: fresh（tools=${toolNames.size}, subagent_types=${subagentTypes.size}, workers=${workers.size}）`,
-);
