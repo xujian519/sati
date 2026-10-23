@@ -10,7 +10,7 @@
 | src TS 文件 / 行数 | 1144 / 200144 |
 | src JS 文件 | 0 |
 | tests 文件 | 668 |
-| ui/src 文件 / 行数 | 684 / 105037 |
+| ui/src 文件 / 行数 | 697 / 105574 |
 | ui/server 文件 / 行数 | 149 / 38859 |
 
 ## 指标口径
@@ -58,7 +58,6 @@
 | `ui/src/components/main-content-v2/CronV2.tsx` | `CronFormView` | 476 | function |
 | `ui/src/components/chat/hooks/useChatComposerState.ts` | `useChatComposerState` | 462 | function |
 | `ui/src/components/settings/view/modelPool/components/ProviderCard.tsx` | `ProviderCard` | 447 | function |
-| `ui/src/components/chat-v2/MessageRowV2.tsx` | `MessageRowV2` | 429 | function |
 | `ui/src/components/settings/view/integrations/im/components/FeishuChannelSection.tsx` | `FeishuChannelSection` | 423 | function |
 | `ui/src/components/code-editor/view/subcomponents/DocxBuiltinPreview.tsx` | `DocxBuiltinPreview` | 422 | function |
 | `ui/src/components/chat-v2/processGrouping.test.ts` | `(anonymous)` | 409 | arrow |
@@ -79,7 +78,6 @@
 | `ui/src/stores/useSessionStore.actions.test.tsx` | `(anonymous)` | 354 | arrow |
 | `ui/src/components/main-content/view/MainContent.tsx` | `MainContent` | 346 | function |
 | `ui/src/components/chat-v2/MessagesPaneV2.tsx` | `MessagesPaneV2` | 338 | function |
-| `ui/src/components/chat/view/subcomponents/MessageComponent.tsx` | `(anonymous)` | 335 | arrow |
 | `ui/src/components/main-content-v2/PlansAndCronJobs.tsx` | `PlansAndCronJobs` | 334 | function |
 | `ui/src/components/main-content-v2/DashboardV2.tsx` | `DashboardV2` | 332 | function |
 | `ui/src/hooks/useSatiConfig.ts` | `useSatiConfigState` | 332 | function |
@@ -87,7 +85,6 @@
 | `ui/src/components/code-editor/view/CodeEditor.tsx` | `CodeEditor` | 326 | function |
 | `ui/src/components/annotation/view/Annotator.tsx` | `Annotator` | 322 | function |
 | `src/tool/builtin/patentFigureProject.ts` | `createPatentFigureProjectTool` | 313 | function |
-| `ui/src/components/chat-v2/SubagentDetailMessageFlow.tsx` | `SubagentDetailMessageFlow` | 309 | function |
 | `ui/src/components/settings/view/integrations/im/components/WeixinChannelSection.tsx` | `WeixinChannelSection` | 300 | function |
 
 ## Top 30 大文件

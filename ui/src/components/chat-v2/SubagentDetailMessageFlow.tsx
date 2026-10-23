@@ -9,16 +9,16 @@ import { ProcessLiveStatus, StreamingThinkingPreview, type ProcessTraceStep } fr
 import {
   buildRenderableMessageItems,
   getLiveProcessGroups,
-  getLiveProcessGroupStep,
   getProcessToolKind,
   shouldRenderLiveProcessGroup,
-  splitLiveProcessGroupDetailMessages,
   type LiveProcessGroup,
   type ProcessAttachment,
   type RenderableMessageItem,
 } from "./processGrouping";
 import { useChatHistorySearch } from "./useChatHistorySearch";
 import type { SearchableChatMessageInput } from "./chatHistorySearchUtils";
+import { getMessageKey, isStreamingSubagentThinkingMessage } from "./subagentDetailKeys";
+import { useLiveProcessGroupRenderers } from "./subagentDetailRenderers";
 
 interface SubagentDetailMessageFlowProps {
   messages: ChatMessage[];
@@ -35,16 +35,6 @@ type KeyedRenderableMessageItem = RenderableMessageItem & {
   itemKey: string;
   renderIndex: number;
 };
-
-function getMessageKey(message: ChatMessage, index: number): string {
-  return String(
-    message.id || message.toolId || message.activityId || message.runId || `${message.timestamp || "message"}-${index}`,
-  );
-}
-
-function isStreamingSubagentThinkingMessage(message: ChatMessage): boolean {
-  return Boolean(message.isThinking && String(message.id || "").startsWith("__subagent_thinking_"));
-}
 
 function processAttachmentOverlapsLiveGroup(attachment: ProcessAttachment, liveGroups: LiveProcessGroup[]): boolean {
   return liveGroups.some(group => attachment.startIndex <= group.endIndex && attachment.endIndex >= group.startIndex);
@@ -232,67 +222,19 @@ export default function SubagentDetailMessageFlow({
     captureFindShortcutInModal: true,
   });
 
-  const renderLiveProcessDetailMessages = useCallback(
-    (detailMessages: ChatMessage[], groupId: string) => {
-      return detailMessages.map((message, index) => (
-        <MessageRowV2
-          key={`${groupId}-${index}-${getMessageKey(message, index)}`}
-          message={message}
-          prevMessage={index > 0 ? detailMessages[index - 1] : null}
-          nextMessage={index < detailMessages.length - 1 ? detailMessages[index + 1] : null}
-          provider={provider}
-          selectedProject={selectedProject}
-          createDiff={createDiff}
-          onFileOpen={onFileOpen}
-          showThinking={showThinking}
-          isProcessExpanded={isProcessExpanded}
-          onProcessExpandedChange={handleProcessExpandedChange}
-        />
-      ));
-    },
-    [createDiff, handleProcessExpandedChange, isProcessExpanded, onFileOpen, provider, selectedProject, showThinking],
-  );
-
-  const renderLiveProcessGroup = useCallback(
-    (group: LiveProcessGroup, index: number) => {
-      const isLatestGroup = liveProcessGroups[liveProcessGroups.length - 1]?.id === group.id;
-      const step = getLiveProcessGroupStep(group, t, group.isRunning && isLatestGroup ? thinkingStatusStep : null);
-      const expanded = isProcessExpanded(group.id);
-      const { beforeStatusMessages, statusDetailMessages } = splitLiveProcessGroupDetailMessages(group);
-      const showStreamingThinkingBeforeStatus = Boolean(streamingThinkingContent && group.isRunning && isLatestGroup);
-      return (
-        <Fragment key={group.id || `${group.afterOriginalIndex}-${index}`}>
-          {expanded && beforeStatusMessages.length > 0 ? (
-            <div className="pl-5">
-              {renderLiveProcessDetailMessages(beforeStatusMessages, `${group.id}-before-status`)}
-            </div>
-          ) : null}
-          {showStreamingThinkingBeforeStatus ? (
-            <div className="pl-5">
-              <StreamingThinkingPreview content={streamingThinkingContent!} />
-            </div>
-          ) : null}
-          <ProcessLiveStatus
-            step={step}
-            compact
-            expanded={expanded}
-            onExpandedChange={expanded => handleProcessExpandedChange(group.id, expanded)}
-          >
-            {statusDetailMessages.length > 0 ? renderLiveProcessDetailMessages(statusDetailMessages, group.id) : null}
-          </ProcessLiveStatus>
-        </Fragment>
-      );
-    },
-    [
-      handleProcessExpandedChange,
-      isProcessExpanded,
-      liveProcessGroups,
-      renderLiveProcessDetailMessages,
-      streamingThinkingContent,
-      t,
-      thinkingStatusStep,
-    ],
-  );
+  const { renderLiveProcessGroup } = useLiveProcessGroupRenderers({
+    provider,
+    selectedProject,
+    createDiff,
+    onFileOpen,
+    showThinking,
+    isProcessExpanded,
+    onProcessExpandedChange: handleProcessExpandedChange,
+    liveProcessGroups,
+    streamingThinkingContent,
+    thinkingStatusStep,
+    t,
+  });
 
   if (
     keyedItems.length === 0 &&
