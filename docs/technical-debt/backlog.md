@@ -2354,7 +2354,7 @@
 - [x] **B1.1** `ui/src/stores/useSessionStore.ts` — `createSessionActions`（624 → **67** 行；判据 ≤350 达成）（`a17297ef`；文件 **1348 → 133** 行（≤800），file-size 存量豁免 **40 → 39**（BF-09 脱表）；拆为 `sessionStoreCore.ts`（684 行：类型 + 合并/去重/URL 纯函数）+ `sessionActions/` 四组普通函数工厂（context 61 / server 202 / stream 211 / activity 37 / subagent 154，均 ≤211 行）——同一 `storeRef` 经 deps 传入、**不拆子 hook**，return 28 键顺序不变；逐 token **68/69**（唯一差异为 `INVISIBLE_REALTIME_KINDS` 加 export 后 biome 折行补尾逗号）；负控制共享键 **18/18 红** + patch 顺序翻转 **1/18 红**；决策见 `docs/notes/implemented/2026-10-23-session-store-actions-factories.md`）
 - [x] **B1.2** `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` — `useChatRealtimeHandlers`（721 → **103** 行；判据两函数各 ≤350 达成）（`46611401`；hook 变薄为 refs + `useSessionStatusRetryTimers` + `useMemo(createChatRealtimeMessageHandler)` + subscribe effect；工厂落 `chatRealtimeHandlers.ts`（253 行，`createChatRealtimeMessageHandler` 231 行），7 条 kind 注册项保持原派发顺序；决策见 `docs/notes/implemented/2026-10-23-chat-realtime-handlers-registry-split.md`）
 - [x] **B1.2** `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` — `(anonymous)`（匿名 handleMessage）（624 → **95** 行；判据两函数各 ≤350 达成）（`46611401`；3 个 legacy case 外移 `chatRealtimeLegacyHandlers.ts`（190 行），10 类副作用外移 `chatRealtimeSideEffects.ts`（359 行），14 项纯工具外移 `chatRealtimeMessageUtils.ts`（212 行）；逐段 token 对拍 43/43；三负控制按预期转红——状态重试 1F/7P、投影新鲜度 1F/7P、文案复制 proof 42/43 + tests 8/8）
-- [ ] **B1.3** `ui/src/hooks/useProjectsState.ts` — `useProjectsState`（647 行）
+- [x] **B1.3** `ui/src/hooks/useProjectsState.ts` — `useProjectsState`（647 → **367** 行；判据 ≤400 达成；文件 900 → 586）（`782e4d73`；settings / optimistic / selection 三簇外置为 `useProjectSettingsPanel` / `useProjectOptimisticUpdates` / `useProjectSelectionActions`，共享谓词入 `projectSessionUtils`；state/ref/effect 顺序与 return 34 键序逐 token 一致；新增 jsdom 19 例；决策见 `docs/notes/implemented/2026-10-23-projects-state-cluster-split.md`）
 
 **B2 · chat 主链路（D24–D29，子件先、枢纽后）**
 
@@ -2429,13 +2429,14 @@
 - [x] **P2**（P2.9）`src/tool/execution/ToolRuntime.ts` — `execute`（388 → **16** 行；判据 ≤200 达成）（`1fd45f71`；五阶段私有方法 `preflight`/`applyPreToolUseHooks`/`resolvePermission`/`runTool` 保持审计/事件/证据顺序；`toolErrorFormatting.ts`（69 行）与 `planModePreflight.ts`（77 行）外移使文件 710 → 683（≤800）；185 定向测试 + 2 负控制（alwaysAsk 声明式 allow、timeout 归一）各按预期 1 红后恢复；决策同上）
 - [x] **P2**（P2.10）`src/patent/graph/domains/inventiveness.ts` — `buildInventivenessGraph`（342 → **21** 行；判据「图构建声明化」达成）（`1fd45f71`；`STAGE_NODES`/`STAGE_EDGES` 表驱动，开关决议纯函数 `resolveGraphFlags`/`normalizeMaxRounds`；14/14 组合 `describe()` 逐字节一致、10/10 运行 state/degraded/interrupted/prompt 多重集一致；负控制 maxRounds=0 与 citationGate 各按预期 1/3 红；文件 633 → 696；决策同上）
 
-### 38.2 ≥800 行文件（38 个：承接 12 + 未承接 26）
+### 38.2 ≥800 行文件（37 个：承接 11 + 未承接 26）
 
 > 承接 = 计划条目的拆分会使该文件降到 800 以下或另有明确目标；未承接 = 转 §38.3 的 sweep 后条目（**不进 45/50 天承诺面**，不静默）。注：`InProcessGateway.ts` 只拆函数不拆文件，故按未承接计。
 > *（P2.7 回填：原表 42 个 = 承接 16 + 未承接 26；`src/cli/sati.ts` 经 P2.7 降到 14 行已不在表内，故承接 16 → 15、总数 42 → 41，与 `architecture-baseline.json` 存量豁免 42 → 41 同步。）*
 > *（P2.8 回填：`src/adapters/channel/tui/app/TuiApp.tsx` 经 P2.8 降到 184 行已不在表内，故承接 15 → 14、总数 41 → 40，与 `architecture-baseline.json` 存量豁免 41 → 40 同步。）*
 > *（B1.1 回填：`ui/src/stores/useSessionStore.ts` 经 B1.1 降到 133 行已不在表内，故承接 14 → 13、总数 40 → 39，与 `architecture-baseline.json` 存量豁免 40 → 39 同步。）*
 > *（B1.2 回填：`ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` 经 B1.2 降到 114 行已不在表内，故承接 13 → 12、总数 39 → 38，与 `architecture-baseline.json` 存量豁免 39 → 38 同步。）*
+> *（B1.3 回填：`ui/src/hooks/useProjectsState.ts` 经 B1.3 降到 586 行已不在表内，故承接 12 → 11、总数 38 → 37，与 `architecture-baseline.json` 存量豁免 38 → 37 同步。）*
 
 - [ ] **BF-01** `ui/server/sati-bridge.js` — 2347 行 · 未承接 → PS-01
 - [ ] **BF-02** `src/adapters/channel/wecom/WeComChannel.ts` — 1763 行 · 未承接 → PS-02
@@ -2471,7 +2472,7 @@
 - [ ] **BF-32** `src/context/DefaultContextRuntime.ts` — 953 行 · 未承接 → PS-20
 - [ ] **BF-33** `src/pilot/config/loadPilotConfig.ts` — 921 行 · 未承接 → PS-21
 - [ ] **BF-34** `src/patent/figuregen/inkscape-renderer.ts` — 915 行 · 未承接 → PS-22
-- [ ] **BF-35** `ui/src/hooks/useProjectsState.ts` — 900 行 · 承接：**B1.3**
+- [x] **BF-35** `ui/src/hooks/useProjectsState.ts` — 900 行 · 承接：**B1.3** —— **已交付（2026-10-23，`782e4d73`）：900 → 586 行**（metrics 口径 901 → 587；脱表，见 §38.2 抬头回填；`useProjectsState` 647 → 367 行）
 - [ ] **BF-36** `ui/src/components/app-shell/AppShellV2.tsx` — 894 行 · 承接：**B3.3**
 - [ ] **BF-37** `ui/src/components/chat/tools/configs/toolConfigs.ts` — 863 行 · 未承接 → PS-23
 - [ ] **BF-38** `ui/server/services/satiConfig.js` — 857 行 · 未承接 → PS-24
