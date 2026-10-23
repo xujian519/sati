@@ -1,6 +1,6 @@
 # HTML 标注能力 —— 计划（参照 dsh-annotator）
 
-> 状态：**计划 v2 已获裁定；P0–H4 已合入 main；H5（互通与收尾）已实现（本 PR）——H 系列全部落地；发布门控保持默认关闭（开启条件见 §6 H5）**
+> 状态：**计划 v2 已获裁定；P0–H4 已合入 main；H5（互通与收尾）已实现——H 系列全部落地；发布门控已于 2026-10-23 默认开启（#624，见 §6 H5）**
 > 裁定记录（2026-10-08，用户）：D0 先独立修复 P0；D1 允许沙箱内脚本；D5 固定 1024×768 视口；D4 Sati 侧修、dsh 侧另议。D2、D3、D6 沿用推荐项，未单独裁定。
 > 参照实现：`/Users/xujian/projects/dsh-annotator`（DSH 插件，已实现 HTML 标注）
 > 上游方案：`docs/document-annotation-plan.md`（图片族 + sidecar v2，已落地）
@@ -231,7 +231,7 @@ MutationObserver(attributes+childList)    文档 nonce 匹配，字段类型与�
 | Sati→dsh | selector 超 400 被静默截断 | 不可解析前缀 | §3.2 超长即不输出并告警 |
 | Sati→dsh | `anchor.text` 无上限 | dsh 不校验 | Sati 侧截到 80 |
 | 读→存 round-trip ★ | Sati 读 dsh 文件后再存，dsh 独有字段（若有）丢失；dsh 读 Sati 文件后再存，`targetFingerprint` 丢失 | 静默丢字段 | H5 增加「读→存→读」不变量测试；丢失字段列入清单 |
-| **旧版 Sati 读到新版 kind（B3）** ★ | 旧版 `isTargetInfo` 拒绝 `kind:"html"` → 视为未标注 → 保存时**覆盖侧车** | **静默覆盖** | **发布门控**：HTML 写入（`kind:"html"`）仅在所有读者升级后开启，由配置开关控制；H1 内以开关默认关闭；在决策记录中写明升级顺序 |
+| **旧版 Sati 读到新版 kind（B3）** ★ | 旧版 `isTargetInfo` 拒绝 `kind:"html"` → 视为未标注 → 保存时**覆盖侧车** | **静默覆盖** | **发布门控**：HTML 写入（`kind:"html"`）仅在所有读者升级后开启，由配置开关控制；H1 落地时默认关闭，2026-10-23 按升级确认开启（#624） |
 | 双写冲突 | 两插件先后保存同一 HTML | 后者覆盖 | 与图片族一致：各自只读写自己的形状，记为已知分叉 |
 
 **两边必须对齐的常量与语法**：`RENDER_WIDTH = 1024`；selector 语法（`tag:nth-of-type(n)`、`#id` 截断条件、`body` 起）；id 合法性规则；anchor.text 截断 80；selector 上限 400。
@@ -311,18 +311,18 @@ DoD：#0 与 #1 必须先于其他项；每项记录命令或工具、时间、�
 - #1 的回退方案在 H2/H3 定稿（三候选）：A = `SameSite=None; Secure` 的路径限定 cookie（仅可信源可用，需安全评估与降级提示）；B = annotate 模式服务端内联相对资源（自包含化）；C = 接受限制并提示。倾向 A（+ 非可信源降级提示）。
 - 其余假设维持，§4.2/§4.6/§3.2 均有实测证据补强。
 
-### H1 — 契约层（无用户可见变化；HTML 写入默认关闭）
+### H1 — 契约层（无用户可见变化；HTML 写入当时默认关闭，2026-10-23 开启）
 
 **状态：已实现（PR #618）**。落地说明：
 
-- 发布门控在 `saveAnnotation` **强制**（开关未开启即拒绝写 `kind:"html"`），不只靠 UI 约定；开关为 `VITE_ENABLE_HTML_ANNOTATION`（默认关）。
+- 发布门控在 `saveAnnotation` **强制**（开关关闭时拒绝写 `kind:"html"`），不只靠 UI 约定；开关为 `VITE_ENABLE_HTML_ANNOTATION`（H1 落地时默认关，2026-10-23 起默认开，见 §6 H5）。
 - v2 一致性校验为 `kind↔mediaType` 成对（`html` 只配 `text/html`，反之亦然）；`width` 只要求正数（非 1024 只告警不拒绝）。
 - 读取路径对未知字段是透传的（`selector` 原始数据不会丢），H1 补齐类型、`readAnchor` 与 `describeAnchor`（selector 最高优先级；id/title ≤200、text ≤80、去换行、转义引号与反斜杠）。
 - 未做（随 H3）：渲染宽度常量与「非 1024 告警」的界面落点。
 
 - `kind` 加 `html`；`selector`；`readLegacyFigure` 推导 kind；`kind`↔`mediaType` 一致性；width 告警规则；`describeAnchor` 限长转义。
 - `referenceSurfaceOf` 返回 `"html"`；`locator.surface` 拓宽。
-- **发布门控开关**（默认关）：控制是否写 `kind:"html"`。
+- **发布门控开关**：控制是否写 `kind:"html"`（H1 落地时默认关；2026-10-23 起默认开）。
 - 决策记录同一 PR 落地，含 `## Alternatives considered`（至少：方案 B、方案 C、方案 D、不做发布门控、仅 dsh 侧修复）。
 - 测试：dsh v1 HTML 夹具读回（kind 推导 + selector 保留）；未知 kind 旧读者行为；kind↔mediaType 不一致拒绝；注入样例的提示块转义。
 - DoD：`pnpm check` 通过；SVG/栅格零行为变化。
@@ -382,11 +382,11 @@ DoD：#0 与 #1 必须先于其他项；每项记录命令或工具、时间、�
 **状态：已实现（本 PR）**：
 
 - **双向互读与不变量**：dsh 写的 v1 HTML 侧车在 Sati 读为 `kind:"html"`、`selector`/`figureFingerprint→targetFingerprint` 保留；「读 dsh v1 → 存 v2 → 再读」不变量有单测（丢失项与 §4.6 清单一致）；dsh 读 Sati v2 的实测见 H0 #5。
-- **发布门控开启条件**：默认保持关闭；确认工作区所有读者（dsh 及在用 Sati 版本）均含 kind-aware 读取后，再显式置 `VITE_ENABLE_HTML_ANNOTATION=true`（决策记录已写明，开启是人工确认动作）。
+- **发布门控已开启（2026-10-23，#624）**：默认允许写 `kind:"html"`；显式 `VITE_ENABLE_HTML_ANNOTATION=false`（或 `0`）仍可关闭。开启前核对：在用 Sati 桌面端 v0.3.7（含 H1 契约层）、工作区无既有 `*.html.annot.json`；dsh 读侧保留标注、按 `mediaType` 往返（dsh-annotator#5 的保真度缺口仍在跟踪）。决策与取舍见 `docs/notes/implemented/2026-10-23-html-annotation-gate-opened.md`。
 - **收尾**：决策记录转 `docs/notes/implemented/2026-10-08-html-annotation.md`；`docs/document-annotation-plan.md` 状态行与阶段清单加入 HTML 行；技术债基线同 PR 刷新。
 
 - dsh 夹具双向互读；「读→存→读」不变量测试；互通清单写入决策记录。
-- 发布门控的开启条件：确认所有读者已升级，再开启写入。
+- 发布门控的开启条件：确认所有读者已升级，再开启写入（2026-10-23 已按条件开启）。
 - 技术债基线 `pnpm measure:update`（同 PR）。
 - `docs/document-annotation-plan.md` 状态表加 HTML 行；决策记录转 `implemented/`。
 
@@ -405,7 +405,7 @@ DoD：#0 与 #1 必须先于其他项；每项记录命令或工具、时间、�
 2. 三个含脚本模板在「标注」模式下图表正常呈现。
 3. 抽样 20 个可解析元素，selector 在源文件中命中同一元素；运行时节点不输出 selector。
 4. dsh 写的 HTML 侧车在 Sati 中显示为 HTML 面（非 SVG），锚点保留；Sati 写的侧车 dsh 能读，`targetFingerprint` 丢失已记入清单。
-5. 发布门控关闭时，旧版读者行为不变；开启前已完成升级顺序确认。
+5. 发布门控默认开启（2026-10-23，显式 `false`/`0` 可关闭）；开启前已完成读者升级确认，旧版读者行为不受本次改动影响。
 6. 查看模式的无参数预览正文与改动前逐字节一致。
 7. `pnpm check` 通过；无文件被标注写入（磁盘校验）。
 
@@ -432,7 +432,7 @@ DoD：#0 与 #1 必须先于其他项；每项记录命令或工具、时间、�
 | **D3** | 外部资源：allowlist（jsdelivr、googleapis、gstatic）还是全拦？ | **allowlist** | 全拦：图表库与字体失效，回到 B 的问题 |
 | **D4** | 与 dsh 互通的范围？ | **互通 = selector 在源文件可解析 + 已知缺口有处理**；dsh 侧 400 截断、id 转义、`targetFingerprint` 丢弃需用户确认是否排期修改 dsh | 不互通：同一文件两插件各存各的，且 dsh 写的 HTML 会被 Sati 误读为 SVG（必须修的一条不受此决定影响） |
 | **D5** | 100vh 与高度策略 | **(b) 固定 1024×768 视口 + 框内滚动** | (a) scrollHeight 定高：仅对非 vh 文档正确；(d) 按幻灯片分页：deck 更自然，但要新增分页模型 |
-| **D6** | 发布门控：HTML 写入是否默认关闭，待所有读者升级后开启？ | **是** | 否：旧版 Sati 会静默覆盖 HTML 侧车（B3） |
+| **D6** | 发布门控：HTML 写入是否默认关闭，待所有读者升级后开启？ | **是（2026-10-23 已开启，保留显式关闭）** | 否：旧版 Sati 会静默覆盖 HTML 侧车（B3） |
 
 ## 10. 风险
 
@@ -468,4 +468,4 @@ DoD：#0 与 #1 必须先于其他项；每项记录命令或工具、时间、�
 3. ✅ H0 spike（#0、#1 优先）：结论已回写本文件 §6 与 §10（2026-10-08）。
 4. ✅ HTML 标注决策记录：已转 `docs/notes/implemented/2026-10-08-html-annotation.md`（H5 转正）。
 5. ✅ H1 契约层（PR #618）；✅ H2 渲染面与桥接（PR #619，回退方案定案 A）；✅ H3 UI 接入（PR #620 + #621 验收回填）。
-6. ✅ H4 发送通路与纪律（PR #622）；✅ H5 互通与收尾（本 PR，决策记录已转正）。**H 系列全部落地**；发布门控仍默认关闭，开启由用户按「所有读者已升级」条件人工执行。
+6. ✅ H4 发送通路与纪律（PR #622）；✅ H5 互通与收尾（决策记录已转正）。**H 系列全部落地**；✅ 发布门控开启（#624，2026-10-23，默认开启并保留显式关闭）。
