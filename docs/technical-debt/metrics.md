@@ -10,7 +10,7 @@
 | src TS 文件 / 行数 | 1144 / 200224 |
 | src JS 文件 | 0 |
 | tests 文件 | 669 |
-| ui/src 文件 / 行数 | 731 / 108638 |
+| ui/src 文件 / 行数 | 740 / 109531 |
 | ui/server 文件 / 行数 | 149 / 38859 |
 
 ## 指标口径
@@ -49,7 +49,6 @@
 | `ui/src/components/main-content-v2/FilesV2.tsx` | `FilesV2` | 832 | function |
 | `ui/src/components/git-panel/hooks/useGitPanelController.ts` | `useGitPanelController` | 704 | function |
 | `ui/src/components/main-content-v2/skills/import/ImportFromFolder.tsx` | `ImportFromFolder` | 688 | function |
-| `ui/src/components/chat-v2/ChatInterfaceV2.tsx` | `ChatInterfaceV2` | 668 | function |
 | `ui/src/components/onboarding/view/subcomponents/LlmConfigurationStep.tsx` | `LlmConfigurationStep` | 633 | function |
 | `ui/src/components/app-shell/AppShellV2.tsx` | `AppShellV2` | 632 | function |
 | `ui/src/components/main-content/view/MainContent.tsx` | `SplitBody` | 573 | function |
