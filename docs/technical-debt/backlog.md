@@ -2373,7 +2373,7 @@
 
 **B3 · app-shell（D30–D32）**
 
-- [ ] **B3.1** `ui/src/components/app-shell/SidebarV2.tsx` — `SidebarV2`（1014 行）
+- [x] **B3.1** `ui/src/components/app-shell/SidebarV2.tsx` — `SidebarV2`（1014 → **380** 行；判据 ≤400 达成）（`b35851255`；文件 **1322 → 426** 行，脱 §38.2 ≥800 清单、存量豁免 35 → 34（BF-12 脱表）；纯模型 `sidebarV2Model.ts`（169）+ 排序/宽度/重命名/右键菜单四个 hook（20/91/93/100）+ 会话行/项目组/指示器/头部/分区切换/两个分区/底部/菜单八个组件（272/119/43/67/64/82/48/61/57，均 ≤272）；逐 token **34 段 5231/5231**；effect 顺序一致，hook 多重集仅 +2 个稳定 `useCallback`（`closeContextMenu` / `resetSidebarWidth`）；负控制 1F/23P + 1F/23P + 文案对照（proof 红 / 测试 24/24 绿）；双视口 A/B **19/19**（移动端会话态未驱动，见 note）；新增 14 例 jsdom；决策见 `docs/notes/implemented/2026-10-24-sidebar-v2-cluster-split.md`）
 - [ ] **B3.2** `ui/src/components/app-shell/MainAreaV2.tsx` — `MainAreaV2Content`（381 行）
 - [ ] **B3.3** `ui/src/components/app-shell/AppShellV2.tsx` — `AppShellV2`（631 行）
 
@@ -2429,7 +2429,7 @@
 - [x] **P2**（P2.9）`src/tool/execution/ToolRuntime.ts` — `execute`（388 → **16** 行；判据 ≤200 达成）（`1fd45f71`；五阶段私有方法 `preflight`/`applyPreToolUseHooks`/`resolvePermission`/`runTool` 保持审计/事件/证据顺序；`toolErrorFormatting.ts`（69 行）与 `planModePreflight.ts`（77 行）外移使文件 710 → 683（≤800）；185 定向测试 + 2 负控制（alwaysAsk 声明式 allow、timeout 归一）各按预期 1 红后恢复；决策同上）
 - [x] **P2**（P2.10）`src/patent/graph/domains/inventiveness.ts` — `buildInventivenessGraph`（342 → **21** 行；判据「图构建声明化」达成）（`1fd45f71`；`STAGE_NODES`/`STAGE_EDGES` 表驱动，开关决议纯函数 `resolveGraphFlags`/`normalizeMaxRounds`；14/14 组合 `describe()` 逐字节一致、10/10 运行 state/degraded/interrupted/prompt 多重集一致；负控制 maxRounds=0 与 citationGate 各按预期 1/3 红；文件 633 → 696；决策同上）
 
-### 38.2 ≥800 行文件（35 个：承接 9 + 未承接 26）
+### 38.2 ≥800 行文件（34 个：承接 8 + 未承接 26）
 
 > 承接 = 计划条目的拆分会使该文件降到 800 以下或另有明确目标；未承接 = 转 §38.3 的 sweep 后条目（**不进 45/50 天承诺面**，不静默）。注：`InProcessGateway.ts` 只拆函数不拆文件，故按未承接计。
 > *（P2.7 回填：原表 42 个 = 承接 16 + 未承接 26；`src/cli/sati.ts` 经 P2.7 降到 14 行已不在表内，故承接 16 → 15、总数 42 → 41，与 `architecture-baseline.json` 存量豁免 42 → 41 同步。）*
@@ -2439,6 +2439,7 @@
 > *（B1.3 回填：`ui/src/hooks/useProjectsState.ts` 经 B1.3 降到 586 行已不在表内，故承接 12 → 11、总数 38 → 37，与 `architecture-baseline.json` 存量豁免 38 → 37 同步。）*
 > *（B2.1 回填：`ui/src/components/chat-v2/MessagesPaneV2.tsx` 经 B2.1 降到 360 行已不在表内，故承接 11 → 10、总数 37 → 36，与 `architecture-baseline.json` 存量豁免 37 → 36 同步。）*
 > *（B2.2 回填：`ui/src/components/chat-v2/ComposerV2.tsx` 经 B2.2 降到 508 行已不在表内，故承接 10 → 9、总数 36 → 35，与 `architecture-baseline.json` 存量豁免 36 → 35 同步。）*
+> *（B3.1 回填：`ui/src/components/app-shell/SidebarV2.tsx` 经 B3.1 降到 426 行已不在表内，故承接 9 → 8、总数 35 → 34，与 `architecture-baseline.json` 存量豁免 35 → 34 同步。）*
 
 - [ ] **BF-01** `ui/server/sati-bridge.js` — 2347 行 · 未承接 → PS-01
 - [ ] **BF-02** `src/adapters/channel/wecom/WeComChannel.ts` — 1763 行 · 未承接 → PS-02
@@ -2451,7 +2452,7 @@
 - [x] **BF-09** `ui/src/stores/useSessionStore.ts` — 1351 行 · 承接：**B1.1** —— **已交付（2026-10-23，`a17297ef`）：1348 → 133 行**（脱表，见 §38.2 抬头回填；`createSessionActions` 624 → 67 行，逻辑迁入 core + 四组 action factories）
 - [ ] **BF-10** `ui/src/components/main-content-v2/DashboardV2.tsx` — 1344 行 · 承接：**B4.1**
 - [ ] **BF-11** `src/adapters/channel/feishu/FeishuChannel.ts` — 1336 行 · 未承接 → PS-08
-- [ ] **BF-12** `ui/src/components/app-shell/SidebarV2.tsx` — 1322 行 · 承接：**B3.1**
+- [x] **BF-12** `ui/src/components/app-shell/SidebarV2.tsx` — 1322 行 · 承接：**B3.1** —— **已交付（2026-10-24，`b35851255`）：1322 → 426 行**（脱表，见 §38.2 抬头回填；`SidebarV2` 1014 → 380 行，会话行/项目组/右键菜单/resize/rename 五簇 + 八个渲染块外置）
 - [ ] **BF-13** `ui/src/components/chat-v2/processGrouping.ts` — 1293 行 · 未承接 → PS-09
 - [ ] **BF-14** `ui/src/components/chat-v2/MessagesPaneV2.render.test.tsx` — 1233 行 · 承接：**B5.5**
 - [ ] **BF-15** `ui/server/routes/config.js` — 1233 行 · 未承接 → PS-10

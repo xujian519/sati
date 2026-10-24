@@ -10,7 +10,7 @@
 | src TS 文件 / 行数 | 1144 / 200224 |
 | src JS 文件 | 0 |
 | tests 文件 | 669 |
-| ui/src 文件 / 行数 | 725 / 108891 |
+| ui/src 文件 / 行数 | 740 / 109531 |
 | ui/server 文件 / 行数 | 149 / 38859 |
 
 ## 指标口径
@@ -45,7 +45,6 @@
 
 | 文件 | 函数 | 行 | 类型 |
 |---|---|---|---|
-| `ui/src/components/app-shell/SidebarV2.tsx` | `SidebarV2` | 1014 | function |
 | `ui/src/components/chat-v2/MessagesPaneV2.render.test.tsx` | `(anonymous)` | 943 | arrow |
 | `ui/src/components/main-content-v2/FilesV2.tsx` | `FilesV2` | 832 | function |
 | `ui/src/components/git-panel/hooks/useGitPanelController.ts` | `useGitPanelController` | 704 | function |
@@ -63,6 +62,7 @@
 | `ui/src/components/settings/view/agentSearch/components/ToolsSection.tsx` | `ToolsSection` | 399 | function |
 | `ui/src/components/settings/view/integrations/im/components/WeComChannelSection.tsx` | `WeComChannelSection` | 395 | function |
 | `ui/src/components/chat-v2/ComposerV2.tsx` | `ComposerV2` | 387 | function |
+| `ui/src/components/app-shell/SidebarV2.tsx` | `SidebarV2` | 385 | function |
 | `ui/src/components/main-content-v2/CronV2.test.tsx` | `(anonymous)` | 384 | arrow |
 | `ui/src/components/app-shell/MainAreaV2.tsx` | `MainAreaV2Content` | 381 | function |
 | `ui/src/types/annotationReference.spec.ts` | `(anonymous)` | 381 | arrow |
@@ -94,7 +94,6 @@
 | `ui/src/components/main-content-v2/SkillsV2.tsx` | 1441 |
 | `src/adapters/channel/feishu/FeishuChannel.ts` | 1389 |
 | `ui/src/components/main-content-v2/DashboardV2.tsx` | 1345 |
-| `ui/src/components/app-shell/SidebarV2.tsx` | 1323 |
 | `ui/src/components/chat-v2/processGrouping.ts` | 1294 |
 | `src/adapters/channel/protocol/ImLiveReplyController.ts` | 1255 |
 | `ui/src/components/chat-v2/MessagesPaneV2.render.test.tsx` | 1235 |
@@ -114,6 +113,7 @@
 | `src/pilot/config/loadPilotConfig.ts` | 922 |
 | `src/patent/figuregen/inkscape-renderer.ts` | 916 |
 | `ui/src/components/app-shell/AppShellV2.tsx` | 897 |
+| `ui/src/components/chat/tools/configs/toolConfigs.ts` | 864 |
 
 ## vendored 子包（单列，不计入上述规模与排名）
 
