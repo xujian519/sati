@@ -129,11 +129,6 @@
     },
     {
       "rule": "file-size",
-      "file": "ui/src/components/app-shell/SidebarV2.tsx",
-      "lines": 1323
-    },
-    {
-      "rule": "file-size",
       "file": "ui/src/components/chat-v2/MessagesPaneV2.render.test.tsx",
       "lines": 1235
     },
