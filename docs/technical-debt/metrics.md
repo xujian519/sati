@@ -1,7 +1,7 @@
 # Sati 技术债务指标基线与趋势
 
 > 由 `node scripts/measure-techdebt.mjs --update` 自动生成，谨防手工编辑。
-> 最近一次快照：**2026-10-23**
+> 最近一次快照：**2026-10-24**
 
 ## 规模
 
@@ -10,7 +10,7 @@
 | src TS 文件 / 行数 | 1144 / 200224 |
 | src JS 文件 | 0 |
 | tests 文件 | 669 |
-| ui/src 文件 / 行数 | 716 / 107998 |
+| ui/src 文件 / 行数 | 725 / 108891 |
 | ui/server 文件 / 行数 | 149 / 38859 |
 
 ## 指标口径
@@ -50,7 +50,6 @@
 | `ui/src/components/main-content-v2/FilesV2.tsx` | `FilesV2` | 832 | function |
 | `ui/src/components/git-panel/hooks/useGitPanelController.ts` | `useGitPanelController` | 704 | function |
 | `ui/src/components/main-content-v2/skills/import/ImportFromFolder.tsx` | `ImportFromFolder` | 688 | function |
-| `ui/src/components/chat-v2/ChatInterfaceV2.tsx` | `ChatInterfaceV2` | 668 | function |
 | `ui/src/components/onboarding/view/subcomponents/LlmConfigurationStep.tsx` | `LlmConfigurationStep` | 633 | function |
 | `ui/src/components/app-shell/AppShellV2.tsx` | `AppShellV2` | 632 | function |
 | `ui/src/components/main-content/view/MainContent.tsx` | `SplitBody` | 573 | function |
