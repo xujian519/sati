@@ -59,11 +59,6 @@
     },
     {
       "rule": "file-size",
-      "file": "src/patent/evidence/engine.ts",
-      "lines": 842
-    },
-    {
-      "rule": "file-size",
       "file": "src/patent/figuregen/inkscape-renderer.ts",
       "lines": 916
     },

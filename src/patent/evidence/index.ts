@@ -6,7 +6,8 @@
  * - receipt.ts：工具调用账本（Receipt/Ledger）
  * - claimBinding.ts：结论 ↔ 证据绑定 + UnbackedClaims
  * - conflict.ts：冲突检测（claim 冲突 / source 冲突）
- * - engine.ts：领域判定（三性 / 举证责任 / 证明标准），经本文件 re-export
+ * - engine.ts：领域判定编排（三性 / 举证责任 / 证明标准），内部按职责
+ *   拆为 judgment / type-inference / four-elements / rule-evaluation，经本文件 re-export
  * - 本文件：EvidenceExtension 聚合（实现 tool 层 SatiEvidenceCollector）
  *
  * 账本层只做"记录与回溯"，可采性判断由 engine 承担。法条引用的形式核验
@@ -35,11 +36,11 @@ export { ClaimBinding, claimBindingRef, type UnbackedClaim } from "./claimBindin
 export { ConflictDetector, type EvidenceConflict } from "./conflict.js";
 export {
   EvidenceEngine,
-  inferEvidenceType,
-  evaluateFourElements,
   STANDARD_PREPONDERANCE,
   STANDARD_CLEAR_CONVINCING,
 } from "./engine.js";
+export { inferEvidenceType } from "./type-inference.js";
+export { evaluateFourElements } from "./four-elements.js";
 export type {
   EvidenceJudgment,
   DimensionJudgment,
