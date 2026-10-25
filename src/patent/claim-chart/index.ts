@@ -8,6 +8,8 @@ export {
   validateRowMapping,
   deriveNoveltyCoverage,
   deriveDistinguishingFeatures,
+  type NoveltyCoverage,
+  type DistinguishingFeatures,
 } from "./runtime/mapping-machine.js";
 export { detectGaps } from "./runtime/gap-detector.js";
 export {

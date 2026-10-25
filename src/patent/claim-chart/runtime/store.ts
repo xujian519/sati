@@ -8,7 +8,21 @@ import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { atomicWriteJson, assertSafeId } from "../../persist-utils.js";
 import { caseOutputsDir } from "../../paths.js";
-import type { ClaimChart } from "../protocol/types.js";
+import type { ClaimChart, Mapping } from "../protocol/types.js";
+
+/** Gap List 的映射文案（Record 强制枚举扩容时同步；漏项即 tsc 报错）。 */
+const MAPPING_LABELS: Record<Mapping, string> = {
+  literal: "字面对应",
+  "literal-construction-dependent": "字面对应（依赖权利要求解释）",
+  doe: "等同",
+  anticipation: "单篇公开",
+  "obviousness-combination": "组合公开",
+  partial: "仅部分公开",
+  "not-found": "未找到",
+  "needs-evidence": "证据不足",
+  "construction-dependent": "待权利要求解释",
+  unevaluated: "未评估",
+};
 
 export function chartFileBase(caseId: string, chartId: string): string {
   // 防御路径注入：chartId 直接拼入文件名，仅允许安全字符集（对齐 persist-utils 惯例）。
@@ -50,22 +64,31 @@ export function renderChartMarkdown(chart: ClaimChart): string {
   const lines: string[] = [];
   lines.push(`# 权利要求对照表（Claim Chart）— ${chart.mode}`, "");
   lines.push(`> ${chart.draftNotice}`, "");
+  const targetsWithoutSource = chart.targets.filter(t => !t.sourcePath).map(t => t.id || "(未命名目标)");
+  if (targetsWithoutSource.length > 0) {
+    lines.push(`> ⚠️ 未做原文核验：${targetsWithoutSource.join("、")}（未提供源文路径，pin-cite 仅做格式校验）`, "");
+  }
   lines.push("## Gap List（优先处理）", "");
   if (chart.gaps.length === 0) {
     lines.push("（无缺口：全部要素均有证据映射）", "");
   } else {
     for (const g of chart.gaps) {
       const el = byId.get(g.elementId);
-      lines.push(`- [ ] \`${g.elementId}\` ${el?.text ?? ""} → ${g.targetId}（${g.mapping}）：${g.suggestion}`);
+      lines.push(
+        `- [ ] \`${g.elementId}\` ${el?.text ?? ""} → ${g.targetId}（${MAPPING_LABELS[g.mapping]}）：${g.suggestion}`,
+      );
     }
     lines.push("");
   }
   lines.push("## 逐要素映射表", "");
-  lines.push("| # | Element | 目标特征/证据 | Evidence (pin-cite) | Mapping | Verified |", "|---|---|---|---|---|---|");
+  lines.push(
+    "| # | Element | 目标特征/证据 | Evidence (pin-cite) | Mapping | Note | Verified |",
+    "|---|---|---|---|---|---|---|",
+  );
   for (const r of chart.rows) {
     const el = byId.get(r.elementId);
     lines.push(
-      `| ${r.elementId} | ${escapeCell(el?.text ?? "")} | ${escapeCell(r.quote)} | ${escapeCell(r.pinCite)} | ${r.mapping} | ${r.verified ? "✓" : "☐"} |`,
+      `| ${r.elementId} | ${escapeCell(el?.text ?? "")} | ${escapeCell(r.quote)} | ${escapeCell(r.pinCite)} | ${r.mapping} | ${escapeCell(r.note ?? "")} | ${r.verified ? "✓" : "☐"} |`,
     );
   }
   return lines.join("\n");

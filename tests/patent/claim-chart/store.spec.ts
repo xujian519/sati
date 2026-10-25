@@ -79,8 +79,8 @@ test("renderChartMarkdown 空 gap/特殊字符转义/verified 标记/分隔行",
   assert.ok(md.includes("（无缺口：全部要素均有证据映射）"));
   assert.ok(!md.includes("- [ ]"));
 
-  // ④ 表格分隔行
-  assert.ok(md.includes("|---|---|---|---|---|---|"));
+  // ④ 表格分隔行（含 Note 列）
+  assert.ok(md.includes("|---|---|---|---|---|---|---|"));
 
   // ②/③ 1c 行：| 转义为 \|、换行替换为空格、pinCite 内 | 转义、verified:true 渲染 ✓
   const row1c = md.split("\n").find(line => line.includes("| 1c |"));
@@ -92,6 +92,22 @@ test("renderChartMarkdown 空 gap/特殊字符转义/verified 标记/分隔行",
   assert.ok(row1c!.endsWith("| ✓ |"));
   // 无转义列的 mapping/verified 断言不涉及 | 字符的额外列数污染
   assert.ok(!row1c!.includes("| ☐ |"));
+});
+
+test("Gap List 的 unevaluated 显示「未评估」，无 sourcePath 时报告标注核验范围", () => {
+  const chart = makeChart();
+  chart.gaps = [
+    {
+      elementId: "1b",
+      targetId: "D1",
+      mapping: "unevaluated",
+      reason: "要素 1b 在 D1 上未评估",
+      suggestion: "补做该要素对该目标的映射评估",
+    },
+  ];
+  const md = renderChartMarkdown(chart);
+  assert.ok(md.includes("（未评估）：补做该要素对该目标的映射评估"));
+  assert.ok(md.includes("未做原文核验：D1（未提供源文路径，pin-cite 仅做格式校验）"));
 });
 
 test("chartFileBase 拒绝不安全 chartId（防路径注入）", () => {

@@ -32,11 +32,38 @@ test("doe 仅限侵权模式", () => {
   assert.deepEqual(validateRowMapping(row("1a", "产品A", "doe"), PRODUCT, "infringement"), []);
 });
 
+test("unevaluated 在任意目标与场景合法", () => {
+  for (const target of [D1, PRODUCT]) {
+    for (const mode of ["invalidity", "infringement", "patentability", "oa-response", "reexamination"] as const) {
+      assert.deepEqual(validateRowMapping(row("1a", target.id, "unevaluated"), target, mode), []);
+    }
+  }
+});
+
+test("十值 mapping 全部可构造且行级校验不崩溃", () => {
+  const all: ChartRow["mapping"][] = [
+    "literal",
+    "literal-construction-dependent",
+    "doe",
+    "anticipation",
+    "obviousness-combination",
+    "partial",
+    "not-found",
+    "needs-evidence",
+    "construction-dependent",
+    "unevaluated",
+  ];
+  for (const mapping of all) {
+    assert.doesNotThrow(() => validateRowMapping(row("1a", "D1", mapping), D1, "invalidity"));
+  }
+});
+
 test("新颖性单篇全覆盖推导：有缺口时不覆盖", () => {
   const rows = [row("1a", "D1", "literal"), row("1b", "D1", "literal"), row("1c", "D1", "not-found")];
   const res = deriveNoveltyCoverage(rows, "D1", ELEMENTS);
   assert.equal(res.covered, false);
   assert.deepEqual(res.missing, ["1c"]);
+  assert.deepEqual(res.unevaluated, []);
 });
 
 test("新颖性单篇全覆盖推导：anticipation 计入覆盖", () => {
@@ -48,6 +75,23 @@ test("新颖性单篇全覆盖推导：anticipation 计入覆盖", () => {
   const res = deriveNoveltyCoverage(rows, "D1", ELEMENTS);
   assert.equal(res.covered, true);
   assert.deepEqual(res.missing, []);
+  assert.deepEqual(res.unevaluated, []);
+});
+
+test("新颖性覆盖把未评估要素单列，不计入 missing", () => {
+  const rows = [row("1a", "D1", "literal"), row("1b", "D1", "literal")];
+  const res = deriveNoveltyCoverage(rows, "D1", ELEMENTS);
+  assert.equal(res.covered, false);
+  assert.deepEqual(res.missing, []);
+  assert.deepEqual(res.unevaluated, ["1c"]);
+});
+
+test("显式 unevaluated 行同样计入 unevaluated 而非 missing", () => {
+  const rows = [row("1a", "D1", "literal"), row("1b", "D1", "literal"), row("1c", "D1", "unevaluated")];
+  const res = deriveNoveltyCoverage(rows, "D1", ELEMENTS);
+  assert.equal(res.covered, false);
+  assert.deepEqual(res.missing, []);
+  assert.deepEqual(res.unevaluated, ["1c"]);
 });
 
 test("区别特征 = 主目标上 not-found/needs-evidence 的要素", () => {
@@ -57,5 +101,21 @@ test("区别特征 = 主目标上 not-found/needs-evidence 的要素", () => {
     row("1c", "D1", "needs-evidence"),
     row("1c", "D2", "literal"),
   ];
-  assert.deepEqual(deriveDistinguishingFeatures(rows, "D1", ELEMENTS), ["1b", "1c"]);
+  const res = deriveDistinguishingFeatures(rows, "D1", ELEMENTS);
+  assert.deepEqual(res.features, ["1b", "1c"]);
+  assert.deepEqual(res.unevaluatedElements, []);
+});
+
+test("未评估要素不当作区别特征，另列 unevaluatedElements", () => {
+  const rows = [row("1a", "D1", "literal"), row("1b", "D1", "not-found")];
+  const res = deriveDistinguishingFeatures(rows, "D1", ELEMENTS);
+  assert.deepEqual(res.features, ["1b"]);
+  assert.deepEqual(res.unevaluatedElements, ["1c"]);
+});
+
+test("显式 unevaluated 不进入区别特征", () => {
+  const rows = [row("1a", "D1", "literal"), row("1b", "D1", "not-found"), row("1c", "D1", "unevaluated")];
+  const res = deriveDistinguishingFeatures(rows, "D1", ELEMENTS);
+  assert.deepEqual(res.features, ["1b"]);
+  assert.deepEqual(res.unevaluatedElements, ["1c"]);
 });
