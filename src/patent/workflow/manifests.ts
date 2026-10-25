@@ -4,7 +4,23 @@
  * 从 workflow.ts 拆出（轮次 1 纯搬移）：纯数据常量，零执行依赖。
  */
 
-import type { WorkflowManifest } from "./types.js";
+import { DISPUTE_FRAMING_OUTPUT_CONTRACT } from "./disputeFraming.js";
+import type { WorkflowManifest, WorkflowStage } from "./types.js";
+
+/**
+ * 三场景共用的争点粗定位阶段（无 atom：输出是文本契约，由 disputeFraming.ts 解析）。
+ * 只给 OA 答复 / 无效 / 侵权——这些场景的「争议边界」决定 parse 的提取面；
+ * 新颖性/创造性/撰写不是围绕对方主张展开的，不插。
+ */
+function disputeFramingStage(): WorkflowStage {
+  return {
+    id: "dispute_framing",
+    strategy: "chain",
+    description:
+      "粗定争议范围：先列争议法条/理由与涉及权项，供 parse 过滤（先定争点再解析，避免无关事实展开）。" +
+      DISPUTE_FRAMING_OUTPUT_CONTRACT,
+  };
+}
 
 /**
  * 内置：专利新颖性分析六阶段 manifest（镜像 Mady patent_novelty.yaml 与 novelty_chain 模板）。
@@ -285,7 +301,7 @@ export const patentPatentabilityManifest: WorkflowManifest = {
 
 /**
  * 内置：审查意见答复 manifest（OA 答复场景）。
- * parse → claim-chart（mode=oa-response，targets=审查员引用对比文件）→
+ * dispute_framing → parse → claim-chart（mode=oa-response，targets=审查员引用对比文件）→
  * draft（意见陈述书撰写，消费 claim-chart 产出）。
  */
 export const patentOaResponseManifest: WorkflowManifest = {
@@ -293,7 +309,14 @@ export const patentOaResponseManifest: WorkflowManifest = {
   name: "审查意见答复",
   caseType: "oa_response",
   stages: [
-    { id: "parse", strategy: "chain", description: "解析审查意见与权利要求" },
+    disputeFramingStage(),
+    {
+      id: "parse",
+      strategy: "chain",
+      description:
+        "解析审查意见与权利要求（消费 dispute_framing 过滤；审查意见通知书的程序理由保留全量解析，" +
+        "不得因争点范围漏掉程序缺陷）",
+    },
     {
       id: "claim-chart",
       strategy: "chain",
@@ -309,7 +332,7 @@ export const patentOaResponseManifest: WorkflowManifest = {
 
 /**
  * 内置：无效宣告/复审答复 manifest（无效/复审双场景）。
- * parse → claim-chart（mode=invalidity；复审场景可经 flexible-plan 调整）→
+ * dispute_framing → parse → claim-chart（mode=invalidity；复审场景可经 flexible-plan 调整）→
  * novelty（单篇全覆盖由 mapping-machine 校验）→ inventiveness（区别特征 = D1
  * not-found 行）。
  *
@@ -323,7 +346,13 @@ export const patentInvalidationManifest: WorkflowManifest = {
   name: "无效/复审答复",
   caseType: "invalidation_analysis",
   stages: [
-    { id: "parse", strategy: "chain", description: "解析无效请求/驳回决定与权利要求" },
+    disputeFramingStage(),
+    {
+      id: "parse",
+      strategy: "chain",
+      description:
+        "解析无效请求/驳回决定与权利要求（消费 dispute_framing 过滤；未识别争点时按全文解析并注明「未识别争点」）",
+    },
     {
       id: "claim-chart",
       strategy: "chain",
@@ -340,14 +369,20 @@ export const patentInvalidationManifest: WorkflowManifest = {
 
 /**
  * 内置：侵权比对 manifest（侵权场景）。
- * parse → claim-chart（mode=infringement，targets=被控产品，支持 doe 行）→ 报告。
+ * dispute_framing → parse → claim-chart（mode=infringement，targets=被控产品，支持 doe 行）→ 报告。
  */
 export const patentInfringementManifest: WorkflowManifest = {
   id: "patent_infringement_v1",
   name: "侵权比对分析",
   caseType: "infringement_analysis",
   stages: [
-    { id: "parse", strategy: "chain", description: "解析权利要求与被控产品材料" },
+    disputeFramingStage(),
+    {
+      id: "parse",
+      strategy: "chain",
+      description:
+        "解析权利要求与被控产品材料（消费 dispute_framing 过滤；未识别争点时按全文解析并注明「未识别争点」）",
+    },
     {
       id: "claim-chart",
       strategy: "chain",

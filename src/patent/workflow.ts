@@ -68,6 +68,15 @@ export {
 } from "./workflow/checkpoint.js";
 export { resolveRunRulePack } from "./workflow/rulePackInfo.js";
 export {
+  DISPUTE_CLAIMS_HEADING,
+  DISPUTE_FRAMING_OUTPUT_CONTRACT,
+  DISPUTE_GROUNDS_HEADING,
+  DISPUTE_UNIDENTIFIED_LABEL,
+  parseDisputeFraming,
+  renderUnidentifiedDisputeFraming,
+  type DisputeFraming,
+} from "./workflow/disputeFraming.js";
+export {
   builtinPatentManifests,
   formatManifestCatalog,
   patentDisclosureManifest,

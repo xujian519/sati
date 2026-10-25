@@ -12,9 +12,12 @@ validation:
   requireAllSteps: true
   maxRetries: 2
 stages:
+  - id: dispute_framing
+    strategy: chain
+    description: "粗定争议范围：先列争议法条/理由与涉及权项，供 parse 过滤（先定争点再解析，避免无关事实展开）。按两段输出：## dispute_grounds（争议法条/理由，每行一条）与 ## dispute_claims（涉及权项，每行一条）。两段都识别不到时段落留空，并写明「未识别争点」——不得写成「无争点」。"
   - id: parse
     strategy: chain
-    description: 解析无效请求/驳回决定与权利要求
+    description: 解析无效请求/驳回决定与权利要求（消费 dispute_framing 过滤；未识别争点时按全文解析并注明「未识别争点」）
   - id: claim-chart
     strategy: chain
     atom: claim-chart
