@@ -60,6 +60,6 @@ export {
   type LlmNodeOptions,
   type RuleGateState,
   DOMAIN_GRAPHS,
-  DOMAIN_INPUT_DECLARATIONS,
+  getInputDeclarations,
   type DomainGraphName,
 } from "./domains/index.js";
