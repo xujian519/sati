@@ -26,6 +26,7 @@ export {
 export {
   SyllogismBuilder,
   SyllogismError,
+  syllogismRef,
   ruleAssertion,
   assertChain,
   type Syllogism,

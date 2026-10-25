@@ -255,6 +255,7 @@ export {
   contentHash,
   receiptFromToolExecution,
   ClaimBinding,
+  claimBindingRef,
   ConflictDetector,
   EvidenceExtension,
   EvidenceEngine,
@@ -277,6 +278,7 @@ export {
   extractWaybackMachineDate,
   cleanEvidenceURI,
 } from "./evidence/index.js";
+export type { UnbackedClaim } from "./evidence/index.js";
 export type {
   EvidenceJudgment,
   DimensionJudgment,
@@ -316,6 +318,7 @@ export {
   ConfirmedRuleSet,
   SyllogismBuilder,
   SyllogismError,
+  syllogismRef,
   ruleAssertion,
   assertChain,
   type FactEntry,
@@ -332,6 +335,18 @@ export {
   type Premise,
   type PremiseSource,
 } from "./reasoning/index.js";
+
+export type { ArgumentGap, ArgumentGapSource, ArgumentRef } from "./argument/index.js";
+export {
+  ArgumentRefError,
+  argumentRefKey,
+  assertArgumentRef,
+  dedupeArgumentGaps,
+  normalizeArgumentRef,
+  claimChartGapsToArgumentGaps,
+  syllogismErrorToArgumentGap,
+  unbackedClaimsToArgumentGaps,
+} from "./argument/index.js";
 
 export {
   type Atom,

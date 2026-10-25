@@ -8,6 +8,21 @@
  *   - spansForClaim(claimId)：给定结论的全部证据（冲突检测的输入）
  */
 
+import { assertArgumentRef } from "../argument/refs.js";
+import type { ArgumentRef } from "../argument/types.js";
+
+/** 无证据支持的结论及其统一论证指针。 */
+export type UnbackedClaim = {
+  claimId: string;
+  /** 三向指针中没有独立的 claim 字段：结论 id 在推理黑板上就是事实引用。 */
+  ref?: ArgumentRef;
+};
+
+/** 结论 id → 统一论证指针（`factRef: claimId`）。 */
+export function claimBindingRef(claimId: string): ArgumentRef {
+  return assertArgumentRef({ factRef: claimId }, `结论 ${claimId}`);
+}
+
 export class ClaimBinding {
   private readonly claimToSpans = new Map<string, Set<string>>();
   private readonly spanToClaims = new Map<string, Set<string>>();
@@ -58,6 +73,11 @@ export class ClaimBinding {
       }
     }
     return result;
+  }
+
+  /** 无证据支持的结论（带统一论证指针；保留 `unbackedClaims()` 的字符串形态）。 */
+  unbackedClaimRefs(claimIds: Iterable<string>): UnbackedClaim[] {
+    return this.unbackedClaims(claimIds).map(claimId => ({ claimId, ref: claimBindingRef(claimId) }));
   }
 
   clear(): void {
