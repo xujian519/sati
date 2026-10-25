@@ -1,7 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildSpecContext, runSpecPrechecks, splitSpecSections } from "../../../src/patent/graph/domains/enablement.js";
+import { CITATION_CHECK_INPUT_DECLARATIONS } from "../../../src/patent/graph/domains/citation-check.js";
 import {
+  ENABLEMENT_INPUT_DECLARATIONS,
+  buildSpecContext,
+  runSpecPrechecks,
+  splitSpecSections,
+} from "../../../src/patent/graph/domains/enablement.js";
+import { INVENTIVENESS_INPUT_DECLARATIONS } from "../../../src/patent/graph/domains/inventiveness.js";
+import { NOVELTY_INPUT_DECLARATIONS } from "../../../src/patent/graph/domains/novelty.js";
+import {
+  DOMAIN_GRAPHS,
   StageHandlerRegistry,
   buildEnablementGraph,
   buildInventivenessGraph,
@@ -10,9 +19,11 @@ import {
   extractEnablementResult,
   extractInventivenessResult,
   extractNumericRanges,
+  getInputDeclarations,
   globalStageHandlerRegistry,
   isDegraded,
   registerBuiltinAtoms,
+  type DomainGraphName,
   type StageHandler,
   type StageProvider,
 } from "../../../src/patent/index.js";
@@ -938,4 +949,33 @@ test("inventiveness: 无领域命中时 domain_inject 输出空串（P2-2 不改
   assert.equal(result.state.inventiveness_domain_focus, "", "未命中领域时不注入");
   const extracted = extractInventivenessResult(result.state);
   assert.equal(extracted.inventive, true);
+});
+
+// ---------------------------------------------------------------------------
+// 输入声明表：显式懒取（W-10 / #728）
+// ---------------------------------------------------------------------------
+
+const DECLARATION_SOURCES = {
+  novelty: NOVELTY_INPUT_DECLARATIONS,
+  inventiveness: INVENTIVENESS_INPUT_DECLARATIONS,
+  enablement: ENABLEMENT_INPUT_DECLARATIONS,
+  citation_check: CITATION_CHECK_INPUT_DECLARATIONS,
+} as const satisfies Record<DomainGraphName, Readonly<Record<string, readonly string[]>>>;
+
+test("getInputDeclarations: 四图均可取，且与各子图声明表同源", () => {
+  const names = Object.keys(DOMAIN_GRAPHS) as DomainGraphName[];
+  assert.deepEqual([...names].sort(), Object.keys(DECLARATION_SOURCES).sort());
+  for (const name of names) {
+    const declarations = getInputDeclarations(name);
+    assert.ok(declarations, `${name} 应有输入声明表`);
+    assert.equal(declarations, DECLARATION_SOURCES[name], `${name} 应直接返回子图声明表（同源引用）`);
+    assert.ok(Object.keys(declarations).length > 0, `${name} 声明表不应为空`);
+    for (const [node, keys] of Object.entries(declarations)) {
+      assert.ok(Array.isArray(keys) && keys.every(key => typeof key === "string"), `${name}.${node} 应为字符串数组`);
+    }
+  }
+});
+
+test("getInputDeclarations: 未知图名运行期返回 undefined（调用方 ?? []）", () => {
+  assert.equal(getInputDeclarations("ghost" as DomainGraphName), undefined);
 });

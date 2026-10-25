@@ -2,8 +2,8 @@ import { join } from "node:path";
 import { globalStageHandlerRegistry } from "../../../patent/atoms/index.js";
 import {
   DOMAIN_GRAPHS,
-  DOMAIN_INPUT_DECLARATIONS,
   GRAPH_RUN_SUMMARY_DIR,
+  getInputDeclarations,
   InMemoryCheckpointStore,
   JsonFileCheckpointStore,
   buildGraphRunSummary,
@@ -173,7 +173,7 @@ export async function executeGraphRun(
       ...(provenanceCollector !== null
         ? {
             onAddNode: (name: string, node: GraphNode) =>
-              provenanceCollector!.wrapNode(name, node, DOMAIN_INPUT_DECLARATIONS[graphName][name]),
+              provenanceCollector!.wrapNode(name, node, getInputDeclarations(graphName)?.[name] ?? []),
           }
         : {}),
     })

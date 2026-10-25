@@ -63,25 +63,30 @@ export const DOMAIN_GRAPHS = {
 } as const;
 
 /**
- * 各子图节点输入声明表（溯源 derivedFrom 链；按图名取用）。
- * getter 延迟求值：domains 各文件与 graph barrel 存在循环 import（既有结构），
- * 顶层常量会触碰 TDZ；运行时访问时各模块已完整加载。
+ * 按图名取该子图的节点输入声明表（溯源 derivedFrom 链）。
+ *
+ * 刻意做成函数而非顶层常量：domains 各文件与 graph barrel 存在循环 import
+ * （既有结构），顶层求值会触碰 TDZ；函数体只在调用时读取声明表，那时各模块已完整加载。
+ * 这不消除循环 import，只把延迟求值从 getter 的隐式行为变成显式契约。
+ * 未知图名在编译期被 DomainGraphName 挡住；运行期防御性返回 undefined（调用方 `?? []`）。
  */
-export const DOMAIN_INPUT_DECLARATIONS: Readonly<Record<DomainGraphName, Readonly<Record<string, readonly string[]>>>> =
-  {
-    get novelty() {
+export function getInputDeclarations(
+  graphName: DomainGraphName,
+): Readonly<Record<string, readonly string[]>> | undefined {
+  switch (graphName) {
+    case "novelty":
       return NOVELTY_INPUT_DECLARATIONS;
-    },
-    get inventiveness() {
+    case "inventiveness":
       return INVENTIVENESS_INPUT_DECLARATIONS;
-    },
-    get enablement() {
+    case "enablement":
       return ENABLEMENT_INPUT_DECLARATIONS;
-    },
-    get citation_check() {
+    case "citation_check":
       return CITATION_CHECK_INPUT_DECLARATIONS;
-    },
-  };
+    default:
+      // 类型层不可达；JS 调用方传未知图名时保持 fail-soft（调用方自行决定 `?? []`）。
+      return undefined;
+  }
+}
 
 /** 领域子图名（工具层 graph 参数枚举）。 */
 export type DomainGraphName = keyof typeof DOMAIN_GRAPHS;
