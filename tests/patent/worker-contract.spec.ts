@@ -15,7 +15,7 @@ test("registry registers patent workers and verifies contract completeness", () 
   for (const w of defaultPatentWorkers()) registry.register(w);
   const issues = registry.verify();
   assert.deepEqual(issues, [], "all default patent workers should pass verification");
-  assert.equal(registry.list().length, 6);
+  assert.equal(registry.list().length, 7);
   assert.equal(registry.listByTier("reasoning").length, 2);
   assert.equal(registry.listByTier("reasoning")[0].name, "patent-novelty-analyzer");
   assert.equal(registry.listByTier("reasoning")[1].name, "patent-inventiveness-analyzer");
@@ -28,7 +28,7 @@ test("search worker: allowedTools 含专利数据工具（修正后）", () => {
   }
 });
 
-test("WORKER_ROLE_MAP 覆盖全部 6 个内置 worker 且角色无重复", () => {
+test("WORKER_ROLE_MAP 覆盖全部内置 worker 且角色无重复", () => {
   const workers = defaultPatentWorkers().map(w => w.name);
   const mapped = WORKER_ROLE_MAP.map(e => e.worker);
   // 内置 worker 必须全部被映射（映射表可含额外条目，如 skills/provision-* 角色）。
@@ -115,6 +115,40 @@ test("inventiveness worker: hard contract fields aligned with rule-gate elements
     "创造性结论",
     "置信度",
   ]);
+});
+
+test("patent-adversary-reviewer: checker 契约声明三路输入与四段断言链", () => {
+  const registry = new WorkerRegistry();
+  for (const w of defaultPatentWorkers()) registry.register(w);
+  const worker = registry.get("patent-adversary-reviewer")!;
+  assert.equal(worker.tier, "checker");
+  assert.equal(worker.triggersHITL, false);
+  assert.deepEqual(
+    worker.inputs?.map(i => i.path),
+    ["data/cases/{caseId}/outputs/*.md", "data/cases/{caseId}/source/**", "data/cases/{caseId}/disclosure/*.md"],
+  );
+
+  const [output] = worker.outputs ?? [];
+  assert.ok(output, "对抗审查 worker 应声明输出契约");
+  assert.equal(output.path, "data/cases/{caseId}/outputs/adversarial-review.md");
+  assert.equal(output.contractLevel, "hard");
+  assert.deepEqual(output.requiredFields, ["主张", "前提", "脆弱点", "反驳钩子", "factRef", "articleRef"]);
+
+  const ok = validateWorkerOutput(
+    worker,
+    "主张：权1不具备创造性。前提：A22.3 + D1。脆弱点：区别特征认定。反驳钩子：D1未公开该特征。factRef: f-1；articleRef: A22.3。",
+  );
+  assert.equal(ok.valid, true);
+  const bad = validateWorkerOutput(worker, "评审完成。");
+  assert.equal(bad.valid, false);
+  assert.deepEqual(bad.missingHardFields, ["主张", "前提", "脆弱点", "反驳钩子", "factRef", "articleRef"]);
+
+  // tier 白名单与角色映射是两处：漏一处 = 声明了但不可调度。
+  const mapping = WORKER_ROLE_MAP.find(e => e.worker === "patent-adversary-reviewer");
+  assert.equal(mapping?.role, "adversarial-reviewer");
+  assert.equal(workerAllowedForRole("adversarial-reviewer", worker), true);
+  assert.equal(workerAllowedForRole("researcher", worker), false);
+  assert.equal(workerAllowedForRole("drafter", worker), false);
 });
 
 test("monitor aggregates success rate and degradation counts", () => {
