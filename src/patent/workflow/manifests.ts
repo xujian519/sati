@@ -186,7 +186,13 @@ export const patentInventivenessManifest: WorkflowManifest = {
       id: "parse",
       strategy: "chain",
       description:
-        "解析权利要求/技术方案，构建所属领域技术人员画像，确定申请日/优先权日时间基准（收口模式：graph 侧为专用 LLM 节点 parseNode，非通用 atom）",
+        "解析权利要求/技术方案，构建所属领域技术人员画像，解析申请日/优先权日时间字段（时间基准由 time_baseline 产出；收口模式：graph 侧为专用 LLM 节点 parseNode，非通用 atom）",
+    },
+    {
+      id: "time_baseline",
+      strategy: "chain",
+      description: "确定现有技术时间基准（优先权日 > 申请日；缺失则显式降级，不假定今天）",
+      atom: "time-baseline",
     },
     {
       id: "search",

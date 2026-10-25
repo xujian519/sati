@@ -28,7 +28,7 @@ import {
 } from "../shared/fts.js";
 import { decompressChunk, registerChunkUncompress } from "../shared/chunk-compression.js";
 import type { KnowledgeRuntimeStats } from "../shared/knowledge-stats.js";
-import type { LawCategory, LawRecord, LawSearchResult, LegalSearchSource } from "./types.js";
+import type { LawCategory, LawRecord, LawSearchResult, LegalSearchSource, TimedLegalSearchResult } from "./types.js";
 import { extractLawKeywords } from "./keywords.js";
 import { headingToArticleRecord } from "./article-parser.js";
 import { lawSourceConfidence } from "./row-mapper.js";
@@ -48,7 +48,16 @@ export type KnowledgeLawSearchOptions = {
   level?: string;
   /** 分类过滤：knowledge.db 无 category 概念，忽略。 */
   category?: string;
+  /**
+   * 时点过滤（YYYY-MM-DD）：knowledge.db 无 `valid_from`，只能按
+   * `documents.publish_date <= asOf` 作**下界近似**（公布早于 asOf ≠ 该日仍有效）。
+   * `publish_date` 空的行不返回，计入 `searchAt` 的 `unknownDateCount`。
+   */
+  asOf?: string;
 };
+
+/** 近似时点条件：仅凭公布日期下界，不能证明该日仍有效。 */
+const APPROX_AS_OF_CLAUSE = `d.publish_date IS NOT NULL AND d.publish_date <> '' AND d.publish_date <= ?`;
 
 type DocChunkRow = {
   document_id: string;
@@ -81,6 +90,8 @@ const FETCH_MULTIPLIER = 3;
 export class KnowledgeLawSearch implements LegalSearchSource {
   private readonly db: DatabaseSync;
   private readonly hasFts: boolean;
+  /** knowledge.db 无施行日列，时点过滤只能按公布日期作下界近似。 */
+  readonly timeFilter = "approximate" as const;
   /** FTS5 查询曾抛异常（模块缺失等）后置 true，后续查询直接走 LIKE。 */
   private ftsDegraded = false;
   private readonly logger?: { warn: (message: string) => void };
@@ -196,10 +207,34 @@ export class KnowledgeLawSearch implements LegalSearchSource {
     return rows.map(row => this.toSearchResult(row));
   }
 
-  /** 按法规名模糊查找（返回全部匹配文档）。 */
-  findByName(name: string, limit = 10): LawRecord[] {
+  /** 时点检索（近似口径）：公布日期下界过滤 + 未知日期候选计数。 */
+  searchAt(keyword: string, options: KnowledgeLawSearchOptions & { asOf: string }): TimedLegalSearchResult {
+    return {
+      results: this.search(keyword, options),
+      meta: {
+        timeFilter: this.timeFilter,
+        unknownDateCount: this.countUnknownDateMatches(keyword, options),
+      },
+    };
+  }
+
+  /** 按法规名模糊查找（返回全部匹配文档）。`asOf` 提供时同样按公布日期下界过滤。 */
+  findByName(name: string, limit = 10, options: { asOf?: string } = {}): LawRecord[] {
     const pattern = `%${name.replace(/[%_\\]/g, m => `\\${m}`)}%`;
-    const rows = this.stmtFindByName.all(pattern, limit) as DocChunkRow[];
+    if (options.asOf === undefined) {
+      const rows = this.stmtFindByName.all(pattern, limit) as DocChunkRow[];
+      return rows.map(row => this.toRecord(row));
+    }
+    const sql = `
+      SELECT ${DOC_COLUMNS}
+      FROM documents d
+      JOIN chunks c ON c.id = (
+        SELECT id FROM chunks WHERE document_id = d.id ORDER BY char_count DESC LIMIT 1)
+      WHERE d.doc_type = 'law_article'
+        AND d.title LIKE ? ESCAPE '\\'
+        AND ${APPROX_AS_OF_CLAUSE}
+      LIMIT ?`;
+    const rows = prepareCached(this.preparedCache, this.db, sql).all(pattern, options.asOf, limit) as DocChunkRow[];
     return rows.map(row => this.toRecord(row));
   }
 
@@ -273,45 +308,82 @@ export class KnowledgeLawSearch implements LegalSearchSource {
     });
   }
 
-  /** FTS 查询 + 可选 level 过滤（动态 SQL；无过滤走预编译热路径）。 */
+  /** FTS 查询 + 可选 level/asOf 过滤（动态 SQL；无过滤走预编译热路径）。 */
   private withLevelFilter(match: string, options: KnowledgeLawSearchOptions, limit: number): DocChunkRow[] {
-    if (!options.level) {
+    if (!options.level && options.asOf === undefined) {
       return this.stmtSearchFts!.all(match, limit) as DocChunkRow[];
     }
+    const conditions = ["docs_fts MATCH ?", "d.doc_type = 'law_article'"];
+    const params: Array<string | number> = [match];
+    if (options.level) {
+      conditions.push("d.level = ?");
+      params.push(options.level);
+    }
+    if (options.asOf !== undefined) {
+      conditions.push(APPROX_AS_OF_CLAUSE);
+      params.push(options.asOf);
+    }
+    params.push(limit);
     const sql = `
       SELECT ${FTS_COLUMNS}
       FROM docs_fts
       JOIN chunks c ON c.id = docs_fts.rowid
       JOIN documents d ON d.id = c.document_id
-      WHERE docs_fts MATCH ? AND d.doc_type = 'law_article' AND d.level = ?
-      ORDER BY bm25(docs_fts) LIMIT ?
-    `;
-    return prepareCached(this.preparedCache, this.db, sql).all(match, options.level, limit) as DocChunkRow[];
+      WHERE ${conditions.join(" AND ")}
+      ORDER BY bm25(docs_fts) LIMIT ?`;
+    return prepareCached(this.preparedCache, this.db, sql).all(...params) as DocChunkRow[];
   }
 
   private searchLike(keyword: string, options: KnowledgeLawSearchOptions, limit: number): DocChunkRow[] {
     // LIKE 回退计数（设计内降级路径：短词/未命中/FTS 降级；不 warn 避免噪音）。
     this.stats?.recordLikeFallback();
     const pattern = `%${keyword.replace(/[%_\\]/g, m => `\\${m}`)}%`;
-    if (!options.level) {
+    if (!options.level && options.asOf === undefined) {
       return this.stmtSearchLike.all(pattern, pattern, limit) as DocChunkRow[];
     }
-    let sql = `
+    const conditions = [
+      "d.doc_type = 'law_article'",
+      `(d.title LIKE ? ESCAPE '\\' OR sati_uncompress(c.content) LIKE ? ESCAPE '\\')`,
+    ];
+    const params: Array<string | number> = [pattern, pattern];
+    if (options.level) {
+      conditions.push("d.level = ?");
+      params.push(options.level);
+    }
+    if (options.asOf !== undefined) {
+      conditions.push(APPROX_AS_OF_CLAUSE);
+      params.push(options.asOf);
+    }
+    params.push(limit);
+    const sql = `
       SELECT ${LIKE_COLUMNS}
       FROM documents d
       JOIN chunks c ON c.id = (
         SELECT id FROM chunks WHERE document_id = d.id ORDER BY char_count DESC LIMIT 1)
-      WHERE d.doc_type = 'law_article'
-        AND (d.title LIKE ? ESCAPE '\\' OR sati_uncompress(c.content) LIKE ? ESCAPE '\\')
-    `;
+      WHERE ${conditions.join(" AND ")}
+      ORDER BY d.char_count DESC LIMIT ?`;
+    return prepareCached(this.preparedCache, this.db, sql).all(...params) as DocChunkRow[];
+  }
+
+  /**
+   * 日期未知候选计数（时点检索口径）：匹配关键词但 `publish_date` 缺失的法规文档数。
+   * 用 LIKE 匹配作候选口径（与 FTS 分词略有差异）；仅用于回答「漏了多少条」。
+   */
+  private countUnknownDateMatches(keyword: string, options: KnowledgeLawSearchOptions): number {
+    const pattern = `%${keyword.replace(/[%_\\]/g, m => `\\${m}`)}%`;
+    const conditions = [
+      "d.doc_type = 'law_article'",
+      "(d.publish_date IS NULL OR d.publish_date = '')",
+      `(d.title LIKE ? ESCAPE '\\' OR sati_uncompress(c.content) LIKE ? ESCAPE '\\')`,
+    ];
     const params: Array<string | number> = [pattern, pattern];
     if (options.level) {
-      sql += " AND d.level = ?";
+      conditions.push("d.level = ?");
       params.push(options.level);
     }
-    sql += " ORDER BY d.char_count DESC LIMIT ?";
-    params.push(limit);
-    return prepareCached(this.preparedCache, this.db, sql).all(...params) as DocChunkRow[];
+    const sql = `SELECT COUNT(DISTINCT d.id) AS c FROM documents d JOIN chunks c ON c.document_id = d.id WHERE ${conditions.join(" AND ")}`;
+    const row = prepareCached(this.preparedCache, this.db, sql).get(...params) as { c: number };
+    return row.c;
   }
 
   /** 按文档去重（一文档一行，保留 bm25 最优 chunk——排序后首个出现的行）。 */

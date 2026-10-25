@@ -12,7 +12,7 @@ export const LAW_SEARCH_COLUMNS = `l.id, l.level, l.name, l.filename, l.publish,
 /** FTS 路径列（追加 bm25 分数）。 */
 export const LAW_SEARCH_COLUMNS_FTS = `${LAW_SEARCH_COLUMNS}, bm25(law_fts) AS fts_rank`;
 
-export type LawSearchFilter = { level?: string; category?: string };
+export type LawSearchFilter = { level?: string; category?: string; asOf?: string };
 
 function buildFilterClauses(filter: LawSearchFilter): { sql: string; params: string[] } {
   const clauses: string[] = [];
@@ -24,6 +24,11 @@ function buildFilterClauses(filter: LawSearchFilter): { sql: string; params: str
   if (filter.category) {
     clauses.push("AND c.name = ?");
     params.push(filter.category);
+  }
+  if (filter.asOf) {
+    // 精确时点：施行日 <= asOf 且未失效（失效日期不可知，expired=1 一律排除）。
+    clauses.push("AND l.valid_from IS NOT NULL AND l.valid_from <> '' AND l.valid_from <= ? AND l.expired = 0");
+    params.push(filter.asOf);
   }
   return { sql: clauses.join(" "), params };
 }

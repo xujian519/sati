@@ -218,3 +218,55 @@ test("knowledge-law-search: 无 law_article 时 count 为 0 且 search 安全", 
   assert.deepEqual(s.search("专利"), []);
   assert.equal(s.ftsAvailable, false, "无 docs_fts 表时应探测为不可用");
 });
+
+// ---------------------------------------------------------------------------
+// #735 asOf 时点过滤（近似口径：公布日期下界）
+// ---------------------------------------------------------------------------
+
+test("knowledge-law-search: asOf 按公布日期下界过滤，标 approximate", t => {
+  const s = withStore(t);
+  const timed = s.searchAt("专利法", { asOf: "2021-01-01" });
+  assert.equal(timed.meta.timeFilter, "approximate");
+  assert.deepEqual(
+    timed.results.map(r => r.name),
+    ["中华人民共和国专利法"],
+    "2023 版实施细则不在 2021-01-01 的时点内",
+  );
+  assert.equal(timed.meta.unknownDateCount, 0, "命中候选中无日期未知文档");
+  // 缺省路径行为不变
+  assert.equal(s.search("专利法").length, 2);
+});
+
+test("knowledge-law-search: 日期未知文档不返回，但计入 unknownDateCount", t => {
+  const s = withStore(t);
+  const timed = s.searchAt("营商环境", { asOf: "2021-01-01" });
+  assert.deepEqual(timed.results, [], "publish_date 为空不能证明早于 asOf");
+  assert.equal(timed.meta.unknownDateCount, 1);
+});
+
+test("knowledge-law-search: findByName 同样应用 asOf 过滤", t => {
+  const s = withStore(t);
+  assert.deepEqual(
+    s.findByName("专利法", 10, { asOf: "2021-01-01" }).map(r => r.name),
+    ["中华人民共和国专利法"],
+  );
+  assert.equal(s.findByName("专利法", 10, { asOf: "2024-01-01" }).length, 2);
+  assert.equal(s.findByName("专利法", 10).length, 2, "缺省 findByName 不过滤");
+});
+
+test("knowledge-law-search: law_search 端到端输出 asOf/timeFilter/unknownDateCount", async t => {
+  const search = withStore(t);
+  const tool = createLawSearchTool(
+    () => ({ engine: search, dbPath: "fixture" }),
+    () => new Map(),
+  );
+  const result = await tool.execute({ query: "专利法", asOf: "2021-01-01" }, makeToolContext());
+  assert.ok(result.data);
+  assert.equal(result.data.asOf, "2021-01-01");
+  assert.equal(result.data.timeFilter, "approximate");
+  assert.equal(result.data.unknownDateCount, 0);
+  assert.deepEqual(
+    result.data.results.map(r => r.name),
+    ["中华人民共和国专利法"],
+  );
+});

@@ -576,9 +576,68 @@ test("inventiveness: build_query 检索式带申请日时间基准（P0-1）", a
     },
   };
   const graph = buildInventivenessGraph({ ruleGate: false, handlers: passthroughHandlers() }).compile("parse");
-  await graph.run({ text: "一种分拣装置，包括传送带与识别传感器" }, { provider });
+  const result = await graph.run({ text: "一种分拣装置，包括传送带与识别传感器" }, { provider });
   assert.ok(queryPrompt.includes("时间基准"), "build_query prompt 应含时间基准要求");
-  assert.ok(queryPrompt.includes("after:YYYYMMDD"), "build_query prompt 应说明 after 日期限定");
+  assert.ok(
+    queryPrompt.includes("截止日 2024-01-01"),
+    `build_query prompt 应消费 time_baseline 的显式截止日: ${queryPrompt}`,
+  );
+  assert.ok(queryPrompt.includes("after:20240101"), "build_query prompt 应给出 after 日期限定");
+  assert.equal(result.state.cutoff_date, "2024-01-01");
+  assert.equal(result.state.cutoff_basis, "filing");
+});
+
+test("inventiveness: 拓扑 parse → time_baseline → domain_inject → build_query（不绕过领域注入）", () => {
+  const graph = buildInventivenessGraph({ ruleGate: false, handlers: passthroughHandlers() }).compile("parse");
+  const described = graph.describe();
+  assert.ok(described.nodes.includes("time_baseline"));
+  const edges = new Set(described.edges.flatMap(([from, targets]) => targets.map(to => `${from}→${to}`)));
+  assert.ok(edges.has("parse→time_baseline"));
+  assert.ok(edges.has("time_baseline→domain_inject"));
+  assert.ok(edges.has("domain_inject→build_query"));
+  assert.equal(edges.has("parse→domain_inject"), false, "不得绕过 time_baseline");
+});
+
+test("inventiveness: time_baseline 优先权日优先于申请日", async () => {
+  const base = inventivenessProvider();
+  const provider: StageProvider = {
+    ...base,
+    callLLM: async prompt => {
+      if (prompt.includes("创造性分析专家")) {
+        return JSON.stringify({
+          features: ["传送带"],
+          field: "机械分拣",
+          priority_date: "2023-05-01",
+          filing_date: "2024-01-01",
+        });
+      }
+      return base.callLLM!(prompt);
+    },
+  };
+  const graph = buildInventivenessGraph({ ruleGate: false, handlers: passthroughHandlers() }).compile("parse");
+  const result = await graph.run({ text: "一种分拣装置" }, { provider });
+  assert.equal(result.state.cutoff_date, "2023-05-01");
+  assert.equal(result.state.cutoff_basis, "priority");
+  assert.equal(result.state.cutoff_degraded, false);
+});
+
+test("inventiveness: 缺少申请日/优先权日 → time_baseline 显式降级（不假定今天）", async () => {
+  const base = inventivenessProvider();
+  const provider: StageProvider = {
+    ...base,
+    callLLM: async prompt => {
+      if (prompt.includes("创造性分析专家")) {
+        return JSON.stringify({ features: ["传送带"], field: "机械分拣" });
+      }
+      return base.callLLM!(prompt);
+    },
+  };
+  const graph = buildInventivenessGraph({ ruleGate: false, handlers: passthroughHandlers() }).compile("parse");
+  const result = await graph.run({ text: "一种分拣装置" }, { provider });
+  assert.equal(result.state.cutoff_date, "");
+  assert.equal(result.state.cutoff_basis, "unknown");
+  assert.equal(result.state.cutoff_degraded, true);
+  assert.match(String(result.state.time_baseline), /未确定截止日/);
 });
 
 test("inventiveness: recall_check 降级 → 直接放行 closest，不进入重检回路（P0-1 B3）", async () => {

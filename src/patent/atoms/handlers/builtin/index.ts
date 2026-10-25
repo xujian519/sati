@@ -79,3 +79,9 @@ export {
 export { claimChartAtom, ClaimChartHandler } from "./chart.js";
 export { claimEmbodimentMapperAtom, ClaimEmbodimentMapperHandler } from "./mapper.js";
 export { chemistryAnalyzeAtom, ChemistryAnalyzeHandler } from "./chemistry.js";
+export {
+  timeBaselineAtom,
+  TimeBaselineHandler,
+  type TimeBaseline,
+  type TimeBaselineBasis,
+} from "./timeBaseline.js";

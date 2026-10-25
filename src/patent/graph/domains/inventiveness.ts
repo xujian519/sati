@@ -1,13 +1,14 @@
 /**
  * src/patent/graph/domains/inventiveness — 创造性分析子图（专利法 A22.3，三步法）。
  *
- * 节点链：parse（画像/时间基准）→ build_query（检索式含时间基准）→ prepare_query
- * → search（复用）→ recall_check（检索覆盖度反思）→ [refine_query → prepare_query
- * → search 回路，最多 2 次重检] → converge_prior_art（union top-N 收敛）→ closest
- * （Step1 最接近现有技术）→ diff（Step2 区别特征+实际解决技术问题）→ combination
- * （D2 组合动机/技术障碍显式建模）→ hint（Step3 技术启示）→ secondary（辅助因素）
- * → conclude（结论+反事后诸葛亮自检）→ approval → rule_gate。retrieval.maxRounds=0
- * 时禁用反思回路，保持旧行为（search → closest）。
+ * 节点链：parse（画像/时间字段）→ time_baseline（截止日显式事实）→ domain_inject
+ * → build_query（检索式含时间基准）→ prepare_query → search（复用）→ recall_check
+ * （检索覆盖度反思）→ [refine_query → prepare_query → search 回路，最多 2 次重检]
+ * → converge_prior_art（union top-N 收敛）→ closest（Step1 最接近现有技术）→ diff
+ * （Step2 区别特征+实际解决技术问题）→ combination（D2 组合动机/技术障碍显式建模）
+ * → hint（Step3 技术启示）→ secondary（辅助因素）→ conclude（结论+反事后诸葛亮自检）
+ * → approval → rule_gate。retrieval.maxRounds=0 时禁用反思回路，保持旧行为
+ * （search → closest）。
  *
  * 对齐 Mady domains/inventiveness（7 节点 Pregel）：每 LLM 节点 JSON schema 结构化
  * 输出（temperature 0.2），LLM 缺失/失败 → markDegraded（确定性骨架仍可跑）。
@@ -23,7 +24,12 @@ import { GRAPH_END } from "../types.js";
 import { getStateArray, getStateString } from "../state.js";
 import { isDegraded } from "../degradation.js";
 import type { EdgeRouter, GraphNode } from "../types.js";
-import { globalStageHandlerRegistry, type StageHandler, type StageHandlerRegistry } from "../../atoms/index.js";
+import {
+  globalStageHandlerRegistry,
+  TimeBaselineHandler,
+  type StageHandler,
+  type StageHandlerRegistry,
+} from "../../atoms/index.js";
 import { tryParseJson } from "../../llm-json.js";
 import { classifyIpc, IPC_DOMAINS, MULTI_CLASSIFY_MIN_CONFIDENCE } from "../../../knowledge/patent/ipc-classifier.js";
 import { dataBlock } from "../../prompt-hygiene.js";
@@ -58,7 +64,8 @@ const PARSE_SCHEMA = {
   properties: {
     features: { type: "array", items: { type: "string" }, description: "技术特征" },
     field: { type: "string", description: "所属技术领域" },
-    filing_date: { type: "string", description: "申请日/优先权日（如提供）" },
+    priority_date: { type: "string", description: "优先权日（如提供；优先于申请日作为时间基准）" },
+    filing_date: { type: "string", description: "申请日（如提供）" },
     inventor_claimed_effect: { type: "string", description: "发明声称的技术效果" },
   },
   required: ["features", "field"],
@@ -253,10 +260,10 @@ const parseNode: GraphNode = llmNode({
     return [
       "你是专利创造性分析专家（专利法 A22.3）。解析以下权利要求/技术方案：",
       "- 提取技术特征，构建所属领域技术人员画像",
-      "- 确定申请日/优先权日时间基准（如提供）",
+      "- 解析申请日与优先权日（如提供）；本节点只解析时间字段，截止日由 time_baseline 统一产出",
       "- 记录发明人声称的技术效果（不以声称的问题为准）",
       dataBlock(input.slice(0, 8000)),
-      "请严格输出 JSON：{ features, field, filing_date, inventor_claimed_effect }。",
+      "请严格输出 JSON：{ features, field, priority_date, filing_date, inventor_claimed_effect }。",
     ].join("\n");
   },
   schema: PARSE_SCHEMA,
@@ -270,12 +277,19 @@ const buildQueryNode: GraphNode = llmNode({
   timeoutMs: 60_000,
   buildPrompt: state => {
     const parse = getStateString(state, "inventiveness_parse");
+    const cutoffDate = getStateString(state, "cutoff_date");
+    const cutoffBasis = getStateString(state, "cutoff_basis");
+    const basisLabel = cutoffBasis === "priority" ? "优先权日" : "申请日";
+    const timeLine =
+      cutoffDate.length > 0
+        ? `- 时间基准已确定：截止日 ${cutoffDate}（${basisLabel}）——只检索该日期之前公开的文献，检索式加入 after:${cutoffDate.replace(/-/g, "")} 或等效日期限定`
+        : "- 时间基准未确定（缺少申请日/优先权日）：不得假定今天，检索式中不得写死当日日期，并在输出中标注时间基准缺失";
     return [
       "基于创造性分析解析结果，生成现有技术检索策略：",
       "- 最接近现有技术的检索方向（同技术领域/同技术问题）",
       "- 三层检索式：精确层 → 扩展层 → 语义层",
       "- 含布尔表达式与 IPC 限定（如可推断）",
-      "- 检索以申请日/优先权日为时间基准：如可推断申请日/优先权日，在检索式中加入 after:YYYYMMDD 或等效日期限定（只检索该日期之前公开的文献）",
+      timeLine,
       dataBlock(parse.slice(0, 4000)),
       "输出检索策略文本（至少 3 组检索式）。",
     ].join("\n");
@@ -536,6 +550,11 @@ type EdgeSpec = {
 /** 节点定义表：顺序即 addNode 顺序（provenance / describe 依赖该顺序）。 */
 const STAGE_NODES: readonly StageSpec[] = [
   { name: "parse", create: () => parseNode, include: () => true },
+  {
+    name: "time_baseline",
+    create: () => handlerNode(new TimeBaselineHandler()),
+    include: () => true,
+  },
   { name: "domain_inject", create: () => domainInjectNode, include: () => true },
   { name: "build_query", create: () => buildQueryNode, include: () => true },
   { name: "search", create: ctx => handlerNode(ctx.searchHandler!), include: ctx => ctx.search },
@@ -575,8 +594,9 @@ const STAGE_EDGES: readonly EdgeSpec[] = [
   { from: "converge_prior_art", to: "closest", when: f => f.recallLoop },
   { from: "search", to: "closest", when: f => f.search && !f.recallLoop },
   { from: "build_query", to: "closest", when: f => !f.search },
-  // 三步法主线
-  { from: "parse", to: "domain_inject", when: () => true },
+  // 三步法主线：parse → time_baseline（截止日显式事实）→ domain_inject → build_query
+  { from: "parse", to: "time_baseline", when: () => true },
+  { from: "time_baseline", to: "domain_inject", when: () => true },
   { from: "domain_inject", to: "build_query", when: () => true },
   { from: "closest", to: "diff", when: () => true },
   { from: "diff", to: "combination", when: f => f.combination },
@@ -674,8 +694,9 @@ export function extractInventivenessResult(state: GraphState): {
  */
 export const INVENTIVENESS_INPUT_DECLARATIONS: Readonly<Record<string, readonly string[]>> = {
   parse: [],
+  time_baseline: ["priority_date", "filing_date", "inventiveness_parse"],
   domain_inject: [],
-  build_query: ["inventiveness_parse"],
+  build_query: ["inventiveness_parse", "cutoff_date"],
   prepare_query: ["inventiveness_query", "inventiveness_parse"],
   search: ["query"],
   recall_check: ["prior_art", "search_summary"],

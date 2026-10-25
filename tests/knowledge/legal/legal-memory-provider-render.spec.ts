@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { LegalMemoryProvider } from "../../../src/knowledge/legal/legal-memory-provider.js";
-import type { LawCategory, LawRecord, LawSearchResult, LegalSearchSource } from "../../../src/knowledge/legal/types.js";
+import type {
+  LawCategory,
+  LawRecord,
+  LawSearchResult,
+  LegalSearchSource,
+  TimedLegalSearchResult,
+} from "../../../src/knowledge/legal/types.js";
 import type { MemoryRetrieveInput } from "../../../src/context/memory/MemoryResolver.js";
 
 /**
@@ -26,10 +32,15 @@ function rec(overrides: Partial<LawRecord> = {}): LawRecord {
 
 class FakeEngine implements LegalSearchSource {
   readonly ftsAvailable = true;
+  readonly timeFilter = "approximate" as const;
   constructor(private readonly hits: LawRecord[]) {}
 
   search(): LawSearchResult[] {
     return this.hits.map(r => ({ ...r, score: 0 }));
+  }
+
+  searchAt(): TimedLegalSearchResult {
+    return { results: this.search(), meta: { timeFilter: this.timeFilter, unknownDateCount: 0 } };
   }
 
   findByName(): LawRecord[] {
