@@ -397,6 +397,11 @@ export type WorkflowProviderDeps = {
   /** 检索器（缺省 nuo-patent 的 searchPatents，经 createNuoSearchProvider 适配）。 */
   search?: StageProvider["search"];
   /**
+   * 装配时启用的检索源数量（缺省不传 = 源数未知，按多源严格门槛）。
+   * 语义见 `StageProvider.sourceCount`：是装配结果而非本次成功源数。
+   */
+  sourceCount?: number;
+  /**
    * per-node 模型覆盖映射（P2-1 模型分层）：callLLM 的 modelHint 标识（如 "cheap"/"strong"）
    * → { provider?, model }。缺省空 = 忽略 modelHint，全部节点用默认模型（行为不变）。
    */
@@ -493,5 +498,6 @@ export function buildWorkflowProvider(
     },
     search: deps.search ?? createNuoSearchProvider().search,
     caseId: context.caseId ?? "",
+    ...(deps.sourceCount !== undefined ? { sourceCount: deps.sourceCount } : {}),
   };
 }

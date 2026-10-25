@@ -133,16 +133,21 @@ export class QualityGateHandler implements StageHandler {
   readonly name = "quality-gate";
   readonly category = "gate" as const;
 
-  async execute({ state }: StageExecuteInput): Promise<PipelineState> {
+  async execute({ state, provider }: StageExecuteInput): Promise<PipelineState> {
     const summary = getStateString(state, "search_summary");
     const docs = formatPriorArtDocs(getStateArray(state, "prior_art"));
     const text = [summary, docs].filter(Boolean).join("\n");
     if (text.trim().length === 0) {
       return degraded("quality-gate", "输入为空（state.search_summary / prior_art）");
     }
-    const result = checkSearchQuality(text);
+    const result = checkSearchQuality(text, { sourceCount: provider?.sourceCount });
     const report = [
       `检索质量门: ${result.passed ? "✅ 通过" : "⚠️ 未通过（挂 HITL 决策：退回重做或人工确认放行）"}`,
+      ...(result.thresholdsAdjusted
+        ? [
+            `- 检索源: 装配时 1 个（单源检索，阈值已调整：对比文件 ≥${result.thresholds.minDocs} 篇、全文 ≥${result.thresholds.minFulltextMarks} 篇；运行期源失败不恢复严格阈值）`,
+          ]
+        : []),
       `- 对比文件: ${result.details.docCount} 篇 | 相关度标注: ${result.details.relatednessMarks} 处 | 全文标注: ${result.details.fullTextMarks} 篇 | 布尔检索式: ${result.details.hasBooleanQuery ? "是" : "否"} | IPC 限定: ${result.details.hasIpcLimit ? "是" : "否"}`,
       ...result.failures.map(f => `- ❌ ${f}`),
     ].join("\n");
