@@ -10,7 +10,7 @@
  * 本门禁只产出判定结果，挂起/审批由调用方（Agent 输出流）处理。
  */
 
-import type { RuleEvaluation, RuleSet, RuleViolation } from "../protocol/types.js";
+import type { RuleEvaluation, RuleSet, RuleSkip, RuleViolation } from "../protocol/types.js";
 import { evaluateText, groupByAction } from "./RuleEngine.js";
 import type { SynonymMap } from "./synonym-engine.js";
 
@@ -38,6 +38,12 @@ export type RuleOutputGateResult = {
   blockHits: string[];
   /** 完整评估（含 log 分组）。 */
   evaluation: RuleEvaluation;
+  /** 实际执行了检查的规则 id（evaluation.assessed 的便捷别名）。 */
+  assessed: string[];
+  /** 未执行检查的规则及原因（evaluation.skipped 的便捷别名）。 */
+  skipped: RuleSkip[];
+  /** 本轮没有任何规则被评估（不等于「通过」）。 */
+  notAssessed: boolean;
 };
 
 /** 规则驱动的输出门禁。一个实例持有一份 RuleSet（启动时加载一次）。 */
@@ -86,6 +92,9 @@ export class RuleOutputGate {
       reviewHits,
       blockHits,
       evaluation,
+      assessed: evaluation.assessed,
+      skipped: evaluation.skipped,
+      notAssessed: evaluation.assessed.length === 0,
     };
   }
 }

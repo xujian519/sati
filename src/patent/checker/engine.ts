@@ -8,7 +8,16 @@
  * - 关键词匹配：同义词扩展 + 命中前 60 字符窗口否定检测（"不具有/未发现/…"不误报）。
  */
 
-import type { CheckRule, CheckType, RuleCheckResult, RuleEngineOptions, Severity, Verdict } from "./types.js";
+import type {
+  CheckRule,
+  CheckType,
+  RuleCheckResult,
+  RuleCheckSkip,
+  RuleEngineOptions,
+  RuleEvaluationDetail,
+  Severity,
+  Verdict,
+} from "./types.js";
 import { LevelMust, LevelQuality, LevelShould } from "./types.js";
 import {
   NEGATION_WINDOW,
@@ -280,11 +289,29 @@ export class RuleEngine {
    * 未显式传 rules 时使用注册的全部规则。domain 支持单域或多域（任一匹配即评估）。
    */
   evaluate(text: string, options: RuleEngineOptions = {}): RuleCheckResult[] {
+    return this.evaluateDetailed(text, options).results;
+  }
+
+  /**
+   * 详细评估：除失败清单外，返回实际评估 / 跳过的规则，供「未评估 ≠ 通过」审计。
+   * 空文本仍执行确定性检查（与既有 blocked 判定兼容）；`empty-text` 只为跨引擎
+   * 形状对齐保留，本引擎当前不产生该原因。
+   */
+  evaluateDetailed(text: string, options: RuleEngineOptions = {}): RuleEvaluationDetail {
     const rules = options.rules ?? this.all();
     const domains = normalizeDomains(options.domain);
     const results: RuleCheckResult[] = [];
+    const assessed: string[] = [];
+    const skipped: RuleCheckSkip[] = [];
+    if (rules.length === 0) {
+      return { results, assessed, skipped: [{ reason: "no-rules" }] };
+    }
     for (const rule of rules) {
-      if (domains.length > 0 && rule.domain !== "" && !domains.includes(rule.domain)) continue;
+      if (domains.length > 0 && rule.domain !== "" && !domains.includes(rule.domain)) {
+        skipped.push({ ruleId: rule.id, reason: "domain-filtered" });
+        continue;
+      }
+      assessed.push(rule.id);
       const { passed, detail } = evaluateRule(rule, text);
       if (passed) continue;
       results.push({
@@ -297,7 +324,7 @@ export class RuleEngine {
         fixSuggestion: rule.fixSuggestion,
       });
     }
-    return results;
+    return { results, assessed, skipped };
   }
 }
 
@@ -309,15 +336,20 @@ export class RuleEngine {
  * 判级模型（与 Mady Aggregate 一致）：
  * - 任一 Level-0 (Must) 或 Level-1 (Should) 失败 → blocked。
  * - 3 条及以上 Level-2 (Quality) 失败 → needs_revision。
+ * - `assessed === 0` → not_assessed（没有规则参与评估，不得冒充 pass）。
  * - 否则 → pass。
+ *
+ * `assessed` 缺省时保持旧行为（空结果 = pass）：直接调用方若未提供覆盖面，
+ * 聚合函数无法自行判断「没有规则」与「规则都通过」的区别。
  */
-export function aggregate(results: readonly RuleCheckResult[]): Verdict {
+export function aggregate(results: readonly RuleCheckResult[], options: { assessed?: number } = {}): Verdict {
   let level2Failures = 0;
   for (const result of results) {
     if (result.passed) continue;
     if (result.level <= LevelShould) return "blocked";
     if (result.level === LevelQuality) level2Failures += 1;
   }
+  if (options.assessed === 0) return "not_assessed";
   if (level2Failures >= 3) return "needs_revision";
   return "pass";
 }
@@ -354,10 +386,16 @@ function severityLabel(severity: Severity): string {
 
 /** 渲染规则检查结果为 Markdown 报告片段。 */
 export function formatRuleResults(results: readonly RuleCheckResult[], verdict: Verdict): string {
-  const verdictLabel = verdict === "pass" ? "✅ 通过" : verdict === "needs_revision" ? "⚠️ 需修改" : "⛔ 阻断";
+  const VERDICT_LABELS: Record<Verdict, string> = {
+    pass: "✅ 通过",
+    needs_revision: "⚠️ 需修改",
+    blocked: "⛔ 阻断",
+    not_assessed: "◻️ 未评估",
+  };
+  const verdictLabel = VERDICT_LABELS[verdict];
   const lines: string[] = ["## 规则引擎检查", "", `检查结论: ${verdictLabel}`, "", ""];
   if (results.length === 0) {
-    lines.push("所有规则检查均通过。", "");
+    lines.push(verdict === "not_assessed" ? "未评估：本轮无规则参与检查。" : "所有规则检查均通过。", "");
     return lines.join("");
   }
   lines.push("| 规则 | 级别 | 严重度 | 问题 | 修改建议 |", "|------|------|--------|------|----------|");

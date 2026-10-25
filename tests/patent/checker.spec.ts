@@ -56,6 +56,32 @@ test("aggregate: passed 结果不参与判级", () => {
   assert.equal(aggregate([failure(2, true), failure(2, true)]), "pass");
 });
 
+test("aggregate: assessed=0 → not_assessed（零评估不得冒充 pass）", () => {
+  assert.equal(aggregate([], { assessed: 0 }), "not_assessed");
+  assert.equal(aggregate([failure(2)], { assessed: 0 }), "not_assessed");
+  assert.equal(aggregate([failure(0)], { assessed: 0 }), "blocked", "阻断级失败仍优先于零评估");
+});
+
+test("aggregate: assessed>0 且无失败 → pass", () => {
+  assert.equal(aggregate([], { assessed: 1 }), "pass");
+});
+
+test("evaluateDetailed: 域过滤记入 skipped，assessed 只含实际评估规则", () => {
+  const rules = [...noveltyRules(), ...inventivenessRules()];
+  const detail = engine.evaluateDetailed("不具备新颖性", { rules, domain: "patent_novelty" });
+  assert.ok(detail.assessed.length > 0);
+  assert.ok(detail.skipped.some(s => s.reason === "domain-filtered"));
+  assert.ok(!detail.assessed.includes(detail.skipped[0]!.ruleId!), "被跳过的规则不得同时出现在 assessed");
+});
+
+test("evaluateDetailed: 空规则集 → no-rules 与空 assessed", () => {
+  const empty = new RuleEngine();
+  const detail = empty.evaluateDetailed("任意文本");
+  assert.deepEqual(detail.results, []);
+  assert.deepEqual(detail.assessed, []);
+  assert.deepEqual(detail.skipped, [{ reason: "no-rules" }]);
+});
+
 // =============================================================================
 // 新颖性规则（单独对比原则）
 // =============================================================================
@@ -232,6 +258,13 @@ test("formatRuleResults: 通过时输出 Markdown 结论行", () => {
   const md = formatRuleResults([], "pass");
   assert.match(md, /检查结论: ✅ 通过/);
   assert.match(md, /所有规则检查均通过/);
+});
+
+test("formatRuleResults: 未评估时不得输出「所有规则检查均通过」", () => {
+  const md = formatRuleResults([], "not_assessed");
+  assert.match(md, /检查结论: ◻️ 未评估/);
+  assert.match(md, /未评估：本轮无规则参与检查/);
+  assert.doesNotMatch(md, /所有规则检查均通过/);
 });
 
 test("formatRuleResults: 失败时输出表格行", () => {

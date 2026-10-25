@@ -12,6 +12,7 @@ import type {
   RuleEvaluation,
   RuleSeverity,
   RuleSet,
+  RuleSkip,
   RuleViolation,
   StructuralAnalysisCheck,
 } from "../protocol/types.js";
@@ -161,7 +162,7 @@ export type EvaluateTextOptions = {
   domain?: string;
 };
 
-/** 评估一段文本，返回全部违规（synonyms 为同义词表，供 synonym_match 检查；缺省空表）。 */
+/** 评估一段文本，返回全部违规与评估覆盖（synonyms 为同义词表，供 synonym_match 检查；缺省空表）。 */
 export function evaluateText(
   text: string,
   ruleSet: RuleSet,
@@ -169,12 +170,33 @@ export function evaluateText(
   options?: EvaluateTextOptions,
 ): RuleEvaluation {
   const violations: RuleViolation[] = [];
+  const assessed: string[] = [];
+  const skipped: RuleSkip[] = [];
+  if (ruleSet.rules.length === 0) {
+    return { violations, assessed, skipped: [{ reason: "no-rules" }] };
+  }
+  const textEmpty = text.trim().length === 0;
   for (const rule of ruleSet.rules) {
-    if (options?.domain !== undefined && rule.domain && rule.domain !== options.domain) continue;
+    if (options?.domain !== undefined && rule.domain && rule.domain !== options.domain) {
+      skipped.push({ ruleId: rule.id, reason: "domain-filtered" });
+      continue;
+    }
+    // 内容匹配类检查在空文本上不存在「已检查且通过」的语义；结构/同义要素检查
+    // 在空文本下报「缺失要素」仍是有效结论，继续评估以保持 violations 语义稳定。
+    if (textEmpty && isContentMatchCheck(rule.check)) {
+      skipped.push({ ruleId: rule.id, reason: "empty-text" });
+      continue;
+    }
+    assessed.push(rule.id);
     const found = evaluateRule(rule, text, synonyms);
     if (found !== null) violations.push(found);
   }
-  return { violations };
+  return { violations, assessed, skipped };
+}
+
+/** 空文本下无法给出有意义结论的检查类型（命中即「无内容可查」，不等于通过）。 */
+function isContentMatchCheck(check: ConstitutionalRule["check"]): boolean {
+  return check.type === "keyword_blocklist" || check.type === "pattern_analysis" || check.type === "citation_analysis";
 }
 
 /** 评估单条规则；无违规返回 null。 */

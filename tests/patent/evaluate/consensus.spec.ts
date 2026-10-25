@@ -163,6 +163,7 @@ test("compositeOverall：保守序 blocked > disagree > needs_revision > pass", 
   assert.equal(compositeOverall([layer("mechanical", "pass"), layer("consensus", "disagree")]), "disagree");
   assert.equal(compositeOverall([layer("mechanical", "needs_revision"), layer("consensus", "pass")]), "needs_revision");
   assert.equal(compositeOverall([layer("mechanical", "pass"), layer("consensus", "pass")]), "pass");
+  assert.equal(compositeOverall([layer("mechanical", "not_assessed"), layer("consensus", "pass")]), "needs_revision");
   assert.equal(compositeOverall([layer("mechanical", "unknown")]), "unknown");
 });
 
