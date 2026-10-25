@@ -1,13 +1,13 @@
 name: Build Installers
 
 # 远程打包入口：在 GitHub 托管 runner 上构建 macOS arm64 DMG 与 Windows x64 EXE。
-# 触发方式：向 `ci/remote-installers*` 分支推送（工作流文件随该 ref 生效），或
-# 合并到默认分支后用 `gh workflow run build-installers.yml -f ref=vX.Y.Z` 手动触发。
+# 触发方式：
+#   1. Actions → Build Installers → Run workflow，填写 tag 并勾选 publish_release；
+#   2. 向 `ci/remote-installers*` 分支推送（仅构建验证，不发布）。
 #
 # 无签名证书（仓库未配置 CSC_LINK / Apple 公证凭据）时只产出：
 #   macOS  ad-hoc 签名 DMG（用户需右键打开）
 #   Windows 未签名 EXE（SmartScreen 提示“未知发布者”）
-# 产物作为 Actions artifacts 保存，不创建 GitHub Release、不覆盖已有发布资产。
 on:
   push:
     branches:
@@ -15,9 +15,13 @@ on:
   workflow_dispatch:
     inputs:
       ref:
-        description: Git tag or commit to build
+        description: Git tag to build and publish (e.g. v0.4.0)
         required: true
-        default: v0.3.8
+        default: v0.4.0
+      publish_release:
+        description: Create or update the GitHub Release with the built installers
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -25,6 +29,10 @@ permissions:
 concurrency:
   group: build-installers-${{ inputs.ref || github.sha }}
   cancel-in-progress: false
+
+env:
+  BUILD_REF: ${{ inputs.ref || github.sha }}
+  PNPM_VERSION: "10.32.1"
 
 jobs:
   macos:
@@ -34,18 +42,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.ref || 'v0.3.8' }}
+          ref: ${{ inputs.ref || github.sha }}
           fetch-depth: 0
           lfs: false
 
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: "22"
 
       - name: Enable pnpm (corepack)
         run: |
           corepack enable
-          corepack prepare pnpm@10.32.1 --activate
+          corepack prepare pnpm@${PNPM_VERSION} --activate
           pnpm --version
 
       - name: Install dependencies
@@ -61,7 +69,7 @@ jobs:
         run: pnpm --filter edgeclaw-memory-core build
 
       # 测试门禁由同一 commit 的 CI 覆盖，打包不重复执行 pnpm test。
-      # --ad-hoc：无 Developer ID，跳过公证；--skip-publish：不上传 Release。
+      # --ad-hoc：无 Developer ID，跳过公证；--skip-publish：由 release job 统一发布。
       - name: Build ad-hoc DMG
         run: bash apps/desktop/scripts/release.sh --ad-hoc --skip-tests --skip-publish
 
@@ -73,7 +81,7 @@ jobs:
       - name: Upload DMG
         uses: actions/upload-artifact@v4
         with:
-          name: Sati-${{ inputs.ref || 'v0.3.8' }}-macos-arm64
+          name: sati-macos-arm64
           path: |
             apps/desktop/dist-electron/Sati-*-arm64.dmg
             apps/desktop/dist-electron/SHA256SUMS-macos.txt
@@ -89,19 +97,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.ref || 'v0.3.8' }}
+          ref: ${{ inputs.ref || github.sha }}
           fetch-depth: 0
           lfs: false
 
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: "22"
 
       - name: Enable pnpm (corepack)
         shell: bash
         run: |
           corepack enable
-          corepack prepare pnpm@10.32.1 --activate
+          corepack prepare pnpm@${PNPM_VERSION} --activate
           pnpm --version
 
       - name: Install dependencies
@@ -130,9 +138,106 @@ jobs:
       - name: Upload EXE
         uses: actions/upload-artifact@v4
         with:
-          name: Sati-${{ inputs.ref || 'v0.3.8' }}-windows-x64
+          name: sati-windows-x64
           path: |
             apps/desktop/dist-electron/Sati-*-win-x64.exe
             apps/desktop/dist-electron/SHA256SUMS-windows.txt
           if-no-files-found: error
           retention-days: 30
+
+  release:
+    name: Publish GitHub Release
+    runs-on: ubuntu-latest
+    needs: [macos, windows]
+    if: github.event_name == 'workflow_dispatch' && inputs.publish_release
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+          lfs: false
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Assemble release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+
+          VERSION="$(node -p "require('./apps/desktop/package.json').version")"
+          TAG="v${VERSION}"
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+          echo "TAG=${TAG}" >> "$GITHUB_ENV"
+
+          # 版本必须与 tag 指向的 commit 一致，避免发布张冠李戴。
+          if ! git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+            echo "::error::tag ${TAG} not found (build ref: ${{ inputs.ref }})"
+            exit 1
+          fi
+          TAG_SHA="$(git rev-parse "${TAG}^{commit}")"
+          HEAD_SHA="$(git rev-parse HEAD)"
+          if [[ "$TAG_SHA" != "$HEAD_SHA" ]]; then
+            echo "::error::${TAG} points to ${TAG_SHA}, but checked out ${HEAD_SHA}"
+            exit 1
+          fi
+
+          mkdir -p release-assets
+          find artifacts -type f \
+            \( -name '*.dmg' -o -name '*.exe' -o -name 'install-sati.sh' -o -name 'INSTALL.md' \) \
+            -exec cp {} release-assets/ \;
+
+          cd release-assets
+
+          # README 固定链接：Sati-latest-*
+          for f in Sati-"${VERSION}"-arm64.dmg; do
+            cp "$f" Sati-latest-arm64.dmg
+          done
+          for f in Sati-"${VERSION}"-win-*.exe; do
+            cp "$f" "${f/Sati-${VERSION}-/Sati-latest-}"
+          done
+
+          shasum -a 256 *.dmg *.exe > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+          ls -lh
+
+      - name: Create or update GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          NOTES="$(awk -v ver="## ${TAG}" '
+            $0 ~ ver { found=1; next }
+            found && /^---$/ { exit }
+            found && /^## v/ { exit }
+            found { print }
+          ' CHANGELOG.md)"
+          if [[ -z "${NOTES//[[:space:]]/}" ]]; then
+            NOTES="Sati Desktop ${TAG}"
+          fi
+          NOTES="${NOTES}
+
+          ---
+          Build: ${GITHUB_SHA} · [workflow run](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})
+          macOS: ad-hoc signed (right-click → Open on first launch)
+          Windows: unsigned (SmartScreen may warn)"
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release ${TAG} exists — uploading assets (overwrite)…"
+            gh release upload "$TAG" release-assets/* --clobber
+          else
+            echo "Creating release ${TAG}…"
+            gh release create "$TAG" release-assets/* \
+              --title "Sati Desktop ${TAG}" \
+              --notes "$NOTES"
+          fi
+
+          URL="$(gh release view "$TAG" --json url -q .url)"
+          echo "### Published ${URL}" >> "$GITHUB_STEP_SUMMARY"
