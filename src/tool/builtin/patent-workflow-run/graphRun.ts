@@ -3,15 +3,19 @@ import { globalStageHandlerRegistry } from "../../../patent/atoms/index.js";
 import {
   DOMAIN_GRAPHS,
   DOMAIN_INPUT_DECLARATIONS,
+  GRAPH_RUN_SUMMARY_DIR,
   InMemoryCheckpointStore,
   JsonFileCheckpointStore,
+  buildGraphRunSummary,
   caseInventivenessFeedbackPath,
   caseSessionBindingPath,
   grantApproval,
   loadInventivenessFeedback,
+  resolveRunRulePack,
   runGraphWithCheckpoints,
   saveSessionCaseBinding,
   summarizeInventivenessFeedback,
+  writeGraphRunSummary,
 } from "../../../patent/index.js";
 import {
   buildWorkflowProvider,
@@ -42,6 +46,7 @@ function renderGraphResultText(opts: {
   graph: DomainGraphName;
   result: GraphRunResult;
   persistNote: string;
+  summaryNote: string;
   checkpointNote: string;
 }): string {
   const completion = opts.result.completed ? "completed" : "incomplete";
@@ -81,6 +86,7 @@ function renderGraphResultText(opts: {
     `规则门 verdict: ${String(opts.result.state.rule_gate_verdict ?? "（未启用）")}`,
     opts.checkpointNote,
     opts.persistNote,
+    opts.summaryNote,
     ...(opts.result.interrupted !== undefined
       ? [
           `⏸ 审批门暂停: "${opts.result.interrupted.node}"（${opts.result.interrupted.message}）——可用 resumeCheckpointId 续跑`,
@@ -183,9 +189,26 @@ export async function executeGraphRun(
   }
   store ??= new InMemoryCheckpointStore();
 
+  // 规则包快照在**执行开始**采集（与 manifest 路径同一函数；每次 run 重新计算，
+  // 不复用模块级缓存——长驻进程会拿到旧值）。
+  const rulePack = resolveRunRulePack();
+  // 图 run 摘要写入 `<runsDir>/graph/`：runId 加 `graph-` 前缀，与 manifest run
+  // 的 `<caseKey>__<manifestId>` 命名空间分开（否则会被当成 manifest run 读取）。
+  const summaryTarget =
+    input.caseId !== undefined
+      ? resolveRunPersistTarget(input.caseId, `graph-${graphId}`, context.cwd ?? process.cwd())
+      : undefined;
+  let summaryNote =
+    summaryTarget !== undefined
+      ? `图 run 摘要: ${join(summaryTarget.runsDir, GRAPH_RUN_SUMMARY_DIR, `${summaryTarget.runId}.json`)}`
+      : "图 run 摘要: 未启用（未提供 caseId）";
+
   let resumeFrom: GraphCheckpoint | undefined;
   let result: GraphRunResult;
   let checkpointId: string | undefined;
+  // finally 里写摘要：中断与异常路径也要留下「用了哪版规则」的记录。
+  let summaryResult: GraphRunResult | undefined;
+  let summaryError: string | undefined;
   try {
     if (resumeSpec !== undefined) {
       if (resumeSpec.grant) {
@@ -220,6 +243,8 @@ export async function executeGraphRun(
         provenanceCollector?.setCurrentStep(step);
       },
     }));
+    result.rulePack = rulePack;
+    summaryResult = result;
 
     // 全图降级标记（结果侧，覆盖引擎级直接写 state 的降级路径，评审 P9）。
     if (result.degraded.length > 0) {
@@ -235,8 +260,28 @@ export async function executeGraphRun(
         message: result.interrupted.message,
       });
     }
+  } catch (error) {
+    summaryError = error instanceof Error ? error.message : String(error);
+    throw error;
   } finally {
     provenanceCollector?.close();
+    // 检查点不存在等「未真正开跑」的返回不写摘要（两者都未设置）。
+    if (summaryTarget !== undefined && (summaryResult !== undefined || summaryError !== undefined)) {
+      try {
+        await writeGraphRunSummary(
+          summaryTarget.runsDir,
+          buildGraphRunSummary({
+            graph: graphId,
+            runId: summaryTarget.runId,
+            rulePack,
+            ...(summaryResult !== undefined ? { result: summaryResult } : {}),
+            ...(summaryError !== undefined ? { error: summaryError } : {}),
+          }),
+        );
+      } catch (writeError) {
+        summaryNote = `图 run 摘要写入失败: ${writeError instanceof Error ? writeError.message : String(writeError)}`;
+      }
+    }
   }
 
   const checkpointNote = checkpointId
@@ -268,7 +313,7 @@ export async function executeGraphRun(
     content: [
       {
         type: "text",
-        text: renderGraphResultText({ graph: graphName, result, persistNote, checkpointNote }) + judgeNote,
+        text: renderGraphResultText({ graph: graphName, result, persistNote, summaryNote, checkpointNote }) + judgeNote,
       },
     ],
     data: result,

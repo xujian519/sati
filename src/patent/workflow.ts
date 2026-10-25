@@ -33,6 +33,7 @@ import {
   type WorkflowStageResult,
 } from "./workflow/types.js";
 import { needsRedo, signalFor } from "./workflow/signal.js";
+import { resolveRunRulePack } from "./workflow/rulePackInfo.js";
 import { closeRevision, createRevisionLedger, recordRewind } from "./workflow/revision.js";
 import { clearStageOutputs } from "./workflow/stage-primitives.js";
 import { buildDefaultWorkerMap, runStageOnce } from "./workflow/executor.js";
@@ -52,6 +53,7 @@ export type {
   ManifestCheckpointStage,
   ManifestCheckpointStore,
   RevisionRecord,
+  RunRulePackInfo,
   WorkflowRunOptions,
   WorkflowRunResult,
   WorkflowRunStore,
@@ -64,6 +66,7 @@ export {
   restoreFromCheckpoint,
   stageToCheckpointStage,
 } from "./workflow/checkpoint.js";
+export { resolveRunRulePack } from "./workflow/rulePackInfo.js";
 export {
   builtinPatentManifests,
   formatManifestCatalog,
@@ -172,6 +175,11 @@ export async function runWorkflow(
   options: WorkflowRunOptions = {},
 ): Promise<WorkflowRunResult> {
   validateWorkflowManifest(manifest);
+  // 规则包快照在**执行开始**采集：这条 run 的所有阶段按同一版规则评估；执行期间
+  // 文件再变也不改写归属，下一次 run 会重新计算（不复用模块级缓存）。
+  const rulePack = resolveRunRulePack(
+    options.rulePackManifestPath !== undefined ? { manifestPath: options.rulePackManifestPath } : {},
+  );
   const requireAll = manifest.validation?.requireAllSteps ?? true;
   const maxRetries = manifest.validation?.maxRetries ?? 2;
   const handlers = options.handlers ?? globalStageHandlerRegistry;
@@ -415,6 +423,7 @@ export async function runWorkflow(
     ...(interrupted ? { interrupted } : {}),
     ...(revisions.records.length > 0 ? { revisions: revisions.records.map(record => ({ ...record })) } : {}),
     ...(degradations.length > 0 ? { degradations: [...degradations] } : {}),
+    rulePack,
   };
   // 持久化失败不阻断执行结果（对齐工具层"持久化失败仅提示"的语义），
   // 仅把告警带回结果供调用方展示。

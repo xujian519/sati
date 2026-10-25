@@ -107,6 +107,11 @@ export type WorkflowRunOptions = {
   resumeFrom?: ManifestCheckpoint;
   /** 断点续跑：每阶段完成后保存检查点（可选）。 */
   checkpointStore?: ManifestCheckpointStore;
+  /**
+   * 规则包清单路径（测试注入用）；缺省按 `.sati/rules.yaml` 约定解析。
+   * 只影响 run 记录里的 `rulePack` 指纹，不改变实际加载/评估的规则集。
+   */
+  rulePackManifestPath?: string;
 };
 
 export type WorkflowStageResult = {
@@ -165,6 +170,18 @@ export type WorkflowDegradation = {
   message: string;
 };
 
+/**
+ * run 级规则包快照：回答「这一轮用的是哪版规则包」。
+ *
+ * `fingerprint` 是 `computeRulePackFingerprint` 的原样字符串（清单 + 各层规则文件的
+ * `文件名@mtime`），因此两层之间的变化可以直接从指纹里定位到层与文件；`version`
+ * 只取项目清单显式声明的值，未声明时缺省（不臆造聚合版本）。
+ */
+export type RunRulePackInfo = {
+  fingerprint: string;
+  version?: string;
+};
+
 export type WorkflowRunResult = {
   manifestId: string;
   caseType: string;
@@ -179,6 +196,8 @@ export type WorkflowRunResult = {
   revisions?: RevisionRecord[];
   /** 运行期降级标记（如结构化回退判据不可解析）；无降级时缺省。 */
   degradations?: WorkflowDegradation[];
+  /** 本次 run 使用的规则包快照（run 开始时计算，随结果落盘供事后对账）。 */
+  rulePack?: RunRulePackInfo;
   /** 可选：结果持久化失败时的告警（执行本身不受影响） */
   persistWarning?: string;
 };

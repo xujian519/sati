@@ -16,7 +16,11 @@ import { createPatentWorkflowRunTool, buildJudgeSection } from "../../../src/too
 import { buildWorkflowProvider } from "../../../src/tool/builtin/patentWorkflowTool.js";
 import { createBuiltinRegistry } from "../../../src/tool/registry/createBuiltinRegistry.js";
 import { DEFAULT_MODEL_ID } from "../../../src/model/index.js";
-import { appendInventivenessFeedback, caseInventivenessFeedbackPath } from "../../../src/patent/index.js";
+import {
+  JsonFileWorkflowRunStore,
+  appendInventivenessFeedback,
+  caseInventivenessFeedbackPath,
+} from "../../../src/patent/index.js";
 
 /**
  * patent_workflow_run（原子自动执行）接线测试。
@@ -649,6 +653,46 @@ test("graph=inventiveness 断点续跑：中断后 resumeCheckpointId 从检查�
     const resumedText = textOf(resumed);
     assert.match(resumedText, /完成状态: completed/);
     assert.match(resumedText, /规则门 verdict/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("graph run 摘要落盘：独立 graph/ 子目录、含规则包指纹、不混入 manifest run 列表", async () => {
+  registerBuiltinAtoms();
+  const dir = mkdtempSync(join(tmpdir(), "wf-graph-summary-"));
+  try {
+    const tool = createPatentWorkflowRunTool({ model: mockModel(inventivenessResponder), search: mockSearch });
+    const res = await tool.execute(
+      { graph: "inventiveness", input: "一种分拣装置，包括传送带与识别传感器", caseId: "summary-case" },
+      makeToolContext({ cwd: dir }),
+    );
+    const text = textOf(res);
+    const runsDir = join(dir, "data", "cases", "summary-case", "workflow-runs");
+    const summaryPath = join(runsDir, "graph", "summary-case__graph-patent_inventiveness.json");
+    assert.ok(existsSync(summaryPath), `图 run 摘要应落盘: ${summaryPath}`);
+    assert.match(text, /图 run 摘要: .*summary-case__graph-patent_inventiveness\.json/);
+
+    const summary = JSON.parse(readFileSync(summaryPath, "utf8")) as {
+      graph: string;
+      completed: boolean;
+      interrupted?: { node: string };
+      rulePack: { fingerprint: string };
+    };
+    assert.equal(summary.graph, "patent_inventiveness");
+    assert.equal(summary.completed, false);
+    assert.ok(summary.interrupted, "审批中断路径也要留下摘要");
+    assert.match(summary.rulePack.fingerprint, /manifest:/);
+    // 同一指纹同时出现在工具 data 面（结果对象）与落盘摘要
+    const data = res.data as { rulePack?: { fingerprint: string } };
+    assert.deepEqual(summary.rulePack, data.rulePack);
+    // 图摘要位于子目录，不被 JsonFileWorkflowRunStore.listIds 扫成 manifest run
+    // （runsDir 顶层的 session-binding.json 是本用例之外的既有文件，不参与断言）
+    const manifestRuns = await new JsonFileWorkflowRunStore(runsDir).listRuns();
+    assert.ok(
+      !manifestRuns.some(id => id.includes("graph-patent_inventiveness")),
+      `图摘要不应出现在 manifest run 列表: ${manifestRuns.join(", ")}`,
+    );
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

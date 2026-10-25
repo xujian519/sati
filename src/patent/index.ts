@@ -62,9 +62,11 @@ export {
   // 与 docket 的 RevisionRecord（案卷修订轮次）同名异义：barrel 侧别名区分。
   type RevisionRecord as WorkflowRevisionRecord,
   type WorkflowDegradation,
+  type RunRulePackInfo,
   WorkflowError,
   validateWorkflowManifest,
   runWorkflow,
+  resolveRunRulePack,
   JsonFileManifestCheckpointStore,
   restoreFromCheckpoint,
   stageToCheckpointStage,
@@ -137,6 +139,11 @@ export {
   runStageHandler,
   manifestToGraph,
   type ManifestToGraphDeps,
+  // 图 run 摘要（规则包指纹 + 完成度）
+  GRAPH_RUN_SUMMARY_DIR,
+  buildGraphRunSummary,
+  writeGraphRunSummary,
+  type GraphRunSummary,
   // 三性领域子图
   buildNoveltyGraph,
   extractNumericRanges,
