@@ -24,6 +24,7 @@ import {
   WorkflowError,
   type StageExecutor,
   type WorkflowContext,
+  type WorkflowDegradation,
   type WorkflowInterrupt,
   type WorkflowManifest,
   type WorkflowRunOptions,
@@ -31,7 +32,8 @@ import {
   type WorkflowStage,
   type WorkflowStageResult,
 } from "./workflow/types.js";
-import { signalFor, signalMatches } from "./workflow/signal.js";
+import { needsRedo, signalFor } from "./workflow/signal.js";
+import { closeRevision, createRevisionLedger, recordRewind } from "./workflow/revision.js";
 import { clearStageOutputs } from "./workflow/stage-primitives.js";
 import { buildDefaultWorkerMap, runStageOnce } from "./workflow/executor.js";
 import { restoreFromCheckpoint, stageToCheckpointStage } from "./workflow/checkpoint.js";
@@ -43,11 +45,13 @@ export { WorkflowError };
 export type {
   StageExecutor,
   WorkflowContext,
+  WorkflowDegradation,
   WorkflowInterrupt,
   WorkflowManifest,
   ManifestCheckpoint,
   ManifestCheckpointStage,
   ManifestCheckpointStore,
+  RevisionRecord,
   WorkflowRunOptions,
   WorkflowRunResult,
   WorkflowRunStore,
@@ -104,14 +108,26 @@ export function validateWorkflowManifest(
       throw new WorkflowError(`阶段 ${stage.id} 声明了未知 atom: ${stage.atom}`);
     }
     if (stage.retry !== undefined) {
-      if (stage.retry.whenOutputMatches.trim() === "") {
-        throw new WorkflowError(`阶段 ${stage.id} 的 retry.whenOutputMatches 不能为空`);
+      if (stage.retry.whenOutputGaps !== undefined && typeof stage.retry.whenOutputGaps !== "boolean") {
+        throw new WorkflowError(`阶段 ${stage.id} 的 retry.whenOutputGaps 必须是布尔值`);
       }
-      try {
-        new RegExp(stage.retry.whenOutputMatches, "i");
-      } catch {
-        // whenOutputMatches 不是合法正则（RegExp 构造抛 SyntaxError）→ 转译为带阶段 id 的 WorkflowError：在 manifest 校验期就 fail-fast，由 patent_workflow 工具作为"manifest 校验失败"文本回给模型，而不是等运行时做重试匹配才崩。
-        throw new WorkflowError(`阶段 ${stage.id} 的 retry.whenOutputMatches 非法正则`);
+      const pattern = stage.retry.whenOutputMatches;
+      const hasGaps = stage.retry.whenOutputGaps === true;
+      if (pattern === undefined && !hasGaps) {
+        throw new WorkflowError(
+          `阶段 ${stage.id} 的 retry 必须声明 whenOutputMatches 或 whenOutputGaps（至少一个触发判据）`,
+        );
+      }
+      if (pattern !== undefined) {
+        if (pattern.trim() === "") {
+          throw new WorkflowError(`阶段 ${stage.id} 的 retry.whenOutputMatches 不能为空`);
+        }
+        try {
+          new RegExp(pattern, "i");
+        } catch {
+          // whenOutputMatches 不是合法正则（RegExp 构造抛 SyntaxError）→ 转译为带阶段 id 的 WorkflowError：在 manifest 校验期就 fail-fast，由 patent_workflow 工具作为"manifest 校验失败"文本回给模型，而不是等运行时做重试匹配才崩。
+          throw new WorkflowError(`阶段 ${stage.id} 的 retry.whenOutputMatches 非法正则`);
+        }
       }
       if (stage.retry.rewindTo !== undefined && !ids.has(stage.retry.rewindTo)) {
         // ids 按 manifest 顺序逐个收集：此检查隐含约束 rewindTo 只能指向更早阶段
@@ -127,6 +143,20 @@ export function validateWorkflowManifest(
       if (maxRetries < 0) throw new WorkflowError(`阶段 ${stage.id} 的 retry.maxRetries 不能为负`);
     }
   }
+}
+
+/**
+ * 记录「结构化回退判据不可解析」降级标记（按阶段去重）。
+ * 只声明 whenOutputGaps 的 manifest 在 LLM 输出非严格 JSON 时无法判定是否回退；
+ * 这里显式留痕，避免把「没判定」呈现成「判定通过」。
+ */
+function recordRetrySignalDegradation(degradations: WorkflowDegradation[], stageId: string): void {
+  if (degradations.some(item => item.stageId === stageId)) return;
+  degradations.push({
+    stageId,
+    reason: "retry_signal_unparseable",
+    message: `阶段 "${stageId}" 声明 whenOutputGaps，但输出不是严格 JSON 且未声明 whenOutputMatches：本次未做回退判定（结构化触发不可用）`,
+  });
 }
 
 /**
@@ -182,6 +212,10 @@ export async function runWorkflow(
   const rewindCounts = new Map<string, number>();
   // 信号正则预编译（manifest 常量，避免每次执行/回退重新编译；判定逻辑见 ./workflow/signal.ts）。
   const signalCache = new Map<string, RegExp>();
+  // 回退留痕：resume 时从检查点恢复（旧检查点无该字段 → 空账本）。
+  const revisions = createRevisionLedger(options.resumeFrom?.revisions);
+  // 运行期降级标记（结构化回退判据不可解析）：按阶段去重，不静默。
+  const degradations: WorkflowDegradation[] = [];
 
   // 单阶段执行（重试循环 + degraded 构造）见 ./workflow/executor.ts（参数化，供串行/并行共用）。
   const workerMap = buildDefaultWorkerMap();
@@ -207,6 +241,7 @@ export async function runWorkflow(
       completedStages: results.map(stageToCheckpointStage),
       state: { ...state },
       approvalGrants: approvalGrants ?? [],
+      revisions: revisions.records.map(record => ({ ...record })),
       updatedAt: new Date().toISOString(),
     };
     await options.checkpointStore.save(checkpoint);
@@ -300,21 +335,33 @@ export async function runWorkflow(
     }
     const { output, retries } = outcome;
 
-    // 一致性重试循环（对齐 Mady check_consistency 条件回退边）：输出触发信号时
+    // 一致性重试循环（对齐 Mady check_consistency 条件回退边）：判定「需要重做」时
     // 回退到 rewindTo 阶段重新执行（含中间阶段），覆盖被回退阶段的旧结果与 state。
+    // 触发判据 = needsRedo（manifest / graph 共用单一实现，结构化优先、正则兜底）。
     if (output.trim().length > 0 && stage.retry !== undefined) {
-      const signal = signalFor(stage, signalCache);
-      if (signal !== undefined && signalMatches(output, signal)) {
+      const decision = needsRedo(stage, output, signalFor(stage, signalCache));
+      if (decision === undefined) {
+        // 只声明 whenOutputGaps 且输出不是严格 JSON：不回退，但必须在结果里标明
+        // 「本次没做判定」——不得把「无法判定」呈现成「判定通过」。
+        closeRevision(revisions, stage.id, output);
+        recordRetrySignalDegradation(degradations, stage.id);
+      } else if (!decision.redo) {
+        // 触发阶段重跑完成且不再需要回退：闭合上一轮挂起的记录。
+        closeRevision(revisions, stage.id, output);
+      } else {
         const rewindTo = stage.retry.rewindTo ?? stage.id;
         const rewindIndex = stageIds.get(rewindTo)!;
         const rewindCount = (rewindCounts.get(stage.id) ?? 0) + 1;
         const maxRewind = stage.retry.maxRetries ?? 1;
         if (rewindCount > maxRewind) {
           // 超过最大回退次数：保留当前（不一致）输出并继续，标记 degraded。
+          // 上一轮挂起的记录以超限输出闭合（这是该阶段本轮的真实产出）。
+          const exhaustedOutput = `[WORKFLOW_RETRY_EXHAUSTED] ${stage.id}: ${output}`;
+          closeRevision(revisions, stage.id, exhaustedOutput);
           results.push({
             stageId: stage.id,
             strategy: stage.strategy,
-            output: `[WORKFLOW_RETRY_EXHAUSTED] ${stage.id}: ${output}`,
+            output: exhaustedOutput,
             degraded: true,
             retries,
             ...(stage.atom !== undefined ? { atom: stage.atom } : {}),
@@ -323,6 +370,14 @@ export async function runWorkflow(
           await saveCheckpoint(index);
           continue;
         }
+        // 先闭合上一轮挂起记录（无论本轮是否再次触发），再为本轮回退开新记录。
+        closeRevision(revisions, stage.id, output);
+        recordRewind(revisions, {
+          stageId: stage.id,
+          output,
+          gapId: decision.gapIds.length > 0 ? decision.gapIds.join("+") : `pattern:${stage.id}`,
+          rationale: decision.rationale,
+        });
         // 覆盖从 rewindTo 起的结果与 state 键（防陈旧输出被兜底复用），回退重执行。
         // 清理规则（含原子输出键）与图路径共用单一实现，见 ./workflow/stage-primitives.js；
         // 范围差异（此处清到清单末尾）是该函数的参数，见其模块注释。
@@ -358,6 +413,8 @@ export async function runWorkflow(
     degradedSteps,
     summary,
     ...(interrupted ? { interrupted } : {}),
+    ...(revisions.records.length > 0 ? { revisions: revisions.records.map(record => ({ ...record })) } : {}),
+    ...(degradations.length > 0 ? { degradations: [...degradations] } : {}),
   };
   // 持久化失败不阻断执行结果（对齐工具层"持久化失败仅提示"的语义），
   // 仅把告警带回结果供调用方展示。

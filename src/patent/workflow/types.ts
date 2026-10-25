@@ -33,12 +33,19 @@ export type WorkflowStage = {
   params?: Record<string, unknown>;
   /**
    * 可选：一致性重试循环（对齐 Mady disclosure 管线的 check_consistency 条件回退边）。
-   * 本阶段输出匹配 whenOutputMatches（信号：需要重做）时，回退到 rewindTo 阶段
-   * 重新执行（含中间阶段），最多 maxRetries 次。
+   * 本阶段输出判定「需要重做」时，回退到 rewindTo 阶段重新执行（含中间阶段），
+   * 最多 maxRetries 次。触发判据至少声明一个；同时声明时结构化优先：
+   * - `whenOutputGaps`：严格 JSON 的 `gaps[]` 非空 / `consistent:false`；
+   * - `whenOutputMatches`：输出正则（兼容旧 manifest）。
    */
   retry?: {
-    /** 触发回退的输出信号（正则源文本；如 "不一致|矛盾|缺少"）。 */
-    whenOutputMatches: string;
+    /**
+     * 兼容判据：触发回退的输出信号（正则源文本；如 "不一致|矛盾|缺少"）。
+     * 结构化判据可用时不再使用它，仅在结构化不可用时兜底。
+     */
+    whenOutputMatches?: string;
+    /** 结构化判据：声明后按严格 JSON 的 `gaps[]` / `consistent` 判定。 */
+    whenOutputGaps?: boolean;
     /** 回退目标阶段 id；缺省重试当前阶段。 */
     rewindTo?: string;
     /** 最大回退次数（缺省 1）。 */
@@ -129,6 +136,35 @@ export type WorkflowInterrupt = {
   data: Record<string, unknown>;
 };
 
+/**
+ * 一次回退的修改留痕：回答「哪个缺口、改前改后、为什么」。
+ * `before/after` 取触发回退阶段输出的截断摘要（上限见 `workflow/revision.ts`）；
+ * `after` 在回退尚未重跑完成时为空串，`status` 标注未闭合原因。
+ */
+export type RevisionRecord = {
+  /** 触发缺口 id：结构化 `gaps[].id`（多个以 `+` 连接）或旧路径命名空间 `rule:` / `element:` / `pattern:`。 */
+  gapId: string;
+  /** 回退前（触发阶段本轮输出）摘要。 */
+  before: string;
+  /** 重跑后的新输出摘要；未闭合时为空串。 */
+  after: string;
+  /** 触发来源说明（结构化 gaps / consistent / 正则）。 */
+  rationale: string;
+  /** 记录时间（ISO 8601）。 */
+  at: string;
+  /** `closed` = 重跑完成并回填 after；`interrupted` = 重跑前中断，after 为空。 */
+  status: "closed" | "interrupted";
+  /** before/after 任一侧被截断。 */
+  truncated?: boolean;
+};
+
+/** 运行期降级标记（不改变阶段产出的「降级但不静默」通道）。 */
+export type WorkflowDegradation = {
+  stageId: string;
+  reason: "retry_signal_unparseable";
+  message: string;
+};
+
 export type WorkflowRunResult = {
   manifestId: string;
   caseType: string;
@@ -139,6 +175,10 @@ export type WorkflowRunResult = {
   summary: string;
   /** 审批门等中断信息：存在表示执行被人工介入暂停（暂停 ≠ 失败） */
   interrupted?: WorkflowInterrupt;
+  /** 回退留痕（每次回退一条；无回退时缺省）。 */
+  revisions?: RevisionRecord[];
+  /** 运行期降级标记（如结构化回退判据不可解析）；无降级时缺省。 */
+  degradations?: WorkflowDegradation[];
   /** 可选：结果持久化失败时的告警（执行本身不受影响） */
   persistWarning?: string;
 };
@@ -189,6 +229,8 @@ export type ManifestCheckpoint = {
   state: Record<string, unknown>;
   /** 已人工放行的审批门阶段 id（resume 时经 approvalGrants 语义跳过）。 */
   approvalGrants: string[];
+  /** 已完成回退的留痕（旧检查点缺省；resume 后仍可读）。 */
+  revisions?: RevisionRecord[];
   updatedAt: string;
 };
 

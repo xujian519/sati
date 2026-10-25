@@ -459,3 +459,77 @@ test("manifestToGraph: 未知 atom fail-fast", () => {
   };
   assert.throws(() => manifestToGraph(manifest), /未知 atom/);
 });
+
+// ---------------------------------------------------------------------------
+// #734 结构化回退 + RevisionRecord（跨路径共用判定与留痕实现）
+// ---------------------------------------------------------------------------
+
+function gapsManifest(): WorkflowManifest {
+  return {
+    id: "equiv_gaps_retry",
+    name: "结构化回退等价",
+    caseType: "test",
+    stages: [
+      { id: "extract", strategy: "chain", description: "提取" },
+      {
+        id: "check",
+        strategy: "chain",
+        description: "一致性检查",
+        retry: { whenOutputGaps: true, rewindTo: "extract", maxRetries: 1 },
+      },
+    ],
+  };
+}
+
+function makeGapsExecutor(): { fn: (stage: WorkflowStage) => Promise<string>; checkCalls: () => number } {
+  const state = { checks: 0 };
+  return {
+    checkCalls: () => state.checks,
+    fn: async stage => {
+      if (stage.id === "check") {
+        state.checks += 1;
+        return state.checks === 1
+          ? JSON.stringify({
+              consistent: false,
+              gaps: [{ id: "g1", kind: "isolated", detail: "特征无效果关联" }],
+              issues: [],
+            })
+          : JSON.stringify({ consistent: true, gaps: [], issues: [] });
+      }
+      return `[${stage.id}] 完成`;
+    },
+  };
+}
+
+test("manifestToGraph: whenOutputGaps 结构化回退与 runWorkflow 等价，RevisionRecord 一致", async () => {
+  const manifest = gapsManifest();
+  const wfExecutor = makeGapsExecutor();
+  const grExecutor = makeGapsExecutor();
+  const wf = await runWorkflow(manifest, { input: "x" }, wfExecutor.fn);
+  const graph = manifestToGraph(manifest, { executor: grExecutor.fn });
+  const gr = await graph.run({ input: "x" });
+
+  assert.equal(wfExecutor.checkCalls(), 2, "manifest 路径：结构化 gaps 触发回退");
+  assert.equal(grExecutor.checkCalls(), 2, "图路径：同一判定触发回退");
+  assert.equal(gr.state.check, wf.stages.find(s => s.stageId === "check")?.output);
+  assert.equal(wf.revisions?.length, 1);
+  assert.equal(gr.revisions?.length, 1);
+  const w = wf.revisions![0]!;
+  const g = gr.revisions![0]!;
+  assert.equal(g.gapId, w.gapId);
+  assert.equal(g.before, w.before);
+  assert.equal(g.after, w.after);
+  assert.equal(g.rationale, w.rationale);
+  assert.equal(g.status, "closed");
+  assert.equal(g.status, w.status);
+});
+
+test("manifestToGraph: 仅 whenOutputGaps 且输出非 JSON → 不回退并写降级标记", async () => {
+  const executor = async (stage: WorkflowStage) => (stage.id === "check" ? "检查发现：不一致" : "[extract] 完成");
+  const graph = manifestToGraph(gapsManifest(), { executor });
+  const gr = await graph.run({ input: "x" });
+  assert.equal(gr.state.check, "检查发现：不一致");
+  assert.equal(gr.revisions, undefined);
+  assert.ok(gr.degraded.some(mark => mark.reason === "retry_signal_unparseable"));
+  assert.match(gr.degraded.find(mark => mark.reason === "retry_signal_unparseable")?.message ?? "", /未做回退判定/);
+});

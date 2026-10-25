@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -113,4 +113,25 @@ test("runWorkflow degrades gracefully when persist saveRun throws", async () => 
   assert.equal(result.completed, true);
   assert.match(result.persistWarning ?? "", /持久化失败/);
   assert.match(result.persistWarning ?? "", /disk full/);
+});
+
+test("JsonFileWorkflowRunStore 兼容旧 run JSON（无 revisions / degradations 字段）", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "sati-wf-legacy-"));
+  try {
+    const legacy = {
+      manifestId: "legacy_run",
+      caseType: "test",
+      completed: true,
+      stages: [],
+      degradedSteps: [],
+      summary: "旧版本产物",
+    };
+    await writeFile(join(dir, "legacy_run.json"), JSON.stringify(legacy), "utf8");
+    const loaded = await new JsonFileWorkflowRunStore(dir).loadRun("legacy_run");
+    assert.equal(loaded?.manifestId, "legacy_run");
+    assert.equal(loaded?.revisions, undefined);
+    assert.equal(loaded?.degradations, undefined);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });

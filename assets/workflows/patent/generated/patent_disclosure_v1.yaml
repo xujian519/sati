@@ -38,6 +38,7 @@ stages:
     strategy: chain
     atom: reasoning
     retry:
+      whenOutputGaps: true
       whenOutputMatches: 不一致|矛盾|缺少|孤立
       rewindTo: extract_problem
       maxRetries: 1

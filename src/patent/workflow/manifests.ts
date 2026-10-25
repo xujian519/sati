@@ -66,7 +66,8 @@ export const patentNoveltyManifest: WorkflowManifest = {
  */
 const PFE_CONSISTENCY_PROMPT =
   "对以下 PFE 三元组做一致性检查：特征-效果因果链是否闭合、有无孤立特征（无问题/无效果关联的特征）。" +
-  "严格输出 JSON：{ consistent: boolean, issues: string[] }。issues 为空数组表示一致。";
+  "严格输出 JSON：{ consistent: boolean, gaps: [{ id: string, kind: string, detail: string }], issues: string[] }。" +
+  "gaps 为空数组表示无缺口；每个缺口给出稳定 id（同一缺口跨轮次复用，供回退留痕对账）；issues 记录非缺口性说明。";
 
 /**
  * 内置：技术交底书披露分析 manifest（移植 Mady disclosure/graph.go 的 PFE 管线）。
@@ -125,6 +126,8 @@ export const patentDisclosureManifest: WorkflowManifest = {
       atom: "reasoning",
       params: { reasoning_prompt: PFE_CONSISTENCY_PROMPT },
       retry: {
+        // 结构化判据优先（gaps[]），正则保留为 LLM 输出非严格 JSON 时的兜底。
+        whenOutputGaps: true,
         whenOutputMatches: "不一致|矛盾|缺少|孤立",
         rewindTo: "extract_problem",
         maxRetries: 1,
@@ -429,6 +432,8 @@ export const patentDraftingManifest: WorkflowManifest = {
       atom: "reasoning",
       params: { reasoning_prompt: PFE_CONSISTENCY_PROMPT },
       retry: {
+        // 结构化判据优先（gaps[]），正则保留为 LLM 输出非严格 JSON 时的兜底。
+        whenOutputGaps: true,
         whenOutputMatches: "不一致|矛盾|缺少|孤立",
         rewindTo: "extract_problem",
         maxRetries: 1,
@@ -538,6 +543,8 @@ export const patentDraftingManifest: WorkflowManifest = {
       description: "反套话评分门（未通过自动带证据提示回退说明书修订）",
       atom: "slop-gate",
       retry: {
+        // 未纳入结构化触发：主输出是文本报告（slop_score 只在 state），
+        // 没有可解析的 gaps[]/consistent 字段；改结构化需先改原子输出契约。
         whenOutputMatches: "需修订",
         rewindTo: "draft_spec",
         maxRetries: 1,

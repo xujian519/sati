@@ -13,7 +13,8 @@
 
 import type { WorkflowContext, WorkflowManifest, WorkflowStage } from "../workflow.js";
 import { validateWorkflowManifest } from "../workflow.js";
-import { signalMatches } from "../workflow/signal.js";
+import { needsRedo } from "../workflow/signal.js";
+import { closeRevision, readRevisionLedger, recordRewind, writeRevisionLedger } from "../workflow/revision.js";
 import { clearStageOutputs, isApprovalGateStage, resolveStageOutput } from "../workflow/stage-primitives.js";
 import {
   APPROVAL_GRANTED_KEY,
@@ -26,8 +27,9 @@ import {
 import { globalAtomRegistry, globalStageHandlerRegistry, isInterruptStageError } from "../atoms/index.js";
 import type { EdgeRouter, GraphNode, GraphState, StateDelta } from "./types.js";
 import { GRAPH_END, GraphEngineError, GraphInterruptError } from "./types.js";
+import type { DegradationMark } from "./types.js";
 import { GraphBuilder, type CompiledGraph } from "./engine.js";
-import { markDegraded } from "./degradation.js";
+import { DEGRADATION_SUFFIX, markDegraded } from "./degradation.js";
 import { getStateString } from "./state.js";
 
 // ---------------------------------------------------------------------------
@@ -164,14 +166,15 @@ function makeStageNode(
 }
 
 // ---------------------------------------------------------------------------
-// retry 信号回退（信号判定复用 ./workflow/signal.js 单一实现，防语义漂移）
+// retry 回退（判定复用 ./workflow/signal.js 的 needsRedo、留痕复用 ./workflow/revision.js，
+// 与 manifest 路径同一实现，防语义漂移）
 // ---------------------------------------------------------------------------
 
 /** 重试计数/超限标记 key（state 内部键，带 __ 前缀防污染业务数据）。 */
 const rewindCountKey = (stageId: string): string => `_rewind_count_${stageId}`;
 const retryExhaustedKey = (stageId: string): string => `${stageId}__retry_exhausted`;
 
-/** retry 阶段 → 条件边 router：命中信号回退 rewindTo，否则继续 nextId。 */
+/** retry 阶段 → 条件边 router：命中判定回退 rewindTo，否则继续 nextId。 */
 function makeRetryRouter(
   stage: WorkflowStage,
   stages: WorkflowStage[],
@@ -181,7 +184,7 @@ function makeRetryRouter(
   const retry = stage.retry!;
   const rewindTo = retry.rewindTo ?? stage.id;
   const maxRetries = retry.maxRetries ?? 1;
-  const signal = new RegExp(retry.whenOutputMatches, "gi");
+  const signal = retry.whenOutputMatches !== undefined ? new RegExp(retry.whenOutputMatches, "gi") : undefined;
   // 被回退阶段集合（rewindTo .. 当前阶段），回退时删除其 state 键与原子输出键
   // 防陈旧复用（对齐 runWorkflow 的 rewind 清理语义）。
   const rewindIndex = stages.findIndex(s => s.id === rewindTo);
@@ -191,16 +194,49 @@ function makeRetryRouter(
 
   return async state => {
     const text = getStateString(state, stage.id, "");
-    if (text.length === 0 || !signalMatches(text, signal)) {
+    if (text.length === 0) {
+      // 无输出：既无结构化判据也无正则输入；挂起记录保持 interrupted（不伪装闭合）。
+      return [nextId];
+    }
+    // 触发判定与 manifest 路径共用 needsRedo（结构化优先、正则兜底）。
+    const decision = needsRedo(stage, text, signal);
+    const ledger = readRevisionLedger(state);
+    if (decision === undefined) {
+      // 只声明 whenOutputGaps 且输出不可解析：不回退，但写降级标记（降级不静默）。
+      closeRevision(ledger, stage.id, text);
+      writeRevisionLedger(state, ledger);
+      state[`${stage.id}${DEGRADATION_SUFFIX}`] = {
+        reason: "retry_signal_unparseable",
+        message: `节点 "${stage.id}" 声明 whenOutputGaps，但输出不是严格 JSON 且未声明 whenOutputMatches：本次未做回退判定（结构化触发不可用）`,
+        severity: "warning",
+      } satisfies DegradationMark;
+      return [nextId];
+    }
+    if (!decision.redo) {
+      // 触发阶段重跑完成且不再需要回退：闭合上一轮挂起的记录。
+      closeRevision(ledger, stage.id, text);
+      writeRevisionLedger(state, ledger);
       return [nextId];
     }
     const countKey = rewindCountKey(stage.id);
     const count = typeof state[countKey] === "number" ? (state[countKey] as number) : 0;
     if (count >= maxRetries) {
       // 超限：fail-open 继续（对齐 runWorkflow 的 WORKFLOW_RETRY_EXHAUSTED 降级）。
+      // 上一轮挂起记录以超限输出闭合（这是该阶段本轮的真实产出）。
+      closeRevision(ledger, stage.id, `[WORKFLOW_RETRY_EXHAUSTED] ${stage.id}: ${text}`);
+      writeRevisionLedger(state, ledger);
       state[retryExhaustedKey(stage.id)] = true;
       return [nextId];
     }
+    // 先闭合上一轮挂起记录（无论本轮是否再次触发），再为本轮回退开新记录。
+    closeRevision(ledger, stage.id, text);
+    recordRewind(ledger, {
+      stageId: stage.id,
+      output: text,
+      gapId: decision.gapIds.length > 0 ? decision.gapIds.join("+") : `pattern:${stage.id}`,
+      rationale: decision.rationale,
+    });
+    writeRevisionLedger(state, ledger);
     state[countKey] = count + 1;
     // 清理被回退阶段的 state 键与其 atom 输出键（防陈旧复用）——与 manifest 路径
     // 共用单一实现；范围差异（此处清到当前阶段为止）见该函数的模块注释。
