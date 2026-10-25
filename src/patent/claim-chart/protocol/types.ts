@@ -5,6 +5,8 @@
  * mapping 状态机、gap list 第一优先输出、draft notice 免责声明。
  */
 
+import type { ArgumentRef } from "../../argument/types.js";
+
 export type ElementKind = "preamble" | "transitional" | "limitation" | "means-plus-function" | "markush-member";
 
 export interface ClaimElement {
@@ -41,7 +43,9 @@ export type Mapping =
   | "partial"
   | "not-found"
   | "needs-evidence"
-  | "construction-dependent";
+  | "construction-dependent"
+  /** 该「要素 × 目标」组合尚未评估（区分「没跑过」与「跑过但未找到」）。 */
+  | "unevaluated";
 
 export type RowState = Mapping;
 
@@ -67,6 +71,8 @@ export interface GapEntry {
   reason: string;
   /** 建议动作（补充检索/证据固化/等同分析）。 */
   suggestion: string;
+  /** 统一论证指针（S-09 补齐映射；当前仅预留可选字段）。 */
+  ref?: ArgumentRef;
 }
 
 export const DRAFT_NOTICE =

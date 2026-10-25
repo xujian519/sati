@@ -285,6 +285,15 @@ entries:
     observability: "success:false / errorCode"
     negativeDrill: tests/tool/builtin/patentLegalStatus.spec.ts
 
+  - id: claim-chart-pin-cite-source-missing
+    component: src/patent/atoms/handlers/builtin/chart.ts
+    dependency: "claim-chart pin-cite 源文核验（target.sourcePath 可选）"
+    failDirection: open
+    degradedBehavior: "sourcePath 缺失 → 跳过段号/quote 源文核验，仅保留 pin-cite 格式校验与 mapping 场景校验；行 note 与报告标注「未做原文核验」"
+    degradedImpact: "该目标的引用无法逐字回溯到原文，格式合法的幻觉引用不再被拦下；读者经行 note 与报告顶部标注可知核验面收窄"
+    observability: "行级 note「未做原文核验」+ claim-chart.md 顶部「未做原文核验」目标清单"
+    negativeDrill: tests/patent/claim-chart/pin-cite-degradation.spec.ts
+
   - id: web-fetch-error
     component: src/tool/builtin/webFetch.ts
     dependency: "web_fetch（fetch 工具）"

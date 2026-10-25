@@ -56,6 +56,7 @@ const MAPPINGS: readonly string[] = [
   "not-found",
   "needs-evidence",
   "construction-dependent",
+  "unevaluated",
 ];
 
 const CHART_SCHEMA = {
@@ -93,6 +94,20 @@ const CHART_SCHEMA = {
 } as const;
 
 const MAX_RETRIES = 2;
+
+/** 无 sourcePath 时 pin-cite 只能做格式校验；行与报告都标注核验面收窄。 */
+const UNVERIFIED_SOURCE_NOTE = "未做原文核验";
+
+/** 给缺少源文的目标行补核验范围标注（不改变 mapping / 引用内容）。 */
+function markUnverifiedSourceRows(rows: ChartRow[], targets: ChartTarget[]): void {
+  const targetsWithoutSource = new Set(targets.filter(t => !t.sourcePath).map(t => t.id));
+  if (targetsWithoutSource.size === 0) return;
+  for (const row of rows) {
+    if (!targetsWithoutSource.has(row.targetId)) continue;
+    row.note =
+      row.note !== undefined && row.note.length > 0 ? `${row.note}；${UNVERIFIED_SOURCE_NOTE}` : UNVERIFIED_SOURCE_NOTE;
+  }
+}
 
 type TargetsParseResult = { targets: ChartTarget[]; error: string | null };
 
@@ -284,7 +299,7 @@ export class ClaimChartHandler implements StageHandler {
       "- 要素 text 必须为权利要求原文的连续子串（逐字引用，不得改写）",
       "- 每个要素对每个目标产出一行：quote 为目标对象对应内容的逐字引用（未找到/证据不足时为空串）",
       "- 无目标对象（【目标对象】为空）时只输出 elements，rows 必须为空数组 []",
-      "- pinCite 格式 [D1 段[0032] 图3]；mapping 取值：literal（字面对应）/literal-construction-dependent/doe（等同，仅侵权）/anticipation（单篇公开，仅对比文件）/obviousness-combination（组合公开，仅对比文件）/partial/not-found/needs-evidence/construction-dependent",
+      "- pinCite 格式 [D1 段[0032] 图3]；mapping 取值：literal（字面对应）/literal-construction-dependent/doe（等同，仅侵权）/anticipation（单篇公开，仅对比文件）/obviousness-combination（组合公开，仅对比文件）/partial/not-found/needs-evidence/construction-dependent/unevaluated（未评估，仅当确无结论时显式标注）",
       `- 场景模式：${mode}`,
       "",
       "请严格输出 JSON。",
@@ -306,7 +321,7 @@ export class ClaimChartHandler implements StageHandler {
       const rows = parsed.rows as ChartRow[];
       const errors = validateChart(elements, rows, targets, mode, claim, sourceCache);
       if (errors.length === 0) {
-        const gaps = detectGaps(rows);
+        const gaps = detectGaps(rows, elements, targets);
         // 落盘/核验按 mode 区分 chartId：同一 caseId 下不同场景（invalidity /
         // patentability / oa-response…）互不覆盖，verified 标记也不跨 mode 串扰。
         const chartId = `chart-${mode}`;
@@ -324,6 +339,7 @@ export class ClaimChartHandler implements StageHandler {
             `${row.elementId}→${row.targetId}|${row.mapping}|${row.quote}|${row.pinCite}`,
           );
         }
+        markUnverifiedSourceRows(rows, targets);
         const chart: ClaimChart = {
           chartId,
           mode,

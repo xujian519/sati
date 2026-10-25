@@ -504,3 +504,44 @@ test("无 sourcePath 时 pin-cite 格式非法仍打回重做（m4 格式校验�
   assert.match(prompts[1]!, /pin-cite 格式非法/);
   assert.equal(typeof state.claim_chart_doc, "string");
 });
+
+test("要素×目标缺失映射组合 → gap list 产出 unevaluated", async () => {
+  const partial = goodChart() as { rows: unknown[] };
+  partial.rows = partial.rows.slice(0, 2); // 1c 未产出映射行
+  const provider: StageProvider = { callLLM: async () => JSON.stringify(partial) };
+  const handler = new ClaimChartHandler();
+  const state = await handler.execute({
+    state: {
+      claim: CLAIM,
+      chart_targets: JSON.stringify([{ id: "D1", kind: "prior-art", title: "对比文件1" }]),
+      chart_mode: "invalidity",
+    },
+    provider,
+  });
+  const doc = JSON.parse(state.claim_chart_doc as string) as ClaimChart;
+  assert.equal(doc.gaps.length, 1);
+  assert.equal(doc.gaps[0]!.elementId, "1c");
+  assert.equal(doc.gaps[0]!.mapping, "unevaluated");
+});
+
+test("模型显式 unevaluated 行被接受并进入 gap list", async () => {
+  const chart = goodChart() as { rows: Array<Record<string, unknown>> };
+  chart.rows[2]!.mapping = "unevaluated";
+  chart.rows[2]!.quote = "";
+  const provider: StageProvider = { callLLM: async () => JSON.stringify(chart) };
+  const handler = new ClaimChartHandler();
+  const state = await handler.execute({
+    state: {
+      claim: CLAIM,
+      chart_targets: JSON.stringify([{ id: "D1", kind: "prior-art", title: "对比文件1" }]),
+      chart_mode: "invalidity",
+    },
+    provider,
+  });
+  const doc = JSON.parse(state.claim_chart_doc as string) as ClaimChart;
+  assert.equal(doc.rows[2]!.mapping, "unevaluated");
+  assert.deepEqual(
+    doc.gaps.map(g => `${g.elementId}:${g.mapping}`),
+    ["1c:unevaluated"],
+  );
+});
