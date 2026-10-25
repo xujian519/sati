@@ -12,7 +12,7 @@
  */
 
 import type { SatiEvidenceCollector, SatiEvidenceReceipt } from "../../tool/protocol/evidence.js";
-import { ClaimBinding } from "./claimBinding.js";
+import { ClaimBinding, type UnbackedClaim } from "./claimBinding.js";
 import { ConflictDetector, type EvidenceConflict } from "./conflict.js";
 import { Ledger, contentHash, type Receipt } from "./receipt.js";
 import { createSpan, type EvidenceDirection, type EvidenceSpan } from "./span.js";
@@ -27,7 +27,7 @@ export {
   type TeamEvidenceDeclaration,
   type TeamEvidenceConflict,
 } from "./receipt.js";
-export { ClaimBinding } from "./claimBinding.js";
+export { ClaimBinding, claimBindingRef, type UnbackedClaim } from "./claimBinding.js";
 export { ConflictDetector, type EvidenceConflict } from "./conflict.js";
 export {
   EvidenceEngine,
@@ -126,6 +126,11 @@ export class EvidenceExtension implements SatiEvidenceCollector {
   /** 无证据支持的结论列表（结论必须显式登记为 claim）。 */
   unbackedClaims(claimIds: Iterable<string>): string[] {
     return this.binding.unbackedClaims(claimIds);
+  }
+
+  /** 无证据支持的结论（带统一论证指针）。 */
+  unbackedClaimRefs(claimIds: Iterable<string>): UnbackedClaim[] {
+    return this.binding.unbackedClaimRefs(claimIds);
   }
 
   /**

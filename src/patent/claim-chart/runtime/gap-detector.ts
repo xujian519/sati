@@ -6,7 +6,14 @@
  * 它和「查过但没有」分属不同出口，回退与规划才能知道哪一块没跑过。
  */
 
+import { assertArgumentRef } from "../../argument/refs.js";
+import type { ArgumentRef } from "../../argument/types.js";
 import type { ChartRow, ChartTarget, ClaimElement, GapEntry, Mapping } from "../protocol/types.js";
+
+/** claim-chart 缺口的统一论证指针：优先已写入的 `ref`，旧数据回退到要素编号。 */
+export function claimChartGapRef(gap: Pick<GapEntry, "elementId" | "ref">): ArgumentRef {
+  return assertArgumentRef(gap.ref ?? { elementId: gap.elementId }, `缺口 ${gap.elementId}`);
+}
 
 type GapMapping = Extract<Mapping, "not-found" | "needs-evidence" | "partial" | "unevaluated">;
 
@@ -60,6 +67,8 @@ export function detectGaps(rows: ChartRow[], elements: ClaimElement[], targets: 
       mapping,
       reason: `要素 ${elementId} 在 ${targetId} 上${GAP_REASON_LABELS[mapping]}`,
       suggestion: SUGGESTIONS[mapping],
+      // 统一论证指针（S-09）：claim-chart 侧引用对象是要素编号。
+      ref: { elementId },
     });
   };
 

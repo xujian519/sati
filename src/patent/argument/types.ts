@@ -28,5 +28,8 @@ export type ArgumentGap = {
   ref: ArgumentRef;
   kind: string;
   detail: string;
+  /** 首个报出该缺口的来源（`sources` 合并后仍保留，兼容只读单值的消费方）。 */
   source: ArgumentGapSource;
+  /** 去重后合并的全部来源（`dedupeArgumentGaps` 写入；未去重时缺省）。 */
+  sources?: ArgumentGapSource[];
 };

@@ -1,6 +1,8 @@
 import {
+  claimBindingRef,
   createSpan,
   loadEvidenceRulesEngine,
+  type ArgumentRef,
   type EvidenceDirection,
   type EvidenceExternalInputs,
   type EvidenceType,
@@ -61,6 +63,8 @@ export type EvaluateEvidenceOutput = {
     reasoning: string;
   };
   burden?: { burdenHolder: string; standard: string; hasShifted: boolean; reasoning: string };
+  /** 输入结论 id 的统一论证指针（三向指针互操作；不改变既有字段）。 */
+  claimRefs?: Array<{ claimId: string; ref: ArgumentRef }>;
   /** 实际适用的证据规则（条件全部满足；不再返回全量表）。 */
   rulesMatched: Array<{ ruleId: string; name: string; action: string; severity: string }>;
   /** 待外部输入确认的规则（条件含未提供的输入）。 */
@@ -147,6 +151,21 @@ export function createEvaluateEvidenceTool(deps?: {
             standard: { type: "string" },
             hasShifted: { type: "boolean" },
             reasoning: { type: "string" },
+          },
+        },
+        claimRefs: {
+          type: "array",
+          items: {
+            type: "object",
+            required: ["claimId", "ref"],
+            properties: {
+              claimId: { type: "string" },
+              ref: {
+                type: "object",
+                required: ["factRef"],
+                properties: { factRef: { type: "string" } },
+              },
+            },
           },
         },
         rulesMatched: {
@@ -286,6 +305,9 @@ export function createEvaluateEvidenceTool(deps?: {
           reasoning: judgment.reasoning,
         },
         burden,
+        ...(input.claimRefs !== undefined && input.claimRefs.length > 0
+          ? { claimRefs: input.claimRefs.map(claimId => ({ claimId, ref: claimBindingRef(claimId) })) }
+          : {}),
         rulesMatched: judgment.rulesApplied
           .filter(r => r.satisfied)
           .map(r => ({ ruleId: r.ruleId, name: r.name, action: r.action, severity: r.severity })),
