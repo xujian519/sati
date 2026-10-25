@@ -2,6 +2,54 @@
 
 本文件按版本记录 Sati 的重要变更。桌面端版本号（`release(desktop)`）与根 `package.json` 由 `scripts/bump-version.mjs` 同步维护。
 
+## v0.4.0 - 2026-10-26
+
+> **版本目标（2026-10-26）**：专利论证从自由文本走向可引用的结构化证据——先定争点、`ArgumentRef` 三向指针、规则评估三态、run 规则包指纹，使每份意见都能回答「依据哪条、跑过哪些、哪次运行、用了哪套规则」；同期完成专利工具集审计整改（编排 5 合 3、契约 ≤40k 字符）、写路径 TOCTOU/硬链接加固、默认绑定环回、UI 可维护性 sweep B1.1–B3.1 与远程安装包构建流水线。
+
+### Feat
+
+- feat(patent): 论证结构收敛为 `ArgumentRef` 三向指针——claim-chart 缺口、三段论、未支撑主张共用一套引用，缺口可跨来源去重（#766）
+- feat(patent): OA/无效/侵权三场景先定争点再 parse（`dispute_framing` 两段契约），未识别争点时显式标注，不回显原文冒充争点（#765）
+- feat(patent): run 记录规则包指纹与图 run 摘要——每次 run 重算指纹，中断与异常路径同样留痕（#764）
+- feat(patent): quality-gate 按启用的检索源数调整门槛，单源检索时报告注明「阈值已调整」（#770）
+- feat(patent): W-02 citation-check 注册为独立子图、W-03 化学阶段自动触发原子、W-08 多 judge 缺 `modelHints` 时输出退化提示（#741）
+- feat(agent): 对抗审查席位落成——补 worker 契约（主张/前提/脆弱点/反驳钩子四段必填 + 引用强制），工具面从 `*` 收为 20 项只读白名单（#767）
+- feat(knowledge): `law_search` 新增 `asOf` 时点检索（exact/approximate 双口径 + `unknownDateCount`），并新增 `time-baseline` 原子产出可确定性消费的截止日（#763）
+- feat(knowledge): 法律面强制核验与检索分层——`law_verify` 列为强制动作，检索按法条 → 核验 → 案例分层（#768）
+- feat(ui): HTML 标注写入门控默认开启，`VITE_ENABLE_HTML_ANNOTATION=false` 可关闭（#747）
+
+### Fix
+
+- fix(permission): 写路径 TOCTOU 与硬链接复核——落盘前重解析真实路径（`O_NOFOLLOW`/`O_EXCL`）、`fstat` dev/ino 对拍并复查词法路径，新建失败按 inode 回滚；`nlink > 1` 的写目标一律拒绝，`edit_notebook` 同覆盖（#750）
+- fix(ui): 默认绑定环回 `127.0.0.1`，局域网访问须显式 `HOST=0.0.0.0`；非环回 Host 信任收窄（#749）
+- fix(rule): 规则评估补 `assessed`/`skipped`/`not_assessed` 三态——「一条规则都没跑」不再被当成通过（#760）
+- fix(knowledge): 法条效力未知状态不再伪造成现行有效，逐条携带 `statusSource`，未知标「待核验」（#754）
+- fix(patent): claim-chart 缺口补 `unevaluated` 第四档并枚举「要素 × 目标」全组合，pin-cite 缺源降级登记入库（#761）
+- fix(patent): 一致性回路改结构化触发（`retry.whenOutputGaps`）并记录 `RevisionRecord`，manifest 与图两条路径共用 `needsRedo`（#762）
+- fix(patent): 工具集审计整改 R-02/R-04/R-05/R-08——著录项缺字段可见、名称归一化、空壳 `outputSchema` 注册期拒绝、KG 类型/分数过滤与可选 LLM 精排（#759）
+- fix(patent): `patent_search` 修复 JSON 主路径与静默 0 命中——`PARSE_ERROR` 与真 0 命中分离，解析失败不缓存，输出带 `dataSource`/`cache`（#717）
+- fix(tool): 说明书章节识别兼容纯文本与编号标题，附图说明边界与 Markdown 标题语义修正（#756）
+- fix(tool): 工具引用门禁扩面（调用式写法）、扫描面缺失 fail-loud、清除幽灵工具名并校验角色（#755）
+
+### Refactor
+
+- refactor(ui): 可维护性 sweep B1.1–B3.1——session store、实时事件 handler、项目状态、MessagesPane、Composer、消息行、提交与斜杠命令、ChatInterfaceV2、SidebarV2 逐簇拆分（#742/#743/#744/#745/#746/#751/#752/#753/#757/#758）
+- refactor(knowledge): 专利知识图谱模块深度优化（P0/P1/P2 共 10 项）（#729）
+- refactor(patent): inventiveness 子图 Schema 与提示词拆分（#772）、evidence engine 职责拆分（#771）、`DOMAIN_INPUT_DECLARATIONS` 改显式 lazy-init（#769）
+- refactor(patent): 编排工具面收敛为 `patent_workflow_assemble` / `patent_workflow_run` / `patent_docket` 三入口，旧名保留 alias；manifest 清单由内置清单动态生成，专利面契约压到 ≤40k 字符（#759）
+
+### Test
+
+- test(patent): 评测基准扩充至 25 个用例（#773）
+
+### CI
+
+- ci(release): 新增远程构建 macOS/Windows 安装包工作流——GitHub 托管 runner 并行构建，只调用既有发布脚本，产物为未签名 artifacts（#706）
+
+### Docs
+
+- docs(notes): 本版本新增 36 条决策记录（ArgumentRef 收敛、争点先行、规则三态、写路径复核、环回默认、UI 各簇拆分、远程安装包等）
+
 ## v0.3.8 - 2026-10-22
 
 > **版本目标（2026-10-22）**：专利业务闭环 + IM/权限安全加固——专利期限、官费、法条核验与申请文件 docx 五件套/成品核验全部落地；同步上游 PilotDeck #654/#645/#665，堵住 bash 跨命令授权、飞书未鉴权 webhook，补齐 IM 回复节流/编辑预算与频道生命周期，并恢复可选 IM 渠道；同期完成可维护性 sweep P2.8–P2.10。
