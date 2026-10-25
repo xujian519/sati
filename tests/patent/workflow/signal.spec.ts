@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { compileSignal, signalFor, signalMatches } from "../../../src/patent/workflow/signal.js";
+import { compileSignal, needsRedo, signalFor, signalMatches } from "../../../src/patent/workflow/signal.js";
 import type { WorkflowStage } from "../../../src/patent/workflow/types.js";
 
 test("signalMatches: 命中信号且前窗口无否定词无句界 → true", () => {
@@ -68,4 +68,107 @@ test("signalFor: 无 retry 返回 undefined；有 retry 编译并缓存同引用
   const second = signalFor(withRetry, cache);
   assert.equal(first, second, "缓存命中应返回同一正则实例");
   assert.equal(first.flags, "gi", "信号正则必须带 g 标志（exec 遍历全部匹配位置）");
+});
+
+// ---------------------------------------------------------------------------
+// needsRedo（#734）：结构化判据优先，正则仅兼容兜底
+// ---------------------------------------------------------------------------
+
+const gapsStage: WorkflowStage = {
+  id: "consistency",
+  strategy: "chain",
+  description: "一致性检查",
+  retry: { whenOutputGaps: true, rewindTo: "extract", maxRetries: 1 },
+};
+
+test("needsRedo: gaps 非空 → 回退，gapIds 来自 gaps[].id", () => {
+  const output = JSON.stringify({
+    consistent: true,
+    gaps: [{ id: "g1", kind: "isolated", detail: "特征无效果" }],
+    issues: [],
+  });
+  const decision = needsRedo(gapsStage, output);
+  assert.ok(decision);
+  assert.equal(decision.redo, true);
+  assert.deepEqual(decision.gapIds, ["g1"]);
+  assert.match(decision.rationale, /结构化 gaps:1/);
+});
+
+test("needsRedo: gaps 空数组 → 不回退", () => {
+  const decision = needsRedo(gapsStage, JSON.stringify({ consistent: false, gaps: [], issues: [] }));
+  assert.ok(decision);
+  assert.equal(decision.redo, false);
+  assert.deepEqual(decision.gapIds, []);
+});
+
+test("needsRedo: gaps 与 consistent 并存 → gaps 优先", () => {
+  // gaps 非空 + consistent:true：缺口清单为准 → 回退
+  const nonEmpty = needsRedo(gapsStage, JSON.stringify({ consistent: true, gaps: [{ id: "g1" }], issues: [] }));
+  assert.equal(nonEmpty?.redo, true);
+  // gaps 为空 + consistent:false：缺口清单为准 → 不回退
+  const empty = needsRedo(gapsStage, JSON.stringify({ consistent: false, gaps: [], issues: [] }));
+  assert.equal(empty?.redo, false);
+});
+
+test("needsRedo: 无 gaps 字段时 consistent:false 回退（gapId 用 consistent:<stage>）", () => {
+  const decision = needsRedo(gapsStage, JSON.stringify({ consistent: false, issues: ["缺失"] }));
+  assert.ok(decision);
+  assert.equal(decision.redo, true);
+  assert.deepEqual(decision.gapIds, ["consistent:consistency"]);
+});
+
+test("needsRedo: 缺 id 的 gap 条目用 gaps[i] 占位（条目与 id 一一对应）", () => {
+  const decision = needsRedo(gapsStage, JSON.stringify({ gaps: [{ kind: "isolated" }, { id: "g2" }] }));
+  assert.ok(decision);
+  assert.deepEqual(decision.gapIds, ["gaps[0]", "g2"]);
+});
+
+test("needsRedo: 非 JSON 且同时声明正则 → 正则兜底", () => {
+  const stage: WorkflowStage = {
+    ...gapsStage,
+    retry: { whenOutputGaps: true, whenOutputMatches: "不一致", rewindTo: "extract" },
+  };
+  const decision = needsRedo(stage, "检查发现：特征与效果不一致");
+  assert.ok(decision);
+  assert.equal(decision.redo, true);
+  assert.match(decision.rationale, /正则命中/);
+});
+
+test("needsRedo: 只声明 whenOutputGaps 且非 JSON → undefined（调用方写降级标记）", () => {
+  assert.equal(needsRedo(gapsStage, "检查发现：特征与效果不一致"), undefined);
+});
+
+test("needsRedo: 只声明 whenOutputGaps 时不走正则（文本含信号词也不判定）", () => {
+  const decision = needsRedo(gapsStage, "不一致|矛盾|缺少|孤立");
+  assert.equal(decision, undefined);
+});
+
+test("needsRedo: 结构化优先于正则（consistent:true 但正则命中 → 不回退）", () => {
+  const stage: WorkflowStage = {
+    ...gapsStage,
+    retry: { whenOutputGaps: true, whenOutputMatches: "缺少", rewindTo: "extract" },
+  };
+  const decision = needsRedo(stage, JSON.stringify({ consistent: true, gaps: [], issues: ["缺少证据"] }));
+  assert.ok(decision);
+  assert.equal(decision.redo, false);
+  assert.match(decision.rationale, /结构化 gaps:0/);
+});
+
+test("needsRedo: 旧路径 gapId 命名空间 rule: / element: / pattern:", () => {
+  const stage: WorkflowStage = {
+    id: "check",
+    strategy: "chain",
+    description: "检查",
+    retry: { whenOutputMatches: "不一致", rewindTo: "extract" },
+  };
+  const rule = needsRedo(stage, JSON.stringify({ ruleId: "PAT-001", issues: ["不一致"] }));
+  assert.deepEqual(rule?.gapIds, ["rule:PAT-001"]);
+  const element = needsRedo(stage, JSON.stringify({ elementId: "E1", targetId: "D1", issues: ["不一致"] }));
+  assert.deepEqual(element?.gapIds, ["element:E1→D1"]);
+  const pattern = needsRedo(stage, "发现不一致");
+  assert.deepEqual(pattern?.gapIds, ["pattern:不一致"]);
+});
+
+test("needsRedo: 无 retry → undefined", () => {
+  assert.equal(needsRedo({ id: "x", strategy: "chain", description: "x" }, "不一致"), undefined);
 });

@@ -10,6 +10,7 @@
  */
 
 import type { StageProvider } from "../atoms/handler.js";
+import type { RevisionRecord } from "../workflow/types.js";
 
 /** 图共享状态（与原子层 PipelineState 同构：字符串键 → 任意值）。 */
 export type GraphState = Record<string, unknown>;
@@ -102,6 +103,8 @@ export type GraphRunResult = {
   interrupted?: { node: string; message: string; data: Record<string, unknown> };
   /** 各节点执行耗时（含中断/failFast 前已执行的节点）。 */
   nodeDurations?: NodeDuration[];
+  /** 回退留痕（manifest / graph 共用同一记录实现；无回退时缺省）。 */
+  revisions?: RevisionRecord[];
 };
 
 /** 数据级降级标记（见 degradation.ts）。 */
@@ -117,6 +120,7 @@ export type DegradationReason =
   | "retriever_unavailable"
   | "search_failed"
   | "node_failed"
+  | "retry_signal_unparseable"
   | "not_implemented";
 
 /** 节点抛出的中断信号（审批门等需要人工介入的场景）；引擎捕获后暂停执行。 */

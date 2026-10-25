@@ -12,6 +12,7 @@
  * 中断（GraphInterruptError，如审批门）：引擎捕获后暂停返回，completed=false。
  */
 
+import { readRevisionLedger } from "../workflow/revision.js";
 import type {
   EdgeRouter,
   GraphCheckpoint,
@@ -177,6 +178,30 @@ function sortedNodeDurations(durations: NodeDuration[]): NodeDuration[] {
   return [...durations].sort(byNodeName);
 }
 
+/**
+ * 统一装配运行结果（所有提前返回路径共用）。
+ * 回退留痕从 state 读取——中断/failFast/maxSteps 退出时也必须带回，
+ * 否则「回退过但没跑完」在结果里看起来像「从未回退」。
+ */
+function buildRunResult(input: {
+  state: GraphState;
+  completed: boolean;
+  steps: number;
+  interrupted?: GraphRunResult["interrupted"];
+  durations?: NodeDuration[];
+}): GraphRunResult {
+  const revisions = readRevisionLedger(input.state).records;
+  return {
+    state: input.state,
+    completed: input.completed,
+    steps: input.steps,
+    degraded: degradationSummary(input.state),
+    ...(input.interrupted !== undefined ? { interrupted: input.interrupted } : {}),
+    ...(input.durations !== undefined ? { nodeDurations: sortedNodeDurations(input.durations) } : {}),
+    ...(revisions.length > 0 ? { revisions } : {}),
+  };
+}
+
 /** SuperStep 主循环（resumeFrom 提供时从指定超步继续）。 */
 async function runSuperSteps(
   def: CompiledGraphDef,
@@ -235,14 +260,13 @@ async function runSuperSteps(
       if ("error" in outcome && isGraphInterruptError(outcome.error)) {
         const interrupt = outcome.error as GraphInterruptError;
         interrupted = { node: outcome.name, message: interrupt.message, data: interrupt.data };
-        return {
+        return buildRunResult({
           state,
           completed: false,
           steps,
-          degraded: degradationSummary(state),
           interrupted,
-          nodeDurations: sortedNodeDurations(durations),
-        };
+          durations,
+        });
       }
     }
 
@@ -265,13 +289,7 @@ async function runSuperSteps(
       }
     }
     if (failed) {
-      return {
-        state,
-        completed: false,
-        steps,
-        degraded: degradationSummary(state),
-        nodeDurations: sortedNodeDurations(durations),
-      };
+      return buildRunResult({ state, completed: false, steps, durations });
     }
 
     // 确定性合并（Reducer + 节点名字典序）。
@@ -303,19 +321,7 @@ async function runSuperSteps(
 
   // 循环因 maxSteps 耗尽退出（active 非空）→ 未正常完成（护栏触发）。
   if (!completed && active.length > 0) {
-    return {
-      state,
-      completed: false,
-      steps,
-      degraded: degradationSummary(state),
-      nodeDurations: sortedNodeDurations(durations),
-    };
+    return buildRunResult({ state, completed: false, steps, durations });
   }
-  return {
-    state,
-    completed,
-    steps,
-    degraded: degradationSummary(state),
-    nodeDurations: sortedNodeDurations(durations),
-  };
+  return buildRunResult({ state, completed, steps, durations });
 }

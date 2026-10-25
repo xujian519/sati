@@ -59,6 +59,9 @@ export {
   type ManifestCheckpoint,
   type ManifestCheckpointStage,
   type ManifestCheckpointStore,
+  // 与 docket 的 RevisionRecord（案卷修订轮次）同名异义：barrel 侧别名区分。
+  type RevisionRecord as WorkflowRevisionRecord,
+  type WorkflowDegradation,
   WorkflowError,
   validateWorkflowManifest,
   runWorkflow,

@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  InterruptStageError,
   patentDisclosureManifest,
   runWorkflow,
   validateWorkflowManifest,
+  type ManifestCheckpoint,
+  type ManifestCheckpointStore,
   type WorkflowManifest,
   type WorkflowStage,
 } from "../../src/patent/index.js";
@@ -285,14 +288,16 @@ test("patentDisclosureManifest：结构与 retry 声明合法", () => {
   assert.equal(patentDisclosureManifest.stages.length, 13);
   const consistency = patentDisclosureManifest.stages.find(s => s.id === "consistency")!;
   assert.equal(consistency.retry?.rewindTo, "extract_problem");
-  assert.match(consistency.retry!.whenOutputMatches, /不一致|矛盾|缺少|孤立/);
+  assert.match(String(consistency.retry?.whenOutputMatches ?? ""), /不一致|矛盾|缺少|孤立/);
   // consistency 声明 reasoning 原子（对齐 drafting_v1）：LLM 严格输出 JSON 契约，
   // 修复"透传原文 + 信号误回退"缺陷（防回归）。
   assert.equal(consistency.atom, "reasoning");
   assert.match(
     String(consistency.params?.reasoning_prompt ?? ""),
-    /严格输出 JSON：\{ consistent: boolean, issues: string\[\] \}/,
+    /严格输出 JSON：\{ consistent: boolean, gaps: \[\{ id: string, kind: string, detail: string \}\], issues: string\[\] \}/,
   );
+  // 结构化触发：consistency 声明 whenOutputGaps（正则保留兼容兜底）。
+  assert.equal(consistency.retry?.whenOutputGaps, true);
   // 原子声明：三路提取 + merge + groundedness + 一致性 + 检索关键词 + 检索 + 新颖性 + 复核门 + 草稿撰写
   const atoms = patentDisclosureManifest.stages.filter(s => s.atom !== undefined).map(s => s.atom);
   assert.deepEqual([...new Set(atoms)].sort(), [
@@ -332,4 +337,198 @@ test("patentDisclosureManifest：声明原子存在性校验（内置注册后�
       atomNames: new Set(globalAtomRegistry.list().map(a => a.name)),
     }),
   );
+});
+
+// ---------------------------------------------------------------------------
+// #734 结构化触发 + RevisionRecord
+// ---------------------------------------------------------------------------
+
+test("validate：retry 未声明任何触发判据被拦截", () => {
+  assert.throws(
+    () =>
+      validateWorkflowManifest({
+        id: "t",
+        name: "t",
+        caseType: "t",
+        stages: [{ id: "a", strategy: "chain", description: "a", retry: {} }],
+      }),
+    /必须声明 whenOutputMatches 或 whenOutputGaps/,
+  );
+});
+
+test("validate：仅声明 whenOutputGaps 合法（无需正则）", () => {
+  assert.doesNotThrow(() =>
+    validateWorkflowManifest({
+      id: "t",
+      name: "t",
+      caseType: "t",
+      stages: [{ id: "a", strategy: "chain", description: "a", retry: { whenOutputGaps: true } }],
+    }),
+  );
+});
+
+function gapsManifest(): WorkflowManifest {
+  return {
+    id: "gaps_retry",
+    name: "结构化回退",
+    caseType: "disclosure_analysis",
+    stages: [
+      { id: "extract", strategy: "chain", description: "提取" },
+      {
+        id: "consistency",
+        strategy: "chain",
+        description: "一致性检查",
+        retry: { whenOutputGaps: true, rewindTo: "extract", maxRetries: 1 },
+      },
+    ],
+  };
+}
+
+test("runWorkflow：结构化 gaps 非空触发回退，RevisionRecord 字段完整并闭合", async () => {
+  let extractCalls = 0;
+  let checkCalls = 0;
+  const first = JSON.stringify({
+    consistent: false,
+    gaps: [{ id: "g1", kind: "isolated", detail: "特征A无效果关联" }],
+    issues: [],
+  });
+  const second = JSON.stringify({ consistent: true, gaps: [], issues: [] });
+  const executor = async (stage: WorkflowStage) => {
+    if (stage.id === "extract") {
+      extractCalls += 1;
+      return "特征A";
+    }
+    checkCalls += 1;
+    return checkCalls === 1 ? first : second;
+  };
+
+  const result = await runWorkflow(gapsManifest(), { input: "交底书" }, executor);
+  assert.equal(extractCalls, 2, "gaps 非空应触发回退重跑");
+  assert.equal(result.completed, true);
+  assert.equal(result.revisions?.length, 1);
+  const revision = result.revisions![0]!;
+  assert.equal(revision.gapId, "g1");
+  assert.equal(revision.before, first);
+  assert.equal(revision.after, second);
+  assert.match(revision.rationale, /结构化 gaps:1/);
+  assert.equal(revision.status, "closed");
+  assert.equal(revision.truncated, undefined);
+  assert.match(revision.at, /^\d{4}-\d{2}-\d{2}T/);
+});
+
+test("runWorkflow：结构化 gaps 为空 → 不回退、无 RevisionRecord", async () => {
+  let extractCalls = 0;
+  const executor = async (stage: WorkflowStage) => {
+    if (stage.id === "extract") {
+      extractCalls += 1;
+      return "特征A";
+    }
+    return JSON.stringify({ consistent: false, gaps: [], issues: [] });
+  };
+  const result = await runWorkflow(gapsManifest(), { input: "交底书" }, executor);
+  assert.equal(extractCalls, 1);
+  assert.equal(result.revisions, undefined);
+});
+
+test("runWorkflow：仅声明 whenOutputGaps 且输出非 JSON → 不回退并写降级标记", async () => {
+  let extractCalls = 0;
+  const executor = async (stage: WorkflowStage) => {
+    if (stage.id === "extract") {
+      extractCalls += 1;
+      return "特征A";
+    }
+    return "检查发现：特征与效果不一致";
+  };
+  const result = await runWorkflow(gapsManifest(), { input: "交底书" }, executor);
+  assert.equal(extractCalls, 1, "结构化判据不可用不得回退");
+  assert.equal(result.revisions, undefined);
+  assert.equal(result.degradations?.length, 1);
+  assert.equal(result.degradations?.[0]?.stageId, "consistency");
+  assert.equal(result.degradations?.[0]?.reason, "retry_signal_unparseable");
+  assert.match(result.degradations?.[0]?.message ?? "", /未做回退判定/);
+});
+
+test("runWorkflow：超过最大回退次数 → 挂起记录以 WORKFLOW_RETRY_EXHAUSTED 闭合", async () => {
+  let checkCalls = 0;
+  const inconsistent = JSON.stringify({ consistent: false, gaps: [{ id: "g1" }], issues: [] });
+  const executor = async (stage: WorkflowStage) => {
+    if (stage.id === "extract") return "特征A";
+    checkCalls += 1;
+    return inconsistent;
+  };
+  const result = await runWorkflow(gapsManifest(), { input: "交底书" }, executor);
+  assert.equal(checkCalls, 2, "maxRetries=1 → 首轮触发 + 回退一轮后超限");
+  assert.equal(result.completed, false);
+  assert.equal(result.revisions?.length, 1);
+  const revision = result.revisions![0]!;
+  assert.equal(revision.status, "closed");
+  assert.equal(revision.before, inconsistent);
+  assert.match(revision.after, /^\[WORKFLOW_RETRY_EXHAUSTED\] consistency:/);
+});
+
+test("runWorkflow：回退重跑前中断 → 记录保持 interrupted（after 为空）", async () => {
+  const manifest: WorkflowManifest = {
+    id: "interrupted_retry",
+    name: "中断留痕",
+    caseType: "disclosure_analysis",
+    stages: [
+      { id: "extract", strategy: "chain", description: "提取" },
+      { id: "mid", strategy: "chain", description: "中间阶段" },
+      {
+        id: "consistency",
+        strategy: "chain",
+        description: "一致性检查",
+        retry: { whenOutputGaps: true, rewindTo: "extract", maxRetries: 1 },
+      },
+    ],
+  };
+  let midCalls = 0;
+  const executor = async (stage: WorkflowStage) => {
+    if (stage.id === "extract") return "特征A";
+    if (stage.id === "mid") {
+      midCalls += 1;
+      if (midCalls === 2) throw new InterruptStageError("mid", "需要人工确认", { reason: "test" });
+      return "中间结果";
+    }
+    return JSON.stringify({ consistent: false, gaps: [{ id: "g1" }], issues: [] });
+  };
+  const result = await runWorkflow(manifest, { input: "交底书" }, executor);
+  assert.equal(result.interrupted?.stageId, "mid");
+  assert.equal(result.revisions?.length, 1);
+  const revision = result.revisions![0]!;
+  assert.equal(revision.status, "interrupted");
+  assert.equal(revision.after, "");
+  assert.equal(revision.gapId, "g1");
+});
+
+test("runWorkflow：resume 后 revisions 仍可读（检查点携带留痕）", async () => {
+  class MemoryCheckpointStore implements ManifestCheckpointStore {
+    latest?: ManifestCheckpoint;
+    async save(checkpoint: ManifestCheckpoint): Promise<void> {
+      this.latest = checkpoint;
+    }
+    async load(): Promise<ManifestCheckpoint | undefined> {
+      return this.latest;
+    }
+  }
+  let checkCalls = 0;
+  const executor = async (stage: WorkflowStage) => {
+    if (stage.id === "extract") return "特征A";
+    checkCalls += 1;
+    return checkCalls === 1
+      ? JSON.stringify({ gaps: [{ id: "g1" }], issues: [] })
+      : JSON.stringify({ gaps: [], issues: [] });
+  };
+  const store = new MemoryCheckpointStore();
+  const first = await runWorkflow(gapsManifest(), { input: "交底书" }, executor, { checkpointStore: store });
+  assert.equal(first.revisions?.length, 1);
+  assert.equal(store.latest?.revisions?.length, 1, "检查点应携带已闭合的 RevisionRecord");
+
+  const resumed = await runWorkflow(gapsManifest(), { input: "交底书" }, executor, {
+    checkpointStore: store,
+    resumeFrom: store.latest,
+  });
+  assert.equal(resumed.revisions?.length, 1);
+  assert.equal(resumed.revisions?.[0]?.gapId, "g1");
+  assert.equal(resumed.revisions?.[0]?.status, "closed");
 });

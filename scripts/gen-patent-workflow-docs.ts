@@ -45,7 +45,10 @@ function manifestToYaml(entry: (typeof builtinPatentManifests)[number]): string 
       ...(stage.retry !== undefined
         ? {
             retry: {
-              whenOutputMatches: stage.retry.whenOutputMatches,
+              ...(stage.retry.whenOutputGaps !== undefined ? { whenOutputGaps: stage.retry.whenOutputGaps } : {}),
+              ...(stage.retry.whenOutputMatches !== undefined
+                ? { whenOutputMatches: stage.retry.whenOutputMatches }
+                : {}),
               rewindTo: stage.retry.rewindTo,
               maxRetries: stage.retry.maxRetries,
             },
