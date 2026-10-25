@@ -5,6 +5,7 @@ import {
   STANDARD_CLEAR_CONVINCING,
   STANDARD_PREPONDERANCE,
   createSpan,
+  evaluateFourElements,
   extractWaybackMachineDate,
   inferEvidenceType,
   isBeforeFilingDate,
@@ -19,6 +20,19 @@ import {
 function span(overrides: Partial<EvidenceSpan> & { snippet?: string }): EvidenceSpan {
   return createSpan({ snippet: "", direction: "neutral", ...overrides });
 }
+
+// ---------------------------------------------------------------------------
+// 导出面（#740 T-10-03：领域判定已实现，法律面可直接调用）
+// ---------------------------------------------------------------------------
+
+test("导出面：EvidenceEngine 与三性/证明标准可从 patent barrel 调用", () => {
+  const engine = new EvidenceEngine();
+  assert.equal(typeof engine.judge, "function");
+  assert.equal(inferEvidenceType(span({ snippet: "x" })), "general");
+  assert.equal(typeof evaluateFourElements(span({ snippet: "x" })).allMet, "boolean");
+  assert.equal(STANDARD_PREPONDERANCE, "preponderance");
+  assert.equal(STANDARD_CLEAR_CONVINCING, "clear_and_convincing");
+});
 
 // ---------------------------------------------------------------------------
 // 三性判定

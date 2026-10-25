@@ -1,14 +1,18 @@
 /**
- * src/patent/evidence — 证据闭环（通用账本层，无领域判定）。
+ * src/patent/evidence — 证据闭环（通用账本层 + 领域判定）。
  *
  * 分层（对齐 Mady agentcore/evidence ↔ domains/evidence 分离）：
  * - span.ts：EvidenceSpan 可定位原文切片 + 方向语义
  * - receipt.ts：工具调用账本（Receipt/Ledger）
  * - claimBinding.ts：结论 ↔ 证据绑定 + UnbackedClaims
  * - conflict.ts：冲突检测（claim 冲突 / source 冲突）
+ * - engine.ts：领域判定（三性 / 举证责任 / 证明标准），经本文件 re-export
  * - 本文件：EvidenceExtension 聚合（实现 tool 层 SatiEvidenceCollector）
  *
- * 领域判定（三性/证明标准）明确留二期 —— 本期只做"记录与回溯"。
+ * 账本层只做"记录与回溯"，可采性判断由 engine 承担。法条引用的形式核验
+ * 由 src/knowledge/legal 的 law_verify 承担，两者语义不同（证据可采性 vs
+ * 引用条号/片段是否成立），不互相复用。边界见
+ * docs/notes/implemented/2026-10-26-legal-evidence-boundary.md。
  */
 
 import type { SatiEvidenceCollector, SatiEvidenceReceipt } from "../../tool/protocol/evidence.js";

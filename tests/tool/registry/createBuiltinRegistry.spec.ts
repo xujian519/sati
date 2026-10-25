@@ -61,3 +61,17 @@ test("createBuiltinRegistry：team options 注入后 11 工具注册且 domain �
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("createBuiltinRegistry：law_search / law_verify 默认注册，legal: false 一并关闭", () => {
+  const registry = createBuiltinRegistry({});
+  for (const name of ["law_search", "law_verify"]) {
+    const tool = registry.get(name);
+    assert.ok(tool, `工具未注册：${name}`);
+    assert.equal(tool.domain, "legal", `${name} 应标注 legal 域`);
+  }
+
+  // 开关语义：legal 关闭时两条工具都消失（不得只关一个，留下半套法律面）
+  const disabled = createBuiltinRegistry({ legal: false });
+  assert.equal(disabled.get("law_search"), undefined);
+  assert.equal(disabled.get("law_verify"), undefined);
+});
