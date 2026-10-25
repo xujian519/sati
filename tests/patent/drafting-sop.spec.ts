@@ -224,6 +224,60 @@ test("QualityGateHandler：输入为空时降级", async () => {
   assert.match(String(out._error), /输入为空/);
 });
 
+test("checkSearchQuality：单源放宽两篇/一篇全文，多源与未知源数保持严格", () => {
+  const text = [
+    "检索式: (保温 AND 真空) OR IPC=G06F3/04",
+    "对比文件 1: CN1234567A，相关度 X，全文已获取",
+    "对比文件 2: US20240012345A1，相关度 Y",
+  ].join("\n");
+
+  const single = checkSearchQuality(text, { sourceCount: 1 });
+  assert.equal(single.passed, true);
+  assert.equal(single.thresholdsAdjusted, true);
+  assert.equal(single.sourceCount, 1);
+  assert.equal(single.thresholds.minDocs, 2);
+
+  const multi = checkSearchQuality(text, { sourceCount: 2 });
+  assert.equal(multi.passed, false);
+  assert.equal(multi.thresholdsAdjusted, false);
+  assert.ok(
+    multi.failures.some(f => f.includes("不足 3 篇")),
+    "多源仍按 3 篇门槛",
+  );
+
+  // 缺省与 0 都按严格门槛：未知源数不得被当成单源而放宽。
+  for (const options of [undefined, { sourceCount: 0 }]) {
+    const strict = checkSearchQuality(text, options);
+    assert.equal(strict.passed, false);
+    assert.equal(strict.thresholdsAdjusted, false);
+  }
+});
+
+test("QualityGateHandler：单源报告注明阈值已调整，多源/缺省不注明", async () => {
+  registerBuiltinAtoms();
+  const h = LookupStageHandler("quality-gate")!;
+  const state = {
+    search_summary: "检索到 2 篇相关文献（查询: 保温 AND 真空 OR IPC=G06F3/04）",
+    prior_art: [
+      { title: "CN1234567A 保温容器", snippet: "相关度 X，全文已获取", url: "https://e/1" },
+      { title: "US20240012345A1 真空结构", snippet: "相关度 Y", url: "https://e/2" },
+    ],
+  };
+
+  const single = await h.execute({ state, provider: { sourceCount: 1 } });
+  assert.match(String(single.quality_report), /单源检索，阈值已调整/);
+  assert.match(String(single.quality_report), /对比文件 ≥2 篇/);
+  assert.doesNotMatch(String(single.quality_report), /❌ 对比文件不足/);
+
+  const multi = await h.execute({ state, provider: { sourceCount: 2 } });
+  assert.doesNotMatch(String(multi.quality_report), /单源检索/);
+  assert.match(String(multi.quality_report), /对比文件不足 3 篇/);
+
+  const unknown = await h.execute({ state });
+  assert.doesNotMatch(String(unknown.quality_report), /单源检索/);
+  assert.match(String(unknown.quality_report), /对比文件不足 3 篇/);
+});
+
 // ---------------------------------------------------------------------------
 // T3: slop-gate 反套话评分门
 // ---------------------------------------------------------------------------

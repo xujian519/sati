@@ -63,3 +63,9 @@ test("无会话无 deps 时回退全局默认", async () => {
   assert.equal(requests[0]?.provider, DEFAULT_MODEL_PROVIDER);
   assert.equal(requests[0]?.model, DEFAULT_MODEL_ID);
 });
+
+test("sourceCount 透传；缺省不写，保持「源数未知 = 严格门槛」", () => {
+  const model = recordingClient([]);
+  assert.equal(buildWorkflowProvider({ model, sourceCount: 1 })?.sourceCount, 1);
+  assert.equal(buildWorkflowProvider({ model })?.sourceCount, undefined);
+});

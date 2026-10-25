@@ -406,6 +406,9 @@ export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): T
       annotate(
         createPatentWorkflowRunTool({
           search,
+          // 装配时启用的检索源数（nuo + 可选 paper）；paperSearch=false 时只有 nuo=1，
+          // quality-gate 据此放宽单源门槛。运行期源失败不回改此值（保守）。
+          sourceCount: searchSources.length,
           ...(options?.patentModelHints !== undefined ? { modelHints: options.patentModelHints } : {}),
         }),
         "patent",

@@ -53,6 +53,12 @@ export type StageProvider = {
     query: string,
     opts?: { maxResults?: number },
   ) => Promise<Array<{ title: string; snippet: string; url?: string; publication_date?: string }>>;
+  /**
+   * 装配时启用的检索源数量（如 nuo 专利 + paper 论文 = 2），**不是**本次运行成功源数。
+   * 仅 `=== 1` 触发 quality-gate 的单源放宽；缺省、0 或多源按严格门槛处理——
+   * 运行期源失败不触发放宽（保守，避免失败越多门槛越低）。
+   */
+  sourceCount?: number;
 };
 
 export type StageExecuteInput = {
