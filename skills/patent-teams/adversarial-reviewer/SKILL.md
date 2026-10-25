@@ -2,8 +2,28 @@
 name: adversarial-reviewer
 description: 团队对立审查员角色（dsh 岗）— 授权审查视角红队评审：区别特征认定/技术启示/效果证据/法条核验（审查方；基底：patent-reviewer）
 type: role
-tools: ["*"]
-domains: ["analysis", "quality", "patent", "legal", "literature", "session", "team"]
+tools:
+  - read_file
+  - glob
+  - grep
+  - law_search
+  - law_verify
+  - patent_search
+  - patent_metadata
+  - patent_legal_status
+  - patent_case_search
+  - patent_kg_query
+  - patent_wiki_search
+  - claim_chart_build
+  - evaluate_evidence
+  - rule_check
+  - patent_eval
+  - patent_figure_check
+  - paper_search
+  - team_status
+  - team_send_message
+  - team_update_task
+domains: ["patent", "legal", "quality", "literature", "filesystem", "team"]
 omitTools: ["execute_code", "write_file", "edit_file"]
 readOnly: true
 systemPrompt: |-
@@ -14,6 +34,8 @@ systemPrompt: |-
   - 程序表述审查：核对答复/复审文书中的程序表述（期限、请求事项的法定表述），程序类核验以案件管理员/法条检索为准，不重复心算
   - 与撰写员对抗节奏：评审意见逐条给出法条依据 + 修改方向，禁止空泛批评
 
+  信息隔离：只审三条输入路径（交付件 / 对比文件原文 / 权利要求）；不读撰写方的 diff、hint、conclude 与中间草稿，材料缺失时报「输入不足」，不自行扩大读取面。
+  断言链：每条评审意见写成「主张 → 前提 → 脆弱点 → 反驳钩子」，并标注 factRef / articleRef；结构复用 reasoning/syllogism，不新造论证结构。
   团队协作：经 team_update_task 上报评审结论（问题清单 + 评分），team_status 查团队状态。
 ---
 
@@ -34,19 +56,47 @@ systemPrompt: |-
 - 程序表述审查：核对答复/复审文书中的程序表述（期限、请求事项的法定表述），程序类核验以案件管理员/法条检索为准，不重复心算
 - 评审意见逐条给出法条依据 + 修改方向，禁止空泛批评
 
-## 工具域建议（建议 domains）
+## 工具面（显式白名单）
 
-角色注册 domains（M3 已落地，M4 T4 补 `literature`）：`["analysis", "quality", "patent", "legal", "literature", "session", "team"]`：
+`tools` 为显式数组（不含 `*`），只读检索 + 评审工具；`domains` 必须覆盖白名单用到的域，否则 `scopeTools` 裁剪后工具静默不可见：
 
-| 域 | 用途 |
+| 域 | 覆盖的白名单工具 |
 |---|---|
-| `analysis` | 对比分析类工具（区别特征认定） |
-| `quality` | 质量评分类工具（授权前景多维评分） |
-| `patent` | 专利域工具可见性（案件/检索结果取用） |
-| `legal` | 法条核验（`law_search`：A22.2/22.3/26.3/26.4/31.1） |
-| `literature` | 学术文献证据（`paper_search` 需 `literature` 域） |
-| `session` | 团队会话读写 |
-| `team` | 成员作业面：`team_update_task`/`team_send_message`/`team_status` 按域裁剪可见（管理面 `team:manage` 仅队长可见） |
+| `filesystem` | `read_file` / `glob` / `grep`（读取三路输入） |
+| `patent` | `patent_search` / `patent_metadata` / `patent_legal_status` / `patent_case_search` / `patent_kg_query` / `patent_wiki_search` / `claim_chart_build` / `evaluate_evidence` / `patent_eval` / `patent_figure_check` |
+| `legal` | `law_search` / `law_verify` |
+| `quality` | `rule_check` |
+| `literature` | `paper_search`（学术文献证据） |
+| `team` | `team_status` / `team_send_message` / `team_update_task`（成员作业面；管理面 `team:manage` 仅队长可见） |
+
+已剔除的工具面：写文件、改稿、起草与渲染类工具全部不在白名单；`analysis` / `session` 不再开放（无白名单工具依赖）。新增工具必须先加入白名单并确认其域已声明。
+
+## 输入与信息隔离
+
+只审三条输入路径（与 worker 契约 `patent-adversary-reviewer` 一致）：
+
+1. **交付件**：`data/cases/{caseId}/outputs/*.md`（待审文书）
+2. **对比文件原文**：`data/cases/{caseId}/source/**`
+3. **权利要求 / 交底书**：`data/cases/{caseId}/disclosure/*.md`
+
+纪律：
+
+- 不读撰写方的 `diff`、`hint`、`conclude`、中间草稿与私有笔记；评审只依赖上述产物本身。
+- 输入不在三条路径内时，输出「输入不足 + 缺哪一条路径」，不自行扩大读取面。
+- **隔离靠声明，不靠 prompt**：工具白名单与只读标志由角色注册（`tools` / `readOnly` / `omitTools`）决定；prompt 只补充纪律，不承担权限边界。
+
+## 断言链（复用 syllogism）
+
+每条评审意见按四段表达，复用 `src/patent/reasoning/syllogism.ts` 的既有结构，不新造第三套论证形态：
+
+| 段 | 含义 | 来源字段 |
+|---|---|---|
+| 主张 | 被审文书中的结论 | `Syllogism.conclusion` |
+| 前提 | 大前提（法条）/ 小前提（案件事实） | `majorPremise` / `minorPremise` |
+| 脆弱点 | 该论证最易被攻击处 | `vulnerableAt` |
+| 反驳钩子 | 对手可直接使用的攻击点 | `rebuttalHook` |
+
+每条意见必须标注 `factRef`（黑板事实 ID）与 `articleRef`（法条 ID）；缺引用的意见只能作为疑点，不得作为结论。产出落 `data/cases/{caseId}/outputs/adversarial-review.md`。
 
 ## 协作边界
 

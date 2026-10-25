@@ -2,7 +2,7 @@ import { defaultPatentWorkers, validateWorkerOutput, WorkerRegistry } from "../.
 import type { SatiToolDefinition } from "../protocol/types.js";
 
 export type PatentWorkerValidateInput = {
-  /** worker 名称（内置目录: patent-technical-analyzer / patent-search-commander / patent-novelty-analyzer / patent-oa-writer / quality_checker）。 */
+  /** worker 名称（内置目录: patent-technical-analyzer / patent-search-commander / patent-novelty-analyzer / patent-oa-writer / patent-adversary-reviewer / quality_checker）。 */
   workerName: string;
   /** 待校验的 worker 输出文本。 */
   outputText: string;

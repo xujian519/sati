@@ -155,6 +155,7 @@ description: 专利案持久团队组建模板。当 Sati 团队编排层可用�
 - 立场配对：复审/无效 = 请求方（申请人代理/无效请求人）× 防御方（专利权人）+ 合议组（裁判）；诉讼 = 专利权人（原告）× 被告代理人（抗辩）+ 裁判（裁决）+ 调查官（技术查明）。每个立场一个成员，不合并；对抗意见冲突由 captain 收口并说明取舍理由。
 - 角色边界：技术专家不评法律论证，代理人/请求人/被告不代写对方文书，裁判不参与任一方策略起草，案件管理员不评技术内容。
 - 复核派发纪律：复核角色经 `subagent_type` 真实调度（`patent-reviewer` / `adversarial-reviewer` / 各 checker），并显式给预算（建议 `max_turns` 8–16、`max_tool_calls` 24–40）；返回 `partial: true` 时只能当临时意见，需缩小复核范围或提高预算后重跑，不得当作完整结论收口。
+- 交付前对抗审查席位：交付件定稿后、进入质量门禁/收口/归档之前，captain 以真实 `subagent_type: "adversarial-reviewer"` 或团队 `role: "adversarial-reviewer"` 调度一次（对应 worker 契约 `patent-adversary-reviewer`，tier `checker`）。输入只给三条路径：交付件（`outputs/*.md`）、对比文件原文（`source/**`）、权利要求/交底书（`disclosure/*.md`）；产出 `adversarial-review.md`，逐条按「主张 → 前提 → 脆弱点 → 反驳钩子」并标注 `factRef` / `articleRef`。未完成该席位不得归档；输入不足时记录缺口，不得用撰写方的 diff/hint/conclude 补足。
 - 期限与流程：答复期限、复审 3 个月与恢复窗口、补正期限、送达日认定（电子送达不加 15 日，只有邮寄才有满 15 日推定）由案件管理员或 captain 核验，禁止心算——用 `patent_deadlines` 机械核算。
 - HITL 确认点不可跳过：权利要求布局、修改方案、无效理由组合、诉请金额、答复策略在动手前用 `ask_user_question` 确认或至少说明取舍理由。
 - 收口：全部任务完成后 `team_archive` 归档团队；归档保留完整成员与任务历史，可随时复查。

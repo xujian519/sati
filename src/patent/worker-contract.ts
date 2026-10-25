@@ -246,6 +246,7 @@ export const WORKER_ROLE_MAP: ReadonlyArray<{ worker: string; role?: string; not
   { worker: "patent-novelty-analyzer", role: "patent-novelty-checker", note: "A22.2 新颖性" },
   { worker: "patent-inventiveness-analyzer", role: "patent-creativity-checker", note: "A22.3 三步法" },
   { worker: "quality_checker", role: "patent-quality-checker", note: "质量复核" },
+  { worker: "patent-adversary-reviewer", role: "adversarial-reviewer", note: "对抗审查席位（S-08）" },
   { worker: "patent-oa-writer", role: undefined, note: "无对应 type: role 角色（OA 答复为技能）" },
   { worker: "provision-disclosure", role: "provision-disclosure", note: "P-A05 充分公开（T8 新增角色）" },
   {
@@ -353,6 +354,38 @@ export function defaultPatentWorkers(): WorkerContract[] {
         },
       ],
       triggersHITL: true,
+    },
+    {
+      name: "patent-adversary-reviewer",
+      tier: "checker",
+      description:
+        "对抗审查席位：只审三路输入（交付件/对比文件原文/权利要求），逐条输出「主张 → 前提 → 脆弱点 → 反驳钩子」，不改稿",
+      // 工具面由 skills/patent-teams/adversarial-reviewer/SKILL.md 的显式白名单约束；
+      // worker 契约不重复声明，避免两处清单漂移（字段语义见 WorkerContract.allowedTools）。
+      inputs: [
+        {
+          path: `${caseOutputsDir("{caseId}")}/*.md`,
+          description: "待审交付件（申请文件/答复稿/复审请求书等）",
+        },
+        {
+          path: `${CASE_ROOT_REL}/{caseId}/source/**`,
+          description: "对比文件原文（申请日前公开文本）",
+        },
+        {
+          path: `${CASE_ROOT_REL}/{caseId}/disclosure/*.md`,
+          description: "权利要求书与交底书",
+        },
+      ],
+      outputs: [
+        {
+          path: `${caseOutputsDir("{caseId}")}/adversarial-review.md`,
+          format: "markdown",
+          contractLevel: "hard",
+          requiredFields: ["主张", "前提", "脆弱点", "反驳钩子", "factRef", "articleRef"],
+        },
+      ],
+      forbiddenActions: ["write_file", "edit_file", "draft_claims", "draft_specification", "render_patent_document"],
+      triggersHITL: false,
     },
     {
       name: "quality_checker",

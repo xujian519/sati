@@ -170,7 +170,7 @@ describe("worker 契约（worker-contract.ts 接线）", () => {
       registry.register(w);
     }
     assert.deepEqual(registry.verify(), []);
-    assert.equal(registry.list().length, 6);
+    assert.equal(registry.list().length, 7);
   });
 
   it("validateWorkerOutput 硬性字段缺失 → degraded", () => {

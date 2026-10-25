@@ -6,7 +6,10 @@ import test from "node:test";
 import { parse as parseYaml } from "yaml";
 import { parseRoleConfig } from "../../src/extension/skills/roleConfig.js";
 import { roleFromSkill } from "../../src/agent/sub/roleFromSkill.js";
+import { scopeToolsForDefinition } from "../../src/agent/sub/scopeTools.js";
+import { createBuiltinRegistry } from "../../src/tool/registry/createBuiltinRegistry.js";
 import type { SkillSummary } from "../../src/extension/skills/types.js";
+import type { TeamDb, TeamScheduler } from "../../src/agent/team/index.js";
 
 /**
  * Validates the patent role skills (type: role) migrated from YunXi:
@@ -94,6 +97,9 @@ const TOOL_DOMAINS = new Set([
   "literature",
   "agent",
   "session",
+  "team",
+  "team:manage",
+  "html",
   "mcp",
   "custom",
 ]);
@@ -110,6 +116,82 @@ function parseFrontmatter(content: string): Record<string, unknown> {
     return {};
   }
 }
+
+const ADVERSARIAL_REVIEWER_SKILL = join(SKILLS_ROOT, "patent-teams", "adversarial-reviewer", "SKILL.md");
+
+test("adversarial-reviewer: 显式只读工具面（不含 *）与断言链纪律", async () => {
+  const content = await readFile(ADVERSARIAL_REVIEWER_SKILL, "utf8");
+  const fm = parseFrontmatter(content);
+  assert.equal(fm.type, "role", "frontmatter must declare type: role");
+  assert.equal(fm.readOnly, true, "对抗审查席位必须只读");
+
+  const tools = fm.tools as string[];
+  assert.ok(Array.isArray(tools) && tools.length > 0, "tools must be an explicit non-empty array");
+  assert.ok(!tools.includes("*"), "对抗审查席位不得以 * 放开工具面");
+  assert.equal(new Set(tools).size, tools.length, "工具白名单不得重复");
+
+  const domains = fm.domains as string[];
+  assert.ok(Array.isArray(domains) && domains.length > 0);
+  for (const d of domains) assert.ok(TOOL_DOMAINS.has(d), `domain "${d}" must be a known ToolDomain`);
+  // domains 必须覆盖白名单用到的域，否则 scopeTools 裁剪后工具静默不可见。
+  for (const d of ["patent", "legal", "quality", "literature", "filesystem", "team"]) {
+    assert.ok(domains.includes(d), `domains 应包含 "${d}"（白名单工具依赖该域）`);
+  }
+
+  const role = parseRoleConfig(fm);
+  const definition = roleFromSkill({
+    slug: "adversarial-reviewer",
+    description: (fm.description as string) ?? "adversarial-reviewer",
+    role,
+  } as SkillSummary);
+  assert.notEqual(definition, null);
+  assert.equal(definition!.isReadOnly, true);
+  assert.ok(!definition!.allowedTools.includes("*"), "角色定义不得继承通配工具面");
+  assert.deepEqual(definition!.visibleDomains, domains);
+
+  assert.match(content, /隔离靠声明，不靠 prompt/);
+  for (const field of ["主张", "前提", "脆弱点", "反驳钩子", "factRef", "articleRef"]) {
+    assert.ok(content.includes(field), `skill 正文应声明断言链字段「${field}」`);
+  }
+});
+
+test("adversarial-reviewer: 白名单工具在 domains 裁剪后全部可见且无幽灵工具", async () => {
+  const content = await readFile(ADVERSARIAL_REVIEWER_SKILL, "utf8");
+  const fm = parseFrontmatter(content);
+  const tools = fm.tools as string[];
+  const domains = fm.domains as string[];
+
+  // team_* 工具只在注入团队依赖时注册；这里用空依赖装配（工厂仅闭包引用，不调用 db）。
+  const registry = createBuiltinRegistry({
+    team: {
+      db: {} as unknown as TeamDb,
+      scheduler: {} as unknown as TeamScheduler,
+      emit: () => true,
+    },
+  });
+  assert.deepEqual(
+    tools.filter(name => !registry.has(name)),
+    [],
+    "白名单不得含未注册的工具名",
+  );
+
+  const visible = new Set(
+    scopeToolsForDefinition(registry.list(), { allowedTools: tools, visibleDomains: domains }).map(t => t.name),
+  );
+  for (const name of tools) assert.ok(visible.has(name), `${name} 应在 domains 裁剪后可见`);
+  for (const forbidden of [
+    "write_file",
+    "edit_file",
+    "execute_code",
+    "bash",
+    "draft_claims",
+    "draft_specification",
+    "render_patent_document",
+    "patent_workflow_run",
+  ]) {
+    assert.ok(!visible.has(forbidden), `写/起草类工具 ${forbidden} 不得进入对抗审查工具面`);
+  }
+});
 
 for (const slug of ALL_ROLE_SLUGS) {
   test(`role skill ${slug} has valid type: role frontmatter`, async () => {
