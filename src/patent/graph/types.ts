@@ -10,7 +10,7 @@
  */
 
 import type { StageProvider } from "../atoms/handler.js";
-import type { RevisionRecord } from "../workflow/types.js";
+import type { RevisionRecord, RunRulePackInfo } from "../workflow/types.js";
 
 /** 图共享状态（与原子层 PipelineState 同构：字符串键 → 任意值）。 */
 export type GraphState = Record<string, unknown>;
@@ -105,6 +105,8 @@ export type GraphRunResult = {
   nodeDurations?: NodeDuration[];
   /** 回退留痕（manifest / graph 共用同一记录实现；无回退时缺省）。 */
   revisions?: RevisionRecord[];
+  /** 本次 run 使用的规则包快照（run 开始时计算；工具层装配，引擎本身不感知规则包）。 */
+  rulePack?: RunRulePackInfo;
 };
 
 /** 数据级降级标记（见 degradation.ts）。 */

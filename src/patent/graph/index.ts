@@ -32,6 +32,12 @@ export {
   manifestToGraph,
   type ManifestToGraphDeps,
 } from "./adapter.js";
+export {
+  GRAPH_RUN_SUMMARY_DIR,
+  buildGraphRunSummary,
+  writeGraphRunSummary,
+  type GraphRunSummary,
+} from "./runSummary.js";
 
 export {
   buildNoveltyGraph,

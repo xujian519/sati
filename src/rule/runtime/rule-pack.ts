@@ -33,6 +33,8 @@ export type RulePackManifest = {
   domains: string[];
   /** 项目私有规则目录（相对清单所在目录或绝对路径）。 */
   overrides?: string;
+  /** 清单显式声明的版本（可选；各层 pack.yaml 的版本彼此独立，不在这里拼总版本）。 */
+  version?: string;
 };
 
 /** 分层规则包加载结果。 */
@@ -85,7 +87,10 @@ export function parseRulePackManifest(yamlText: string): RulePackManifest {
   }
   const overrides =
     typeof record.overrides === "string" && record.overrides.trim() !== "" ? record.overrides.trim() : undefined;
-  return { base, domains, overrides };
+  const version =
+    typeof record.version === "string" && record.version.trim() !== "" ? record.version.trim() : undefined;
+  // 未声明时省略 version 键：既有清单无该字段，deepEqual 断言保持稳定。
+  return { base, domains, overrides, ...(version !== undefined ? { version } : {}) };
 }
 
 /**
