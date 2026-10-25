@@ -7,8 +7,10 @@ import {
   loadRulePack,
   loadSynonymsAsset,
   summarizeRulePackLayers,
+  type RuleEvaluation,
   type RulePackLoadResult,
   type RuleSet,
+  type RuleSkip,
   type SynonymMap,
 } from "../../rule/index.js";
 import type { SatiToolDefinition } from "../protocol/types.js";
@@ -31,6 +33,27 @@ export type RuleCheckDeps = {
 
 /** rule_check 支持的规则集 scope（description 与运行时报错共用）。 */
 const AVAILABLE_SCOPES = "patent, patent-electrical, patent-full, pack";
+
+const SKIP_REASON_LABELS: Record<RuleSkip["reason"], string> = {
+  "domain-filtered": "域过滤",
+  "empty-text": "空文本",
+  "no-rules": "无规则",
+};
+
+/** 评估覆盖摘要：已评估 / 跳过（按原因分组），供报告与审计。 */
+function formatCoverage(evaluation: RuleEvaluation): string {
+  const groups = new Map<RuleSkip["reason"], number>();
+  for (const skip of evaluation.skipped) {
+    groups.set(skip.reason, (groups.get(skip.reason) ?? 0) + 1);
+  }
+  const skipped =
+    groups.size === 0
+      ? "0 条"
+      : `${evaluation.skipped.length} 条（${[...groups]
+          .map(([reason, count]) => `${SKIP_REASON_LABELS[reason]} ${count}`)
+          .join(" / ")}）`;
+  return `覆盖: 已评估 ${evaluation.assessed.length} 条 / 跳过 ${skipped}`;
+}
 
 /**
  * `rule_check` — 宪法规则检查工具。
@@ -142,17 +165,23 @@ export function createRuleCheckTool(deps?: RuleCheckDeps): SatiToolDefinition<Ru
         };
       }
       const evaluation = evaluateText(input.text, ruleSet, synonymsCache);
+      const coverage = formatCoverage(evaluation);
       // scope=pack 附分层来源摘要与加载警告，便于审计与排障
       const packHeader =
         pack !== null
           ? `规则分层: ${summarizeRulePackLayers(pack.layers)}（清单: ${pack.manifestPath ?? "无，默认 rules/base"}）`
           : null;
       const packWarnings = pack !== null && pack.warnings.length > 0 ? `\n加载警告: ${pack.warnings.join("；")}` : "";
+      // 全部规则被跳过 ≠ 通过：显式报「未评估」，避免把覆盖面为零误读为合规。
+      if (evaluation.assessed.length === 0) {
+        const text = `rule_check(${scope}): 未评估（无规则可评估）\n${coverage}${packHeader !== null ? `\n${packHeader}` : ""}${packWarnings}`;
+        return { content: [{ type: "text", text }] };
+      }
       if (evaluation.violations.length === 0) {
         const text =
           packHeader !== null
-            ? `rule_check(pack): 无违规\n${packHeader}${packWarnings}`
-            : `rule_check(${scope}): 无违规`;
+            ? `rule_check(pack): 无违规\n${coverage}\n${packHeader}${packWarnings}`
+            : `rule_check(${scope}): 无违规\n${coverage}`;
         return { content: [{ type: "text", text }] };
       }
       const lines = evaluation.violations.map(v => {
@@ -162,7 +191,9 @@ export function createRuleCheckTool(deps?: RuleCheckDeps): SatiToolDefinition<Ru
       });
       const summary = `rule_check(${scope}): 发现 ${evaluation.violations.length} 条违规`;
       const header = packHeader !== null ? `${packHeader}\n` : "";
-      return { content: [{ type: "text", text: `${header}${summary}\n${lines.join("\n")}${packWarnings}` }] };
+      return {
+        content: [{ type: "text", text: `${header}${summary}\n${coverage}\n${lines.join("\n")}${packWarnings}` }],
+      };
     },
   };
 }

@@ -141,9 +141,9 @@ export function ruleGateNode(domains: readonly string[], precomputedFailures: st
     const text = collectStateText(state);
     const engine = new RuleEngine();
     engine.registerMany(defaultPatentRules());
-    const failures = engine.evaluate(text, { domain: domains });
-    const verdict = aggregate(failures);
-    const ruleFailures = failures.map(f => f.ruleId);
+    const detail = engine.evaluateDetailed(text, { domain: domains });
+    const verdict = aggregate(detail.results, { assessed: detail.assessed.length });
+    const ruleFailures = detail.results.map(f => f.ruleId);
     let finalVerdict = verdict;
     if (precomputedFailures.length > 0 && verdict !== "blocked" && verdict !== "needs_revision") {
       finalVerdict = "needs_revision";
@@ -153,6 +153,8 @@ export function ruleGateNode(domains: readonly string[], precomputedFailures: st
       rule_gate_domains: [...domains],
       rule_gate_failures: [...new Set([...ruleFailures, ...precomputedFailures])],
       rule_gate_text_length: text.length,
+      rule_gate_assessed: detail.assessed.length,
+      rule_gate_skipped: detail.skipped.length,
     };
   };
 }
@@ -169,6 +171,7 @@ export function collectStateText(state: GraphState): string {
     if (key.startsWith("_")) continue;
     if (key.endsWith("__degradation")) continue;
     if (key === "rule_gate_verdict" || key === "rule_gate_domains" || key === "rule_gate_failures") continue;
+    if (key === "rule_gate_assessed" || key === "rule_gate_skipped") continue;
     if (typeof value === "string" && value.trim().length > 0) {
       blocks.push(`## ${key}\n${value}`);
     } else if (Array.isArray(value) && value.length > 0) {

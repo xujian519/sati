@@ -35,8 +35,13 @@ export function citationCompleteness(actual: string, requiredCitations: readonly
   return hit / requiredCitations.length;
 }
 
-/** 规则门判级分数：pass = 1，否则 0。 */
-export function ruleGatePass(verdict: string): number {
+/**
+ * 规则门判级分数：pass 且至少评估过一条规则 = 1，否则 0。
+ * `assessedCount` 缺省时不额外限制（兼容只持有 verdict 的旧调用方）；
+ * 新路径应传入实际评估数，避免「零评估」被当成通过。
+ */
+export function ruleGatePass(verdict: string, assessedCount?: number): number {
+  if (assessedCount === 0) return 0;
   return verdict === "pass" ? 1 : 0;
 }
 

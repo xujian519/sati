@@ -63,6 +63,7 @@ const CHECK_VERDICT_LABEL: Record<Verdict, string> = {
   pass: "✅ 通过",
   needs_revision: "⚠️ 需修改",
   blocked: "⛔ 阻断",
+  not_assessed: "◻️ 未评估",
 };
 
 /** 规则检查结果摘要（一行）：verdict + 失败数。 */
@@ -369,11 +370,12 @@ export function runRuleGate(result: RuleGateResultLike, domains: readonly string
   }
   const engine = new RuleEngine();
   engine.registerMany(defaultPatentRules());
-  const failures = engine.evaluate(text, { domain: domains });
-  const verdict = aggregate(failures);
-  const summary = summarizeCheck(verdict, failures);
+  const detail = engine.evaluateDetailed(text, { domain: domains });
+  const verdict = aggregate(detail.results, { assessed: detail.assessed.length });
+  const summary = summarizeCheck(verdict, detail.results);
+  const coverage = `覆盖: 已评估 ${detail.assessed.length} 条 / 跳过 ${detail.skipped.length} 条`;
   const partialNote = result.completed ? "" : "（注：run 未完整完成，以下评估仅覆盖已完成/未降级的产出）";
-  return `${summary}${partialNote}\n${formatRuleResults(failures, verdict)}`;
+  return `${summary}${partialNote}\n${coverage}\n${formatRuleResults(detail.results, verdict)}`;
 }
 
 // ---------------------------------------------------------------------------
