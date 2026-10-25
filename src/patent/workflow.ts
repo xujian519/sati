@@ -62,6 +62,7 @@ export {
 } from "./workflow/checkpoint.js";
 export {
   builtinPatentManifests,
+  formatManifestCatalog,
   patentDisclosureManifest,
   patentDraftingManifest,
   patentInfringementManifest,

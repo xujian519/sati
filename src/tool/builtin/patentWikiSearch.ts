@@ -42,6 +42,8 @@ export type PatentWikiSearchOutput = {
     concept?: string;
     domain?: string;
     body?: string;
+    /** 相关性分 0..1（query 与标题/概念/领域词面重合度；空 query = 1）。 */
+    score: number;
   }>;
   wikiDir?: string;
 };
@@ -57,10 +59,38 @@ function getLoader(): { loader: WikiCardLoader; wikiDir: string } | null {
   return cachedLoader;
 }
 
+/** wiki 卡片相关性分：query 词条出现在标题/概念/领域的比例（空 query = 1）。 */
+function scoreWikiCard(meta: WikiCardMeta, query: string): number {
+  const terms = query
+    .split(/[\s,，;；、|/]+/)
+    .map(term => term.trim().toLowerCase())
+    .filter(term => term.length > 0);
+  if (terms.length === 0) return 1;
+  const haystack = `${meta.title} ${meta.concept ?? ""} ${meta.domain ?? ""}`.toLowerCase();
+  const matched = terms.filter(term => haystack.includes(term)).length;
+  return Math.round((matched / terms.length) * 1000) / 1000;
+}
+
+/** 同标题去重：保留最高分；按分数降序截断到 limit。 */
+export function dedupeWikiMetas(
+  metas: WikiCardMeta[],
+  query: string,
+  limit: number,
+): Array<{ meta: WikiCardMeta; score: number }> {
+  const byTitle = new Map<string, { meta: WikiCardMeta; score: number }>();
+  for (const meta of metas) {
+    const score = scoreWikiCard(meta, query);
+    const existing = byTitle.get(meta.title);
+    if (existing === undefined || score > existing.score) byTitle.set(meta.title, { meta, score });
+  }
+  return [...byTitle.values()].sort((a, b) => b.score - a.score).slice(0, limit);
+}
+
 function toResult(
   meta: WikiCardMeta,
   loader: WikiCardLoader,
   includeBody: boolean,
+  score: number,
 ): PatentWikiSearchOutput["results"][number] {
   const result: PatentWikiSearchOutput["results"][number] = {
     id: meta.id,
@@ -68,6 +98,7 @@ function toResult(
     relativePath: meta.relativePath,
     concept: meta.concept,
     domain: meta.domain,
+    score,
   };
   if (includeBody) {
     const body = loader.formatAsContext(meta.id, 600);
@@ -128,6 +159,7 @@ export function createPatentWikiSearchTool(): SatiToolDefinition<PatentWikiSearc
               concept: { type: "string" },
               domain: { type: "string" },
               body: { type: "string" },
+              score: { type: "number" },
             },
           },
         },
@@ -162,10 +194,12 @@ export function createPatentWikiSearchTool(): SatiToolDefinition<PatentWikiSearc
       const limit = Math.min(Math.max(input.limit ?? 5, 1), 10);
       const includeBody = input.include_body === true;
 
-      const metas = loader.searchIn(prefix, input.query ?? "", limit);
+      // 同标题重复卡片只保留最高分：先超取再按 title 去重，避免重复项挤占 limit。
+      const metas = loader.searchIn(prefix, input.query ?? "", Math.min(limit * 3, 30));
+      const deduped = dedupeWikiMetas(metas, input.query ?? "", limit);
       const output: PatentWikiSearchOutput = {
-        total: metas.length,
-        results: metas.map(meta => toResult(meta, loader, includeBody)),
+        total: deduped.length,
+        results: deduped.map(entry => toResult(entry.meta, loader, includeBody, entry.score)),
         wikiDir,
       };
       return {

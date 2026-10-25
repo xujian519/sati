@@ -133,51 +133,12 @@ export type PatentFeesOutput = {
   report: string;
 };
 
-const TRIGGER_DESCRIPTIONS = [
-  "filing=提出申请",
-  "substantive-examination=请求实质审查",
-  "grant-registration=办理登记手续（现行无独立费种，见报告说明）",
-  "annual-fee=年费（含滞纳金）",
-  "reexamination=请求复审",
-  "invalidation=请求宣告无效",
-  "evaluation-report=请求专利权评价报告",
-  "term-compensation=请求专利权期限补偿",
-  "document-copy=请求专利文件副本证明",
-  "restoration=请求恢复权利",
-  "extension=请求延长期限",
-  "record-change=办理著录事项变更",
-  "pct-grace=PCT 进入国家阶段的宽限费",
-  "pct-national-phase=PCT 进入国家阶段的其他费用",
-];
-
-const DESCRIPTION = [
-  "计算一个中国专利案件应缴的官费：本案涉及哪些费种、每个费种计几份、是否适用费用减缴、",
-  "各专利年度的年费档位、以及年费超期后的滞纳金，输出每一行的单价/小计/应付与金额状态、",
-  "合计与法条依据，并渲染成一份缴费清单。",
-  "",
-  `计价环节（triggers）取值：${TRIGGER_DESCRIPTIONS.join("；")}。`,
-  "",
-  "三条边界，用之前必须知道：",
-  "① **金额只从已转录的费率索引里来**。每一行带 status：verified（金额与核验日期都已登记）、",
-  "   unverified（登记了金额但没有核验日期）、unrecorded（没有金额）。只要有任一适用项不是",
-  "   verified，本工具就**不给合计**并在 unverifiedIds 里指名是哪几项；`pending`（还缺案件输入",
-  "   的条目）同样挡住合计。索引未转录的金额是**未知**，不是零——不要自己填，也不要把表里的",
-  "   行相加当成案子的价格。",
-  "② **triggers 是报告的覆盖面，不是提示**：没点到的环节一律不计价。索引里没有条目的环节",
-  "   （如 grant-registration）会在说明里讲清为什么没有、真正要缴的费种挂在哪个环节上。",
-  "③ **减缴比例取决于申请人是一个还是多个**：《专利收费减缴办法》第四条规定单独申请减缴 85%、",
-  "   两个或者两个以上共同申请减缴 70%，与主体是个人还是企业无关；同时减缴以**已办理费减备案**",
-  "   为前提（第八条、第十条），未备案时本工具按全额计并写明理由。资格门槛（个人上年度月均收入",
-  "   低于 5000 元、企业上年度应纳税所得额低于 100 万元、事业单位/社会团体/非营利性科研机构）",
-  "   请在调用前自行核实，本工具只按你给出的 kind 取值。",
-  "",
-  "字段来源：annuityYears（要计价的专利年度）与 reduction.grantPatentYear（授权当年所处的专利",
-  "年度）都取自 patent_deadlines 的对应条目（字段同名 patentYear）——本工具不自行推算日期或年度。",
-  "",
-  "用法说明：",
-  "  - 只读、离线、不发网络请求。",
-  "  - lines 为空表示所给 triggers 与专利类型在索引里没有匹配项——这不等于本案没有费用。",
-].join("\n");
+const DESCRIPTION =
+  "Compute CNIPA official fees: fee items, quantities, reduction, annuity tiers, and late surcharges, with " +
+  "per-line unit/subtotal/payable/status, total, legal basis, and a fee schedule. Money comes only from the " +
+  "rate index; unverified/unrecorded/pending items block the total (unverifiedIds). Reduction is 85% for a " +
+  "sole applicant and 70% for two or more, and requires a filed record. annuityYears and grantPatentYear " +
+  "come from patent_deadlines. Read-only.";
 
 /**
  * 创建 `patent_fees` 工具。
@@ -197,52 +158,47 @@ export function createPatentFeesTool(): SatiToolDefinition<PatentFeesInput, Pate
         patentType: {
           type: "string",
           enum: ["invention", "utility-model", "design"],
-          description: "专利类型：invention=发明、utility-model=实用新型、design=外观设计",
+          description: "invention / utility-model / design.",
         },
         triggers: {
           type: "array",
-          description:
-            "本案涉及的环节；未点到的环节一律不计价，漏一个在报告里读起来就是「该环节不收费」。" +
-            `取值：${FEE_TRIGGERS.join(" / ")}`,
+          description: "Fee triggers; unlisted steps are not priced.",
           items: { type: "string", enum: [...FEE_TRIGGERS] },
         },
-        claims: { type: "number", description: "权利要求总项数（用于申请附加费：自第 11 项起每项加收）" },
-        specificationPages: { type: "number", description: "说明书总页数（申请附加费按页分档，本索引不给金额）" },
-        priorityClaims: { type: "number", description: "优先权要求项数（每项 80 元）" },
+        claims: { type: "number", description: "Total claims (excess-claim fee from item 11)." },
+        specificationPages: { type: "number", description: "Specification pages (tiered index)." },
+        priorityClaims: { type: "number", description: "Priority claims (80 CNY each)." },
         annuityYears: {
           type: "array",
-          description:
-            "要计算年费的专利年度（从 1 起，如 [1,4,13]）。取自 patent_deadlines 年费条目的 patentYear——本工具不自行推算。",
+          description: "Annuity patent years (e.g. [1,4,13]).",
           items: { type: "number" },
         },
-        extensionMonths: { type: "number", description: "请求延长期限的月数" },
+        extensionMonths: { type: "number", description: "Extension months." },
         lateMonths: {
           type: "number",
-          description:
-            "年费已超期的月数（0 表示未超期）。超出法定补缴窗口或超出官方参考表已列月份的，不给金额并说明原因。",
+          description: "Late annuity months (0 = on time).",
         },
         reduction: {
           type: "object",
-          description: "本案请求的费用减缴",
+          description: "Fee reduction.",
           additionalProperties: false,
           properties: {
             kind: {
               type: "string",
               enum: ["individual", "enterprise", "institution"],
-              description: "减缴资格：individual=个人、enterprise=企业、institution=事业单位/社会团体/非营利性科研机构",
+              description: "individual / enterprise / institution.",
             },
             applicants: {
               type: "number",
-              description: "专利申请人/专利权人的人数；1 为单独申请（减缴 85%），2 及以上为共同申请（减缴 70%）",
+              description: "Applicant count (1 = 85%, >=2 = 70%).",
             },
             filed: {
               type: "boolean",
-              description: "是否已办理费减备案；false 时不得按减缴计算，本工具按全额并写明理由",
+              description: "Reduction record filed.",
             },
             grantPatentYear: {
               type: "number",
-              description:
-                "授权当年所处的专利年度，用于确定年费减缴覆盖的「自授予专利权当年起十年内」区间；取自 patent_deadlines 的 patentYear。缺省时按第 10 年度及以前作保守近似",
+              description: "Patent year of grant (from patent_deadlines).",
             },
           },
         },

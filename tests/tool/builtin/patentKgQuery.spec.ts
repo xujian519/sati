@@ -213,3 +213,50 @@ test("patent_kg_query: 无有效输入返回错误", async () => {
   assert.equal(first?.type, "text");
   assert.match((first as { text: string }).text, /请提供 query/);
 });
+
+test("patent_kg_query: 每条命中带 score 与 nodeType", async () => {
+  const tool = createPatentKgQueryTool(() => makeRef());
+  const output = asJson(await tool.execute({ query: "三步法" }, makeToolContext()));
+  for (const hit of output.hits) {
+    assert.equal(typeof hit.score, "number");
+    assert.ok(hit.score >= 0 && hit.score <= 1);
+    assert.ok(hit.nodeType.length > 0);
+  }
+});
+
+test("patent_kg_query: node_types / min_score 透传给 adapter", async () => {
+  let received: { nodeTypes?: string[]; minScore?: number } = {};
+  const ref = makeRef();
+  ref.adapter = {
+    ...ref.adapter,
+    searchRelevant: (_q: string, options?: { nodeTypes?: string[]; minScore?: number }) => {
+      received = { nodeTypes: options?.nodeTypes, minScore: options?.minScore };
+      return [];
+    },
+  } as unknown as PatentKgAdapter;
+  const tool = createPatentKgQueryTool(() => ref);
+  await tool.execute({ query: "创造性", node_types: ["Judgment"], min_score: 0.7 }, makeToolContext());
+  assert.deepEqual(received.nodeTypes, ["Judgment"]);
+  assert.equal(received.minScore, 0.7);
+});
+
+test("patent_kg_query: rerank 缺模型时保持原序并标记 degraded", async () => {
+  const tool = createPatentKgQueryTool(() => makeRef());
+  const output = asJson(await tool.execute({ query: "三步法", rerank: true }, makeToolContext()));
+  assert.deepEqual(
+    output.hits.map(hit => hit.id),
+    ["RULE_1", "CASE_005", "JUDG_1"],
+  );
+  assert.deepEqual(output.rerank, {
+    requested: true,
+    applied: false,
+    degraded: true,
+    reason: "模型客户端不可用",
+  });
+});
+
+test("patent_kg_query: rerank=false 时不做精排", async () => {
+  const tool = createPatentKgQueryTool(() => makeRef());
+  const output = asJson(await tool.execute({ query: "三步法" }, makeToolContext()));
+  assert.equal(output.rerank, undefined);
+});

@@ -22,7 +22,15 @@ export type DocumentStylePanelInput = {
 export function createDocumentStylePanelTool(): SatiToolDefinition<DocumentStylePanelInput> {
   return {
     name: "document_style_panel",
-    outputSchema: { type: "object", properties: {} },
+    outputSchema: {
+      type: "object",
+      required: ["kind", "htmlPath", "style"],
+      properties: {
+        kind: { type: "string", enum: ["document_style_panel"] },
+        htmlPath: { type: "string" },
+        style: { type: "object", additionalProperties: true },
+      },
+    },
     title: "Document Style Panel",
     description:
       "Open the document typography adjustment panel for a rendered patent HTML. " +

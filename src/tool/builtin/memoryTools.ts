@@ -76,6 +76,8 @@ export function createMemoryOverviewTool(
       type: "object",
       properties: {},
     },
+    // memory 服务返回结构随 SQLite/向量索引实现演进；R-05 只覆盖专利工具面。
+    outputSchemaExemptReason: "Memory service payload evolves with storage/index backends. Tracked in #713.",
     title: "Memory Overview",
     description:
       "Return the ClawXMemory status overview: memory freshness, indexing backlog, last flush/dream timestamps, and runtime health. Use this for questions about memory state before drilling into specific records.",
@@ -100,6 +102,8 @@ export function createMemoryListTool(
       type: "object",
       properties: {},
     },
+    // memory 服务返回结构随 SQLite/向量索引实现演进；R-05 只覆盖专利工具面。
+    outputSchemaExemptReason: "Memory service payload evolves with storage/index backends. Tracked in #713.",
     title: "Memory List",
     description:
       "Browse file-based user, feedback, and project memory manifest entries. Optionally filter by kind, free-text query, scope, and limit.",
@@ -153,6 +157,8 @@ export function createMemorySearchTool(
       type: "object",
       properties: {},
     },
+    // memory 服务返回结构随 SQLite/向量索引实现演进；R-05 只覆盖专利工具面。
+    outputSchemaExemptReason: "Memory service payload evolves with storage/index backends. Tracked in #713.",
     title: "Memory Search",
     description:
       "Search durable long-term memory (preferences, collaboration rules, project progress across sessions). Run this before answering questions that may depend on earlier sessions, then use memory_get only for the exact file ids you need to verify.",
@@ -183,6 +189,8 @@ export function createMemoryGetTool(
       type: "object",
       properties: {},
     },
+    // memory 服务返回结构随 SQLite/向量索引实现演进；R-05 只覆盖专利工具面。
+    outputSchemaExemptReason: "Memory service payload evolves with storage/index backends. Tracked in #713.",
     title: "Memory Get",
     description:
       "Read the exact memory file records for the given ids (returned by memory_list or memory_search). Use only for the specific files you need to verify.",
@@ -219,6 +227,8 @@ export function createMemoryFlushTool(
       type: "object",
       properties: {},
     },
+    // memory 服务返回结构随 SQLite/向量索引实现演进；R-05 只覆盖专利工具面。
+    outputSchemaExemptReason: "Memory service payload evolves with storage/index backends. Tracked in #713.",
     title: "Memory Flush",
     description:
       "Extract memory from recent sessions now. Use when the user asks why a just-finished conversation is not visible in memory yet, or explicitly wants recent memory extracted immediately.",
@@ -253,6 +263,8 @@ export function createMemoryDreamTool(
       type: "object",
       properties: {},
     },
+    // memory 服务返回结构随 SQLite/向量索引实现演进；R-05 只覆盖专利工具面。
+    outputSchemaExemptReason: "Memory service payload evolves with storage/index backends. Tracked in #713.",
     title: "Memory Dream",
     description:
       "Run memory maintenance: cleanup, duplicate merge, and manifest repair. Use when the user asks for memory cleanup or consolidation.",

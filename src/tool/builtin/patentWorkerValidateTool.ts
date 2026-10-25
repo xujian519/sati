@@ -25,7 +25,14 @@ export function createPatentWorkerValidateTool(): SatiToolDefinition<PatentWorke
     name: "patent_worker_validate",
     outputSchema: {
       type: "object",
-      properties: {},
+      required: ["workerName", "valid", "missingHardFields", "missingSoftFields"],
+      properties: {
+        workerName: { type: "string" },
+        valid: { type: "boolean" },
+        degradationReason: { type: "string" },
+        missingHardFields: { type: "array", items: { type: "string" } },
+        missingSoftFields: { type: "array", items: { type: "string" } },
+      },
     },
     aliases: ["PatentWorkerValidate", "worker_contract_check"],
     description:
@@ -72,6 +79,13 @@ export function createPatentWorkerValidateTool(): SatiToolDefinition<PatentWorke
             text: `patent_worker_validate(${worker.name}): ${verdict}\n${hard}${soft ? `\n${soft}` : ""}`,
           },
         ],
+        data: {
+          workerName: worker.name,
+          valid: validation.valid,
+          degradationReason: validation.degradationReason ?? "",
+          missingHardFields: validation.missingHardFields,
+          missingSoftFields: validation.missingSoftFields,
+        },
       };
     },
   };

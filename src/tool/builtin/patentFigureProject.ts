@@ -469,16 +469,10 @@ export function createPatentFigureProjectTool(
     aliases: ["PatentFigureProject", "figure_project"],
     title: "Project 3D Model to Patent Figure",
     description:
-      "Project an existing STEP/3D model into a patent-style figure (deterministic black-and-white SVG, " +
-      "hidden-line removal, millimetre-accurate orthographic projection) using a headless FreeCAD on this " +
-      "machine. Views: front/back/left/right/top/bottom/iso. `section_offset_mm` produces a full section " +
-      "view (cut plane perpendicular to the view direction, facing material removed, cut faces hatched at " +
-      "45 degrees; full sections only — no rotated, stepped or local sections); `annotations` places " +
-      "reference numerals anchored at model-space points, each drawn as a leader line plus the numeral. " +
-      "The SVG follows this project's drawing contract (A4 printable area, 图N caption, numerals carry " +
-      "data-ref for readback) with a sidecar recording the projection, section and numeral parameters. It " +
-      "does not create geometry and does not read dimension or centre lines from the model. Requires a " +
-      "local FreeCAD install (SATI_FREECAD_CMD or the standard app path); missing install fails closed.",
+      "Project a STEP/3D model into a patent-style figure (black-and-white SVG, hidden-line removal, " +
+      "orthographic projection) with a local headless FreeCAD. Views: front/back/left/right/top/bottom/iso. " +
+      "section_offset_mm produces a full section view; annotations place reference numerals. Returns the SVG " +
+      "plus a sidecar. Requires FreeCAD (SATI_FREECAD_CMD); missing install fails closed.",
     kind: "custom",
     domain: "patent",
     inputSchema: {
@@ -486,13 +480,13 @@ export function createPatentFigureProjectTool(
       additionalProperties: false,
       required: ["step_path", "output_name", "view"],
       properties: {
-        step_path: { type: "string", description: "STEP 文件路径（工作区相对或绝对）" },
-        output_name: { type: "string", description: "输出文件名主干（生成 <name>-fig<N>.svg 与 <name>-figures.json）" },
-        view: { type: "string", enum: [...CAD_VIEWS], description: "投影方向（正投影；iso 为轴测图）" },
-        figure_no: { type: "number", description: "图号（默认 1，用于图号标注与 sidecar）" },
+        step_path: { type: "string", description: "STEP file path." },
+        output_name: { type: "string", description: "Output base name." },
+        view: { type: "string", enum: [...CAD_VIEWS], description: "Projection view (iso = isometric)." },
+        figure_no: { type: "number", description: "Figure number (default 1)." },
         hidden_lines: {
           type: "boolean",
-          description: "是否绘制隐藏线（默认 false：CNIPA 实务以剖视图表达内部结构，虚线易与标记线混淆）",
+          description: "Draw hidden lines (default false).",
         },
         section_offset_mm: {
           type: "number",
@@ -501,28 +495,28 @@ export function createPatentFigureProjectTool(
         },
         annotations: {
           type: "array",
-          description: "附图标记标注（缺省出未标注的投影图）：每项一个标记，锚点为模型坐标（毫米）",
+          description: "Reference-numeral annotations (model-space anchors).",
           items: {
             type: "object",
             additionalProperties: false,
             required: ["ref", "at_mm"],
             properties: {
-              ref: { type: "integer", description: "附图标记（细则第 21 条：须与说明书文字部分一致）" },
+              ref: { type: "integer", description: "Reference numeral." },
               at_mm: {
                 type: "array",
-                description: "标记锚点（模型坐标，毫米；[x, y, z]）：投影后作为引线起点",
+                description: "Anchor [x,y,z] in model mm.",
                 items: { type: "number" },
               },
               label_offset_mm: {
                 type: "array",
-                description: "标号相对锚点的图面偏移（毫米，[dx, dy]；+x 向右、+y 向下）；缺省按远离图心方向自动引线",
+                description: "Label offset [dx,dy] in mm.",
                 items: { type: "number" },
               },
             },
           },
         },
-        case_id: { type: "string", description: "案卷 id；提供时落盘 data/cases/<caseId>/outputs/" },
-        output_dir: { type: "string", description: "显式输出目录（覆盖默认 .sati/figures/ 与 case_id）" },
+        case_id: { type: "string", description: "Case id (writes under data/cases/<caseId>/outputs/)." },
+        output_dir: { type: "string", description: "Override output directory." },
         jurisdiction: {
           type: "string",
           enum: JURISDICTIONS,
@@ -533,9 +527,9 @@ export function createPatentFigureProjectTool(
         document_kind: {
           type: "string",
           enum: ["invention", "utility"],
-          description: "发明/实用新型（写入 sidecar，供附图门判定 V9）",
+          description: "invention / utility (sidecar V9).",
         },
-        tolerance_mm: { type: "number", description: "投影离散化容差（毫米，默认 0.5；越小越平滑、边表越大）" },
+        tolerance_mm: { type: "number", description: "Projection tolerance in mm (default 0.5)." },
         figure_count: {
           type: "integer",
           minimum: 1,
@@ -546,12 +540,12 @@ export function createPatentFigureProjectTool(
         sheet_index: {
           type: "integer",
           minimum: 1,
-          description: "附图页序号（与 sheet_total 成对声明；缺省不落页码）",
+          description: "Sheet index (paired with sheet_total).",
         },
-        sheet_total: { type: "integer", minimum: 1, description: "附图页总页数（成对声明；页码体例按法域档案）" },
+        sheet_total: { type: "integer", minimum: 1, description: "Total sheets." },
         fit_to_page: {
           type: "boolean",
-          description: "是否另产提交落版页 <name>-fig<N>-page.svg（默认 false：投影图 SVG 仍是主产物）",
+          description: "Also produce a print page SVG.",
         },
       },
     },

@@ -1,6 +1,6 @@
 import type { SatiToolDefinition } from "../protocol/types.js";
 import type { FigureAnalysisResult } from "../../patent/figure/types.js";
-import { DOMAIN_KEYWORDS, type PatentType, type TechDomain } from "./draftClaims.js";
+import { DOMAIN_KEYWORDS, normalizeInventionName, type PatentType, type TechDomain } from "./draftClaims.js";
 
 /**
  * draft_specification — 专利说明书草案生成（移植自 Mady domains/specdrafting）。
@@ -130,11 +130,14 @@ export function createDraftSpecificationTool(): SatiToolDefinition<DraftSpecific
 
 /** 纯函数入口：组装五部分说明书草案。 */
 export function draftSpecification(input: DraftSpecificationInput): DraftSpecificationOutput {
-  const title = input.title.trim();
+  const rawTitle = input.title.trim();
+  const normalizedTitle = normalizeInventionName(rawTitle);
+  const title = normalizedTitle || rawTitle;
   const patentType: PatentType = input.patent_type ?? "invention";
   const domain = resolveDomain(input.tech_domain, title, input);
 
   const warnings: string[] = [];
+  if (title.length === 0) warnings.push("发明名称为空或仅含量词前缀，已按原样保留");
   if (title.length > 25) warnings.push(`发明名称 ${title.length} 字，超过 25 字限制`);
   if (patentType === "utility_model" && !input.has_drawings) {
     warnings.push("实用新型必须有附图，请确认补充附图");
@@ -178,7 +181,7 @@ function buildTechField(title: string, domain: TechDomain): SpecificationSection
           : domain === "software"
             ? "软件"
             : "";
-  const content = `本发明涉及${domainLabel}技术领域，尤其涉及一种${title}。`;
+  const content = domainLabel ? `本发明涉及${domainLabel}技术领域，尤其涉及一种${title}。` : `本发明涉及一种${title}。`;
   return { name: "技术领域", content, placeholder: false };
 }
 
@@ -257,7 +260,13 @@ function buildEmbodiments(embodiments?: string[], patentType?: PatentType): Spec
 
 function resolveDomain(hint: TechDomain | undefined, title: string, input: DraftSpecificationInput): TechDomain {
   if (hint && hint !== "general") return hint;
-  const haystack = `${title} ${input.technical_solution ?? ""} ${input.background ?? ""}`;
+  const haystack = [
+    title,
+    input.technical_problem ?? "",
+    input.technical_solution ?? "",
+    input.background ?? "",
+    ...(input.embodiments ?? []),
+  ].join(" ");
   for (const entry of DOMAIN_KEYWORDS) {
     if (entry.keywords.some(k => haystack.includes(k))) return entry.domain;
   }

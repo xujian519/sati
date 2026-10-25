@@ -340,17 +340,11 @@ export function createPatentFigureGenerateTool(): SatiToolDefinition<PatentFigur
     aliases: ["PatentFigureGenerate", "figure_generate"],
     title: "Generate Patent Figures",
     description:
-      "Render patent-style figures (flowcharts for method claims, block diagrams for system claims, " +
-      "state transition diagrams, component hierarchy diagrams, and curve charts for measured data) " +
-      "from structured FigureSpec input. Deterministic black-and-white SVG compliant with CNIPA drawing " +
-      "rules (Guidelines 2023 Part I Ch1 4.3/4.6): black lines on white, no gradients. Reference numerals " +
-      "are structured fields embedded as data-ref attributes and validated against Rule 21 of the " +
-      "Implementing Regulations (bidirectional figure/spec numeral consistency). Figure numbering follows " +
-      "the target office: CN numbers every figure (图N), while PCT/US omit the number when the case has " +
-      "only one view (PCT Guide IP 5.141, 37 CFR 1.84(u)(1)) and use Fig. N / FIG. N otherwise. Paper " +
-      "constants, minimum character height and page numbering come from the per-office profile " +
-      "(CNIPA/PCT/USPTO, each value cited to its provision). Also returns a draft of the Brief " +
-      "Description of Drawings section. Registered by default; pass `patentFigure: false` to skip.",
+      "Render patent-style figures from structured FigureSpec: flowcharts, block diagrams, state diagrams, " +
+      "component hierarchies, and curve charts. Deterministic black-and-white SVG compliant with CNIPA " +
+      "drawing rules, with reference numerals stored as data-ref and bidirectional figure/spec validation. " +
+      "Numbering follows the target office (CN figure N; PCT/US Fig. N, omitted for a single view). Returns " +
+      "SVG paths and a draft Brief Description of Drawings.",
     kind: "custom",
     domain: "patent",
     inputSchema: {
@@ -358,50 +352,50 @@ export function createPatentFigureGenerateTool(): SatiToolDefinition<PatentFigur
       additionalProperties: false,
       required: ["figures", "output_name"],
       properties: {
-        figures: { type: "array", minItems: 1, items: FIGURE_INPUT_SCHEMA_REF, description: "附图数组（1..N 幅）" },
-        output_name: { type: "string", description: "输出文件名主干（不含扩展名），生成 <name>-fig<N>.svg" },
-        case_id: { type: "string", description: "案卷 id；提供时落盘 data/cases/<caseId>/outputs/" },
-        output_dir: { type: "string", description: "显式输出目录（覆盖默认 .sati/figures/ 与 case_id）" },
+        figures: {
+          type: "array",
+          minItems: 1,
+          items: FIGURE_INPUT_SCHEMA_REF,
+          description: "FigureSpec figures (1..N).",
+        },
+        output_name: { type: "string", description: "Output base name." },
+        case_id: { type: "string", description: "Case id (writes to data/cases/<caseId>/outputs/)." },
+        output_dir: { type: "string", description: "Override output directory." },
         document_kind: {
           type: "string",
           enum: ["invention", "utility"],
-          description: "发明/实用新型（影响附图说明措辞）",
+          description: "invention / utility.",
         },
-        invention_name: { type: "string", description: "发明名称（附图说明草稿引用）" },
-        brief: { type: "boolean", description: "是否生成附图说明草稿（默认 true）" },
+        invention_name: { type: "string", description: "Invention name for the drawing brief." },
+        brief: { type: "boolean", description: "Generate the drawing brief (default true)." },
         format: {
           type: "string",
           enum: ["svg", "html", "both"],
-          description: "Output format: svg (default) / A4 print single-file HTML / both",
+          description: "svg (default) / print HTML / both.",
         },
         jurisdiction: {
           type: "string",
           enum: JURISDICTIONS,
-          description:
-            "Target office (default cn): cn=CNIPA (图N captions, CN-only rules), us=USPTO (FIG. N, 37 CFR " +
-            "1.84 profile), pct=PCT international application (Fig. N, PCT Rule 11 profile)",
+          description: "cn (CNIPA) / us (USPTO) / pct.",
         },
         figure_count: {
           type: "integer",
           minimum: 1,
-          description:
-            "本案附图总幅数（缺省取本次 figures 的幅数）：分次生成时须声明，它决定是否需要图号标注" +
-            "（单幅在 pct/us 不得出现 Fig./FIG.）与纸面尺寸判据",
+          description: "Total figure count in the case.",
         },
         sheet_index: {
           type: "integer",
           minimum: 1,
-          description: "附图页序号（与 sheet_total 成对声明；缺省不落页码）",
+          description: "Sheet index (paired with sheet_total).",
         },
         sheet_total: {
           type: "integer",
           minimum: 1,
-          description: "附图页总页数（成对声明；页码体例按法域档案，CN 顺序数字、PCT/US 形如 1/3）",
+          description: "Total sheets.",
         },
         fit_to_page: {
           type: "boolean",
-          description:
-            "是否另产提交落版页 <name>-fig<N>-page.svg（默认 false：图形 SVG 仍是主产物，落版页为附加页式件）",
+          description: "Also produce <name>-fig<N>-page.svg.",
         },
       },
     },

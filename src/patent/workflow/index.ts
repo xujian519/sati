@@ -19,6 +19,7 @@ export type {
 export { WorkflowError } from "./types.js";
 export {
   builtinPatentManifests,
+  formatManifestCatalog,
   patentDisclosureManifest,
   patentInfringementManifest,
   patentInventivenessManifest,

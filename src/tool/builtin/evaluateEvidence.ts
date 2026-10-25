@@ -90,7 +90,91 @@ export function createEvaluateEvidenceTool(deps?: {
     name: "evaluate_evidence",
     outputSchema: {
       type: "object",
-      properties: {},
+      required: ["judgment", "rulesMatched", "rulesPending"],
+      properties: {
+        judgment: {
+          type: "object",
+          required: [
+            "spanId",
+            "overallScore",
+            "confidence",
+            "relevance",
+            "legality",
+            "authenticity",
+            "flaggedIssues",
+            "reasoning",
+          ],
+          properties: {
+            spanId: { type: "string" },
+            overallScore: { type: "number" },
+            confidence: { type: "number" },
+            relevance: {
+              type: "object",
+              required: ["score", "level"],
+              properties: { score: { type: "number" }, level: { type: "string" } },
+            },
+            legality: {
+              type: "object",
+              required: ["score", "level"],
+              properties: { score: { type: "number" }, level: { type: "string" } },
+            },
+            authenticity: {
+              type: "object",
+              required: ["score", "level"],
+              properties: { score: { type: "number" }, level: { type: "string" } },
+            },
+            typeSpecific: { type: "object" },
+            flaggedIssues: {
+              type: "array",
+              items: {
+                type: "object",
+                required: ["type", "description", "severity"],
+                properties: {
+                  type: { type: "string" },
+                  description: { type: "string" },
+                  severity: { type: "string" },
+                },
+              },
+            },
+            reasoning: { type: "string" },
+          },
+        },
+        burden: {
+          type: "object",
+          required: ["burdenHolder", "standard", "hasShifted", "reasoning"],
+          properties: {
+            burdenHolder: { type: "string" },
+            standard: { type: "string" },
+            hasShifted: { type: "boolean" },
+            reasoning: { type: "string" },
+          },
+        },
+        rulesMatched: {
+          type: "array",
+          items: {
+            type: "object",
+            required: ["ruleId", "name", "action", "severity"],
+            properties: {
+              ruleId: { type: "string" },
+              name: { type: "string" },
+              action: { type: "string" },
+              severity: { type: "string" },
+            },
+          },
+        },
+        rulesPending: {
+          type: "array",
+          items: {
+            type: "object",
+            required: ["ruleId", "name", "pendingInputs"],
+            properties: {
+              ruleId: { type: "string" },
+              name: { type: "string" },
+              pendingInputs: { type: "array", items: { type: "string" } },
+            },
+          },
+        },
+      },
     },
     title: "Evaluate Evidence",
     description:
@@ -105,16 +189,15 @@ export function createEvaluateEvidenceTool(deps?: {
         snippet: { type: "string", description: "待判定证据描述（原文摘录）。" },
         sourceUri: {
           type: "string",
-          description:
-            "来源 URI，如 web:https://example.com/page、patent:CN123、file:///path。判定平台可信度与证据类型。",
+          description: "Source URI (web:/patent:/file:).",
         },
-        docVersion: { type: "string", description: "证据日期，如 2023-01-02、2023年1月、20230102、Jan 15, 2023。" },
-        contentHash: { type: "string", description: "内容哈希（真实性/完整性校验）。" },
+        docVersion: { type: "string", description: "Evidence date." },
+        contentHash: { type: "string", description: "Content hash." },
         direction: { type: "string", enum: ["supporting", "contradicting", "neutral"], description: "证据方向。" },
         claimRefs: { type: "array", items: { type: "string" }, description: "绑定的结论 id 列表。" },
         evidenceType: {
           type: "string",
-          description: "显式证据类型（缺省按 sourceUri 推断）。",
+          description: "Evidence type (inferred from sourceUri).",
           enum: [
             "general",
             "foreign_language",
@@ -133,8 +216,8 @@ export function createEvaluateEvidenceTool(deps?: {
             "design_comparison",
           ],
         },
-        filingDate: { type: "string", description: "专利申请日（公开日是否早于申请日）。" },
-        caseType: { type: "string", description: "案件类型：invalidation / infringement / new_product_method。" },
+        filingDate: { type: "string", description: "Filing date." },
+        caseType: { type: "string", description: "invalidation / infringement / new_product_method." },
         notarized: { type: "boolean", description: "域外证据已公证（EVI-011 条件）。" },
         legalized: { type: "boolean", description: "域外证据已认证（EVI-011 条件）。" },
         translated: { type: "boolean", description: "外文证据已附中文译本（EVI-011 条件）。" },

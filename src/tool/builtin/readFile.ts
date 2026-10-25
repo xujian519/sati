@@ -22,6 +22,10 @@ export function createReadFileTool(): SatiToolDefinition<ReadFileInput> {
       type: "object",
       properties: {},
     },
+    // 成功路径以 content 块返回文件正文/媒体块，仅 unchanged 命中带结构化 data；
+    // 声明 object 契约会误杀文本读取路径。R-05 仅覆盖专利工具面，本工具另项补齐。
+    outputSchemaExemptReason:
+      "content-block output (text/media); structured data only on the unchanged shortcut. Tracked in #713.",
     aliases: ["Read"],
     description:
       "Reads a file from the current workspace. You can access workspace files directly by using this tool.\n" +

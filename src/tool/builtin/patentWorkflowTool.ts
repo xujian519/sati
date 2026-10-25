@@ -190,25 +190,52 @@ export function createPatentWorkflowTool(): SatiToolDefinition<PatentWorkflowInp
   const manifests = new Map(builtinPatentManifests.map(({ manifest }) => [manifest.id, manifest]));
 
   return {
-    name: "patent_workflow",
+    name: "patent_workflow_assemble",
     outputSchema: {
       type: "object",
-      properties: {},
+      required: ["manifestId", "caseType", "completed", "stages", "degradedSteps", "summary"],
+      properties: {
+        manifestId: { type: "string" },
+        caseType: { type: "string" },
+        completed: { type: "boolean" },
+        stages: {
+          type: "array",
+          items: {
+            type: "object",
+            required: ["stageId", "strategy", "output", "degraded", "retries"],
+            properties: {
+              stageId: { type: "string" },
+              strategy: { type: "string" },
+              output: { type: "string" },
+              degraded: { type: "boolean" },
+              retries: { type: "integer" },
+              atom: { type: "string" },
+              workerValidation: { type: "object", additionalProperties: true },
+            },
+          },
+        },
+        degradedSteps: { type: "array", items: { type: "string" } },
+        summary: { type: "string" },
+        interrupted: {
+          type: "object",
+          required: ["stageId", "message", "data"],
+          properties: {
+            stageId: { type: "string" },
+            message: { type: "string" },
+            data: { type: "object", additionalProperties: true },
+          },
+        },
+        persistWarning: { type: "string" },
+      },
     },
-    aliases: ["PatentWorkflow", "run_patent_workflow"],
+    // 旧名 patent_workflow 保留一个版本（alias），提示词/技能可平滑迁移。
+    aliases: ["PatentWorkflow", "patent_workflow", "run_patent_workflow"],
     description:
-      "Run a declarative patent workflow: validates the manifest, assembles per-stage outputs into a " +
-      "structured WorkflowRunResult with degraded-step marking and a summary, then runs the deterministic " +
-      "rule gate (dual-track checker) over the outputs and appends the pass/needs_revision/blocked verdict. " +
-      "Built-in manifests: patent_novelty_v1 (parse → search → compare → conclude → approval), " +
-      "patent_disclosure_v1 (preprocess → extract problems/features/effects → merge → groundedness → " +
-      "consistency → keywords → search → novelty → report → review gate → draft claims) and " +
-      "patent_inventiveness_v1 (parse → search → closest → diff → hint → secondary → conclude → approval). " +
-      "Use to finalize " +
-      "multi-stage patent analyses (novelty / disclosure / inventiveness) with a single verifiable result record. " +
-      "When caseId is provided, the run result is persisted to <caseDir>/workflow-runs/<caseId>__<manifestId>.json " +
-      "plus a Mermaid plan diagram <caseId>__<manifestId>.mmd " +
-      "(caseId as path → <caseId>/workflow-runs/; as plain id → data/cases/<caseId>/workflow-runs/ under cwd).",
+      "Assemble stage outputs for a declarative patent workflow (no LLM): validates the manifest, marks missing " +
+      "stages degraded, runs the deterministic rule gate, and persists when caseId is given. Use when stage " +
+      "outputs already exist; use patent_workflow_run to execute atoms. Orchestration entries: " +
+      "patent_workflow_assemble (assemble), patent_workflow_run (execute), patent_docket (case lifecycle). " +
+      "Manifest catalog: see patent_workflow_run. Legacy name patent_workflow is an alias.",
     kind: "session",
     inputSchema: {
       type: "object",
@@ -246,7 +273,9 @@ export function createPatentWorkflowTool(): SatiToolDefinition<PatentWorkflowInp
         },
       },
     },
-    isReadOnly: () => true,
+    // 传 caseId 时写 <caseDir>/workflow-runs/*.json|*.mmd，不能再声明为只读；
+    // PermissionRuntime 对只读工具在所有模式直接放行，失实声明会绕过写审批。
+    isReadOnly: input => !input?.caseId,
     isConcurrencySafe: () => true,
     async execute(input, context) {
       // 缺省取内置目录首个 manifest（patent_novelty_v1）。
@@ -296,7 +325,7 @@ export function createPatentWorkflowTool(): SatiToolDefinition<PatentWorkflowInp
           {
             type: "text",
             text: renderWorkflowResultText({
-              toolName: "patent_workflow",
+              toolName: "patent_workflow_assemble",
               result,
               stageLines: lines,
               persistNote,
@@ -304,6 +333,7 @@ export function createPatentWorkflowTool(): SatiToolDefinition<PatentWorkflowInp
             }),
           },
         ],
+        data: result,
       };
     },
   };

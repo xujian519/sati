@@ -482,6 +482,14 @@ export type SatiToolDefinition<Input = unknown, Output = unknown> = {
   inputSchema: SatiToolInputSchema;
   outputSchema?: Record<string, unknown>;
   /**
+   * 输出契约豁免理由（仅当 `requireOutputSchema` 开启时生效）。
+   *
+   * 只给确实无法静态声明成功返回形状的**存量非 MCP** 工具使用；必须写明"为什么
+   * 无法声明"以及后续处置，并在 docs/technical-debt/ 记账。新工具应直接声明
+   * `outputSchema`，不得用豁免绕过契约门（注册表会拒绝空 schema + 空理由）。
+   */
+  outputSchemaExemptReason?: string;
+  /**
    * 合作式执行预算（阶段四 T6.1）：调度层在 ToolRuntime.execute 把 deadline
    * 熔合进执行 signal，到期按 TOOL_TIMEOUT 归一。忽略 signal 的工具无法被
    * 硬杀，仅能在其返回后判定超时。

@@ -209,5 +209,6 @@ export async function runManifestWorkflow(
         }),
       },
     ],
+    data: result,
   };
 }

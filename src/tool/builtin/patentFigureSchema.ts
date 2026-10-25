@@ -153,83 +153,10 @@ export const FIGURE_INPUT_SCHEMA_REF: SatiJsonSchema = {
   additionalProperties: false,
   required: ["figure_no", "kind", "nodes", "edges"],
   properties: {
-    figure_no: {
-      type: "integer",
-      minimum: 1,
-      description: "图号（图1、图2…按 1..N 连续编号，细则第 21 条）",
-    },
-    kind: {
-      type: "string",
-      enum: FIGURE_KINDS,
-      description:
-        "flowchart=方法流程图（默认纵向），block=系统结构框图（默认横向），" +
-        "state=状态转移图（纵向；初态 circle、终态 doublecircle），hierarchy=组件层级图（纵向；连线表示包含关系，不画箭头），" +
-        "chart=曲线图/坐标图（数值数据；须另给 chart 字段，nodes/edges 留空数组）",
-    },
-    chart: {
-      type: "object",
-      additionalProperties: false,
-      required: ["x", "y", "series"],
-      description: "曲线图数据（kind=chart 时必填；其余图型忽略）",
-      properties: {
-        x: {
-          type: "object",
-          additionalProperties: false,
-          required: ["title"],
-          description: "横轴（恒为横向，画在下方）",
-          properties: {
-            title: { type: "string", description: "轴标目，含单位，如 时间(h)、转化率(%)" },
-            min: { type: "number", description: "范围下限；缺省按数据推导并按 1/2/2.5/5 步长取整" },
-            max: { type: "number", description: "范围上限；缺省按数据推导" },
-            ticks: { type: "integer", minimum: 2, maximum: 12, description: "目标刻度数（含两端），缺省 5" },
-          },
-        },
-        y: {
-          type: "object",
-          additionalProperties: false,
-          required: ["title"],
-          description: "纵轴（恒为纵向，画在左侧）",
-          properties: {
-            title: { type: "string", description: "轴标目，含单位，如 温度(℃)、强度(a.u.)" },
-            min: { type: "number", description: "范围下限；缺省按数据推导" },
-            max: { type: "number", description: "范围上限；缺省按数据推导" },
-            ticks: { type: "integer", minimum: 2, maximum: 12, description: "目标刻度数（含两端），缺省 5" },
-          },
-        },
-        series: {
-          type: "array",
-          minItems: 1,
-          description: "数据曲线（至少 1 条）",
-          items: {
-            type: "object",
-            additionalProperties: false,
-            required: ["points"],
-            properties: {
-              name: { type: "string", description: "序列名（图例文本）；缺省则该曲线不上图例" },
-              points: {
-                type: "array",
-                minItems: 1,
-                description: "数据点 [x, y]（按 x 升序给出，按给定顺序连线，不重排）",
-                items: { type: "array", minItems: 2, maxItems: 2, items: { type: "number" } },
-              },
-              marker: {
-                type: "string",
-                enum: CHART_MARKERS,
-                description: "标记形状；缺省自动分配不同标记（黑白附图不得用颜色区分曲线）",
-              },
-              line: { type: "string", enum: CHART_LINE_STYLES, description: "线型；缺省实线" },
-            },
-          },
-        },
-        grid: { type: "boolean", description: "是否画网格线（默认 false）" },
-        legend: { type: "boolean", description: "是否写图例（默认 true；只列有 name 的序列）" },
-      },
-    },
-    direction: { type: "string", enum: ["TB", "LR"], description: "布局方向，缺省按 kind 取默认" },
-    abstract: {
-      type: "boolean",
-      description: "指定为摘要附图（多图时应指定一幅，指南一部一章 4.5.2）",
-    },
+    figure_no: { type: "integer", minimum: 1 },
+    kind: { type: "string", enum: FIGURE_KINDS },
+    direction: { type: "string", enum: ["TB", "LR"] },
+    abstract: { type: "boolean" },
     nodes: {
       type: "array",
       items: {
@@ -237,19 +164,10 @@ export const FIGURE_INPUT_SCHEMA_REF: SatiJsonSchema = {
         additionalProperties: false,
         required: ["id", "label"],
         properties: {
-          id: { type: "string", description: "稳定节点 id（跨图同一组件沿用同一 id）" },
-          label: {
-            type: "string",
-            description: "节点文本，可含 \\n 换行；建议含附图标记如 处理模块(20)",
-          },
-          ref: { type: "integer", description: "专利附图标记（细则第 21 条双向核验对象）" },
-          shape: {
-            type: "string",
-            enum: FIGURE_NODE_SHAPES,
-            description:
-              "节点形状；缺省矩形。状态图：round=状态、circle=初态、doublecircle=终态；" +
-              "circle/doublecircle 为符号形状，不渲染文字（label 请留空，勿写标记）",
-          },
+          id: { type: "string" },
+          label: { type: "string" },
+          ref: { type: "integer" },
+          shape: { type: "string", enum: FIGURE_NODE_SHAPES },
         },
       },
     },
@@ -262,8 +180,30 @@ export const FIGURE_INPUT_SCHEMA_REF: SatiJsonSchema = {
         properties: {
           from: { type: "string" },
           to: { type: "string" },
-          label: { type: "string", description: "边标签（判断分支的 是/否）" },
-          dashed: { type: "boolean", description: "虚线边（可选/隐含路径）" },
+          label: { type: "string" },
+          dashed: { type: "boolean" },
+        },
+      },
+    },
+    chart: {
+      type: "object",
+      additionalProperties: true,
+      required: ["x", "y", "series"],
+      properties: {
+        x: { type: "object", additionalProperties: true, required: ["title"] },
+        y: { type: "object", additionalProperties: true, required: ["title"] },
+        series: {
+          type: "array",
+          minItems: 1,
+          items: {
+            type: "object",
+            additionalProperties: true,
+            required: ["points"],
+            properties: {
+              marker: { type: "string", enum: CHART_MARKERS },
+              line: { type: "string", enum: CHART_LINE_STYLES },
+            },
+          },
         },
       },
     },

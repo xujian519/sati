@@ -44,6 +44,34 @@ export interface StructuredPatentData {
   backwardCites: Citation[];
   forwardCites: Citation[];
   abstractText: string;
+  /**
+   * 期望存在但解析为空的字段（页面结构变化的可观测足迹）。
+   * 空数组表示本次解析没有发现缺失；不表示字段语义上一定存在。
+   */
+  missingFields: string[];
+}
+
+/** 判断哪些期望字段为空。顺序固定，便于测试与日志比对。 */
+export function computeMissingFields(
+  data: Pick<
+    StructuredPatentData,
+    "title" | "inventors" | "assigneesOriginal" | "assigneesCurrent" | "filingDate" | "grantDate" | "legalStatus"
+  >,
+): string[] {
+  const missing: string[] = [];
+  if (!data.title.trim()) missing.push("title");
+  if (data.inventors.length === 0) missing.push("inventors");
+  if (data.assigneesOriginal.length === 0 && data.assigneesCurrent.length === 0) missing.push("assignees");
+  if (!data.filingDate.trim()) missing.push("filingDate");
+  if (!data.grantDate.trim()) missing.push("grantDate");
+  if (!data.legalStatus.trim()) missing.push("legalStatus");
+  return missing;
+}
+
+/** 必需字段（title + inventors/assignees + filingDate）是否全部为空——即整页不可解析。 */
+export function hasNoRequiredMetadata(data: Pick<StructuredPatentData, "missingFields">): boolean {
+  const missing = new Set(data.missingFields);
+  return missing.has("title") && missing.has("inventors") && missing.has("assignees") && missing.has("filingDate");
 }
 
 /** 宽容解析 JSON 数组字符串；空/非法输入返回空数组（不抛异常）。
@@ -89,7 +117,7 @@ export function mapPatentData(data: PatentData, patent: string, url: string): St
     ...parseJsonArray<Citation>(data.forward_cite_yes_family, "forward_cite_yes_family"),
   ];
 
-  return {
+  const mapped: Omit<StructuredPatentData, "missingFields"> = {
     patent,
     url,
     title: data.title,
@@ -111,4 +139,6 @@ export function mapPatentData(data: PatentData, patent: string, url: string): St
     forwardCites,
     abstractText: data.abstract_text,
   };
+
+  return { ...mapped, missingFields: computeMissingFields(mapped) };
 }

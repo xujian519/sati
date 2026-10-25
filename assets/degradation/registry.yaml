@@ -240,6 +240,24 @@ entries:
     observability: "条目级 failed 标记"
     negativeDrill: tests/tool/builtin/patentPdfDownload.spec.ts
 
+  - id: patent-metadata-page-structure
+    component: src/tool/builtin/patentMetadata.ts
+    dependency: "Google Patents 详情页 HTML microdata（发明人/受让人/日期/法律状态选择器）"
+    failDirection: closed
+    degradedBehavior: "部分字段缺失 → data.degraded=true + missingFields + degradedReason；必需字段（标题/发明人/受让人/申请日）全空 → PARSE_ERROR（tool_execution_failed），不返回 success:true"
+    degradedImpact: "用户会看到明确的『页面结构变化，字段不可用』提示，不会把缺失误判为『该专利无发明人/无法律状态』"
+    observability: "degraded / degradedReason / missingFields / dataSource + PARSE_ERROR 错误码"
+    negativeDrill: tests/tool/builtin/patentMetadata.spec.ts
+
+  - id: patent-legal-status-page-structure
+    component: src/tool/builtin/patentLegalStatus.ts
+    dependency: "Google Patents 法律状态页 HTML microdata（标题/状态/日期/事件选择器）"
+    failDirection: closed
+    degradedBehavior: "核心字段缺失 → 单条 degraded=true + missingFields + degradedReason；status 为空归一为 UNKNOWN；不静默返回空串"
+    degradedImpact: "批量结果中逐条可见降级来源，用户不会把解析失败当成『无法律状态』"
+    observability: "degraded / degradedReason / missingFields / withDegraded 计数"
+    negativeDrill: tests/tool/builtin/patentLegalStatus.spec.ts
+
   - id: patent-metadata-not-found
     component: src/tool/builtin/patentMetadata.ts
     dependency: "按号元数据点查——不存在段"

@@ -25,8 +25,8 @@
 
 | claim | 事实 | 值 | 来源 |
 | --- | --- | --- | --- |
-| `default_tool_count` | 默认注册工具数（无参 createBuiltinRegistry） | `55` | src/tool/registry/createBuiltinRegistry.ts（运行期实例化） |
-| `patent_tool_count` | 专利域工具数（domain === "patent"） | `30` | src/tool/registry/createBuiltinRegistry.ts（运行期实例化） |
+| `default_tool_count` | 默认注册工具数（无参 createBuiltinRegistry） | `54` | src/tool/registry/createBuiltinRegistry.ts（运行期实例化） |
+| `patent_tool_count` | 专利域工具数（domain === "patent"） | `29` | src/tool/registry/createBuiltinRegistry.ts（运行期实例化） |
 | `channel_adapter_count` | IM 渠道适配器数 | `21` | src/adapters/channel/（目录数，不含 protocol/） |
 | `skill_count` | 内置技能数（SKILL.md 总数） | `107` | skills/**/SKILL.md |
 | `role_skill_count` | 专家角色数（type: role） | `45` | skills/**/SKILL.md frontmatter |

@@ -335,9 +335,7 @@ export function createPatentFigureCheckTool(): SatiToolDefinition<PatentFigureCh
               findings: { type: "array", items: FIGURE_FINDING_SCHEMA },
             },
           },
-          description:
-            "已交付 SVG 的矢量源渲染复核（RC0–RC5；未提供 svg_paths 时为空数组）。" +
-            "RC0「未量测」不是缺陷，是这份报告未覆盖到的结构清单——没有它时「未发现问题」才等于逐类量测过",
+          description: "Delivered-SVG render checks (RC0-RC5); empty without svg_paths.",
         },
         multi_figure_consistency: {
           type: "object",
@@ -354,21 +352,11 @@ export function createPatentFigureCheckTool(): SatiToolDefinition<PatentFigureCh
     aliases: ["PatentFigureCheck", "figure_check"],
     title: "Check Patent Figures",
     description:
-      "Validate patent figures against the specification text (Rule 21 of the CNIPA Implementing " +
-      "Regulations 2023): figure numbering, figure-to-text and text-to-figure numeral consistency, " +
-      "one-numeral-one-component, annotation-like labels, drawing-surface wording (annotation prefixes, " +
-      "body references, dimension/scale indications, trailing punctuation, figure number inside the " +
-      "drawing, non-Chinese wording, numeral shape), claim/description numeral-bracket conventions, " +
-      "canvas legibility against the per-office printable area and minimum character height, conditional " +
-      "view numbering (single view must not be numbered under PCT/US), sheet numbering, abstract-figure " +
-      "designation and the utility-model drawings requirement. Every finding names its rule id and cites " +
-      "the governing provision, so the report is self-explanatory. Pass the full specification text " +
-      "(claims + description). Input: structured `figures`, `svg_paths` (re-parses SVGs produced by " +
-      "patent_figure_generate) and/or `image_paths` for raster drawings (customer scans, CAD exports, " +
-      "third-party images), which get a pixel-level check instead: black-and-white purity, minimum line " +
-      "width, DPI and printed size against the printable area (no OCR — the figure number must be declared " +
-      "via the file name). Figures are not final until this check reports ok. Rules and their workflow are " +
-      "documented in the `patent-illustrator` skill. Registered by default; pass `patentFigure: false` to skip.",
+      "Check patent figure compliance for CNIPA / PCT / USPTO: structural rules V1-V21, raster pixel gate " +
+      "(black-and-white, line width, DPI, paper size), and delivered-SVG render checks. Provide FigureSpec " +
+      "figures and/or svg_paths / image_paths plus spec_text. Returns findings, pixel_images, render checks, " +
+      "and a deterministic ok verdict. Rule catalog: `patent-illustrator` skill. Use after " +
+      "patent_figure_generate or for third-party figures.",
     kind: "custom",
     domain: "patent",
     inputSchema: {
@@ -380,61 +368,53 @@ export function createPatentFigureCheckTool(): SatiToolDefinition<PatentFigureCh
           type: "array",
           minItems: 1,
           items: FIGURE_INPUT_SCHEMA_REF,
-          description: "待核验附图（与 patent_figure_generate 的 figures 同契约）",
+          description: "FigureSpec figures (same contract as patent_figure_generate).",
         },
         svg_paths: {
           type: "array",
           minItems: 1,
           items: { type: "string" },
-          description: "patent_figure_generate 产出的 SVG 文件路径（回读 data-ref 复核已交付文件）",
+          description: "Delivered SVG paths to read back data-ref.",
         },
         image_paths: {
           type: "array",
           minItems: 1,
           items: { type: "string" },
-          description:
-            "非本工具产出的栅格附图路径（客户扫描件/CAD 导出/他人绘制的图，支持 jpg/png/gif/webp）：做像素级合规核查（黑白性、线宽、DPI、纸面尺寸）。不做 OCR——图号存在性需由文件名（如 xxx-fig3.png）或调用方声明，未声明会给出提示",
+          description: "Raster figures for the pixel gate; no OCR.",
         },
         spec_text: {
           type: "string",
-          description: "说明书文字部分全文（权利要求书 + 说明书，不含附图本身）；V2/V3 的判定文本",
+          description: "Specification text (claims + description) for V2/V3.",
         },
         claims_text: {
           type: "string",
-          description:
-            "权利要求书文本（可选）：提供时替代启发式分节作为权利要求面，使 V10（权利要求中附图标记须置于括号内）的判定不再依赖小节标题",
+          description: "Optional claims text (V10).",
         },
         description_text: {
           type: "string",
-          description:
-            "说明书正文文本（可选）：提供时替代启发式分节作为正文面（V11 判定面）。若含附图说明小节，其括号引用也会被 V11 计为正文引用",
+          description: "Optional description text (V11).",
         },
         document_kind: {
           type: "string",
           enum: ["invention", "utility"],
-          description: "发明/实用新型（V9 实用新型必须有附图，US 辖区无此规则）",
+          description: "invention / utility (V9 utility requires drawings).",
         },
         jurisdiction: {
           type: "string",
           enum: JURISDICTIONS,
-          description:
-            "Target office (default cn): cn=CNIPA (CN-only rules V8/V9/V10/V11 + 图N numbering), us=USPTO " +
-            "(37 CFR 1.84 profile, FIG. N numbering), pct=PCT (PCT Rule 11 profile, Fig. N numbering, CN " +
-            "bracket rules V10/V11 not applied)",
+          description: "cn (CNIPA) / us (USPTO) / pct.",
         },
         figure_count: {
           type: "integer",
           minimum: 1,
-          description:
-            "本案附图总幅数（缺省取本次核验的附图数）：分次生成/只核验单幅时须声明——它决定图号是否" +
-            "应当出现（单幅在 pct/us 不得编号）与纸面尺寸判据",
+          description: "Total figure count in the case.",
         },
         sheet_index: {
           type: "integer",
           minimum: 1,
-          description: "附图页序号（与 sheet_total 成对声明；多页附图未声明时 V17 提示）",
+          description: "Sheet index (paired with sheet_total).",
         },
-        sheet_total: { type: "integer", minimum: 1, description: "附图页总页数（成对声明；≥2 时 V17 核验页码声明）" },
+        sheet_total: { type: "integer", minimum: 1, description: "Total sheets." },
       },
     },
     isReadOnly: () => true,

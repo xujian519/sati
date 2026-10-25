@@ -94,7 +94,7 @@ export async function executeGraphRun(
   input: PatentWorkflowRunInput,
   context: GraphExecuteContext,
   deps: PatentWorkflowRunDeps,
-): Promise<{ content: Array<{ type: "text"; text: string }> }> {
+): Promise<{ content: Array<{ type: "text"; text: string }>; data?: unknown }> {
   const graphName = input.graph!;
   const def = DOMAIN_GRAPHS[graphName];
   const graphId = `patent_${graphName}`;
@@ -271,5 +271,6 @@ export async function executeGraphRun(
         text: renderGraphResultText({ graph: graphName, result, persistNote, checkpointNote }) + judgeNote,
       },
     ],
+    data: result,
   };
 }

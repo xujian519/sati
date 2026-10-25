@@ -74,6 +74,7 @@ export {
   patentInfringementManifest,
   patentDraftingManifest,
   builtinPatentManifests,
+  formatManifestCatalog,
   type BuiltinPatentManifest,
 } from "./workflow.js";
 

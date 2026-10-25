@@ -7,7 +7,7 @@ import {
   type PlanTask,
   type PlanTaskState,
 } from "../../patent/index.js";
-import type { SatiToolDefinition } from "../protocol/types.js";
+import type { SatiToolDefinition, SatiToolExecutionOutput } from "../protocol/types.js";
 
 export type PatentPlanTaskInput = {
   /** 操作类型。 */
@@ -41,7 +41,15 @@ export function createPatentPlanTaskTool(): SatiToolDefinition<PatentPlanTaskInp
     name: "patent_plan_task",
     outputSchema: {
       type: "object",
-      properties: {},
+      required: ["action"],
+      properties: {
+        action: { type: "string", enum: ["transition", "sync", "replan"] },
+        from: { type: "string" },
+        to: { type: "string" },
+        tasks: { type: "array", items: { type: "object", additionalProperties: true } },
+        toRun: { type: "array", items: { type: "string" } },
+        preserved: { type: "array", items: { type: "string" } },
+      },
     },
     aliases: ["PatentPlanTask", "plan_task_state"],
     description:
@@ -82,91 +90,103 @@ export function createPatentPlanTaskTool(): SatiToolDefinition<PatentPlanTaskInp
     isReadOnly: () => true,
     isConcurrencySafe: () => true,
     async execute(input) {
-      switch (input.action) {
-        case "transition": {
-          const from = (input.currentState ?? "planning") as PlanTaskState;
-          const to = input.to as PlanTaskState;
-          // 运行时输入校验（inputSchema enum 仅代理侧提示，不强制）：非法状态 fail-closed 返回文本而非抛 TypeError
-          const validStates = new Set(Object.keys(TRANSITIONS));
-          if (!validStates.has(from) || !validStates.has(to)) {
-            return {
-              content: [
-                {
-                  type: "text",
-                  text: `patent_plan_task: 非法状态 "${from}" 或 "${to}"（合法: ${[...validStates].join(" / ")}）`,
-                },
-              ],
-            };
-          }
-          const machine = new PlanTaskStateMachine(from);
-          if (!machine.canTransition(to)) {
-            return {
-              content: [
-                {
-                  type: "text",
-                  text: `patent_plan_task: 非法状态迁移 ${from} → ${to}（请检查 TRANSITIONS 白名单）`,
-                },
-              ],
-            };
-          }
-          // 语义强制（fail-closed）：executing 需 tasks、replanning 需 feedback——
-          // 与状态机 PlanTaskSemanticError 一致，工具层转为文本返回。
-          try {
-            const next = machine.transition(to, { tasks: input.tasks, feedback: input.feedback });
-            return { content: [{ type: "text", text: `patent_plan_task: ${from} → ${next} ✅` }] };
-          } catch (err) {
-            if (err instanceof PlanTaskSemanticError) {
-              return { content: [{ type: "text", text: `patent_plan_task: ${err.message}` }] };
-            }
-            throw err;
-          }
-        }
-        case "sync": {
-          const steps = input.planSteps ?? [];
-          if (steps.length === 0) {
-            return { content: [{ type: "text", text: "patent_plan_task: sync 需要 planSteps 非空" }] };
-          }
-          const result = syncPlanToTasks(steps);
-          const lines = result.tasks.map(
-            t => `- ${t.id} ${t.status}${t.blockedBy ? `（依赖 ${t.blockedBy.join(",")}）` : ""}: ${t.description}`,
-          );
-          return {
-            content: [
-              {
-                type: "text",
-                text: `patent_plan_task: 同步 ${result.tasks.length} 个任务\n${lines.join("\n")}\n待执行: ${result.toRun.join(", ")}`,
-              },
-            ],
-          };
-        }
-        case "replan": {
-          const steps = input.planSteps ?? [];
-          if (steps.length === 0) {
-            return { content: [{ type: "text", text: "patent_plan_task: replan 需要 planSteps 非空" }] };
-          }
-          const result = replanTasks(input.previousTasks ?? [], steps);
-          const preserved = result.preserved.length > 0 ? `保留已完成: ${result.preserved.join(", ")}` : "无保留步骤";
-          return {
-            content: [
-              {
-                type: "text",
-                text: `patent_plan_task: 重规划 → ${result.tasks.length} 个任务\n${preserved}\n需执行: ${result.toRun.join(", ") || "（全部已完成）"}`,
-              },
-            ],
-          };
-        }
-        default: {
-          // inputSchema enum 仅代理侧提示，运行时不强制：未知 action fail-closed
-          return {
-            content: [
-              {
-                type: "text",
-                text: `patent_plan_task: 未知操作 "${String(input.action)}"（可选: transition / sync / replan）`,
-              },
-            ],
-          };
-        }
-      }
+      return executePlanTaskAction(input);
     },
   };
+}
+
+/** 供 flexible_plan 复用（patent_plan_task 已并入 flexible_plan，旧名保留为别名）。 */
+export async function executePlanTaskAction(
+  input: PatentPlanTaskInput,
+): Promise<SatiToolExecutionOutput<Record<string, unknown>>> {
+  switch (input.action) {
+    case "transition": {
+      const from = (input.currentState ?? "planning") as PlanTaskState;
+      const to = input.to as PlanTaskState;
+      // 运行时输入校验（inputSchema enum 仅代理侧提示，不强制）：非法状态 fail-closed 返回文本而非抛 TypeError
+      const validStates = new Set(Object.keys(TRANSITIONS));
+      if (!validStates.has(from) || !validStates.has(to)) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `patent_plan_task: 非法状态 "${from}" 或 "${to}"（合法: ${[...validStates].join(" / ")}）`,
+            },
+          ],
+        };
+      }
+      const machine = new PlanTaskStateMachine(from);
+      if (!machine.canTransition(to)) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `patent_plan_task: 非法状态迁移 ${from} → ${to}（请检查 TRANSITIONS 白名单）`,
+            },
+          ],
+        };
+      }
+      // 语义强制（fail-closed）：executing 需 tasks、replanning 需 feedback——
+      // 与状态机 PlanTaskSemanticError 一致，工具层转为文本返回。
+      try {
+        const next = machine.transition(to, { tasks: input.tasks, feedback: input.feedback });
+        return {
+          content: [{ type: "text", text: `patent_plan_task: ${from} → ${next} ✅` }],
+          data: { action: "transition", from, to: next },
+        };
+      } catch (err) {
+        if (err instanceof PlanTaskSemanticError) {
+          return { content: [{ type: "text", text: `patent_plan_task: ${err.message}` }] };
+        }
+        throw err;
+      }
+    }
+    case "sync": {
+      const steps = input.planSteps ?? [];
+      if (steps.length === 0) {
+        return { content: [{ type: "text", text: "patent_plan_task: sync 需要 planSteps 非空" }] };
+      }
+      const result = syncPlanToTasks(steps);
+      const lines = result.tasks.map(
+        t => `- ${t.id} ${t.status}${t.blockedBy ? `（依赖 ${t.blockedBy.join(",")}）` : ""}: ${t.description}`,
+      );
+      return {
+        content: [
+          {
+            type: "text",
+            text: `patent_plan_task: 同步 ${result.tasks.length} 个任务\n${lines.join("\n")}\n待执行: ${result.toRun.join(", ")}`,
+          },
+        ],
+        data: { action: "sync", tasks: result.tasks, toRun: result.toRun },
+      };
+    }
+    case "replan": {
+      const steps = input.planSteps ?? [];
+      if (steps.length === 0) {
+        return { content: [{ type: "text", text: "patent_plan_task: replan 需要 planSteps 非空" }] };
+      }
+      const result = replanTasks(input.previousTasks ?? [], steps);
+      const preserved = result.preserved.length > 0 ? `保留已完成: ${result.preserved.join(", ")}` : "无保留步骤";
+      return {
+        content: [
+          {
+            type: "text",
+            text: `patent_plan_task: 重规划 → ${result.tasks.length} 个任务\n${preserved}\n需执行: ${result.toRun.join(", ") || "（全部已完成）"}`,
+          },
+        ],
+        data: { action: "replan", tasks: result.tasks, toRun: result.toRun, preserved: result.preserved },
+      };
+    }
+    default: {
+      // inputSchema enum 仅代理侧提示，运行时不强制：未知 action fail-closed
+      return {
+        content: [
+          {
+            type: "text",
+            text: `patent_plan_task: 未知操作 "${String(input.action)}"（可选: transition / sync / replan）`,
+          },
+        ],
+      };
+    }
+  }
 }

@@ -20,6 +20,7 @@ import {
 import { globalAtomRegistry, globalStageHandlerRegistry } from "../../patent/atoms/index.js";
 import type { SatiJsonSchema } from "../protocol/schema.js";
 import type { SatiToolDefinition } from "../protocol/types.js";
+import { executePlanTaskAction, type PatentPlanTaskInput } from "./patentPlanTaskTool.js";
 import {
   buildWorkflowProvider,
   buildWorkflowRunContext,
@@ -57,6 +58,9 @@ export type FlexiblePlanAction =
   | "complete"
   | "abandon";
 
+/** 旧 patent_plan_task 的无状态动作（并入本工具，旧名保留为别名）。 */
+export type LegacyPlanTaskAction = "transition" | "sync" | "replan";
+
 /** 阶段定义（工具侧输入；status/artifacts 等由状态机补齐）。 */
 export type FlexiblePlanStageInput = {
   id: string;
@@ -73,7 +77,7 @@ export type FlexiblePlanStageInput = {
 };
 
 export type FlexiblePlanToolInput = {
-  action: FlexiblePlanAction;
+  action: FlexiblePlanAction | LegacyPlanTaskAction;
   /** 计划主键（全部操作必需；持久化按此键控）。 */
   caseId?: string;
   /** 对齐 orchestrations id（create 必需）。 */
@@ -96,6 +100,13 @@ export type FlexiblePlanToolInput = {
   maxResults?: number;
   /** run 结束后自动确认全部成功（非降级）阶段。 */
   autoConfirm?: boolean;
+  // ── 旧 patent_plan_task 字段（action=transition/sync/replan 时使用）──
+  currentState?: string;
+  to?: string;
+  planSteps?: string[];
+  previousTasks?: PatentPlanTaskInput["previousTasks"];
+  tasks?: PatentPlanTaskInput["tasks"];
+  feedback?: string;
 };
 
 /** provider 装配字段（model/provider/modelId/search）单一来源见 patentWorkflowTool 的 WorkflowProviderDeps。 */
@@ -169,8 +180,8 @@ const STAGE_SCHEMA: SatiJsonSchema = {
     name: { type: "string" },
     goal: { type: "string" },
     strategy: { type: "string", enum: ["chain", "react", "sub_agent"] },
-    atom: { type: "string", description: "Atom name to auto-execute this stage (e.g. extract)." },
-    params: { type: "object", description: "Static params passed to the stage handler." },
+    atom: { type: "string" },
+    params: { type: "object" },
     artifacts: { type: "array", items: { type: "string" } },
     constraintIds: { type: "array", items: { type: "string" } },
     articleJudgments: { type: "array", items: { type: "string" } },
@@ -228,54 +239,75 @@ const MUTATIONS: Partial<Record<Exclude<FlexiblePlanAction, "create" | "get" | "
   },
 };
 
-const ACTIONS_LABEL = "create / get / run / confirm / rollback / add / remove / reorder / complete / abandon";
+const ACTIONS_LABEL =
+  "create / get / run / confirm / rollback / add / remove / reorder / complete / abandon " +
+  "(legacy: transition / sync / replan)";
+
+/** 旧 patent_plan_task 动作：无 caseId、无状态，直接委托无状态状态机。 */
+function isLegacyPlanTaskAction(action: string): action is LegacyPlanTaskAction {
+  return action === "transition" || action === "sync" || action === "replan";
+}
 
 export function createFlexiblePlanTool(deps: FlexiblePlanToolDeps = {}): SatiToolDefinition<FlexiblePlanToolInput> {
   return {
     name: "flexible_plan",
     outputSchema: {
       type: "object",
-      properties: {},
+      required: ["action"],
+      properties: {
+        action: { type: "string" },
+        caseId: { type: "string" },
+        // run 分支附带完整 WorkflowRunResult（成功时）。
+        manifestId: { type: "string" },
+        caseType: { type: "string" },
+        completed: { type: "boolean" },
+        stages: { type: "array", items: { type: "object", additionalProperties: true } },
+        degradedSteps: { type: "array", items: { type: "string" } },
+        summary: { type: "string" },
+        interrupted: { type: "object", additionalProperties: true },
+        persistWarning: { type: "string" },
+      },
     },
-    aliases: ["FlexiblePlan", "flexible_plan_task"],
+    // patent_plan_task 已并入本工具：旧名保留为别名，输入/输出保持兼容。
+    aliases: ["FlexiblePlan", "flexible_plan_task", "patent_plan_task"],
     description:
-      "Flexible plan for patent cases (stage-level HITL): create a plan (optional IPC technical-field " +
-      "inference from the disclosure text), run it (pending stages executed via the atom registry with " +
-      "LLM + prior-art search, exactly like patent_workflow_run), then confirm / rollback stages one by one. " +
-      "Also add / remove / reorder stages at runtime and complete or abandon the plan. Plans are persisted by " +
-      "caseId across calls (unlike patent_plan_task, which is stateless). run executes only unconfirmed stages " +
-      "(pending + rolled_back); confirmed stages are frozen, so confirm fixes the output — autoConfirm=true " +
-      "confirms all successful stages at the end of a run. " +
-      "For drafting plans, declare a first stage {id:'clarity_gate', atom:'clarity-gate'} before the " +
-      "deconstruction stage: it scores disclosure clarity (mechanical signals + semantic 4-dimension) and " +
-      "pauses at HITL when below the threshold (approve it to force-continue).",
+      "Flexible plan (stage-level HITL): create a plan (optional IPC field inference), run pending stages via " +
+      "atoms (LLM + prior-art search), then confirm/rollback stages; add/remove/reorder/complete/abandon at " +
+      "runtime. Plans persist by caseId; run executes only unconfirmed stages and autoConfirm=true freezes " +
+      "successful ones. Also accepts legacy patent_plan_task actions transition/sync/replan (stateless, no " +
+      "caseId; old name kept as an alias). Orchestration entries: patent_workflow_assemble (assemble), " +
+      "patent_workflow_run (execute), patent_docket (case lifecycle). For drafting, declare " +
+      "{id:'clarity_gate',atom:'clarity-gate'} before deconstruction to pause at low clarity.",
     kind: "session",
     domain: "patent",
     inputSchema: {
       type: "object",
-      required: ["action", "caseId"],
+      required: ["action"],
       additionalProperties: false,
       properties: {
         action: {
           type: "string",
-          enum: ["create", "get", "run", "confirm", "rollback", "add", "remove", "reorder", "complete", "abandon"],
-          description:
-            "Operation: create | get | run | confirm | rollback | add | remove | reorder | complete | abandon.",
+          enum: [
+            "create",
+            "get",
+            "run",
+            "confirm",
+            "rollback",
+            "add",
+            "remove",
+            "reorder",
+            "complete",
+            "abandon",
+            "transition",
+            "sync",
+            "replan",
+          ],
+          description: "Plan operation (legacy patent_plan_task: transition | sync | replan).",
         },
-        caseId: { type: "string", description: "Plan key (required for every operation; persists by this id)." },
-        caseType: {
-          type: "string",
-          description: "Orchestration type, e.g. invalidation / infringement / drafting (create).",
-        },
-        inputText: {
-          type: "string",
-          description:
-            "Case input text (e.g. technical disclosure). create persists it for later runs; run can override it.",
-        },
-        technicalField: {
-          type: "string",
-          description: "Explicit technical field (create; else inferred from inputText).",
-        },
+        caseId: { type: "string", description: "Plan key (required except legacy actions)." },
+        caseType: { type: "string", description: "Orchestration type (create)." },
+        inputText: { type: "string", description: "Case input text; create persists it, run can override." },
+        technicalField: { type: "string", description: "Explicit technical field (else inferred)." },
         stages: {
           type: "array",
           description: "Stage definitions (create / add).",
@@ -286,126 +318,144 @@ export function createFlexiblePlanTool(deps: FlexiblePlanToolDeps = {}): SatiToo
           ...STAGE_SCHEMA,
         },
         stageId: { type: "string", description: "Target stage id (confirm / rollback / remove)." },
-        stageIds: {
-          type: "array",
-          items: { type: "string" },
-          description: "New stage order (reorder, must include all ids).",
-        },
-        reason: { type: "string", description: "Abandon reason, kept for audit (abandon)." },
-        maxResults: { type: "number", description: "Max prior-art search results for run (default 5)." },
-        autoConfirm: {
-          type: "boolean",
-          description: "When true, run confirms all successful (non-degraded) stages at the end.",
-        },
+        stageIds: { type: "array", items: { type: "string" }, description: "New stage order (reorder)." },
+        reason: { type: "string", description: "Abandon reason (audit)." },
+        maxResults: { type: "number", description: "Max search results for run (default 5)." },
+        autoConfirm: { type: "boolean", description: "Confirm successful stages after run." },
+        // Legacy patent_plan_task fields.
+        currentState: { type: "string", description: "Current state." },
+        to: { type: "string", description: "Target state." },
+        planSteps: { type: "array", items: { type: "string" }, description: "Plan steps." },
+        previousTasks: { type: "array", items: { type: "object", additionalProperties: true } },
+        tasks: { type: "array", items: { type: "object", additionalProperties: true } },
+        feedback: { type: "string", description: "Replan feedback." },
       },
     },
     isReadOnly: () => false,
     isConcurrencySafe: () => false,
     async execute(input, context) {
-      if (input.caseId === undefined || input.caseId.trim() === "") {
-        return toolText("flexible_plan: caseId 不能为空（计划按 caseId 持久化，跨调用状态）");
-      }
-      const store = deps.store ?? defaultPlanStore(input.caseId, context?.cwd ?? process.cwd());
-      try {
-        // 计划变更：七个 mutation 共用同一条执行流（操作表驱动）。
-        const mutation = MUTATIONS[input.action as keyof typeof MUTATIONS];
-        if (mutation !== undefined) {
-          const missing = mutation.require?.(input);
-          if (missing !== undefined) return toolText(`flexible_plan: ${missing}`);
-          const plan = await loadPlan(store, input.caseId);
-          const updated = mutation.apply(plan, input);
-          await store.savePlan(updated);
-          return toolText(`${renderPlan(updated)}\n${mutation.message(updated, input)}`);
-        }
-
-        switch (input.action) {
-          case "create": {
-            if (input.caseType === undefined || input.caseType.trim() === "") {
-              return toolText("flexible_plan: create 需要 caseType");
-            }
-            // inputText 由状态机 createFlexiblePlan 持久化（字段所有权在状态机）。
-            const plan = createFlexiblePlan(input.caseId, input.caseType, {
-              inputText: input.inputText,
-              technicalField: input.technicalField,
-              stages: (input.stages ?? []).map(toFlexibleStage),
-              now: deps.now,
-            });
-            await store.savePlan(plan);
-            return toolText(`${renderPlan(plan)}\n已创建并持久化（action=run 执行未确认阶段）。`);
-          }
-          case "get": {
-            const plan = await loadPlan(store, input.caseId);
-            return toolText(renderPlan(plan));
-          }
-          case "run": {
-            const plan = await loadPlan(store, input.caseId);
-            // toManifest 内部 assertActive + 拒绝"全部已确认"（无待执行阶段）。
-            const manifest = toManifest(plan);
-            const provider = buildWorkflowProvider(deps, context);
-            if (!provider) {
-              return toolText(
-                "flexible_plan: 未提供模型客户端（context.model 缺失），无法执行原子阶段。请在有模型会话中调用。",
-              );
-            }
-            const sourceText = input.inputText ?? plan.inputText ?? "";
-            const workflowCtx = buildWorkflowRunContext({
-              caseId: input.caseId,
-              input: sourceText,
-              maxResults: input.maxResults,
-            });
-            // 无 atom 阶段（报告/透传）：透传输入文本，不降级。
-            const executor = async (): Promise<string> => sourceText;
-            const persistTarget = resolveRunPersistTarget(input.caseId, manifest.id, context?.cwd ?? process.cwd());
-            const result = await runWorkflow(manifest, workflowCtx, executor, {
-              handlers: deps.handlers ?? globalStageHandlerRegistry,
-              atoms: globalAtomRegistry,
-              provider,
-              ...(persistTarget !== undefined
-                ? { persist: new JsonFileWorkflowRunStore(persistTarget.runsDir), runId: persistTarget.runId }
-                : {}),
-            });
-            // autoConfirm：成功（非降级）阶段自动确认并回流计划（固化产物）。
-            let updated = plan;
-            if (input.autoConfirm === true) {
-              for (const stage of result.stages) {
-                if (!stage.degraded) updated = confirmStage(updated, stage.stageId);
-              }
-              await store.savePlan(updated);
-            }
-            const lines = result.stages.map(s => {
-              const flag = s.degraded ? "⚠️ 降级" : "✅";
-              return `- ${flag} ${s.stageId}${s.atom !== undefined ? ` [atom:${s.atom}]` : ""}: ${previewText(s.output)}`;
-            });
-            const persistNote =
-              persistTarget !== undefined ? await writeRunArtifacts(persistTarget, manifest, result) : "持久化: 未启用";
-            const interruptNote = result.interrupted
-              ? `⏸ 审批门暂停: "${result.interrupted.stageId}"（${result.interrupted.message}）——等待人工确认，后续阶段未执行`
-              : undefined;
-            return {
-              content: [
-                {
-                  type: "text",
-                  text: renderWorkflowResultText({
-                    toolName: "flexible_plan(run)",
-                    result,
-                    stageLines: lines,
-                    persistNote,
-                    checkSection: "",
-                    interruptNote,
-                  }),
-                },
-              ],
-            };
-          }
-          default: {
-            // inputSchema enum 仅代理侧提示，运行时不强制：未知 action fail-closed。
-            return toolText(`flexible_plan: 未知操作 "${String(input.action)}"（可选: ${ACTIONS_LABEL}）`);
-          }
-        }
-      } catch (err) {
-        // FlexiblePlanError / WorkflowError / 存储错误统一转文本（fail-closed，对齐专利工具风格）。
-        return toolText(`flexible_plan: ${err instanceof Error ? err.message : String(err)}`);
-      }
+      const output = await runFlexiblePlan(input, context);
+      const data = output.data ?? { action: input.action, caseId: input.caseId ?? "" };
+      return { ...output, data };
     },
   };
+
+  async function runFlexiblePlan(
+    input: FlexiblePlanToolInput,
+    context: Parameters<NonNullable<SatiToolDefinition["execute"]>>[1],
+  ): Promise<{ content: Array<{ type: "text"; text: string }>; data?: Record<string, unknown> }> {
+    // 旧 patent_plan_task 动作：无状态、无需 caseId，直接委托状态机。
+    if (isLegacyPlanTaskAction(input.action)) {
+      const legacyOutput = await executePlanTaskAction(input as PatentPlanTaskInput);
+      return {
+        content: legacyOutput.content as Array<{ type: "text"; text: string }>,
+        ...(legacyOutput.data !== undefined ? { data: legacyOutput.data as Record<string, unknown> } : {}),
+      };
+    }
+    if (input.caseId === undefined || input.caseId.trim() === "") {
+      return toolText("flexible_plan: caseId 不能为空（计划按 caseId 持久化，跨调用状态）");
+    }
+    const store = deps.store ?? defaultPlanStore(input.caseId, context?.cwd ?? process.cwd());
+    try {
+      // 计划变更：七个 mutation 共用同一条执行流（操作表驱动）。
+      const mutation = MUTATIONS[input.action as keyof typeof MUTATIONS];
+      if (mutation !== undefined) {
+        const missing = mutation.require?.(input);
+        if (missing !== undefined) return toolText(`flexible_plan: ${missing}`);
+        const plan = await loadPlan(store, input.caseId);
+        const updated = mutation.apply(plan, input);
+        await store.savePlan(updated);
+        return toolText(`${renderPlan(updated)}\n${mutation.message(updated, input)}`);
+      }
+
+      switch (input.action) {
+        case "create": {
+          if (input.caseType === undefined || input.caseType.trim() === "") {
+            return toolText("flexible_plan: create 需要 caseType");
+          }
+          // inputText 由状态机 createFlexiblePlan 持久化（字段所有权在状态机）。
+          const plan = createFlexiblePlan(input.caseId, input.caseType, {
+            inputText: input.inputText,
+            technicalField: input.technicalField,
+            stages: (input.stages ?? []).map(toFlexibleStage),
+            now: deps.now,
+          });
+          await store.savePlan(plan);
+          return toolText(`${renderPlan(plan)}\n已创建并持久化（action=run 执行未确认阶段）。`);
+        }
+        case "get": {
+          const plan = await loadPlan(store, input.caseId);
+          return toolText(renderPlan(plan));
+        }
+        case "run": {
+          const plan = await loadPlan(store, input.caseId);
+          // toManifest 内部 assertActive + 拒绝"全部已确认"（无待执行阶段）。
+          const manifest = toManifest(plan);
+          const provider = buildWorkflowProvider(deps, context);
+          if (!provider) {
+            return toolText(
+              "flexible_plan: 未提供模型客户端（context.model 缺失），无法执行原子阶段。请在有模型会话中调用。",
+            );
+          }
+          const sourceText = input.inputText ?? plan.inputText ?? "";
+          const workflowCtx = buildWorkflowRunContext({
+            caseId: input.caseId,
+            input: sourceText,
+            maxResults: input.maxResults,
+          });
+          // 无 atom 阶段（报告/透传）：透传输入文本，不降级。
+          const executor = async (): Promise<string> => sourceText;
+          const persistTarget = resolveRunPersistTarget(input.caseId, manifest.id, context?.cwd ?? process.cwd());
+          const result = await runWorkflow(manifest, workflowCtx, executor, {
+            handlers: deps.handlers ?? globalStageHandlerRegistry,
+            atoms: globalAtomRegistry,
+            provider,
+            ...(persistTarget !== undefined
+              ? { persist: new JsonFileWorkflowRunStore(persistTarget.runsDir), runId: persistTarget.runId }
+              : {}),
+          });
+          // autoConfirm：成功（非降级）阶段自动确认并回流计划（固化产物）。
+          let updated = plan;
+          if (input.autoConfirm === true) {
+            for (const stage of result.stages) {
+              if (!stage.degraded) updated = confirmStage(updated, stage.stageId);
+            }
+            await store.savePlan(updated);
+          }
+          const lines = result.stages.map(s => {
+            const flag = s.degraded ? "⚠️ 降级" : "✅";
+            return `- ${flag} ${s.stageId}${s.atom !== undefined ? ` [atom:${s.atom}]` : ""}: ${previewText(s.output)}`;
+          });
+          const persistNote =
+            persistTarget !== undefined ? await writeRunArtifacts(persistTarget, manifest, result) : "持久化: 未启用";
+          const interruptNote = result.interrupted
+            ? `⏸ 审批门暂停: "${result.interrupted.stageId}"（${result.interrupted.message}）——等待人工确认，后续阶段未执行`
+            : undefined;
+          return {
+            content: [
+              {
+                type: "text",
+                text: renderWorkflowResultText({
+                  toolName: "flexible_plan(run)",
+                  result,
+                  stageLines: lines,
+                  persistNote,
+                  checkSection: "",
+                  interruptNote,
+                }),
+              },
+            ],
+            data: result as unknown as Record<string, unknown>,
+          };
+        }
+        default: {
+          // inputSchema enum 仅代理侧提示，运行时不强制：未知 action fail-closed。
+          return toolText(`flexible_plan: 未知操作 "${String(input.action)}"（可选: ${ACTIONS_LABEL}）`);
+        }
+      }
+    } catch (err) {
+      // FlexiblePlanError / WorkflowError / 存储错误统一转文本（fail-closed，对齐专利工具风格）。
+      return toolText(`flexible_plan: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
 }

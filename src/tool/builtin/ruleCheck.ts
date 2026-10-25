@@ -97,6 +97,8 @@ export function createRuleCheckTool(deps?: RuleCheckDeps): SatiToolDefinition<Ru
       type: "object",
       properties: {},
     },
+    // 检查结果含分层规则包动态字段；本工具返回文本报告，无 canonical data。
+    outputSchemaExemptReason: "Text-only report (no data); rule-pack fields are dynamic. Tracked in #713.",
     aliases: ["RuleCheck", "constitutional_check"],
     description:
       "Run deterministic constitutional rule checks (keyword blocklist / pattern / structural / citation range / synonym match) " +

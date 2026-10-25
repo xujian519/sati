@@ -6,7 +6,12 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import type { PatentData } from "nuo-patent";
 import type { JsonParseDiagnostic } from "../../../../src/patent/data/nuo/mapper.js";
-import { mapPatentData, parseJsonArray } from "../../../../src/patent/data/nuo/mapper.js";
+import {
+  computeMissingFields,
+  hasNoRequiredMetadata,
+  mapPatentData,
+  parseJsonArray,
+} from "../../../../src/patent/data/nuo/mapper.js";
 
 /** 构造一个带 JSON 字符串字段的 nuo-patent PatentData fixture。 */
 function makePatentData(): PatentData {
@@ -178,5 +183,57 @@ describe("parseJsonArray 坏 JSON 告警（TD-PATENT-N06）", () => {
     assert.ok(!sample.includes("\n"), "样本已压缩为单行");
     assert.ok(sample.includes("y") && sample.includes("z"), "样本保留首尾片段");
     assert.ok(sample.length <= 81, `样本截断到 80 字符（含省略号），实际 ${sample.length}`);
+  });
+});
+
+describe("missingFields（R-02 降级可见）", () => {
+  it("完整数据无缺失字段", () => {
+    const mapped = mapPatentData(makePatentData(), "US11452699B2", "url");
+    assert.deepEqual(mapped.missingFields, []);
+    assert.equal(hasNoRequiredMetadata(mapped), false);
+  });
+
+  it("现行详情页形态：仅标题存活时列出全部缺失字段", () => {
+    const data = makePatentData();
+    data.inventor_name = "";
+    data.assignee_name_orig = "";
+    data.assignee_name_current = "";
+    data.filing_date = "";
+    data.grant_date = "";
+    data.legal_status = "";
+    const mapped = mapPatentData(data, "US11452699B2", "url");
+    assert.deepEqual(mapped.missingFields, ["inventors", "assignees", "filingDate", "grantDate", "legalStatus"]);
+    assert.equal(hasNoRequiredMetadata(mapped), false, "标题仍在，属于部分降级");
+  });
+
+  it("必需字段全空判定为整页不可解析", () => {
+    const mapped = mapPatentData(
+      {
+        ...makePatentData(),
+        title: "",
+        inventor_name: "",
+        assignee_name_orig: "",
+        assignee_name_current: "",
+        filing_date: "",
+      },
+      "US11452699B2",
+      "url",
+    );
+    assert.equal(hasNoRequiredMetadata(mapped), true);
+  });
+
+  it("computeMissingFields 只报告空值，不推断领域语义", () => {
+    assert.deepEqual(
+      computeMissingFields({
+        title: "T",
+        inventors: [],
+        assigneesOriginal: ["A"],
+        assigneesCurrent: [],
+        filingDate: "",
+        grantDate: "2022-09-27",
+        legalStatus: "Active",
+      }),
+      ["inventors", "filingDate"],
+    );
   });
 });

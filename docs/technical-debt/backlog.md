@@ -2529,3 +2529,17 @@
 - [ ] **P4.2** adapters 测试文件比 0.12 → 0.25
 - [ ] **P4.3** ui/server→src 直连 15 → ≤5（白名单 barrel 收口）
 - [ ] **P4.4** shared/browser/lifecycle/methodology/board 洼地机会型补测
+
+### 38.5 `outputSchemaExemptReason` 存量豁免记账（#713，2026-10-25）
+
+注册表已拒绝空 properties；以下非专利面存量工具暂以 `outputSchemaExemptReason` 过渡，均应在对应域补真实契约后移除豁免：
+
+| 工具/类别 | 豁免理由 | 后续 |
+|---|---|---|
+| `read_file` | 正文/媒体以 content 块返回，仅 `unchanged` 快捷路径带 data | filesystem 域立项 |
+| `read_skill` | 返回 SKILL.md 正文（content 块），无 data | session 域立项 |
+| `rule_check` | 文本报告，无 canonical data；规则包字段动态 | rule 域立项 |
+| `structured_output` | data 为调用方透传的任意 JSON，无法静态声明 | 永久豁免（设计使然） |
+| `memory_*`（6 个） | 返回结构随 SQLite/向量索引实现演进 | memory 域立项 |
+
+专利域 10 个工具已补真实 schema（#713 验收），不在此表。

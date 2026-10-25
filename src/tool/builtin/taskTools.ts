@@ -148,7 +148,12 @@ export function createTaskCreateTool(
     name: "task_create",
     outputSchema: {
       type: "object",
-      properties: {},
+      required: ["taskId", "status"],
+      properties: {
+        taskId: { type: "string" },
+        status: { type: "string" },
+        pid: { type: "number" },
+      },
     },
     aliases: ["TaskCreate"],
     description:
@@ -200,7 +205,27 @@ export function createTaskListTool(runtime?: BackgroundTaskRuntime): SatiToolDef
     name: "task_list",
     outputSchema: {
       type: "object",
-      properties: {},
+      required: ["tasks"],
+      properties: {
+        tasks: {
+          type: "array",
+          items: {
+            type: "object",
+            required: ["taskId", "command", "status", "interrupted", "outputBytes", "startedAt"],
+            properties: {
+              taskId: { type: "string" },
+              command: { type: "string" },
+              status: { type: "string" },
+              pid: { type: "number" },
+              exitCode: { type: "number" },
+              interrupted: { type: "boolean" },
+              outputBytes: { type: "number" },
+              startedAt: { type: "string" },
+              endedAt: { type: "string" },
+            },
+          },
+        },
+      },
     },
     aliases: ["TaskList"],
     description: "List background tasks (optionally filter by agentId / status / kind).",
@@ -284,7 +309,16 @@ export function createTaskOutputTool(
     name: "task_output",
     outputSchema: {
       type: "object",
-      properties: {},
+      required: ["taskId", "content", "nextOffset", "totalBytes", "truncated", "status"],
+      properties: {
+        taskId: { type: "string" },
+        content: { type: "string" },
+        nextOffset: { type: "number" },
+        totalBytes: { type: "number" },
+        truncated: { type: "boolean" },
+        status: { type: "string" },
+        exitCode: { type: "number" },
+      },
     },
     aliases: ["TaskOutput"],
     description:
@@ -342,7 +376,18 @@ export function createTaskWaitTool(runtime?: BackgroundTaskRuntime): SatiToolDef
     name: "task_wait",
     outputSchema: {
       type: "object",
-      properties: {},
+      required: ["taskId", "content", "nextOffset", "totalBytes", "truncated", "status", "waitedMs", "timedOut"],
+      properties: {
+        taskId: { type: "string" },
+        content: { type: "string" },
+        nextOffset: { type: "number" },
+        totalBytes: { type: "number" },
+        truncated: { type: "boolean" },
+        status: { type: "string" },
+        exitCode: { type: "number" },
+        waitedMs: { type: "number" },
+        timedOut: { type: "boolean" },
+      },
     },
     aliases: ["TaskWait"],
     description:
@@ -439,7 +484,11 @@ export function createTaskStopTool(runtime?: BackgroundTaskRuntime): SatiToolDef
     name: "task_stop",
     outputSchema: {
       type: "object",
-      properties: {},
+      required: ["taskId", "status"],
+      properties: {
+        taskId: { type: "string" },
+        status: { type: "string" },
+      },
     },
     aliases: ["TaskStop"],
     description: "Stop a background task (SIGTERM → grace → SIGKILL).",
