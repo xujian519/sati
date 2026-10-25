@@ -48,6 +48,7 @@ function textOf(res: { content: readonly { type: string; text?: string; value?: 
  */
 const INVENTIVENESS_COMPLIANT_OUTPUTS: { stageId: string; text: string }[] = [
   { stageId: "parse", text: "解析权利要求1，构建所属领域技术人员画像，申请日 2025-01-01。" },
+  { stageId: "time_baseline", text: "时间基准：申请日 2025-01-01（只检索该日之前公开的文献）。" },
   { stageId: "search", text: "检索到对比文件D1、D2，D1为最接近的现有技术候选。" },
   { stageId: "closest", text: "最接近的现有技术为对比文件D1（技术领域相同、技术问题相关、发明构思最接近）。" },
   {
@@ -447,7 +448,7 @@ describe("patent inventiveness 工作流（patent_inventiveness_v1 接线）", (
     );
     assert.equal(result.completed, true);
     assert.equal(result.degradedSteps.length, 0);
-    assert.equal(result.stages.length, 8);
+    assert.equal(result.stages.length, 9);
   });
 
   it("patent_workflow 工具：inventiveness manifest 全阶段输出 → completed 摘要", async () => {
@@ -455,7 +456,17 @@ describe("patent inventiveness 工作流（patent_inventiveness_v1 接线）", (
     const res = await tool.execute(
       {
         manifestId: "patent_inventiveness_v1",
-        outputs: ["parse", "search", "closest", "diff", "hint", "secondary", "conclude", "approval"].map(stageId => ({
+        outputs: [
+          "parse",
+          "time_baseline",
+          "search",
+          "closest",
+          "diff",
+          "hint",
+          "secondary",
+          "conclude",
+          "approval",
+        ].map(stageId => ({
           stageId,
           text: `阶段 ${stageId} 输出`,
         })),
@@ -467,7 +478,7 @@ describe("patent inventiveness 工作流（patent_inventiveness_v1 接线）", (
       text.includes("patent_workflow_assemble(patent_inventiveness_v1)"),
       `应识别 inventiveness manifest: ${text}`,
     );
-    assert.ok(text.includes("8/8 阶段完成"), `摘要应含 8/8: ${text}`);
+    assert.ok(text.includes("9/9 阶段完成"), `摘要应含 9/9: ${text}`);
     assert.ok(text.includes("completed"));
   });
 

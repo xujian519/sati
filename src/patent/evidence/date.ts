@@ -149,6 +149,17 @@ export function inferredMonthEnd(date: Date): string {
   return formatIsoDate(lastDay);
 }
 
+/**
+ * 把日期表达归一为时点判定用的 ISO 日期（YYYY-MM-DD）：
+ * 精确日期归一到日；仅到月 → 推定月末（保守，与证据日期规则同源）。
+ * 无法解析 → undefined（调用方须显式降级，不得假定今天）。
+ */
+export function normalizeToCutoffDate(text: string): string | undefined {
+  const parsed = parseDateFlexible(text);
+  if (parsed === null) return undefined;
+  return isMonthOnlyDate(text) ? inferredMonthEnd(parsed) : formatIsoDate(parsed);
+}
+
 function formatIsoDate(d: Date): string {
   const y = d.getUTCFullYear();
   const mo = `${d.getUTCMonth() + 1}`.padStart(2, "0");

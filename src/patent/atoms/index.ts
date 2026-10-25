@@ -95,6 +95,10 @@ export {
   ClaimChartHandler,
   claimEmbodimentMapperAtom,
   ClaimEmbodimentMapperHandler,
+  timeBaselineAtom,
+  TimeBaselineHandler,
+  type TimeBaseline,
+  type TimeBaselineBasis,
   type SpecViolation,
   type PFETriple,
 } from "./handlers/builtin/index.js";
@@ -124,6 +128,7 @@ export function registerBuiltinAtoms(): void {
   globalAtomRegistry.register(builtin.claimChartAtom);
   globalAtomRegistry.register(builtin.claimEmbodimentMapperAtom);
   globalAtomRegistry.register(builtin.chemistryAnalyzeAtom);
+  globalAtomRegistry.register(builtin.timeBaselineAtom);
 
   globalStageHandlerRegistry.register(new builtin.SearchHandler());
   globalStageHandlerRegistry.register(new builtin.ExtractHandler());
@@ -143,4 +148,5 @@ export function registerBuiltinAtoms(): void {
   globalStageHandlerRegistry.register(new builtin.ClaimChartHandler());
   globalStageHandlerRegistry.register(new builtin.ClaimEmbodimentMapperHandler());
   globalStageHandlerRegistry.register(new builtin.ChemistryAnalyzeHandler());
+  globalStageHandlerRegistry.register(new builtin.TimeBaselineHandler());
 }

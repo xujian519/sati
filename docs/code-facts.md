@@ -33,7 +33,7 @@
 | `patent_skill_count` | 专利相关技能数（patent-* 与 provision-* 技能目录） | `52` | skills/ 目录命名 |
 | `src_module_count` | src/ 模块数 | `32` | src/ 顶层目录 |
 | `loop_module_count` | agent/loop 模块数（.ts 文件） | `28` | src/agent/loop/ |
-| `patent_atom_count` | 内置原子数 | `18` | src/patent/atoms/index.ts registerBuiltinAtoms |
+| `patent_atom_count` | 内置原子数 | `19` | src/patent/atoms/index.ts registerBuiltinAtoms |
 | `patent_manifest_count` | 内置 patent manifest 数 | `8` | assets/workflows/patent/generated/*.yaml（由 check:patent-workflow-docs 保真） |
 | `drafting_stage_count` | patent_drafting_v1 阶段数 | `25` | assets/workflows/patent/generated/patent_drafting_v1.yaml |
 | `event_total_count` | 事件总数（生产者/消费者矩阵行数） | `80` | docs/event-producer-consumer.md（由 check:event-matrix 保真） |
@@ -64,7 +64,7 @@
 | `src/methodology/` | 14 | ✓ | 方法论注册表（five-whys/mece/triz/bridge-reencode 等） |
 | `src/model/` | 75 | ✓ | 模型抽象（providers/embedding/catalog/resolveModelInfo/streaming） |
 | `src/network/` | 3 | ✓ | 网络层（fetch 封装） |
-| `src/patent/` | 223 | ✓ | 专利执行管线（workflow/graph/atoms/evidence/figure/document 等） |
+| `src/patent/` | 224 | ✓ | 专利执行管线（workflow/graph/atoms/evidence/figure/document 等） |
 | `src/permission/` | 7 | ✓ | 权限（decision/PermissionRuntime + guard/ToolGuardRegistry） |
 | `src/pilot/` | 18 | ✓ | 配置（PilotConfigStore / lastGoodFacts / workspace 判定） |
 | `src/router/` | 35 | ✓ | 智能路由（含多模态媒体降级） |

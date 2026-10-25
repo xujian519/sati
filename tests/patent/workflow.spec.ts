@@ -203,19 +203,19 @@ test("inventiveness manifest covers the full eight-stage three-step chain with a
   assert.equal(patentInventivenessManifest.id, "patent_inventiveness_v1");
   assert.equal(patentInventivenessManifest.name, "专利创造性分析");
   assert.equal(patentInventivenessManifest.caseType, "inventiveness_analysis");
-  assert.equal(patentInventivenessManifest.stages.length, 8);
+  assert.equal(patentInventivenessManifest.stages.length, 9);
   assert.deepEqual(
     patentInventivenessManifest.stages.map(s => s.id),
-    ["parse", "search", "closest", "diff", "hint", "secondary", "conclude", "approval"],
+    ["parse", "time_baseline", "search", "closest", "diff", "hint", "secondary", "conclude", "approval"],
   );
   assert.deepEqual(
     patentInventivenessManifest.stages.map(s => s.strategy),
-    ["chain", "react", "chain", "chain", "chain", "chain", "chain", "chain"],
+    ["chain", "chain", "react", "chain", "chain", "chain", "chain", "chain", "chain"],
   );
-  // 原子声明对齐 buildInventivenessGraph：search + approval-gate；hint/secondary 用 reasoning
+  // 原子声明对齐 buildInventivenessGraph：time-baseline + search + approval-gate；hint/secondary 用 reasoning
   assert.deepEqual(
     patentInventivenessManifest.stages.map(s => s.atom),
-    [undefined, "search", undefined, undefined, "reasoning", "reasoning", undefined, "approval-gate"],
+    [undefined, "time-baseline", "search", undefined, undefined, "reasoning", "reasoning", undefined, "approval-gate"],
   );
 });
 
@@ -239,9 +239,9 @@ test("runWorkflow executes inventiveness manifest stages and reports completion"
   });
   assert.equal(result.manifestId, "patent_inventiveness_v1");
   assert.equal(result.completed, true);
-  assert.equal(result.stages.length, 8);
+  assert.equal(result.stages.length, 9);
   assert.deepEqual(result.degradedSteps, []);
-  assert.match(result.summary, /8\/8 阶段完成/);
+  assert.match(result.summary, /9\/9 阶段完成/);
 });
 
 test("runWorkflow marks degraded inventiveness stage without aborting", async () => {

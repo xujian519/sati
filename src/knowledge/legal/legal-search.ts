@@ -9,7 +9,7 @@ import {
   sqliteHasFts5,
 } from "../shared/fts.js";
 import { prepareCached } from "../../shared/sqlite.js";
-import type { LawCategory, LawRecord, LawSearchResult, LegalSearchSource } from "./types.js";
+import type { LawCategory, LawRecord, LawSearchResult, LegalSearchSource, TimedLegalSearchResult } from "./types.js";
 import { extractLawKeywords } from "./keywords.js";
 import { buildLawSearchSql, LAW_SEARCH_COLUMNS, LAW_SEARCH_COLUMNS_FTS } from "./sql.js";
 import { dedupeByLawName } from "./dedupe.js";
@@ -32,6 +32,12 @@ export { extractLawKeywords } from "./keywords.js";
 
 /** 长查询切词（extractLawKeywords 见 ./keywords.ts，被 case-law/knowledge-law 跨域复用）。 */
 
+/**
+ * laws-full 精确时点过滤：施行日 <= asOf 且未被标记失效。
+ * `expired = 1` 的行失效日期不可知，一律排除（保守：宁可漏报，不把已废止当行为时法）。
+ */
+const EXACT_AS_OF_CLAUSE = `l.valid_from IS NOT NULL AND l.valid_from <> '' AND l.valid_from <= ? AND l.expired = 0`;
+
 export type LegalSearchOptions = {
   /** 返回条数上限（默认 10）。 */
   limit?: number;
@@ -39,11 +45,19 @@ export type LegalSearchOptions = {
   level?: string;
   /** 按分类名称过滤（如 专利法 所属的 民法商法）。 */
   category?: string;
+  /**
+   * 时点过滤（YYYY-MM-DD）：只返回该日已施行且未失效的版本。
+   * 依据 `law.valid_from` / `law.expired`（精确口径）；日期缺失的候选不返回并计入
+   * `searchAt` 的 `unknownDateCount`。
+   */
+  asOf?: string;
 };
 
 export class LegalSearchEngine implements LegalSearchSource {
   private readonly db: DatabaseSync;
   private readonly hasFts: boolean;
+  /** laws-full 具备 `valid_from` / `expired`，时点过滤为精确口径。 */
+  readonly timeFilter = "exact" as const;
   /** FTS5 查询曾抛异常（模块缺失等）后置 true，后续查询直接走 LIKE。 */
   private ftsDegraded = false;
 
@@ -120,7 +134,7 @@ export class LegalSearchEngine implements LegalSearchSource {
     return this.hasFts && !this.ftsDegraded;
   }
 
-  /** FTS5 BM25 全文搜索；短查询/无 FTS 时降级 LIKE。 */
+  /** FTS5 BM25 全文搜索；短查询/无 FTS 时降级 LIKE。`asOf` 提供时按施行日/失效字段过滤。 */
   search(keyword: string, options: LegalSearchOptions = {}): LawSearchResult[] {
     const limit = options.limit ?? 10;
     const rows = runFtsThenLikeFallback<LawRow>({
@@ -140,9 +154,33 @@ export class LegalSearchEngine implements LegalSearchSource {
     return rows.map(row => toSearchResult(row));
   }
 
-  /** 按名称精确/模糊查找法律（返回全部版本记录）。 */
-  findByName(name: string, limit = 10): LawRecord[] {
-    const rows = this.stmtFindByName.all(`%${name.replace(/[%_\\]/g, m => `\\${m}`)}%`, limit) as LawRow[];
+  /** 时点检索：精确过滤 + 口径元数据（未知日期候选计数）。 */
+  searchAt(keyword: string, options: LegalSearchOptions & { asOf: string }): TimedLegalSearchResult {
+    return {
+      results: this.search(keyword, options),
+      meta: {
+        timeFilter: this.timeFilter,
+        unknownDateCount: this.countUnknownDateMatches(keyword, options),
+      },
+    };
+  }
+
+  /** 按名称精确/模糊查找法律（返回全部版本记录）。`asOf` 提供时同样应用时点过滤。 */
+  findByName(name: string, limit = 10, options: { asOf?: string } = {}): LawRecord[] {
+    const pattern = `%${name.replace(/[%_\\]/g, m => `\\${m}`)}%`;
+    if (options.asOf === undefined) {
+      const rows = this.stmtFindByName.all(pattern, limit) as LawRow[];
+      return rows.map(toRecord);
+    }
+    const sql = `
+      SELECT ${LAW_SEARCH_COLUMNS}
+      FROM law l
+      JOIN category c ON c.id = l.category_id
+      WHERE l.name LIKE ? ESCAPE '\\'
+        AND ${EXACT_AS_OF_CLAUSE}
+      ORDER BY l.publish DESC
+      LIMIT ?`;
+    const rows = prepareCached(this.preparedCache, this.db, sql).all(pattern, options.asOf, limit) as LawRow[];
     return rows.map(toRecord);
   }
 
@@ -202,7 +240,7 @@ export class LegalSearchEngine implements LegalSearchSource {
 
   private searchFtsWithQuery(query: string, options: LegalSearchOptions, limit: number): LawRow[] {
     let rows: LawRow[];
-    if (!options.level && !options.category) {
+    if (!options.level && !options.category && options.asOf === undefined) {
       rows = this.stmtSearchFts!.all(query, limit * 3) as LawRow[];
     } else {
       const { sql, params } = buildLawSearchSql("fts", options);
@@ -215,12 +253,36 @@ export class LegalSearchEngine implements LegalSearchSource {
   private searchLike(keyword: string, options: LegalSearchOptions, limit: number): LawRow[] {
     const pattern = `%${keyword.replace(/[%_\\]/g, m => `\\${m}`)}%`;
     let rows: LawRow[];
-    if (!options.level && !options.category) {
+    if (!options.level && !options.category && options.asOf === undefined) {
       rows = this.stmtSearchLike.all(pattern, pattern, limit) as LawRow[];
     } else {
       const { sql, params } = buildLawSearchSql("like", options);
       rows = prepareCached(this.preparedCache, this.db, sql).all(pattern, pattern, ...params, limit) as LawRow[];
     }
     return rows;
+  }
+
+  /**
+   * 日期未知候选计数（时点检索口径）：匹配关键词但 `valid_from` 缺失的行。
+   * 用 LIKE 匹配作候选口径（与 FTS 分词略有差异）；仅用于回答「漏了多少条」。
+   */
+  private countUnknownDateMatches(keyword: string, options: LegalSearchOptions): number {
+    const pattern = `%${keyword.replace(/[%_\\]/g, m => `\\${m}`)}%`;
+    const conditions = [
+      `(l.name LIKE ? ESCAPE '\\' OR l.content LIKE ? ESCAPE '\\')`,
+      `(l.valid_from IS NULL OR l.valid_from = '')`,
+    ];
+    const params: string[] = [pattern, pattern];
+    if (options.level) {
+      conditions.push("l.level = ?");
+      params.push(options.level);
+    }
+    if (options.category) {
+      conditions.push("c.name = ?");
+      params.push(options.category);
+    }
+    const sql = `SELECT COUNT(*) AS c FROM law l JOIN category c ON c.id = l.category_id WHERE ${conditions.join(" AND ")}`;
+    const row = prepareCached(this.preparedCache, this.db, sql).get(...params) as { c: number };
+    return row.c;
   }
 }

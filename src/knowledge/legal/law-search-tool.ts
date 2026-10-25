@@ -23,6 +23,11 @@ export type LawSearchToolInput = {
   category?: string;
   /** 返回条数上限（默认 5） */
   limit?: number;
+  /**
+   * 时点过滤（YYYY-MM-DD）：只返回该日已存在的版本。
+   * 输出以 `timeFilter` 标明精确（施行日/失效字段）或近似（公布日期下界）。
+   */
+  asOf?: string;
 };
 
 /** 效力状态来源：db=数据源硬字段（expired/publish），version-meta=离线版本沿革，unknown=未提供。 */
@@ -37,7 +42,26 @@ export type LawSearchToolOutput = {
   total: number;
   results: LawSearchToolResult[];
   dbPath?: string;
+  /** 时点过滤回显（仅提供 asOf 时）。 */
+  asOf?: string;
+  /** 时点口径：exact=按施行日/失效字段；approximate=按公布日期下界近似。 */
+  timeFilter?: "exact" | "approximate";
+  /** 因日期缺失无法证明早于 asOf、被排除的候选数（仅提供 asOf 时）。 */
+  unknownDateCount?: number;
 };
+
+const ISO_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/** 严格校验 YYYY-MM-DD（含日历合法性，如 2023-02-30 非法）。 */
+function isValidIsoDate(value: string): boolean {
+  const match = ISO_DATE_RE.exec(value);
+  if (match === null) return false;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+}
 
 /** 默认数据库路径（供模块级缓存使用）。 */
 let cachedEngine: { engine: LegalSearchSource; dbPath: string } | null = null;
@@ -124,6 +148,9 @@ export function createLawSearchTool(
       properties: {
         total: { type: "number" },
         dbPath: { type: "string" },
+        asOf: { type: "string" },
+        timeFilter: { type: "string", enum: ["exact", "approximate"] },
+        unknownDateCount: { type: "number" },
         results: {
           type: "array",
           items: {
@@ -146,7 +173,7 @@ export function createLawSearchTool(
     },
     title: "Law Search",
     description:
-      "搜索中国法律法规全文（宝宸知识库 9000+ 部法律）。支持全文关键词检索、按法律层级（法律/行政法规/司法解释/地方性法规/宪法/案例/部门规章）和分类过滤。用于查询法条原文、法律名称、立法依据。",
+      "搜索中国法律法规全文（宝宸知识库 9000+ 部法律）。支持全文关键词检索、按法律层级（法律/行政法规/司法解释/地方性法规/宪法/案例/部门规章）和分类过滤。用于查询法条原文、法律名称、立法依据。提供 asOf（YYYY-MM-DD）时按行为时点过滤，并输出 timeFilter（exact=按施行日/失效字段；approximate=按公布日期下界近似）与 unknownDateCount（日期未知未纳入数）。",
     kind: "custom",
     domain: "legal",
     inputSchema: {
@@ -169,6 +196,11 @@ export function createLawSearchTool(
         limit: {
           type: "number",
           description: "返回条数上限（默认 5，最大 20）",
+        },
+        asOf: {
+          type: "string",
+          description:
+            "时点过滤（YYYY-MM-DD，如 2020-10-17）：只返回该日已存在的版本；输出标注 timeFilter（exact/approximate）与 unknownDateCount。非法日期返回 invalid_as_of。",
         },
       },
       required: ["query"],
@@ -198,13 +230,30 @@ export function createLawSearchTool(
       }
       const { engine, dbPath } = resolved;
 
+      // 时点参数 fail-loud：非法格式不静默忽略（否则模型会误以为已过滤）。
+      const asOf = input.asOf;
+      if (asOf !== undefined && !isValidIsoDate(asOf)) {
+        return {
+          content: [{ type: "text", text: `错误：asOf 必须是合法的 YYYY-MM-DD 日期（收到 "${asOf}"），未执行检索。` }],
+          metadata: { error: "invalid_as_of" },
+        };
+      }
+
       const limit = Math.min(Math.max(input.limit ?? 5, 1), 20);
-      const options: LegalSearchOptions = { limit, level: input.level, category: input.category };
+      const options: LegalSearchOptions = {
+        limit,
+        level: input.level,
+        category: input.category,
+        ...(asOf !== undefined ? { asOf } : {}),
+      };
 
       // 优先精确名称匹配（结果中保持该法律在前）。
       // 搜索结果按不同法律名配额取数（limit 即配额；多取的行经 seen 去重丢弃）。
-      const byName = input.query.length >= 2 ? engine.findByName(input.query, 3) : [];
-      const results = engine.search(input.query, options);
+      const byName =
+        input.query.length >= 2 ? engine.findByName(input.query, 3, asOf !== undefined ? { asOf } : undefined) : [];
+      // 时点检索走 searchAt（带口径元数据）；缺省路径行为不变。
+      const timed = asOf !== undefined ? engine.searchAt(input.query, { ...options, asOf }) : undefined;
+      const results = timed?.results ?? engine.search(input.query, options);
 
       // 精确名命中按 name 分组：同名多版本（如 laws-full 多版本库）标注
       // status/supersededBy（A2 版本沿革——输出"当前版本/历史版本"）；单版本不标避免噪音。
@@ -265,11 +314,18 @@ export function createLawSearchTool(
         total: merged.length,
         results: merged,
         dbPath,
+        ...(asOf !== undefined
+          ? {
+              asOf,
+              timeFilter: timed?.meta.timeFilter ?? engine.timeFilter,
+              unknownDateCount: timed?.meta.unknownDateCount ?? 0,
+            }
+          : {}),
       };
       return {
         content: [{ type: "json", value: output }],
         data: output,
-        metadata: { domain: "legal", dbPath, fts5: engine.ftsAvailable },
+        metadata: { domain: "legal", dbPath, fts5: engine.ftsAvailable, ...(asOf !== undefined ? { asOf } : {}) },
       };
     },
   };

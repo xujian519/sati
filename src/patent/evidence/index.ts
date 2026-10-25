@@ -55,6 +55,7 @@ export {
   isPreciseDate,
   isMonthOnlyDate,
   inferredMonthEnd,
+  normalizeToCutoffDate,
   extractDateFromText,
   isBeforeFilingDate,
   determinePublicationDate,

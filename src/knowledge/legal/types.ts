@@ -66,14 +66,46 @@ export type LawCategory = {
   group?: string;
 };
 
+/** 时点过滤精度：exact=按施行日/失效字段；approximate=按公布日期下界近似。 */
+export type LegalTimeFilter = "exact" | "approximate";
+
+/** 时点检索元数据（仅 `asOf` 检索时产生）。 */
+export type LegalSearchTimeMeta = {
+  timeFilter: LegalTimeFilter;
+  /**
+   * 因日期缺失而无法证明「早于 asOf」、被排除的候选数。
+   * 口径 = 本次查询命中的候选（非全库）；数据源不同匹配方式可能略有差异。
+   */
+  unknownDateCount: number;
+};
+
+/** 时点检索结果（结果 + 口径元数据）。 */
+export type TimedLegalSearchResult = {
+  results: LawSearchResult[];
+  meta: LegalSearchTimeMeta;
+};
+
 /** 法律检索源统一契约（LegalSearchEngine=laws-full.db / KnowledgeLawSearch=knowledge.db）。 */
 export type LegalSearchSource = {
   /** FTS5 是否实际可用。 */
   readonly ftsAvailable: boolean;
+  /** 该数据源的时点过滤精度（`asOf` 检索时用于输出标注）。 */
+  readonly timeFilter: LegalTimeFilter;
   /** 全文搜索（FTS5 BM25 优先，短查询/无 FTS 降级 LIKE）。 */
-  search(keyword: string, options?: { limit?: number; level?: string; category?: string }): LawSearchResult[];
-  /** 按名称模糊查找。 */
-  findByName(name: string, limit?: number): LawRecord[];
+  search(
+    keyword: string,
+    options?: { limit?: number; level?: string; category?: string; asOf?: string },
+  ): LawSearchResult[];
+  /**
+   * 时点检索（`asOf` 必填）：按数据源精度过滤并回报口径。
+   * 无法证明早于 asOf 的日期未知行不返回，计入 `unknownDateCount`。
+   */
+  searchAt(
+    keyword: string,
+    options: { limit?: number; level?: string; category?: string; asOf: string },
+  ): TimedLegalSearchResult;
+  /** 按名称模糊查找（`options.asOf` 提供时同样应用时点过滤）。 */
+  findByName(name: string, limit?: number, options?: { asOf?: string }): LawRecord[];
   /** 按主键精确查询。 */
   getById(id: string): LawRecord | undefined;
   /** 批量按主键查询。 */

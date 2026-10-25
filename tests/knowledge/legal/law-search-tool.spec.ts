@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createLawSearchTool } from "../../../src/knowledge/legal/law-search-tool.js";
-import type { LawCategory, LawRecord, LawSearchResult, LegalSearchSource } from "../../../src/knowledge/legal/types.js";
+import type {
+  LawCategory,
+  LawRecord,
+  LawSearchResult,
+  LegalSearchSource,
+  LegalTimeFilter,
+  TimedLegalSearchResult,
+} from "../../../src/knowledge/legal/types.js";
 import type { LawVersionMeta } from "../../../src/knowledge/legal/version-meta.js";
 import { makeToolContext } from "../../tool/context-fixture.js";
 
@@ -25,19 +32,45 @@ function rec(name: string, publish: string | undefined, expired: number | null =
   };
 }
 
+/** 时点过滤（fake 口径）：施行日优先，其次公布日；日期缺失视为无法证明。 */
+function withinAsOf(record: LawRecord, asOf: string | undefined): boolean {
+  if (asOf === undefined) return true;
+  const effective = record.validFrom ?? record.publish;
+  return effective !== undefined && effective <= asOf;
+}
+
 class FakeEngine implements LegalSearchSource {
   readonly ftsAvailable = true;
+  readonly timeFilter: LegalTimeFilter;
+  /** 最近一次调用的 asOf 与元数据（供工具层接线断言）。 */
+  lastFindByNameAsOf: string | undefined;
+  lastSearchAsOf: string | undefined;
+  searchAtCalls = 0;
+
   constructor(
     private readonly searchResult: LawRecord[],
     private readonly byNameResult: LawRecord[],
-  ) {}
-
-  search(): LawSearchResult[] {
-    return this.searchResult.map(r => ({ ...r, score: 0 }));
+    private readonly meta: { timeFilter: LegalTimeFilter; unknownDateCount: number } = {
+      timeFilter: "approximate",
+      unknownDateCount: 0,
+    },
+  ) {
+    this.timeFilter = meta.timeFilter;
   }
 
-  findByName(): LawRecord[] {
-    return this.byNameResult;
+  search(_keyword?: string, options: { asOf?: string } = {}): LawSearchResult[] {
+    this.lastSearchAsOf = options.asOf;
+    return this.searchResult.filter(r => withinAsOf(r, options.asOf)).map(r => ({ ...r, score: 0 }));
+  }
+
+  searchAt(_keyword: string, options: { asOf: string }): TimedLegalSearchResult {
+    this.searchAtCalls += 1;
+    return { results: this.search(_keyword, options), meta: this.meta };
+  }
+
+  findByName(_name?: string, _limit?: number, options: { asOf?: string } = {}): LawRecord[] {
+    this.lastFindByNameAsOf = options.asOf;
+    return this.byNameResult.filter(r => withinAsOf(r, options.asOf));
   }
 
   getById(): LawRecord | undefined {
@@ -239,4 +272,53 @@ test("law_search: limit 封顶为 20 且名称配额不超限", async () => {
   assert.ok(result.data);
   assert.ok(result.data.results.length >= 3);
   assert.ok(result.data.results.length <= 20);
+});
+
+// ---------------------------------------------------------------------------
+// #735 asOf 时点过滤
+// ---------------------------------------------------------------------------
+
+test("law_search: 未提供 asOf → 不输出时点字段，也不调用 searchAt", async () => {
+  const engine = new FakeEngine([rec("中华人民共和国专利法", "2020-10-17")], []);
+  const tool = createLawSearchTool(() => ({ engine, dbPath: "fake" }), emptyMeta);
+  const result = await tool.execute({ query: "专利法" }, makeToolContext());
+  assert.ok(result.data);
+  assert.equal(result.data.asOf, undefined);
+  assert.equal(result.data.timeFilter, undefined);
+  assert.equal(result.data.unknownDateCount, undefined);
+  assert.equal(engine.searchAtCalls, 0);
+  assert.equal(engine.lastFindByNameAsOf, undefined);
+});
+
+test("law_search: 非法 asOf → invalid_as_of，且不执行检索", async () => {
+  for (const asOf of ["2020-02-30", "2020/10/17", "20201017", ""]) {
+    const engine = new FakeEngine([rec("中华人民共和国专利法", "2020-10-17")], []);
+    const tool = createLawSearchTool(() => ({ engine, dbPath: "fake" }), emptyMeta);
+    const result = await tool.execute({ query: "专利法", asOf }, makeToolContext());
+    assert.equal(result.metadata?.error, "invalid_as_of", `asOf=${JSON.stringify(asOf)} 应被拒绝`);
+    assert.equal(engine.searchAtCalls, 0, "非法 asOf 不得进入检索");
+    assert.equal(result.data, undefined);
+  }
+});
+
+test("law_search: 合法 asOf → 输出口径元数据，findByName/search 同步应用过滤", async () => {
+  const engine = new FakeEngine(
+    [rec("中华人民共和国专利法实施细则", "2023-12-11")],
+    [rec("中华人民共和国专利法", "2020-10-17"), rec("中华人民共和国专利法实施细则", "2023-12-11")],
+    { timeFilter: "exact", unknownDateCount: 7 },
+  );
+  const tool = createLawSearchTool(() => ({ engine, dbPath: "fake" }), emptyMeta);
+  const result = await tool.execute({ query: "专利法", asOf: "2021-01-01" }, makeToolContext());
+  assert.ok(result.data);
+  assert.equal(result.data.asOf, "2021-01-01");
+  assert.equal(result.data.timeFilter, "exact");
+  assert.equal(result.data.unknownDateCount, 7);
+  assert.equal(engine.searchAtCalls, 1);
+  assert.equal(engine.lastSearchAsOf, "2021-01-01");
+  assert.equal(engine.lastFindByNameAsOf, "2021-01-01");
+  assert.deepEqual(
+    result.data.results.map(r => r.name),
+    ["中华人民共和国专利法"],
+    "2023 版细则不应出现在 2021-01-01 的时点检索",
+  );
 });
