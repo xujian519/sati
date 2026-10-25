@@ -1,0 +1,18 @@
+maxScore: 100
+items:
+  - id: three_step
+    weight: 0.35
+    criterion: 是否完整执行三步法（最接近现有技术→区别特征与技术问题→显而易见性）
+    behavior: observable
+  - id: cites_a223
+    weight: 0.2
+    criterion: 是否明确引用专利法第二十二条第三款
+    behavior: observable
+  - id: distinguishing_features
+    weight: 0.2
+    criterion: 是否识别出气体浓度与电压跌落速率两项区别特征
+    behavior: observable
+  - id: motivation_conclusion
+    weight: 0.25
+    criterion: 是否论证结合动机并得出不具备创造性的结论
+    behavior: observable

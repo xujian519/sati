@@ -1,0 +1,18 @@
+maxScore: 100
+items:
+  - id: cites_a222
+    weight: 0.3
+    criterion: 是否明确引用专利法第二十二条第二款（精确到条款号）
+    behavior: observable
+  - id: per_feature_table
+    weight: 0.3
+    criterion: 是否逐项对比分层、残差去噪与加权融合三步
+    behavior: observable
+  - id: identifies_diff
+    weight: 0.25
+    criterion: 是否识别出区别特征为分层处理与按噪声估计加权融合
+    behavior: observable
+  - id: conclusion
+    weight: 0.15
+    criterion: 结论是否为具备新颖性
+    behavior: observable
