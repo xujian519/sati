@@ -13,6 +13,7 @@ test("rule_check returns no violation for clean text", async () => {
   const result = await tool.execute({ text: "本方案采用特定装置提高效率。" }, makeToolContext());
   const text = result.content.map(c => (c.type === "text" ? c.text : "")).join("");
   assert.match(text, /无违规/);
+  assert.match(text, /覆盖: 已评估 \d+ 条 \/ 跳过 \d+ 条/);
 });
 
 test("rule_check reports violations with rule id and legal basis", async () => {
@@ -56,6 +57,26 @@ test("rule_check unknown scope is not silently clean", async () => {
   // 未知 scope 显式提示"未加载规则"，避免"静默零违规"误判合规
   assert.match(text, /未加载任何规则/);
   assert.match(text, /patent, patent-electrical, patent-full, pack/);
+  assert.doesNotMatch(text, /无违规/);
+});
+
+test("rule_check 空文本 + 内容匹配规则 → 未评估，不冒充无违规", async () => {
+  const loader = (): RuleSet => ({
+    rules: [
+      {
+        id: "ONLY-KEYWORD",
+        name: "仅关键词",
+        severity: "minor",
+        action: "warn",
+        check: { type: "keyword_blocklist", keywords: ["禁忌词"] },
+      },
+    ],
+  });
+  const tool = createRuleCheckTool({ loader });
+  const result = await tool.execute({ text: "   ", scope: "custom" }, makeToolContext());
+  const text = result.content.map(c => (c.type === "text" ? c.text : "")).join("");
+  assert.match(text, /未评估（无规则可评估）/);
+  assert.match(text, /覆盖: 已评估 0 条 \/ 跳过 1 条（空文本 1）/);
   assert.doesNotMatch(text, /无违规/);
 });
 

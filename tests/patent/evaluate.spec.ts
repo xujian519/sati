@@ -89,8 +89,13 @@ test("evaluateSingleText: 单文本规则门评估（缺要素 → blocked）", 
   const incomplete = evaluateSingleText("结论：具备新颖性", ["patent_novelty"]);
   assert.equal(incomplete.verdict, "blocked");
   assert.ok(incomplete.failures.includes("NOVELTY-SINGLE-COMPARISON"));
+  assert.ok(incomplete.assessed > 0, "有规则参与评估");
   const empty = evaluateSingleText("", ["patent_inventiveness"]);
   assert.equal(empty.verdict, "blocked");
+  const noRules = evaluateSingleText("任意文本", ["__no_rules__"]);
+  assert.equal(noRules.verdict, "not_assessed");
+  assert.equal(noRules.assessed, 0);
+  assert.ok(noRules.skipped > 0, "不存在的域 → 规则全部记入 skipped");
 });
 
 test("defaultDomainGraphMap: 按 caseId/businessTask/expected 映射子图", () => {
@@ -202,6 +207,8 @@ test("createGraphRunner + Evaluator: 图模式跑 fixture 并产出指标", asyn
   const report = await evaluator.evaluateCases(cases);
   assert.equal(report.total, 2);
   assert.equal(report.degradedCount, 0);
+  assert.ok(report.ruleGateAssessed > 0, "批次应汇总规则门评估数");
+  assert.ok(report.ruleGateSkipped >= 0);
   // 图模式用例：规则门/关键词指标已计算。
   const graphCase = report.cases.find(c => c.caseId === "patent_exam_2009_novelty_01");
   assert.ok(graphCase);

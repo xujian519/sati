@@ -37,6 +37,10 @@ export type EvalOutcome = {
   verdict: string;
   /** 是否降级（图模式：任一节点降级）。 */
   degraded: boolean;
+  /** 规则门实际评估的规则数（缺省未提供）。 */
+  ruleGateAssessed?: number;
+  /** 规则门跳过的规则数（缺省未提供）。 */
+  ruleGateSkipped?: number;
   elapsedMs: number;
 };
 
@@ -44,7 +48,14 @@ export type EvalOutcome = {
 export type CaseRunner = (
   input: string,
   caseMeta: EvalCase,
-) => Promise<{ output: string; ruleGateFailures: string[]; verdict: string; degraded: boolean }>;
+) => Promise<{
+  output: string;
+  ruleGateFailures: string[];
+  verdict: string;
+  degraded: boolean;
+  ruleGateAssessed?: number;
+  ruleGateSkipped?: number;
+}>;
 
 /** 批次报告。 */
 export type BatchReport = {
@@ -55,6 +66,10 @@ export type BatchReport = {
   metrics: Record<string, number>;
   /** 降级用例数。 */
   degradedCount: number;
+  /** 全部用例的规则门评估数合计（信息性计数，不参与综合分）。 */
+  ruleGateAssessed: number;
+  /** 全部用例的规则门跳过数合计（信息性计数，不参与综合分）。 */
+  ruleGateSkipped: number;
   cases: EvalOutcome[];
 };
 
@@ -63,6 +78,8 @@ export type MetricInput = {
   expected: string;
   output: string;
   verdict: string;
+  /** 规则门实际评估的规则数（rule_gate_pass 用于防止「零评估」冒充 pass）。 */
+  assessed?: number;
   required?: readonly string[];
 };
 
@@ -70,7 +87,7 @@ export type MetricInput = {
 export const DEFAULT_METRICS: Record<string, (outcome: MetricInput) => number> = {
   keyword_recall: outcome => keywordRecall(outcome.expected, outcome.output),
   citation_completeness: outcome => citationCompleteness(outcome.output, outcome.required ?? []),
-  rule_gate_pass: outcome => ruleGatePass(outcome.verdict),
+  rule_gate_pass: outcome => ruleGatePass(outcome.verdict, outcome.assessed),
   jaccard: outcome => jaccardSimilarity(outcome.expected, outcome.output),
   // 结论方向指标：expected 无固定单行标记（旧 suite）时恒为 1，不影响旧分数。
   conclusion_direction: outcome => conclusionDirection(outcome.expected, outcome.output),
@@ -105,6 +122,7 @@ export class Evaluator {
         expected: c.expected,
         output: run.output,
         verdict: run.verdict,
+        ...(run.ruleGateAssessed !== undefined ? { assessed: run.ruleGateAssessed } : {}),
         required: c.requiredCitations,
       };
       const metrics: Record<string, number> = {};
@@ -118,6 +136,8 @@ export class Evaluator {
         ruleGateFailures: run.ruleGateFailures,
         verdict: run.verdict,
         degraded: run.degraded,
+        ...(run.ruleGateAssessed !== undefined ? { ruleGateAssessed: run.ruleGateAssessed } : {}),
+        ...(run.ruleGateSkipped !== undefined ? { ruleGateSkipped: run.ruleGateSkipped } : {}),
         elapsedMs: Date.now() - started,
       });
     }
@@ -131,6 +151,8 @@ export class Evaluator {
       passed: outcomes.filter(o => overallOf(o, metricNames) >= this.passLine).length,
       metrics: averages,
       degradedCount: outcomes.filter(o => o.degraded).length,
+      ruleGateAssessed: outcomes.reduce((sum, o) => sum + (o.ruleGateAssessed ?? 0), 0),
+      ruleGateSkipped: outcomes.reduce((sum, o) => sum + (o.ruleGateSkipped ?? 0), 0),
       cases: outcomes,
     };
   }

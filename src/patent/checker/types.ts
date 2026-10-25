@@ -35,8 +35,8 @@ export const LevelQuality: RuleLevel = 2;
 /** 严重度（报告展示用；判级只看 Level）。 */
 export type Severity = "critical" | "major" | "minor";
 
-/** 聚合判级结论。 */
-export type Verdict = "pass" | "needs_revision" | "blocked";
+/** 聚合判级结论。`not_assessed` = 没有规则参与评估（不等于通过）。 */
+export type Verdict = "pass" | "needs_revision" | "blocked" | "not_assessed";
 
 /** 单条确定性检查规则（与 Mady CheckRule 同构）。 */
 export interface CheckRule {
@@ -83,6 +83,22 @@ export interface RuleCheckResult {
   message: string;
   fixSuggestion: string;
 }
+
+/** 规则跳过原因（与宪法规则引擎同名同义，便于跨引擎审计）。 */
+export type RuleCheckSkipReason = "domain-filtered" | "empty-text" | "no-rules";
+
+/** 单条被跳过的规则。`no-rules` 没有具体规则，故省略 `ruleId`。 */
+export type RuleCheckSkip = {
+  ruleId?: string;
+  reason: RuleCheckSkipReason;
+};
+
+/** 详细评估结果：失败清单 + 实际评估 / 跳过的规则。 */
+export type RuleEvaluationDetail = {
+  results: RuleCheckResult[];
+  assessed: string[];
+  skipped: RuleCheckSkip[];
+};
 
 /** 规则引擎评估上下文：给定规则集 + 文本 + 域过滤。 */
 export interface RuleEngineOptions {

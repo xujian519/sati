@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { evaluateText, groupByAction, type ConstitutionalRule, type RuleSet } from "../../src/rule/index.js";
+import {
+  evaluateText,
+  groupByAction,
+  RuleOutputGate,
+  type ConstitutionalRule,
+  type RuleSet,
+} from "../../src/rule/index.js";
 
 function ruleSet(rules: ConstitutionalRule[]): RuleSet {
   return { rules };
@@ -151,4 +157,91 @@ test("groupByAction buckets violations by action", () => {
   assert.equal(grouped.block?.length, 1);
   assert.equal(grouped.review?.length, 1);
   assert.equal(grouped.warn?.length, 1);
+});
+
+// ---------------------------------------------------------------------------
+// 评估覆盖三态（#732）：assessed / skipped / no-rules
+// ---------------------------------------------------------------------------
+
+test("evaluateText: 空规则集 → skipped(no-rules) 且 assessed 为空", () => {
+  const result = evaluateText("任意文本", ruleSet([]));
+  assert.deepEqual(result.violations, []);
+  assert.deepEqual(result.assessed, []);
+  assert.deepEqual(result.skipped, [{ reason: "no-rules" }]);
+});
+
+test("evaluateText: 域过滤规则记入 skipped(domain-filtered)", () => {
+  const set = ruleSet([
+    {
+      id: "DOMAIN-A",
+      name: "领域 A 规则",
+      severity: "minor",
+      action: "warn",
+      domain: "domain_a",
+      check: { type: "keyword_blocklist", keywords: ["甲"] },
+    },
+    {
+      id: "GENERIC",
+      name: "通用规则",
+      severity: "minor",
+      action: "warn",
+      check: { type: "keyword_blocklist", keywords: ["乙"] },
+    },
+  ]);
+  const result = evaluateText("甲与乙", set, undefined, { domain: "domain_b" });
+  assert.deepEqual(result.assessed, ["GENERIC"]);
+  assert.deepEqual(result.skipped, [{ ruleId: "DOMAIN-A", reason: "domain-filtered" }]);
+});
+
+test("evaluateText: 空文本只跳过内容匹配类，结构检查仍评估并报缺失", () => {
+  const set = ruleSet([
+    {
+      id: "KEYWORD",
+      name: "关键词",
+      severity: "minor",
+      action: "warn",
+      check: { type: "keyword_blocklist", keywords: ["赌博"] },
+    },
+    {
+      id: "STRUCT",
+      name: "结构要素",
+      severity: "major",
+      action: "block",
+      check: {
+        type: "structural_analysis",
+        requiresAll: [{ element: "technical_means", patterns: ["装置|设备"] }],
+        minConfidence: 1,
+      },
+    },
+  ]);
+  const result = evaluateText("", set);
+  assert.deepEqual(result.assessed, ["STRUCT"]);
+  assert.deepEqual(result.skipped, [{ ruleId: "KEYWORD", reason: "empty-text" }]);
+  assert.equal(result.violations.length, 1);
+  assert.equal(result.violations[0]?.ruleId, "STRUCT");
+});
+
+test("RuleOutputGate: 空规则集标记 notAssessed，且不改变放行语义", () => {
+  const gate = new RuleOutputGate({ rules: [] });
+  const result = gate.process("任意文本");
+  assert.equal(result.notAssessed, true);
+  assert.deepEqual(result.assessed, []);
+  assert.equal(result.needsApproval, false);
+});
+
+test("RuleOutputGate: 有规则参与评估时 notAssessed=false", () => {
+  const gate = new RuleOutputGate(
+    ruleSet([
+      {
+        id: "GATE-1",
+        name: "门禁规则",
+        severity: "minor",
+        action: "warn",
+        check: { type: "keyword_blocklist", keywords: ["禁忌"] },
+      },
+    ]),
+  );
+  const result = gate.process("干净文本");
+  assert.equal(result.notAssessed, false);
+  assert.deepEqual(result.assessed, ["GATE-1"]);
 });

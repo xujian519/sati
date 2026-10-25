@@ -84,11 +84,12 @@ test("checkCitations: 文档标识归一比对（对比文件2 ↔ title 含对�
 // ruleGateNode precomputedFailures 合并规则（P1-2）
 // ---------------------------------------------------------------------------
 
-test("ruleGateNode: 无 precomputedFailures 行为不变（pass 基线）", async () => {
-  // 不存在的域 → 全部规则被域过滤跳过 → pass 基线（验证合并逻辑的 verdict 转换）。
+test("ruleGateNode: 无适配规则 → not_assessed（零评估不冒充 pass）", async () => {
+  // 不存在的域 → 全部规则被域过滤跳过：没有规则参与评估，不得报 pass。
   const node = ruleGateNode(["__no_rules__"], []);
   const delta = await node({ state: { x: "文本" }, provider: undefined });
-  assert.equal(delta.rule_gate_verdict, "pass");
+  assert.equal(delta.rule_gate_verdict, "not_assessed");
+  assert.equal(delta.rule_gate_assessed, 0);
   assert.deepEqual(delta.rule_gate_failures, []);
 });
 

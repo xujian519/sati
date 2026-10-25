@@ -53,11 +53,16 @@ export function defaultDomainGraphMap(caseMeta: EvalCase): DomainGraphName | und
 export function evaluateSingleText(
   text: string,
   domains: readonly string[] = [],
-): { verdict: string; failures: string[] } {
+): { verdict: string; failures: string[]; assessed: number; skipped: number } {
   const engine = new RuleEngine();
   engine.registerMany(defaultPatentRules());
-  const results = engine.evaluate(text, { domain: domains });
-  return { verdict: aggregate(results), failures: results.map(r => r.ruleId) };
+  const detail = engine.evaluateDetailed(text, { domain: domains });
+  return {
+    verdict: aggregate(detail.results, { assessed: detail.assessed.length }),
+    failures: detail.results.map(r => r.ruleId),
+    assessed: detail.assessed.length,
+    skipped: detail.skipped.length,
+  };
 }
 
 /** 图引擎评测运行器。 */
@@ -68,8 +73,15 @@ export function createGraphRunner(options: GraphRunnerOptions): CaseRunner {
     const graphName = graphMap(caseMeta);
     if (graphName === undefined) {
       // 单文本 fallback：LLM 输出即规则门输入（调用方已先做 LLM 生成时使用）。
-      const { verdict, failures } = evaluateSingleText(input, options.fallbackDomains ?? []);
-      return { output: input, ruleGateFailures: failures, verdict, degraded: false };
+      const { verdict, failures, assessed, skipped } = evaluateSingleText(input, options.fallbackDomains ?? []);
+      return {
+        output: input,
+        ruleGateFailures: failures,
+        verdict,
+        degraded: false,
+        ruleGateAssessed: assessed,
+        ruleGateSkipped: skipped,
+      };
     }
     const def = DOMAIN_GRAPHS[graphName];
     // includeApproval: false —— 评测自动执行到 rule_gate 收口，不停 HITL 审批门。
@@ -80,11 +92,15 @@ export function createGraphRunner(options: GraphRunnerOptions): CaseRunner {
     );
     const verdict = typeof result.state.rule_gate_verdict === "string" ? result.state.rule_gate_verdict : "blocked";
     const failures = Array.isArray(result.state.rule_gate_failures) ? result.state.rule_gate_failures.map(String) : [];
+    const assessed = typeof result.state.rule_gate_assessed === "number" ? result.state.rule_gate_assessed : undefined;
+    const skipped = typeof result.state.rule_gate_skipped === "number" ? result.state.rule_gate_skipped : undefined;
     return {
       output: collectStateText(result.state),
       ruleGateFailures: failures,
       verdict,
       degraded: result.degraded.length > 0,
+      ...(assessed !== undefined ? { ruleGateAssessed: assessed } : {}),
+      ...(skipped !== undefined ? { ruleGateSkipped: skipped } : {}),
     };
   };
 }

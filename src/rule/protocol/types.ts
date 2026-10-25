@@ -152,9 +152,22 @@ export type RuleViolation = {
   evidence: string[];
 };
 
-/** 一次评估的结果。 */
+/** 规则跳过原因（评估覆盖面的可审计标记）。 */
+export type RuleSkipReason = "domain-filtered" | "empty-text" | "no-rules";
+
+/** 单条被跳过的规则。`no-rules` 没有具体规则，故省略 `ruleId`。 */
+export type RuleSkip = {
+  ruleId?: string;
+  reason: RuleSkipReason;
+};
+
+/** 一次评估的结果：违规 + 实际评估 / 跳过的规则清单。 */
 export type RuleEvaluation = {
   violations: RuleViolation[];
+  /** 实际执行了检查的规则 id。 */
+  assessed: string[];
+  /** 未执行检查的规则及原因。 */
+  skipped: RuleSkip[];
 };
 
 /** 规则集校验问题（加载期诊断）。 */

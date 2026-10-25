@@ -18,6 +18,8 @@ export type {
   RuleSet,
   RuleSetValidationIssue,
   RuleSeverity,
+  RuleSkip,
+  RuleSkipReason,
   RuleViolation,
   StructuralAnalysisCheck,
   StructuralElement,

@@ -117,6 +117,8 @@ export function compositeOverall(layers: readonly VerdictLayer[]): string {
   const consensus = byLayer.get("consensus");
   if (mechanical === "blocked") return "blocked";
   if (consensus === "disagree") return "disagree";
+  // 机械层零评估不得冒充 pass：保守降为 needs_revision，交由上层可见地复核。
+  if (mechanical === "not_assessed") return "needs_revision";
   if (mechanical === "needs_revision" || consensus === "needs_revision") return "needs_revision";
   if (mechanical === "pass" || consensus === "pass") return "pass";
   return "unknown";
