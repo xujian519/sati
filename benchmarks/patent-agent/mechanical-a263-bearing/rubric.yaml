@@ -1,0 +1,18 @@
+maxScore: 100
+items:
+  - id: cites_a263
+    weight: 0.3
+    criterion: 是否明确引用专利法第二十六条第三款
+    behavior: observable
+  - id: not_enabled_conclusion
+    weight: 0.3
+    criterion: 结论是否为不符合充分公开
+    behavior: observable
+  - id: missing_means
+    weight: 0.25
+    criterion: 是否指出缺失的必要手段（加工方法、形态分布、工况、对比数据）
+    behavior: observable
+  - id: amendment_direction
+    weight: 0.15
+    criterion: 是否给出可操作的修改方向（补充参数与对比数据）
+    behavior: observable

@@ -1,0 +1,18 @@
+maxScore: 100
+items:
+  - id: three_step
+    weight: 0.3
+    criterion: 是否完整执行三步法（最接近现有技术→区别特征与技术问题→显而易见性）
+    behavior: observable
+  - id: cites_a223
+    weight: 0.2
+    criterion: 是否明确引用专利法第二十二条第三款
+    behavior: observable
+  - id: selection_effect
+    weight: 0.3
+    criterion: 是否以申请文件数据论证具体选择产生了预料不到的技术效果
+    behavior: observable
+  - id: motivation_analysis
+    weight: 0.2
+    criterion: 是否论证 D2/D3 未给出指向靶点 K 的技术启示
+    behavior: observable
