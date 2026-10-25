@@ -5,6 +5,7 @@ import {
   WorkerMonitor,
   builtinPatentManifests,
   defaultPatentWorkers,
+  renderUnidentifiedDisputeFraming,
   runWorkflow,
   validateWorkflowManifest,
 } from "../../../patent/index.js";
@@ -17,7 +18,7 @@ import {
   runRuleGate,
   writeRunArtifacts,
 } from "../patentWorkflowTool.js";
-import type { ManifestCheckpoint, WorkflowManifest } from "../../../patent/index.js";
+import type { ManifestCheckpoint, WorkflowManifest, WorkflowStage } from "../../../patent/index.js";
 import type { SatiToolExecutionOutput, SatiToolRuntimeContext } from "../../protocol/types.js";
 import { openProvenanceCollector } from "./provenance.js";
 import type { PatentWorkflowRunDeps, PatentWorkflowRunInput } from "./types.js";
@@ -78,7 +79,10 @@ export async function runManifestWorkflow(
   });
 
   // 无 atom 阶段（preprocess/report）：透传输入文本（等价"未预处理"），不 degraded。
-  const executor = async (): Promise<string> => input.input;
+  // dispute_framing 例外：自动执行路径没有收口模式的阶段产出，回显原文会被下游当成
+  // 「已定争点」；显式写「未识别争点」，让 parse 按全文解析且不静默。
+  const executor = async (stage: WorkflowStage): Promise<string> =>
+    stage.id === "dispute_framing" ? renderUnidentifiedDisputeFraming() : input.input;
 
   // caseId 持久化（复用收口工具目录约定）：runWorkflow 内 saveRun JSON，执行后补 .mmd。
   const persistTarget = resolveRunPersistTarget(input.caseId, manifest.id, context?.cwd ?? process.cwd());
