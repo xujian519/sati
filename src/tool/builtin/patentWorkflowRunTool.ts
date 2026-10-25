@@ -1,4 +1,4 @@
-import { builtinPatentManifests } from "../../patent/index.js";
+import { builtinPatentManifests, formatManifestCatalog } from "../../patent/index.js";
 import type { SatiToolDefinition } from "../protocol/types.js";
 import { executeGraphRun } from "./patent-workflow-run/graphRun.js";
 import { runManifestWorkflow } from "./patent-workflow-run/manifestRun.js";
@@ -42,23 +42,35 @@ export function createPatentWorkflowRunTool(
     name: "patent_workflow_run",
     outputSchema: {
       type: "object",
-      properties: {},
+      required: ["completed"],
+      properties: {
+        // Manifest path (WorkflowRunResult)
+        manifestId: { type: "string" },
+        caseType: { type: "string" },
+        completed: { type: "boolean" },
+        stages: { type: "array", items: { type: "object", additionalProperties: true } },
+        degradedSteps: { type: "array", items: { type: "string" } },
+        summary: { type: "string" },
+        persistWarning: { type: "string" },
+        // Graph path (GraphRunResult)
+        state: { type: "object", additionalProperties: true },
+        steps: { type: "integer" },
+        degraded: { type: "array", items: { type: "object", additionalProperties: true } },
+        nodeDurations: { type: "array", items: { type: "object", additionalProperties: true } },
+        // Both paths
+        interrupted: { type: "object", additionalProperties: true },
+      },
     },
     aliases: ["PatentWorkflowRun", "run_patent_atoms"],
     description:
-      "Automatically execute a declarative patent workflow (atom stages) or a domain graph. Manifest path: " +
-      "patent_disclosure_v1 (PFE extraction → prior-art search → per-feature novelty → review gate → claims draft), " +
-      "patent_drafting_v1 (disclosure pipeline → prior-art compare → drafting: claims draft + specification draft + " +
-      "deterministic spec validation + slop score gate; HITL at deconstruct/search/compare/disclosure/final). " +
-      "Graph path (graph=novelty|inventiveness|enablement|citation_check): runs a full domain graph (LLM nodes + patent search + " +
-      "deterministic rule gate) in one call — e.g. graph=inventiveness runs the A22.3 three-step analysis end-to-end. " +
-      "citation_check is a pure-function graph (no LLM) that verifies citation grounding against search results. " +
-      "Provide the input as 'input'. The review gate pauses the run (reports interrupted + checkpointId); re-invoking " +
-      "with resumeCheckpointId continues from the pause point (the gate pauses again), while approveCheckpointId " +
-      "grants the gate and resumes past it. Manifest path: approveStageIds skips approved gates on rerun; " +
-      "resumeCheckpointId (with caseId) resumes past completed stages from the manifest checkpoint. " +
-      "When caseId is provided, run results, the Mermaid " +
-      "diagram, and graph checkpoints are persisted under <caseDir>/workflow-runs/. Requires a model client.",
+      "Execute a patent workflow (atom stages) or a domain graph (LLM + search + rule gate): manifest path runs " +
+      "the manifest, graph path (novelty|inventiveness|enablement|citation_check) runs a subgraph. Approval " +
+      "gates pause the run; resumeCheckpointId continues and approveCheckpointId/approveStageIds grant the gate. " +
+      "With caseId, runs and checkpoints persist under <caseDir>/workflow-runs/. Requires a model client. " +
+      "Orchestration entries: patent_workflow_assemble (assemble/validate only), patent_workflow_run (execute), " +
+      "patent_docket (case lifecycle). Built-in manifests: " +
+      formatManifestCatalog() +
+      ".",
     kind: "session",
     domain: "patent",
     inputSchema: {
@@ -68,73 +80,60 @@ export function createPatentWorkflowRunTool(
       properties: {
         manifestId: {
           type: "string",
-          description:
-            "Workflow manifest id. Defaults to 'patent_disclosure_v1'; multiple built-in manifests declare atoms (claim-chart etc.) and run automatically.",
+          description: "Manifest id (default patent_disclosure_v1).",
         },
         graph: {
           type: "string",
           enum: ["novelty", "inventiveness", "enablement", "citation_check"],
           description:
-            "Domain graph to run: novelty (A22.2), inventiveness (A22.3 three-step), enablement (A26.3), " +
-            "citation_check (pure-function citation grounding verification, no LLM). " +
-            "LLM graphs run all nodes up to the approval gate, which pauses the run (HITL); " +
-            "re-invoke with resumeCheckpointId to continue (the gate pauses again until approved). " +
+            "Domain graph: novelty (A22.2), inventiveness (A22.3), enablement (A26.3), citation_check (no LLM). " +
             "Mutually exclusive with manifestId.",
         },
         resumeCheckpointId: {
           type: "string",
-          description:
-            "Graph-mode checkpoint id from a previous interrupted run; continues from that point instead of restarting.",
+          description: "Graph checkpoint id from an interrupted run.",
         },
         approveCheckpointId: {
           type: "string",
-          description:
-            "Graph-mode approval: grants the approval gate at this checkpoint (writes the grant marker) and resumes from it — the gate passes on replay and later nodes run. Mutually exclusive with resumeCheckpointId.",
+          description: "Grant the approval gate at this checkpoint and resume.",
         },
         approveStageIds: {
           type: "array",
           items: { type: "string" },
-          description:
-            "Manifest-mode approval: stage ids of already-approved approval gates (e.g. ['review_gate']); reruns skip these gates and continue past them.",
+          description: "Manifest approval: approved gate stage ids (e.g. ['review_gate']).",
         },
         caseId: {
           type: "string",
-          description:
-            "Optional case id. When provided, the run result is persisted to <caseDir>/workflow-runs/<runId>.json plus a Mermaid diagram.",
+          description: "Persist run artifacts under <caseDir>/workflow-runs/.",
         },
         input: {
           type: "string",
-          description: "Initial material (e.g. the technical disclosure text) consumed by the extract atoms.",
+          description: "Initial material (e.g. disclosure text).",
         },
         claimText: {
           type: "string",
-          description:
-            "Optional claim text (for graph=enablement): when provided, the enablement/conclude nodes judge the claimed technical solution; defaults to the input text.",
+          description: "Claim text for graph=enablement (defaults to input).",
         },
         chartTargets: {
           type: "string",
-          description:
-            "Target objects JSON for the claim-chart stage ([{id,kind,title?,source_path?}], kind: prior-art|product); empty by default (elements only, row mapping deferred).",
+          description: "Claim-chart targets JSON ([{id,kind,...}]; kind prior-art|product).",
         },
         maxResults: {
           type: "number",
-          description: "Max prior-art search results (default 5).",
+          description: "Max search results (default 5).",
         },
         retrievalRounds: {
           type: "number",
-          description:
-            "Graph-mode retrieval-reflection rounds (default 2, 0 disables the reflection loop): when search coverage is insufficient the graph re-queries up to this many times before proceeding to closest.",
+          description: "Graph retrieval reflection rounds (default 2; 0 disables).",
         },
         judgeSamples: {
           type: "number",
-          description:
-            "LLM Judge quality score (default off): when >0, scores the graph conclusion report 0-1 (median of N samples) and appends it to the result — advisory only, does not change the rule-gate verdict.",
+          description: "LLM judge samples; >0 adds a 0-1 advisory score.",
         },
         judgeModels: {
           type: "array",
           items: { type: "string" },
-          description:
-            "Multi-model consensus judges (default off): modelHint ids (e.g. ['judge-a','judge-b'], each mapped via deps.modelHints). When provided, votes from multiple judges → median + spread-based disagreement detection → consensus verdict + Verdict Envelope (typed, hash-sealed). Takes precedence over judgeSamples.",
+          description: "Multi-judge modelHint ids → consensus verdict + Verdict Envelope.",
         },
       },
     },

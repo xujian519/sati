@@ -1,5 +1,5 @@
 /**
- * src/patent/workflow — 内置 manifest 数据（7 个 + 目录）。
+ * src/patent/workflow — 内置 manifest 数据（8 个 + 目录）。
  *
  * 从 workflow.ts 拆出（轮次 1 纯搬移）：纯数据常量，零执行依赖。
  */
@@ -581,6 +581,11 @@ export type BuiltinPatentManifest = {
   /** 收口时确定性规则门检查域（caseType 推导的默认值）。 */
   checkDomains: readonly string[];
 };
+
+/** 供工具描述动态拼接：manifest id 逗号分隔，避免描述里的清单漂移。 */
+export function formatManifestCatalog(): string {
+  return builtinPatentManifests.map(({ manifest }) => manifest.id).join(", ");
+}
 
 export const builtinPatentManifests: readonly BuiltinPatentManifest[] = [
   { manifest: patentNoveltyManifest, checkDomains: ["patent_novelty"] },

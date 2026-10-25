@@ -22,7 +22,12 @@ export type DraftClaimsInput = {
   technical_features: string[];
   /** 附加/可选技术特征列表（用于从属权利要求） */
   optional_features?: string[];
-  /** 最接近现有技术描述（可选，用于前序部分） */
+  /**
+   * 与最接近现有技术共有的结构化技术特征（用于独立权利要求前序部分）。
+   * 优先于 prior_art；由调用方逐条给出，避免自由文本被误当作技术特征。
+   */
+  shared_features?: string[];
+  /** 最接近现有技术描述（自由文本；仅用于生成提示，不再作为权利要求特征） */
   prior_art?: string;
 };
 
@@ -82,7 +87,7 @@ const DOMAIN_STRUCT: Record<
     priorConnector: "包含：",
   },
   software: {
-    head: name => `一种${name}的实现方法，`,
+    head: name => `一种${name}${name.endsWith("方法") ? "" : "的实现方法"}，`,
     connector: "其特征在于，包括以下步骤：",
     withPriorConnector: "其特征在于，还包括以下步骤：",
     priorConnector: "包括以下步骤：",
@@ -98,10 +103,33 @@ const DOMAIN_STRUCT: Record<
 /** 领域关键词 → 自动识别技术领域（draft_claims 与 draft_specification 共享）。 */
 export const DOMAIN_KEYWORDS: Array<{ domain: TechDomain; keywords: string[] }> = [
   { domain: "chemical", keywords: ["组分", "化合物", "合成", "催化剂", "溶液", "材料组合物", "重量份"] },
-  { domain: "software", keywords: ["步骤", "算法", "数据", "模块", "接口", "处理器执行", "电子设备"] },
+  {
+    domain: "software",
+    keywords: ["步骤", "算法", "数据", "模块", "接口", "处理器执行", "电子设备", "程序", "计算机", "方法"],
+  },
   { domain: "electrical", keywords: ["电路", "电源", "信号", "传感器", "控制器", "芯片", "电压"] },
-  { domain: "mechanical", keywords: ["壳体", "齿轮", "轴承", "支架", "轴", "弹簧", "连接件", "传动"] },
+  {
+    domain: "mechanical",
+    keywords: ["壳体", "齿轮", "轴承", "支架", "轴", "弹簧", "连接件", "传动", "装置", "设备", "机构", "结构"],
+  },
 ];
+
+/** 名称前缀（"一种"等）——重复出现时逐一剥离，避免"一种一种…"。 */
+const INVENTION_NAME_PREFIX_RE = /^(?:一种|一件|一款|一项)\s*/;
+
+/**
+ * 归一化发明名称：剥离开头的"一种/一件/一款/一项"（含重复前缀）并裁掉首尾空白。
+ * 输出为不含量词前缀的裸名称；权利要求与说明书统一在模板里补"一种"。
+ */
+export function normalizeInventionName(raw: string): string {
+  let name = raw.trim();
+  let previous: string;
+  do {
+    previous = name;
+    name = name.replace(INVENTION_NAME_PREFIX_RE, "").trim();
+  } while (name !== previous);
+  return name;
+}
 
 export function createDraftClaimsTool(): SatiToolDefinition<DraftClaimsInput, DraftClaimsOutput> {
   return {
@@ -135,7 +163,15 @@ export function createDraftClaimsTool(): SatiToolDefinition<DraftClaimsInput, Dr
           items: { type: "string" },
           description: "附加/可选技术特征列表（用于从属权利要求）",
         },
-        prior_art: { type: "string", description: "最接近现有技术描述（可选，用于前序部分）" },
+        shared_features: {
+          type: "array",
+          items: { type: "string" },
+          description: "与最接近现有技术共有的结构化技术特征（置于独立权利要求前序部分）；优先于 prior_art",
+        },
+        prior_art: {
+          type: "string",
+          description: "最接近现有技术描述（自由文本，仅生成提示，不写入权利要求）；结构化共有特征请用 shared_features",
+        },
       },
       required: ["invention_name", "technical_features"],
     },
@@ -191,21 +227,33 @@ export function createDraftClaimsTool(): SatiToolDefinition<DraftClaimsInput, Dr
 
 /** 纯函数入口：生成权利要求书草案 + 形式校验。 */
 export function draftClaims(input: DraftClaimsInput): DraftClaimsOutput {
-  const name = input.invention_name.trim();
+  const rawName = input.invention_name.trim();
+  const name = normalizeInventionName(rawName);
   const domain = resolveDomain(input.tech_domain, name, input.technical_features);
   const essential = input.technical_features.map(f => f.trim()).filter(Boolean);
   const optional = (input.optional_features ?? []).map(f => f.trim()).filter(Boolean);
+  const shared = (input.shared_features ?? []).map(f => f.trim().replace(/[。；;，,]+$/, "")).filter(Boolean);
+  const priorArt = input.prior_art?.trim() ?? "";
 
   const warnings: string[] = [];
+  if (name.length === 0) {
+    warnings.push("发明名称为空或仅含量词前缀，已按原样保留");
+  }
   if (essential.length === 0) {
     warnings.push("未提供必要技术特征，独立权利要求无法生成完整技术方案");
   }
   if (name.length > 25) {
     warnings.push(`发明名称 ${name.length} 字，超过 25 字限制`);
   }
+  if (priorArt && shared.length === 0) {
+    warnings.push(
+      "prior_art 是自由文本，未写入权利要求前序部分；请改用 shared_features 提供与现有技术共有的结构化技术特征",
+    );
+  }
 
+  const claimName = name || rawName;
   // 1) 独立权利要求（前序 + 特征部分）
-  const independentText = buildIndependentClaim(name, domain, essential, input.prior_art?.trim() ?? "");
+  const independentText = buildIndependentClaim(claimName, domain, essential, shared);
 
   // 2) 从属权利要求（由 optional 特征引导，逐层限定形成梯度保护）
   const dependents: DraftedClaim[] = optional.map((feat, idx) => {
@@ -215,7 +263,7 @@ export function draftClaims(input: DraftClaimsInput): DraftClaimsOutput {
       number,
       type: "dependent",
       refersTo,
-      text: `根据权利要求${refersTo}所述的${name}，其特征在于，还包括：${feat}。`,
+      text: `根据权利要求${refersTo}所述的${claimName}，其特征在于，还包括：${feat}。`,
     };
   });
 
@@ -225,7 +273,7 @@ export function draftClaims(input: DraftClaimsInput): DraftClaimsOutput {
   const violations = validateClaims(claims);
 
   return {
-    invention_name: name,
+    invention_name: claimName,
     tech_domain: domain,
     claims,
     violations,
@@ -233,17 +281,16 @@ export function draftClaims(input: DraftClaimsInput): DraftClaimsOutput {
   };
 }
 
-function buildIndependentClaim(name: string, domain: TechDomain, features: string[], priorArt: string): string {
+function buildIndependentClaim(name: string, domain: TechDomain, features: string[], sharedFeatures: string[]): string {
   const struct = DOMAIN_STRUCT[domain];
   if (features.length === 0) {
     return `${struct.head(name)}${struct.connector}（缺少必要技术特征）`;
   }
   const featurePart = features.join("；");
-  // prior_art（最接近现有技术的共有特征）置于前序部分（"其特征在于"之前），
-  // 特征部分承载区别特征 —— 符合专利撰写规范。所有领域统一组合，术语随领域模板。
-  if (priorArt && priorArt.length > 0) {
-    const normalized = normalizePriorArt(priorArt);
-    return `${struct.head(name)}${struct.priorConnector}${normalized}；${struct.withPriorConnector}${featurePart}。`;
+  // 前序部分只接受结构化的共有技术特征（shared_features）。prior_art 自由文本
+  // 曾被原样塞进"包括："，等于把一段描述当成技术特征，故降级为提示（见 warnings）。
+  if (sharedFeatures.length > 0) {
+    return `${struct.head(name)}${struct.priorConnector}${sharedFeatures.join("；")}；${struct.withPriorConnector}${featurePart}。`;
   }
   if (domain === "software") {
     // 软件领域：步骤化特征
@@ -251,11 +298,6 @@ function buildIndependentClaim(name: string, domain: TechDomain, features: strin
     return `${struct.head(name)}${struct.connector}${steps}。`;
   }
   return `${struct.head(name)}${struct.connector}${featurePart}。`;
-}
-
-/** 去除 prior_art 末尾标点，避免前序部分与"；其特征在于"之间出现"。；"拼接。 */
-function normalizePriorArt(priorArt: string): string {
-  return priorArt.replace(/[。；;，,]+$/, "");
 }
 
 function resolveDomain(hint: TechDomain | undefined, name: string, features: string[]): TechDomain {

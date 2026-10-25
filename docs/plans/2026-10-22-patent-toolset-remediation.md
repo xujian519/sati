@@ -1,7 +1,7 @@
 # 专利工具集审计整改方案（2026-10-22）
 
 > 日期：2026-10-22
-> 状态：待评审（issue `status: triage`）
+> 状态：已完成（2026-10-25；决策记录见 `docs/notes/implemented/2026-10-25-*`）
 > 来源：专利工具集深度审计（30 个 patent 域工具 / nuo-patent v2.3.1 / 真实环境探针）
 > 跟踪：母议题 #707；每个工作流一个子议题（见 §9）
 > 范围：`src/tool/builtin/*`（patent 面）、`src/patent/data/nuo/*`、`src/knowledge/patent/*`、`assets/degradation/registry.yaml`、`scripts/check-patent-sop-references.mjs`
@@ -97,21 +97,21 @@ Wave 3（降成本/提质量）R-06（依赖 R-05）  R-07   R-08
 
 **任务清单**：
 
-- [ ] T1.1 新增 `searchViaEgoJson(query, opts)`：XHR URL + `fetchHtmlWithEgoBrowser` + `<pre>` 解包 + `parseSearchResultsJson`
-- [ ] T1.2 `searchProvider` 编排：ego-json → vendor `searchPatents` → 结果归一化，暴露 `dataSource`
-- [ ] T1.3 `patentSearch.execute`：把 `PARSE_ERROR` 与"真 0 命中"分开；空结果且 body 非空 → 抛 `tool_execution_failed`
-- [ ] T1.4 `patentCache`：`PARSE_ERROR` / `页面结构` 类结果不缓存；命中信息透出 `cacheHit`/`cacheAge`
-- [ ] T1.5 录制 5 条 fixture（3 关键词 + 2 公开号）并加契约测试（JSON 正常、JSON 空、HTML 兜底三路）
-- [ ] T1.6 新增降级条目 `patent-search-parse-error`（failDirection / degradedImpact / observability / negativeDrill）
-- [ ] T1.7 上游 issue：nuo-patent 增加 JSON 感知抓取（附本仓证据与复现）
+- [x] T1.1 新增 `searchViaEgoJson(query, opts)`：XHR URL + `fetchHtmlWithEgoBrowser` + `<pre>` 解包 + `parseSearchResultsJson`
+- [x] T1.2 `searchProvider` 编排：ego-json → vendor `searchPatents` → 结果归一化，暴露 `dataSource`
+- [x] T1.3 `patentSearch.execute`：把 `PARSE_ERROR` 与"真 0 命中"分开；空结果且 body 非空 → 抛 `tool_execution_failed`
+- [x] T1.4 `patentCache`：`PARSE_ERROR` / `页面结构` 类结果不缓存；命中信息透出 `cacheHit`/`cacheAge`
+- [x] T1.5 录制 5 条 fixture（3 关键词 + 2 公开号）并加契约测试（JSON 正常、JSON 空、HTML 兜底三路）
+- [x] T1.6 新增降级条目 `patent-search-parse-error`（failDirection / degradedImpact / observability / negativeDrill）
+- [x] T1.7 上游 issue：nuo-patent 增加 JSON 感知抓取（附本仓证据与复现）
 
 **验收清单**：
 
-- [ ] 真实环境 5 条固定查询各 ≥1 命中
-- [ ] `git diff --stat vendor/` 为空（未手改 vendor）
-- [ ] 用"人工破坏的 JSON 页面"fixture 触发 `PARSE_ERROR`，且**不**返回 `0 result(s)` 的 success
-- [ ] `pnpm check:degradation` 绿
-- [ ] `pnpm check` 绿
+- [x] 真实环境 5 条固定查询各 ≥1 命中
+- [x] `git diff --stat vendor/` 为空（未手改 vendor）
+- [x] 用"人工破坏的 JSON 页面"fixture 触发 `PARSE_ERROR`，且**不**返回 `0 result(s)` 的 success
+- [x] `pnpm check:degradation` 绿
+- [x] `pnpm check` 绿
 
 **风险**：XHR URL 结构由 Google 控制；桥接层复制了 URL 构造逻辑，需在 fixture 里锁住。缓解：URL 构造集中在单一函数并加注释"与 vendor 同步"。
 
@@ -146,18 +146,18 @@ Wave 3（降成本/提质量）R-06（依赖 R-05）  R-07   R-08
 
 **任务清单**：
 
-- [ ] T2.1 `mapper.ts` 计算 `missingFields`（title/inventors/assignees/filingDate/grantDate/legalStatus）
-- [ ] T2.2 `patentMetadata`：必需字段全空 → 结构化错误；部分缺失 → `degraded + missingFields`
-- [ ] T2.3 `patentLegalStatus`：逐条结果带 `degraded`/`missingFields`，不再静默空串
-- [ ] T2.4 两条降级 registry 条目 + 负向演练（modern-page fixture）
-- [ ] T2.5 上游 issue：microdata → 现行页面结构解析升级
+- [x] T2.1 `mapper.ts` 计算 `missingFields`（title/inventors/assignees/filingDate/grantDate/legalStatus）
+- [x] T2.2 `patentMetadata`：必需字段全空 → 结构化错误；部分缺失 → `degraded + missingFields`
+- [x] T2.3 `patentLegalStatus`：逐条结果带 `degraded`/`missingFields`，不再静默空串
+- [x] T2.4 两条降级 registry 条目 + 负向演练（modern-page fixture）
+- [x] T2.5 上游 issue：microdata → 现行页面结构解析升级
 
 **验收清单**：
 
-- [ ] 对 `US11452699B2` 不再出现"`success:true` + 发明人/受让人/日期全空"
-- [ ] 缺字段时 `missingFields` 非空且渲染层显式提示"页面结构变化，字段不可用"
-- [ ] `pnpm check:degradation` 绿
-- [ ] 负向演练在人为移除 `DC.title` 时也失败（不能只修一半）
+- [x] 对 `US11452699B2` 不再出现"`success:true` + 发明人/受让人/日期全空"
+- [x] 缺字段时 `missingFields` 非空且渲染层显式提示"页面结构变化，字段不可用"
+- [x] `pnpm check:degradation` 绿
+- [x] 负向演练在人为移除 `DC.title` 时也失败（不能只修一半）
 
 ---
 
@@ -177,16 +177,16 @@ Wave 3（降成本/提质量）R-06（依赖 R-05）  R-07   R-08
 
 **任务清单**：
 
-- [ ] T3.1 抽 `SECTION_HEADING_RE` 与 `matchSectionHeading()`
-- [ ] T3.2 `REQUIRED_SECTIONS` / `DRAWING_SECTION_RE` 改用统一识别
-- [ ] T3.3 测试矩阵：Markdown / 纯文本 / 编号 / 方括号 / 缺 1 节 / 正文误命中
-- [ ] T3.4 更新工具描述中的输入格式说明
+- [x] T3.1 抽 `SECTION_HEADING_RE` 与 `matchSectionHeading()`
+- [x] T3.2 `REQUIRED_SECTIONS` / `DRAWING_SECTION_RE` 改用统一识别
+- [x] T3.3 测试矩阵：Markdown / 纯文本 / 编号 / 方括号 / 缺 1 节 / 正文误命中
+- [x] T3.4 更新工具描述中的输入格式说明
 
 **验收清单**：
 
-- [ ] 纯文本标准说明书 → `passed:true`
-- [ ] 只缺"附图说明" → 仅报 1 节缺失
-- [ ] 正文出现"技术领域"字样但无标题 → 不误判为存在
+- [x] 纯文本标准说明书 → `passed:true`
+- [x] 只缺"附图说明" → 仅报 1 节缺失
+- [x] 正文出现"技术领域"字样但无标题 → 不误判为存在
 
 ---
 
@@ -210,19 +210,19 @@ Wave 3（降成本/提质量）R-06（依赖 R-05）  R-07   R-08
 
 **任务清单**：
 
-- [ ] T4.1 `normalizeInventionName()` + 单测（一种/一件/一款/重复前缀/空串）
-- [ ] T4.2 独立/从属权利要求统一使用 `bareName`
-- [ ] T4.3 `shared_features` 入参与前序构造；`prior_art` 降级为引导语
-- [ ] T4.4 software 域名后缀去重
-- [ ] T4.5 `draft_specification` 同步名称归一化与 `tech_domain` 识别修正
-- [ ] T4.6 测试改精确串断言，新增 4 条反例
-- [ ] T4.7 重录 llm-replay fixture
+- [x] T4.1 `normalizeInventionName()` + 单测（一种/一件/一款/重复前缀/空串）
+- [x] T4.2 独立/从属权利要求统一使用 `bareName`
+- [x] T4.3 `shared_features` 入参与前序构造；`prior_art` 降级为引导语
+- [x] T4.4 software 域名后缀去重
+- [x] T4.5 `draft_specification` 同步名称归一化与 `tech_domain` 识别修正
+- [x] T4.6 测试改精确串断言，新增 4 条反例
+- [x] T4.7 重录 llm-replay fixture
 
 **验收清单**：
 
-- [ ] `一种一种…` / `…的实现方法` / `根据权利要求1所述的一种…` 三类病句全部消失
-- [ ] 同一输入二次运行输出稳定（无随机）
-- [ ] `pnpm check` 绿（含 replay）
+- [x] `一种一种…` / `…的实现方法` / `根据权利要求1所述的一种…` 三类病句全部消失
+- [x] 同一输入二次运行输出稳定（无随机）
+- [x] `pnpm check` 绿（含 replay）
 
 ---
 
@@ -243,18 +243,18 @@ Wave 3（降成本/提质量）R-06（依赖 R-05）  R-07   R-08
 
 **任务清单**：
 
-- [ ] T5.1 `ToolRegistry` 拒绝空 properties + `outputSchemaExemptReason` 通道
-- [ ] T5.2 补 `render_patent_document` / `patent_docket` / `patent_plan_task` schema
-- [ ] T5.3 补 `patent_workflow` / `patent_workflow_run` / `flexible_plan` schema
-- [ ] T5.4 补 `patent_metadata` / `patent_worker_validate` / `evaluate_evidence` / `recognize_chemical_structure` schema
-- [ ] T5.5 注册表负向测试：空 schema 必须拒绝、带 reason 的豁免必须登记
-- [ ] T5.6 `patent_workflow.isReadOnly` 按输入判定 + 权限测试（plan 模式传 `caseId` 必须 ask/deny）
+- [x] T5.1 `ToolRegistry` 拒绝空 properties + `outputSchemaExemptReason` 通道
+- [x] T5.2 补 `render_patent_document` / `patent_docket` / `patent_plan_task` schema
+- [x] T5.3 补 `patent_workflow` / `patent_workflow_run` / `flexible_plan` schema
+- [x] T5.4 补 `patent_metadata` / `patent_worker_validate` / `evaluate_evidence` / `recognize_chemical_structure` schema
+- [x] T5.5 注册表负向测试：空 schema 必须拒绝、带 reason 的豁免必须登记
+- [x] T5.6 `patent_workflow.isReadOnly` 按输入判定 + 权限测试（plan 模式传 `caseId` 必须 ask/deny）
 
 **验收清单**：
 
-- [ ] 运行时扫描 `EMPTY_OUTPUT_SCHEMA = 0`
-- [ ] `pnpm check` 绿（schema 不影响 inputSchema，replay 不失效）
-- [ ] 权限用例：`{caseId}` → 不放行；无 `caseId` → 放行
+- [x] 运行时扫描 `EMPTY_OUTPUT_SCHEMA = 0`
+- [x] `pnpm check` 绿（schema 不影响 inputSchema，replay 不失效）
+- [x] 权限用例：`{caseId}` → 不放行；无 `caseId` → 放行
 
 ---
 
@@ -273,20 +273,20 @@ Wave 3（降成本/提质量）R-06（依赖 R-05）  R-07   R-08
 
 **任务清单**：
 
-- [ ] T6.1 设计三入口职责表（装配 / 执行 / 案卷）并写入工具描述
-- [ ] T6.2 `formatManifestCatalog()` + 描述动态拼接
-- [ ] T6.3 `patent_plan_task` 能力并入 `flexible_plan`，旧名设 alias + 弃用说明
-- [ ] T6.4 `patent_workflow` 更名 + alias；描述首句改为 "Assemble…"
-- [ ] T6.5 描述瘦身到预算内（脚本测量）
-- [ ] T6.6 一致性测试：8 个 manifest 全部可发现；alias 可调用
-- [ ] T6.7 重录 replay fixture
+- [x] T6.1 设计三入口职责表（装配 / 执行 / 案卷）并写入工具描述
+- [x] T6.2 `formatManifestCatalog()` + 描述动态拼接
+- [x] T6.3 `patent_plan_task` 能力并入 `flexible_plan`，旧名设 alias + 弃用说明
+- [x] T6.4 `patent_workflow` 更名 + alias；描述首句改为 "Assemble…"
+- [x] T6.5 描述瘦身到预算内（脚本测量）
+- [x] T6.6 一致性测试：8 个 manifest 全部可发现；alias 可调用
+- [x] T6.7 重录 replay fixture
 
 **验收清单**：
 
-- [ ] 8/8 manifest 在至少一个工具描述中出现
-- [ ] 旧工具名仍可调用（alias 测试）
-- [ ] 契约字符 ≤ 40,000
-- [ ] 智能体路由测试：给定"装配已有阶段输出"不选 `patent_workflow_run`
+- [x] 8/8 manifest 在至少一个工具描述中出现
+- [x] 旧工具名仍可调用（alias 测试）
+- [x] 契约字符 ≤ 40,000
+- [x] 智能体路由测试：给定"装配已有阶段输出"不选 `patent_workflow_run`
 
 ---
 
@@ -302,17 +302,17 @@ Wave 3（降成本/提质量）R-06（依赖 R-05）  R-07   R-08
 
 **任务清单**：
 
-- [ ] T7.1 抽取 `collectToolIdentifiers(markdown)` + allowlist
-- [ ] T7.2 扩扫描范围与错误输出（文件:行 + 疑似替代项）
-- [ ] T7.3 修 cap09 4 处、skill 1 处
-- [ ] T7.4 负向测试（幽灵工具名 / allowlist / 非工具 token）
-- [ ] T7.5 把 `check:patent-sop` 的覆盖范围写进脚本头注释
+- [x] T7.1 抽取 `collectToolIdentifiers(markdown)` + allowlist
+- [x] T7.2 扩扫描范围与错误输出（文件:行 + 疑似替代项）
+- [x] T7.3 修 cap09 4 处、skill 1 处
+- [x] T7.4 负向测试（幽灵工具名 / allowlist / 非工具 token）
+- [x] T7.5 把 `check:patent-sop` 的覆盖范围写进脚本头注释
 
 **验收清单**：
 
-- [ ] 修复前脚本对 5 处报红；修复后绿
-- [ ] 新增一个幽灵引用能被立刻拦下
-- [ ] `pnpm check` 绿
+- [x] 修复前脚本对 5 处报红；修复后绿
+- [x] 新增一个幽灵引用能被立刻拦下
+- [x] `pnpm check` 绿
 
 ---
 
@@ -331,19 +331,19 @@ Wave 3（降成本/提质量）R-06（依赖 R-05）  R-07   R-08
 
 **任务清单**：
 
-- [ ] T8.1 `PatentKgAdapter.searchRelevant` 支持 `nodeTypes` / `minScore`，返回 `score`
-- [ ] T8.2 `patent_kg_query` 透传参数 + 输出排序
-- [ ] T8.3 `patent_wiki_search` 标题去重
-- [ ] T8.4 可选 rerank 接线（缺模型 → 原序 + `degraded`）
-- [ ] T8.5 golden query 测试（5 条）
-- [ ] T8.6 重录 replay fixture
+- [x] T8.1 `PatentKgAdapter.searchRelevant` 支持 `nodeTypes` / `minScore`，返回 `score`
+- [x] T8.2 `patent_kg_query` 透传参数 + 输出排序
+- [x] T8.3 `patent_wiki_search` 标题去重
+- [x] T8.4 可选 rerank 接线（缺模型 → 原序 + `degraded`）
+- [x] T8.5 golden query 测试（5 条）
+- [x] T8.6 重录 replay fixture
 
 **验收清单**：
 
-- [ ] "创造性" top-3 不再出现"侵权-原理"类节点
-- [ ] 每条结果有 `score` 与 `nodeType`
-- [ ] wiki 无重复标题
-- [ ] 缺模型时 rerank 降级有 `degraded` 标记
+- [x] "创造性" top-3 不再出现"侵权-原理"类节点
+- [x] 每条结果有 `score` 与 `nodeType`
+- [x] wiki 无重复标题
+- [x] 缺模型时 rerank 降级有 `degraded` 标记
 
 ---
 
@@ -366,37 +366,37 @@ Wave 3（降成本/提质量）R-06（依赖 R-05）  R-07   R-08
 
 **代码与测试**
 
-- [ ] `pnpm check` 全绿（biome → eslint → typecheck → test → 各门禁）
+- [x] `pnpm check` 全绿（biome → eslint → typecheck → test → 各门禁）
 - [ ] 新增 `*.test.ts` 已 `git add -f`
 - [ ] 真实结构 fixture 入库（JSON / HTML / modern page）
-- [ ] 无 `any` / `@ts-ignore` 新增
-- [ ] 单测不触网（外部依赖 mock 或 fixture）
+- [x] 无 `any` / `@ts-ignore` 新增
+- [x] 单测不触网（外部依赖 mock 或 fixture）
 
 **契约**
 
-- [ ] 改 `inputSchema` 的 PR 已 `pnpm record:replay`
-- [ ] 未改 `AgentEvent` / gateway frames（本方案不涉及）
-- [ ] 工具 `outputSchema` 运行时扫描 0 空壳
+- [x] 改 `inputSchema` 的 PR 已 `pnpm record:replay`
+- [x] 未改 `AgentEvent` / gateway frames（本方案不涉及）
+- [x] 工具 `outputSchema` 运行时扫描 0 空壳
 
 **降级**
 
-- [ ] 每条新降级路径都有 `degraded` / `missingFields` / `dataSource`
-- [ ] `assets/degradation/registry.yaml` 已登记，`negativeDrill` 可执行
-- [ ] `pnpm check:degradation` 绿
+- [x] 每条新降级路径都有 `degraded` / `missingFields` / `dataSource`
+- [x] `assets/degradation/registry.yaml` 已登记，`negativeDrill` 可执行
+- [x] `pnpm check:degradation` 绿
 
 **文档**
 
-- [ ] `docs/notes/` 决策记录（含 `## Alternatives considered`）
-- [ ] 计划文档勾选回填（本文件）
-- [ ] 工具描述与实际能力一致
-- [ ] `docs/code-facts.md` 若工具数变化 → `pnpm gen:doc-claims`
+- [x] `docs/notes/` 决策记录（含 `## Alternatives considered`）
+- [x] 计划文档勾选回填（本文件）
+- [x] 工具描述与实际能力一致
+- [x] `docs/code-facts.md` 若工具数变化 → `pnpm gen:doc-claims`
 
 **Git / 交付**
 
 - [ ] 分支 + PR，标题符合 Conventional Commits
 - [ ] PR 正文 `Closes #<issue>`
 - [ ] CI `pr-traceability` 绿
-- [ ] 若行数变化影响基线 → `pnpm measure:update` 并同 PR 提交
+- [x] 若行数变化影响基线 → `pnpm measure:update` 并同 PR 提交
 
 ## 7. 风险登记
 
@@ -423,12 +423,12 @@ Wave 3（降成本/提质量）R-06（依赖 R-05）  R-07   R-08
 
 | ID | Issue | 状态 |
 |---|---|---|
-| EPIC | #707 | triage |
-| R-01 | #710 | triage |
-| R-02 | #709 | triage |
-| R-03 | #711 | triage |
-| R-04 | #708 | triage |
-| R-05 | #713 | triage |
-| R-06 | #715（依赖 #713） | triage |
-| R-07 | #714 | triage |
-| R-08 | #712 | triage |
+| EPIC | #707 | 已完成 |
+| R-01 | #710 | 已完成 |
+| R-02 | #709 | 已完成 |
+| R-03 | #711 | 已完成 |
+| R-04 | #708 | 已完成 |
+| R-05 | #713 | 已完成 |
+| R-06 | #715（依赖 #713） | 已完成 |
+| R-07 | #714 | 已完成 |
+| R-08 | #712 | 已完成 |

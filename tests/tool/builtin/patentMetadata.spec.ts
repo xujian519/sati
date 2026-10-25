@@ -141,4 +141,47 @@ describe("patent_metadata 工具", () => {
     assert.equal(warnings.length, 1);
     assert.equal(warnings[0].field, "title");
   });
+
+  it("部分字段缺失 → degraded + missingFields + 显式提示（不再静默 N/A）", async () => {
+    const data = makePatentData();
+    data.inventor_name = "";
+    data.assignee_name_orig = "";
+    data.assignee_name_current = "";
+    data.filing_date = "";
+    data.grant_date = "";
+    data.legal_status = "";
+    const tool = createPatentMetadataTool({ scrape: async () => makeScrapeResult({ data }) });
+    const res = await tool.execute({ patent: "US11452699B2" }, context);
+
+    const out = res.data as {
+      success: boolean;
+      degraded: boolean;
+      degradedReason: string;
+      dataSource: string;
+      data: { missingFields: string[] };
+    };
+    assert.equal(out.success, true);
+    assert.equal(out.degraded, true);
+    assert.match(out.degradedReason, /页面结构变化/);
+    assert.equal(out.dataSource, "html-microdata");
+    assert.deepEqual(out.data.missingFields, ["inventors", "assignees", "filingDate", "grantDate", "legalStatus"]);
+    assert.match(res.content[0]!.type === "text" ? res.content[0]!.text : "", /页面结构变化，字段不可用/);
+    assert.equal(res.metadata?.degraded, true);
+  });
+
+  it("必需字段全空 → PARSE_ERROR，不返回 success:true", async () => {
+    const data = makePatentData();
+    data.title = "";
+    data.inventor_name = "";
+    data.assignee_name_orig = "";
+    data.assignee_name_current = "";
+    data.filing_date = "";
+    const tool = createPatentMetadataTool({ scrape: async () => makeScrapeResult({ data }) });
+
+    await assert.rejects(
+      tool.execute({ patent: "US11452699B2" }, context),
+      err =>
+        err instanceof SatiToolRuntimeError && err.code === "tool_execution_failed" && /PARSE_ERROR/.test(err.message),
+    );
+  });
 });

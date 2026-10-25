@@ -89,78 +89,12 @@ export const DOCUMENT_STYLE_JSON_SCHEMA: Record<string, unknown> = {
   type: "object",
   additionalProperties: false,
   properties: {
-    fontSize: {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        xs: { type: "string", description: "小五 9pt（页脚/免责小注）" },
-        sm: { type: "string", description: "五号 10.5pt（表格/元数据）" },
-        base: { type: "string", description: "小四 12pt（正文）" },
-        md: { type: "string", description: "H4 标题字号" },
-        lg: { type: "string", description: "H3 标题字号" },
-        xl: { type: "string", description: "H2 节标题字号" },
-        x2l: { type: "string", description: "H1 主标题字号" },
-      },
-    },
-    leading: {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        body: { type: "string", description: "正文行距（如 1.5）" },
-        tight: { type: "string", description: "紧凑行距（如 1.3）" },
-      },
-    },
-    page: {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        margin: { type: "string", description: "页边距（如 20mm 25mm 20mm 25mm）" },
-        padding: { type: "string", description: "正文内边距（如 0 25mm）" },
-        bodyMaxWidth: { type: "string", description: "正文最大宽度（如 160mm）" },
-      },
-    },
-    spacing: {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        sectionGap: { type: "string", description: "节间距" },
-        sectionGapLg: { type: "string", description: "大节间距" },
-      },
-    },
-    font: {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        serif: { type: "string", description: "正文字体族（仿宋）" },
-        sans: { type: "string", description: "标题字体族（黑体）" },
-        mono: { type: "string", description: "等宽字体族（编号/公开号）" },
-      },
-    },
-    color: {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        accent: { type: "string" },
-        accentStrong: { type: "string" },
-        body: { type: "string" },
-        muted: { type: "string" },
-        border: { type: "string" },
-        headerBg: { type: "string" },
-        surface: { type: "string" },
-        zebra: { type: "string" },
-        danger: { type: "string" },
-        warning: { type: "string" },
-        success: { type: "string" },
-      },
-    },
-    brand: {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        firm: { type: "string", description: "事务所名称" },
-        confidential: { type: "string", description: "密级标记" },
-        disclaimer: { type: "string", description: "免责声明" },
-      },
-    },
+    fontSize: { type: "object", additionalProperties: true },
+    leading: { type: "object", additionalProperties: true },
+    page: { type: "object", additionalProperties: true },
+    spacing: { type: "object", additionalProperties: true },
+    font: { type: "object", additionalProperties: true },
+    color: { type: "object", additionalProperties: true },
+    brand: { type: "object", additionalProperties: true },
   },
 };

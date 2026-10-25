@@ -58,7 +58,7 @@ function collectFiles(dir, suffix) {
   return out;
 }
 
-/** 提取工具注册名：builtin / literature / legal 的 name: "…" 与 *_TOOL_NAME 常量。 */
+/** 提取工具注册名：builtin / literature / legal 的 name: "…"、aliases 与 *_TOOL_NAME 常量。 */
 function collectToolNames() {
   const files = [
     ...collectFiles(join(SRC_ROOT, "tool", "builtin"), ".ts"),
@@ -70,6 +70,13 @@ function collectToolNames() {
     const text = readFileSync(file, "utf8");
     for (const m of text.matchAll(/name:\s*"([a-z][a-z0-9_]{1,60})"/g)) {
       names.add(m[1]);
+    }
+    // 别名也是可调用名（如 patent_workflow → patent_workflow_assemble，
+    // patent_plan_task → flexible_plan）；文档引用旧名不应被当成幽灵工具。
+    for (const m of text.matchAll(/aliases:\s*\[([^\]]*)\]/g)) {
+      for (const alias of m[1].matchAll(/"([a-z][a-z0-9_]{1,60})"/g)) {
+        names.add(alias[1]);
+      }
     }
     for (const m of text.matchAll(/TOOL_NAME\s*=\s*"([a-z][a-z0-9_]{1,60})"/g)) {
       names.add(m[1]);

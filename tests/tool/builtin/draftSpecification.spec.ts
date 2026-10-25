@@ -129,3 +129,17 @@ test("draft_specification tool definition is read-only", async () => {
   if (first?.type !== "json") assert.fail("expected json content");
   assert.ok((first.value as { sections: unknown[] }).sections.length === 5);
 });
+
+test("draft_specification normalizes measure-word prefixes and auto-detects domain", () => {
+  const result = draftSpecification({ title: "一种一种相变储热装置" });
+  assert.equal(result.title, "相变储热装置");
+  assert.equal(result.tech_domain, "mechanical");
+  const techField = result.sections[0]!.content;
+  assert.ok(!techField.includes("一种一种"), techField);
+  assert.match(techField, /一种相变储热装置/);
+});
+
+test("draft_specification detects software domain from title alone", () => {
+  const result = draftSpecification({ title: "一种数据处理方法" });
+  assert.equal(result.tech_domain, "software");
+});

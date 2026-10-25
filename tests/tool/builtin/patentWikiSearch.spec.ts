@@ -57,3 +57,16 @@ test("patent_wiki_search: include_body 附带正文片段", async () => {
   assert.ok(output.results.length > 0);
   assert.ok(output.results[0]?.body, "include_body 时应返回正文片段");
 });
+
+test("patent_wiki_search: 同标题重复卡片去重并保留最高分", async () => {
+  const { dedupeWikiMetas } = await import("../../../src/tool/builtin/patentWikiSearch.js");
+  const metas = [
+    { id: "a/1", title: "充分公开", relativePath: "a/1.md", concept: "充分公开" },
+    { id: "a/2", title: "充分公开", relativePath: "a/2.md", concept: "其他" },
+    { id: "a/3", title: "实施例", relativePath: "a/3.md", concept: "实施例" },
+  ];
+  const deduped = dedupeWikiMetas(metas as never, "充分公开", 5);
+  assert.equal(deduped.length, 2);
+  assert.equal(deduped[0]?.meta.id, "a/1");
+  assert.ok((deduped[0]?.score ?? 0) > (deduped[1]?.score ?? 0));
+});

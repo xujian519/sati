@@ -41,14 +41,6 @@ export type {
 } from "./patent-pdf-download/types.js";
 export type { PatentManifestEntry } from "./patent-pdf-download/manifest.js";
 
-const DESCRIPTION = `Download patent PDFs from Google Patents, preferring the user's ego-browser (ego lite) for in-browser download interception so authorized PDFs work with the browser session's login state. When in-browser interception is unavailable or fails, the tool falls back to fetching the extracted CDN PDF URL directly over HTTP and writes it to disk.
-
-Input \`patents\` is a list of publication numbers (CN123456789A, US11452699B2, EP1234567A1, WO2023123456A1, ...). Files are saved as <outputDir>/<patent>.pdf. Each patent is processed in sequence in a single browser session (task space); \`PROGRESS\` lines report per-patent completion.
-
-Each patent's outcome is \`status: "ok"\` (with \`path\` on disk and \`method\` "browser"|"http" indicating how it was saved) or \`status: "failed"\` (with \`error\`, and \`pdfUrl\` kept for manual retry when one was found). Failures do not interrupt the remaining patents.
-
-Set \`record: true\` to also record the browser session to <outputDir>/recording.webm (screencast) for process evidence.`;
-
 export function createPatentPdfDownloadTool(
   options: CreatePatentPdfDownloadToolOptions = {},
 ): SatiToolDefinition<PatentPdfDownloadInput, PatentPdfDownloadOutput> {
@@ -69,7 +61,11 @@ export function createPatentPdfDownloadTool(
         recorded: { type: "boolean" },
       },
     },
-    description: DESCRIPTION,
+    description:
+      "Download patent PDFs from Google Patents: prefers the ego-browser session (login state), falls back to " +
+      "the CDN URL. Input patents is a list of publication numbers; files go to <outputDir>/<patent>.pdf. " +
+      "Per-patent status is ok or failed (pdfUrl kept); failures do not stop the batch. record=true records " +
+      "the browser session.",
     kind: "network",
     domain: "patent",
     inputSchema: {

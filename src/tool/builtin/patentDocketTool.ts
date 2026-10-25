@@ -157,17 +157,20 @@ export function createPatentDocketTool(deps: PatentDocketToolDeps = {}): SatiToo
     name: "patent_docket",
     outputSchema: {
       type: "object",
-      properties: {},
+      required: ["action"],
+      properties: {
+        action: {
+          type: "string",
+          enum: ["create", "get", "list", "set_gaps", "triage", "record_revision", "finalize", "abandon"],
+        },
+        caseId: { type: "string" },
+      },
     },
     aliases: ["PatentDocket", "docket"],
     description:
-      "Case-file (docket) round control for patent cases: create a docket (optional initial gap list), " +
-      "maintain gap questions (set_gaps), triage the file into the next action (draft / revise round N / " +
-      "finalize_ready / escalate_human once the round cap is hit), record revisions with mandatory " +
-      "version archiving (revisions/round-N/, old drafts untouched — answers must map to open gaps), " +
-      "finalize (refuses while open gaps remain) or abandon with a reason. Stage execution itself stays " +
-      "in flexible_plan; this tool enforces the " +
-      "gap-list → dispatch → capped-revision-loop → finalize-gate rhythm of real patent prosecution.",
+      "Case-file (docket) round control: create with an optional gap list, maintain gaps (set_gaps), triage " +
+      "(draft / revise / finalize_ready / escalate_human), record revisions with version archiving, finalize " +
+      "(refuses while gaps remain), or abandon. Stage execution stays in flexible_plan.",
     kind: "session",
     domain: "patent",
     inputSchema: {
@@ -178,32 +181,32 @@ export function createPatentDocketTool(deps: PatentDocketToolDeps = {}): SatiToo
         action: {
           type: "string",
           enum: ["create", "get", "list", "set_gaps", "triage", "record_revision", "finalize", "abandon"],
-          description: "Operation: create | get | list | set_gaps | triage | record_revision | finalize | abandon.",
+          description: "Operation.",
         },
-        caseId: { type: "string", description: "Docket key (required except list; persists by this id)." },
+        caseId: { type: "string", description: "Docket key (required except list)." },
         caseType: {
           type: "string",
-          description: "Orchestration type, e.g. invalidation / infringement / drafting (create).",
+          description: "Orchestration type.",
         },
-        maxRounds: { type: "number", description: "Revision round cap for create (default 3)." },
+        maxRounds: { type: "number", description: "Round cap (default 3)." },
         linkedPlanCaseId: {
           type: "string",
-          description: "flexible_plan case id linked to this docket (create; defaults to caseId).",
+          description: "Linked flexible_plan case id.",
         },
-        notes: { type: "string", description: "Case note (create) or finalization note (finalize)." },
+        notes: { type: "string", description: "Notes." },
         gaps: {
           type: "array",
-          description: "Gap questions (create / set_gaps; set_gaps merges by id and reopens matched gaps).",
+          description: "Gap questions.",
           items: GAP_SCHEMA,
         },
         answered: {
           type: "array",
           items: { type: "string" },
-          description: "Gap ids or verbatim question texts answered this round (record_revision).",
+          description: "Answered gap ids/questions.",
         },
         artifacts: {
           type: "array",
-          description: "Stage artifacts to archive this round (record_revision; path relative to cwd).",
+          description: "Artifacts to archive.",
           items: {
             type: "object",
             required: ["name", "path"],
@@ -214,136 +217,146 @@ export function createPatentDocketTool(deps: PatentDocketToolDeps = {}): SatiToo
             },
           },
         },
-        reason: { type: "string", description: "Abandon reason, kept for audit (abandon)." },
+        reason: { type: "string", description: "Abandon reason." },
       },
     },
     isReadOnly: () => false,
     isConcurrencySafe: () => false,
     async execute(input, context) {
-      const cwd = context?.cwd ?? process.cwd();
-      try {
-        if (input.action === "list") {
-          const ids = await defaultDocketStore(cwd).listCaseIds();
-          return toolText(
-            ids.length > 0 ? `patent_docket 案卷 (${ids.length}): ${ids.join(", ")}` : "patent_docket: 暂无案卷。",
-          );
-        }
-        if (input.caseId === undefined || input.caseId.trim() === "") {
-          return toolText(`patent_docket: ${input.action} 需要 caseId（案卷按 caseId 持久化）`);
-        }
-        const docketDir = resolveDocketDir(cwd);
-        const store = deps.store ?? new JsonFileDocketStore(docketDir);
-
-        switch (input.action) {
-          case "create": {
-            if (input.caseType === undefined || input.caseType.trim() === "") {
-              return toolText("patent_docket: create 需要 caseType");
-            }
-            const existing = await store.loadDocket(input.caseId);
-            if (existing !== undefined) {
-              return toolText(`patent_docket: 案卷 "${input.caseId}" 已存在\n${renderDocket(existing)}`);
-            }
-            const docket = createDocket(input.caseId, input.caseType, {
-              ...(input.maxRounds !== undefined ? { maxRounds: input.maxRounds } : {}),
-              ...(input.linkedPlanCaseId !== undefined ? { linkedPlanCaseId: input.linkedPlanCaseId } : {}),
-              ...(input.notes !== undefined ? { notes: input.notes } : {}),
-              gaps: input.gaps ?? [],
-              ...(deps.now !== undefined ? { now: deps.now } : {}),
-            });
-            await store.saveDocket(docket);
-            return toolText(`${renderDocket(docket)}\n已立案并持久化（action=triage 获取下一步派工）。`);
-          }
-          case "get": {
-            const docket = await loadDocket(store, input.caseId);
-            return toolText(renderDocket(docket));
-          }
-          case "set_gaps": {
-            if (input.gaps === undefined || input.gaps.length === 0) {
-              return toolText("patent_docket: set_gaps 需要 gaps（缺口清单）");
-            }
-            const docket = await loadDocket(store, input.caseId);
-            const updated = setGapQuestions(docket, input.gaps);
-            await store.saveDocket(updated);
-            return toolText(`${renderDocket(updated)}\n已更新缺口清单（同 id 重开，未提到的保持原状态）。`);
-          }
-          case "triage": {
-            const docket = await loadDocket(store, input.caseId);
-            const { next } = triageDocket(docket);
-            return toolText(`${renderDocket(docket)}\n${renderTriage(next)}`);
-          }
-          case "record_revision": {
-            if (input.answered === undefined || input.answered.length === 0) {
-              return toolText("patent_docket: record_revision 需要 answered（本轮回答的缺口 id 或原文）");
-            }
-            const docket = await loadDocket(store, input.caseId);
-            const updated = recordRevision(docket, {
-              answered: input.answered,
-              ...(input.notes !== undefined ? { notes: input.notes } : {}),
-              artifacts: (input.artifacts ?? []).map(a => a.name),
-            });
-            // 归档本轮产物（读文件失败不阻断记账：降级为 notes 提示，轮次事实已成立）。
-            let archiveNote = "本轮无产物归档";
-            if (input.artifacts !== undefined && input.artifacts.length > 0) {
-              const loaded: Array<{ name: string; content: string }> = [];
-              const missing: string[] = [];
-              for (const a of input.artifacts) {
-                // 产物读取限制在工作区内（对齐 read_file 的 workspace 守卫）：
-                // 含 ../ 或绝对路径的越界项按「读失败不阻断记账」降级为 missing。
-                const abs = resolve(cwd, a.path);
-                const rel = relative(cwd, abs);
-                if (rel === "" || rel.startsWith("..") || isAbsolute(rel)) {
-                  missing.push(a.name);
-                  continue;
-                }
-                try {
-                  loaded.push({ name: a.name, content: await readFile(abs, "utf8") });
-                } catch {
-                  // 产物读取失败（缺失/权限）不阻断记账：降级为归档提示。
-                  missing.push(a.name);
-                }
-              }
-              const revision = updated.revisions[updated.revisions.length - 1];
-              if (revision !== undefined && loaded.length > 0) {
-                const dir = await archiveRevision({
-                  caseId: updated.caseId,
-                  round: revision.round,
-                  revision,
-                  artifacts: loaded,
-                  docketsDir: docketDir,
-                });
-                archiveNote = `产物已归档: ${dir}${missing.length > 0 ? `（读取失败未归档: ${missing.join(", ")}）` : ""}`;
-              } else if (missing.length > 0) {
-                archiveNote = `产物读取失败未归档: ${missing.join(", ")}`;
-              }
-            }
-            await store.saveDocket(updated);
-            const after = triageDocket(updated).next;
-            return toolText(`${renderDocket(updated)}\n${archiveNote}\n${renderTriage(after)}`);
-          }
-          case "finalize": {
-            const docket = await loadDocket(store, input.caseId);
-            const updated = finalizeDocket(docket, input.notes);
-            await store.saveDocket(updated);
-            return toolText(`${renderDocket(updated)}\n案卷已定稿（phase=finalized）。`);
-          }
-          case "abandon": {
-            if (input.reason === undefined || input.reason.trim() === "") {
-              return toolText("patent_docket: abandon 需要 reason（审计留痕）");
-            }
-            const docket = await loadDocket(store, input.caseId);
-            const updated = abandonDocket(docket, input.reason);
-            await store.saveDocket(updated);
-            return toolText(`${renderDocket(updated)}\n案卷已放弃（phase=abandoned）。`);
-          }
-          default:
-            return toolText(
-              `patent_docket: 未知操作 "${String(input.action)}"（可选: create / get / list / set_gaps / triage / record_revision / finalize / abandon）`,
-            );
-        }
-      } catch (err) {
-        // DocketError / 存储错误统一转文本（fail-closed，对齐 flexible_plan 风格）。
-        return toolText(`patent_docket: ${err instanceof Error ? err.message : String(err)}`);
-      }
+      // 统一输出契约信封：所有 action 都带 action/caseId，便于审计与回放；
+      // 详细的案卷内容仍在 content 文本中（工具的历史输出形态保持不变）。
+      const output = await runDocketAction(input, context);
+      return { ...output, data: { action: input.action, caseId: input.caseId ?? "" } };
     },
   };
+
+  async function runDocketAction(
+    input: PatentDocketToolInput,
+    context: Parameters<NonNullable<SatiToolDefinition["execute"]>>[1],
+  ): Promise<{ content: Array<{ type: "text"; text: string }> }> {
+    const cwd = context?.cwd ?? process.cwd();
+    try {
+      if (input.action === "list") {
+        const ids = await defaultDocketStore(cwd).listCaseIds();
+        return toolText(
+          ids.length > 0 ? `patent_docket 案卷 (${ids.length}): ${ids.join(", ")}` : "patent_docket: 暂无案卷。",
+        );
+      }
+      if (input.caseId === undefined || input.caseId.trim() === "") {
+        return toolText(`patent_docket: ${input.action} 需要 caseId（案卷按 caseId 持久化）`);
+      }
+      const docketDir = resolveDocketDir(cwd);
+      const store = deps.store ?? new JsonFileDocketStore(docketDir);
+
+      switch (input.action) {
+        case "create": {
+          if (input.caseType === undefined || input.caseType.trim() === "") {
+            return toolText("patent_docket: create 需要 caseType");
+          }
+          const existing = await store.loadDocket(input.caseId);
+          if (existing !== undefined) {
+            return toolText(`patent_docket: 案卷 "${input.caseId}" 已存在\n${renderDocket(existing)}`);
+          }
+          const docket = createDocket(input.caseId, input.caseType, {
+            ...(input.maxRounds !== undefined ? { maxRounds: input.maxRounds } : {}),
+            ...(input.linkedPlanCaseId !== undefined ? { linkedPlanCaseId: input.linkedPlanCaseId } : {}),
+            ...(input.notes !== undefined ? { notes: input.notes } : {}),
+            gaps: input.gaps ?? [],
+            ...(deps.now !== undefined ? { now: deps.now } : {}),
+          });
+          await store.saveDocket(docket);
+          return toolText(`${renderDocket(docket)}\n已立案并持久化（action=triage 获取下一步派工）。`);
+        }
+        case "get": {
+          const docket = await loadDocket(store, input.caseId);
+          return toolText(renderDocket(docket));
+        }
+        case "set_gaps": {
+          if (input.gaps === undefined || input.gaps.length === 0) {
+            return toolText("patent_docket: set_gaps 需要 gaps（缺口清单）");
+          }
+          const docket = await loadDocket(store, input.caseId);
+          const updated = setGapQuestions(docket, input.gaps);
+          await store.saveDocket(updated);
+          return toolText(`${renderDocket(updated)}\n已更新缺口清单（同 id 重开，未提到的保持原状态）。`);
+        }
+        case "triage": {
+          const docket = await loadDocket(store, input.caseId);
+          const { next } = triageDocket(docket);
+          return toolText(`${renderDocket(docket)}\n${renderTriage(next)}`);
+        }
+        case "record_revision": {
+          if (input.answered === undefined || input.answered.length === 0) {
+            return toolText("patent_docket: record_revision 需要 answered（本轮回答的缺口 id 或原文）");
+          }
+          const docket = await loadDocket(store, input.caseId);
+          const updated = recordRevision(docket, {
+            answered: input.answered,
+            ...(input.notes !== undefined ? { notes: input.notes } : {}),
+            artifacts: (input.artifacts ?? []).map(a => a.name),
+          });
+          // 归档本轮产物（读文件失败不阻断记账：降级为 notes 提示，轮次事实已成立）。
+          let archiveNote = "本轮无产物归档";
+          if (input.artifacts !== undefined && input.artifacts.length > 0) {
+            const loaded: Array<{ name: string; content: string }> = [];
+            const missing: string[] = [];
+            for (const a of input.artifacts) {
+              // 产物读取限制在工作区内（对齐 read_file 的 workspace 守卫）：
+              // 含 ../ 或绝对路径的越界项按「读失败不阻断记账」降级为 missing。
+              const abs = resolve(cwd, a.path);
+              const rel = relative(cwd, abs);
+              if (rel === "" || rel.startsWith("..") || isAbsolute(rel)) {
+                missing.push(a.name);
+                continue;
+              }
+              try {
+                loaded.push({ name: a.name, content: await readFile(abs, "utf8") });
+              } catch {
+                // 产物读取失败（缺失/权限）不阻断记账：降级为归档提示。
+                missing.push(a.name);
+              }
+            }
+            const revision = updated.revisions[updated.revisions.length - 1];
+            if (revision !== undefined && loaded.length > 0) {
+              const dir = await archiveRevision({
+                caseId: updated.caseId,
+                round: revision.round,
+                revision,
+                artifacts: loaded,
+                docketsDir: docketDir,
+              });
+              archiveNote = `产物已归档: ${dir}${missing.length > 0 ? `（读取失败未归档: ${missing.join(", ")}）` : ""}`;
+            } else if (missing.length > 0) {
+              archiveNote = `产物读取失败未归档: ${missing.join(", ")}`;
+            }
+          }
+          await store.saveDocket(updated);
+          const after = triageDocket(updated).next;
+          return toolText(`${renderDocket(updated)}\n${archiveNote}\n${renderTriage(after)}`);
+        }
+        case "finalize": {
+          const docket = await loadDocket(store, input.caseId);
+          const updated = finalizeDocket(docket, input.notes);
+          await store.saveDocket(updated);
+          return toolText(`${renderDocket(updated)}\n案卷已定稿（phase=finalized）。`);
+        }
+        case "abandon": {
+          if (input.reason === undefined || input.reason.trim() === "") {
+            return toolText("patent_docket: abandon 需要 reason（审计留痕）");
+          }
+          const docket = await loadDocket(store, input.caseId);
+          const updated = abandonDocket(docket, input.reason);
+          await store.saveDocket(updated);
+          return toolText(`${renderDocket(updated)}\n案卷已放弃（phase=abandoned）。`);
+        }
+        default:
+          return toolText(
+            `patent_docket: 未知操作 "${String(input.action)}"（可选: create / get / list / set_gaps / triage / record_revision / finalize / abandon）`,
+          );
+      }
+    } catch (err) {
+      // DocketError / 存储错误统一转文本（fail-closed，对齐 flexible_plan 风格）。
+      return toolText(`patent_docket: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
 }

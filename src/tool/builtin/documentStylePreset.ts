@@ -45,7 +45,16 @@ function requireName(action: string, name: string | undefined): string {
 export function createDocumentStylePresetTool(): SatiToolDefinition<DocumentStylePresetInput> {
   return {
     name: "document_style_preset",
-    outputSchema: { type: "object", properties: {} },
+    outputSchema: {
+      type: ["object", "array"],
+      items: { type: "object", additionalProperties: true },
+      properties: {
+        name: { type: "string" },
+        description: { type: "string" },
+        style: { type: "object", additionalProperties: true },
+        updatedAt: { type: "string" },
+      },
+    },
     title: "Document Style Preset",
     description:
       "Manage reusable patent-document typography presets (save / list / get / delete). " +

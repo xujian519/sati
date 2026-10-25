@@ -205,7 +205,7 @@ describe("管线工具注册与执行（patent_workflow / patent_plan_task / pat
       makeToolContext(),
     );
     const text = textOf(res);
-    assert.ok(text.includes("patent_workflow(patent_novelty_v1)"));
+    assert.ok(text.includes("patent_workflow_assemble(patent_novelty_v1)"));
     assert.ok(text.includes("6/6 阶段完成"));
     assert.ok(text.includes("completed"));
   });
@@ -303,7 +303,7 @@ describe("管线工具注册与执行（patent_workflow / patent_plan_task / pat
       makeToolContext(),
     );
     const text = textOf(res);
-    assert.ok(text.includes("patent_workflow(patent_disclosure_v1)"), `应识别 disclosure manifest: ${text}`);
+    assert.ok(text.includes("patent_workflow_assemble(patent_disclosure_v1)"), `应识别 disclosure manifest: ${text}`);
     // checkDomain 覆盖为 infringement 域：文本缺全面覆盖要素 → 阻断
     assert.ok(text.includes("确定性门: ⛔ 阻断"), `应按 infringement 域判定: ${text}`);
     assert.ok(text.includes("侵权全面覆盖原则"), "失败明细应含全面覆盖规则");
@@ -463,7 +463,10 @@ describe("patent inventiveness 工作流（patent_inventiveness_v1 接线）", (
       makeToolContext(),
     );
     const text = textOf(res);
-    assert.ok(text.includes("patent_workflow(patent_inventiveness_v1)"), `应识别 inventiveness manifest: ${text}`);
+    assert.ok(
+      text.includes("patent_workflow_assemble(patent_inventiveness_v1)"),
+      `应识别 inventiveness manifest: ${text}`,
+    );
     assert.ok(text.includes("8/8 阶段完成"), `摘要应含 8/8: ${text}`);
     assert.ok(text.includes("completed"));
   });

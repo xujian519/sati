@@ -125,16 +125,12 @@ export function createPatentSearchTool(
     name: "patent_search",
     aliases: ["PatentSearch", "search_patents"],
     title: "Patent Search",
-    description: [
-      "- Searches Google Patents by keyword or boolean query (e.g. '(phase change OR PCM) AND thermal', 'assignee:(Samsung) after:20200101')",
-      "- Returns structured hits: patent number, title, assignee, publication date, abstract, URL",
-      "- Use for prior-art search, novelty pre-screening, competitor/assignee analysis",
-      "",
-      "Usage notes:",
-      "  - Read-only; query syntax follows Google Patents search grammar",
-      "  - Follow up with patent_metadata to fetch full details of a specific hit",
-      "  - A network failure is reported as an error; a genuine zero-result search returns empty hits with warnings",
-    ].join("\n"),
+    description:
+      "Search Google Patents by keyword or boolean query (e.g. '(phase change OR PCM) AND thermal', " +
+      "'assignee:(Samsung) after:20200101'). Returns structured hits: patent number, title, assignee, " +
+      "publication date, abstract, URL, dataSource, and cache flags. Read-only. Zero results return empty " +
+      "hits with warnings; parse failures raise an error.",
+
     kind: "network",
     domain: "patent",
     inputSchema: {

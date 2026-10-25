@@ -3,6 +3,7 @@ import type { SatiToolDefinition } from "../protocol/types.js";
 import { resolveKnowledgeDbPaths } from "../../knowledge/config.js";
 import { KgStore } from "../../knowledge/shared/kg-store.js";
 import { PatentKgAdapter, resolveNodeTypes, type RelevantHit } from "../../knowledge/patent/patent-kg-adapter.js";
+import { rerankCandidatesWithModel } from "../../patent/index.js";
 import type { KgNode } from "../../knowledge/patent/types.js";
 
 /**
@@ -38,6 +39,12 @@ export type PatentKgQueryInput = {
   include_content?: boolean;
   /** 返回条数上限（默认 5，最大 10）。 */
   limit?: number;
+  /** 仅保留这些节点类型（支持 Judgment / LawArticle 别名）。 */
+  node_types?: string[];
+  /** 最低相关性分 0..1；低于该值的命中丢弃。 */
+  min_score?: number;
+  /** 关键词模式可选二阶段 LLM 精排（缺模型时原序 + degraded）。 */
+  rerank?: boolean;
 };
 
 export type PatentKgNeighbor = {
@@ -53,6 +60,10 @@ export type PatentKgHit = {
   nodeType: string;
   name?: string;
   title?: string;
+  /** 相关性分 0..1（命中方式 + 词面重合度）。 */
+  score: number;
+  /** LLM 精排档位 0..3（仅 rerank=true 且未降级时存在）。 */
+  tier?: number;
   /** 命中方式：keyword（关键词直接命中）/ similar（相似扩展）/ cites（引用扩展）。 */
   via?: "keyword" | "similar" | "cites";
   relation?: string;
@@ -66,6 +77,8 @@ export type PatentKgQueryOutput = {
   total: number;
   hits: PatentKgHit[];
   dbPath?: string;
+  /** rerank=true 时的精排状态（缺模型/失败 → applied=false + degraded=true）。 */
+  rerank?: { requested: true; applied: boolean; degraded: boolean; reason?: string };
 };
 
 /** 图谱访问引用（适配器为唯一入口；id/类型模式均经适配器，不直取底层 store）。 */
@@ -125,12 +138,14 @@ function toHit(
   via: RelevantHit["via"] | undefined,
   relation: string | undefined,
   includeContent: boolean,
+  score: number,
 ): PatentKgHit {
   return {
     id: node.id,
     nodeType: node.nodeType,
     name: node.name,
     title: node.title,
+    score,
     via,
     relation,
     content: includeContent ? truncateContent(node.content) : undefined,
@@ -164,7 +179,7 @@ function queryById(ref: PatentKgAdapterRef, id: string, limit: number, includeCo
 
   return {
     total: 1,
-    hits: [{ ...toHit(node, undefined, undefined, includeContent), neighbors: neighbors.slice(0, limit) }],
+    hits: [{ ...toHit(node, undefined, undefined, includeContent, 1), neighbors: neighbors.slice(0, limit) }],
     dbPath,
   };
 }
@@ -176,6 +191,7 @@ function queryByKeyword(
   limit: number,
   expand: boolean,
   includeContent: boolean,
+  options: { nodeTypes?: string[]; minScore?: number } = {},
 ): PatentKgQueryOutput {
   const { adapter, dbPath } = ref;
 
@@ -186,6 +202,8 @@ function queryByKeyword(
     keywordLimit: limit,
     expandLimit: Math.min(limit * 3, 30),
     mode: "or",
+    ...(options.nodeTypes !== undefined ? { nodeTypes: options.nodeTypes } : {}),
+    ...(options.minScore !== undefined ? { minScore: options.minScore } : {}),
   });
 
   // 命中方式排序：keyword → similar → cites（稳定排序，保持各组内首次出现顺序）
@@ -194,7 +212,9 @@ function queryByKeyword(
     .slice(0, limit);
   return {
     total: top.length,
-    hits: top.map(hit => toHit(hit.node, hit.via, hit.relation, includeContent)),
+    hits: top.map(hit =>
+      toHit(hit.node, hit.via, hit.relation, includeContent, hit.score ?? (hit.via === "keyword" ? 1 : 0.5)),
+    ),
     dbPath,
   };
 }
@@ -221,8 +241,53 @@ function queryByType(
   }
   return {
     total: nodes.length,
-    hits: nodes.map(node => toHit(node, undefined, undefined, includeContent)),
+    hits: nodes.map(node => toHit(node, undefined, undefined, includeContent, 1)),
     dbPath,
+  };
+}
+
+/** 二阶段 LLM 精排：失败/缺模型时保持原序并标记 degraded。 */
+async function rerankHits(
+  query: string,
+  hits: PatentKgHit[],
+  context: Parameters<NonNullable<SatiToolDefinition<PatentKgQueryInput, PatentKgQueryOutput>["execute"]>>[1],
+  requested: boolean,
+): Promise<{ hits: PatentKgHit[]; rerank?: PatentKgQueryOutput["rerank"] }> {
+  if (!requested) return { hits };
+  if (hits.length === 0) {
+    return { hits, rerank: { requested: true, applied: false, degraded: false } };
+  }
+  const result = await rerankCandidatesWithModel(
+    context.model,
+    query,
+    hits.map(hit => ({
+      id: hit.id,
+      title: hit.title ?? hit.name ?? hit.id,
+      ...(hit.content !== undefined ? { snippet: hit.content } : {}),
+    })),
+    {
+      ...(context.provider !== undefined ? { provider: context.provider } : {}),
+      ...(context.modelId !== undefined ? { model: context.modelId } : {}),
+      signal: context.abortSignal,
+    },
+  );
+  if (result.degraded) {
+    return {
+      hits,
+      rerank: { requested: true, applied: false, degraded: true, reason: result.degradeReason ?? "精排不可用" },
+    };
+  }
+  const byId = new Map(hits.map(hit => [hit.id, hit]));
+  const ranked: PatentKgHit[] = [];
+  for (const entry of result.ranked) {
+    const hit = byId.get(entry.id);
+    if (hit !== undefined) ranked.push({ ...hit, tier: entry.tier });
+  }
+  // 未被模型评级的候选（超出上限等）按原序置尾。
+  const seen = new Set(ranked.map(hit => hit.id));
+  return {
+    hits: [...ranked, ...hits.filter(hit => !seen.has(hit.id))],
+    rerank: { requested: true, applied: true, degraded: false },
   };
 }
 
@@ -238,6 +303,7 @@ export function createPatentKgQueryTool(
         total: { type: "integer" },
         hits: { type: "array" },
         dbPath: { type: "string" },
+        rerank: { type: "object", additionalProperties: true },
       },
     },
     title: "Patent Knowledge Graph Query",
@@ -274,6 +340,19 @@ export function createPatentKgQueryTool(
           type: "number",
           description: "返回条数上限（默认 5，最大 10）",
         },
+        node_types: {
+          type: "array",
+          items: { type: "string" },
+          description: "仅保留这些节点类型（支持 Judgment / LawArticle 别名）",
+        },
+        min_score: {
+          type: "number",
+          description: "最低相关性分 0..1；低于该值的命中丢弃",
+        },
+        rerank: {
+          type: "boolean",
+          description: "关键词模式可选 LLM 二阶段精排（缺模型时原序 + degraded）",
+        },
       },
     },
     isReadOnly: () => true,
@@ -290,7 +369,7 @@ export function createPatentKgQueryTool(
       }
       return { ok: true };
     },
-    execute: async (input: PatentKgQueryInput) => {
+    execute: async (input, context) => {
       const resolved = getAdapterFn();
       if (!resolved) {
         return {
@@ -316,11 +395,21 @@ export function createPatentKgQueryTool(
         };
       }
       if (input.query?.trim()) {
-        const output = queryByKeyword(resolved, input.query.trim(), limit, input.expand !== false, includeContent);
+        const output = queryByKeyword(resolved, input.query.trim(), limit, input.expand !== false, includeContent, {
+          ...(input.node_types !== undefined ? { nodeTypes: input.node_types } : {}),
+          ...(input.min_score !== undefined ? { minScore: input.min_score } : {}),
+        });
+        const reranked = await rerankHits(input.query.trim(), output.hits, context, input.rerank === true);
+        const finalOutput: PatentKgQueryOutput = {
+          ...output,
+          total: reranked.hits.length,
+          hits: reranked.hits,
+          ...(reranked.rerank !== undefined ? { rerank: reranked.rerank } : {}),
+        };
         return {
-          content: [{ type: "json", value: output }],
-          data: output,
-          metadata: { domain: "patent", dbPath },
+          content: [{ type: "json", value: finalOutput }],
+          data: finalOutput,
+          metadata: { domain: "patent", dbPath, degraded: reranked.rerank?.degraded === true },
         };
       }
       if (input.node_type?.trim()) {

@@ -120,7 +120,29 @@ export function createLawSearchTool(
     name: "law_search",
     outputSchema: {
       type: "object",
-      properties: {},
+      required: ["total", "results"],
+      properties: {
+        total: { type: "number" },
+        dbPath: { type: "string" },
+        results: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: true,
+            properties: {
+              name: { type: "string" },
+              level: { type: "string" },
+              category: { type: "string" },
+              article: { type: "string" },
+              content: { type: "string" },
+              snippet: { type: "string" },
+              publish: { type: "string" },
+              status: { type: "string" },
+              statusSource: { type: "string", enum: ["db", "version-meta", "unknown"] },
+            },
+          },
+        },
+      },
     },
     title: "Law Search",
     description:

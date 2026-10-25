@@ -85,4 +85,67 @@ describe("patent_legal_status 工具", () => {
     const res = await tool.execute({ patents: [] }, context);
     assert.deepEqual((res.data as { results: unknown[] }).results, []);
   });
+
+  it("核心字段缺失 → 逐条 degraded + missingFields，status 归一为 UNKNOWN", async () => {
+    const tool = createPatentLegalStatusTool({
+      checker: mockChecker(async patents =>
+        Object.fromEntries(
+          patents.map(pn => [
+            pn,
+            makeResult(pn, {
+              title: "",
+              status: "",
+              filing_date: "",
+              grant_date: "",
+              estimated_expiration: "",
+              applicant: "",
+              inventor: "",
+              events_summary: [],
+            }),
+          ]),
+        ),
+      ),
+    });
+    const res = await tool.execute({ patents: ["US11452699B2"] }, context);
+    const item = (
+      res.data as {
+        results: Array<{
+          status: string;
+          degraded: boolean;
+          degradedReason: string;
+          missingFields: string[];
+          dataSource: string;
+        }>;
+      }
+    ).results[0]!;
+
+    assert.equal(item.status, "UNKNOWN");
+    assert.equal(item.degraded, true);
+    assert.match(item.degradedReason, /页面结构变化/);
+    assert.equal(item.dataSource, "html-microdata");
+    assert.deepEqual(item.missingFields, [
+      "title",
+      "status",
+      "estimatedExpiration",
+      "filingDate",
+      "grantDate",
+      "applicant",
+      "inventor",
+      "events",
+    ]);
+    assert.equal(res.metadata?.withDegraded, 1);
+    assert.match(res.content[0]!.type === "text" ? res.content[0]!.text : "", /页面结构变化/);
+  });
+
+  it("完整结果不标记降级（可选字段缺失不算核心降级）", async () => {
+    const tool = createPatentLegalStatusTool({
+      checker: mockChecker(async patents =>
+        Object.fromEntries(patents.map(pn => [pn, makeResult(pn, { applicant: "", inventor: "" })])),
+      ),
+    });
+    const res = await tool.execute({ patents: ["US11452699B2"] }, context);
+    const item = (res.data as { results: Array<{ degraded: boolean; missingFields: string[] }> }).results[0]!;
+    assert.equal(item.degraded, false);
+    assert.deepEqual(item.missingFields, ["applicant", "inventor"]);
+  });
 });

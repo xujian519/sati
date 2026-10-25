@@ -14,6 +14,8 @@ export type RelevantHit = {
   /** 命中方式：keyword（关键词直接命中）/ similar（SIMILAR_TO 扩展）/ cites（引用扩展） */
   via: "keyword" | "similar" | "cites";
   relation?: string;
+  /** 相关性分 0..1（命中方式 + query 词面重合度；keyword > similar > cites）。 */
+  score: number;
 };
 
 export type PatentKgSearchOptions = {
@@ -23,6 +25,10 @@ export type PatentKgSearchOptions = {
   expandLimit?: number;
   /** 关键词匹配模式：phrase（默认）/ or（分词 OR，多词召回）。 */
   mode?: "phrase" | "or";
+  /** 仅保留这些节点类型（支持 Judgment / LawArticle 等别名）。 */
+  nodeTypes?: string[];
+  /** 最低相关性分（0..1）；低于该值的命中丢弃。 */
+  minScore?: number;
 };
 
 const SIMILAR_RELATIONS = new Set(["SIMILAR_TO", "RELATED_TO"]);
@@ -60,6 +66,33 @@ export function resolveNodeTypes(raw: string, aliases?: Record<string, string[]>
     if (alias.toLowerCase() === lower) return types;
   }
   return [trimmed];
+}
+
+/** 命中方式基础分（关系扩展必然弱于直接命中）。 */
+const VIA_BASE_SCORE: Record<RelevantHit["via"], number> = { keyword: 1, similar: 0.65, cites: 0.45 };
+const VIA_ORDER: Record<RelevantHit["via"], number> = { keyword: 0, similar: 1, cites: 2 };
+
+/** query 分词（空白/常见中英文标点）；空片段丢弃。 */
+function tokenizeQuery(query: string): string[] {
+  return query
+    .split(/[\s,，;；、|/]+/)
+    .map(term => term.trim().toLowerCase())
+    .filter(term => term.length > 0);
+}
+
+/** 词面重合度：query 词条出现在 name/title/content 的比例（0..1）。 */
+function lexicalOverlap(query: string, node: KgNode): number {
+  const terms = tokenizeQuery(query);
+  if (terms.length === 0) return 0;
+  const haystack = `${node.name ?? ""} ${node.title ?? ""} ${(node.content ?? "").slice(0, 2000)}`.toLowerCase();
+  const matched = terms.filter(term => haystack.includes(term)).length;
+  return matched / terms.length;
+}
+
+/** 相关性分：命中方式 75% + 词面重合 25%，四舍五入到 3 位。 */
+export function scoreRelevantHit(query: string, node: KgNode, via: RelevantHit["via"]): number {
+  const raw = VIA_BASE_SCORE[via] * 0.75 + lexicalOverlap(query, node) * 0.25;
+  return Math.round(Math.min(1, Math.max(0, raw)) * 1000) / 1000;
 }
 
 /** PatentKgAdapter 构造选项。 */
@@ -104,12 +137,35 @@ export class PatentKgAdapter {
     const keywordLimit = options.keywordLimit ?? 5;
     const expandLimit = options.expandLimit ?? 6;
     const mode = options.mode ?? "phrase";
-    const cacheKey = `${query}|${keywordLimit}|${expandLimit}|${mode}`;
+    const cacheKey = [
+      query,
+      keywordLimit,
+      expandLimit,
+      mode,
+      (options.nodeTypes ?? []).join("|"),
+      options.minScore ?? 0,
+    ].join("~");
     const cached = this.searchCache?.get(cacheKey);
     if (cached) return cached;
 
-    const hits = this.store.searchByKeyword(query, keywordLimit, { mode });
-    const results = this.expandRelations(hits, expandLimit);
+    // 类型过滤发生在召回之后：先超取，避免"前 N 条全是别的类型"导致空结果。
+    const fetchLimit =
+      options.nodeTypes !== undefined && options.nodeTypes.length > 0 ? Math.max(keywordLimit * 3, 15) : keywordLimit;
+    const hits = this.store.searchByKeyword(query, fetchLimit, { mode });
+    let results = this.expandRelations(hits, expandLimit).map(hit => ({
+      ...hit,
+      score: scoreRelevantHit(query, hit.node, hit.via),
+    }));
+
+    if (options.nodeTypes !== undefined && options.nodeTypes.length > 0) {
+      const allowed = new Set(options.nodeTypes.flatMap(type => resolveNodeTypes(type, this.aliases)));
+      results = results.filter(hit => allowed.has(hit.node.nodeType));
+    }
+    if (options.minScore !== undefined) {
+      results = results.filter(hit => hit.score >= options.minScore!);
+    }
+    results.sort((a, b) => b.score - a.score || VIA_ORDER[a.via] - VIA_ORDER[b.via]);
+
     this.searchCache?.set(cacheKey, results);
     return results;
   }
@@ -122,7 +178,7 @@ export class PatentKgAdapter {
     for (const node of hits) {
       if (seen.has(node.id)) continue;
       seen.add(node.id);
-      results.push({ node, via: "keyword" });
+      results.push({ node, via: "keyword", score: 0 });
     }
 
     // 扩展：相似节点 + 引用关系（取优先类型，避免重复）
@@ -133,7 +189,7 @@ export class PatentKgAdapter {
           const node = this.store.getNode(neighbor.targetId);
           if (!node) continue;
           seen.add(node.id);
-          results.push({ node, via: "similar", relation });
+          results.push({ node, via: "similar", relation, score: 0 });
         }
       }
       for (const relation of CITE_RELATIONS) {
@@ -142,7 +198,7 @@ export class PatentKgAdapter {
           const node = this.store.getNode(neighbor.targetId);
           if (!node) continue;
           seen.add(node.id);
-          results.push({ node, via: "cites", relation });
+          results.push({ node, via: "cites", relation, score: 0 });
         }
       }
     }

@@ -598,3 +598,17 @@ test("未标记 alwaysAsk 的工具在 bypassPermissions 下照旧自动放行�
   const decision = await runtime.decide(tool, {}, makeContext({ mode: "bypassPermissions" }), "call-1");
   assert.equal(decision.type, "allow");
 });
+
+test("patent_workflow 传 caseId 时不再被当作只读工具自动放行", async () => {
+  const { createPatentWorkflowTool } = await import("../../src/tool/builtin/patentWorkflowTool.js");
+  const tool = createPatentWorkflowTool();
+  const withoutCase = await runtime.decide(tool, { manifestId: "patent_novelty_v1" }, makeContext(), "call-1");
+  assert.equal(withoutCase.type, "allow");
+  const withCase = await runtime.decide(
+    tool,
+    { manifestId: "patent_novelty_v1", caseId: "case-1" },
+    makeContext(),
+    "call-2",
+  );
+  assert.equal(withCase.type, "ask");
+});

@@ -20,6 +20,26 @@ export class ToolRegistry {
   constructor(private readonly options: ToolRegistryOptions = {}) {}
 
   /**
+   * 空壳输出契约判定：`undefined`，或 `{ type: "object", properties: {} }`。
+   *
+   * 空 properties 在运行时不会校验任何字段（ToolRuntime 只在 data 存在时校验），
+   * 把它当作"已声明契约"等于给免检开绿灯。注册期直接拒绝（MCP 除外）。
+   */
+  private static isVacuousOutputSchema(schema: Record<string, unknown> | undefined): boolean {
+    if (schema === undefined) return true;
+    const properties = schema.properties;
+    // 没有 properties 就没有字段约束：无论 type/required 写得多完整，运行时都
+    // 不会校验任何字段，仍按空壳处理。
+    if (properties === undefined) return true;
+    return (
+      typeof properties === "object" &&
+      properties !== null &&
+      !Array.isArray(properties) &&
+      Object.keys(properties).length === 0
+    );
+  }
+
+  /**
    * Read-only view of this registry's construction options, so *derived*
    * registries (`clone()`, `filterAvailableTools()`, sub-agent scoped registries)
    * can propagate the `requireOutputSchema` strict bit instead of silently
@@ -38,10 +58,22 @@ export class ToolRegistry {
     // `{}` unconditionally), i.e. dressing "no contract" up as "has a contract".
     // So we honestly exempt `kind === "mcp"` (#532); forwarding the server-side
     // schema is a separate, later cut.
-    if (this.options.requireOutputSchema === true && tool.outputSchema === undefined && tool.kind !== "mcp") {
-      throw new Error(
-        `Tool ${tool.name} is missing its canonical outputSchema (phase 4 T9: new tools must declare one).`,
-      );
+    if (this.options.requireOutputSchema === true && tool.kind !== "mcp") {
+      const vacuous = ToolRegistry.isVacuousOutputSchema(tool.outputSchema);
+      const exemptReason = tool.outputSchemaExemptReason?.trim() ?? "";
+      if (vacuous && exemptReason.length === 0) {
+        const shape = tool.outputSchema === undefined ? "missing" : "empty properties";
+        throw new Error(
+          `Tool ${tool.name} has a vacuous canonical outputSchema (${shape}); declare real properties ` +
+            `or set outputSchemaExemptReason with a recorded justification.`,
+        );
+      }
+      if (!vacuous && exemptReason.length > 0) {
+        throw new Error(
+          `Tool ${tool.name} declares both an outputSchema and outputSchemaExemptReason; ` +
+            `remove the redundant exemption.`,
+        );
+      }
     }
     if (this.toolsByName.has(tool.name)) {
       throw new Error(`Tool ${tool.name} is already registered.`);

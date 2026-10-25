@@ -16,6 +16,7 @@ export function createReadSkillTool(deps: ReadSkillDeps): SatiToolDefinition<Rea
       type: "object",
       properties: {},
     },
+    outputSchemaExemptReason: "Returns SKILL.md body as a content block; no structured data. Tracked in #713.",
     aliases: ["ReadSkill"],
     description:
       "Load a skill recipe by name and return its resolved SKILL.md path with the full content. " +
