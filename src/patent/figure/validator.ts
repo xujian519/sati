@@ -11,6 +11,7 @@
  * 纯函数、无模型依赖，输入 ElectricalAnalysis，输出校验警告。
  */
 
+import { NUMERAL_PREFIX_EXCLUSION } from "../figuregen/numeral.js";
 import { parseRefNumber, querySymbolByRefPrefix } from "./symbols/loader.js";
 import type { ElectricalAnalysis, ElectricalComponent } from "./types.js";
 
@@ -39,9 +40,6 @@ function parsePinRef(pin: string): { ref: string; pin?: string } | null {
   if (refMatch) return { ref: trimmed };
   return null;
 }
-
-/** 数字档排除前缀：这些词后的数字是编号（式(1)/步骤(2)/实施例3…），不是附图标记。 */
-const NUMERAL_PREFIX_EXCLUSION = /(?:式|公式|步骤|例|图|表|第|共|约|款|条|项|章|节|claim|step|formula|fig)$/iu;
 
 /** 纯数字型附图标记（机械/实用新型案：`壳体(10)`、`盖板20`）。 */
 function extractNumericRefs(text: string, limit: number): number[] {

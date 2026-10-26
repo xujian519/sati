@@ -42,6 +42,7 @@ const EXPECTED_ORDER: readonly FigureCheckRuleId[] = [
   "V15",
   "V16",
   "V17",
+  "V22",
 ];
 
 const FIG: FigureSpec = {

@@ -1,5 +1,5 @@
 /**
- * src/patent/figuregen — 附图校验规则（V1–V21）与注册表。
+ * src/patent/figuregen — 附图校验规则（V1–V22）与注册表。
  *
  * 为什么拆出来：这些规则原先挤在一个 503 行的 `checkFigures` 里，**共用一个作用域**——
  * 规则之间通过 `skipLayoutRules`/`figureCount`/`zoom` 这类共享局部量相互牵动，改一条规则
@@ -29,6 +29,7 @@ import {
 } from "./check-context.js";
 import { isSymbolShape } from "./layout.js";
 import { FIGURE_FONT_SIZE } from "./metrics.js";
+import { isRefNumeral, REF_NUMERAL_PRACTICAL_MAX } from "./numeral.js";
 import { minCharHeight, printableArea, sheetNumberText } from "./office-profile.js";
 import { LEGIBILITY_SHRINK_FACTOR, pxToMm } from "./page-contract.js";
 import type { FigureSpec } from "./types.js";
@@ -96,7 +97,7 @@ const ruleV2: FigureRule = {
     const missingEvidence: string[] = [];
     for (const figure of ctx.figures) {
       for (const node of figure.nodes) {
-        if (node.ref === undefined) continue;
+        if (node.ref === undefined || !isRefNumeral(node.ref)) continue;
         if (!textMentionsRef(ctx.specText, node.ref)) {
           missingEvidence.push(
             `图${figure.figure_no} 节点「${node.label.replace(/\n/gu, " ")}」标记 ${node.ref} 未在说明书文字部分出现`,
@@ -148,7 +149,7 @@ const ruleV4: FigureRule = {
     for (const figure of ctx.figures) {
       const refToNodeIds = new Map<number, Set<string>>();
       for (const node of figure.nodes) {
-        if (node.ref !== undefined) {
+        if (node.ref !== undefined && isRefNumeral(node.ref)) {
           const names = refToNames.get(node.ref) ?? new Set<string>();
           names.add(normalizeRefLabel(node.label));
           refToNames.set(node.ref, names);
@@ -158,7 +159,7 @@ const ruleV4: FigureRule = {
           refToNodeIds.set(node.ref, ids);
         }
         const refs = idToRefs.get(node.id) ?? new Set<number>();
-        if (node.ref !== undefined) refs.add(node.ref);
+        if (node.ref !== undefined && isRefNumeral(node.ref)) refs.add(node.ref);
         idToRefs.set(node.id, refs);
       }
       for (const [ref, ids] of refToNodeIds) {
@@ -455,7 +456,10 @@ const ruleV7: FigureRule = {
           figure_nos: [size.figure_no],
         });
       }
-      const printed = pxToMm(FIGURE_FONT_SIZE) * zoom;
+      // 源字高按**渲染器**取值：graphviz 的 14pt 与 CAD 的 3mm 标号都不等于内置布局的
+      // 14px；用像素常数会把 graphviz 字高低估约 25%，把 CAD 标号高估。
+      const sourceCharMm = ctx.options.sourceCharHeightMm ?? pxToMm(FIGURE_FONT_SIZE);
+      const printed = sourceCharMm * zoom;
       if (charHeight !== undefined && printed < charHeight.mm) {
         const limitNote =
           charHeight.basis === "statute"
@@ -637,6 +641,58 @@ const ruleV17: FigureRule = {
 };
 
 /**
+ * V22 附图标记取值：必须是正整数（0/负数/小数不是可引用的标记）。
+ *
+ * **渲染契约与数据健全性判据，非条文**：V14 判标注的书写形态（括号/引号/后缀），本规则
+ * 判**结构化数据本身**能不能成为标记。值为 0 或负数时，V2/V4 的文本匹配与跨图比对会给
+ * 出误导性结论（0 会匹配任何 `0`），故先在这里拦下。
+ *
+ * 超过三位数只判 warn：条文未规定上限，四位数更可能是年份/页码/段号误填，提示复核而不是
+ * 断言违规。
+ */
+const ruleV22: FigureRule = {
+  id: "V22",
+  run(ctx) {
+    const invalid: string[] = [];
+    const excessive: string[] = [];
+    for (const figure of ctx.figures) {
+      for (const node of figure.nodes) {
+        if (node.ref === undefined) continue;
+        if (!isRefNumeral(node.ref)) {
+          invalid.push(`图${figure.figure_no} 节点「${node.id}」的附图标记 ${String(node.ref)} 不是正整数`);
+          continue;
+        }
+        if (node.ref > REF_NUMERAL_PRACTICAL_MAX) {
+          excessive.push(`图${figure.figure_no} 节点「${node.id}」的附图标记 ${node.ref} 超出常用三位数范围`);
+        }
+      }
+    }
+    const findings: FigureCheckFinding[] = [];
+    if (invalid.length > 0) {
+      findings.push({
+        rule: "V22",
+        severity: "fail",
+        message:
+          "附图标记必须是正整数（V22，渲染契约与数据健全性判据非条文）：0、负数或小数无法作为" +
+          "可引用的标记，且会让图文核验把任意 `0` 当成命中",
+        evidence: capEvidence(invalid),
+      });
+    }
+    if (excessive.length > 0) {
+      findings.push({
+        rule: "V22",
+        severity: "warn",
+        message:
+          `有 ${excessive.length} 个附图标记超过 ${REF_NUMERAL_PRACTICAL_MAX}（V22，条文未规定上限）：` +
+          "请确认不是年份、页码或段号误填",
+        evidence: capEvidence(excessive),
+      });
+    }
+    return findings;
+  },
+};
+
+/**
  * 规则注册表。
  *
  * **顺序是契约**：报告里的发现顺序与 24 个 spec 的断言都按它排列（不是号码顺序——V18–V21
@@ -664,6 +720,7 @@ export const FIGURE_RULES: readonly FigureRule[] = [
   ruleV15,
   ruleV16,
   ruleV17,
+  ruleV22,
 ];
 
 /** 按注册表顺序跑全部规则（规则的产出顺序即报告顺序）。 */

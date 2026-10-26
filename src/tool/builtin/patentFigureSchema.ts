@@ -9,6 +9,7 @@
  */
 
 import type { FigureSpec, Jurisdiction } from "../../patent/figuregen/index.js";
+import { isRefNumeral } from "../../patent/figuregen/numeral.js";
 import { SatiToolRuntimeError } from "../protocol/errors.js";
 import type { SatiJsonSchema } from "../protocol/schema.js";
 
@@ -90,6 +91,17 @@ export function assertFigurePayloads(figures: readonly FigureSpec[], tool: strin
   };
   for (const figure of figures) {
     const no = figure.figure_no;
+    if (Array.isArray(figure.nodes)) {
+      for (const node of figure.nodes) {
+        if (node.ref !== undefined && !isRefNumeral(node.ref)) {
+          invalid(
+            `图${no} 节点「${node.id}」的附图标记应为正整数（收到 ${String(node.ref)}）：` +
+              "0、负数或小数无法作为可引用的标记",
+            no,
+          );
+        }
+      }
+    }
     if (figure.kind !== "chart") {
       if (!Array.isArray(figure.nodes) || figure.nodes.length === 0) {
         invalid(`图${no} 的 nodes 不能为空`, no);
@@ -226,7 +238,7 @@ export const FIGURE_FINDING_SCHEMA: SatiJsonSchema = {
   additionalProperties: false,
   required: ["rule", "severity", "message"],
   properties: {
-    rule: { type: "string", description: "规则号（V1–V21 结构 / PX1–PX4 像素 / C1–C11 CAD 几何）" },
+    rule: { type: "string", description: "规则号（V1–V22 结构 / PX1–PX4 像素 / RC0–RC5 渲染 / C1–C12 CAD 几何）" },
     severity: { type: "string", enum: ["fail", "warn", "info"] },
     message: { type: "string" },
     figure_nos: { type: "array", items: { type: "integer" }, description: "涉及的图号（集合级判定）" },

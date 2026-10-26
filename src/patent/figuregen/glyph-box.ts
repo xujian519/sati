@@ -195,7 +195,7 @@ function clipInterval(
  * 线段是否穿过仿射矩形：线段上有一段落在矩形内部，且离每条边至少
  * {@link GLYPH_BOX_TOLERANCE_MM}。
  *
- * 判据是「进入多深」而不是「是否与边相交」：引线止点由 {@link leaderEnd} 解在占位框
+ * 判据是「进入多深」而不是「是否与边相交」：引线止点由 {@link boxEntryAlongRay} 解在占位框
  * 边界上，而坐标只保留三位小数，止点会落在边界内侧 1e-15 毫米量级处——按相交判定，
  * 工具自己画的引线会被报成「贯穿文字」。沿边共线、只在角上掠过同样不算。绘图侧
  * （引线避让、标号落位）与复核侧（判图面缺陷）共用本判定，两侧口径因此完全一致。
@@ -249,39 +249,35 @@ export function boxCrossedBySegment(
 }
 
 /**
- * 引线在文字占位框上的止点：自 `from` 指向文字基线锚点，止于占位框边界 —— 引线
- * 因此不进入占位框，文字不会被线条贯穿。
- * @param content - 文字内容（决定宽度）。
- * @param baseline - 基线锚点（SVG `<text>` 的 x/y）。
- * @param fontSizeMm - 字号（毫米）。
- * @param anchor - 水平对齐方式。
- * @param from - 引线起点（零件上的指称点）。
- * @returns 引线止点；起点与文字中心重合、或起点已落在占位框内时为 undefined。
+ * 射线与占位框的首个进入距离（自 `from` 沿单位向量 `direction`）：标号落位用它把引线
+ * 止点解在字框外缘，而不是按"基线点后退间隙"估算（基线在框内偏下，按基线后退会让
+ * 引线贴字底走）。起点已在框内时返回 0（调用方据此不画引线）。
+ * @param box - 占位框。
+ * @param from - 射线起点。
+ * @param direction - 单位方向向量。
+ * @returns 进入距离（≥0）；射线不穿过框时 undefined。
  */
-export function leaderEnd(
-  content: string,
-  baseline: readonly [number, number],
-  fontSizeMm: number,
-  anchor: GlyphTextAnchor,
+export function boxEntryAlongRay(
+  box: GlyphBox,
   from: readonly [number, number],
-): readonly [number, number] | undefined {
-  const box = glyphBox(content, baseline, fontSizeMm, anchor);
-  const center: readonly [number, number] = [(box.minX + box.maxX) / 2, (box.minY + box.maxY) / 2];
-  const dx = center[0] - from[0];
-  const dy = center[1] - from[1];
-  const distance = Math.hypot(dx, dy);
-  if (distance === 0) return undefined;
-  const unit: readonly [number, number] = [dx / distance, dy / distance];
-  // 沿 -unit 自中心后退，各自先出框的那一步决定后退量。
-  const stepX =
-    unit[0] === 0
-      ? Number.POSITIVE_INFINITY
-      : (unit[0] > 0 ? center[0] - box.minX : box.maxX - center[0]) / Math.abs(unit[0]);
-  const stepY =
-    unit[1] === 0
-      ? Number.POSITIVE_INFINITY
-      : (unit[1] > 0 ? center[1] - box.minY : box.maxY - center[1]) / Math.abs(unit[1]);
-  const back = Math.min(stepX, stepY);
-  if (!(back < distance)) return undefined;
-  return [center[0] - back * unit[0], center[1] - back * unit[1]];
+  direction: readonly [number, number],
+): number | undefined {
+  const EPS = 1e-9;
+  let enter = Number.NEGATIVE_INFINITY;
+  let exit = Number.POSITIVE_INFINITY;
+  for (const [origin, delta, min, max] of [
+    [from[0], direction[0], box.minX, box.maxX],
+    [from[1], direction[1], box.minY, box.maxY],
+  ] as const) {
+    if (Math.abs(delta) < EPS) {
+      if (origin < min - EPS || origin > max + EPS) return undefined;
+      continue;
+    }
+    const first = (min - origin) / delta;
+    const second = (max - origin) / delta;
+    enter = Math.max(enter, Math.min(first, second));
+    exit = Math.min(exit, Math.max(first, second));
+  }
+  if (exit < enter || exit < 0) return undefined;
+  return Math.max(0, enter);
 }

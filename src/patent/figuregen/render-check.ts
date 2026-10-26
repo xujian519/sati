@@ -47,6 +47,7 @@
 
 import { glyphBox, inflateQuad, quadCrossedBySegment } from "./glyph-box.js";
 import type { GlyphBox, GlyphQuad, GlyphTextAnchor } from "./glyph-box.js";
+import { SVG_LEADER_ROLE, SVG_ROLE_ATTRIBUTE } from "./render-utils.js";
 import { DEFAULT_SVG_MAX_BYTES, assertSafeSvg } from "./svg-safety.js";
 import { MM_PER_USER_UNIT, parseLengthMm, resolveSvgViewport } from "./svg-viewport.js";
 
@@ -121,13 +122,12 @@ const HATCH_SPACING_MIN_GAP_MM = 0.1;
  */
 const HATCH_GROUP_ATTRIBUTE = "data-dsh-hatch-group";
 /**
- * 绘图侧标注线段角色的属性名（见 `section-diagram.ts` 的 `segmentElement`）：值为
- * {@link LEADER_ROLE} 的线段是引线。引线止于文字占位框外框，参与「贯穿」判定才有的
- * 可读性；「净距」判据必须排除它，否则工具自己画的每条引线都会被报成贴线。
+ * 绘图侧线段角色（见 `render-utils.ts`）：值为 {@link LEADER_ROLE} 的线段是引线，
+ * 「净距」判据必须排除它，否则工具自己画的每条引线都会被报成贴线。
  */
-const ROLE_ATTRIBUTE = "data-dsh-role";
+const ROLE_ATTRIBUTE = SVG_ROLE_ATTRIBUTE;
 /** 引线的角色取值。 */
-const LEADER_ROLE = "leader";
+const LEADER_ROLE = SVG_LEADER_ROLE;
 /**
  * 标号净距默认值（毫米）：文字占位框外扩这么多之后仍与图元相交即报。
  *

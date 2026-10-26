@@ -143,6 +143,23 @@ function parseAspectRatio(raw: string | undefined): AspectRatio {
 }
 
 /**
+ * 已交付 SVG 的纸面尺寸（毫米）：取根元素声明的 `width`/`height`。
+ *
+ * 只认显式声明（含 mm/cm/in/pt/px 单位）；百分比或缺失时返回 undefined——调用方据此
+ * 保留"按布局重排"的旧路径，而不是把 96dpi 用户单位当成纸面尺寸蒙一个值。
+ * @param svg - 完整 SVG 文本。
+ * @returns 宽高（毫米）；声明不可解析时 undefined。
+ */
+export function measureSvgPaperSize(svg: string): { widthMm: number; heightMm: number } | undefined {
+  const openTag = /<svg\b[^>]*>/iu.exec(svg)?.[0];
+  if (openTag === undefined) return undefined;
+  const viewport = resolveSvgViewport(openTag);
+  if (viewport.widthMm === undefined || viewport.heightMm === undefined) return undefined;
+  if (!Number.isFinite(viewport.widthMm) || !Number.isFinite(viewport.heightMm)) return undefined;
+  return { widthMm: viewport.widthMm, heightMm: viewport.heightMm };
+}
+
+/**
  * 解析根元素的视口映射。
  *
  * 没有 `viewBox` 时 1 用户单位按 CSS 的 96 dpi 像素换算；有 `viewBox` 时先按声明的

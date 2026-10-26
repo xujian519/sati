@@ -21,8 +21,8 @@
 
 import { figureCaption, officeProfile, printableArea } from "../office-profile.js";
 import { planLeaderLines, type LeaderSegment } from "../leader-line.js";
-import { measureTextWidth } from "../metrics.js";
-import { escapeXml, fmt as fmtShared } from "../render-utils.js";
+import { glyphBox, textWidthMm } from "../glyph-box.js";
+import { escapeXml, fmt as fmtShared, SVG_LEADER_ROLE, SVG_ROLE_ATTRIBUTE } from "../render-utils.js";
 import type { Jurisdiction } from "../types.js";
 import {
   projectModelPoints,
@@ -81,7 +81,7 @@ export type CadLabelPlacement = {
   anchorMm: [number, number];
   /** 标号锚点（纸面毫米；文本水平居中于此、基线落于此）。 */
   labelMm: [number, number];
-  /** 文本包围盒（纸面毫米；按 `measureTextWidth` 估算，用于重叠/越界判定）。 */
+  /** 文本包围盒（纸面毫米；与复核侧同一 `glyphBox` 估算，用于重叠/越界判定）。 */
   boxMm: { left: number; top: number; right: number; bottom: number };
   /** 引线折线（纸面毫米）；退化为就地标号时为空。 */
   leaderMm: readonly LeaderSegment[];
@@ -114,6 +114,8 @@ export type CadRenderResult = {
   labelWarnings: string[];
   /** 绘制几何（不含标注）的纸面范围：判定"锚点是否落在图内"用。 */
   geometryBoundsMm: { left: number; top: number; right: number; bottom: number };
+  /** 图号注记的纸面包围盒（无图号时缺省；C12 判标号是否压盖它）。 */
+  captionBoxMm?: { left: number; top: number; right: number; bottom: number };
 };
 
 const DEFAULT_MARGIN_MM = 6;
@@ -288,7 +290,7 @@ export function renderCadSvg(table: CadEdgeTable, options: CadRenderOptions): Ca
     for (const annotation of annotations) {
       const offset = annotation.labelOffsetMm;
       const reach = offset === undefined ? CAD_REF_LEADER_MM : Math.hypot(offset[0], offset[1]);
-      const halfWidth = measureTextWidth(String(annotation.ref), CAD_REF_FONT_MM) / 2;
+      const halfWidth = textWidthMm(String(annotation.ref), CAD_REF_FONT_MM) / 2;
       needed = Math.max(needed, Math.min(reach, CAD_REF_LEADER_MM * 6) + halfWidth + CAD_REF_RESERVE_PAD_MM);
     }
     const cap = Math.min(area.widthMm, area.heightMm) * CAD_MAX_RESERVE_RATIO;
@@ -310,6 +312,18 @@ export function renderCadSvg(table: CadEdgeTable, options: CadRenderOptions): Ca
     right: band + geometryWidth * scale,
     bottom: band + geometryHeight * scale,
   };
+
+  // 图号注记（图下方居中）也是图面内容：标号落位时把它当障碍，否则标号会压在图号上
+  // （两者都读不出），而 C 规则此前只在标号越界/互压时才报。注记框与复核侧同一字框模型。
+  const caption = figureCaption(profile, options.figureNo, options.figureCount ?? 1);
+  const captionY = heightMm - 2;
+  const captionBoxMm =
+    caption === undefined
+      ? undefined
+      : (() => {
+          const box = glyphBox(caption, [widthMm / 2, captionY], 3.5, "middle");
+          return { left: box.minX, top: box.minY, right: box.maxX, bottom: box.maxY };
+        })();
 
   // 纸面折线只算一次：SVG 路径与"引线不得与之共线"的障碍线段同源（两处各算一遍必然漂移）
   const paperPolylines = projected.map(entry => ({
@@ -375,7 +389,7 @@ export function renderCadSvg(table: CadEdgeTable, options: CadRenderOptions): Ca
         ...(annotation.labelOffsetMm === undefined ? {} : { pinnedOffsetMm: annotation.labelOffsetMm }),
       };
     }),
-    { boxes: [geometryBoundsMm], segments: obstacleSegments },
+    { boxes: [geometryBoundsMm, ...(captionBoxMm === undefined ? [] : [captionBoxMm])], segments: obstacleSegments },
     {
       fontSizeMm: CAD_REF_FONT_MM,
       gapMm: CAD_REF_LABEL_GAP_MM,
@@ -407,6 +421,7 @@ export function renderCadSvg(table: CadEdgeTable, options: CadRenderOptions): Ca
           segment =>
             `<polyline points="${fmt(segment.from.x)},${fmt(segment.from.y)} ` +
             `${fmt(segment.to.x)},${fmt(segment.to.y)}" fill="none" stroke="#000000" ` +
+            `${SVG_ROLE_ATTRIBUTE}="${SVG_LEADER_ROLE}" ` +
             `stroke-width="${CAD_LINE_WIDTH_MM}"/>`,
         )
         .join("");
@@ -418,8 +433,6 @@ export function renderCadSvg(table: CadEdgeTable, options: CadRenderOptions): Ca
     })
     .join("\n");
 
-  const caption = figureCaption(profile, options.figureNo, options.figureCount ?? 1);
-  const captionY = heightMm - 2;
   const captionMarkup =
     caption === undefined
       ? ""
@@ -446,5 +459,6 @@ export function renderCadSvg(table: CadEdgeTable, options: CadRenderOptions): Ca
     labels,
     labelWarnings: plan.warnings,
     geometryBoundsMm,
+    ...(captionBoxMm === undefined ? {} : { captionBoxMm }),
   };
 }

@@ -96,6 +96,7 @@ export {
 } from "./render-graphviz.js";
 export { createWasmDotRunner, type VizLoader } from "./render-viz-wasm.js";
 export { parseFigureSvg } from "./readback.js";
+export { REF_NUMERAL_PRACTICAL_MAX, isRefNumeral } from "./numeral.js";
 export { analyzeImageBuffer, type PixelFinding, type PixelMetrics } from "./pixel-gate.js";
 export {
   DEFAULT_SVG_MAX_BYTES,
@@ -139,15 +140,16 @@ export {
   GLYPH_WIDTH_RATIO,
   FULL_WIDTH_RATIO,
   UPPER_WIDTH_RATIO,
+  boxEntryAlongRay,
   boxQuad,
   glyphBox,
   inflateQuad,
-  leaderEnd,
   quadCrossedBySegment,
   textWidthMm,
 } from "./glyph-box.js";
 export {
   MM_PER_USER_UNIT,
+  measureSvgPaperSize,
   parseLengthMm,
   resolveSvgViewport,
 } from "./svg-viewport.js";
@@ -158,3 +160,4 @@ export {
   type RenderCheckKind,
   type RenderCheckReport,
 } from "./render-check.js";
+export { RENDER_CHECK_RULE, toRenderCheckFindings } from "./render-check-rules.js";

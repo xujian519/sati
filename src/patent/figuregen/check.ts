@@ -56,6 +56,9 @@
  *   不得用颜色区分曲线，标记与线型是唯二的区分手段，两者都相同则图面上无从分辨。
  * - V21 曲线图有数据点落在坐标轴范围之外 → WARN。**渲染契约非条文**：轴外数据点会被画到
  *   绘图区之外、压住刻度值与轴标目（渲染器有意不裁剪——裁剪会把超范围数据画成贴边失真）。
+ * - V22 附图标记取值非正整数（0/负数/小数）→ FAIL；超过三位数 → WARN。**数据健全性判据
+ *   非条文**：无效值无法作为可引用的标记，且会让 V2 把任意 `0` 当成命中；上界只提示复核
+ *   （条文未规定上限，四位数更可能是年份/页码/段号误填）。
  *
  * V15/V16 需要**可观测的交付形态**（已交付 SVG 的图号回读）才判：只有结构化 FigureSpec
  * 而没有交付文件时，图号是渲染期由本模块决定的，对"看不见的东西"判违规属错误归因。
@@ -102,7 +105,8 @@ export type FigureCheckRuleId =
   | "V18"
   | "V19"
   | "V20"
-  | "V21";
+  | "V21"
+  | "V22";
 
 export type FigureCheckOptions = {
   /** 生成期无说明书文本可核时跳过 V2/V3（V1/V4/V5/V7/V8/V9 照常）。 */
@@ -158,7 +162,21 @@ export type FigureCheckOptions = {
    * 没有"是否带图号"这一信息，缺省不判（不猜）。
    */
   numberedFigureNos?: readonly number[];
-  /** 附图页序号（多页附图；缺省不判 V17）。 */
+  /**
+   * 已交付产物的**实测纸面尺寸**（毫米；按图号）。
+   *
+   * V7 的画幅判据此前一律用 `layoutFigure` 重排一次——那量的是"本模块会排成多大"，
+   * 不是"交付文件多大"。graphviz 的 14pt 字与 CAD 的投影画幅都与之不同，实测会出现
+   * "图其实放得下、V7 判超框"（或反过来）。给了本字段的图号按实测值判，其余仍按布局。
+   */
+  measuredPaperSizes?: readonly { figure_no: number; widthMm: number; heightMm: number }[];
+  /**
+   * 源图字高（毫米）：`graphviz` 的 14pt 与 CAD 的 3mm 标号都不等于内置布局的 14px。
+   * 缺省按内置渲染器的 `pxToMm(FIGURE_FONT_SIZE)`。
+   */
+  sourceCharHeightMm?: number;
+  /**
+   * 附图页序号（多页附图；缺省不判 V17）。 */
   sheetIndex?: number;
   /** 附图页总页数（≥2 时要求声明页码，V17）。 */
   sheetTotal?: number;

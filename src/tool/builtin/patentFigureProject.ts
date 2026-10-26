@@ -463,7 +463,7 @@ export function createPatentFigureProjectTool(
           description: "全剖视图剖切参数（非剖视时缺省）",
         },
         ref_numerals: { type: "array", items: { type: "integer" }, description: "图面已标注的附图标记" },
-        geometry_findings: { type: "array", items: FIGURE_FINDING_SCHEMA, description: "几何级检查（C1–C11）" },
+        geometry_findings: { type: "array", items: FIGURE_FINDING_SCHEMA, description: "几何级检查（C1–C12）" },
       },
     },
     aliases: ["PatentFigureProject", "figure_project"],

@@ -16,6 +16,7 @@
 import { layoutChart } from "./chart.js";
 import type { FigureCheckFinding, FigureCheckOptions, FigureCheckResult, FigureCheckRuleId } from "./check.js";
 import { layoutFigure } from "./layout.js";
+import { NUMERAL_PREFIX_EXCLUSION, isRefNumeral } from "./numeral.js";
 import { profileForJurisdiction, shouldRenderCaption, type OfficeProfile } from "./office-profile.js";
 import { pxToMm, uniformFigureZoom } from "./page-contract.js";
 import { splitSpecFaces, type SpecFaces } from "./spec-sections.js";
@@ -35,9 +36,20 @@ export function basis(jurisdiction: Jurisdiction, texts: { cn: string; us: strin
   return jurisdiction === "us" ? texts.us : texts.pct;
 }
 
-/** 词边界匹配：说明书文字部分是否提及该标记（"S20"/"120" 不算提及标记 20）。 */
+/**
+ * 词边界匹配：说明书文字部分是否提及该标记（"S20"/"120" 不算提及标记 20）。
+ *
+ * 编号前缀（图20/式(20)/步骤20/第20项…）不算提及：那些数字是图号、公式号或步骤号，
+ * 不是附图标记。词法排除与说明书侧抽取共用 {@link NUMERAL_PREFIX_EXCLUSION}。
+ */
 export function textMentionsRef(specText: string, ref: number): boolean {
-  return new RegExp(`(?<![0-9A-Za-z])${ref}(?![0-9])`, "u").test(specText);
+  const pattern = new RegExp(`(?<![0-9A-Za-z])${ref}(?![0-9])`, "gu");
+  for (const match of specText.matchAll(pattern)) {
+    const index = match.index ?? 0;
+    const before = specText.slice(Math.max(0, index - 4), index);
+    if (!NUMERAL_PREFIX_EXCLUSION.test(before)) return true;
+  }
+  return false;
 }
 
 /** 提取说明书文字部分括号形式的疑似附图标记。 */
@@ -143,7 +155,9 @@ export function buildRuleContext(
   const figureCount = options.figureCount ?? figures.length;
 
   const refsInFigures = [
-    ...new Set(figures.flatMap(f => f.nodes.flatMap(n => (n.ref === undefined ? [] : [n.ref])))),
+    ...new Set(
+      figures.flatMap(f => f.nodes.flatMap(n => (n.ref === undefined || !isRefNumeral(n.ref) ? [] : [n.ref]))),
+    ),
   ].sort((a, b) => a - b);
   const refsInText = options.skipTextRules ? [] : extractBracketRefs(specText);
 
@@ -211,11 +225,18 @@ export function buildRuleContext(
       const captionRendered = shouldRenderCaption(profile, figureCount);
       // 画幅不可量的图（回读骨架）逐图排除：见 skipLayoutFigureNos 的选项文档。
       const skipLayoutNos = new Set(options.skipLayoutFigureNos ?? []);
+      // 实测尺寸优先：交付文件的画幅由渲染器/投影几何决定，用布局重排会把"放得下"判成超框
+      // （graphviz 14pt 与 CAD 投影都如此）。没有实测值的图仍按布局判，不静默跳过。
+      const measuredByNo = new Map((options.measuredPaperSizes ?? []).map(size => [size.figure_no, size]));
       const paperSizes = options.skipLayoutRules
         ? []
         : figures
             .filter(figure => !skipLayoutNos.has(figure.figure_no))
             .map(figure => {
+              const measured = measuredByNo.get(figure.figure_no);
+              if (measured !== undefined) {
+                return { figure_no: figure.figure_no, widthMm: measured.widthMm, heightMm: measured.heightMm };
+              }
               const { width, height } = figureCanvasPx(figure, captionRendered);
               return { figure_no: figure.figure_no, widthMm: pxToMm(width), heightMm: pxToMm(height) };
             });

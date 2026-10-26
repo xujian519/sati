@@ -627,6 +627,7 @@ test("标注：锚点投影 + 引线 + data-ref（回读契约与内置渲染器
   assert.match(render.svg, /<g id="n-ref-20" data-ref="20">/u);
   assert.match(render.svg, /<text x="[^"]*" y="[^"]*" font-size="3" text-anchor="middle"/u);
   assert.equal((render.svg.match(/<polyline/gu) ?? []).length, render.visibleEdges + 2, "每个标记一条引线");
+  assert.match(render.svg, /<polyline[^>]*data-dsh-role="leader"/u, "引线须标注角色（复核侧据此跳过净距判定）");
 
   // 锚点必须落在图内（模型坐标 → 图面的落位）
   for (const label of render.labels) {
@@ -664,6 +665,47 @@ test("标注：锚点投影 + 引线 + data-ref（回读契约与内置渲染器
     parseFigureSvg(pinned.svg).nodes.map(node => node.ref),
     [30],
   );
+});
+
+test("标注：图号注记是择位障碍，标号压盖注记 ⇒ C12 warn", () => {
+  const table = loadTable("plate-front.json");
+  // 有图号时注记框存在，且引擎落位不与它相交
+  const render = renderCadSvg(table, {
+    figureNo: 1,
+    annotations: [{ ref: 10, atMm: [40, 15, 10] }],
+  });
+  const caption = render.captionBoxMm;
+  assert.ok(caption !== undefined, "有图号时应给出注记框");
+  const label = render.labels[0]!.boxMm;
+  const overlap =
+    label.left < caption.right &&
+    caption.left < label.right &&
+    label.top < caption.bottom &&
+    caption.top < label.bottom;
+  assert.equal(overlap, false, `择位后标号不得压盖图号注记：${JSON.stringify([label, caption])}`);
+
+  // 直接构造压盖落位：C12 兜住钉死偏移与旧产物（择位已避开，但钉死照用）
+  const covered = checkCadProjection({
+    table,
+    hiddenLines: false,
+    render: {
+      scale: 1,
+      widthMm: 100,
+      heightMm: 100,
+      labels: [
+        {
+          ref: 10,
+          anchorMm: [50, 50],
+          labelMm: [50, 90],
+          boxMm: { left: 48, top: 88, right: 52, bottom: 91 },
+        },
+      ],
+      captionBoxMm: { left: 40, top: 89, right: 60, bottom: 92 },
+    },
+  });
+  const c12 = covered.find(finding => finding.rule === "C12");
+  assert.equal(c12?.severity, "warn");
+  assert.match(c12!.message, /压盖了图号注记/u);
 });
 
 test("标注：无标注时图幅与旧行为逐位一致（预留带只在有标注时占用）", () => {
