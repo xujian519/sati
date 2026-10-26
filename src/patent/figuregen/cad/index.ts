@@ -27,10 +27,12 @@ export {
   type CadRunner,
 } from "./freecad.js";
 export {
+  CAD_CAPTION_FONT_MM,
   CAD_HATCH_LINE_WIDTH_MM,
   CAD_HATCH_SPACING_MM,
   CAD_HIDDEN_DASH_MM,
   CAD_LINE_WIDTH_MM,
+  CAD_REF_FONT_MM,
   CAD_REF_LEADER_MM,
   buildScreenTransform,
   hatchPolylines,

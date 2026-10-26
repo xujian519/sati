@@ -16,7 +16,7 @@
 import { layoutChart } from "./chart.js";
 import type { FigureCheckFinding, FigureCheckOptions, FigureCheckResult, FigureCheckRuleId } from "./check.js";
 import { layoutFigure } from "./layout.js";
-import { NUMERAL_PREFIX_EXCLUSION, isRefNumeral } from "./numeral.js";
+import { hasNumeralPrefix, isRefNumeral } from "./numeral.js";
 import { profileForJurisdiction, shouldRenderCaption, type OfficeProfile } from "./office-profile.js";
 import { pxToMm, uniformFigureZoom } from "./page-contract.js";
 import { splitSpecFaces, type SpecFaces } from "./spec-sections.js";
@@ -39,24 +39,31 @@ export function basis(jurisdiction: Jurisdiction, texts: { cn: string; us: strin
 /**
  * 词边界匹配：说明书文字部分是否提及该标记（"S20"/"120" 不算提及标记 20）。
  *
- * 编号前缀（图20/式(20)/步骤20/第20项…）不算提及：那些数字是图号、公式号或步骤号，
- * 不是附图标记。词法排除与说明书侧抽取共用 {@link NUMERAL_PREFIX_EXCLUSION}。
+ * 编号前缀（图20/式(20)/步骤20/claim 20…）不算提及：那些数字是图号、公式号或步骤号，
+ * 不是附图标记。词法排除与说明书侧抽取共用 {@link hasNumeralPrefix}——回看窗口在
+ * 那里统一取足，调用方不要自己截一段（截短会让英文前缀整类失效）。
  */
 export function textMentionsRef(specText: string, ref: number): boolean {
   const pattern = new RegExp(`(?<![0-9A-Za-z])${ref}(?![0-9])`, "gu");
   for (const match of specText.matchAll(pattern)) {
-    const index = match.index ?? 0;
-    const before = specText.slice(Math.max(0, index - 4), index);
-    if (!NUMERAL_PREFIX_EXCLUSION.test(before)) return true;
+    if (!hasNumeralPrefix(specText.slice(0, match.index ?? 0))) return true;
   }
   return false;
 }
 
-/** 提取说明书文字部分括号形式的疑似附图标记。 */
+/**
+ * 提取说明书文字部分括号形式的疑似附图标记。
+ *
+ * 与 V2 用同一套词法：`式(10)`/`步骤(20)` 是编号不是标记，且非法取值（0/负数）归 V22 判，
+ * 混进来只会让 V3 报"括号标记 0 未出现于任何附图"这种自相矛盾的结论。
+ */
 function extractBracketRefs(specText: string): number[] {
   const found = new Set<number>();
   for (const match of specText.matchAll(/[（(]\s*(\d{1,3})\s*[)）]/gu)) {
-    found.add(Number(match[1]));
+    const ref = Number(match[1]);
+    if (!isRefNumeral(ref)) continue;
+    if (hasNumeralPrefix(specText.slice(0, match.index ?? 0))) continue;
+    found.add(ref);
   }
   return [...found].sort((a, b) => a - b);
 }

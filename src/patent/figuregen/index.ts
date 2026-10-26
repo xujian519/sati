@@ -161,3 +161,4 @@ export {
   type RenderCheckReport,
 } from "./render-check.js";
 export { RENDER_CHECK_RULE, toRenderCheckFindings } from "./render-check-rules.js";
+export { sourceCharHeightMm } from "./source-char-height.js";

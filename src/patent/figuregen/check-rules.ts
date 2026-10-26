@@ -29,7 +29,7 @@ import {
 } from "./check-context.js";
 import { isSymbolShape } from "./layout.js";
 import { FIGURE_FONT_SIZE } from "./metrics.js";
-import { isRefNumeral, REF_NUMERAL_PRACTICAL_MAX } from "./numeral.js";
+import { hasNumeralPrefix, isRefNumeral, REF_NUMERAL_PRACTICAL_MAX } from "./numeral.js";
 import { minCharHeight, printableArea, sheetNumberText } from "./office-profile.js";
 import { LEGIBILITY_SHRINK_FACTOR, pxToMm } from "./page-contract.js";
 import type { FigureSpec } from "./types.js";
@@ -380,8 +380,7 @@ const ruleV11: FigureRule = {
     for (const match of scope.matchAll(/[（(]\s*(\d{1,3})\s*[)）]/gu)) {
       const ref = Number(match[1]);
       if (!ctx.refsInFigures.includes(ref)) continue;
-      const before = scope.slice(Math.max(0, (match.index ?? 0) - 2), match.index ?? 0);
-      if (/(?:式|公式|步骤|第|图|表|claim|step|formula|fig)s?$/iu.test(before)) continue;
+      if (hasNumeralPrefix(scope.slice(0, match.index ?? 0))) continue;
       evidence.push(`说明书正文以括号引用附图标记 ${ref}：「${(match[0] ?? "").trim()}」`);
     }
     if (evidence.length === 0) return [];

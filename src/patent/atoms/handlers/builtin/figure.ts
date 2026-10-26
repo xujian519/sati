@@ -48,10 +48,9 @@ import {
   checkFigures,
   findFigureSidecar,
   measureSvgPaperSize,
-  MM_PER_INCH,
   officeForJurisdiction,
   parseFigureSvg,
-  pxToMm,
+  sourceCharHeightMm,
   readFigureSidecar,
   toRenderCheckFindings,
   type DocumentKind,
@@ -66,7 +65,6 @@ import {
   type TargetOffice,
 } from "../../../figuregen/index.js";
 import { caseOutputsDir } from "../../../paths.js";
-import { CAD_REF_FONT_MM } from "../../../figuregen/cad/render-cad.js";
 import { APPROVAL_GRANTED_KEY } from "./gate.js";
 import { degraded } from "./llm.js";
 
@@ -156,12 +154,14 @@ export async function detectFigureDrift(inputs: LocatedInputs): Promise<{
   drifts: string[];
   numberedFigureNos: number[];
   paperSizes: { figure_no: number; widthMm: number; heightMm: number }[];
+  unmeasuredPaperSizes: number[];
   renderChecks: FigureGateRenderCheck[];
   svgDigests: { name: string; digest: string }[];
 }> {
   const drifts: string[] = [];
   const numberedFigureNos: number[] = [];
   const paperSizes: { figure_no: number; widthMm: number; heightMm: number }[] = [];
+  const unmeasuredPaperSizes: number[] = [];
   const renderChecks: FigureGateRenderCheck[] = [];
   const svgDigests: { name: string; digest: string }[] = [];
   for (const figure of inputs.sidecar.figures) {
@@ -220,9 +220,11 @@ export async function detectFigureDrift(inputs: LocatedInputs): Promise<{
       );
     }
     // 实测纸面尺寸：V7 必须量**这份交付文件**。拿不到显式宽高时留空，V7 对该图回落到
-    // 布局重排（不静默跳过，也不拿 96dpi 用户单位冒充纸面毫米）。
+    // 布局重排（不静默跳过，也不拿 96dpi 用户单位冒充纸面毫米）；回落要记下来，报告里
+    // "V7 无发现"才不会被读成"已按交付文件核验过"。
     const paper = measureSvgPaperSize(svg);
     if (paper !== undefined) paperSizes.push({ figure_no: figure.spec.figure_no, ...paper });
+    else unmeasuredPaperSizes.push(figure.spec.figure_no);
     svgDigests.push({ name: figure.file, digest: sha256Hex(Buffer.from(svg, "utf8")) });
     // 矢量源渲染复核（RC1/RC5 fail 现在参与门禁）：复核本身失败时记 drift——"没跑"不能
     // 被当作"没发现问题"。
@@ -239,7 +241,7 @@ export async function detectFigureDrift(inputs: LocatedInputs): Promise<{
       );
     }
   }
-  return { drifts, numberedFigureNos, paperSizes, renderChecks, svgDigests };
+  return { drifts, numberedFigureNos, paperSizes, unmeasuredPaperSizes, renderChecks, svgDigests };
 }
 
 /** 栅格附图扩展名（`pixel-gate` 经 sharp 解码的格式）。 */
@@ -335,12 +337,19 @@ export function figureInputsHash(input: {
   specText: string;
   documentKind?: DocumentKind;
   jurisdiction: Jurisdiction;
+  renderer?: string;
   raster?: readonly { name: string; digest: string }[];
   /** 已交付矢量图的**内容**哈希：RC* 结论由这些字节决定，故并入载荷。 */
   vector?: readonly { name: string; digest: string }[];
+  /**
+   * 投影期几何（C*）结论：它们现在参与判定，改了 sidecar 的 findings 就能把结论从通过
+   * 翻成中断——不并入载荷，`inputs_hash` 就不再是"结论 ↔ 输入"的凭据。
+   */
+  geometry?: readonly unknown[];
 }): string {
   const raster = (input.raster ?? []).filter(entry => entry.digest.length > 0);
   const vector = (input.vector ?? []).filter(entry => entry.digest.length > 0);
+  const geometry = input.geometry ?? [];
   return createHash("sha256")
     .update(
       JSON.stringify({
@@ -348,8 +357,10 @@ export function figureInputsHash(input: {
         spec_text: input.specText,
         document_kind: input.documentKind ?? null,
         jurisdiction: input.jurisdiction,
+        renderer: input.renderer ?? null,
         ...(raster.length === 0 ? {} : { raster }),
         ...(vector.length === 0 ? {} : { vector }),
+        ...(geometry.length === 0 ? {} : { geometry }),
       }),
     )
     .digest("hex");
@@ -398,6 +409,10 @@ function renderReport(input: {
   textFaces: string;
   skippedTextRules: boolean;
   numberedFigureNos: readonly number[];
+  /** 未能实测画幅的图（V7 对这些图按布局重排估算——"未实测"必须与"已核验"可区分）。 */
+  unmeasuredPaperSizes: readonly number[];
+  /** 文件与 sidecar 不一致：此时核验结论不成立，报告头不得写成"通过"。 */
+  drifted: boolean;
   forced: boolean;
 }): string {
   const fails = input.result.findings.filter(f => f.severity === "fail");
@@ -425,7 +440,9 @@ function renderReport(input: {
   const failCount = fails.length + rasterFails.length + renderFails.length + geometryFails.length;
   const warnCount = warns.length + rasterWarns.length + renderWarns.length + geometryWarns.length;
   const lines = [
-    `附图门: ${passed ? "✅ 通过" : "⚠️ 未通过"}（fail=${failCount}, warn=${warnCount}${
+    `附图门: ${
+      input.drifted ? "❌ 未核验（文件与 sidecar 不一致）" : passed ? "✅ 通过" : "⚠️ 未通过"
+    }（fail=${failCount}, warn=${warnCount}${
       degradedRaster === 0 ? "" : `, 未核验栅格=${degradedRaster}`
     }）${input.forced ? "【人工强制放行】" : ""}`,
     `- 附图来源: ${input.source}（${input.dir}）`,
@@ -436,6 +453,11 @@ function renderReport(input: {
       input.numberedFigureNos.length === 0
         ? `均无图号标注（本案 ${input.sidecar.figures.length} 幅）`
         : `图${input.numberedFigureNos.join("、图")} 带图号`
+    }`,
+    `- 画幅实测: ${
+      input.unmeasuredPaperSizes.length === 0
+        ? "各图取交付文件声明的 width/height"
+        : `图${input.unmeasuredPaperSizes.join("、图")} 未声明宽高，V7 按布局重排估算（该图字高判据不是对交付文件量的）`
     }`,
     ...(input.result.specFaces === undefined
       ? []
@@ -478,19 +500,6 @@ function renderReport(input: {
   return lines.join("\n");
 }
 
-/**
- * 源图字高（毫米）：V7 的字高判据按**实际渲染器**取值。
- *
- * - graphviz 以 14pt 排出（≈4.94mm），用内置的 14px（≈3.70mm）会把打印字高低估 25%；
- * - CAD 通路的图面文字只有附图标记（{@link CAD_REF_FONT_MM}），没有节点文字；
- * - 内置渲染器 14px。
- */
-export function sourceCharHeightMm(renderer: string): number {
-  if (renderer === "cad") return CAD_REF_FONT_MM;
-  if (renderer === "graphviz" || renderer === "graphviz-wasm") return (14 / 72) * MM_PER_INCH;
-  return pxToMm(14);
-}
-
 export class FigureGateHandler implements StageHandler {
   readonly name = "figure-gate";
   readonly category = "gate" as const;
@@ -520,7 +529,8 @@ export class FigureGateHandler implements StageHandler {
 
     // 先回读交付文件（漂移检测与图号观测同源），再跑确定性规则——图号义务（V15/V16）只有
     // 在交付形态可观测时才能判，缺了观测就退化成"猜渲染器应该怎么写"。
-    const { drifts, numberedFigureNos, paperSizes, renderChecks, svgDigests } = await detectFigureDrift(located);
+    const { drifts, numberedFigureNos, paperSizes, unmeasuredPaperSizes, renderChecks, svgDigests } =
+      await detectFigureDrift(located);
     // 投影期几何检查（C*）随 sidecar 落盘；它们与 V*/RC* 同权，任一 fail 都不放行。
     const geometryFindings = sidecar.figures.flatMap(figure =>
       (figure.geometry?.findings ?? []).map(finding => ({ ...finding, figure_no: figure.figure_no })),
@@ -555,6 +565,8 @@ export class FigureGateHandler implements StageHandler {
       textFaces: textFaces.length > 0 ? textFaces : "（无）",
       skippedTextRules,
       numberedFigureNos,
+      unmeasuredPaperSizes,
+      drifted: drifts.length > 0,
       forced: Boolean(state[APPROVAL_GRANTED_KEY]),
     });
 
@@ -564,10 +576,19 @@ export class FigureGateHandler implements StageHandler {
       specText,
       documentKind,
       jurisdiction,
+      renderer: sidecar.renderer,
       ...(raster.status === "ran"
         ? { raster: raster.entries.map(entry => ({ name: entry.name, digest: entry.digest })) }
         : {}),
       ...(svgDigests.length === 0 ? {} : { vector: svgDigests }),
+      ...(geometryFindings.length === 0
+        ? {}
+        : {
+            geometry: sidecar.figures.map(figure => ({
+              figure_no: figure.figure_no,
+              geometry: figure.geometry ?? null,
+            })),
+          }),
     });
     const reportPath = join(dir, "figure-check.json");
     await writeReport(reportPath, {
@@ -575,6 +596,7 @@ export class FigureGateHandler implements StageHandler {
       result,
       raster,
       renderChecks,
+      unmeasuredPaperSizes,
       renderer: sidecar.renderer,
       figures: sidecar.figures,
     });
@@ -631,6 +653,8 @@ export type FigureCheckReport = {
   raster?: RasterGateObservation;
   /** 已交付 SVG 的渲染复核（RC*；本次未做时缺省）。 */
   render_check?: readonly FigureGateRenderCheck[];
+  /** 交付文件未声明宽高、V7 只能按布局重排估算的图（缺省 = 全部实测）。 */
+  paper_size_unmeasured?: readonly number[];
   renderer?: string;
   geometry?: readonly (FigureSidecarGeometry & { figure_no: number })[];
 };
@@ -642,6 +666,8 @@ export type FigureCheckReportInput = {
   raster?: RasterGateObservation;
   /** 已交付 SVG 的渲染复核（RC*）。 */
   renderChecks?: readonly FigureGateRenderCheck[];
+  /** 未能实测画幅的图号。 */
+  unmeasuredPaperSizes?: readonly number[];
   /** sidecar.renderer（builtin / graphviz / cad）。 */
   renderer?: string;
   /** sidecar 各图的几何来源（仅 CAD 图有）。 */
@@ -660,6 +686,9 @@ export function buildFigureCheckReport(input: FigureCheckReportInput): FigureChe
     result: input.result,
     ...(input.raster === undefined ? {} : { raster: input.raster }),
     ...(input.renderChecks === undefined ? {} : { render_check: input.renderChecks }),
+    ...(input.unmeasuredPaperSizes === undefined || input.unmeasuredPaperSizes.length === 0
+      ? {}
+      : { paper_size_unmeasured: input.unmeasuredPaperSizes }),
     ...(input.renderer === undefined ? {} : { renderer: input.renderer }),
     ...(geometry.length === 0 ? {} : { geometry }),
   };

@@ -23,6 +23,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { isAbsolute, resolve } from "node:path";
 import {
+  CAD_REF_FONT_MM,
   CAD_VIEWS,
   buildFigureSidecar,
   checkCadProjection,
@@ -268,7 +269,7 @@ async function writeProjectArtifacts(args: {
   let pagePath: string | undefined;
   if (args.fitToPage === true) {
     // 落版页的装配与内置渲染通路共用一份实现（文件名形态 + sidecar 的 layout 字段）。
-    // `sourceCharHeightMm` 传 3.5：CAD 图以 mm 为坐标单位，字高无需按 px 折算。
+    // 字高取图内最小字（标记字号）：CAD 图以 mm 为坐标单位，无需按 px 折算。
     const page = await writeSubmissionPageArtifact({
       outputDir,
       outputName,
@@ -276,7 +277,7 @@ async function writeProjectArtifacts(args: {
       drawingSvg: render.svg,
       office: profile.office,
       ...(sheet === undefined ? {} : { sheet: { index: sheet.index, total: sheet.total } }),
-      sourceCharHeightMm: 3.5,
+      sourceCharHeightMm: CAD_REF_FONT_MM,
     });
     pagePath = page.path;
     layoutField = page.layout;

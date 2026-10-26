@@ -34,15 +34,14 @@ import {
   exportSvgTextToPath,
   figureCaption,
   measureSvgPaperSize,
-  MM_PER_INCH,
   profileForJurisdiction,
-  pxToMm,
   renderFigureSvg,
   renderFigureSvgWithGraphviz,
   renderFiguresHtml,
   resolveDotBinary,
   sheetNumberText,
   shouldRenderCaption,
+  sourceCharHeightMm,
   writeFigureSidecar,
   writeSubmissionPageArtifact,
   type DocumentKind,
@@ -440,7 +439,9 @@ export function createPatentFigureGenerateTool(): SatiToolDefinition<PatentFigur
         // 用布局重排会把放得下的图判成超框。V2/V3 需说明书文本，属 patent_figure_check。
         const { renderer, renderOne } = resolveRenderPipeline(figures, jurisdiction, figureCount, tool);
         const captionRendered = shouldRenderCaption(profile, figureCount);
-        const sourceCharMm = renderer === "graphviz" ? (14 / 72) * MM_PER_INCH : pxToMm(14);
+        // 与门禁共用同一映射：两处各写一份时 graphviz-wasm 会在一侧漏掉，同一张图
+        // 在生成期按 14px、在门禁按 14pt 判字高。
+        const sourceCharMm = sourceCharHeightMm(renderer);
         const sheetText = sheet === undefined ? undefined : sheetNumberText(profile, sheet.index, sheet.total);
         const { files, pagePaths, renderedSvgs } = await renderFigureArtifacts({
           figures,

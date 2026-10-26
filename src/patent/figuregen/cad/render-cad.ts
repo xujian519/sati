@@ -129,6 +129,13 @@ export const CAD_HATCH_SPACING_MM = 2.5;
 /** 附图标记标号字号（毫米，纸面）与引线长度（毫米，纸面）。 */
 export const CAD_REF_FONT_MM = 3.0;
 export const CAD_REF_LEADER_MM = 6;
+/** 图号注记字号（毫米，纸面）：注记框是 C12 与择位障碍的输入，字框计算与实际绘制共用此值。 */
+export const CAD_CAPTION_FONT_MM = 3.5;
+/**
+ * 图号注记基线距纸面下缘（毫米）：须让注记框与最近图线留出 RC2 的 1.5mm 净距。
+ * 取 1.2 时注记字脚距下缘 0.78mm、距几何下界约 2.2mm（几何带 3mm 左右）。
+ */
+export const CAD_CAPTION_BASELINE_FROM_BOTTOM_MM = 1.2;
 /** 引线止于标号外缘的间隙（毫米，纸面）。 */
 export const CAD_REF_LABEL_GAP_MM = 1.5;
 /** 标注预留带的额外余量（毫米，纸面）：标号外缘与可印区之间留白。 */
@@ -316,12 +323,12 @@ export function renderCadSvg(table: CadEdgeTable, options: CadRenderOptions): Ca
   // 图号注记（图下方居中）也是图面内容：标号落位时把它当障碍，否则标号会压在图号上
   // （两者都读不出），而 C 规则此前只在标号越界/互压时才报。注记框与复核侧同一字框模型。
   const caption = figureCaption(profile, options.figureNo, options.figureCount ?? 1);
-  const captionY = heightMm - 2;
+  const captionY = heightMm - CAD_CAPTION_BASELINE_FROM_BOTTOM_MM;
   const captionBoxMm =
     caption === undefined
       ? undefined
       : (() => {
-          const box = glyphBox(caption, [widthMm / 2, captionY], 3.5, "middle");
+          const box = glyphBox(caption, [widthMm / 2, captionY], CAD_CAPTION_FONT_MM, "middle");
           return { left: box.minX, top: box.minY, right: box.maxX, bottom: box.maxY };
         })();
 
@@ -436,7 +443,7 @@ export function renderCadSvg(table: CadEdgeTable, options: CadRenderOptions): Ca
   const captionMarkup =
     caption === undefined
       ? ""
-      : `<text x="${fmt(widthMm / 2)}" y="${fmt(captionY)}" font-size="3.5" text-anchor="middle" fill="#000000">` +
+      : `<text x="${fmt(widthMm / 2)}" y="${fmt(captionY)}" font-size="${CAD_CAPTION_FONT_MM}" text-anchor="middle" fill="#000000">` +
         `${escapeXml(caption)}</text>\n`;
   const svg =
     `<svg xmlns="http://www.w3.org/2000/svg" width="${fmt(widthMm)}mm" height="${fmt(heightMm)}mm" ` +

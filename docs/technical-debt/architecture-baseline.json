@@ -65,7 +65,7 @@
     {
       "rule": "file-size",
       "file": "src/patent/figuregen/render-check.ts",
-      "lines": 1634
+      "lines": 1639
     },
     {
       "rule": "file-size",

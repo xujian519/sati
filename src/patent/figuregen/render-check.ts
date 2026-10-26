@@ -1551,9 +1551,14 @@ export function checkFigureRendering(
   // 中心线不展开就只是一条长线段，点划签名与「被实线覆盖」都看不出来。
   const pieces: Segment[] = [];
   for (const shape of scan.shapes) {
+    // 无描边的白填充是背景/挖空（画布底色、文字白边），图面上不承载墨迹：算进图线会把
+    // 画布边框报成"贯穿文字的线条"，或让贴着纸边的标号被报"贴线"。
+    const drawsInk = shape.stroked || !shape.occludes;
     for (const subpath of shape.subpaths) {
       const segments = subpathSegments(subpath);
-      drawn.push(...segments.map(segment => ({ segment, order: shape.order, leader: shape.role === LEADER_ROLE })));
+      if (drawsInk) {
+        drawn.push(...segments.map(segment => ({ segment, order: shape.order, leader: shape.role === LEADER_ROLE })));
+      }
       // 不透明填充的闭合轮廓遮挡更早绘制的图元；开放子路径的填充按闭合处理，故不列入。
       if (shape.occludes && subpath.closed) occluders.push({ points: subpath.points, order: shape.order });
       if (subpath.closed) {

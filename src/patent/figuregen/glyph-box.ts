@@ -263,6 +263,8 @@ export function boxEntryAlongRay(
   direction: readonly [number, number],
 ): number | undefined {
   const EPS = 1e-9;
+  // 零向量不是射线：两轴都退化时会一路落到 `Math.max(0, -∞) = 0`，把"方向算错"讲成"起点在框内"。
+  if (Math.hypot(direction[0], direction[1]) < EPS) return undefined;
   let enter = Number.NEGATIVE_INFINITY;
   let exit = Number.POSITIVE_INFINITY;
   for (const [origin, delta, min, max] of [

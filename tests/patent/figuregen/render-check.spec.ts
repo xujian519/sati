@@ -505,7 +505,19 @@ test("measureSvgPaperSize：按根元素声明的单位量交付尺寸，缺失/
   assert.deepEqual(measureSvgPaperSize('<svg width="192px" height="96px">'), { widthMm: 50.8, heightMm: 25.4 });
   // 百分比/缺省：不拿 96dpi 用户单位冒充纸面尺寸
   assert.equal(measureSvgPaperSize('<svg width="100%" height="100%">'), undefined);
+  assert.equal(measureSvgPaperSize('<svg viewBox="0 0 100 50">'), undefined, "只有 viewBox 不算声明纸面");
+  assert.equal(measureSvgPaperSize('<svg width="0mm" height="50mm">'), undefined, "非正尺寸是坏文件");
+  assert.equal(measureSvgPaperSize('<svg width="-100mm" height="50mm">'), undefined);
   assert.equal(measureSvgPaperSize("<div></div>"), undefined);
+  // `\bwidth` 会读到 `stroke-width`（`-` 也是词边界），把画幅读成 0.13mm
+  assert.deepEqual(measureSvgPaperSize('<svg stroke-width="0.5" width="100mm" height="50mm">'), {
+    widthMm: 100,
+    heightMm: 50,
+  });
+  assert.deepEqual(measureSvgPaperSize('<svg viewBox="0 0 10 5" stroke-width="0.5" width="100mm" height="50mm">'), {
+    widthMm: 100,
+    heightMm: 50,
+  });
 });
 
 test("resolveSvgViewport：无 viewBox 时用户单位按 96 dpi 像素，画布尺寸照原样取", () => {

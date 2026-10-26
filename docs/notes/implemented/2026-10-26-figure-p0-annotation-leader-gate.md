@@ -22,17 +22,22 @@ Status: implemented
 ## Decision
 
 - **字框单点**：`labelBoxOf` 直接委托 `glyphBox`；CAD 的预留带也用 `textWidthMm`。引线止点改为
-  「射线与占位框的首个进入点再退 `gapMm`」，由 `rayBoxEntryDistance` 求解，不再按基线估算。
+  「射线与占位框的首个进入点再退 `gapMm`」：`boxEntryAlongRay` 解进入距离，`leaderOf` 据此收边，
+  不再按基线估算。
 - **CAD 引线标角色**：CAD 渲染器给引线写 `data-dsh-role="leader"`（与内置通路共用
   `render-utils.ts` 的常量），复核侧的净距判据据此跳过工具自己的引线。
-- **V22 + 共享词法**：新增 V22（非正整数 fail、超过三位数 warn）；`textMentionsRef` 与说明书侧
-  抽取共用 `numeral.ts` 的编号前缀排除。入参层拒绝非正整数（不改 inputSchema）。
+- **V22 + 共享词法**：新增 V22（非正整数 fail、超过三位数 warn）；`textMentionsRef`、V3 的括号
+  抽取、V11 与说明书侧抽取共用 `numeral.ts` 的 `hasNumeralPrefix`（回看窗口取足 24 字符，
+  单字编号词要求左侧边界，避免 `密封条（20）` 这类元件名被误排除）。入参层拒绝非正整数
+  （不改 inputSchema，报错带 V22）。
 - **图号注记**：CAD 择位把注记框加入障碍；新增 C12 报告钉死偏移/旧产物造成的压盖。
 - **V7 实测优先**：`checkFigures` 新增 `measuredPaperSizes` 与 `sourceCharHeightMm`；生成期在渲染后
-  量交付 SVG，门禁在回读时量每张图（CAD 用 sidecar 的 `geometry.width_mm/height_mm`）。
+  量交付 SVG，门禁在回读时量每张交付 SVG 的根元素（`measureSvgPaperSize`），字高由
+  `sourceCharHeightMm(renderer)` 单点给出；量不到显式宽高时回落布局重排，并在报告与
+  `figure-check.json` 里标为「未实测」。
 - **门禁消费 RC/C**：`figure-gate` 对每张交付 SVG 跑 `checkFigureRendering`，并把 sidecar 的
-  `geometry.findings` 一并计入 fail 判定、报告与 `figure-check.json`；`inputs_hash` 并入矢量图
-  内容哈希（RC 结论由这些字节决定）。
+  `geometry.findings` 一并计入 fail 判定、报告与 `figure-check.json`；`inputs_hash` 并入渲染器名、
+  矢量图内容哈希与 C 结论（RC/C 结论由这些输入决定，否则改 sidecar 就能翻结论而哈希不变）。
 
 ## Alternatives considered
 
@@ -54,8 +59,12 @@ Status: implemented
 - 工具入参结构未变（`inputSchema` 零改动），llm-replay fixture 不需重录。
 - 引线可见长度会随标号宽度缩短（3 位横引最短约 1.8mm）；标号落位与旧坐标不再逐位一致，
   相关单测改为断言几何性质（止点不进入字框、轴向间隙 = `gapMm`）。
-- `figure-check.json` v1 追加可选 `render_check`；`inputs_hash` 对纯矢量案件也随 SVG 内容变化，
-  审计语义更强（旧结论的哈希不再复现，但契约版本与读取方不变）。
+- `figure-check.json` v1 追加可选 `render_check` 与 `paper_size_unmeasured`；`inputs_hash` 对纯矢量
+  案件也随 SVG 内容变化，审计语义更强（旧结论的哈希不再复现，但契约版本与读取方不变）。
+- 曲线图的刻度值/图例间隙由 4px 提到 6px（≈1.59mm），以满足 RC2 的 1.5mm 净距；CAD 图号注记
+  基线由「纸面下缘 −2mm」下移到 −1.2mm。两处都是为了让渲染器产物自己通过复核，否则门禁会
+  对每张曲线图稳定报 6–9 条 warn。白色填充（无描边）不再计作图线，画布边框不再被当成贯穿文字
+  的线条。
 - 生成期核验从「渲染前」移到「渲染后」：V7 用的是真实画幅；渲染失败时不再产出核验快照
   （失败路径本来就不落 sidecar）。
 - CAD 标号会避开图号注记带，可落位空间略减；无标注/无图号的图幅与旧行为逐位一致。

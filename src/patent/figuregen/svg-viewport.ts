@@ -64,7 +64,9 @@ export type SvgViewport = {
 
 /** 根元素属性的值（第一个匹配的 `name="…"`，属性名不区分大小写）。 */
 function attribute(openTag: string, name: string): string | undefined {
-  const pattern = new RegExp(`\\b${name}\\s*=\\s*"([^"]*)"`, "i");
+  // 左边界的 `\b` 挡不住 `stroke-width=`（`-` 也是词边界）：查 `width` 会读到描边宽度，
+  // 把 100mm 的画幅读成 0.13mm。属性之间以空白分隔，故用 `(?:^|\s)`。
+  const pattern = new RegExp(`(?:^|\\s)${name}\\s*=\\s*"([^"]*)"`, "i");
   return pattern.exec(openTag)?.[1];
 }
 
@@ -154,9 +156,10 @@ export function measureSvgPaperSize(svg: string): { widthMm: number; heightMm: n
   const openTag = /<svg\b[^>]*>/iu.exec(svg)?.[0];
   if (openTag === undefined) return undefined;
   const viewport = resolveSvgViewport(openTag);
-  if (viewport.widthMm === undefined || viewport.heightMm === undefined) return undefined;
-  if (!Number.isFinite(viewport.widthMm) || !Number.isFinite(viewport.heightMm)) return undefined;
-  return { widthMm: viewport.widthMm, heightMm: viewport.heightMm };
+  const { widthMm, heightMm } = viewport;
+  // 非正尺寸是坏文件：`uniformFigureZoom` 对 ≤0 的边直接跳过，判据会静默恒过。
+  if (widthMm === undefined || heightMm === undefined || widthMm <= 0 || heightMm <= 0) return undefined;
+  return { widthMm, heightMm };
 }
 
 /**

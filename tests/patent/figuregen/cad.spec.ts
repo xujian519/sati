@@ -35,6 +35,7 @@ import {
 } from "../../../src/patent/figuregen/cad/index.js";
 import { PRINTABLE_HEIGHT_MM, PRINTABLE_WIDTH_MM } from "../../../src/patent/figuregen/page-contract.js";
 import { parseFigureSvg } from "../../../src/patent/figuregen/readback.js";
+import { checkFigureRendering } from "../../../src/patent/figuregen/render-check.js";
 
 const FIXTURE_DIR = resolve(process.cwd(), "tests/fixtures/patent/cad");
 
@@ -706,6 +707,19 @@ test("标注：图号注记是择位障碍，标号压盖注记 ⇒ C12 warn", (
   const c12 = covered.find(finding => finding.rule === "C12");
   assert.equal(c12?.severity, "warn");
   assert.match(c12!.message, /压盖了图号注记/u);
+});
+
+test("复核：CAD 产物（含图号注记与引线）自身通过文字贯穿/净距判据", () => {
+  const table = loadTable("plate-front.json");
+  // 注记与几何下界过近、或引线未标角色时，门禁会对每张 CAD 图稳定报 RC1/RC2（自家产物被
+  // 当成缺陷）。这条用例同时钉住注记基线与引线角色属性。
+  for (const annotations of [[], [{ ref: 10, atMm: [40, 15, 10] }] as CadRefAnnotation[]]) {
+    const render = renderCadSvg(table, { figureNo: 1, annotations });
+    const findings = checkFigureRendering(render.svg).findings.filter(finding => finding.check !== "not-measured");
+    assert.deepEqual(findings, [], `annotations=${annotations.length} 时不应有 RC 发现`);
+  }
+  const annotated = renderCadSvg(table, { figureNo: 1, annotations: [{ ref: 10, atMm: [40, 15, 10] }] });
+  assert.match(annotated.svg, /data-dsh-role="leader"/u, "引线须标角色，否则净距判据会把引线当普通图线");
 });
 
 test("标注：无标注时图幅与旧行为逐位一致（预留带只在有标注时占用）", () => {

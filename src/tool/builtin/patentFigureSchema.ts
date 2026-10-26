@@ -95,7 +95,7 @@ export function assertFigurePayloads(figures: readonly FigureSpec[], tool: strin
       for (const node of figure.nodes) {
         if (node.ref !== undefined && !isRefNumeral(node.ref)) {
           invalid(
-            `图${no} 节点「${node.id}」的附图标记应为正整数（收到 ${String(node.ref)}）：` +
+            `图${no} 节点「${node.id}」的附图标记应为正整数（V22，收到 ${String(node.ref)}）：` +
               "0、负数或小数无法作为可引用的标记",
             no,
           );

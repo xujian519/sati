@@ -325,6 +325,54 @@ test("figure-gate：投影期几何检查 fail（C9）参与阻断（不只躺�
   }
 });
 
+test("figure-gate：几何结论并入 inputs_hash（改 sidecar 的 C 发现会改变哈希）", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "sati-gate-hash-geometry-"));
+  try {
+    await generateFigures(dir);
+    const sidecarPath = join(dir, "case-g-figures.json");
+    const sidecar = JSON.parse(readFileSync(sidecarPath, "utf8")) as {
+      figures: { geometry?: Record<string, unknown> }[];
+    };
+    const geometry = {
+      source: "cad",
+      view: "front",
+      scale: 1,
+      width_mm: 100,
+      height_mm: 100,
+      hidden_lines: false,
+      findings: [] as unknown[],
+    };
+    sidecar.figures[0]!.geometry = geometry;
+    writeFileSync(sidecarPath, `${JSON.stringify(sidecar, null, 2)}\n`, "utf8");
+    await runGate({ figure_dir: dir, claims_draft: "处理模块(20)。", spec_draft: "" });
+    const clean = String(readCheckReport(dir).inputs_hash);
+
+    geometry.findings = [{ rule: "C8", severity: "warn", message: "锚点在图外" }];
+    writeFileSync(sidecarPath, `${JSON.stringify(sidecar, null, 2)}\n`, "utf8");
+    await runGate({ figure_dir: dir, claims_draft: "处理模块(20)。", spec_draft: "" });
+    const changed = String(readCheckReport(dir).inputs_hash);
+    assert.notEqual(clean, changed, "C 结论参与判定，改了它必须改变 inputs_hash");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("figure-gate：交付图未声明宽高时报告标为「未实测」，不写成已核验", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "sati-gate-unmeasured-"));
+  try {
+    await generateFigures(dir);
+    const svgPath = join(dir, "case-g-fig1.svg");
+    writeFileSync(svgPath, readFileSync(svgPath, "utf8").replace(/\swidth="[^"]*"\sheight="[^"]*"/u, ""), "utf8");
+
+    const outcome = await runGate({ figure_dir: dir, claims_draft: "处理模块(20)。", spec_draft: "" });
+    const report = outcome.interrupted === undefined ? outcome.report : String(outcome.interrupted.data.figure_report);
+    assert.match(report, /画幅实测: 图1 未声明宽高/u);
+    assert.deepEqual(readCheckReport(dir).paper_size_unmeasured, [1]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 // ---------------------------------------------------------------------------
 // 门粒度放行隔离（对齐 workflow/stage-primitives.ts 与 executor.ts 的契约）
 // ---------------------------------------------------------------------------
