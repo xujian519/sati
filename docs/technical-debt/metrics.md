@@ -1,15 +1,15 @@
 # Sati 技术债务指标基线与趋势
 
 > 由 `node scripts/measure-techdebt.mjs --update` 自动生成，谨防手工编辑。
-> 最近一次快照：**2026-10-25**
+> 最近一次快照：**2026-10-26**
 
 ## 规模
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1160 / 202864 |
+| src TS 文件 / 行数 | 1169 / 203586 |
 | src JS 文件 | 0 |
-| tests 文件 | 681 |
+| tests 文件 | 683 |
 | ui/src 文件 / 行数 | 740 / 109531 |
 | ui/server 文件 / 行数 | 149 / 38859 |
 
@@ -86,7 +86,6 @@
 |---|---|
 | `ui/server/sati-bridge.js` | 2348 |
 | `src/adapters/channel/wecom/WeComChannel.ts` | 1764 |
-| `src/patent/figuregen/render-check.ts` | 1634 |
 | `src/model/catalog/providers.ts` | 1593 |
 | `ui/server/routes/git.js` | 1523 |
 | `src/gateway/client/InProcessGateway.ts` | 1512 |
@@ -114,6 +113,7 @@
 | `src/patent/figuregen/inkscape-renderer.ts` | 916 |
 | `ui/src/components/app-shell/AppShellV2.tsx` | 897 |
 | `ui/src/components/chat/tools/configs/toolConfigs.ts` | 864 |
+| `ui/server/services/satiConfig.js` | 858 |
 
 ## vendored 子包（单列，不计入上述规模与排名）
 
@@ -137,7 +137,7 @@
 
 | 模块 | 测试文件 |
 |---|---|
-| patent | 164 |
+| patent | 166 |
 | tool | 75 |
 | agent | 61 |
 | knowledge | 43 |
@@ -170,7 +170,7 @@
 | runtime | 1 |
 | status | 1 |
 
-| **合计** | **653** |
+| **合计** | **655** |
 
 ## i18n en/zh-CN 对齐
 

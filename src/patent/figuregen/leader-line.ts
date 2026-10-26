@@ -29,7 +29,7 @@
  * 枚举，取第一个全部判据通过的落位——无随机、无评分阈值、无迭代收敛，同一输入永远同一结果。
  */
 
-import { measureTextWidth } from "./metrics.js";
+import { boxEntryAlongRay, glyphBox } from "./glyph-box.js";
 import { boxesOverlap, boxWithin, GEOMETRY_EPS, type Box } from "./render-utils.js";
 
 /** 标号文本框（与 CAD 的 `CadBox` 同构：同为轴对齐矩形，故几何谓词共用一份实现）。 */
@@ -136,21 +136,19 @@ export const DEFAULT_COLLINEAR_GAP_MM = 0.7;
  * 反向排最后是因为它把标号摆回图形一侧，多半被"标号不得压盖图内内容"否掉。
  */
 export const LEADER_DIRECTIONS_DEG: readonly number[] = [0, 45, -45, 90, -90, 135, -135, 180];
-/** 标号框在基线上方/下方的比例（合计 1.2 倍字号）。 */
-const LABEL_ASCENT_RATIO = 1;
-const LABEL_DESCENT_RATIO = 0.2;
 /** 本模块的几何容差（与共享谓词同一取值：见 render-utils.ts 的 GEOMETRY_EPS）。 */
 const EPS = GEOMETRY_EPS;
 
-/** 标号文本框（纸面毫米）：宽按字符类别估算（与布局器同一度量），高按字号比例。 */
+/**
+ * 标号文本框（纸面毫米）：与复核侧共用 `glyphBox` 的字符宽度与升降比例。
+ *
+ * 这里**必须**用复核侧的同一模型：择位按较紧的框躲避、复核按较松的框判定，会把工具
+ * 自己画出的合规标号报成「文字被线条贯穿」或「净距不足」；反过来（择位宽、复核窄）则
+ * 会漏掉真实压盖。
+ */
 export function labelBoxOf(text: string, fontSizeMm: number, labelPoint: LeaderPoint): LeaderBox {
-  const halfWidth = measureTextWidth(text, fontSizeMm) / 2;
-  return {
-    left: labelPoint.x - halfWidth,
-    right: labelPoint.x + halfWidth,
-    top: labelPoint.y - fontSizeMm * LABEL_ASCENT_RATIO,
-    bottom: labelPoint.y + fontSizeMm * LABEL_DESCENT_RATIO,
-  };
+  const box = glyphBox(text, [labelPoint.x, labelPoint.y], fontSizeMm, "middle");
+  return { left: box.minX, top: box.minY, right: box.maxX, bottom: box.maxY };
 }
 
 function expandBox(box: LeaderBox, by: number): LeaderBox {
@@ -315,18 +313,37 @@ function rotateDeg(direction: readonly [number, number], degrees: number): [numb
   return [direction[0] * cos - direction[1] * sin, direction[0] * sin + direction[1] * cos];
 }
 
-/** 由锚点与方向/长度得到引线（长度不超间隙时无引线：标号就贴在锚点上）。 */
+/**
+ * 由锚点与方向/长度得到引线：止于标号占位框**外缘再退 `gapMm`**。
+ *
+ * 长度参数是"锚点到标号基线点"的择位尺度；可见引线长度要减去框沿该方向的进入距离与
+ * 间隙。标号离锚点太近、框吃掉了整段引线时返回空数组（标号就贴在锚点上），不画一条
+ * 穿进字里的短线。
+ */
 function leaderOf(
   anchor: LeaderPoint,
   direction: readonly [number, number],
   length: number,
+  text: string,
+  fontSizeMm: number,
   gapMm: number,
 ): LeaderSegment[] {
-  if (length <= gapMm + EPS) return [];
+  const labelPoint: LeaderPoint = {
+    x: anchor.x + direction[0] * length,
+    y: anchor.y + direction[1] * length,
+  };
+  const entry = boxEntryAlongRay(
+    glyphBox(text, [labelPoint.x, labelPoint.y], fontSizeMm, "middle"),
+    [anchor.x, anchor.y],
+    direction,
+  );
+  if (entry === undefined) return [];
+  const endDistance = entry - gapMm;
+  if (endDistance <= EPS) return [];
   return [
     {
       from: anchor,
-      to: { x: anchor.x + direction[0] * (length - gapMm), y: anchor.y + direction[1] * (length - gapMm) },
+      to: { x: anchor.x + direction[0] * endDistance, y: anchor.y + direction[1] * endDistance },
     },
   ];
 }
@@ -371,7 +388,7 @@ function auditPinnedPlacement(
   };
   for (const obstacle of obstacles.boxes) {
     if (boxesOverlap(placement.box, expandBox(obstacle, context.clearanceMm))) {
-      record("标号压在图形上（与图内实心区重叠），标号读不出来");
+      record("标号压在图形或图号注记上（与图内内容的占位框重叠），标号读不出来");
       break;
     }
   }
@@ -451,7 +468,9 @@ export function planLeaderLines(
     const placement = placementOf(
       target,
       labelPoint,
-      direction === undefined ? [] : leaderOf(target.anchor, direction, length, options.gapMm),
+      direction === undefined
+        ? []
+        : leaderOf(target.anchor, direction, length, target.text, options.fontSizeMm, options.gapMm),
       options,
       true,
     );
@@ -478,7 +497,7 @@ export function planLeaderLines(
           x: target.anchor.x + direction[0] * length,
           y: target.anchor.y + direction[1] * length,
         };
-        const leader = leaderOf(target.anchor, direction, length, options.gapMm);
+        const leader = leaderOf(target.anchor, direction, length, target.text, options.fontSizeMm, options.gapMm);
         const box = labelBoxOf(target.text, options.fontSizeMm, labelPoint);
         if (!candidateAccepted(box, leader[0], context)) continue;
         placed = placementOf(target, labelPoint, leader, options, false);
