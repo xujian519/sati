@@ -1,6 +1,7 @@
 import React from "react";
 import { Box, Text, useStdout } from "ink";
 import { satiDarkBlueTheme } from "./theme.js";
+import { readTerminalSize } from "./terminal-size.js";
 
 const ANSI_SHADOW_LOGO = [
   "███████╗ █████╗ ████████╗██╗",
@@ -25,7 +26,7 @@ const STANDARD_LOGO = [
 
 export function SatiLogo({ tagline }: { tagline?: string } = {}): React.ReactNode {
   const { stdout } = useStdout();
-  const cols = stdout?.columns ?? 80;
+  const cols = readTerminalSize(stdout).columns ?? 80;
   const useShadow = cols >= ANSI_SHADOW_MIN_TERMINAL_COLS;
 
   return (

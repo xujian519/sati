@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { Box, Text, useInput, useStdout } from "ink";
 import { satiDarkBlueTheme } from "./theme.js";
+import { readTerminalSize } from "./terminal-size.js";
 
 export function ToolOutputViewer({
   content,
@@ -12,7 +13,7 @@ export function ToolOutputViewer({
   onClose: () => void;
 }): React.ReactNode {
   const { stdout } = useStdout();
-  const termRows = stdout?.rows ?? 24;
+  const termRows = readTerminalSize(stdout).rows ?? 24;
   const viewport = Math.max(5, termRows - 4);
 
   const lines = useMemo(() => content.split("\n"), [content]);

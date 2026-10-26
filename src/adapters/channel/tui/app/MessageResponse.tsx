@@ -4,6 +4,7 @@ import type { TuiMessage } from "./types.js";
 import { satiDarkBlueTheme } from "./theme.js";
 import { truncateForDisplay } from "./truncate.js";
 import { formatToolSummary } from "./formatToolSummary.js";
+import { readTerminalSize } from "./terminal-size.js";
 
 function formatCharCount(n: number): string {
   if (n >= 1000) return `${(n / 1000).toFixed(1)}k chars`;
@@ -76,7 +77,7 @@ function ToolMessageResponse({
   focused: boolean;
 }): React.ReactNode {
   const { stdout } = useStdout();
-  const columns = stdout?.columns ?? 80;
+  const columns = readTerminalSize(stdout).columns ?? 80;
 
   const color = message.ok === false ? satiDarkBlueTheme.error : satiDarkBlueTheme.success;
 

@@ -7,9 +7,9 @@
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1169 / 203586 |
+| src TS 文件 / 行数 | 1170 / 203604 |
 | src JS 文件 | 0 |
-| tests 文件 | 683 |
+| tests 文件 | 684 |
 | ui/src 文件 / 行数 | 740 / 109531 |
 | ui/server 文件 / 行数 | 149 / 38859 |
 
@@ -147,7 +147,7 @@
 | session | 28 |
 | cli | 20 |
 | router | 20 |
-| adapters | 17 |
+| adapters | 18 |
 | always-on | 14 |
 | extension | 13 |
 | mcp | 13 |
@@ -170,7 +170,7 @@
 | runtime | 1 |
 | status | 1 |
 
-| **合计** | **655** |
+| **合计** | **656** |
 
 ## i18n en/zh-CN 对齐
 
