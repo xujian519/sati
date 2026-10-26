@@ -107,8 +107,8 @@ importers:
         specifier: ^8.3.0
         version: 8.3.0
       tree-sitter-bash:
-        specifier: 0.25.0
-        version: 0.25.0
+        specifier: 0.25.1
+        version: 0.25.1
       turndown:
         specifier: ^7.2.4
         version: 7.2.4
@@ -6355,8 +6355,8 @@ packages:
     resolution: {integrity: sha512-L0Orpi8qGpRG//Nd+H90vFB+3iHnue1zSSGmNOOCh1GLJ7rUKVwV2HvijphGQS2UmhUZewS9VgvxYIdgr+fG1A==}
     hasBin: true
 
-  tree-sitter-bash@0.25.0:
-    resolution: {integrity: sha512-gZtlj9+qFS81qKxpLfD6H0UssQ3QBc/F0nKkPsiFDyfQF2YBqYvglFJUzchrPpVhZe9kLZTrJ9n2J6lmka69Vg==}
+  tree-sitter-bash@0.25.1:
+    resolution: {integrity: sha512-7hMytuYIMoXOq24yRulgIxthE9YmggZIOHCyPTTuJcu6EU54tYD+4G39cUb28kxC6jMf/AbPfWGLQtgPTdh3xw==}
     peerDependencies:
       tree-sitter: ^0.25.0
     peerDependenciesMeta:
@@ -13422,7 +13422,7 @@ snapshots:
 
   tree-kill@1.2.2: {}
 
-  tree-sitter-bash@0.25.0:
+  tree-sitter-bash@0.25.1:
     dependencies:
       node-addon-api: 8.9.2
       node-gyp-build: 4.8.4
