@@ -441,7 +441,7 @@ export function createPatentFigureGenerateTool(): SatiToolDefinition<PatentFigur
         const captionRendered = shouldRenderCaption(profile, figureCount);
         // 与门禁共用同一映射：两处各写一份时 graphviz-wasm 会在一侧漏掉，同一张图
         // 在生成期按 14px、在门禁按 14pt 判字高。
-        const sourceCharMm = sourceCharHeightMm(renderer);
+        const sourceCharMm = sourceCharHeightMm(renderer, jurisdiction);
         const sheetText = sheet === undefined ? undefined : sheetNumberText(profile, sheet.index, sheet.total);
         const { files, pagePaths, renderedSvgs } = await renderFigureArtifacts({
           figures,

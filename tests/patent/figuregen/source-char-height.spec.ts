@@ -7,12 +7,16 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
-import { CAD_REF_FONT_MM } from "../../../src/patent/figuregen/cad/index.js";
+import { CAD_REF_FONT_MM, CAD_REF_FONT_STATUTORY_MM } from "../../../src/patent/figuregen/cad/index.js";
 import { pxToMm } from "../../../src/patent/figuregen/page-contract.js";
 import { sourceCharHeightMm } from "../../../src/patent/figuregen/source-char-height.js";
 
 test("sourceCharHeightMm：按渲染器取图内最小字高，graphviz 与 wasm 同值", () => {
   assert.equal(sourceCharHeightMm("cad"), CAD_REF_FONT_MM);
+  assert.equal(sourceCharHeightMm("cad", "cn"), CAD_REF_FONT_MM);
+  // PCT Rule 11.13(h) / 37 CFR 1.84(p)(3) 的 3.2mm 下限：CAD 标号按法域取 3.5mm
+  assert.equal(sourceCharHeightMm("cad", "us"), CAD_REF_FONT_STATUTORY_MM);
+  assert.equal(sourceCharHeightMm("cad", "pct"), CAD_REF_FONT_STATUTORY_MM);
   assert.equal(sourceCharHeightMm("builtin"), pxToMm(14));
   // graphviz 边标签是 12pt（节点 14pt）：判据取更小的那个才有合规意义
   const graphviz = sourceCharHeightMm("graphviz");

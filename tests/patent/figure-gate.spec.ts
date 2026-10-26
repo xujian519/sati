@@ -325,6 +325,45 @@ test("figure-gate：投影期几何检查 fail（C9）参与阻断（不只躺�
   }
 });
 
+test("figure-gate：C9 与 RC5 对同一次越界各报一次 → 计数合并为 1（阻断仍成立）", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "sati-gate-overlap-"));
+  try {
+    await generateFigures(dir);
+    // 交付文件里画一条落在画布外的线（RC5）；sidecar 另记 C9（标号越界）。两层是同一类
+    // 缺陷的两个证据，报告计数不得相加。
+    const svgPath = join(dir, "case-g-fig1.svg");
+    const svg = readFileSync(svgPath, "utf8");
+    const height = Number(svg.match(/\bheight="([\d.]+)(?:mm)?"/u)?.[1] ?? 250);
+    const outside = `<line x1="0" y1="${height + 5}" x2="20" y2="${height + 5}" stroke="#000000" stroke-width="0.35"/>`;
+    writeFileSync(svgPath, svg.replace("</svg>", `${outside}\n</svg>`), "utf8");
+
+    const sidecarPath = join(dir, "case-g-figures.json");
+    const sidecar = JSON.parse(readFileSync(sidecarPath, "utf8")) as {
+      figures: { geometry?: unknown }[];
+    };
+    sidecar.figures[0]!.geometry = {
+      source: "cad",
+      view: "front",
+      scale: 1,
+      width_mm: 100,
+      height_mm: 100,
+      hidden_lines: false,
+      findings: [{ rule: "C9", severity: "fail", message: "标号超出图幅，会被裁掉" }],
+    };
+    writeFileSync(sidecarPath, `${JSON.stringify(sidecar, null, 2)}\n`, "utf8");
+
+    const outcome = await runGate({ figure_dir: dir, claims_draft: "处理模块(20)。", spec_draft: "" });
+    assert.ok(outcome.interrupted, "C9/RC5 任一 fail 都应阻断");
+    assert.match(String(outcome.interrupted.data.figure_report), /\[FAIL\] C9/u);
+    assert.match(String(outcome.interrupted.data.figure_report), /\[FAIL\] RC5/u);
+    assert.match(String(outcome.interrupted.data.figure_report), /fail=1/u);
+    assert.match(String(outcome.interrupted.data.figure_report), /跨层重复观测已合并 1 项/u);
+    assert.match(String(outcome.interrupted.data.review_context), /原始 fail 2 项/u);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("figure-gate：几何结论并入 inputs_hash（改 sidecar 的 C 发现会改变哈希）", async () => {
   const dir = mkdtempSync(join(tmpdir(), "sati-gate-hash-geometry-"));
   try {

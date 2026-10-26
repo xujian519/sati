@@ -23,9 +23,9 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { isAbsolute, resolve } from "node:path";
 import {
-  CAD_REF_FONT_MM,
   CAD_VIEWS,
   buildFigureSidecar,
+  cadRefFontMm,
   checkCadProjection,
   exportSvgTextToPath,
   figureCaption,
@@ -277,7 +277,7 @@ async function writeProjectArtifacts(args: {
       drawingSvg: render.svg,
       office: profile.office,
       ...(sheet === undefined ? {} : { sheet: { index: sheet.index, total: sheet.total } }),
-      sourceCharHeightMm: CAD_REF_FONT_MM,
+      sourceCharHeightMm: cadRefFontMm(args.jurisdiction),
     });
     pagePath = page.path;
     layoutField = page.layout;

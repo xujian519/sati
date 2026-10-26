@@ -24,6 +24,7 @@ import { planLeaderLines, type LeaderSegment } from "../leader-line.js";
 import { glyphBox, textWidthMm } from "../glyph-box.js";
 import { escapeXml, fmt as fmtShared, SVG_LEADER_ROLE, SVG_ROLE_ATTRIBUTE } from "../render-utils.js";
 import type { Jurisdiction } from "../types.js";
+import { cadRefFontMm } from "./ref-font.js";
 import {
   projectModelPoints,
   type CadAxisImages,
@@ -126,8 +127,7 @@ export const CAD_HIDDEN_DASH_MM: readonly [number, number] = [1.5, 1];
 /** 剖面线（细实线）线宽与间距（毫米，纸面）：间距指相邻剖面线的垂直距离。 */
 export const CAD_HATCH_LINE_WIDTH_MM = 0.2;
 export const CAD_HATCH_SPACING_MM = 2.5;
-/** 附图标记标号字号（毫米，纸面）与引线长度（毫米，纸面）。 */
-export const CAD_REF_FONT_MM = 3.0;
+/** 附图标记引线长度（毫米，纸面）。标号字号按法域取值，见 `ref-font.ts`。 */
 export const CAD_REF_LEADER_MM = 6;
 /** 图号注记字号（毫米，纸面）：注记框是 C12 与择位障碍的输入，字框计算与实际绘制共用此值。 */
 export const CAD_CAPTION_FONT_MM = 3.5;
@@ -254,6 +254,8 @@ function cutFacePolylines(
 /** 投影边表 → 黑白 SVG（A4 可印区适配；确定性：无时钟/随机）。 */
 export function renderCadSvg(table: CadEdgeTable, options: CadRenderOptions): CadRenderResult {
   const hiddenLines = options.hiddenLines === true;
+  // 标号字号按法域取：PCT/US 的 3.2mm 法定下限不能再用 CNIPA 的 3.0mm 口径。
+  const refFontMm = cadRefFontMm(options.jurisdiction);
   const margin = options.marginMm ?? DEFAULT_MARGIN_MM;
   const annotations = options.annotations ?? [];
   const drawn: CadEdge[] = table.edges.filter(edge => edge.kind === "visible" || hiddenLines);
@@ -297,7 +299,7 @@ export function renderCadSvg(table: CadEdgeTable, options: CadRenderOptions): Ca
     for (const annotation of annotations) {
       const offset = annotation.labelOffsetMm;
       const reach = offset === undefined ? CAD_REF_LEADER_MM : Math.hypot(offset[0], offset[1]);
-      const halfWidth = textWidthMm(String(annotation.ref), CAD_REF_FONT_MM) / 2;
+      const halfWidth = textWidthMm(String(annotation.ref), refFontMm) / 2;
       needed = Math.max(needed, Math.min(reach, CAD_REF_LEADER_MM * 6) + halfWidth + CAD_REF_RESERVE_PAD_MM);
     }
     const cap = Math.min(area.widthMm, area.heightMm) * CAD_MAX_RESERVE_RATIO;
@@ -398,7 +400,7 @@ export function renderCadSvg(table: CadEdgeTable, options: CadRenderOptions): Ca
     }),
     { boxes: [geometryBoundsMm, ...(captionBoxMm === undefined ? [] : [captionBoxMm])], segments: obstacleSegments },
     {
-      fontSizeMm: CAD_REF_FONT_MM,
+      fontSizeMm: refFontMm,
       gapMm: CAD_REF_LABEL_GAP_MM,
       minLeaderMm: CAD_REF_LEADER_MM,
       // 引线上限取几何对角尺度：锚点在零件深处时必须能一路引到图外（缺省 6mm 够不到中心）
@@ -434,7 +436,7 @@ export function renderCadSvg(table: CadEdgeTable, options: CadRenderOptions): Ca
         .join("");
       return (
         `<g id="n-ref-${placement.id}" data-ref="${placement.id}">${leader}` +
-        `<text x="${fmt(placement.labelPoint.x)}" y="${fmt(placement.labelPoint.y)}" font-size="${CAD_REF_FONT_MM}" ` +
+        `<text x="${fmt(placement.labelPoint.x)}" y="${fmt(placement.labelPoint.y)}" font-size="${refFontMm}" ` +
         `text-anchor="middle" fill="#000000">${escapeXml(placement.text)}</text></g>`
       );
     })

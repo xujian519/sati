@@ -161,4 +161,5 @@ export {
   type RenderCheckReport,
 } from "./render-check.js";
 export { RENDER_CHECK_RULE, toRenderCheckFindings } from "./render-check-rules.js";
+export { reconcileGateCounts, type GateCounts, type GateFinding } from "./gate-reconcile.js";
 export { sourceCharHeightMm } from "./source-char-height.js";

@@ -668,6 +668,22 @@ test("标注：锚点投影 + 引线 + data-ref（回读契约与内置渲染器
   );
 });
 
+test("标注：标号字号按法域取——PCT/US 取 3.5mm（≥3.2mm 下限），CNIPA 沿用 3.0mm", () => {
+  const table = loadTable("plate-front.json");
+  const annotations: CadRefAnnotation[] = [{ ref: 10, atMm: [40, 15, 10] }];
+  // CNIPA 无附图专有字高条文，沿用既有 3.0mm 交付口径
+  assert.match(renderCadSvg(table, { figureNo: 1, annotations }).svg, /font-size="3" /u);
+  assert.match(renderCadSvg(table, { figureNo: 1, annotations, jurisdiction: "cn" }).svg, /font-size="3" /u);
+  // PCT Rule 11.13(h) / 37 CFR 1.84(p)(3)：数字/字母不得低于 3.2mm
+  for (const jurisdiction of ["us", "pct"] as const) {
+    assert.match(
+      renderCadSvg(table, { figureNo: 1, annotations, jurisdiction }).svg,
+      /font-size="3\.5" /u,
+      `${jurisdiction} 的标号字号须高于 3.2mm 下限`,
+    );
+  }
+});
+
 test("标注：图号注记是择位障碍，标号压盖注记 ⇒ C12 warn", () => {
   const table = loadTable("plate-front.json");
   // 有图号时注记框存在，且引擎落位不与它相交

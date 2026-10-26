@@ -5,8 +5,9 @@
  * 一边被漏掉，同一张图在生成期报 V7 warn、在门禁却不报——两边都"有核验"，结论却不同。
  */
 
-import { CAD_REF_FONT_MM } from "./cad/render-cad.js";
+import { cadRefFontMm } from "./cad/ref-font.js";
 import { MM_PER_INCH, pxToMm } from "./page-contract.js";
+import type { Jurisdiction } from "./types.js";
 
 /** graphviz 字号（pt）：节点 14pt、边标签 12pt，判据取更小的边标签（最小字才有合规意义）。 */
 const GRAPHVIZ_CHAR_PT = 12;
@@ -15,10 +16,11 @@ const BUILTIN_CHAR_PX = 14;
 
 /**
  * @param renderer - sidecar / 生成管线记录的渲染器名（`builtin`、`graphviz`、`graphviz-wasm`、`cad`）。
+ * @param jurisdiction - 辖区（CAD 标号字号按法定下限取值；缺省 CNIPA）。
  * @returns 该渲染器排出的图内最小字高（毫米）。
  */
-export function sourceCharHeightMm(renderer: string): number {
-  if (renderer === "cad") return CAD_REF_FONT_MM;
+export function sourceCharHeightMm(renderer: string, jurisdiction?: Jurisdiction): number {
+  if (renderer === "cad") return cadRefFontMm(jurisdiction);
   if (renderer === "graphviz" || renderer === "graphviz-wasm") return (GRAPHVIZ_CHAR_PT / 72) * MM_PER_INCH;
   return pxToMm(BUILTIN_CHAR_PX);
 }

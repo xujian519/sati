@@ -52,6 +52,7 @@ import {
   parseFigureSvg,
   sourceCharHeightMm,
   readFigureSidecar,
+  reconcileGateCounts,
   toRenderCheckFindings,
   type DocumentKind,
   type FigureCheckResult,
@@ -59,6 +60,7 @@ import {
   type FigureSidecar,
   type FigureSidecarGeometry,
   type FigureSpec,
+  type GateCounts,
   type Jurisdiction,
   type PixelFinding,
   type PixelMetrics,
@@ -414,17 +416,14 @@ function renderReport(input: {
   /** 文件与 sidecar 不一致：此时核验结论不成立，报告头不得写成"通过"。 */
   drifted: boolean;
   forced: boolean;
+  /** 跨层去重后的计数与合并说明（见 `reconcileGateCounts`）。 */
+  counts: GateCounts;
 }): string {
-  const fails = input.result.findings.filter(f => f.severity === "fail");
-  const warns = input.result.findings.filter(f => f.severity === "warn");
   // 栅格附件的发现与结构规则的发现同权：PX1 这类 fail 级缺陷此前只在按需核验的报告里
   // 出现，本门把它一并计入判定（本仓的规则号分列 PX*/V*，报告里也分列）。
   const rasterEntries = input.raster.status === "ran" ? input.raster.entries : [];
   const rasterFails = rasterEntries.flatMap(entry =>
     entry.measured ? entry.findings.filter(f => f.severity === "fail") : [],
-  );
-  const rasterWarns = rasterEntries.flatMap(entry =>
-    entry.measured ? entry.findings.filter(f => f.severity === "warn") : [],
   );
   // 渲染复核（RC*）与投影几何（C*）同样参与判定：RC1（文字被线贯穿）与 C9（标号被裁）
   // 都是"交付出去就读不出"的缺陷，不能只躺在按需核验的报告里。
@@ -432,19 +431,17 @@ function renderReport(input: {
     entry.findings.map(finding => ({ ...finding, figure_no: entry.figure_no })),
   );
   const renderFails = renderFindings.filter(f => f.severity === "fail");
-  const renderWarns = renderFindings.filter(f => f.severity === "warn");
   const geometryFails = input.geometryFindings.filter(f => f.severity === "fail");
-  const geometryWarns = input.geometryFindings.filter(f => f.severity === "warn");
   const degradedRaster = rasterEntries.filter(entry => !entry.measured).length;
   const passed = input.result.ok && rasterFails.length === 0 && renderFails.length === 0 && geometryFails.length === 0;
-  const failCount = fails.length + rasterFails.length + renderFails.length + geometryFails.length;
-  const warnCount = warns.length + rasterWarns.length + renderWarns.length + geometryWarns.length;
+  // 计数取跨层去重后的值（C9↔RC5、C11↔RC1 是同一缺陷的两层证据）；阻断仍看 rawFail。
+  const { fail: failCount, warn: warnCount } = input.counts;
   const lines = [
     `附图门: ${
       input.drifted ? "❌ 未核验（文件与 sidecar 不一致）" : passed ? "✅ 通过" : "⚠️ 未通过"
     }（fail=${failCount}, warn=${warnCount}${
-      degradedRaster === 0 ? "" : `, 未核验栅格=${degradedRaster}`
-    }）${input.forced ? "【人工强制放行】" : ""}`,
+      input.counts.merged.length === 0 ? "" : `，跨层重复观测已合并 ${input.counts.merged.length} 项`
+    }${degradedRaster === 0 ? "" : `, 未核验栅格=${degradedRaster}`}）${input.forced ? "【人工强制放行】" : ""}`,
     `- 附图来源: ${input.source}（${input.dir}）`,
     `- 附图: ${input.sidecar.figures.map(f => `图${f.figure_no} ${f.file}`).join("；")}（渲染器 ${input.sidecar.renderer}）`,
     `- 生成期核验: ${input.sidecar.check.ok ? "通过" : "有发现"}（文本侧规则未参与）`,
@@ -490,6 +487,10 @@ function renderReport(input: {
     for (const finding of input.geometryFindings) {
       lines.push(`- [${finding.severity.toUpperCase()}] ${finding.rule}（图${finding.figure_no}）: ${finding.message}`);
     }
+  }
+  if (input.counts.merged.length > 0) {
+    lines.push("", "跨层重复观测（同一缺陷的两层证据，计数只取一次）：");
+    for (const note of input.counts.merged) lines.push(`- ${note}`);
   }
   lines.push(
     "",
@@ -543,7 +544,7 @@ export class FigureGateHandler implements StageHandler {
       figureCount: sidecar.figures.length,
       numberedFigureNos,
       measuredPaperSizes: paperSizes,
-      sourceCharHeightMm: sourceCharHeightMm(sidecar.renderer),
+      sourceCharHeightMm: sourceCharHeightMm(sidecar.renderer, sidecar.jurisdiction),
     });
 
     // 栅格附图附件（同目录、同命名体例 `<output_name>-fig<N>.<ext>`）：本门是交付前最后
@@ -552,6 +553,22 @@ export class FigureGateHandler implements StageHandler {
       dir,
       outputName: sidecar.output_name,
       office: sidecar.office ?? officeForJurisdiction(jurisdiction),
+    });
+
+    // 跨层计数：C*/RC* 对同一缺陷的两层证据只计一次（阻断仍看 rawFail）。原始发现逐条
+    // 留在报告里，合并理由由 reconcileGateCounts 给出。
+    const rasterFindings =
+      raster.status === "ran" ? raster.entries.flatMap(entry => (entry.measured ? entry.findings : [])) : [];
+    const renderFindings = renderChecks.flatMap(entry =>
+      entry.findings.map(finding => ({ ...finding, figure_no: entry.figure_no })),
+    );
+    const gateCounts = reconcileGateCounts({
+      structuralFails: result.findings.filter(finding => finding.severity === "fail").length,
+      structuralWarns: result.findings.filter(finding => finding.severity === "warn").length,
+      rasterFails: rasterFindings.filter(finding => finding.severity === "fail").length,
+      rasterWarns: rasterFindings.filter(finding => finding.severity === "warn").length,
+      render: renderFindings,
+      geometry: geometryFindings,
     });
 
     const report = renderReport({
@@ -568,6 +585,7 @@ export class FigureGateHandler implements StageHandler {
       unmeasuredPaperSizes,
       drifted: drifts.length > 0,
       forced: Boolean(state[APPROVAL_GRANTED_KEY]),
+      counts: gateCounts,
     });
 
     // 留痕（无论通过与否）：结论与输入的对应关系可审计（含 renderer 与 CAD 投影参数）。
@@ -613,18 +631,18 @@ export class FigureGateHandler implements StageHandler {
       });
     }
 
-    const fails = result.findings.filter(f => f.severity === "fail");
     const rasterFails = rasterFailCount(raster);
-    const renderFails = renderChecks
-      .flatMap(entry => entry.findings)
-      .filter(finding => finding.severity === "fail").length;
+    const renderFails = renderFindings.filter(finding => finding.severity === "fail").length;
     const geometryFails = geometryFindings.filter(finding => finding.severity === "fail").length;
-    const failTotal = fails.length + rasterFails + renderFails + geometryFails;
-    if (failTotal > 0 && !state[APPROVAL_GRANTED_KEY]) {
+    if (gateCounts.rawFail > 0 && !state[APPROVAL_GRANTED_KEY]) {
+      const mergedNote =
+        gateCounts.merged.length === 0
+          ? ""
+          : `（跨层重复观测已合并 ${gateCounts.merged.length} 项，原始 fail ${gateCounts.rawFail} 项）`;
       throw new InterruptStageError("figure-gate", "附图未通过确定性核验，请决策放行/重做或退回", {
         guardrail_level: "medium",
         review_context:
-          `附图存在 ${failTotal} 项 fail 级发现（图号连续性/图文标记一致/画幅可印性` +
+          `附图存在 ${gateCounts.fail} 项 fail 级发现${mergedNote}（图号连续性/图文标记一致/画幅可印性` +
           `${rasterFails === 0 ? "" : "/栅格附件黑白性与线宽"}` +
           `${renderFails === 0 ? "" : "/交付图面文字与线条冲突"}` +
           `${geometryFails === 0 ? "" : "/投影几何不可交付"}）。` +
