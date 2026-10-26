@@ -5,6 +5,7 @@ import { handleCommand } from "./tuiCommands.js";
 import { applyGatewayEventToTuiState, type TuiAppState, type TuiMessage } from "./types.js";
 import { computeSmartCollapse, groupSessions } from "./sidebar-helpers.js";
 import { MIN_SIDEBAR_COLS } from "./SessionSidebar.js";
+import { readTerminalSize } from "./terminal-size.js";
 
 /**
  * `#646` sweep P2.8 从 `TuiApp` 抽出的 state（actions）层：会话切换、侧栏打开、
@@ -14,7 +15,7 @@ import { MIN_SIDEBAR_COLS } from "./SessionSidebar.js";
 export type TuiActionsParams = {
   gateway: TuiGatewaySurface;
   projectKey: string | undefined;
-  stdout: NodeJS.WriteStream | undefined;
+  stdout: NodeJS.WritableStream | undefined;
   exit: () => void;
   state: TuiAppState;
   setState: Dispatch<SetStateAction<TuiAppState>>;
@@ -107,7 +108,7 @@ export function useTuiActions(params: TuiActionsParams) {
   );
 
   const openSidebar = useCallback(async () => {
-    const cols = stdout?.columns ?? 80;
+    const cols = readTerminalSize(stdout).columns ?? 80;
     try {
       const result = await gateway.listSessions({ projectKey, limit: 20 });
       setState(current => {

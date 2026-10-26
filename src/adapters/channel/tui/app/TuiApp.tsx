@@ -16,6 +16,7 @@ import type { TuiAppState } from "./types.js";
 import { satiDarkBlueTheme } from "./theme.js";
 import { useTuiActions } from "./useTuiActions.js";
 import { useTuiInput } from "./useTuiInput.js";
+import { readTerminalSize } from "./terminal-size.js";
 
 export type TuiAppProps = {
   gateway: Gateway;
@@ -40,7 +41,7 @@ export type TuiAppProps = {
 export function TuiApp(props: TuiAppProps): React.ReactNode {
   const { exit } = useApp();
   const { stdout } = useStdout();
-  const rows = Math.max(10, (stdout?.rows ?? 28) - 7);
+  const rows = Math.max(10, (readTerminalSize(stdout).rows ?? 28) - 7);
   const initialSessionKey = props.sessionKey ?? defaultTuiSessionKey(props.projectKey);
   // Tracks when a ctrl combo key was pressed so handleInputChange can
   // discard the raw character that ink-text-input receives alongside it.
