@@ -64,7 +64,9 @@ export type SvgViewport = {
 
 /** 根元素属性的值（第一个匹配的 `name="…"`，属性名不区分大小写）。 */
 function attribute(openTag: string, name: string): string | undefined {
-  const pattern = new RegExp(`\\b${name}\\s*=\\s*"([^"]*)"`, "i");
+  // 左边界的 `\b` 挡不住 `stroke-width=`（`-` 也是词边界）：查 `width` 会读到描边宽度，
+  // 把 100mm 的画幅读成 0.13mm。属性之间以空白分隔，故用 `(?:^|\s)`。
+  const pattern = new RegExp(`(?:^|\\s)${name}\\s*=\\s*"([^"]*)"`, "i");
   return pattern.exec(openTag)?.[1];
 }
 
@@ -140,6 +142,24 @@ function parseAspectRatio(raw: string | undefined): AspectRatio {
     alignX: alignRatio(match[2] as string),
     alignY: alignRatio(match[3] as string),
   };
+}
+
+/**
+ * 已交付 SVG 的纸面尺寸（毫米）：取根元素声明的 `width`/`height`。
+ *
+ * 只认显式声明（含 mm/cm/in/pt/px 单位）；百分比或缺失时返回 undefined——调用方据此
+ * 保留"按布局重排"的旧路径，而不是把 96dpi 用户单位当成纸面尺寸蒙一个值。
+ * @param svg - 完整 SVG 文本。
+ * @returns 宽高（毫米）；声明不可解析时 undefined。
+ */
+export function measureSvgPaperSize(svg: string): { widthMm: number; heightMm: number } | undefined {
+  const openTag = /<svg\b[^>]*>/iu.exec(svg)?.[0];
+  if (openTag === undefined) return undefined;
+  const viewport = resolveSvgViewport(openTag);
+  const { widthMm, heightMm } = viewport;
+  // 非正尺寸是坏文件：`uniformFigureZoom` 对 ≤0 的边直接跳过，判据会静默恒过。
+  if (widthMm === undefined || heightMm === undefined || widthMm <= 0 || heightMm <= 0) return undefined;
+  return { widthMm, heightMm };
 }
 
 /**

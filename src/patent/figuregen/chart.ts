@@ -82,7 +82,13 @@ const PLOT_HEIGHT = 300;
 
 /** 轴线装饰：刻度线长度、刻度值间隙、标目间隙、轴端开口箭头。 */
 const AXIS_TICK = 6;
-const TICK_LABEL_GAP = 4;
+/**
+ * 刻度值/图例文字与最近图线的间隙（px）。
+ *
+ * 必须不小于复核侧的文字净距判据（RC2 的 1.5mm ≈ 5.67px）：4px 时每张曲线图的每个刻度值
+ * 都会被自家门禁报成"文字贴线"，报告里稳定多出 6–9 条无法消除的 warn。
+ */
+const TICK_LABEL_GAP = 6;
 const AXIS_TITLE_GAP = 12;
 const ARROW_LENGTH = 10;
 const ARROW_HALF_WIDTH = 4;

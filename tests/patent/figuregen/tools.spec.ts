@@ -173,6 +173,36 @@ test("入参结构性校验：曲线图缺 chart/空 series/畸形数据点/缺�
   }
 });
 
+test("入参结构性校验：附图标记非正整数 fail-closed（0/负数/小数无法引用）", async () => {
+  const cwd = tempCwd();
+  try {
+    const tool = createPatentFigureGenerateTool();
+    for (const ref of [0, -5, 1.5]) {
+      await assert.rejects(
+        tool.execute(
+          {
+            figures: [
+              {
+                figure_no: 1,
+                kind: "flowchart",
+                nodes: [{ id: "a", label: "处理模块", ref }],
+                edges: [],
+              },
+            ],
+            output_name: "case-bad-ref",
+          },
+          makeContext(cwd),
+        ),
+        /附图标记应为正整数/u,
+        `标记 ${ref} 应在入参处被拒绝`,
+      );
+    }
+    assert.equal(existsSync(join(cwd, ".sati", "figures", "case-bad-ref-fig1.svg")), false, "失败不得落盘");
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
 test("patent_figure_check：曲线图入参同样 fail-closed（不只 generate 拦）", async () => {
   const cwd = tempCwd();
   try {

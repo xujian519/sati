@@ -22,14 +22,13 @@ import {
   isSvgSafetyError,
   parseFigureSvg,
   profileForJurisdiction,
+  toRenderCheckFindings,
   type FigureCheckSeverity,
   type FigureSpec,
   type Jurisdiction,
   type OfficeProfile,
   type PixelFinding,
   type PixelMetrics,
-  type RenderCheckFinding,
-  type RenderCheckKind,
 } from "../../patent/figuregen/index.js";
 import { figureSpecsToAnalysis } from "../../patent/figure/bridge.js";
 import { checkFigureConsistency } from "../../patent/figure/multi-figure-consistency.js";
@@ -63,40 +62,11 @@ export type PatentFigureCheckInput = {
 /** 栅格图核查条目（报告面：文件名 + 指标 + 发现）。 */
 type PixelGateEntry = PixelMetrics & { name: string; findings: PixelFinding[] };
 
-/**
- * 矢量源渲染复核的发现 → 本仓的规则号与级别。
- *
- * 规则号自成一族 `RC*`（与 `V*` 结构规则、`PX*` 像素规则分列）：这三族吃的是**不同的输入**
- * ——`V*` 吃 FigureSpec、`PX*` 吃栅格像素、`RC*` 吃已生成/外部 SVG 的几何。混进
- * `FigureCheckRuleId` 会让「注册表覆盖全部 V 规则号」那类不变量测试失去意义。
- *
- * 级别取「图面读不出来」与「可读性/制图瑕疵」的界线：
- * - `RC1` 文字被线条贯穿、`RC5` 内容越出画布 ⇒ **fail**（前者标号读不出、后者内容根本没渲染）；
- * - `RC2` 净距不足、`RC3` 点划线被实线覆盖、`RC4` 相邻零件剖面线难区分 ⇒ warn（能读但不清）；
- * - `RC0` 未量测 ⇒ info（不是缺陷，是"这份报告没覆盖到哪些结构"的清单）。
- *
- * 判据与阈值（净距默认 1.5mm、方向差/间距比上限、长划 3mm 等）全部沿用
- * deepseek-harness 的默认值，**非本仓条文核验过的法条数值**；`RC1` 对本仓边标签有一处
- * 适配豁免（见渲染复核模块的 halo 说明）。
- */
-const RENDER_CHECK_RULE: Record<RenderCheckKind, { rule: string; severity: FigureCheckSeverity }> = {
-  "text-crossed-by-line": { rule: "RC1", severity: "fail" },
-  "ink-outside-canvas": { rule: "RC5", severity: "fail" },
-  "text-clearance": { rule: "RC2", severity: "warn" },
-  "centerline-covered": { rule: "RC3", severity: "warn" },
-  "hatch-orientation-collision": { rule: "RC4", severity: "warn" },
-  "not-measured": { rule: "RC0", severity: "info" },
-};
-
 /** 一张已交付 SVG 的渲染复核结果（报告面：文件 + 发现）。 */
 type RenderCheckEntry = {
   path: string;
   findings: { rule: string; severity: FigureCheckSeverity; message: string }[];
 };
-
-function toRenderCheckFindings(findings: readonly RenderCheckFinding[]): RenderCheckEntry["findings"] {
-  return findings.map(finding => ({ ...RENDER_CHECK_RULE[finding.check], message: finding.message }));
-}
 
 /**
  * 栅格附图逐张做像素级核查（sharp 动态导入在 `analyzeImageBuffer` 内）。

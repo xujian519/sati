@@ -7,7 +7,12 @@ packages:
 allowBuilds:
   '@google/genai': true
   bcrypt: true
-  better-sqlite3: true
+  # 显式拒绝构建：better-sqlite3@13 随包发 N-API 预编译产物
+  # （prebuilds/win32-x64.node 等，绑定的是 Node-API 而非 ABI），而
+  # normalize-package-data 见 binding.gyp 就给包注入隐式 `node-gyp rebuild`。
+  # 那次编译纯属浪费（5–15 分钟，且要求 MSVC + Windows SDK），在缺 SDK 的
+  # Windows 上会让整个 `pnpm install` 直接失败。false ⇒ 不打脚本、也不告警。
+  better-sqlite3: false
   esbuild: true
   node-pty: true
   protobufjs: true
@@ -20,7 +25,6 @@ allowBuilds:
 onlyBuiltDependencies:
   - '@google/genai'
   - bcrypt
-  - better-sqlite3
   - electron
   - electron-winstaller
   - esbuild
