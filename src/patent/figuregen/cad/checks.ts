@@ -23,6 +23,8 @@
  *   的体检"：谁把标号钉到了主线条上，谁在这里被报出来。
  * - C11 标号退化：无可用引线落位 ⇒ 标号就地画在锚点上（压在图上）→ warn。退化是引擎的
  *   兜底而不是静默改写，故必须可观测。
+ * - C12 标号压盖图号注记：标号框与图下方的"图N"注记框相交 → warn。两者都读不出；注记已
+ *   作为择位障碍（正常落位不会触发），本规则兜住钉死落位与旧产物。
  *
  * 明确不做（诚实边界）：**最小线间距**检查需要先重建轮廓（相邻边共享端点，逐点距离必然
  * 为 0），属更大的一块工作；当前先以"边数/退化边/缩放"三项覆盖可判定的部分。
@@ -32,7 +34,7 @@ import type { FigureCheckSeverity } from "../check.js";
 import { boxesOverlap, boxWithin, type Box } from "../render-utils.js";
 import type { CadEdgeTable } from "./types.js";
 
-export type CadRuleId = "C1" | "C2" | "C3" | "C4" | "C5" | "C6" | "C7" | "C8" | "C9" | "C10" | "C11";
+export type CadRuleId = "C1" | "C2" | "C3" | "C4" | "C5" | "C6" | "C7" | "C8" | "C9" | "C10" | "C11" | "C12";
 
 export type CadFinding = {
   rule: CadRuleId;
@@ -83,6 +85,8 @@ export type CadCheckInput = {
     }[];
     /** 绘制几何（不含标注）的纸面范围（C8）。 */
     geometryBoundsMm?: CadBox;
+    /** 图号注记的纸面包围盒（C12；无图号时缺省）。 */
+    captionBoxMm?: CadBox;
   };
   hiddenLines: boolean;
 };
@@ -281,6 +285,30 @@ export function checkCadProjection(input: CadCheckInput): CadFinding[] {
         "请显式指定该标记的落位，或减少同时标注的标记",
       evidence: degraded.slice(0, 5).map(label => `标记 ${label.ref} 标号落在锚点上，无引线`),
     });
+  }
+
+  // C12 标号压盖图号注记：图下方的"图N"与标号都是要读的文字，重叠即两者都读不出。
+  // 择位已把注记框当障碍（正常落位不会触发），这里兜住钉死落位与旧产物。
+  const captionBox = input.render?.captionBoxMm;
+  if (captionBox !== undefined) {
+    const covered = labels.filter(label => boxesOverlap(label.boxMm, captionBox));
+    if (covered.length > 0) {
+      findings.push({
+        rule: "C12",
+        severity: "warn",
+        message: `有 ${covered.length} 个附图标记的标号压盖了图号注记，标号与图号都无法完整读出`,
+        evidence: [
+          ...covered
+            .slice(0, 5)
+            .map(
+              label =>
+                `标记 ${label.ref} 标号框 x ${label.boxMm.left.toFixed(1)}–${label.boxMm.right.toFixed(1)}mm、` +
+                `y ${label.boxMm.top.toFixed(1)}–${label.boxMm.bottom.toFixed(1)}mm 与图号注记相交`,
+            ),
+          "去掉 label_offset_mm 让引擎自行择位（注记已作为择位障碍）",
+        ],
+      });
+    }
   }
 
   return findings;

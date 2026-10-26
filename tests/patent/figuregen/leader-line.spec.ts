@@ -22,6 +22,7 @@ import {
   type LeaderSegment,
   type LeaderTarget,
 } from "../../../src/patent/figuregen/leader-line.js";
+import { glyphBox } from "../../../src/patent/figuregen/glyph-box.js";
 
 /** 与 CAD 通路同量：字号 3mm、间隙 1.5mm、最短引线 6mm。 */
 const BASE_OPTIONS: LeaderLineOptions = {
@@ -40,6 +41,10 @@ function dirOf(from: LeaderPoint, to: LeaderPoint): [number, number] {
 
 function angleBetween(a: readonly [number, number], b: readonly [number, number]): number {
   return (Math.acos(Math.min(1, Math.abs(a[0] * b[0] + a[1] * b[1]))) * 180) / Math.PI;
+}
+
+function closeTo(actual: number, expected: number, message: string): void {
+  assert.ok(Math.abs(actual - expected) < 1e-9, `${message}：${actual} ≠ ${expected}`);
 }
 
 function overlaps(a: LeaderBox, b: LeaderBox): boolean {
@@ -64,18 +69,25 @@ function beyondAnchor(segment: LeaderSegment, gapMm: number): LeaderSegment {
   };
 }
 
-test("labelBoxOf：宽度按字符类别（Latin 半角 0.5em、CJK 全角 1em），基线上下按字号比例", () => {
+test("labelBoxOf：与复核侧共用 glyphBox 的字符宽度（数字/小写 0.6em、CJK 1em）与升降比例", () => {
   const latin = labelBoxOf("10", 3, { x: 10, y: 20 });
-  assert.equal(latin.left, 10 - 1.5);
-  assert.equal(latin.right, 10 + 1.5);
-  assert.equal(latin.top, 20 - 3);
-  assert.equal(latin.bottom, 20 + 0.6);
+  closeTo(latin.left, 10 - 1.8, "left");
+  closeTo(latin.right, 10 + 1.8, "right");
+  closeTo(latin.top, 20 - 2.25, "top");
+  closeTo(latin.bottom, 20 + 0.36, "bottom");
 
   const mixed = labelBoxOf("10a", 3, { x: 0, y: 0 });
-  assert.equal(mixed.right - mixed.left, 4.5);
+  closeTo(mixed.right - mixed.left, 5.4, "width");
+
+  // 与复核侧的 `glyphBox` 逐值一致（两侧各算一份会让"择位躲开了、复核说贯穿"）
+  for (const text of ["1", "10", "100", "处理模块"]) {
+    const box = labelBoxOf(text, 3, { x: 7, y: 9 });
+    const glyph = glyphBox(text, [7, 9], 3, "middle");
+    assert.deepEqual(box, { left: glyph.minX, top: glyph.minY, right: glyph.maxX, bottom: glyph.maxY }, text);
+  }
 });
 
-test("无遮挡：标号落在基向（远离图心）上、取最短引线，引线止于标号外缘", () => {
+test("无遮挡：标号落在基向（远离图心）上、取最短引线，引线止于标号外缘再退间隙", () => {
   const plan = planLeaderLines(
     [{ id: "10", text: "10", anchor: { x: 50, y: 0 } }],
     {},
@@ -89,7 +101,8 @@ test("无遮挡：标号落在基向（远离图心）上、取最短引线，�
   assert.equal(placement.leader.length, 1);
   const leader = placement.leader[0]!;
   assert.deepEqual(leader.from, { x: 50, y: 0 });
-  assert.deepEqual(leader.to, { x: 50 + BASE_OPTIONS.minLeaderMm - BASE_OPTIONS.gapMm, y: 0 });
+  // 字框左缘 = 56 − 1.8；引线止于左缘再退 1.5mm 间隙
+  assert.deepEqual(leader.to, { x: placement.box.left - BASE_OPTIONS.gapMm, y: 0 });
   assert.deepEqual(plan.warnings, []);
 });
 
@@ -210,6 +223,40 @@ test("越界：画幅里放不下任何候选 ⇒ 退化为就地标号并告警
   assert.ok(plan.warnings[0]!.includes(String(LEADER_DIRECTIONS_DEG.length)), "告警应报出枚举规模");
 });
 
+test("引线止点按字框求解：1/2/3 位标号在水平/垂直/斜向都不进入字框", () => {
+  const directions: readonly [string, readonly [number, number]][] = [
+    ["水平", [1, 0]],
+    ["垂直", [0, 1]],
+    ["斜向", [Math.SQRT1_2, Math.SQRT1_2]],
+  ];
+  for (const text of ["1", "10", "100"]) {
+    for (const [label, direction] of directions) {
+      const anchor = { x: 50, y: 50 };
+      const plan = planLeaderLines(
+        [{ id: text, text, anchor }],
+        {},
+        {
+          ...BASE_OPTIONS,
+          figureCenter: { x: anchor.x - direction[0], y: anchor.y - direction[1] },
+          canvas: WIDE_CANVAS,
+        },
+      );
+      const placement = plan.placements[0]!;
+      assert.equal(placement.degraded, false, `${text} ${label} 不应退化`);
+      const leader = placement.leader[0]!;
+      const dx = Math.max(placement.box.left - leader.to.x, 0, leader.to.x - placement.box.right);
+      const dy = Math.max(placement.box.top - leader.to.y, 0, leader.to.y - placement.box.bottom);
+      const distance = Math.hypot(dx, dy);
+      assert.ok(distance > 0, `${text} ${label}：引线止点进入了标号框`);
+      assert.ok(distance <= BASE_OPTIONS.gapMm + 1e-9, `${text} ${label}：引线未退出间隙`);
+      // 轴向引线的垂距应正好等于间隙（沿射线退让在轴向上与垂距同值）
+      if (label !== "斜向") {
+        assert.ok(Math.abs(distance - BASE_OPTIONS.gapMm) < 1e-9, `${text} ${label}：间隙应为 ${BASE_OPTIONS.gapMm}mm`);
+      }
+    }
+  }
+});
+
 test("钉死落位：照用调用方给的偏移（不做择位），且不产生择位告警", () => {
   const plan = planLeaderLines(
     [{ id: "30", text: "30", anchor: { x: 10, y: 10 }, pinnedOffsetMm: [-20, -8] }],
@@ -223,12 +270,16 @@ test("钉死落位：照用调用方给的偏移（不做择位），且不产�
   assert.deepEqual(placement.offsetMm, [-20, -8]);
   assert.deepEqual(plan.warnings, []);
   assert.deepEqual(placement.conflicts, []);
-  // 引线止于标号外缘：端点 = 标号点 − 方向 × 间隙
-  const direction = dirOf(placement.anchor, placement.labelPoint);
+  // 引线止于标号外缘再退间隙（斜向：沿射线退 gap，故到框的垂距 ≤ gap）
   const leader = placement.leader[0]!;
   assert.deepEqual(leader.from, { x: 10, y: 10 });
-  assert.ok(Math.abs(leader.to.x - (-10 - direction[0] * BASE_OPTIONS.gapMm)) < 1e-9);
-  assert.ok(Math.abs(leader.to.y - (2 - direction[1] * BASE_OPTIONS.gapMm)) < 1e-9);
+  const dx = Math.max(placement.box.left - leader.to.x, 0, leader.to.x - placement.box.right);
+  const dy = Math.max(placement.box.top - leader.to.y, 0, leader.to.y - placement.box.bottom);
+  const boxDistance = Math.hypot(dx, dy);
+  assert.ok(boxDistance > 0, `引线止点不得进入标号框：${JSON.stringify(leader.to)}`);
+  assert.ok(boxDistance <= BASE_OPTIONS.gapMm + 1e-9, `引线止点应退开间隙：${boxDistance}`);
+  const cross = (leader.to.x - 10) * (2 - 10) - (leader.to.y - 10) * (-10 - 10);
+  assert.ok(Math.abs(cross) < 1e-6, "引线应沿锚点→标号的方向");
 });
 
 test("钉死落位的审计：压盖图内内容 / 引线与主线条共线 / 引线穿过别的标号都被记下", () => {
@@ -242,7 +293,7 @@ test("钉死落位的审计：压盖图内内容 / 引线与主线条共线 / �
     { boxes: [geometry] },
     options,
   );
-  assert.ok(covered.placements[0]!.conflicts.some(message => message.includes("压在图形上")));
+  assert.ok(covered.placements[0]!.conflicts.some(message => message.includes("压在图形或图号注记上")));
 
   // 共线：引线顺着主线条延长出去（远端仍贴在该线条所在直线上）
   const collinear = planLeaderLines(

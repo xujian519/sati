@@ -121,6 +121,46 @@ test("V7 介质锚定：统一缩放——大图存在时同文档小图按同�
   );
 });
 
+test("V7 实测画幅优先：graphviz/CAD 的交付尺寸取代布局重排（9 步实测 120×228.6mm 不再误判超框）", () => {
+  const laidOut = checkFigures([chain(9)], "");
+  assert.ok(
+    laidOut.findings.some(f => f.rule === "V7" && f.metric === "page_fit"),
+    "布局重排高度超过可印区（既有行为）",
+  );
+  const measured = checkFigures([chain(9)], "", {
+    measuredPaperSizes: [{ figure_no: 1, widthMm: 120, heightMm: 228.6 }],
+  });
+  assert.deepEqual(
+    measured.findings.filter(f => f.rule === "V7"),
+    [],
+    "实测放得下就不得按重排结果判超框",
+  );
+  assert.equal(measured.ok, true);
+});
+
+test("V7 源字高按渲染器取值：graphviz 的 14pt 不被当成内置 14px", () => {
+  // 两图统一缩放：第二幅 378mm 宽 ⇒ zoom ≈ 0.45。内置 14px ≈ 3.70mm 落到最小字高以下，
+  // graphviz 14pt ≈ 4.94mm 则仍可辨。
+  const sizes = [
+    { figure_no: 1, widthMm: 100, heightMm: 100 },
+    { figure_no: 2, widthMm: 378, heightMm: 100 },
+  ];
+  const builtin = checkFigures([minimal(1), minimal(2)], "", { measuredPaperSizes: sizes });
+  assert.ok(
+    builtin.findings.some(f => f.rule === "V7" && f.metric === "font_size"),
+    "内置渲染器的字高应按 14px 判定",
+  );
+  const graphviz = checkFigures([minimal(1), minimal(2)], "", {
+    measuredPaperSizes: sizes,
+    sourceCharHeightMm: (14 / 72) * 25.4,
+  });
+  assert.deepEqual(
+    graphviz.findings.filter(f => f.rule === "V7" && f.metric === "font_size"),
+    [],
+    "graphviz 的 14pt 字高不应被低估",
+  );
+});
+
 test("V8 摘要附图：多图未指定/指定多幅 → WARN；恰好一幅 → 通过；单图不提示", () => {
   const none = checkFigures([minimal(1), minimal(2)], "");
   assert.ok(none.findings.some(f => f.rule === "V8" && f.severity === "warn"));

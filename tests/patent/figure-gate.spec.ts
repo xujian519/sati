@@ -273,6 +273,145 @@ test("figure-gate：目录三级回退——案卷 outputs 与 .sati/figures", a
   }
 });
 
+test("figure-gate：已交付图面文字被线条贯穿（RC1）→ fail 挂 HITL 并留痕", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "sati-gate-rc1-"));
+  try {
+    await generateFigures(dir);
+    const svgPath = join(dir, "case-g-fig1.svg");
+    const svg = readFileSync(svgPath, "utf8");
+    const text = svg.match(/<text\s+x="([\d.]+)"\s+y="([\d.]+)"/u);
+    assert.ok(text, "生成的 SVG 应含文字坐标");
+    const width = Number(svg.match(/\bwidth="([\d.]+)mm"/u)?.[1] ?? 100);
+    // 横线穿过文字基线（注入的图线不在 sidecar 的标记集合里，漂移检测不会拦——正是 RC 要覆盖的面）
+    const line = `<line x1="0" y1="${text[2]}" x2="${width}" y2="${text[2]}" stroke="#000000" stroke-width="0.35"/>`;
+    writeFileSync(svgPath, svg.replace("</svg>", `${line}\n</svg>`), "utf8");
+
+    const outcome = await runGate({ figure_dir: dir, claims_draft: "处理模块(20)。", spec_draft: "" });
+    assert.ok(outcome.interrupted, "RC1 fail 应挂 HITL");
+    assert.match(String(outcome.interrupted.data.figure_report), /\[FAIL\] RC1/u);
+    assert.match(String(outcome.interrupted.data.review_context), /文字与线条冲突/u);
+    const report = readCheckReport(dir);
+    assert.ok(Array.isArray(report.render_check), "渲染复核结论须随 figure-check.json 留痕");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("figure-gate：投影期几何检查 fail（C9）参与阻断（不只躺在 sidecar 里）", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "sati-gate-cfail-"));
+  try {
+    await generateFigures(dir);
+    const sidecarPath = join(dir, "case-g-figures.json");
+    const sidecar = JSON.parse(readFileSync(sidecarPath, "utf8")) as {
+      figures: { geometry?: unknown }[];
+    };
+    sidecar.figures[0]!.geometry = {
+      source: "cad",
+      view: "front",
+      scale: 1,
+      width_mm: 100,
+      height_mm: 100,
+      hidden_lines: false,
+      findings: [{ rule: "C9", severity: "fail", message: "标号超出图幅，会被裁掉" }],
+    };
+    writeFileSync(sidecarPath, `${JSON.stringify(sidecar, null, 2)}\n`, "utf8");
+
+    const outcome = await runGate({ figure_dir: dir, claims_draft: "处理模块(20)。", spec_draft: "" });
+    assert.ok(outcome.interrupted, "sidecar 记录的几何 fail 应参与阻断");
+    assert.match(String(outcome.interrupted.data.figure_report), /\[FAIL\] C9/u);
+    assert.match(String(outcome.interrupted.data.review_context), /投影几何不可交付/u);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("figure-gate：C9 与 RC5 对同一次越界各报一次 → 计数合并为 1（阻断仍成立）", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "sati-gate-overlap-"));
+  try {
+    await generateFigures(dir);
+    // 交付文件里画一条落在画布外的线（RC5）；sidecar 另记 C9（标号越界）。两层是同一类
+    // 缺陷的两个证据，报告计数不得相加。
+    const svgPath = join(dir, "case-g-fig1.svg");
+    const svg = readFileSync(svgPath, "utf8");
+    const height = Number(svg.match(/\bheight="([\d.]+)(?:mm)?"/u)?.[1] ?? 250);
+    const outside = `<line x1="0" y1="${height + 5}" x2="20" y2="${height + 5}" stroke="#000000" stroke-width="0.35"/>`;
+    writeFileSync(svgPath, svg.replace("</svg>", `${outside}\n</svg>`), "utf8");
+
+    const sidecarPath = join(dir, "case-g-figures.json");
+    const sidecar = JSON.parse(readFileSync(sidecarPath, "utf8")) as {
+      figures: { geometry?: unknown }[];
+    };
+    sidecar.figures[0]!.geometry = {
+      source: "cad",
+      view: "front",
+      scale: 1,
+      width_mm: 100,
+      height_mm: 100,
+      hidden_lines: false,
+      findings: [{ rule: "C9", severity: "fail", message: "标号超出图幅，会被裁掉" }],
+    };
+    writeFileSync(sidecarPath, `${JSON.stringify(sidecar, null, 2)}\n`, "utf8");
+
+    const outcome = await runGate({ figure_dir: dir, claims_draft: "处理模块(20)。", spec_draft: "" });
+    assert.ok(outcome.interrupted, "C9/RC5 任一 fail 都应阻断");
+    assert.match(String(outcome.interrupted.data.figure_report), /\[FAIL\] C9/u);
+    assert.match(String(outcome.interrupted.data.figure_report), /\[FAIL\] RC5/u);
+    assert.match(String(outcome.interrupted.data.figure_report), /fail=1/u);
+    assert.match(String(outcome.interrupted.data.figure_report), /跨层重复观测已合并 1 项/u);
+    assert.match(String(outcome.interrupted.data.review_context), /原始 fail 2 项/u);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("figure-gate：几何结论并入 inputs_hash（改 sidecar 的 C 发现会改变哈希）", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "sati-gate-hash-geometry-"));
+  try {
+    await generateFigures(dir);
+    const sidecarPath = join(dir, "case-g-figures.json");
+    const sidecar = JSON.parse(readFileSync(sidecarPath, "utf8")) as {
+      figures: { geometry?: Record<string, unknown> }[];
+    };
+    const geometry = {
+      source: "cad",
+      view: "front",
+      scale: 1,
+      width_mm: 100,
+      height_mm: 100,
+      hidden_lines: false,
+      findings: [] as unknown[],
+    };
+    sidecar.figures[0]!.geometry = geometry;
+    writeFileSync(sidecarPath, `${JSON.stringify(sidecar, null, 2)}\n`, "utf8");
+    await runGate({ figure_dir: dir, claims_draft: "处理模块(20)。", spec_draft: "" });
+    const clean = String(readCheckReport(dir).inputs_hash);
+
+    geometry.findings = [{ rule: "C8", severity: "warn", message: "锚点在图外" }];
+    writeFileSync(sidecarPath, `${JSON.stringify(sidecar, null, 2)}\n`, "utf8");
+    await runGate({ figure_dir: dir, claims_draft: "处理模块(20)。", spec_draft: "" });
+    const changed = String(readCheckReport(dir).inputs_hash);
+    assert.notEqual(clean, changed, "C 结论参与判定，改了它必须改变 inputs_hash");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("figure-gate：交付图未声明宽高时报告标为「未实测」，不写成已核验", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "sati-gate-unmeasured-"));
+  try {
+    await generateFigures(dir);
+    const svgPath = join(dir, "case-g-fig1.svg");
+    writeFileSync(svgPath, readFileSync(svgPath, "utf8").replace(/\swidth="[^"]*"\sheight="[^"]*"/u, ""), "utf8");
+
+    const outcome = await runGate({ figure_dir: dir, claims_draft: "处理模块(20)。", spec_draft: "" });
+    const report = outcome.interrupted === undefined ? outcome.report : String(outcome.interrupted.data.figure_report);
+    assert.match(report, /画幅实测: 图1 未声明宽高/u);
+    assert.deepEqual(readCheckReport(dir).paper_size_unmeasured, [1]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 // ---------------------------------------------------------------------------
 // 门粒度放行隔离（对齐 workflow/stage-primitives.ts 与 executor.ts 的契约）
 // ---------------------------------------------------------------------------
