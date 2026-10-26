@@ -15,11 +15,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  boxEntryAlongRay,
   boxQuad,
   boxCrossedBySegment,
   glyphBox,
   inflateQuad,
-  leaderEnd,
   quadCrossedBySegment,
   textWidthMm,
   FULL_WIDTH_RATIO,
@@ -28,7 +28,12 @@ import {
   GLYPH_WIDTH_RATIO,
   UPPER_WIDTH_RATIO,
 } from "../../../src/patent/figuregen/glyph-box.js";
-import { MM_PER_USER_UNIT, parseLengthMm, resolveSvgViewport } from "../../../src/patent/figuregen/svg-viewport.js";
+import {
+  MM_PER_USER_UNIT,
+  measureSvgPaperSize,
+  parseLengthMm,
+  resolveSvgViewport,
+} from "../../../src/patent/figuregen/svg-viewport.js";
 import { SvgSafetyError } from "../../../src/patent/figuregen/svg-safety.js";
 import {
   checkFigureRendering,
@@ -465,14 +470,15 @@ test("inflateQuad：四周各外扩净距，外扩后原判定随之放宽", () 
   assert.equal(quadCrossedBySegment(inflated, near[0], near[1]), true);
 });
 
-test("leaderEnd：止点落在占位框边界上，框内/重合起点返回 undefined", () => {
-  // 起点与文字框竖向中部同高：止点落在左边中点 (100, 48.74)。
-  const end = leaderEnd("A", [100, 50], 4, "start", [0, 48.74]);
-  assert.ok(end !== undefined);
-  assert.equal(end[0], 100);
-  assert.ok(Math.abs(end[1] - 48.74) < 1e-9, `实际 ${end[1]}`);
-  // 起点落在占位框内：无止点可取。
-  assert.equal(leaderEnd("A", [100, 50], 4, "start", [101.5, 48.74]), undefined);
+test("boxEntryAlongRay：给出射线进入字框的距离，起点在框内为 0，不穿框为 undefined", () => {
+  const box = glyphBox("A", [100, 50], 4, "start");
+  const entry = boxEntryAlongRay(box, [0, 48.74], [1, 0]);
+  assert.ok(entry !== undefined);
+  assert.ok(Math.abs(entry - 100) < 1e-9, `实际 ${entry}`);
+  // 起点在框内：进入距离为 0（调用方据此不画引线）
+  assert.equal(boxEntryAlongRay(box, [101.5, 48.74], [1, 0]), 0);
+  // 射线在框外平行经过：不穿框
+  assert.equal(boxEntryAlongRay(box, [0, 100], [1, 0]), undefined);
 });
 
 // ── svg-viewport 纯函数 ───────────────────────────────────────────────────────
@@ -488,6 +494,30 @@ test("parseLengthMm：px 与无单位按 96 dpi 折算，mm/cm/in/pt 按各自�
   assert.equal(parseLengthMm("50%"), undefined);
   assert.equal(parseLengthMm("auto"), undefined);
   assert.equal(parseLengthMm(""), undefined);
+});
+
+test("measureSvgPaperSize：按根元素声明的单位量交付尺寸，缺失/相对值返回 undefined", () => {
+  assert.deepEqual(measureSvgPaperSize('<svg width="100mm" height="50mm">'), { widthMm: 100, heightMm: 50 });
+  const points = measureSvgPaperSize('<svg width="72pt" height="36pt">');
+  assert.ok(points !== undefined);
+  assert.ok(Math.abs(points.widthMm - 25.4) < 1e-9, `72pt 应为 25.4mm：${points.widthMm}`);
+  assert.ok(Math.abs(points.heightMm - 12.7) < 1e-9);
+  assert.deepEqual(measureSvgPaperSize('<svg width="192px" height="96px">'), { widthMm: 50.8, heightMm: 25.4 });
+  // 百分比/缺省：不拿 96dpi 用户单位冒充纸面尺寸
+  assert.equal(measureSvgPaperSize('<svg width="100%" height="100%">'), undefined);
+  assert.equal(measureSvgPaperSize('<svg viewBox="0 0 100 50">'), undefined, "只有 viewBox 不算声明纸面");
+  assert.equal(measureSvgPaperSize('<svg width="0mm" height="50mm">'), undefined, "非正尺寸是坏文件");
+  assert.equal(measureSvgPaperSize('<svg width="-100mm" height="50mm">'), undefined);
+  assert.equal(measureSvgPaperSize("<div></div>"), undefined);
+  // `\bwidth` 会读到 `stroke-width`（`-` 也是词边界），把画幅读成 0.13mm
+  assert.deepEqual(measureSvgPaperSize('<svg stroke-width="0.5" width="100mm" height="50mm">'), {
+    widthMm: 100,
+    heightMm: 50,
+  });
+  assert.deepEqual(measureSvgPaperSize('<svg viewBox="0 0 10 5" stroke-width="0.5" width="100mm" height="50mm">'), {
+    widthMm: 100,
+    heightMm: 50,
+  });
 });
 
 test("resolveSvgViewport：无 viewBox 时用户单位按 96 dpi 像素，画布尺寸照原样取", () => {

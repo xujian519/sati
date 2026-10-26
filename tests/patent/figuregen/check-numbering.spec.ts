@@ -11,6 +11,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { checkFigures } from "../../../src/patent/figuregen/check.js";
+import { CAD_REF_FONT_MM, CAD_REF_FONT_STATUTORY_MM } from "../../../src/patent/figuregen/cad/index.js";
 import { layoutFigure } from "../../../src/patent/figuregen/layout.js";
 import { officeProfile } from "../../../src/patent/figuregen/office-profile.js";
 import { FIGURE_FONT_SIZE } from "../../../src/patent/figuregen/metrics.js";
@@ -149,6 +150,31 @@ test("V7 字高下限按法域：同一张图在 CN 通过、在 uspto 报 warn�
   const cnFont = cnTiny.findings.filter(f => f.rule === "V7" && f.metric === "font_size");
   assert.equal(cnFont.length, 1);
   assert.match(cnFont[0].message, /实践下限，非法条数值/u);
+});
+
+test("V7：CAD 标号按法域取字号后，PCT/US 不再每张图带一条不可消除的 warn", () => {
+  const figure = [chain(3, 1)];
+  const us = checkFigures(figure, "", {
+    skipTextRules: true,
+    jurisdiction: "us",
+    sourceCharHeightMm: CAD_REF_FONT_STATUTORY_MM,
+  });
+  assert.deepEqual(
+    us.findings.filter(f => f.rule === "V7" && f.metric === "font_size"),
+    [],
+    "3.5mm 高于 37 CFR 1.84(p)(3) 的 3.2mm 下限，不应告警",
+  );
+  // 对照：旧的 CNIPA 口径（3.0mm）在 US 仍会报——告警由字号取值决定，规则并未被跳过
+  const legacy = checkFigures(figure, "", {
+    skipTextRules: true,
+    jurisdiction: "us",
+    sourceCharHeightMm: CAD_REF_FONT_MM,
+  });
+  assert.equal(
+    legacy.findings.filter(f => f.rule === "V7" && f.metric === "font_size").length,
+    1,
+    "3.0mm 低于 3.2mm，应保留一条 warn",
+  );
 });
 
 test("pct：跳过 V8/V9/V10/V11 并如实声明（不把 CN 条文伪装成 PCT 条文）", () => {

@@ -11,6 +11,7 @@
  * 纯函数、无模型依赖，输入 ElectricalAnalysis，输出校验警告。
  */
 
+import { hasNumeralPrefix } from "../figuregen/numeral.js";
 import { parseRefNumber, querySymbolByRefPrefix } from "./symbols/loader.js";
 import type { ElectricalAnalysis, ElectricalComponent } from "./types.js";
 
@@ -40,17 +41,13 @@ function parsePinRef(pin: string): { ref: string; pin?: string } | null {
   return null;
 }
 
-/** 数字档排除前缀：这些词后的数字是编号（式(1)/步骤(2)/实施例3…），不是附图标记。 */
-const NUMERAL_PREFIX_EXCLUSION = /(?:式|公式|步骤|例|图|表|第|共|约|款|条|项|章|节|claim|step|formula|fig)$/iu;
-
 /** 纯数字型附图标记（机械/实用新型案：`壳体(10)`、`盖板20`）。 */
 function extractNumericRefs(text: string, limit: number): number[] {
   const found = new Set<number>();
   // ① 括号形：`(10)` / `（10）`——前置词排除式(1)/步骤(2)；`(?<!\d)` 与 `(?!\d)` 防
   //    四位年份（2023）被截出三位数字。
   for (const match of text.matchAll(/(?<!\d)[（(]\s*(\d{1,3})\s*[)）](?!\d)/gu)) {
-    const before = text.slice(Math.max(0, (match.index ?? 0) - 2), match.index ?? 0);
-    if (NUMERAL_PREFIX_EXCLUSION.test(before)) continue;
+    if (hasNumeralPrefix(text.slice(0, match.index ?? 0))) continue;
     found.add(Number(match[1]));
     if (found.size >= limit) return [...found].sort((a, b) => a - b);
   }
@@ -58,8 +55,7 @@ function extractNumericRefs(text: string, limit: number): number[] {
   //    V10 同一词法：只认枚举式裸标记，避免把数量词/数值范围判成附图标记。
   for (const match of text.matchAll(/[\u4e00-\u9fff]{2,}\s*(\d{1,3})(?=\s*(?:[，,；;、。：:]|$))/gmu)) {
     const digitsStart = (match.index ?? 0) + match[0].length - match[1].length;
-    const before = text.slice(Math.max(0, digitsStart - 2), digitsStart);
-    if (NUMERAL_PREFIX_EXCLUSION.test(before)) continue;
+    if (hasNumeralPrefix(text.slice(0, digitsStart))) continue;
     found.add(Number(match[1]));
     if (found.size >= limit) break;
   }

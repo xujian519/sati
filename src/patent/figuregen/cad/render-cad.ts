@@ -21,9 +21,10 @@
 
 import { figureCaption, officeProfile, printableArea } from "../office-profile.js";
 import { planLeaderLines, type LeaderSegment } from "../leader-line.js";
-import { measureTextWidth } from "../metrics.js";
-import { escapeXml, fmt as fmtShared } from "../render-utils.js";
+import { glyphBox, textWidthMm } from "../glyph-box.js";
+import { escapeXml, fmt as fmtShared, SVG_LEADER_ROLE, SVG_ROLE_ATTRIBUTE } from "../render-utils.js";
 import type { Jurisdiction } from "../types.js";
+import { cadRefFontMm } from "./ref-font.js";
 import {
   projectModelPoints,
   type CadAxisImages,
@@ -81,7 +82,7 @@ export type CadLabelPlacement = {
   anchorMm: [number, number];
   /** 标号锚点（纸面毫米；文本水平居中于此、基线落于此）。 */
   labelMm: [number, number];
-  /** 文本包围盒（纸面毫米；按 `measureTextWidth` 估算，用于重叠/越界判定）。 */
+  /** 文本包围盒（纸面毫米；与复核侧同一 `glyphBox` 估算，用于重叠/越界判定）。 */
   boxMm: { left: number; top: number; right: number; bottom: number };
   /** 引线折线（纸面毫米）；退化为就地标号时为空。 */
   leaderMm: readonly LeaderSegment[];
@@ -114,6 +115,8 @@ export type CadRenderResult = {
   labelWarnings: string[];
   /** 绘制几何（不含标注）的纸面范围：判定"锚点是否落在图内"用。 */
   geometryBoundsMm: { left: number; top: number; right: number; bottom: number };
+  /** 图号注记的纸面包围盒（无图号时缺省；C12 判标号是否压盖它）。 */
+  captionBoxMm?: { left: number; top: number; right: number; bottom: number };
 };
 
 const DEFAULT_MARGIN_MM = 6;
@@ -124,9 +127,15 @@ export const CAD_HIDDEN_DASH_MM: readonly [number, number] = [1.5, 1];
 /** 剖面线（细实线）线宽与间距（毫米，纸面）：间距指相邻剖面线的垂直距离。 */
 export const CAD_HATCH_LINE_WIDTH_MM = 0.2;
 export const CAD_HATCH_SPACING_MM = 2.5;
-/** 附图标记标号字号（毫米，纸面）与引线长度（毫米，纸面）。 */
-export const CAD_REF_FONT_MM = 3.0;
+/** 附图标记引线长度（毫米，纸面）。标号字号按法域取值，见 `ref-font.ts`。 */
 export const CAD_REF_LEADER_MM = 6;
+/** 图号注记字号（毫米，纸面）：注记框是 C12 与择位障碍的输入，字框计算与实际绘制共用此值。 */
+export const CAD_CAPTION_FONT_MM = 3.5;
+/**
+ * 图号注记基线距纸面下缘（毫米）：须让注记框与最近图线留出 RC2 的 1.5mm 净距。
+ * 取 1.2 时注记字脚距下缘 0.78mm、距几何下界约 2.2mm（几何带 3mm 左右）。
+ */
+export const CAD_CAPTION_BASELINE_FROM_BOTTOM_MM = 1.2;
 /** 引线止于标号外缘的间隙（毫米，纸面）。 */
 export const CAD_REF_LABEL_GAP_MM = 1.5;
 /** 标注预留带的额外余量（毫米，纸面）：标号外缘与可印区之间留白。 */
@@ -245,6 +254,8 @@ function cutFacePolylines(
 /** 投影边表 → 黑白 SVG（A4 可印区适配；确定性：无时钟/随机）。 */
 export function renderCadSvg(table: CadEdgeTable, options: CadRenderOptions): CadRenderResult {
   const hiddenLines = options.hiddenLines === true;
+  // 标号字号按法域取：PCT/US 的 3.2mm 法定下限不能再用 CNIPA 的 3.0mm 口径。
+  const refFontMm = cadRefFontMm(options.jurisdiction);
   const margin = options.marginMm ?? DEFAULT_MARGIN_MM;
   const annotations = options.annotations ?? [];
   const drawn: CadEdge[] = table.edges.filter(edge => edge.kind === "visible" || hiddenLines);
@@ -288,7 +299,7 @@ export function renderCadSvg(table: CadEdgeTable, options: CadRenderOptions): Ca
     for (const annotation of annotations) {
       const offset = annotation.labelOffsetMm;
       const reach = offset === undefined ? CAD_REF_LEADER_MM : Math.hypot(offset[0], offset[1]);
-      const halfWidth = measureTextWidth(String(annotation.ref), CAD_REF_FONT_MM) / 2;
+      const halfWidth = textWidthMm(String(annotation.ref), refFontMm) / 2;
       needed = Math.max(needed, Math.min(reach, CAD_REF_LEADER_MM * 6) + halfWidth + CAD_REF_RESERVE_PAD_MM);
     }
     const cap = Math.min(area.widthMm, area.heightMm) * CAD_MAX_RESERVE_RATIO;
@@ -310,6 +321,18 @@ export function renderCadSvg(table: CadEdgeTable, options: CadRenderOptions): Ca
     right: band + geometryWidth * scale,
     bottom: band + geometryHeight * scale,
   };
+
+  // 图号注记（图下方居中）也是图面内容：标号落位时把它当障碍，否则标号会压在图号上
+  // （两者都读不出），而 C 规则此前只在标号越界/互压时才报。注记框与复核侧同一字框模型。
+  const caption = figureCaption(profile, options.figureNo, options.figureCount ?? 1);
+  const captionY = heightMm - CAD_CAPTION_BASELINE_FROM_BOTTOM_MM;
+  const captionBoxMm =
+    caption === undefined
+      ? undefined
+      : (() => {
+          const box = glyphBox(caption, [widthMm / 2, captionY], CAD_CAPTION_FONT_MM, "middle");
+          return { left: box.minX, top: box.minY, right: box.maxX, bottom: box.maxY };
+        })();
 
   // 纸面折线只算一次：SVG 路径与"引线不得与之共线"的障碍线段同源（两处各算一遍必然漂移）
   const paperPolylines = projected.map(entry => ({
@@ -375,9 +398,9 @@ export function renderCadSvg(table: CadEdgeTable, options: CadRenderOptions): Ca
         ...(annotation.labelOffsetMm === undefined ? {} : { pinnedOffsetMm: annotation.labelOffsetMm }),
       };
     }),
-    { boxes: [geometryBoundsMm], segments: obstacleSegments },
+    { boxes: [geometryBoundsMm, ...(captionBoxMm === undefined ? [] : [captionBoxMm])], segments: obstacleSegments },
     {
-      fontSizeMm: CAD_REF_FONT_MM,
+      fontSizeMm: refFontMm,
       gapMm: CAD_REF_LABEL_GAP_MM,
       minLeaderMm: CAD_REF_LEADER_MM,
       // 引线上限取几何对角尺度：锚点在零件深处时必须能一路引到图外（缺省 6mm 够不到中心）
@@ -407,23 +430,22 @@ export function renderCadSvg(table: CadEdgeTable, options: CadRenderOptions): Ca
           segment =>
             `<polyline points="${fmt(segment.from.x)},${fmt(segment.from.y)} ` +
             `${fmt(segment.to.x)},${fmt(segment.to.y)}" fill="none" stroke="#000000" ` +
+            `${SVG_ROLE_ATTRIBUTE}="${SVG_LEADER_ROLE}" ` +
             `stroke-width="${CAD_LINE_WIDTH_MM}"/>`,
         )
         .join("");
       return (
         `<g id="n-ref-${placement.id}" data-ref="${placement.id}">${leader}` +
-        `<text x="${fmt(placement.labelPoint.x)}" y="${fmt(placement.labelPoint.y)}" font-size="${CAD_REF_FONT_MM}" ` +
+        `<text x="${fmt(placement.labelPoint.x)}" y="${fmt(placement.labelPoint.y)}" font-size="${refFontMm}" ` +
         `text-anchor="middle" fill="#000000">${escapeXml(placement.text)}</text></g>`
       );
     })
     .join("\n");
 
-  const caption = figureCaption(profile, options.figureNo, options.figureCount ?? 1);
-  const captionY = heightMm - 2;
   const captionMarkup =
     caption === undefined
       ? ""
-      : `<text x="${fmt(widthMm / 2)}" y="${fmt(captionY)}" font-size="3.5" text-anchor="middle" fill="#000000">` +
+      : `<text x="${fmt(widthMm / 2)}" y="${fmt(captionY)}" font-size="${CAD_CAPTION_FONT_MM}" text-anchor="middle" fill="#000000">` +
         `${escapeXml(caption)}</text>\n`;
   const svg =
     `<svg xmlns="http://www.w3.org/2000/svg" width="${fmt(widthMm)}mm" height="${fmt(heightMm)}mm" ` +
@@ -446,5 +468,6 @@ export function renderCadSvg(table: CadEdgeTable, options: CadRenderOptions): Ca
     labels,
     labelWarnings: plan.warnings,
     geometryBoundsMm,
+    ...(captionBoxMm === undefined ? {} : { captionBoxMm }),
   };
 }

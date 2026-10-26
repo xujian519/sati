@@ -18,6 +18,7 @@ import {
 } from "../../../src/patent/figuregen/chart.js";
 import { checkFigures } from "../../../src/patent/figuregen/check.js";
 import { buildFigureDot } from "../../../src/patent/figuregen/dot.js";
+import { checkFigureRendering } from "../../../src/patent/figuregen/render-check.js";
 import { renderFigureSvg } from "../../../src/patent/figuregen/render-svg.js";
 import type { FigureChart, FigureSpec } from "../../../src/patent/figuregen/types.js";
 
@@ -583,4 +584,12 @@ test("确定性：同输入两次布局/渲染逐字节一致", () => {
   const a = renderFigureSvg(chartSpec(ONE_SERIES));
   const b = renderFigureSvg(chartSpec(ONE_SERIES));
   assert.equal(a.svg, b.svg);
+});
+
+test("复核：曲线图产物自身通过文字净距判据（刻度值/图例不与图线贴靠）", () => {
+  // 刻度值与图线的间隙是渲染器自己的排版常量。小于 RC2 的 1.5mm 时，门禁会对每张曲线图
+  // 稳定报 6–9 条无法消除的 warn，报告噪音会淹没真缺陷。
+  const svg = renderFigureSvg(chartSpec(ONE_SERIES)).svg;
+  const findings = checkFigureRendering(svg).findings.filter(finding => finding.check !== "not-measured");
+  assert.deepEqual(findings, []);
 });
