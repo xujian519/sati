@@ -180,6 +180,80 @@ test("V4 防回退：标注书写形态差异（括号形 vs 裸数字）不得�
   );
 });
 
+test("V2 编号前缀排除：中英文编号都不算提及，元件名结尾的单字不算编号", () => {
+  for (const text of [
+    "如图20所示",
+    "计算式(20)",
+    "执行步骤20",
+    "参见第20项",
+    "图 20 的结构",
+    // 英文前缀比中文长：回看窗口不足时（曾取 4 字符）这些用例会静默失效
+    "claim 20 recites a housing",
+    "Claim 20",
+    "step 20",
+    "formula (20)",
+    "FIG. 20 shows the housing",
+  ]) {
+    const result = checkFigures([flowchart(1, [20])], text);
+    assert.ok(
+      result.findings.some(f => f.rule === "V2" && f.severity === "fail"),
+      `「${text}」中的数字是编号，不应被当作标记 20 的提及`,
+    );
+  }
+  // 真提及仍然命中：元件名以 条/表/式 等编号字结尾时不得被误排除（V2 是 fail 级规则）
+  for (const text of [
+    "处理模块(20)执行处理。",
+    "所述密封条(20)固定于壳体上。",
+    "所述水表20计量流量。",
+    "连接方式(20)为螺接。",
+  ]) {
+    const result = checkFigures([flowchart(1, [20])], text);
+    assert.deepEqual(
+      result.findings.filter(f => f.rule === "V2"),
+      [],
+      `「${text}」中的 20 是附图标记，不应被判成未提及`,
+    );
+  }
+});
+
+test("V3 与 V2 同一套词法：编号前缀与非法取值不进括号标记面", () => {
+  const numbered = checkFigures([flowchart(1, [20])], "处理模块(20)执行处理，计算式(10)与步骤(30)在此说明。");
+  assert.deepEqual(numbered.refsInText, [20], "式(10)/步骤(30) 是编号，不是括号标记");
+  assert.deepEqual(
+    numbered.findings.filter(f => f.rule === "V3"),
+    [],
+    "编号不应被报成「括号标记未出现于任何附图」",
+  );
+
+  // 非法取值由 V22 判，V3 不再对同一个 0 报「未出现于任何附图」
+  const invalid = checkFigures([flowchart(1, [0])], "模块(0)。");
+  assert.deepEqual(
+    invalid.findings.filter(f => f.rule === "V3"),
+    [],
+  );
+  assert.ok(invalid.findings.some(f => f.rule === "V22" && f.severity === "fail"));
+});
+
+test("V22 标记取值：0/负数/小数 → FAIL；超过三位数 → WARN", () => {
+  const invalid = [0, -5, 1.5];
+  for (const ref of invalid) {
+    const result = checkFigures([flowchart(1, [ref])], "");
+    assert.ok(
+      result.findings.some(f => f.rule === "V22" && f.severity === "fail"),
+      `标记 ${ref} 不是正整数，应判 fail`,
+    );
+    assert.equal(result.ok, false);
+  }
+  const excessive = checkFigures([flowchart(1, [1000])], "模块(1000)。");
+  assert.ok(excessive.findings.some(f => f.rule === "V22" && f.severity === "warn"));
+  assert.equal(excessive.ok, true, "超出常用上限只提示复核，不阻断");
+  // 无效标记不参与 V2/V4 的文本/跨图比对（避免 0 匹配任意 `0`）
+  assert.deepEqual(
+    invalid.flatMap(ref => checkFigures([flowchart(1, [ref])], "").findings.filter(f => f.rule === "V2")),
+    [],
+  );
+});
+
 test("汇总：refsInFigures / refsInText 正确回流", () => {
   const result = checkFigures([flowchart(1, [10, 20])], "模块(10)；另有风扇(40)。");
   assert.deepEqual(

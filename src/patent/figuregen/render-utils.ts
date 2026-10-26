@@ -14,6 +14,16 @@
 /** 默认坐标精度（小数位）：内置渲染器（流程图/曲线图）用 1 位。 */
 export const FMT_DIGITS = 1;
 
+/**
+ * 图元角色属性（绘图侧标注、复核侧识别，两侧共用同一属性名）。
+ *
+ * 引线是**标记线**，本来就止于标号外围；复核侧的「文字净距」判据若把它当普通图线，
+ * 工具自己画的合规引线会被报成"文字贴线"。故绘图侧写角色、复核侧跳过，口径只有一处。
+ */
+export const SVG_ROLE_ATTRIBUTE = "data-dsh-role";
+/** {@link SVG_ROLE_ATTRIBUTE} 的引线取值。 */
+export const SVG_LEADER_ROLE = "leader";
+
 /** 数值 → SVG 坐标/尺寸文本（固定小数位，去掉浮点噪声；默认 {@link FMT_DIGITS} 位）。 */
 export function fmt(value: number, digits: number = FMT_DIGITS): string {
   const factor = 10 ** digits;

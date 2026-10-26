@@ -33,15 +33,15 @@ import {
   createWasmDotRunner,
   exportSvgTextToPath,
   figureCaption,
-  MM_PER_INCH,
+  measureSvgPaperSize,
   profileForJurisdiction,
-  pxToMm,
   renderFigureSvg,
   renderFigureSvgWithGraphviz,
   renderFiguresHtml,
   resolveDotBinary,
   sheetNumberText,
   shouldRenderCaption,
+  sourceCharHeightMm,
   writeFigureSidecar,
   writeSubmissionPageArtifact,
   type DocumentKind,
@@ -434,18 +434,14 @@ export function createPatentFigureGenerateTool(): SatiToolDefinition<PatentFigur
       await mkdir(outputDir, { recursive: true });
 
       try {
-        // 生成期跑结构规则（V1/V4/V5/V7/V8/V9 + V12–V14 图面用语）；V2/V3 需说明书文本，
-        // 属 patent_figure_check 职责。figureCount 决定图号是否需要标注 ⇒ 也决定纸面尺寸判据
-        // 与渲染画幅（两处必须同源，否则核验量的是另一张图）。
-        const check = checkFigures(figures, "", {
-          skipTextRules: true,
-          documentKind: documentKind,
-          jurisdiction: jurisdiction,
-          figureCount,
-        });
+        // 渲染 → 实测画幅 → 结构规则（V1/V4/V5/V7/V8/V9 + V12–V14 图面用语）。V7 必须
+        // 吃**实际交付文件**的尺寸：graphviz 的 14pt 字与内置 14px 字排出的画幅不同，
+        // 用布局重排会把放得下的图判成超框。V2/V3 需说明书文本，属 patent_figure_check。
         const { renderer, renderOne } = resolveRenderPipeline(figures, jurisdiction, figureCount, tool);
         const captionRendered = shouldRenderCaption(profile, figureCount);
-        const sourceCharMm = renderer === "graphviz" ? (14 / 72) * MM_PER_INCH : pxToMm(14);
+        // 与门禁共用同一映射：两处各写一份时 graphviz-wasm 会在一侧漏掉，同一张图
+        // 在生成期按 14px、在门禁按 14pt 判字高。
+        const sourceCharMm = sourceCharHeightMm(renderer, jurisdiction);
         const sheetText = sheet === undefined ? undefined : sheetNumberText(profile, sheet.index, sheet.total);
         const { files, pagePaths, renderedSvgs } = await renderFigureArtifacts({
           figures,
@@ -458,6 +454,18 @@ export function createPatentFigureGenerateTool(): SatiToolDefinition<PatentFigur
           fitToPage: input.fit_to_page,
           figureCount,
           sourceCharMm,
+        });
+        const measuredPaperSizes = [...renderedSvgs].flatMap(([figureNo, svg]) => {
+          const size = measureSvgPaperSize(svg);
+          return size === undefined ? [] : [{ figure_no: figureNo, ...size }];
+        });
+        const check = checkFigures(figures, "", {
+          skipTextRules: true,
+          documentKind: documentKind,
+          jurisdiction: jurisdiction,
+          figureCount,
+          measuredPaperSizes,
+          sourceCharHeightMm: sourceCharMm,
         });
 
         // 字体独立导出（可选收尾，最后一步）：把字形换成轮廓路径，使交付物不依赖读者机器
