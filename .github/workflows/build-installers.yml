@@ -79,7 +79,7 @@ jobs:
           shasum -a 256 Sati-*-arm64.dmg | tee SHA256SUMS-macos.txt
 
       - name: Upload DMG
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: sati-macos-arm64
           path: |
@@ -136,7 +136,7 @@ jobs:
             Out-File -Encoding ascii apps/desktop/dist-electron/SHA256SUMS-windows.txt
 
       - name: Upload EXE
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: sati-windows-x64
           path: |
@@ -159,7 +159,7 @@ jobs:
           fetch-depth: 0
           lfs: false
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: artifacts
 
