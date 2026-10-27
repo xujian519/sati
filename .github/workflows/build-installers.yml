@@ -15,9 +15,9 @@ on:
   workflow_dispatch:
     inputs:
       ref:
-        description: Git tag to build and publish (e.g. v0.4.0)
+        description: Git tag to build and publish (e.g. v0.4.1)
         required: true
-        default: v0.4.0
+        default: v0.4.1
       publish_release:
         description: Create or update the GitHub Release with the built installers
         type: boolean
