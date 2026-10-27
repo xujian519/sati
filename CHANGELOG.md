@@ -2,6 +2,33 @@
 
 本文件按版本记录 Sati 的重要变更。桌面端版本号（`release(desktop)`）与根 `package.json` 由 `scripts/bump-version.mjs` 同步维护。
 
+## v0.4.1 - 2026-10-27
+
+> **版本目标（2026-10-27）**：专利附图从「能画出来」走向「交付即读得出」——制图侧的标号字框、引线止点与图号注记同一套几何口径，识图侧的编号词法与标记取值统一，交付门禁同权消费 V/PX/RC/C 四族证据并以交付文件实测画幅为准；同期完成 ink 8 迁移、依赖升级与 better-sqlite3 构建提速。
+
+### Fix
+
+- fix(patent): 附图标注与引线收口——择位与复核共用 `glyphBox`，引线止点按「射线与字框首个进入点再退间隙」求解；CAD 引线标 `data-dsh-role="leader"`，不再被渲染复核误报为贯穿（#791）
+- fix(patent): 新增 V22 校验附图标记必须为正整数，入参层拒绝 0/负数/小数；`numeral.ts` 统一编号词法（回看窗口 24 字符、单字编号词要求左侧边界），`图20`/`式(20)`/`步骤20`/`密封条(20)` 不再被误判为标记提及（#791）
+- fix(patent): CAD 图号注记纳入标号择位障碍，新增 C12 报告注记压盖；曲线图刻度与图例间隙 4px → 6px，无描边白填充不再计作图线（#791）
+- fix(patent): V7 改为实测交付 SVG 的纸面尺寸，字高由 `sourceCharHeightMm` 单点给出（graphviz 14pt / 边标签 12pt、CAD 3.0mm CNIPA 与 3.5mm PCT·US、内置 14px）；量不到显式宽高时回落布局重排并在报告与 `figure-check.json` 标为「未实测」（#791）
+- fix(patent): 附图交付门禁同权消费四族证据——V 结构规则、PX 像素门禁、RC 渲染复核（文字贯穿/越界 fail）与 C 投影几何，阻断结论与原始发现一并留痕；`inputs_hash` 并入渲染器、矢量图内容哈希与 C 结论（#791）
+- fix(patent): 跨层重复观测去重——`C9↔RC5`、`C11↔RC1` 按图合并计数（取两侧较小值），阻断仍用 rawFail，合并理由单列「跨层重复观测」；CAD 标号字号按法域取值（#791）
+- fix(build): 停止为 better-sqlite3 触发 node-gyp 重建（#790）
+
+### Refactor
+
+- refactor(patent): `render-check.ts` 1639 行拆为 types/scan/geometry/findings 四个模块，主文件保留公共 API，架构基线的 file-size 豁免随之删除（#791）
+
+### Test
+
+- test(patent): 补齐附图门禁单测——跨层合并、CAD 字号与 V7 联动、编号词法、字高辖区参数、渲染复核与工具入参（#791）
+
+### Chore
+
+- chore(deps): ink 7 → 8.0.0 迁移并适配 stdout 类型（#781）、`@aiden0z/pptx-renderer` 1.4.0（#779）、lucide-react 1.61.0（#780）、express 5.3.0（#782）、tree-sitter-bash 0.25.1（#783）、sharp 0.35.5（#784）、tailwind-merge 3.7.0（#785）、react-dropzone 20.1.4（#786）、node-gyp 13.1.0（#787）、`@radix-ui/react-slot` 1.5.0（#788）、univerjs 组 13 项（#778）
+- ci(release): 远程打包后统一发布 GitHub Release——校验版本与 tag 一致，产出固定链接与 SHA256SUMS（#775）
+
 ## v0.4.0 - 2026-10-26
 
 > **版本目标（2026-10-26）**：专利论证从自由文本走向可引用的结构化证据——先定争点、`ArgumentRef` 三向指针、规则评估三态、run 规则包指纹，使每份意见都能回答「依据哪条、跑过哪些、哪次运行、用了哪套规则」；同期完成专利工具集审计整改（编排 5 合 3、契约 ≤40k 字符）、写路径 TOCTOU/硬链接加固、默认绑定环回、UI 可维护性 sweep B1.1–B3.1 与远程安装包构建流水线。
