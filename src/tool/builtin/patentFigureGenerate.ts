@@ -274,9 +274,15 @@ function buildGenerateReportLines(args: {
   check: ReturnType<typeof checkFigures>;
   /** 跨调用一致性的报告行（见 {@link crossCallReview}）。 */
   crossCallLines: string[];
-  /** 渲染复核档位与发现数（off 档必须显式写「未量测」，见 AGENTS 第 11 条）。 */
+  /** 渲染复核档位（off 档必须显式写「未量测」，见 AGENTS 第 11 条）。 */
   renderGate: FigureRenderGate;
-  renderFindingCount: number;
+  /**
+   * 渲染复核的**缺陷**数（warn/fail）与 RC0 未量测说明数，两者分开计数：
+   * 把 RC0（「箭头端头未量测」这类覆盖盲区）混进缺陷数，会让「没量到」看起来像
+   * 「查出这么多问题」，也让「查了没缺陷」与「查出 N 条」无法区分（AGENTS 第 11 条）。
+   */
+  renderDefectCount: number;
+  renderUnmeasuredCount: number;
   brief: boolean | undefined;
   figures: FigureSpec[];
   inventionName: string | undefined;
@@ -285,7 +291,7 @@ function buildGenerateReportLines(args: {
 }): string[] {
   const { files, pagePaths, profile, jurisdiction, figureCount, captionRendered } = args;
   const { sheetText, sheetTotal, sidecarPath, htmlPath, check, crossCallLines, brief, figures, rendererLabel } = args;
-  const { renderGate, renderFindingCount } = args;
+  const { renderGate, renderDefectCount, renderUnmeasuredCount } = args;
   const lines: string[] = [
     `已生成 ${files.length} 幅附图（黑白线条，审查指南一部一章 4.3/4.6 合规` +
       (rendererLabel === undefined ? "）：" : `；渲染器: ${rendererLabel}）：`),
@@ -300,7 +306,10 @@ function buildGenerateReportLines(args: {
     ...crossCallLines,
     renderGate === "off"
       ? `- 渲染复核：未运行（${FIGURE_RENDER_GATE_ENV}=off）——RC1–RC7 图面缺陷本次未量测，不能视为已核验无问题`
-      : `- 渲染复核：RC1–RC7 已量测，发现 ${String(renderFindingCount)} 条` +
+      : `- 渲染复核：RC1–RC7 已量测，发现 ${String(renderDefectCount)} 条缺陷` +
+        (renderUnmeasuredCount === 0
+          ? ""
+          : `；另有 ${String(renderUnmeasuredCount)} 条 RC0 未量测说明（覆盖盲区，不计入缺陷）`) +
         `（档位 ${renderGate}${renderGate === "fail" ? "，fail 级发现已在产物落盘后阻断" : "，不阻断生成"}）`,
   ];
   if (htmlPath !== undefined) {
@@ -590,7 +599,8 @@ export function createPatentFigureGenerateTool(): SatiToolDefinition<PatentFigur
           check: checkAll,
           crossCallLines: crossCall.lines,
           renderGate,
-          renderFindingCount: renderFindings.length,
+          renderDefectCount: renderFindings.filter(finding => finding.severity !== "info").length,
+          renderUnmeasuredCount: renderFindings.filter(finding => finding.severity === "info").length,
           brief: input.brief,
           figures,
           inventionName: input.invention_name,
