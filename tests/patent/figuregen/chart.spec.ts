@@ -373,6 +373,11 @@ test("渲染：黑白不变式 + 轴/刻度/曲线/标记齐备，无渐变无�
   assert.equal(height % 1, 0);
 });
 
+test("渲染：曲线图根元素标注 data-dsh-kind=chart（渲染复核据此豁免轮廓类判据）", () => {
+  const { svg } = renderFigureSvg(chartSpec(ONE_SERIES));
+  assert.ok(svg.includes('data-dsh-kind="chart"'), svg.slice(0, 160));
+});
+
 test("渲染：符号形状与越界数据不抛错（布局期过滤非有限点/畸形点）", () => {
   const { svg } = renderFigureSvg(
     chartSpec({

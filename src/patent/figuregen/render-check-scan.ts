@@ -6,7 +6,7 @@
  */
 
 import { glyphBox, type GlyphTextAnchor } from "./glyph-box.js";
-import { SVG_LEADER_ROLE, SVG_ROLE_ATTRIBUTE } from "./render-utils.js";
+import { SVG_FIGURE_KIND_ATTRIBUTE, SVG_LEADER_ROLE, SVG_ROLE_ATTRIBUTE } from "./render-utils.js";
 import { MM_PER_USER_UNIT, parseLengthMm, resolveSvgViewport } from "./svg-viewport.js";
 import type {
   ElementGeometry,
@@ -595,7 +595,10 @@ function textEntry(content: string, tag: string, frame: Frame): ScannedText {
 export function scanSvg(svg: string): Scan {
   // 注释里的 `<line …>` 不是图元：先整段去掉，避免把注释当成元素量测。
   const source = svg.replace(/<!--[\s\S]*?-->/g, "");
-  const viewport = resolveSvgViewport(/<svg\b[^>]*>/i.exec(source)?.[0] ?? "");
+  const rootTag = /<svg\b[^>]*>/i.exec(source)?.[0] ?? "";
+  const viewport = resolveSvgViewport(rootTag);
+  // 图型标注只读根元素：本仓产物把 `data-dsh-kind` 写在根上（见 SVG_FIGURE_KIND_ATTRIBUTE）。
+  const figureKind = new RegExp(`\\b${SVG_FIGURE_KIND_ATTRIBUTE}="([^"]*)"`, "u").exec(rootTag)?.[1];
   const root: Frame = {
     matrix: [
       viewport.scaleX,
@@ -703,6 +706,7 @@ export function scanSvg(svg: string): Scan {
     heightMm: viewport.heightMm,
     shapes,
     texts,
+    figureKind,
     unmeasured,
   };
 }

@@ -419,6 +419,36 @@ test("图元重叠：斜放图形包围盒大面积相交但轮廓不相交时�
   assertNoKind(input, "element-overlap");
 });
 
+// ── 图型豁免：曲线图上不适用轮廓类判据（RC4/RC6） ─────────────────────────────
+
+/** 根元素带图型标注（本仓绘图侧给曲线图写 `data-dsh-kind="chart"`）。 */
+function chartSvg(body: string): string {
+  return svg(body, 'width="200" height="200" data-dsh-kind="chart"');
+}
+
+test("图型豁免：同一构造在曲线图上不报 element-overlap，并记一条 not-measured 明示未量测", () => {
+  const body = `${strokedRect(0, 0, 20)}${strokedRect(10, 10, 20)}`;
+  assertKinds(svg(body), ["element-overlap"]);
+  const report = checkFigureRendering(chartSvg(body));
+  assert.deepEqual(
+    report.findings.map(finding => finding.check),
+    ["not-measured"],
+    "曲线图：RC6 不参与，且未量测必须显式说明（不能静默判过）",
+  );
+  assert.match(report.findings[0]?.message ?? "", /曲线图.*RC4.*RC6/u);
+});
+
+test("图型豁免：曲线图上相邻零件剖面线不比较（RC4）", () => {
+  const body = `${HATCH_FRAMES}${HATCH_A_45}${HATCH_B_45}`;
+  assertKinds(svg(body), ["hatch-orientation-collision"]);
+  assert.deepEqual(kinds(chartSvg(body)), ["not-measured"]);
+});
+
+test("图型豁免：图型标注非 chart（如 flowchart）时判据照旧参与（只豁免曲线图）", () => {
+  const body = `${strokedRect(0, 0, 20)}${strokedRect(10, 10, 20)}`;
+  assertKinds(svg(body, 'width="200" height="200" data-dsh-kind="flowchart"'), ["element-overlap"]);
+});
+
 // ── 字高低于下限（RC7） ───────────────────────────────────────────────────────
 
 test("字高低于下限：实测字高（0.92 毫米）低于 1 毫米下限时报 font-below-minimum 并回显下限", () => {

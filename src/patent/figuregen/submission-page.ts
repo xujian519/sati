@@ -21,7 +21,7 @@
 import { svgRootSizeMm } from "./html.js";
 import { officeProfile, printableArea, sheetNumberText, type TargetOffice } from "./office-profile.js";
 import { CSS_PX_PER_INCH, MM_PER_INCH, pxToMm } from "./page-contract.js";
-import { escapeXml, fmt as fmtShared } from "./render-utils.js";
+import { SVG_FIGURE_KIND_ATTRIBUTE, escapeXml, fmt as fmtShared } from "./render-utils.js";
 
 /** 图内文字的默认估算字高（毫米）：内置渲染器 FIGURE_FONT_SIZE=14px。 */
 const DEFAULT_SOURCE_CHAR_MM = (14 / CSS_PX_PER_INCH) * MM_PER_INCH;
@@ -112,10 +112,17 @@ function nestDrawing(svg: string, placed: { xMm: number; yMm: number; widthMm: n
   return `<svg ${[...kept, ...size, ...vb].join(" ")} preserveAspectRatio="xMidYMid meet">${inner}</svg>`;
 }
 
-/** 图形 SVG 的图号属性（若有）原样带到页面上：落版页因此同样可被 `parseFigureSvg` 回读。 */
-function figureNoAttribute(drawingSvg: string): string {
-  const match = drawingSvg.match(/\bdata-figure-no="(\d+)"/u);
-  return match === null ? "" : `data-figure-no="${match[1]}" `;
+/**
+ * 图形 SVG 的根元素标注原样带到页面上：图号使落版页同样可被 `parseFigureSvg` 回读，
+ * 图型使渲染复核在页级仍能识别曲线图（`data-figure-no` 与
+ * {@link SVG_FIGURE_KIND_ATTRIBUTE} 都由绘图侧写在同一处根元素上）。
+ */
+function rootMarkers(drawingSvg: string): string {
+  const figureNo = drawingSvg.match(/\bdata-figure-no="(\d+)"/u)?.[1];
+  const kind = drawingSvg.match(new RegExp(`\\b${SVG_FIGURE_KIND_ATTRIBUTE}="([a-z]+)"`, "u"))?.[1];
+  return `${figureNo === undefined ? "" : `data-figure-no="${figureNo}" `}${
+    kind === undefined ? "" : `${SVG_FIGURE_KIND_ATTRIBUTE}="${kind}" `
+  }`;
 }
 
 /** 落版页坐标精度：2 位小数（纸面毫米；版心定位不需要 CAD 那样的微米级）。 */
@@ -186,7 +193,7 @@ export function buildSubmissionPage(options: SubmissionPageOptions): SubmissionP
     `text-anchor="middle" fill="#000000">${escapeXml(text)}</text>\n`;
 
   const svg =
-    `<svg xmlns="http://www.w3.org/2000/svg" ${figureNoAttribute(options.drawingSvg)}` +
+    `<svg xmlns="http://www.w3.org/2000/svg" ${rootMarkers(options.drawingSvg)}` +
     `width="${fmt(profile.paper.widthMm)}mm" ` +
     `height="${fmt(profile.paper.heightMm)}mm" ` +
     `viewBox="0 0 ${fmt(profile.paper.widthMm)} ${fmt(profile.paper.heightMm)}" ` +

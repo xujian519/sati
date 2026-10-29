@@ -167,6 +167,29 @@ test("落版：页面可被 parseFigureSvg 回读（图号与 data-ref 集合不
   );
 });
 
+test("落版：图形根元素的图型标注带到页面上（曲线图在页级复核仍可识别图型）", () => {
+  const chart: FigureSpec = {
+    figure_no: 1,
+    kind: "chart",
+    nodes: [],
+    edges: [],
+    chart: {
+      x: { title: "t(s)" },
+      y: { title: "y" },
+      series: [
+        {
+          points: [
+            [0, 0],
+            [1, 1],
+          ],
+        },
+      ],
+    },
+  };
+  const page = buildSubmissionPage({ drawingSvg: drawing(chart), office: "cnipa" });
+  assert.ok(page.svg.includes('data-dsh-kind="chart"'), page.svg.slice(0, 200));
+});
+
 test("落版：单幅在 pct/us 无图号时页面同样可回读（不靠可见图号取号）", () => {
   const single = renderFigureSvg(SPEC, { jurisdiction: "us" }).svg;
   const page = buildSubmissionPage({ drawingSvg: single, office: "uspto" });

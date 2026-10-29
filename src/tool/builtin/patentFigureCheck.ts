@@ -109,7 +109,8 @@ async function runPixelGateForPaths(
 
 /**
  * 已交付 SVG 回读：安全门 → 解析图号/标记 → 组装回读骨架 → 矢量源几何量测。
- * `kind` 是**占位**（flowchart）：SVG 里没有图型信息，原图型与方向已不可知——占位只影响
+ * `kind` 是**占位**（flowchart）：SVG 通常不携带图型（本仓曲线图产物例外——根元素写
+ * `data-dsh-kind="chart"`，但那只供渲染复核挑选适用判据），原图型与方向已不可知——占位只影响
  * V19/V20/V21 的保守跳过，画幅判据由 readbackFigureNos 明确排除，不靠占位决定。
  */
 async function readbackSvgFigures(
