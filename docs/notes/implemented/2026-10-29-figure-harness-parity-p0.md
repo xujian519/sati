@@ -27,8 +27,9 @@ P0 五项全部走**环境变量与内部规则**，不动 `inputSchema`（避�
    档位由 `SATI_FIGURE_RENDER_GATE=off|warn|fail` 决定，缺省 `warn`；`off` 时仍写一条
    `RC0` info 明示"未量测 ≠ 通过"（AGENTS 第 11 条）；`fail` 在**产物与 sidecar 全部落盘后**
    抛错（产物可审计），`warn` 只报告。
-2. **新增 RC6 `element-overlap`、RC7 `font-below-minimum`**：前者量闭合轮廓包围盒两轴交叠
-   （排除严格包含、同 `data-dsh-hatch-group`、两侧都无描边），后者按 `minFontMm` 逐**文字元素**
+2. **新增 RC6 `element-overlap`、RC7 `font-below-minimum`**：前者要求闭合轮廓的边真正互相穿过
+   （包围盒只作预筛；排除严格包含、同 `data-dsh-hatch-group`、两侧都无描边、贴边相接——
+   判据的这次收紧见 `2026-10-29-figure-rc6-polygon-overlap.md`），后者按 `minFontMm` 逐**文字元素**
    量字高（下限由法域档案 `minCharHeight` ÷ `uniformFigureZoom` 折算到源图坐标）。
    两条都定 `warn`：新增规则会经既有 `detectFigureDrift` 链自动进入交付门，定 `fail`
    会误伤存量交付。规则号映射仍单点在 `render-check-rules.ts`。
@@ -71,5 +72,6 @@ P0 五项全部走**环境变量与内部规则**，不动 `inputSchema`（避�
   `SATI_FIGURE_RENDER_GATE` 缺省 `warn`，不阻断既有流程。
 - 成本：每次生成多跑一遍矢量量测（纯文本解析，无外部依赖）；目录里此前若有损坏的
   sidecar，跨调用核对会**带文件名报错**而不是静默跳过（这是有意的 fail-loud）。
-- 已知边界：RC6 只看闭合轮廓包围盒，斜置轮廓的交叠会被包围盒放大；
-  RC7 的字高按占位框实测，与 V7 的渲染器常数估算是两套互补口径，两者同时存在不是重复。
+- 已知边界：RC6 的边相交判据对**曲线轮廓**按顶点弦近似（与其它 RC 规则同一份扫描口径），
+  曲率大的贴合可能漏报而不误报；RC7 的字高按占位框实测，与 V7 的渲染器常数估算
+  是两套互补口径，两者同时存在不是重复。
