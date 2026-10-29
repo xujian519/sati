@@ -164,6 +164,9 @@ assets/result/ios_game_result.mp4
 
 # third-party
 third-party/
+# Exception: license dossiers for third-party material we redistribute.
+# THIRD_PARTY_NOTICES.md points readers at these files, so they must ship.
+!docs/third-party/
 
 # Project-local Sati overrides (per-project .sati/sati.yaml etc)
 .sati/

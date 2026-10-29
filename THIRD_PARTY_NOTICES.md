@@ -33,6 +33,21 @@ Sati 基于其聚焦专利业务场景独立发展，与上游无隶属关系。
 > nuo-patent 基于 [ryanlstevens/google_patent_scraper](https://github.com/ryanlstevens/google_patent_scraper)
 > （MIT）重构，其 MIT 版权声明保留于 `vendor/nuo-patent/LICENSE`。
 
+### 1.3 claude-for-legal-ZH — Apache-2.0
+
+`skills/legal-*`（130 个法律实务技能，含 AI 治理、商事、公司并购、刑事、劳动、知识产权、
+诉讼、隐私、政府采购、产品合规、监管、法律检索与案件工作区）导入自
+[claude-for-legal-ZH](https://github.com/CSlawyer1985/claude-for-legal-ZH) v1.1.0
+（作者：陈石律师 / CSlawyer1985），采用 **Apache License 2.0**。
+
+- 完整许可证、上游 NOTICE 与来源台账见 `docs/third-party/legal-skill-pack/`。
+- Sati 的修改：技能目录平铺为 `skills/<slug>/`；每个技能追加「Sati 检索接线」段
+  （法条原文优先用 `law_search`、引用成稿前用 `law_verify` 核验）；一个超长技能拆分到
+  `references/`。其余正文与上游一致。
+- `legal-litigation-party-document-templates/references/styles/` 下的 105 份
+  「当事人参考民事诉讼文书样式」来自最高人民法院（2016-09-28 公布），属国家机关官方文件，
+  不在 Apache 语料范围内；其中的诉讼法条号是 2016 年时点，使用前须按现行法复核。
+
 ---
 
 ## 2. 主要第三方依赖（Runtime Dependencies）

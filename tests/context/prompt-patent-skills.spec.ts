@@ -43,8 +43,9 @@ test("专利工作区（或缺省）列出全部技能与角色", () => {
   for (const options of [{}, { patentDomainEnabled: true }]) {
     const prompt = assemble(options);
     assert.match(prompt, /- spreadsheets — /);
-    assert.match(prompt, /- patent-search — /);
-    assert.match(prompt, /- drafting-claims — /);
+    // 专利组是 compact 组（只列名字，语义由组头摘要承担）。
+    assert.match(prompt, /- Patent \(2 skills\)/);
+    assert.match(prompt, /names: patent-search, drafting-claims/);
     assert.match(prompt, /<available-roles>/);
     assert.match(prompt, /- provision-novelty — /);
   }

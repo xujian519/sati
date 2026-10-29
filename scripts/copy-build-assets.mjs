@@ -33,6 +33,7 @@ const COPIES = [
   ["src/methodology/runtime/components/data", "dist/src/methodology/runtime/components/data"],
   ["assets/templates/patent", "dist/assets/templates/patent"],
   ["assets/patent", "dist/assets/patent"],
+  ["assets/legal-snapshot", "dist/assets/legal-snapshot"],
   ["assets/prompts/html", "dist/assets/prompts/html"],
   ["scripts/export-html.mjs", "dist/scripts/export-html.mjs"],
   ["skills", "dist/skills"],

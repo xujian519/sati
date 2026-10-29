@@ -25,10 +25,10 @@
 
 | claim | 事实 | 值 | 来源 |
 | --- | --- | --- | --- |
-| `default_tool_count` | 默认注册工具数（无参 createBuiltinRegistry） | `54` | src/tool/registry/createBuiltinRegistry.ts（运行期实例化） |
+| `default_tool_count` | 默认注册工具数（无参 createBuiltinRegistry） | `55` | src/tool/registry/createBuiltinRegistry.ts（运行期实例化） |
 | `patent_tool_count` | 专利域工具数（domain === "patent"） | `29` | src/tool/registry/createBuiltinRegistry.ts（运行期实例化） |
 | `channel_adapter_count` | IM 渠道适配器数 | `21` | src/adapters/channel/（目录数，不含 protocol/） |
-| `skill_count` | 内置技能数（SKILL.md 总数） | `107` | skills/**/SKILL.md |
+| `skill_count` | 内置技能数（SKILL.md 总数） | `237` | skills/**/SKILL.md |
 | `role_skill_count` | 专家角色数（type: role） | `45` | skills/**/SKILL.md frontmatter |
 | `patent_skill_count` | 专利相关技能数（patent-* 与 provision-* 技能目录） | `52` | skills/ 目录命名 |
 | `src_module_count` | src/ 模块数 | `32` | src/ 顶层目录 |
@@ -52,12 +52,12 @@
 | `src/board/` | 8 | ✓ | 项目看板（protocol/runtime/storage 三组，kanban_* 工具与网关方法组） |
 | `src/browser/` | 6 | — | 浏览器后端抽象（ego lite / BrowserOS 等后端探测与驱动） |
 | `src/cli/` | 46 | ✓ | CLI 入口与命令（sati.ts / satiServer.ts / createLocalGateway.ts） |
-| `src/context/` | 100 | ✓ | 上下文（压缩/预算/记忆/向量/workspace registerLeak） |
+| `src/context/` | 101 | ✓ | 上下文（压缩/预算/记忆/向量/workspace registerLeak） |
 | `src/cron/` | 18 | ✓ | 定时任务（config/protocol/runtime/storage/tool） |
 | `src/extension/` | 51 | ✓ | 插件系统（plugin.json、lifecycle hooks、skills、贡献点） |
 | `src/fs/` | 1 | — | 文件系统小工具（JSONL run 写入器） |
 | `src/gateway/` | 39 | ✓ | WebSocket 网关（protocol/server/client/approval） |
-| `src/knowledge/` | 52 | ✓ | 知识库（图谱/判例/法规/embeddings/wiki 卡片） |
+| `src/knowledge/` | 63 | ✓ | 知识库（图谱/判例/法规/embeddings/wiki 卡片） |
 | `src/lifecycle/` | 6 | ✓ | 生命周期（protocol/runtime） |
 | `src/literature/` | 13 | ✓ | 学术论文检索（arXiv/OpenAlex/Semantic Scholar/Crossref） |
 | `src/mcp/` | 16 | ✓ | MCP 客户端/协议/运行时 |
@@ -76,7 +76,7 @@
 | `src/task/` | 4 | ✓ | 后台任务存储与运行时 |
 | `src/telemetry/` | 6 | ✓ | 遥测（analytics.v2 契约） |
 | `src/test-support/` | 7 | — | 测试基建（llm-replay 录制/重放 seam） |
-| `src/tool/` | 150 | ✓ | 工具系统（registry/execution/audit/builtin） |
+| `src/tool/` | 151 | ✓ | 工具系统（registry/execution/audit/builtin） |
 | `src/web/` | 13 | — | Web 服务端与浏览器客户端投影 |
 
 > 文件数按 **git 清单**统计（`git ls-files --cached --others --exclude-standard`，排除 `.d.ts`），

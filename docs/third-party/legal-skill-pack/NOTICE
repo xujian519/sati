@@ -1,0 +1,26 @@
+claude-for-legal-ZH
+Copyright (c) 陈石律师 / CSlawyer1985
+Licensed under the Apache License, Version 2.0.
+Source: https://github.com/CSlawyer1985/claude-for-legal-ZH
+Source version: 1.1.0
+Source commit: unknown (source checkout has no git metadata)
+Source tree hash: 5177dcdd1cb7cc52a42b70b263bcb05c1e686f8dbad8db91ec2b62b29dc52a8d
+
+Modifications for DeepSeek Harness:
+- Skills are namespaced as legal-<domain>-<skill>.
+- Claude Code configuration paths and slash commands are rewritten to the
+  workspace-relative ./.legal and ./matters layout.
+- Assistant and product references are rewritten to this mode; source
+  attribution stays in this NOTICE.
+- Per-domain matter-workspace and review-proposals skills are removed; one
+  legal-matter skill owns the active-matter pointer.
+- Legal MCP references are rewritten to ego lite official-source retrieval;
+  the mode also uses optional Yuandian MCP tools when the host installs them.
+- The upstream US/EU regulatory feed catalog is omitted; the privacy and
+  product watch lists are labeled as comparative material.
+
+Separately, `handwritten/legal-litigation-party-document-templates/references/styles`
+reproduces 105 "party reference civil-litigation document styles" published by
+the Supreme People's Court (2016-09-28, retrieved 2026-10-26). These are official
+documents reproduced as a format reference and are not part of the Apache-licensed
+corpus above.

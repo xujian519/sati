@@ -37,6 +37,7 @@ import {
 import { createWebFetchTool, type CreateWebFetchToolOptions } from "../builtin/webFetch.js";
 import { createWebSearchTool, type CreateWebSearchToolOptions } from "../builtin/webSearch.js";
 import { createReadSkillTool, type ReadSkillDeps } from "../builtin/readSkill.js";
+import { createListSkillsTool } from "../builtin/listSkills.js";
 import { createRuleCheckTool, type RuleCheckDeps } from "../builtin/ruleCheck.js";
 import { createPatentEvalTool } from "../builtin/patentEval.js";
 import { createDraftClaimsTool } from "../builtin/draftClaims.js";
@@ -78,6 +79,7 @@ import { createEvaluateEvidenceTool } from "../builtin/evaluateEvidence.js";
 import { createWriteFileTool } from "../builtin/writeFile.js";
 import { createLawSearchTool } from "../../knowledge/legal/law-search-tool.js";
 import { createLawVerifyTool } from "../../knowledge/legal/law-verify-tool.js";
+import { createEvaluateLegalEvidenceTool } from "../../knowledge/legal/legal-evidence/index.js";
 import type { EmbeddingClient } from "../../model/embedding/index.js";
 import {
   createLiteratureRegistry,
@@ -442,6 +444,8 @@ export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): T
     registry.register(annotate(createLawSearchTool(), "legal"));
     // 法条引用核验：同一个 knowledge.db，但判的是「引用是否成立」而非「哪条文怎么说」。
     registry.register(annotate(createLawVerifyTool(), "legal"));
+    // 八类法定证据三性判定：与专利域 evaluate_evidence 分列（证据类型体系不同）。
+    registry.register(annotate(createEvaluateLegalEvidenceTool(), "legal"));
   }
   if (literatureRegistry !== undefined) {
     registry.register(annotate(createPaperListSourcesTool({ registry: literatureRegistry }), "literature"));
@@ -454,6 +458,8 @@ export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): T
   }
   if (options?.readSkill) {
     registry.register(annotate(createReadSkillTool(options.readSkill), "session"));
+    // 清单分组后的按需展开：组 → 名字 + 描述；与 prompt 渲染共用同一套归组规则。
+    registry.register(annotate(createListSkillsTool({ lister: options.readSkill.lister }), "session"));
   }
   if (options?.team) {
     const { db, scheduler, emit, workerGate } = options.team;

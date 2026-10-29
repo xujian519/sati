@@ -52,6 +52,7 @@ export type { SatiToolScheduler } from "./scheduler/ToolScheduler.js";
 export { createAgentTool } from "./builtin/agent.js";
 export { createReadFileTool } from "./builtin/readFile.js";
 export { createReadSkillTool } from "./builtin/readSkill.js";
+export { createListSkillsTool } from "./builtin/listSkills.js";
 export { createGlobTool } from "./builtin/glob.js";
 export { createGrepTool } from "./builtin/grep.js";
 export { createExecuteCodeTool } from "./builtin/executeCode.js";

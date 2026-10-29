@@ -7,6 +7,10 @@ import type {
   ExtensionResolver,
   McpServerInstruction,
 } from "../extension/ExtensionResolver.js";
+import { groupSkills, skillGroupFor } from "./skillGroups.js";
+
+/** `names:` 行宽上限（字符）；只为可读性折行，不影响 token 量级。 */
+const MAX_NAME_LINE_WIDTH = 110;
 
 export type PromptAssemblerInput = {
   cwd: string;
@@ -192,7 +196,12 @@ export class PromptAssembler {
         (s): s is ContributedSkill & { role: NonNullable<ContributedSkill["role"]> } => s.role !== undefined,
       );
       if (plainSkills.length > 0) {
-        sections.push(formatSkills(plainSkills, { includePaths: !hasTool(input.tools, "read_skill") }));
+        sections.push(
+          formatSkills(plainSkills, {
+            includePaths: !hasTool(input.tools, "read_skill"),
+            groupExpansion: hasTool(input.tools, "list_skills"),
+          }),
+        );
       }
       if (roles.length > 0) {
         sections.push(formatRoles(roles));
@@ -265,14 +274,27 @@ function formatCommands(commands: ContributedCommand[]): string {
 }
 
 /**
- * 技能清单渲染。
+ * 技能清单渲染（按域分组，见 `skillGroups.ts`）。
  *
  * `read_skill` 在场时省略逐条绝对路径，只声明技能根目录——路径是清单里最大的
  * 可去重开销（每条十余 tokens × 数十条），而 `read_skill` 按名字取全文，不依赖路径。
  * 无 `read_skill` 时保留逐条路径：那是模型读取技能的唯一线索（fixture 录制路径即此形态）。
+ *
+ * compact 组（`legal-*` / `patent-*` 等名字自解释的大组）只列名字，组头的一句话摘要
+ * 承担选技能所需的语义；非 compact 组逐条保留描述（`gog` / `pdf` 这类名字不透明的
+ * 技能不能省描述）。
  */
-function formatSkills(skills: ContributedSkill[], options: { includePaths: boolean }): string {
-  const lines = ["<available-skills>", "Use the read_skill tool to load the full content of any skill listed below."];
+function formatSkills(skills: ContributedSkill[], options: { includePaths: boolean; groupExpansion: boolean }): string {
+  const lines = [
+    "<available-skills>",
+    "Use the read_skill tool to load the full content of any skill listed below.",
+    'Skills are grouped by domain. A group header reports the skill count and scope; groups followed by a "names:" line list their skills by name only, and that name is what read_skill expects.',
+  ];
+  if (options.groupExpansion && skills.some(skill => skillGroupFor(skill.name).compact)) {
+    lines.push(
+      "Call list_skills with a group id from a header line (e.g. legal/litigation) to get that group's per-skill descriptions before choosing one.",
+    );
+  }
   if (options.includePaths) {
     lines.push("Each entry includes the exact SKILL.md selected by the runtime.");
     lines.push("Resolve relative references, scripts, and assets against the directory containing that SKILL.md.");
@@ -284,13 +306,49 @@ function formatSkills(skills: ContributedSkill[], options: { includePaths: boole
   lines.push(
     "Do not search the user's home directory to rediscover a skill or infer runtime/cache paths; use the listed name with read_skill.",
   );
-  for (const skill of skills) {
-    const description = skill.description ? ` — ${skill.description}` : "";
-    const file = options.includePaths ? ` (file: ${skill.path})` : "";
-    lines.push(`- ${skill.name}${description}${file}`);
+  for (const group of groupSkills(skills)) {
+    const summary = group.description ? ` — ${group.description}` : "";
+    lines.push(`- ${group.label} (${group.skills.length} skills)${summary}`);
+    if (group.compact && !options.includePaths) {
+      lines.push(
+        ...wrapNames(
+          group.skills.map(skill => skill.name),
+          "  names: ",
+        ),
+      );
+      continue;
+    }
+    for (const skill of group.skills) {
+      const description = !group.compact && skill.description ? ` — ${skill.description}` : "";
+      const file = options.includePaths ? ` (file: ${skill.path})` : "";
+      lines.push(`  - ${skill.name}${description}${file}`);
+    }
   }
   lines.push("</available-skills>");
   return lines.join("\n");
+}
+
+/** 把技能名压成若干行 `names:` 列表（单行不超过 `MAX_NAME_LINE_WIDTH`）。 */
+function wrapNames(names: string[], prefix: string): string[] {
+  const lines: string[] = [];
+  let current = prefix;
+  const continuation = " ".repeat(prefix.length);
+  for (const name of names) {
+    if (current === prefix) {
+      current += name;
+      continue;
+    }
+    if (current.length + 2 + name.length > MAX_NAME_LINE_WIDTH) {
+      lines.push(current);
+      current = continuation + name;
+      continue;
+    }
+    current += `, ${name}`;
+  }
+  if (current.trim().length > 0) {
+    lines.push(current);
+  }
+  return lines;
 }
 
 /** 技能根目录去重集合（`<root>/<name>/SKILL.md` 的 root 部分）。 */

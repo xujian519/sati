@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "snapshotAt": "2026-10-29",
+  "source": "deepseek-harness packages/legal/legal-law/assets/legal-law + .cache/legal-transcribe（外部语料转录）",
+  "license": "MIT（源包）；法律文本依《著作权法》第五条不受著作权保护",
+  "format": "gzip-jsonl（一行一法：{n:法名,d:文档名,a:[[条号,正文]]}）",
+  "file": "legal-articles.jsonl.gz",
+  "lawCount": 7908,
+  "articleCount": 339189,
+  "byteSize": 36922349,
+  "sha256": "490f74faabbd71492fb2baf2e57ed6aea5e6797fe313f6b180f38fd8dd3cedde",
+  "transcripts": {
+    "available": true,
+    "lawCount": 7891,
+    "articleCount": 335598
+  },
+  "skipped": {
+    "count": 2,
+    "reasons": {
+      "无正文：YAML 与转录 overlay 都没有": 2
+    },
+    "samples": [
+      {
+        "file": "最高人民法院关于执行我国加入的-承认及执行外国仲裁裁决公约-的通知.yaml",
+        "reason": "无正文：YAML 与转录 overlay 都没有"
+      },
+      {
+        "file": "civil-code-marriage-family.yaml",
+        "reason": "无正文：YAML 与转录 overlay 都没有"
+      }
+    ]
+  }
+}
