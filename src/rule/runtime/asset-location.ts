@@ -15,7 +15,6 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const CURRENT_DIR = dirname(fileURLToPath(import.meta.url));
-const PATENT_DIR = join("rules", "patent");
 const MAX_WALK_LEVELS = 6;
 
 /** 从 startDir 向上定位含 package.json 的根；找不到返回 startDir。 */
@@ -31,7 +30,7 @@ function walkUpForPackageJson(startDir: string): string {
 }
 
 /** Sati 包根：从模块文件位置向上（随包分发的内置资产，如 rules/patent）。 */
-function packageRoot(): string {
+export function packageRoot(): string {
   return walkUpForPackageJson(CURRENT_DIR);
 }
 
@@ -42,11 +41,21 @@ export function findWorkspaceRoot(startDir = process.cwd()): string {
 
 /** 候选规则目录（平铺资产，从最具体到最通用；walk 上限统一 6 层）。 */
 export function candidateRuleDirs(): string[] {
+  return candidateDomainRuleDirs("patent");
+}
+
+/**
+ * 按业务域定位平铺规则资产目录（`<candidate>/<domain>/*.yaml`）。
+ *
+ * 与 `candidateRuleDirs()` 同一套顺序；patent 走前者，legal 等其它域用本函数，
+ * 避免各域各自实现一套 walk 而再次发散。
+ */
+export function candidateDomainRuleDirs(domain: string): string[] {
   const candidates: string[] = [];
   const envDir = process.env.SATI_RULES_DIR;
-  if (envDir) candidates.push(resolve(envDir, "patent"));
-  candidates.push(resolve(process.cwd(), PATENT_DIR));
-  candidates.push(join(packageRoot(), PATENT_DIR));
+  if (envDir) candidates.push(resolve(envDir, domain));
+  candidates.push(resolve(process.cwd(), "rules", domain));
+  candidates.push(join(packageRoot(), "rules", domain));
   return candidates;
 }
 

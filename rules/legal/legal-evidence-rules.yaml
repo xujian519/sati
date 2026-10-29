@@ -1,0 +1,158 @@
+# 法律域证据规则集 — 八类法定证据三性审查
+# 依据《民事诉讼法》第 66 条八类法定证据
+# 消费方：src/knowledge/legal/legal-evidence/engine.ts（LegalEvidenceEngine.loadRules）
+#
+# 声明性元数据：weights 由引擎读取并参与评分；rules 记录检查项、严重程度
+# 与法律依据，可执行判定位于 src/knowledge/legal/legal-evidence/evaluators.ts。
+# 修改 check 名称只改变本文件的记录，不改变判定逻辑。
+#
+# 来源：移植自 deepseek-harness packages/legal/legal-evidence（MIT）。
+# 法条文本以现行《民事诉讼法》（2023 修正）条号为准，条号仅作定位线索。
+
+weights:
+  relevance: 0.35
+  legality: 0.30
+  authenticity: 0.35
+
+rules:
+  # ── 通用规则 ──────────────────────────────────────────
+
+  - id: LEGAL-EVI-GEN-001
+    description: "证据应与待证事实具有关联性"
+    evidence_type: general
+    check: "hasFactToProve"
+    severity: critical
+    legalBasis: "民事诉讼法第66条"
+    conditions:
+      - fact_to_prove_specified
+
+  - id: LEGAL-EVI-GEN-002
+    description: "证据收集应合法"
+    evidence_type: general
+    check: "collectionLegal"
+    severity: critical
+    legalBasis: "民事诉讼法司法解释第106条"
+    conditions:
+      - collection_legal
+
+  # ── 书证规则 ──────────────────────────────────────────
+
+  - id: LEGAL-EVI-001
+    description: "书证应提供原件"
+    evidence_type: documentary
+    check: "hasOriginalOrExplainsAbsence"
+    severity: critical
+    legalBasis: "民事诉讼法第73条"
+    conditions:
+      - has_original
+
+  - id: LEGAL-EVI-002
+    description: "书证签章应核验真实性"
+    evidence_type: documentary
+    check: "signatureVerified"
+    severity: warning
+    legalBasis: "最高人民法院关于民事诉讼证据的若干规定第90条"
+
+  - id: LEGAL-EVI-003
+    description: "书证形成时间应明确"
+    evidence_type: documentary
+    check: "formationTimeClear"
+    severity: warning
+
+  # ── 电子数据规则 ──────────────────────────────────────
+
+  - id: LEGAL-EVI-004
+    description: "电子数据应验证存储完整性"
+    evidence_type: electronic
+    check: "storageIntegrityVerified"
+    severity: critical
+    legalBasis: "最高人民法院关于民事诉讼证据的若干规定第93条"
+
+  - id: LEGAL-EVI-005
+    description: "电子数据应有内容哈希并核验"
+    evidence_type: electronic
+    check: "contentHashVerified"
+    severity: warning
+
+  - id: LEGAL-EVI-006
+    description: "电子数据应有时间戳"
+    evidence_type: electronic
+    check: "hasTimestamp"
+    severity: warning
+
+  # ── 证人证言规则 ──────────────────────────────────────
+
+  - id: LEGAL-EVI-007
+    description: "证人应与案件无利害关系或已披露"
+    evidence_type: witness_testimony
+    check: "noConflictOfInterestOrDisclosed"
+    severity: critical
+    legalBasis: "民事诉讼法第75条"
+
+  - id: LEGAL-EVI-008
+    description: "证人证言应有其他证据佐证"
+    evidence_type: witness_testimony
+    check: "corroborated"
+    severity: warning
+
+  # ── 鉴定意见规则 ──────────────────────────────────────
+
+  - id: LEGAL-EVI-009
+    description: "鉴定机构/鉴定人应具备相应资质"
+    evidence_type: expert_opinion
+    check: "expertQualified"
+    severity: critical
+    legalBasis: "民事诉讼法第79条"
+
+  - id: LEGAL-EVI-010
+    description: "鉴定程序应合法"
+    evidence_type: expert_opinion
+    check: "expertProcedureLegal"
+    severity: critical
+
+  - id: LEGAL-EVI-011
+    description: "鉴定结论应明确"
+    evidence_type: expert_opinion
+    check: "expertConclusionClear"
+    severity: warning
+
+  # ── 当事人陈述规则 ────────────────────────────────────
+
+  - id: LEGAL-EVI-012
+    description: "当事人陈述应有其他证据佐证"
+    evidence_type: party_statement
+    check: "corroborated"
+    severity: warning
+    legalBasis: "民事诉讼法第78条"
+
+  # ── 物证规则 ──────────────────────────────────────────
+
+  - id: LEGAL-EVI-013
+    description: "物证应提供原物"
+    evidence_type: physical
+    check: "hasOriginalOrExplainsAbsence"
+    severity: warning
+    legalBasis: "民事诉讼法第73条"
+
+  # ── 视听资料规则 ──────────────────────────────────────
+
+  - id: LEGAL-EVI-014
+    description: "视听资料应记录内容哈希"
+    evidence_type: audio_visual
+    check: "contentHashProvided"
+    severity: warning
+
+  # ── 勘验笔录规则 ──────────────────────────────────────
+
+  - id: LEGAL-EVI-015
+    description: "勘验应有见证人在场"
+    evidence_type: inspection_record
+    check: "inspectionHasWitness"
+    severity: warning
+    legalBasis: "民事诉讼法第82条"
+
+  - id: LEGAL-EVI-016
+    description: "勘验记录应完整"
+    evidence_type: inspection_record
+    check: "inspectionRecordComplete"
+    severity: warning

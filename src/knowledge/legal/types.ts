@@ -66,8 +66,8 @@ export type LawCategory = {
   group?: string;
 };
 
-/** 时点过滤精度：exact=按施行日/失效字段；approximate=按公布日期下界近似。 */
-export type LegalTimeFilter = "exact" | "approximate";
+/** 时点过滤精度：exact=按施行日/失效字段；approximate=按公布日期下界近似；unsupported=数据源无日期字段，不按时点过滤（降级可见）。 */
+export type LegalTimeFilter = "exact" | "approximate" | "unsupported";
 
 /** 时点检索元数据（仅 `asOf` 检索时产生）。 */
 export type LegalSearchTimeMeta = {

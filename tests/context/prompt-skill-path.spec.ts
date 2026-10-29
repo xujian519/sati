@@ -65,7 +65,8 @@ test("available skills drop per-entry paths when read_skill can load them by nam
   }).joined;
 
   assert.match(prompt, /- spreadsheets — Create and edit spreadsheet files\.\n/);
-  assert.match(prompt, /- patent-search — Search prior art\.\n/);
+  // 专利组是 compact 组：只列名字（不再逐条附描述），名字仍是 read_skill 的入参。
+  assert.match(prompt, /names: patent-search\n/);
   assert.doesNotMatch(prompt, /\(file: /);
   assert.doesNotMatch(prompt, /Resolve relative references/);
   // 根目录去重后按字母序声明一次，供需要 read_file 的场景定位 SKILL.md。
