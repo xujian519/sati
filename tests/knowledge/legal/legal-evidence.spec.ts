@@ -12,7 +12,13 @@ import { LegalEvidenceEngine } from "../../../src/knowledge/legal/legal-evidence
 import { parseLegalRuleSet } from "../../../src/knowledge/legal/legal-evidence/rule-set.js";
 import { loadLegalEvidenceRulesEngine } from "../../../src/knowledge/legal/legal-evidence/rule-loader.js";
 import { createEvaluateLegalEvidenceTool } from "../../../src/knowledge/legal/legal-evidence/tool.js";
-import { LEGAL_EVIDENCE_TYPES, type LegalEvidenceInput } from "../../../src/knowledge/legal/legal-evidence/types.js";
+import { levelFor } from "../../../src/knowledge/legal/legal-evidence/evaluators.js";
+import {
+  LEGAL_EVIDENCE_TYPES,
+  type LegalEvidenceDimension,
+  type LegalEvidenceInput,
+  type LegalEvidenceType,
+} from "../../../src/knowledge/legal/legal-evidence/types.js";
 import { makeToolContext } from "../../tool/context-fixture.js";
 
 const MINIMAL_YAML = `
@@ -196,6 +202,138 @@ test("工具契约：空 evidenceId 拒绝执行并给出稳定错误码", async
   const result = await tool.execute({ evidenceId: "  ", evidenceType: "documentary" }, makeToolContext());
   assert.equal(result.metadata?.error, "no_evidence_id");
 });
+
+test("矩阵：八类 × 三性 24 个判定维度均带正确标签，等级与分数一致", () => {
+  const engine = new LegalEvidenceEngine(readRulesAssetText());
+  const labels: Record<LegalEvidenceDimension, string> = {
+    relevance: "关联性",
+    legality: "合法性",
+    authenticity: "真实性",
+  };
+  for (const evidenceType of LEGAL_EVIDENCE_TYPES) {
+    const assessment = engine.assess({ evidenceId: `MX-${evidenceType}`, evidenceType });
+    for (const dimension of ["relevance", "legality", "authenticity"] as const) {
+      const judgment = assessment.dimensions[dimension];
+      assert.equal(judgment.dimension, dimension, `${evidenceType}/${dimension} 维度标签错配`);
+      assert.ok(judgment.score >= 0 && judgment.score <= 1, `${evidenceType}/${dimension} 分数越界`);
+      assert.equal(judgment.level, levelFor(judgment.score), `${evidenceType}/${dimension} 等级与分数不一致`);
+      assert.ok(
+        judgment.reasoning.includes(labels[dimension]),
+        `${evidenceType}/${dimension} 判定理由未写明维度：${judgment.reasoning}`,
+      );
+    }
+  }
+});
+
+/**
+ * 每类证据挑一个「类型特定驱动字段」：弱输入 → 强输入时，
+ * 目标维度分数必须严格上升，且该类的类型特定规则由「违规」转为「无违规」。
+ * 规则只在未通过时产出 finding（001/004 等例外会产出 passed:true），
+ * 因此强输入侧断言「不存在 failed finding」，不做 passed 断言。
+ */
+type EvidenceFields = Omit<LegalEvidenceInput, "evidenceId" | "evidenceType">;
+
+type MatrixCase = {
+  evidenceType: LegalEvidenceType;
+  dimension: LegalEvidenceDimension;
+  ruleId: string;
+  weak: EvidenceFields;
+  strong: EvidenceFields;
+};
+
+const TRIPLE_ATTRIBUTE_MATRIX: MatrixCase[] = [
+  {
+    evidenceType: "documentary",
+    dimension: "authenticity",
+    ruleId: "LEGAL-EVI-001",
+    weak: { hasOriginal: false },
+    strong: { hasOriginal: true },
+  },
+  {
+    evidenceType: "electronic",
+    dimension: "legality",
+    ruleId: "LEGAL-EVI-004",
+    weak: { collectionLegal: false },
+    strong: { collectionLegal: true, storageIntegrityVerified: true },
+  },
+  {
+    evidenceType: "witness_testimony",
+    dimension: "authenticity",
+    ruleId: "LEGAL-EVI-007",
+    weak: { witnessHasConflict: true, conflictDisclosed: false },
+    strong: { witnessHasConflict: false, corroborated: true },
+  },
+  {
+    evidenceType: "expert_opinion",
+    dimension: "legality",
+    ruleId: "LEGAL-EVI-009",
+    weak: { expertQualified: false, expertProcedureLegal: false },
+    strong: { expertQualified: true, expertProcedureLegal: true },
+  },
+  {
+    evidenceType: "inspection_record",
+    dimension: "authenticity",
+    ruleId: "LEGAL-EVI-015",
+    weak: { inspectionHasWitness: false },
+    strong: { inspectionHasWitness: true, inspectionRecordComplete: true },
+  },
+  {
+    evidenceType: "physical",
+    dimension: "authenticity",
+    ruleId: "LEGAL-EVI-013",
+    weak: { hasOriginal: false },
+    strong: { hasOriginal: true, storageIntegrityVerified: true },
+  },
+  {
+    evidenceType: "audio_visual",
+    dimension: "authenticity",
+    ruleId: "LEGAL-EVI-014",
+    weak: {},
+    strong: { contentHash: "sha256:def", hashVerified: true, storageIntegrityVerified: true },
+  },
+  {
+    evidenceType: "party_statement",
+    dimension: "authenticity",
+    ruleId: "LEGAL-EVI-012",
+    weak: { corroborated: false },
+    strong: { corroborated: true, content: "当事人当庭陈述" },
+  },
+];
+
+test("矩阵：八类证据各有一个可区分的三性驱动字段（互不重复、覆盖完整）", () => {
+  const covered = TRIPLE_ATTRIBUTE_MATRIX.map(item => item.evidenceType).sort();
+  assert.deepEqual(covered, [...LEGAL_EVIDENCE_TYPES].sort(), "矩阵必须一一覆盖八类法定证据");
+  assert.equal(new Set(TRIPLE_ATTRIBUTE_MATRIX.map(item => item.ruleId)).size, TRIPLE_ATTRIBUTE_MATRIX.length);
+});
+
+for (const item of TRIPLE_ATTRIBUTE_MATRIX) {
+  test(`矩阵：${item.evidenceType} 的${item.dimension}驱动使分数上升且 ${item.ruleId} 不再违规`, () => {
+    const engine = new LegalEvidenceEngine(readRulesAssetText());
+    const weak = engine.assess({
+      ...item.weak,
+      evidenceId: `MX-${item.evidenceType}-weak`,
+      evidenceType: item.evidenceType,
+    });
+    const strong = engine.assess({
+      ...item.strong,
+      evidenceId: `MX-${item.evidenceType}-strong`,
+      evidenceType: item.evidenceType,
+    });
+
+    const weakViolation = weak.findings.find(finding => finding.ruleId === item.ruleId);
+    assert.ok(weakViolation, `弱输入应产出 ${item.ruleId} 的检查结果`);
+    assert.equal(weakViolation.passed, false, `弱输入下 ${item.ruleId} 应判定为违规`);
+
+    const strongViolation = strong.findings.find(finding => finding.ruleId === item.ruleId && finding.passed === false);
+    assert.equal(strongViolation, undefined, `强输入下 ${item.ruleId} 不应再有违规记录`);
+
+    assert.ok(
+      strong.dimensions[item.dimension].score > weak.dimensions[item.dimension].score,
+      `${item.evidenceType} 的${item.dimension}分数未随驱动字段上升：${weak.dimensions[item.dimension].score} → ${strong.dimensions[item.dimension].score}`,
+    );
+    assert.ok(strong.score.overall > weak.score.overall, `${item.evidenceType} 综合分未随三性驱动上升`);
+  });
+}
 
 /** 读仓库内真实规则资产（包根 rules/legal，随源码分发）。 */
 function readRulesAssetText(): string {
