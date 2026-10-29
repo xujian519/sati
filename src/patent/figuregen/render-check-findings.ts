@@ -454,7 +454,10 @@ export function inkOutsideCanvas(scan: Scan): RenderCheckFinding | undefined {
   };
 }
 
-/** 元素重叠判定的最小相交尺寸（毫米）：小于它的相交是贴边/共线，不是重叠。 */
+/**
+ * 元素重叠判定的包围盒预筛尺寸（毫米）：两盒在这两个轴上的相交都不超过它时，
+ * 轮廓不可能真正相交，直接跳过（旋转图形的包围盒会假性重叠，见 {@link outlinesCross}）。
+ */
 const OVERLAP_MIN_MM = 0.2;
 /** 字高低于下限的发现最多逐条列出这么多条（其余合并为一条计数说明）。 */
 const FONT_BELOW_MAX_DETAILS = 4;
@@ -467,13 +470,46 @@ function strictlyContains(
   return inner.minX >= outer.minX && inner.minY >= outer.minY && inner.maxX <= outer.maxX && inner.maxY <= outer.maxY;
 }
 
+/** 两线段严格相交：真正穿过；只有端点相接、共线或贴靠时返回 false。 */
+function segmentsCross(a1: Point, a2: Point, b1: Point, b2: Point): boolean {
+  const side = (from: Point, to: Point, point: Point): number =>
+    (to[0] - from[0]) * (point[1] - from[1]) - (to[1] - from[1]) * (point[0] - from[0]);
+  const d1 = side(b1, b2, a1);
+  const d2 = side(b1, b2, a2);
+  const d3 = side(a1, a2, b1);
+  const d4 = side(a1, a2, b2);
+  return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0));
+}
+
 /**
- * 图元互相重叠：两个闭合轮廓（或带描边的图元）包围盒在**两轴**上都相交且都超过
- * {@link OVERLAP_MIN_MM}。
+ * 两个闭合轮廓是否真正相交：存在一对边**互相穿过**。
  *
+ * 不能用包围盒相交代替：斜放/放射状摆放的零件（如 45° 辐条）包围盒大面积套叠，
+ * 轮廓本身却相距很远——实测案例中 24/24 条此类发现均为假阳性（见
+ * `docs/notes/implemented/2026-10-29-figure-harness-rc6-polygon.md`）。端点相接、
+ * 共线贴边、以及一件严格包含另一件（{@link strictlyContains}）都不算相交。
+ * @param a - 多边形 A 的顶点。
+ * @param b - 多边形 B 的顶点。
+ * @returns 轮廓互相穿过时 true。
+ */
+function outlinesCross(a: Poly, b: Poly): boolean {
+  for (let left = 0; left < a.length; left += 1) {
+    const a1 = a[left] as Point;
+    const a2 = a[(left + 1) % a.length] as Point;
+    for (let right = 0; right < b.length; right += 1) {
+      if (segmentsCross(a1, a2, b[right] as Point, b[(right + 1) % b.length] as Point)) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * 图元互相重叠：两个闭合轮廓（或带描边的图元）的**轮廓边真正互相穿过**。
+ *
+ * 包围盒相交只作预筛（旋转图形的包围盒会假性重叠），最终判据是边与边的严格相交。
  * 排除三类：**严格包含**（一件套在另一件里，是装配图的正常画法）、**两侧都不描边**
  * （纯填充图元——文字转路径后的字形彼此压叠是排版常态，不是缺陷）、**同一分组号**
- * （同一材料的几段轮廓，见 `hatchCollisions`）。只相交一条窄边（贴边、共线）也不报。
+ * （同一材料的几段轮廓，见 `hatchCollisions`）。贴边、共线、端点相接都不报。
  * @param outlines - 闭合轮廓。
  * @param groups - 与 `outlines` 一一对应的分组号；undefined 表示该轮廓自成一组。
  * @param stroked - 与 `outlines` 一一对应的「是否描边」。
@@ -496,11 +532,12 @@ export function outlineOverlaps(
       const overlapY = Math.min(a.maxY, b.maxY) - Math.max(a.minY, b.minY);
       if (overlapX <= OVERLAP_MIN_MM || overlapY <= OVERLAP_MIN_MM) continue;
       if (strictlyContains(a, b) || strictlyContains(b, a)) continue;
+      if (!outlinesCross(outlines[left] as Poly, outlines[right] as Poly)) continue;
       findings.push({
         check: "element-overlap",
         message:
-          `图元 #${String(left + 1)} 与 #${String(right + 1)} 的轮廓重叠 ` +
-          `${String(Math.round(overlapX * 10) / 10)}×${String(Math.round(overlapY * 10) / 10)} 毫米：` +
+          `图元 #${String(left + 1)} 与 #${String(right + 1)} 的轮廓重叠` +
+          `（包围盒相交 ${String(Math.round(overlapX * 10) / 10)}×${String(Math.round(overlapY * 10) / 10)} 毫米，轮廓实测互相穿过）：` +
           "两个零件/图形互相压叠时图面上读不出各自的边界，应错开摆放或改为一件在另一件之外的剖视画法",
       });
     }
