@@ -281,10 +281,12 @@ test("Google streaming uses an idle watchdog instead of an absolute SDK timeout"
         generateContent: async () => ({}) as never,
         generateContentStream: async () =>
           (async function* () {
+            // 块间隔（250ms）须明显小于 idle 超时（400ms），流总时长（约 500ms）须大于 idle
+            // 超时，才能证明按空闲计时而非绝对超时；余量过窄会在 CI 并发下被调度抖动误触发。
             yield { candidates: [{ content: { parts: [{ text: "a" }] } }] } as never;
-            await sleep(8);
+            await sleep(250);
             yield { candidates: [{ content: { parts: [{ text: "b" }] } }] } as never;
-            await sleep(8);
+            await sleep(250);
             yield { candidates: [{ finishReason: "STOP", content: { parts: [] } }] } as never;
           })(),
       },
@@ -293,7 +295,7 @@ test("Google streaming uses an idle watchdog instead of an absolute SDK timeout"
 
   const events = await collect(
     streamModel(createRequest(), config, {
-      streamTimeoutMs: 10,
+      streamTimeoutMs: 400,
       googleClientFactory,
     }),
   );
