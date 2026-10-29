@@ -4,10 +4,8 @@
  * 分三层：
  * ① 纯函数（法名归一化 / 条号连续性 / 引用抽取 / 命题匹配）——不碰库；
  * ② 判定（用假索引覆盖五种 decision，含「降级不得判 valid」的安全网）；
- * ③ 真实知识库的集成断言（无库时**显式 skip**，不是"跑过了没问题"）。
- *
- * 第 ③ 层用 `{ skip }` 而非 `return`：本仓库里有过「无依赖时 return，于是 CI 上这条永远
- * 记为通过」的先例，那会把「没跑」伪装成「通过」。
+ * ③ 夹具知识库的集成断言（内存 sqlite，documents/chunks 形状与生产一致，
+ *    替代对本机 knowledge.db 的依赖——这层现在在 CI 上真正跑）。
  */
 
 import assert from "node:assert/strict";
@@ -16,7 +14,6 @@ import test from "node:test";
 import {
   buildLawIndex,
   isLawLikeName,
-  loadLawIndex,
   maxContiguousArticle,
   normalizeLawName,
   type LawEntry,
@@ -250,16 +247,84 @@ test("工具：无引用时给明确结论而不是空白", () => {
   assert.match(report, /未在文本中发现法条引用/);
 });
 
-// ---------------------------------------------------------------- 真实知识库
+// ---------------------------------------------------------------- 夹具知识库
 
-const loaded = loadLawIndex();
+/**
+ * 夹具库（内存 sqlite，XiaoNuo documents/chunks 形状），替代对本机 knowledge.db 的依赖：
+ * 此前这层在无本机库时整体 skip（「没跑」不伪装成「通过」，但 CI 上等于零覆盖）；
+ * 现在用夹具把「选源 / 条号上界 / 反例复跑」真正跑起来。真实生产数据的规模性断言
+ * （如库里确有 9000+ 部法）不属于本层——那是数据验收，不是代码行为。
+ */
 
-test("真实知识库：专利法 82 条 / 实施细则 149 条，且权威源是管道全文", {
-  skip: loaded === undefined ? "本机无 knowledge.db，跳过（不计入通过）" : false,
-}, () => {
-  assert.ok(loaded);
-  const patentLaw = loaded.index.entries.get("专利法");
-  const rules = loaded.index.entries.get("专利法实施细则");
+/** 阿拉伯数字转中文数字（夹具正文用行首「第X条」，覆盖 1..149）。 */
+function toCnNumber(value: number): string {
+  const digits = "零一二三四五六七八九";
+  if (value < 1 || value > 999) throw new RangeError(`toCnNumber 只支持 1..999，收到 ${value}`);
+  const hundreds = Math.floor(value / 100);
+  const rest = value % 100;
+  const tens = Math.floor(rest / 10);
+  const ones = rest % 10;
+  let out = "";
+  if (hundreds > 0) {
+    out += `${digits[hundreds]}百`;
+    if (rest > 0 && tens === 0) out += "零";
+  }
+  if (tens > 0) out += `${tens === 1 && hundreds === 0 ? "" : digits[tens]}十`;
+  if (ones > 0) out += digits[ones];
+  return out;
+}
+
+/** 生成一部法的全文（第 1..count 条；可对指定条号覆盖正文）。 */
+function lawText(count: number, overrides: Record<number, string> = {}): string {
+  const lines: string[] = [];
+  for (let n = 1; n <= count; n += 1) {
+    lines.push(`第${toCnNumber(n)}条 ${overrides[n] ?? `第${n}条正文内容。`}`);
+  }
+  return lines.join("\n");
+}
+
+/** 专利法第二十二条（创造性）正文——与命题匹配用例共用同一段真实条文。 */
+const PATENT_LAW_ARTICLE_22 =
+  "授予专利权的发明和实用新型，应当具备新颖性、创造性和实用性。创造性，是指与现有技术相比，该发明具有突出的实质性特点和显著的进步。";
+
+/** 在内存库造 documents/chunks（doc_type='law_article'）并构建索引。 */
+function buildFixtureIndex(): LawIndex {
+  const db = new DatabaseSync(":memory:");
+  db.exec(
+    "CREATE TABLE documents (id TEXT, source TEXT, doc_type TEXT, title TEXT, char_count INTEGER);" +
+      "CREATE TABLE chunks (id INTEGER PRIMARY KEY, document_id TEXT, chunk_index INTEGER, content TEXT);",
+  );
+  const insertDoc = db.prepare(
+    "INSERT INTO documents (id, source, doc_type, title, char_count) VALUES (?, ?, 'law_article', ?, ?)",
+  );
+  const insertChunk = db.prepare("INSERT INTO chunks (document_id, chunk_index, content) VALUES (?, ?, ?)");
+  const addDoc = (id: string, title: string, source: string, text: string): void => {
+    insertDoc.run(id, source, title, text.length);
+    insertChunk.run(id, 0, text);
+  };
+
+  // 专利法：raw 全文（82 条，第二十二条为真实创造性条文）+ wiki 碎片（落选候选）。
+  addDoc("doc-patent-raw", "中华人民共和国专利法（2020年修正）", "raw", lawText(82, { 22: PATENT_LAW_ARTICLE_22 }));
+  addDoc("doc-patent-wiki", "专利法", "wiki", lawText(2));
+  // 实施细则：raw 全文 149 条。
+  addDoc("doc-rules-raw", "中华人民共和国专利法实施细则（2023年修订）", "raw", lawText(149));
+  // 选源回归场景：「一、山东省专利条例」（wiki，0 条）与「山东省专利条例」（raw，33 条）。
+  addDoc("doc-shandong-wiki", "一、山东省专利条例（2025年修订）", "wiki", "山东省专利条例的知识卡片摘要，无条文切分。");
+  addDoc("doc-shandong-raw", "山东省专利条例", "raw", lawText(33));
+  // 补足索引覆盖面的另外两部法。
+  addDoc("doc-trademark-raw", "中华人民共和国商标法（2019年修正）", "raw", lawText(10));
+  addDoc("doc-defense-raw", "国防专利条例", "raw", lawText(5));
+
+  const index = buildLawIndex(db);
+  db.close();
+  return index;
+}
+
+const fixtureIndex = buildFixtureIndex();
+
+test("夹具知识库：专利法 82 条 / 实施细则 149 条，且权威源是管道全文", () => {
+  const patentLaw = fixtureIndex.entries.get("专利法");
+  const rules = fixtureIndex.entries.get("专利法实施细则");
   assert.ok(patentLaw, "应选到《专利法》");
   assert.ok(rules, "应选到《专利法实施细则》");
   assert.equal(patentLaw.maxArticle, 82);
@@ -270,11 +335,8 @@ test("真实知识库：专利法 82 条 / 实施细则 149 条，且权威源�
   assert.ok(patentLaw.candidates.every(candidate => candidate.maxContig <= 82));
 });
 
-test("真实知识库：计划里的反例逐条复跑", {
-  skip: loaded === undefined ? "本机无 knowledge.db，跳过（不计入通过）" : false,
-}, () => {
-  assert.ok(loaded);
-  const decide = (text: string): string => verifyCitations(text, loaded.index)[0]?.decision ?? "(无引用)";
+test("夹具知识库：计划里的反例逐条复跑", () => {
+  const decide = (text: string): string => verifyCitations(text, fixtureIndex)[0]?.decision ?? "(无引用)";
   assert.equal(decide("《专利法》第一百二十条"), "out-of-range");
   assert.equal(decide("《专利法》第八十三条"), "out-of-range");
   assert.equal(decide("《专利法实施细则》第一百五十条"), "out-of-range");
@@ -284,12 +346,9 @@ test("真实知识库：计划里的反例逐条复跑", {
   assert.equal(decide("《山东省专利条例》第五条"), "valid");
 });
 
-test("真实知识库：索引构建自身不抛错且能覆盖多部法规", {
-  skip: loaded === undefined ? "本机无 knowledge.db，跳过（不计入通过）" : false,
-}, () => {
-  assert.ok(loaded);
-  assert.ok(loaded.index.entries.size >= 5, `应索引到多部法规，实测 ${loaded.index.entries.size}`);
-  assert.ok(loaded.index.lawNames.length > 0, "应至少有一个可被引用识别的法名");
+test("夹具知识库：索引构建自身不抛错且能覆盖多部法规", () => {
+  assert.ok(fixtureIndex.entries.size >= 5, `应索引到多部法规，实测 ${fixtureIndex.entries.size}`);
+  assert.ok(fixtureIndex.lawNames.length > 0, "应至少有一个可被引用识别的法名");
 });
 
 test("buildLawIndex 在空库上返回空索引而不是抛错", () => {

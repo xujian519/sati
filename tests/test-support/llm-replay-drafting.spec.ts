@@ -22,14 +22,26 @@ import { createReplayModelRuntime } from "../../src/test-support/llm-replay/inde
  * T12 端到端验收（llm-replay，docs/patent-drafting-sop-plan.md 迭代四）：
  * patent_drafting_v1 全链路真实会话录制 → CI 无 key 重放。
  *
+ * fixture 缺失时本测试跳过（录制后自动生效）。fixture 请求键 = 内容哈希
+ * （含 systemPrompt/messages/工具 inputSchema digest）——任何工具 schema 改动后需重录。
+ *
  * 录制流程（需真实模型 key + 交互式批准 5 个审批门）：
  *   1. 设置 SATI_LLM_REPLAY_RECORD_ROOT=tests/fixtures/llm-replay/patent-drafting
  *   2. 启动产品，对"撰写专利"任务执行 patent_workflow_run(manifestId=patent_drafting_v1)，
  *      在每个 HITL 检查点批准（approveStageIds 或交互确认）直至完成
  *   3. 提交 fixture 目录（records.jsonl + manifest.json）
  *
- * fixture 缺失时本测试跳过（录制后自动生效）。fixture 请求键 = 内容哈希
- * （含工具 inputSchema digest）——任何工具 schema 改动后需重录。
+ * 2026-10-29 录制尝试（scripts/record-drafting-fixture.ts，deepseek-flash，61 条请求）结论：
+ * 该轨迹**结构性不可重放**，fixture 未入库。原因：请求键含完整 messages（含 tool_result），
+ * 而轨迹中的环境探测型 bash（`ls -la` 的 mtime、会话自身创建的 data/cases/ 内容）使工具结果
+ * 在录制与重放间必然漂移（本地重放即在第 2 个请求处 NO_REPLAY_RECORD；CI 新鲜检出更不可能
+ * 复现）。这不是凭据/网络问题，是回放接缝（只回放模型 + 精确键控消息）对「长链 agentic 轨迹 +
+ * 读可变环境状态的工具」的固有限制。解除阻塞的两条路（任选其一，均需独立设计与决策记录）：
+ *   a. 回放接缝支持工具结果回放（fixture 侧车记录 tool_result，重放时注入而非重跑工具）；
+ *   b. 录制时把 registry 限制到输出只依赖入库文件内容的工具（read_file/grep 等），并保证
+ *      轨迹不写工作区。
+ * 另注：录制当日 DeepSeek API 已拒绝 response_format=json_schema，工作流 LLM 原子在第 8 阶段
+ * 降级失败——即便轨迹可重放，录到的也不是 5 门全过的 happy path。
  */
 
 const FIXTURE_DIR = resolve(process.cwd(), "tests/fixtures/llm-replay/patent-drafting");
@@ -73,7 +85,9 @@ class CapabilityOnlyRuntime implements ModelRuntime {
 function makeConfig(cwd: string): AgentRuntimeConfig {
   return {
     provider: "deepseek",
-    model: "deepseek-v4-flash",
+    // 与 sati.yaml 中真实可用的 deepseek 模型对齐（"deepseek-v4-flash" 不存在于
+    // 配置与 DeepSeek API，无法真实录制）；重放键含 model 字段，改模型名需重录。
+    model: "deepseek-flash",
     cwd,
     permissionMode: "bypassPermissions",
     permissionContext: createDefaultPermissionContext({
