@@ -48,6 +48,28 @@ Sati 基于其聚焦专利业务场景独立发展，与上游无隶属关系。
   「当事人参考民事诉讼文书样式」来自最高人民法院（2016-09-28 公布），属国家机关官方文件，
   不在 Apache 语料范围内；其中的诉讼法条号是 2016 年时点，使用前须按现行法复核。
 
+### 1.4 deepseek-harness 法律域 — MIT
+
+以下两部分导入自 [deepseek-harness](https://github.com/deepseek-ai/deepseek-harness)
+（Copyright (c) 2026 DeepSeek），采用 **MIT License**（完整条文见
+`docs/third-party/deepseek-harness-legal/LICENSE`），与 §1.3 的 Apache-2.0 技能包是不同来源、
+不同许可证的两批材料：
+
+- **`src/knowledge/legal/legal-evidence/`**（八类法定证据三性评分，含
+  `evaluate_legal_evidence` 工具）：移植自上游 `packages/legal/legal-evidence`
+  （`@deepseek-ai/dsh-legal-evidence` v0.2.2-alpha.2）。
+  Sati 的修改：去除 cordis 插件框架依赖，改为 Sati 原生 `SatiToolDefinition` 注册；
+  评分规则阈值外置到 `rules/legal/legal-evidence-rules.yaml`（缺失时回退内置默认权重）；
+  测试重写为 node:test（含八类证据 × 三性矩阵）。
+- **`assets/legal-snapshot/`**（法条离线快照）：条文索引来自上游
+  `packages/legal/legal-law` 随包资产；法律条文正文本身属《中华人民共和国著作权法》
+  第五条规定的「法律、法规」官方文件，不受著作权保护。Sati 的修改：按源文件对回本机
+  语料补转录正文、字段紧凑化（`n`/`d`/`a`/`s`/`v`）、gzip 单文件分发；快照
+  `manifest.json` 随附 `license` / `source` / `snapshotAt` 字段。
+
+> MIT 义务：保留上述版权与许可声明（已随本文件与
+> `docs/third-party/deepseek-harness-legal/LICENSE` 分发）。
+
 ---
 
 ## 2. 主要第三方依赖（Runtime Dependencies）
