@@ -14,12 +14,10 @@
 import { figureCaption, profileForJurisdiction } from "./office-profile.js";
 import { layoutChart, renderChartBody } from "./chart.js";
 import { isSymbolShape, layoutFigure, type FigureLayout } from "./layout.js";
-import { FIGURE_FONT_SIZE } from "./metrics.js";
+import { figureFontSizePx, edgeFontSizePx } from "./metrics.js";
 import { FIGURE_NO_ATTRIBUTE } from "./readback.js";
 import { escapeXml, fmt } from "./render-utils.js";
 import type { FigureNode, FigureNodeShape, FigureSpec, Jurisdiction } from "./types.js";
-
-const EDGE_FONT_SIZE = 12;
 
 /** 节点 id → 合法 XML id 片段。 */
 function xmlId(nodeId: string): string {
@@ -82,15 +80,19 @@ function renderShape(shape: FigureNodeShape, p: { x: number; y: number; width: n
   }
 }
 
-function renderNodeText(node: FigureNode, p: { x: number; y: number; width: number; height: number }): string {
+function renderNodeText(
+  node: FigureNode,
+  p: { x: number; y: number; width: number; height: number },
+  fontSizePx: number,
+): string {
   if (isSymbolShape(node.shape)) return "";
   const lines = node.label.split("\n");
-  const lineHeight = FIGURE_FONT_SIZE + 7;
-  const startY = p.y + p.height / 2 - ((lines.length - 1) * lineHeight) / 2 + FIGURE_FONT_SIZE / 2 - 3;
+  const lineHeight = fontSizePx + 7;
+  const startY = p.y + p.height / 2 - ((lines.length - 1) * lineHeight) / 2 + fontSizePx / 2 - 3;
   return lines
     .map(
       (line, i) =>
-        `<text x="${fmt(p.x + p.width / 2)}" y="${fmt(startY + i * lineHeight)}" font-size="${FIGURE_FONT_SIZE}" ` +
+        `<text x="${fmt(p.x + p.width / 2)}" y="${fmt(startY + i * lineHeight)}" font-size="${fontSizePx}" ` +
         `text-anchor="middle" fill="#000000">${escapeXml(line)}</text>`,
     )
     .join("");
@@ -112,19 +114,23 @@ export function renderFigureSvg(
 ): { svg: string; width: number; height: number } {
   const profile = profileForJurisdiction(options.jurisdiction);
   const caption = figureCaption(profile, spec.figure_no, options.figureCount ?? 1);
+  // 主字号与边标签字号同源：前者由部署级 SATI_FIGURE_FONT_MM 决定（缺省 14px），
+  // 后者按既有 12/14 比例折算，未设 env 时输出与既有快照逐字节一致。
+  const fontSizePx = figureFontSizePx();
+  const edgeFontSize = edgeFontSizePx(fontSizePx);
 
   if (spec.kind === "chart") {
-    const chart = layoutChart(spec.chart, { caption: caption !== undefined });
+    const chart = layoutChart(spec.chart, { caption: caption !== undefined, fontSizePx });
     // 图号由本函数统一加在图形正下方（4.3），曲线图不加箭头 marker，故 defs 留空。
     const body = `${renderChartBody(chart)}\n`;
     return {
-      svg: documentSvg(spec.figure_no, chart.width, chart.height, body, "", caption),
+      svg: documentSvg(spec.figure_no, chart.width, chart.height, body, "", caption, fontSizePx),
       width: chart.width,
       height: chart.height,
     };
   }
 
-  const layout: FigureLayout = layoutFigure(spec, { caption: caption !== undefined });
+  const layout: FigureLayout = layoutFigure(spec, { caption: caption !== undefined, fontSizePx });
   const { width, height } = layout;
 
   // 层级图的边表示包含关系（整体—组成部分），按惯用观感不画箭头；其余图型画箭头。
@@ -137,7 +143,7 @@ export function renderFigureSvg(
         `points="${points.map(pt => `${fmt(pt.x)},${fmt(pt.y)}`).join(" ")}"/>`;
       const label =
         edge.label && labelAt
-          ? `<text x="${fmt(labelAt.x)}" y="${fmt(labelAt.y)}" font-size="${EDGE_FONT_SIZE}" text-anchor="middle" ` +
+          ? `<text x="${fmt(labelAt.x)}" y="${fmt(labelAt.y)}" font-size="${edgeFontSize}" text-anchor="middle" ` +
             `fill="#000000" stroke="#FFFFFF" stroke-width="4" paint-order="stroke">${escapeXml(edge.label)}</text>`
           : "";
       return polyline + label;
@@ -147,7 +153,7 @@ export function renderFigureSvg(
   const nodes = layout.nodes
     .map(p => {
       const shape = renderShape(p.node.shape ?? "rect", p);
-      const text = renderNodeText(p.node, p);
+      const text = renderNodeText(p.node, p, fontSizePx);
       const refAttr = p.node.ref === undefined ? "" : ` data-ref="${p.node.ref}"`;
       return `<g id="n-${xmlId(p.node.id)}"${refAttr}>${shape}${text}</g>`;
     })
@@ -157,7 +163,7 @@ export function renderFigureSvg(
     `<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" ` +
     `orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 Z" fill="#000000"/></marker></defs>\n`;
 
-  return { svg: documentSvg(spec.figure_no, width, height, edges + nodes, defs, caption), width, height };
+  return { svg: documentSvg(spec.figure_no, width, height, edges + nodes, defs, caption, fontSizePx), width, height };
 }
 
 /**
@@ -172,11 +178,12 @@ function documentSvg(
   body: string,
   defs: string,
   caption: string | undefined,
+  fontSizePx: number,
 ): string {
   const captionText =
     caption === undefined
       ? ""
-      : `<text x="${fmt(width / 2)}" y="${fmt(height - 16)}" font-size="${FIGURE_FONT_SIZE}" ` +
+      : `<text x="${fmt(width / 2)}" y="${fmt(height - 16)}" font-size="${fontSizePx}" ` +
         `text-anchor="middle" fill="#000000">${escapeXml(caption)}</text>\n`;
 
   return (

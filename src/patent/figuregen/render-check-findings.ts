@@ -454,6 +454,96 @@ export function inkOutsideCanvas(scan: Scan): RenderCheckFinding | undefined {
   };
 }
 
+/** 元素重叠判定的最小相交尺寸（毫米）：小于它的相交是贴边/共线，不是重叠。 */
+const OVERLAP_MIN_MM = 0.2;
+/** 字高低于下限的发现最多逐条列出这么多条（其余合并为一条计数说明）。 */
+const FONT_BELOW_MAX_DETAILS = 4;
+
+/** 包围盒严格包含另一盒（一件套在另一件里：装配图的正常画法，不算重叠）。 */
+function strictlyContains(
+  outer: { minX: number; minY: number; maxX: number; maxY: number },
+  inner: { minX: number; minY: number; maxX: number; maxY: number },
+): boolean {
+  return inner.minX >= outer.minX && inner.minY >= outer.minY && inner.maxX <= outer.maxX && inner.maxY <= outer.maxY;
+}
+
+/**
+ * 图元互相重叠：两个闭合轮廓（或带描边的图元）包围盒在**两轴**上都相交且都超过
+ * {@link OVERLAP_MIN_MM}。
+ *
+ * 排除三类：**严格包含**（一件套在另一件里，是装配图的正常画法）、**两侧都不描边**
+ * （纯填充图元——文字转路径后的字形彼此压叠是排版常态，不是缺陷）、**同一分组号**
+ * （同一材料的几段轮廓，见 `hatchCollisions`）。只相交一条窄边（贴边、共线）也不报。
+ * @param outlines - 闭合轮廓。
+ * @param groups - 与 `outlines` 一一对应的分组号；undefined 表示该轮廓自成一组。
+ * @param stroked - 与 `outlines` 一一对应的「是否描边」。
+ * @returns 发现的问题。
+ */
+export function outlineOverlaps(
+  outlines: readonly Poly[],
+  groups: readonly (number | undefined)[],
+  stroked: readonly boolean[],
+): RenderCheckFinding[] {
+  const findings: RenderCheckFinding[] = [];
+  for (let left = 0; left < outlines.length; left += 1) {
+    for (let right = left + 1; right < outlines.length; right += 1) {
+      const group = groups[left];
+      if (group !== undefined && group === groups[right]) continue;
+      if (stroked[left] !== true && stroked[right] !== true) continue;
+      const a = bounds(outlines[left] as Poly);
+      const b = bounds(outlines[right] as Poly);
+      const overlapX = Math.min(a.maxX, b.maxX) - Math.max(a.minX, b.minX);
+      const overlapY = Math.min(a.maxY, b.maxY) - Math.max(a.minY, b.minY);
+      if (overlapX <= OVERLAP_MIN_MM || overlapY <= OVERLAP_MIN_MM) continue;
+      if (strictlyContains(a, b) || strictlyContains(b, a)) continue;
+      findings.push({
+        check: "element-overlap",
+        message:
+          `图元 #${String(left + 1)} 与 #${String(right + 1)} 的轮廓重叠 ` +
+          `${String(Math.round(overlapX * 10) / 10)}×${String(Math.round(overlapY * 10) / 10)} 毫米：` +
+          "两个零件/图形互相压叠时图面上读不出各自的边界，应错开摆放或改为一件在另一件之外的剖视画法",
+      });
+    }
+  }
+  return findings;
+}
+
+/**
+ * 字高低于下限：逐条列出低于 `floorMm` 的文字（最多 {@link FONT_BELOW_MAX_DETAILS} 条，
+ * 其余合并为计数），字高由调用方按文字占位框的实际四角算好（毫米，根坐标系）。
+ *
+ * 与 V7 的区别：V7 用**渲染器常数**估算整幅图的最小字，看不见同一幅图里更小的边标签；
+ * 本判据量的是**实际文字元素**，故能报出「节点字够大、边标签不够」这类缺陷。
+ * @param texts - 图面上的文字。
+ * @param heightsMm - 与 `texts` 一一对应的实测字高（毫米）。
+ * @param floorMm - 字高下限（毫米）；不大于 0 时不判。
+ * @returns 发现的问题。
+ */
+export function fontBelowMinimum(
+  texts: readonly ScannedText[],
+  heightsMm: readonly number[],
+  floorMm: number,
+): RenderCheckFinding[] {
+  if (!(floorMm > 0)) return [];
+  const below = texts
+    .map((text, index) => ({ text, heightMm: heightsMm[index] ?? Number.NaN }))
+    .filter(entry => Number.isFinite(entry.heightMm) && entry.heightMm < floorMm);
+  if (below.length === 0) return [];
+  const findings: RenderCheckFinding[] = below.slice(0, FONT_BELOW_MAX_DETAILS).map(entry => ({
+    check: "font-below-minimum",
+    message:
+      `图面文字「${entry.text.content}」字高约 ${String(Math.round(entry.heightMm * 100) / 100)} 毫米，` +
+      `低于下限 ${String(floorMm)} 毫米：缩印到三分之二后更难辨认，应加大字号或减少文字`,
+  }));
+  if (below.length > FONT_BELOW_MAX_DETAILS) {
+    findings.push({
+      check: "font-below-minimum",
+      message: `另有 ${String(below.length - FONT_BELOW_MAX_DETAILS)} 处文字低于 ${String(floorMm)} 毫米字高下限（未逐条列出）`,
+    });
+  }
+  return findings;
+}
+
 /**
  * 量测一张 SVG 的墨迹包围盒（毫米，根坐标系）：全部子路径顶点与文字占位框的并集。
  *

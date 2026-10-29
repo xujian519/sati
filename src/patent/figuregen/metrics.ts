@@ -10,6 +10,58 @@
 /** 节点文字字号（px）：布局盒宽、渲染 font-size 与打印字高判据的共同基准。 */
 export const FIGURE_FONT_SIZE = 14;
 
+/**
+ * 部署级字号环境变量（毫米，纸面）。
+ *
+ * 合规判据是**纸面字高**（毫米），而三条渲染通路各用不同单位：内置渲染器 px、Graphviz
+ * pt、CAD 标号 mm。只给一个毫米值再折算到各通路，比让调用方分别设三个数字更不容易漂移。
+ * 未设定时各通路沿用既有缺省，输出逐字节不变。
+ */
+export const FIGURE_FONT_MM_ENV = "SATI_FIGURE_FONT_MM";
+
+/** 边标签字号与主字号之比：内置 12/14、DOT 12/14，缺省输出因此与既有快照一致。 */
+export const EDGE_FONT_RATIO = 12 / 14;
+
+/** CSS px ↔ 毫米：1in = 96px = 25.4mm（CSS 定义常量；本模块不 import page-contract，避免成环）。 */
+const MM_PER_CSS_PX = 25.4 / 96;
+/** 毫米 → pt：1in = 25.4mm = 72pt。 */
+const PT_PER_MM = 72 / 25.4;
+
+/**
+ * 部署级字号（毫米）；未设定、空串或非法（非正有限数）时 undefined。
+ * @param env - 环境变量表（缺省 process.env；测试注入用）。
+ */
+export function figureFontMm(env: NodeJS.ProcessEnv = process.env): number | undefined {
+  const raw = env[FIGURE_FONT_MM_ENV];
+  if (raw === undefined || raw.trim() === "") return undefined;
+  const value = Number(raw);
+  return Number.isFinite(value) && value > 0 ? value : undefined;
+}
+
+/** 主字号（px）：未设 env 时 {@link FIGURE_FONT_SIZE}，否则由毫米折算（一位小数）。 */
+export function figureFontSizePx(env: NodeJS.ProcessEnv = process.env): number {
+  const mm = figureFontMm(env);
+  if (mm === undefined) return FIGURE_FONT_SIZE;
+  return Math.round((mm / MM_PER_CSS_PX) * 10) / 10;
+}
+
+/** 主字号（pt）：未设 env 时 14pt（Graphviz 缺省），否则由毫米折算（一位小数）。 */
+export function figureFontPt(env: NodeJS.ProcessEnv = process.env): number {
+  const mm = figureFontMm(env);
+  if (mm === undefined) return 14;
+  return Math.round(mm * PT_PER_MM * 10) / 10;
+}
+
+/** 边标签字号（px）：主字号按 {@link EDGE_FONT_RATIO} 折算（一位小数）。 */
+export function edgeFontSizePx(mainPx: number): number {
+  return Math.round(mainPx * EDGE_FONT_RATIO * 10) / 10;
+}
+
+/** 边标签字号（pt）：主字号按 {@link EDGE_FONT_RATIO} 折算（一位小数）。 */
+export function edgeFontPt(mainPt: number): number {
+  return Math.round(mainPt * EDGE_FONT_RATIO * 10) / 10;
+}
+
 /** 宽字符（按 1em 计）的码点区间：CJK 汉字/假名/谚文/全角标点与全角形式。 */
 const WIDE_RANGES: readonly (readonly [number, number])[] = [
   [0x1100, 0x115f], // 谚文字母

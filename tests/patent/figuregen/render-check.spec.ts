@@ -1,7 +1,7 @@
 /**
  * tests/patent/figuregen/render-check — 矢量源渲染复核的用例。
  *
- * 五类「只在渲染结果上才看得见的缺陷」各配真阳性与阴性对照；未量测结构逐类验证；纯函数
+ * 七类「只在渲染结果上才看得见的缺陷」各配真阳性与阴性对照；未量测结构逐类验证；纯函数
  * （文字占位框、视口换算）单独验证。所有阈值都是**实测口径**：用例里的坐标按源实现的
  * 判定条件构造（用户单位 → 毫米按 25.4/96），不是按直觉写死的期望值。
  *
@@ -368,6 +368,72 @@ test("报告：输入未过安全门时抛出 SvgSafetyError", () => {
     () => checkFigureRendering("<svg></svg>", { maxBytes: 4 }),
     (error: unknown) => error instanceof SvgSafetyError && error.code === "too_large",
   );
+});
+
+// ── 图元互相重叠（RC6） ───────────────────────────────────────────────────────
+
+/** 描边矩形（fill=none）：只有描边图元参与重叠判定（纯填充/字形彼此压叠不判）。 */
+function strokedRect(x: number, y: number, size: number, extra = ""): string {
+  return `<rect x="${x}" y="${y}" width="${size}" height="${size}" fill="none" stroke="#000000"${extra}/>`;
+}
+
+test("图元重叠：两个描边轮廓局部交叠时报 element-overlap", () => {
+  // 20×20 的两个框各偏移 10 用户单位：两轴相交 10 用户单位 ≈ 2.65 毫米 > 0.2 毫米。
+  const input = svg(`${strokedRect(0, 0, 20)}${strokedRect(10, 10, 20)}`);
+  assertKinds(input, ["element-overlap"]);
+  assert.match(messagesOf(input, "element-overlap")[0] ?? "", /轮廓重叠/u);
+});
+
+test("图元重叠：一件严格套在另一件里（装配画法）不报", () => {
+  const input = svg(`${strokedRect(0, 0, 40)}${strokedRect(10, 10, 20)}`);
+  assertNoKind(input, "element-overlap");
+});
+
+test("图元重叠：只贴边相接（相交宽度为 0）不报", () => {
+  const input = svg(`${strokedRect(0, 0, 20)}${strokedRect(20, 0, 20)}`);
+  assertNoKind(input, "element-overlap");
+});
+
+test("图元重叠：同一 data-dsh-hatch-group 的两段轮廓不比较", () => {
+  const group = ' data-dsh-hatch-group="7"';
+  const input = svg(`${strokedRect(0, 0, 20, group)}${strokedRect(10, 10, 20, group)}`);
+  assertNoKind(input, "element-overlap");
+});
+
+test("图元重叠：两侧都无描边（纯填充/文字转路径后的字形）不报", () => {
+  const input = svg(
+    '<rect x="0" y="0" width="20" height="20" fill="#000000"/>' +
+      '<rect x="10" y="10" width="20" height="20" fill="#000000"/>',
+  );
+  assertNoKind(input, "element-overlap");
+});
+
+// ── 字高低于下限（RC7） ───────────────────────────────────────────────────────
+
+test("字高低于下限：实测字高（0.92 毫米）低于 1 毫米下限时报 font-below-minimum 并回显下限", () => {
+  // font-size=4 用户单位 → 1.06 毫米，占位框高 0.87em ≈ 0.92 毫米 < 1 毫米。
+  const input = svg('<text x="100" y="50" font-size="4">A</text>');
+  const report = checkFigureRendering(input, { minFontMm: 1 });
+  assert.deepEqual(
+    report.findings.map(finding => finding.check),
+    ["font-below-minimum"],
+  );
+  assert.equal(report.minFontMm, 1);
+  assert.match(report.findings[0]?.message ?? "", /低于下限 1 毫米/u);
+});
+
+test("字高低于下限：下限低于实测字高时不报", () => {
+  const input = svg('<text x="100" y="50" font-size="4">A</text>');
+  const report = checkFigureRendering(input, { minFontMm: 0.5 });
+  assert.deepEqual(report.findings, []);
+  assert.equal(report.minFontMm, 0.5);
+});
+
+test("字高低于下限：未传 minFontMm 时不判（报告不回显下限）", () => {
+  const input = svg('<text x="100" y="50" font-size="4">A</text>');
+  const report = checkFigureRendering(input);
+  assert.deepEqual(report.findings, []);
+  assert.equal(report.minFontMm, undefined);
 });
 
 // ── 墨迹包围盒 ────────────────────────────────────────────────────────────────

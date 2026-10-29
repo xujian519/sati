@@ -14,6 +14,8 @@ export type RenderCheckKind =
   | "centerline-covered"
   | "hatch-orientation-collision"
   | "ink-outside-canvas"
+  | "element-overlap"
+  | "font-below-minimum"
   | "not-measured";
 
 /** 图面墨迹的包围盒（毫米，根坐标系）。 */
@@ -48,6 +50,8 @@ export type RenderCheckReport = {
   readonly strokeWidthMm: readonly { readonly widthMm: number; readonly count: number }[];
   /** 线段取向分布（0–180°，点划线/引线/剖面线一并统计），按线段数降序。 */
   readonly orientationDeg: readonly { readonly orientationDeg: number; readonly count: number }[];
+  /** 最小字高下限（毫米）：调用方传入时报告回显，未传时缺省（该判据未参与）。 */
+  readonly minFontMm?: number;
   /** 发现的问题（无问题为空数组）。 */
   readonly findings: readonly RenderCheckFinding[];
 };

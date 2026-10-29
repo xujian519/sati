@@ -10,10 +10,8 @@
 
 import { figureCaption, profileForJurisdiction } from "./office-profile.js";
 import { isSymbolShape } from "./layout.js";
+import { edgeFontPt, figureFontPt } from "./metrics.js";
 import type { FigureNode, FigureNodeShape, FigureSpec, Jurisdiction } from "./types.js";
-
-const FONT_SIZE = 14;
-const EDGE_FONT_SIZE = 12;
 
 /** 初态实心圆的固定直径（英寸；graphviz 单位为英寸）。 */
 const INITIAL_STATE_DIAMETER_IN = 0.22;
@@ -74,15 +72,18 @@ export function buildFigureDot(
   }
   const direction = spec.direction ?? (spec.kind === "block" ? "LR" : "TB");
   const caption = figureCaption(profileForJurisdiction(options.jurisdiction), spec.figure_no, options.figureCount ?? 1);
+  // 字号由部署级 SATI_FIGURE_FONT_MM 折算（缺省 14pt / 边标签 12pt，与既有快照一致）。
+  const fontSizePt = figureFontPt();
+  const edgeFontSizePt = edgeFontPt(fontSizePt);
   const lines: string[] = [
     "digraph {",
     '  bgcolor="#FFFFFF";',
     `  rankdir="${direction}";`,
     ...(caption === undefined ? [] : [`  label="${dotEscape(caption)}";`, '  labelloc="b";']),
     '  fontname="sans-serif";',
-    `  fontsize=${FONT_SIZE};`,
-    '  node [fontname="sans-serif", fontsize=14, style="filled", fillcolor="#FFFFFF", color="#000000", fontcolor="#000000"];',
-    `  edge [fontname="sans-serif", fontsize=${EDGE_FONT_SIZE}, color="#000000", fontcolor="#000000"` +
+    `  fontsize=${fontSizePt};`,
+    `  node [fontname="sans-serif", fontsize=${fontSizePt}, style="filled", fillcolor="#FFFFFF", color="#000000", fontcolor="#000000"];`,
+    `  edge [fontname="sans-serif", fontsize=${edgeFontSizePt}, color="#000000", fontcolor="#000000"` +
       `${spec.kind === "hierarchy" ? ', arrowhead="none"' : ""}];`,
   ];
   for (const node of spec.nodes) {

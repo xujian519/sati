@@ -7,7 +7,7 @@
  * 全程无随机/时钟输入：同一 FigureSpec 永远产出同一布局（快照测试的前提）。
  */
 
-import { measureTextWidth } from "./metrics.js";
+import { figureFontSizePx, measureTextWidth } from "./metrics.js";
 import type { FigureDirection, FigureEdge, FigureKind, FigureNode, FigureNodeShape, FigureSpec } from "./types.js";
 
 export type Point = { x: number; y: number };
@@ -34,8 +34,8 @@ export type FigureLayout = {
   height: number;
 };
 
-/** 尺寸度量：行高、内边距与最小盒尺寸（字宽见 metrics.ts——按字符类别计）。 */
-const LINE_H = 21;
+/** 尺寸度量：行高（随主字号）、内边距与最小盒尺寸（字宽见 metrics.ts——按字符类别计）。 */
+const LINE_HEIGHT_GAP = 7;
 const PAD_X = 16;
 const PAD_Y = 12;
 const MIN_W = 72;
@@ -60,17 +60,17 @@ export function defaultDirection(kind: FigureKind): FigureDirection {
   return kind === "block" ? "LR" : "TB";
 }
 
-function nodeSize(node: FigureNode): { width: number; height: number } {
+function nodeSize(node: FigureNode, fontSizePx: number): { width: number; height: number } {
   const symbol = node.shape === undefined ? undefined : SYMBOL_SIZE[node.shape];
   if (symbol !== undefined) {
     return { width: symbol, height: symbol };
   }
   const lines = node.label.split("\n");
   // 最宽行按字符类别累计（CJK 1em / Latin 0.5em）：单字宽常数会把英文标签估宽约 2 倍。
-  const longest = Math.max(...lines.map(line => measureTextWidth(line)));
+  const longest = Math.max(...lines.map(line => measureTextWidth(line, fontSizePx)));
   return {
     width: Math.max(MIN_W, longest + PAD_X * 2),
-    height: Math.max(MIN_H, lines.length * LINE_H + PAD_Y * 2),
+    height: Math.max(MIN_H, lines.length * (fontSizePx + LINE_HEIGHT_GAP) + PAD_Y * 2),
   };
 }
 
@@ -110,11 +110,15 @@ function assignLayers(nodes: readonly FigureNode[], edges: readonly FigureEdge[]
  *
  * `caption: false` 时不计入图号标注带的高度（PCT/US 单幅不得编号时画幅随之变小：
  * 编号画在图形正下方的专用带里，不编号就不该留这条空白带）。
+ *
+ * `fontSizePx` 与渲染器共用同一取值（未设 `SATI_FIGURE_FONT_MM` 时为缺省 14px）：
+ * 盒宽必须按实际字号算，否则改字号后文字会溢出盒外。
  */
-export function layoutFigure(spec: FigureSpec, options: { caption?: boolean } = {}): FigureLayout {
+export function layoutFigure(spec: FigureSpec, options: { caption?: boolean; fontSizePx?: number } = {}): FigureLayout {
   const direction = spec.direction ?? defaultDirection(spec.kind);
+  const fontSizePx = options.fontSizePx ?? figureFontSizePx();
   const sizes = new Map<string, { width: number; height: number }>();
-  for (const node of spec.nodes) sizes.set(node.id, nodeSize(node));
+  for (const node of spec.nodes) sizes.set(node.id, nodeSize(node, fontSizePx));
 
   const layers = assignLayers(spec.nodes, spec.edges);
   const maxLayer = Math.max(-1, ...spec.nodes.map(n => layers.get(n.id) ?? 0));

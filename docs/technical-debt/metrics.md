@@ -7,9 +7,9 @@
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1183 / 205931 |
+| src TS 文件 / 行数 | 1184 / 206479 |
 | src JS 文件 | 0 |
-| tests 文件 | 688 |
+| tests 文件 | 689 |
 | ui/src 文件 / 行数 | 740 / 109531 |
 | ui/server 文件 / 行数 | 149 / 38859 |
 
@@ -73,6 +73,7 @@
 | `ui/src/components/main-content/view/MainContent.tsx` | `MainContent` | 346 | function |
 | `ui/src/components/chat-v2/MessagesPaneV2.tsx` | `MessagesPaneV2` | 338 | function |
 | `ui/src/components/main-content-v2/PlansAndCronJobs.tsx` | `PlansAndCronJobs` | 334 | function |
+| `src/tool/builtin/patentFigureGenerate.ts` | `createPatentFigureGenerateTool` | 332 | function |
 | `ui/src/components/main-content-v2/DashboardV2.tsx` | `DashboardV2` | 332 | function |
 | `ui/src/hooks/useSatiConfig.ts` | `useSatiConfigState` | 332 | function |
 | `ui/src/components/code-editor/view/CodeEditor.tsx` | `CodeEditor` | 326 | function |
@@ -137,7 +138,7 @@
 
 | 模块 | 测试文件 |
 |---|---|
-| patent | 166 |
+| patent | 167 |
 | tool | 76 |
 | agent | 61 |
 | knowledge | 45 |
@@ -170,7 +171,7 @@
 | runtime | 1 |
 | status | 1 |
 
-| **合计** | **660** |
+| **合计** | **661** |
 
 ## i18n en/zh-CN 对齐
 

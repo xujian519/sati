@@ -11,6 +11,7 @@
  */
 
 import { minCharHeight, profileForJurisdiction } from "../office-profile.js";
+import { figureFontMm } from "../metrics.js";
 import type { Jurisdiction } from "../types.js";
 
 /** CNIPA 交付口径的标号字号（毫米，纸面）。 */
@@ -21,9 +22,13 @@ export const CAD_REF_FONT_STATUTORY_MM = 3.5;
 /**
  * 该法域的 CAD 标号字号（毫米，纸面）。
  * @param jurisdiction - 工具/案卷声明的辖区；缺省按 CNIPA。
+ * @param env - 环境变量源（注入可测性）；缺省 `process.env`。
  * @returns 法定下限高于 CNIPA 口径时取 {@link CAD_REF_FONT_STATUTORY_MM}，否则取 {@link CAD_REF_FONT_MM}。
  */
-export function cadRefFontMm(jurisdiction: Jurisdiction = "cn"): number {
+export function cadRefFontMm(jurisdiction: Jurisdiction = "cn", env: NodeJS.ProcessEnv = process.env): number {
+  // 部署级字号优先：渲染、V7 判据与落版装配都经本函数取标号字号，一处生效即三处一致。
+  const override = figureFontMm(env);
+  if (override !== undefined) return override;
   const minimum = minCharHeight(profileForJurisdiction(jurisdiction))?.mm;
   return minimum !== undefined && minimum > CAD_REF_FONT_MM ? CAD_REF_FONT_STATUTORY_MM : CAD_REF_FONT_MM;
 }

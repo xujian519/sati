@@ -7,27 +7,33 @@
  * 两个入口得到不同结论；故映射只此一份。
  */
 
-import type { FigureCheckSeverity } from "./check.js";
+import type { FigureCheckRuleId, FigureCheckSeverity } from "./check.js";
 import type { RenderCheckFinding, RenderCheckKind } from "./render-check.js";
 
 /**
  * 级别取「图面读不出来」与「可读性/制图瑕疵」的界线：
  * - `RC1` 文字被线条贯穿、`RC5` 内容越出画布 ⇒ **fail**（前者标号读不出、后者内容根本没渲染）；
  * - `RC2` 净距不足、`RC3` 点划线被实线覆盖、`RC4` 相邻零件剖面线难区分 ⇒ warn（能读但不清）；
+ * - `RC6` 图元互相重叠、`RC7` 字高低于下限 ⇒ warn（既有交付里可能存在，先报告不阻断）；
  * - `RC0` 未量测 ⇒ info（不是缺陷，是"这份报告没覆盖到哪些结构"的清单）。
+ *
+ * RC8 预留给将来的 `figure-hierarchy`（声明的图内层级与权利要求归属表述一致性）：
+ * 该判据需要 FigureSpec 之外的显式层级输入，属 schema 变更，未随本次落地。
  */
-export const RENDER_CHECK_RULE: Record<RenderCheckKind, { rule: string; severity: FigureCheckSeverity }> = {
+export const RENDER_CHECK_RULE: Record<RenderCheckKind, { rule: FigureCheckRuleId; severity: FigureCheckSeverity }> = {
   "text-crossed-by-line": { rule: "RC1", severity: "fail" },
   "ink-outside-canvas": { rule: "RC5", severity: "fail" },
   "text-clearance": { rule: "RC2", severity: "warn" },
   "centerline-covered": { rule: "RC3", severity: "warn" },
   "hatch-orientation-collision": { rule: "RC4", severity: "warn" },
+  "element-overlap": { rule: "RC6", severity: "warn" },
+  "font-below-minimum": { rule: "RC7", severity: "warn" },
   "not-measured": { rule: "RC0", severity: "info" },
 };
 
 /** 一条复核发现 → 带规则号与级别的发现（报告面形状）。 */
 export function toRenderCheckFindings(
   findings: readonly RenderCheckFinding[],
-): { rule: string; severity: FigureCheckSeverity; message: string }[] {
+): { rule: FigureCheckRuleId; severity: FigureCheckSeverity; message: string }[] {
   return findings.map(finding => ({ ...RENDER_CHECK_RULE[finding.check], message: finding.message }));
 }
