@@ -24,6 +24,19 @@ export const SVG_ROLE_ATTRIBUTE = "data-dsh-role";
 /** {@link SVG_ROLE_ATTRIBUTE} 的引线取值。 */
 export const SVG_LEADER_ROLE = "leader";
 
+/**
+ * 图型属性（绘图侧标注、复核侧识别，两侧共用同一属性名）：写在根元素上，曲线图取值
+ * `chart`。
+ *
+ * 为什么需要它：SVG 本身不携带图型信息，而部分渲染复核判据只在某一图型上成立——
+ * 曲线图的数据标记与图例符号天然互相叠靠，「图元互相重叠」与「相邻零件剖面线」在
+ * 曲线图上量不出缺陷、只会产出噪音。绘图侧因此把图型写进产物，复核侧据此对不适用的
+ * 判据显式记「未量测」，而不是静默跳过（见 `render-check.ts` 的曲线图分支）。
+ * 只有曲线图写该属性：其余图型没有豁免判据，写与不写不改变量测结论。
+ * 外部 SVG 没有该属性，复核按「图型未知」处理，判据照旧全部参与。
+ */
+export const SVG_FIGURE_KIND_ATTRIBUTE = "data-dsh-kind";
+
 /** 数值 → SVG 坐标/尺寸文本（固定小数位，去掉浮点噪声；默认 {@link FMT_DIGITS} 位）。 */
 export function fmt(value: number, digits: number = FMT_DIGITS): string {
   const factor = 10 ** digits;

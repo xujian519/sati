@@ -28,6 +28,11 @@
  * - **字高低于下限**（`minFontMm` 由调用方按法域档案给出）：逐**文字元素**量测字高，
  *   能报出「节点字够大、边标签不够」这类 V7 用渲染器常数估不出的情形。
  *
+ * 图型豁免：根元素声明 {@link SVG_FIGURE_KIND_ATTRIBUTE}=`chart` 时，「相邻零件剖面线」
+ * 与「图元互相重叠」**不参与**——曲线图的数据标记与图例符号天然互相叠靠，这两条判据在
+ * 该图型上只会报出噪音；豁免同时记一条 `not-measured` 明示未量测（AGENTS 第 11 条）。
+ * 外部 SVG 不带该属性，按「图型未知」处理，全部判据照旧参与。
+ *
  * 量测范围：根元素的画布尺寸与 `viewBox`/`preserveAspectRatio`（`svg-viewport` 解析成
  * 用户单位 → 毫米的映射，故 px 级用户单位的导出文件与落版页同一口径）；`line`/`polyline`/
  * `polygon`/`rect`/`circle`/`ellipse`/`path`（M/L/H/V/Z，含相对形式）的几何；`text` 的内容、
@@ -182,8 +187,20 @@ export function checkFigureRendering(
   findings.push(...coveredCenterlines(pieces));
   const ink = inkOutsideCanvas(scan);
   if (ink !== undefined) findings.push(ink);
-  findings.push(...hatchCollisions(outlines, openSegments, outlineGroups));
-  findings.push(...outlineOverlaps(outlines, outlineGroups, outlineStroked));
+  // 曲线图的数据标记与图例符号天然互相叠靠（实测散点图的相邻标记 0.3×1.2 毫米就互穿、
+  // 图例符号的短笔画被当成剖面线）：轮廓类判据在这类图上只会产出噪音，量不出缺陷。
+  // 显式记一条 `not-measured`，而不是让"没判"看起来像"判过且无问题"（AGENTS 第 11 条）。
+  if (scan.figureKind === "chart") {
+    findings.push({
+      check: "not-measured",
+      message:
+        "曲线图（kind=chart）的数据标记与图例符号天然互相叠靠：RC4（相邻零件剖面线难以区分）与 RC6（图元互相重叠）" +
+        "在该图型上不适用，本次未量测——RC1/RC2/RC3/RC5/RC7 照常量测",
+    });
+  } else {
+    findings.push(...hatchCollisions(outlines, openSegments, outlineGroups));
+    findings.push(...outlineOverlaps(outlines, outlineGroups, outlineStroked));
+  }
   if (options.minFontMm !== undefined) {
     // 字高按文字占位框的实际四角量测（O→O+e2 的模长）：与 V7 的「按渲染器常数估算」
     // 互补——这里量的是**每个**文字元素，能看见节点字够大而边标签不够的情形。

@@ -16,7 +16,7 @@ import { layoutChart, renderChartBody } from "./chart.js";
 import { isSymbolShape, layoutFigure, type FigureLayout } from "./layout.js";
 import { figureFontSizePx, edgeFontSizePx } from "./metrics.js";
 import { FIGURE_NO_ATTRIBUTE } from "./readback.js";
-import { escapeXml, fmt } from "./render-utils.js";
+import { SVG_FIGURE_KIND_ATTRIBUTE, escapeXml, fmt } from "./render-utils.js";
 import type { FigureNode, FigureNodeShape, FigureSpec, Jurisdiction } from "./types.js";
 
 /** 节点 id → 合法 XML id 片段。 */
@@ -124,7 +124,7 @@ export function renderFigureSvg(
     // 图号由本函数统一加在图形正下方（4.3），曲线图不加箭头 marker，故 defs 留空。
     const body = `${renderChartBody(chart)}\n`;
     return {
-      svg: documentSvg(spec.figure_no, chart.width, chart.height, body, "", caption, fontSizePx),
+      svg: documentSvg(spec.figure_no, chart.width, chart.height, body, "", caption, fontSizePx, spec.kind),
       width: chart.width,
       height: chart.height,
     };
@@ -163,13 +163,20 @@ export function renderFigureSvg(
     `<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" ` +
     `orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 Z" fill="#000000"/></marker></defs>\n`;
 
-  return { svg: documentSvg(spec.figure_no, width, height, edges + nodes, defs, caption, fontSizePx), width, height };
+  return {
+    svg: documentSvg(spec.figure_no, width, height, edges + nodes, defs, caption, fontSizePx, spec.kind),
+    width,
+    height,
+  };
 }
 
 /**
  * 组装完整 SVG 文档：白底 + 可选 defs + 图形片段 + 图号标注（居中，图形正下方）。
  *
  * `body` 为各图元的拼接串（调用方自行决定是否以换行收尾）；`defs` 为空串时整段省略。
+ * 曲线图在根元素写 {@link SVG_FIGURE_KIND_ATTRIBUTE}：渲染复核对曲线图跳过"轮廓压叠""剖面线
+ * 相邻"两类判据（数据标记天然叠靠），需要从产物本身知道图型，而不是靠调用方另传参数——
+ * 交付后回读、落版页复核都只有 SVG 这一个输入。
  */
 function documentSvg(
   figureNo: number,
@@ -179,6 +186,7 @@ function documentSvg(
   defs: string,
   caption: string | undefined,
   fontSizePx: number,
+  kind: FigureSpec["kind"],
 ): string {
   const captionText =
     caption === undefined
@@ -186,8 +194,9 @@ function documentSvg(
       : `<text x="${fmt(width / 2)}" y="${fmt(height - 16)}" font-size="${fontSizePx}" ` +
         `text-anchor="middle" fill="#000000">${escapeXml(caption)}</text>\n`;
 
+  const kindAttribute = kind === "chart" ? ` ${SVG_FIGURE_KIND_ATTRIBUTE}="chart"` : "";
   return (
-    `<svg xmlns="http://www.w3.org/2000/svg" ${FIGURE_NO_ATTRIBUTE}="${figureNo}" ` +
+    `<svg xmlns="http://www.w3.org/2000/svg" ${FIGURE_NO_ATTRIBUTE}="${figureNo}"${kindAttribute} ` +
     `width="${fmt(width)}" height="${fmt(height)}" ` +
     `viewBox="0 0 ${fmt(width)} ${fmt(height)}" font-family="sans-serif">\n` +
     `<rect x="0" y="0" width="${fmt(width)}" height="${fmt(height)}" fill="#FFFFFF"/>\n` +

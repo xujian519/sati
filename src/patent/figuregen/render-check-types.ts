@@ -135,6 +135,11 @@ export type Scan = {
   readonly heightMm: number | undefined;
   readonly shapes: readonly Shape[];
   readonly texts: readonly ScannedText[];
+  /**
+   * 根元素声明的图型（`data-dsh-kind`）：本仓绘图侧给曲线图写 `chart`，外部 SVG 通常
+   * 不写。只用于挑选**不适用**的判据（见 `render-check.ts` 的曲线图分支），不影响几何量测。
+   */
+  readonly figureKind: string | undefined;
   /** 未量测原因（去重，按首次出现顺序）。 */
   readonly unmeasured: readonly string[];
 };

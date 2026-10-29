@@ -187,6 +187,11 @@ test("渲染：确定性输出（同输入逐字节一致）", () => {
   assert.equal(first.svg, second.svg);
 });
 
+test("渲染：非曲线图不写图型标注（只有曲线图需要豁免轮廓类判据）", () => {
+  const { svg } = renderFigureSvg(SNAPSHOT_SPEC);
+  assert.equal(svg.includes("data-dsh-kind"), false);
+});
+
 test("渲染：黑白合规不变式——仅 #000000/#FFFFFF，无渐变无彩色函数", () => {
   const { svg } = renderFigureSvg(SNAPSHOT_SPEC);
   const colors = svg.match(/#[0-9a-fA-F]{3,8}\b/g) ?? [];
