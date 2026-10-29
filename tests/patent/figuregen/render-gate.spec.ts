@@ -103,7 +103,11 @@ test("渲染复核门禁：缺省 warn 跑复核并报告量测结论，不阻�
         makeContext(cwd),
       );
       const text = textOf(result);
-      assert.match(text, /渲染复核：RC1–RC7 已量测，发现 \d+ 条（档位 warn，不阻断生成）/u);
+      // RC0（箭头端头未量测）是覆盖盲区，不得混进缺陷数——否则「没量到」会被读成「查出问题」。
+      assert.match(
+        text,
+        /渲染复核：RC1–RC7 已量测，发现 0 条缺陷；另有 1 条 RC0 未量测说明（覆盖盲区，不计入缺陷）（档位 warn，不阻断生成）/u,
+      );
       assert.ok(!text.includes("渲染复核未运行"), text);
       // warn 档不因渲染发现阻断：结构 ok 时整体 ok 仍为 true。
       assert.equal(checkOf(result).ok, true);
