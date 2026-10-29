@@ -57,7 +57,8 @@ Status: implemented
 | `src/knowledge/legal/offline-snapshot/types.ts` | 快照 schema 版本、清单/法条类型、`LegalSnapshotError` |
 | `.../engine.ts` | `LegalSnapshotEngine`（`LegalSearchSource` 实现；懒加载 + 线性匹配） |
 | `.../locate.ts` | `SATI_LEGAL_SNAPSHOT_DIR` → `cwd/assets/legal-snapshot` → 包根同名目录 |
-| `src/knowledge/legal/law-search-tool.ts` | `resolveLawSearchBackend()` 三级降级 + `source`/`snapshotAt`/`degradedReason`/`unsupportedFilters` |
+| `src/knowledge/legal/law-search-tool.ts` | `resolveLawSearchBackend()` 三级降级 + `source`/`snapshotAt`/`snapshotLawCount`/`snapshotArticleCount`/`degradedReason`/`unsupportedFilters`；description 明示离线标注与收录规模回报 |
+| `skills/legal-agent/SKILL.md` | 「law_search 在线 / 离线快照」段：看 `source` 再下结论、收录规模以输出字段为准、快照不支持 level/category/asOf |
 | `src/knowledge/legal/types.ts` | `LegalTimeFilter` 增加 `"unsupported"` |
 | `src/rule/runtime/asset-location.ts` | `packageRoot()` 改为导出（定位快照复用，行为不变） |
 | `scripts/copy-build-assets.mjs` | `assets/legal-snapshot` → `dist/assets/legal-snapshot` |
@@ -113,9 +114,18 @@ Status: implemented
 
 ## Consequences
 
-- `law_search` 的 `outputSchema` 新增**可选**字段 `source` / `snapshotAt` / `degradedReason` /
-  `unsupportedFilters`，`required` 仍为 `["total","results"]`：按 required 严格校验的旧消费者
-  不需要改动；需要区分在线/离线的调用方自行读取 `source`。
+- `law_search` 的 `outputSchema` 新增**可选**字段 `source` / `snapshotAt` / `snapshotLawCount` /
+  `snapshotArticleCount` / `degradedReason` / `unsupportedFilters`，`required` 仍为
+  `["total","results"]`：按 required 严格校验的旧消费者不需要改动；需要区分在线/离线的调用方
+  自行读取 `source`。**消费方审计结论（2026-10-29）**：仓库内无任何按旧字段集合严格校验
+  `law_search` 输出的消费者——`ui/` 侧无 `law_search` 消费面（grep 全仓无命中，该工具结果只经
+  gateway 作为模型工具结果流转，UI 不解析其字段），后端仅注册处与测试引用；`source` 保持可选
+  不破坏任何消费者，「缺省时语义为 online」由执行层 `backend.source ?? "online"` 保证。
+- 降级可见性落在三处（不只 manifest）：工具 description 明示「离线时附
+  snapshotLawCount/snapshotArticleCount 回报收录规模」；`skills/legal-agent/SKILL.md` 新增
+  「law_search 在线 / 离线快照」行为段（看 source 再下结论、规模以输出字段为准、快照不支持
+  level/category/asOf）；输出字段本身（source/snapshotAt/unsupportedFilters/degradedReason）。
+  i18n 不适用：该链路无 UI 展示面，文案面向模型，不走 `ui/src/i18n`。
 - 新增 `assets/legal-snapshot/` 生成物（**35.21MB**）进入构建产物；重建顺序是
   `node scripts/transcribe-legal-law.mjs`（可选，需本机语料）→
   `node scripts/build-legal-snapshot.mjs`（源目录不在本机时失败并显式报错）。

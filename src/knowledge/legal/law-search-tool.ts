@@ -63,6 +63,10 @@ export type LawSearchToolOutput = {
   snapshotPath?: string;
   /** 离线快照构建时点（仅 source=offline 时存在）。 */
   snapshotAt?: string;
+  /** 离线快照收录的法律部数（仅 source=offline 时存在；回答「快照覆盖了哪些」的规模面）。 */
+  snapshotLawCount?: number;
+  /** 离线快照收录的条文总数（仅 source=offline 时存在）。 */
+  snapshotArticleCount?: number;
   /** 在线库不可用而回退离线快照的原因（仅 source=offline 时存在）。 */
   degradedReason?: string;
   /** 快照不支持、被忽略的过滤维度（如 level/category；不静默假装已过滤）。 */
@@ -96,6 +100,9 @@ export type LawSearchBackend = {
   dbPath?: string;
   snapshotPath?: string;
   snapshotAt?: string;
+  /** 快照收录规模（仅离线后端填；输出层如实回报）。 */
+  snapshotLawCount?: number;
+  snapshotArticleCount?: number;
   degradedReason?: string;
   unsupportedFilters?: Array<"level" | "category">;
 };
@@ -155,6 +162,8 @@ export function resolveLawSearchBackend(
         source: "offline",
         snapshotPath: join(snapshotDir, LEGAL_SNAPSHOT_MANIFEST_FILE),
         snapshotAt: engine.manifest.snapshotAt,
+        snapshotLawCount: engine.manifest.lawCount,
+        snapshotArticleCount: engine.manifest.articleCount,
         degradedReason: reasons.join("；"),
         unsupportedFilters: [...SNAPSHOT_UNSUPPORTED_FILTERS],
       };
@@ -244,6 +253,8 @@ export function createLawSearchTool(
         dbPath: { type: "string" },
         snapshotPath: { type: "string" },
         snapshotAt: { type: "string" },
+        snapshotLawCount: { type: "number" },
+        snapshotArticleCount: { type: "number" },
         degradedReason: { type: "string" },
         unsupportedFilters: { type: "array", items: { type: "string", enum: ["level", "category"] } },
         asOf: { type: "string" },
@@ -273,7 +284,7 @@ export function createLawSearchTool(
     },
     title: "Law Search",
     description:
-      "搜索中国法律法规全文（宝宸知识库 9000+ 部法律）。支持全文关键词检索、按法律层级（法律/行政法规/司法解释/地方性法规/宪法/案例/部门规章）和分类过滤。用于查询法条原文、法律名称、立法依据。优先读实时在线索引；离线库缺失/损坏时退回随包冻结快照，输出以 source（online/offline）与 snapshotAt（快照时点）显式标注，并在 unsupportedFilters 回报快照不支持的过滤维度。提供 asOf（YYYY-MM-DD）时按行为时点过滤，并输出 timeFilter（exact=按施行日/失效字段；approximate=按公布日期下界近似；unsupported=快照无日期字段未过滤）与 unknownDateCount（日期未知未纳入数）。",
+      "搜索中国法律法规全文（宝宸知识库 9000+ 部法律）。支持全文关键词检索、按法律层级（法律/行政法规/司法解释/地方性法规/宪法/案例/部门规章）和分类过滤。用于查询法条原文、法律名称、立法依据。优先读实时在线索引；离线库缺失/损坏时退回随包冻结快照，输出以 source（online/offline）与 snapshotAt（快照时点）显式标注，离线时另附 snapshotLawCount/snapshotArticleCount 如实回报快照收录规模，并在 unsupportedFilters 回报快照不支持的过滤维度。提供 asOf（YYYY-MM-DD）时按行为时点过滤，并输出 timeFilter（exact=按施行日/失效字段；approximate=按公布日期下界近似；unsupported=快照无日期字段未过滤）与 unknownDateCount（日期未知未纳入数）。",
     kind: "custom",
     domain: "legal",
     inputSchema: {
@@ -437,6 +448,10 @@ export function createLawSearchTool(
           ? {
               ...(backend.snapshotPath === undefined ? {} : { snapshotPath: backend.snapshotPath }),
               ...(backend.snapshotAt === undefined ? {} : { snapshotAt: backend.snapshotAt }),
+              ...(backend.snapshotLawCount === undefined ? {} : { snapshotLawCount: backend.snapshotLawCount }),
+              ...(backend.snapshotArticleCount === undefined
+                ? {}
+                : { snapshotArticleCount: backend.snapshotArticleCount }),
               ...(backend.degradedReason === undefined ? {} : { degradedReason: backend.degradedReason }),
             }
           : {}),
