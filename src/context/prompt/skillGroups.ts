@@ -192,6 +192,14 @@ const LEGAL_FALLBACK: LegalDomainMeta = {
   description: "Workspace setup, matter intake, and shared legal orchestration entry points.",
 };
 
+/**
+ * compact/verbose 一行开关：legal-* 组只列技能名（true）还是逐条带描述（false）。
+ * 触发改 false 的条件：观察到**具体**选错案例——模型因看不到逐条描述而选错
+ * legal 技能（把案例与当时渲染出的清单一并留档，再改本行）；代价是清单回到
+ * 约 9.8k tokens 的固定开销。compact 形态下由 `list_skills` 工具（注册表带
+ * readSkill 时才注册）承担「组 → 逐条描述」的按需展开，见
+ * docs/notes/implemented/2026-10-29-skill-grouping.md。
+ */
 const LEGAL_COMPACT = true;
 const LEGAL_BASE_ORDER = 10;
 const GENERAL_ORDER = 900;

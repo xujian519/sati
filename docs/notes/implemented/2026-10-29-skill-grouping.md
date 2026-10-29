@@ -93,7 +93,11 @@ Status: implemented
 - **选技能准确率本批没有量测**：仓库内没有技能选择基准集（现有 benchmark 是专利/法条
   检索评测，不含技能路由）。谁因此漏了什么：无法给出「分组前后选对率」的数字，只能给出
   设计上的缓解（组头摘要、verbose 组保留描述、名字仍是 `read_skill` 入参）与后续观察点。
-  若后续出现选错技能的真实案例，优先考虑把该组从 compact 降级为 verbose（规则表一行改动）。
+  若后续出现选错技能的真实案例，把 `skillGroups.ts` 的 `LEGAL_COMPACT` 一行改为 `false`
+  （legal 组回到逐条 verbose，代价是清单回到约 9.8k tokens 固定开销）。**触发条件（硬判据）**：
+  观察到具体选错案例——模型因看不到逐条描述而选错 legal 技能，把案例与当时渲染出的清单一并
+  留档后再改；不接受「感觉不准」类模糊理由。compact 形态下由 `list_skills` 承担按需展开
+  （注册表带 `readSkill` 时才注册）。
 - 组级摘要是**人工维护**的语义说明（`LEGAL_DOMAINS` / `FAMILY_RULES`）：新增子域不写摘要也能
   成组（只有名字 + 组头计数），不会失配；但摘要缺失时该组的语义只剩名字。
 - 未改 `AgentEvent` / gateway frames；`list_skills` 是新增工具而非改既有 `inputSchema`，
