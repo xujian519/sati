@@ -106,7 +106,17 @@ export type FigureCheckRuleId =
   | "V19"
   | "V20"
   | "V21"
-  | "V22";
+  | "V22"
+  // 渲染复核（RC*）与结构规则同处一份 finding 面：生成期与 figure-gate 都要把两类发现
+  // 混排进同一份报告/门禁，规则号集合必须同域（映射单点在 render-check-rules.ts）。
+  | "RC0"
+  | "RC1"
+  | "RC2"
+  | "RC3"
+  | "RC4"
+  | "RC5"
+  | "RC6"
+  | "RC7";
 
 export type FigureCheckOptions = {
   /** 生成期无说明书文本可核时跳过 V2/V3（V1/V4/V5/V7/V8/V9 照常）。 */

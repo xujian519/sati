@@ -28,10 +28,10 @@ import {
   type FigureRuleContext,
 } from "./check-context.js";
 import { isSymbolShape } from "./layout.js";
-import { FIGURE_FONT_SIZE } from "./metrics.js";
+import { sourceCharHeightMm } from "./source-char-height.js";
 import { hasNumeralPrefix, isRefNumeral, REF_NUMERAL_PRACTICAL_MAX } from "./numeral.js";
 import { minCharHeight, printableArea, sheetNumberText } from "./office-profile.js";
-import { LEGIBILITY_SHRINK_FACTOR, pxToMm } from "./page-contract.js";
+import { LEGIBILITY_SHRINK_FACTOR } from "./page-contract.js";
 import type { FigureSpec } from "./types.js";
 import type { WordingHit, WordingRuleId } from "./wording-rules.js";
 
@@ -456,8 +456,9 @@ const ruleV7: FigureRule = {
         });
       }
       // 源字高按**渲染器**取值：graphviz 的 14pt 与 CAD 的 3mm 标号都不等于内置布局的
-      // 14px；用像素常数会把 graphviz 字高低估约 25%，把 CAD 标号高估。
-      const sourceCharMm = ctx.options.sourceCharHeightMm ?? pxToMm(FIGURE_FONT_SIZE);
+      // 14px；用像素常数会把 graphviz 字高低估约 25%，把 CAD 标号高估。缺省走同一个
+      // `sourceCharHeightMm`，部署级 SATI_FIGURE_FONT_MM 因此对生成期与核验期同时生效。
+      const sourceCharMm = ctx.options.sourceCharHeightMm ?? sourceCharHeightMm("builtin");
       const printed = sourceCharMm * zoom;
       if (charHeight !== undefined && printed < charHeight.mm) {
         const limitNote =

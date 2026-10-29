@@ -6,7 +6,7 @@
  * 其中；位图量测要引入栅格化器（rsvg/ImageMagick），而本包的两条渲染通路都不
  * 依赖它们。凡「画出来是什么样」取决于矢量源的地方，本模块都按同一条遍历量测。
  *
- * 覆盖五类只在渲染结果上显现的缺陷（前四类来自实测案例）：
+ * 覆盖七类只在渲染结果上显现的缺陷（前四类来自实测案例）：
  * - **文字被线条贯穿**：引线或轮廓线穿过文字占位框，标号或元件名读不出（引线的
  *   终点落在文字上、或标号落在被剖面线的零件内都会触发）。
  * - **文字与图线净距不足**：线条没压进字身、但贴着文字占位框（默认不足
@@ -23,6 +23,10 @@
  *   `hatch-orientation-collision`，判据含方向与间距两项。
  * - **内容越出画布**：线段、轮廓或标号落在根元素声明的画布之外，越界部分不会被
  *   渲染出来（后处理放大字号或落版改写画布时最易发生）。
+ * - **图元互相重叠**：两个描边轮廓的包围盒在两轴上都交叠（排除严格包含与同组轮廓），
+ *   两个零件/图形压叠时图面上读不出各自边界。
+ * - **字高低于下限**（`minFontMm` 由调用方按法域档案给出）：逐**文字元素**量测字高，
+ *   能报出「节点字够大、边标签不够」这类 V7 用渲染器常数估不出的情形。
  *
  * 量测范围：根元素的画布尺寸与 `viewBox`/`preserveAspectRatio`（`svg-viewport` 解析成
  * 用户单位 → 毫米的映射，故 px 级用户单位的导出文件与落版页同一口径）；`line`/`polyline`/
@@ -55,9 +59,11 @@ import {
   DEFAULT_TEXT_CLEARANCE_MM,
   coveredCenterlines,
   dashSegments,
+  fontBelowMinimum,
   hatchCollisions,
   inkBounds,
   inkOutsideCanvas,
+  outlineOverlaps,
   textClearanceFindings,
 } from "./render-check-findings.js";
 import { orientation, subpathSegments, textQuad, visiblePieces } from "./render-check-geometry.js";
@@ -96,18 +102,20 @@ export function measureInkBounds(svg: string, options: { maxBytes?: number } = {
  * 各自成组，与标注存在前的判定一致。
  * @param svg - 完整 SVG 文本。
  * @param options - 安全校验上限（字节）；`textClearanceMm` 为标号净距（毫米，默认
- * {@link DEFAULT_TEXT_CLEARANCE_MM}，`0` 关闭该判据）。
+ * {@link DEFAULT_TEXT_CLEARANCE_MM}，`0` 关闭该判据）；`minFontMm` 为字高下限
+ * （毫米，缺省不判——调用方按法域档案给出才有合规意义）。
  * @returns 量测值与发现的问题。
  * @throws SvgSafetyError 输入未通过 {@link assertSafeSvg} 时。
  */
 export function checkFigureRendering(
   svg: string,
-  options: { maxBytes?: number; textClearanceMm?: number } = {},
+  options: { maxBytes?: number; textClearanceMm?: number; minFontMm?: number } = {},
 ): RenderCheckReport {
   assertSafeSvg(svg, options.maxBytes ?? DEFAULT_SVG_MAX_BYTES);
   const scan = scanSvg(svg);
   const outlines: Poly[] = [];
   const outlineGroups: (number | undefined)[] = [];
+  const outlineStroked: boolean[] = [];
   const openSegments: Segment[] = [];
   const drawn: DrawnSegment[] = [];
   const occluders: Occluder[] = [];
@@ -128,6 +136,7 @@ export function checkFigureRendering(
       if (subpath.closed) {
         outlines.push(subpath.points);
         outlineGroups.push(shape.hatchGroup);
+        outlineStroked.push(shape.stroked);
       } else openSegments.push(...segments);
       for (const segment of segments) {
         if (shape.dashPatternMm === undefined) pieces.push(segment);
@@ -174,6 +183,16 @@ export function checkFigureRendering(
   const ink = inkOutsideCanvas(scan);
   if (ink !== undefined) findings.push(ink);
   findings.push(...hatchCollisions(outlines, openSegments, outlineGroups));
+  findings.push(...outlineOverlaps(outlines, outlineGroups, outlineStroked));
+  if (options.minFontMm !== undefined) {
+    // 字高按文字占位框的实际四角量测（O→O+e2 的模长）：与 V7 的「按渲染器常数估算」
+    // 互补——这里量的是**每个**文字元素，能看见节点字够大而边标签不够的情形。
+    const heightsMm = scan.texts.map(text => {
+      const quad = textQuad(text);
+      return Math.hypot(quad.edgeHeight[0], quad.edgeHeight[1]);
+    });
+    findings.push(...fontBelowMinimum(scan.texts, heightsMm, options.minFontMm));
+  }
 
   const strokeCounts = new Map<number, number>();
   for (const shape of scan.shapes) {
@@ -197,6 +216,7 @@ export function checkFigureRendering(
     orientationDeg: [...orientationCounts]
       .map(([value, count]) => ({ orientationDeg: value, count }))
       .sort((left, right) => right.count - left.count),
+    ...(options.minFontMm === undefined ? {} : { minFontMm: options.minFontMm }),
     findings,
   };
 }

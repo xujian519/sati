@@ -73,11 +73,21 @@ export function toSheet(value: {
 }
 
 /**
+ * 单幅附图的结构元素上限（nodes + edges）。
+ *
+ * 与 deepseek-harness 的 `STRUCTURAL_MAX_ITEMS` 同值（200）：超过它时任何自动布局
+ * （分层或 graphviz）都会把图压缩到字高不足，画出来也过不了 V7 的字高判据。在入参处
+ * 拒绝比让渲染器出一张"合规但读不出"的图更早、更可操作。
+ */
+export const STRUCTURAL_MAX_ITEMS = 200;
+
+/**
  * figures 入参的结构性校验（`patent_figure_generate` 与 `patent_figure_check` 共用）。
  *
  * JSON Schema 只挡类型/枚举/未知属性（`src/tool/execution/validateToolInput.ts` 不校验
  * `minItems`/`maxItems`），条数与成对性在这里兜底，避免"空节点图"或"没有数据点的曲线"
  * 静默出一张空图：
+ * - 单幅 `nodes + edges` 不超过 {@link STRUCTURAL_MAX_ITEMS}；
  * - 非曲线图：`nodes` 不能为空；
  * - 曲线图（kind=chart）：必须有 `chart` 数据、至少 1 条曲线、每条曲线至少 1 个数据点、
  *   每个数据点是 `[x, y]` 两个有限数，且两根轴都有非空标目。
@@ -91,6 +101,16 @@ export function assertFigurePayloads(figures: readonly FigureSpec[], tool: strin
   };
   for (const figure of figures) {
     const no = figure.figure_no;
+    const nodeCount = Array.isArray(figure.nodes) ? figure.nodes.length : 0;
+    const edgeCount = Array.isArray(figure.edges) ? figure.edges.length : 0;
+    if (nodeCount + edgeCount > STRUCTURAL_MAX_ITEMS) {
+      invalid(
+        `图${no} 的结构元素共 ${nodeCount + edgeCount} 个（nodes ${nodeCount} + edges ${edgeCount}），` +
+          `超过单幅上限 ${STRUCTURAL_MAX_ITEMS}：超过它自动布局会把字压到不可辨（V7 字高判据必然不过），` +
+          "请拆分为多幅附图，或把可合并的节点合并为更高层的功能模块",
+        no,
+      );
+    }
     if (Array.isArray(figure.nodes)) {
       for (const node of figure.nodes) {
         if (node.ref !== undefined && !isRefNumeral(node.ref)) {
@@ -238,7 +258,10 @@ export const FIGURE_FINDING_SCHEMA: SatiJsonSchema = {
   additionalProperties: false,
   required: ["rule", "severity", "message"],
   properties: {
-    rule: { type: "string", description: "规则号（V1–V22 结构 / PX1–PX4 像素 / RC0–RC5 渲染 / C1–C12 CAD 几何）" },
+    rule: {
+      type: "string",
+      description: "规则号（V1–V22 结构 / PX1–PX4 像素 / RC0–RC7 渲染 / C1–C12 CAD 几何）",
+    },
     severity: { type: "string", enum: ["fail", "warn", "info"] },
     message: { type: "string" },
     figure_nos: { type: "array", items: { type: "integer" }, description: "涉及的图号（集合级判定）" },

@@ -70,7 +70,17 @@ export {
   type TargetOffice,
 } from "./office-profile.js";
 export { buildSubmissionPage, type SubmissionPageOptions } from "./submission-page.js";
-export { FIGURE_FONT_SIZE, measureTextWidth } from "./metrics.js";
+export {
+  EDGE_FONT_RATIO,
+  FIGURE_FONT_MM_ENV,
+  FIGURE_FONT_SIZE,
+  edgeFontPt,
+  edgeFontSizePx,
+  figureFontMm,
+  figureFontPt,
+  figureFontSizePx,
+  measureTextWidth,
+} from "./metrics.js";
 export {
   A4_HEIGHT_MM,
   A4_WIDTH_MM,
@@ -112,6 +122,7 @@ export {
   findFigureSidecar,
   parseFigureSidecar,
   readFigureSidecar,
+  readFigureSidecars,
   type FigureSidecar,
   type FigureSidecarGeometry,
   type FigureSidecarLayout,

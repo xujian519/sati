@@ -247,3 +247,34 @@ export async function findFigureSidecar(dir: string): Promise<string | undefined
   const first = matches[0];
   return first === undefined ? undefined : join(dir, first);
 }
+
+/**
+ * 读取目录内**全部** sidecar（按文件名升序，保证确定性）。
+ *
+ * 与 {@link findFigureSidecar}（只取首个，供"本案是否有附图留痕"的判断）不同：分次生成
+ * 时同一目录会有多份 sidecar，跨调用核对附图标记必须看到全部留痕——只看第一份会漏掉
+ * 后几次调用分配的标号，进而把重复标号判成通过。
+ * @param dir - 目录；不存在时返回空数组（调用方按"该目录无附图"处理）。
+ * @returns 已解析的 sidecar（顺序与文件名升序一致）。
+ */
+export async function readFigureSidecars(dir: string): Promise<FigureSidecar[]> {
+  let entries: string[];
+  try {
+    entries = await readdir(dir);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw err;
+  }
+  const matches = entries.filter(name => name.endsWith("-figures.json")).sort((a, b) => a.localeCompare(b));
+  const sidecars: FigureSidecar[] = [];
+  for (const name of matches) {
+    try {
+      const sidecar = await readFigureSidecar(join(dir, name));
+      if (sidecar !== undefined) sidecars.push(sidecar);
+    } catch (err) {
+      // 带文件名重抛：跨调用核对失败时调用方要能定位到具体是哪一份留痕坏了。
+      throw new TypeError(`读取附图 sidecar ${name} 失败：${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  return sidecars;
+}

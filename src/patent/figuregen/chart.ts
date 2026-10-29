@@ -17,7 +17,7 @@
  * 字号取 `FIGURE_FONT_SIZE`——核验器 V7 的打印字高判据因此对曲线图同样成立。
  */
 
-import { FIGURE_FONT_SIZE, measureTextWidth } from "./metrics.js";
+import { figureFontSizePx, measureTextWidth } from "./metrics.js";
 import { escapeXml, fmt } from "./render-utils.js";
 import type { ChartAxis, ChartLineStyle, ChartMarker, ChartSeries, FigureChart } from "./types.js";
 
@@ -68,6 +68,8 @@ export type ChartLayout = {
   series: readonly { resolved: ResolvedChartSeries; points: readonly Point[] }[];
   /** 图例行（每行的条目与文本基线 y）。 */
   legend: readonly { entries: readonly ResolvedChartSeries[]; baseline: number }[];
+  /** 图面主字号（px）：与布局边距、刻度值与渲染 `font-size` 同源。 */
+  fontSizePx: number;
 };
 
 /** 刻度数取值域（含两端）：1 个刻度等于没有刻度，十几段刻度在小画幅上会挤成一团。 */
@@ -337,12 +339,16 @@ export function chartOutOfRange(chart: FigureChart | undefined): string[] {
 }
 
 /** 图例按可用宽度折行（行内自左向右，超出换行）。 */
-function packLegend(entries: readonly ResolvedChartSeries[], available: number): ResolvedChartSeries[][] {
+function packLegend(
+  entries: readonly ResolvedChartSeries[],
+  available: number,
+  fontSizePx: number,
+): ResolvedChartSeries[][] {
   const rows: ResolvedChartSeries[][] = [];
   let row: ResolvedChartSeries[] = [];
   let cursor = 0;
   for (const entry of entries) {
-    const width = LEGEND_SWATCH_W + measureTextWidth(entry.series.name?.trim() ?? "");
+    const width = LEGEND_SWATCH_W + measureTextWidth(entry.series.name?.trim() ?? "", fontSizePx);
     if (row.length > 0 && cursor + LEGEND_GAP_X + width > available) {
       rows.push(row);
       row = [];
@@ -360,7 +366,11 @@ function packLegend(entries: readonly ResolvedChartSeries[], available: number):
  *
  * `caption: false` 时不留图号标注带（PCT/US 单幅不编号，画幅须与渲染器同源）。
  */
-export function layoutChart(chart: FigureChart | undefined, options: { caption?: boolean } = {}): ChartLayout {
+export function layoutChart(
+  chart: FigureChart | undefined,
+  options: { caption?: boolean; fontSizePx?: number } = {},
+): ChartLayout {
+  const fontSizePx = options.fontSizePx ?? figureFontSizePx();
   const xAxis = chart?.x ?? EMPTY_AXIS;
   const yAxis = chart?.y ?? EMPTY_AXIS;
   const resolved = resolveChartSeries(chart);
@@ -376,22 +386,22 @@ export function layoutChart(chart: FigureChart | undefined, options: { caption?:
 
   // 左留纵轴刻度值与竖排标目，下留横轴刻度值、标目与图例：边距按实际文本宽度算，
   // 不写死常数（"-0.001" 与 "0" 的宽度差数倍，写死会让长刻度值压住纵轴标目）。
-  const maxYLabelWidth = Math.max(0, ...yTexts.map(value => measureTextWidth(value)));
-  const maxXLabelWidth = Math.max(0, ...xTexts.map(value => measureTextWidth(value)));
-  const plotLeft = EDGE_PAD + FIGURE_FONT_SIZE + AXIS_TITLE_GAP + maxYLabelWidth + TICK_LABEL_GAP + AXIS_TICK;
+  const maxYLabelWidth = Math.max(0, ...yTexts.map(value => measureTextWidth(value, fontSizePx)));
+  const maxXLabelWidth = Math.max(0, ...xTexts.map(value => measureTextWidth(value, fontSizePx)));
+  const plotLeft = EDGE_PAD + fontSizePx + AXIS_TITLE_GAP + maxYLabelWidth + TICK_LABEL_GAP + AXIS_TICK;
   const plotRight = plotLeft + PLOT_WIDTH;
   const plotTop = EDGE_PAD;
   const plotBottom = plotTop + PLOT_HEIGHT;
-  const xLabelBaseline = plotBottom + AXIS_TICK + TICK_LABEL_GAP + FIGURE_FONT_SIZE;
-  const xTitleBaseline = xLabelBaseline + AXIS_TITLE_GAP + FIGURE_FONT_SIZE;
+  const xLabelBaseline = plotBottom + AXIS_TICK + TICK_LABEL_GAP + fontSizePx;
+  const xTitleBaseline = xLabelBaseline + AXIS_TITLE_GAP + fontSizePx;
 
   const legendEntries =
     chart?.legend === false ? [] : resolved.filter(entry => (entry.series.name ?? "").trim() !== "");
-  const rows = packLegend(legendEntries, plotRight - plotLeft);
+  const rows = packLegend(legendEntries, plotRight - plotLeft, fontSizePx);
   const legendTop = xTitleBaseline + AXIS_TITLE_GAP;
   const legend = rows.map((entries, rowIndex) => ({
     entries,
-    baseline: legendTop + rowIndex * LEGEND_ROW_H + FIGURE_FONT_SIZE,
+    baseline: legendTop + rowIndex * LEGEND_ROW_H + fontSizePx,
   }));
   const contentBottom = legend.length === 0 ? xTitleBaseline : legendTop + legend.length * LEGEND_ROW_H;
 
@@ -417,6 +427,7 @@ export function layoutChart(chart: FigureChart | undefined, options: { caption?:
       points: pointsBySeries[index]!.map(point => ({ x: mapX(point.x), y: mapY(point.y) })),
     })),
     legend,
+    fontSizePx,
   };
 }
 
@@ -432,10 +443,17 @@ function lineSegment(x1: number, y1: number, x2: number, y2: number, strokeWidth
 }
 
 /** 文本元素：`rotated` 时绕锚点逆时针旋转 90°（纵轴标目自下而上）。 */
-function text(x: number, y: number, content: string, anchor: "start" | "middle" | "end", rotated = false): string {
+function text(
+  x: number,
+  y: number,
+  content: string,
+  anchor: "start" | "middle" | "end",
+  fontSizePx: number,
+  rotated = false,
+): string {
   const transform = rotated ? ` transform="rotate(-90 ${fmt(x)} ${fmt(y)})"` : "";
   return (
-    `<text x="${fmt(x)}" y="${fmt(y)}" font-size="${FIGURE_FONT_SIZE}" text-anchor="${anchor}"${transform} ` +
+    `<text x="${fmt(x)}" y="${fmt(y)}" font-size="${fontSizePx}" text-anchor="${anchor}"${transform} ` +
     `fill="#000000">${escapeXml(content)}</text>`
   );
 }
@@ -485,6 +503,7 @@ const MARKER_SHAPE: Readonly<Record<ChartMarker, (cx: number, cy: number) => str
  */
 export function renderChartBody(layout: ChartLayout): string {
   const { plot } = layout;
+  const fontSizePx = layout.fontSizePx;
   const parts: string[] = [];
 
   if (layout.grid) {
@@ -511,21 +530,27 @@ export function renderChartBody(layout: ChartLayout): string {
   // 刻度线与刻度值（朝外，写在轴外侧）。
   for (const tick of layout.xTicks) {
     parts.push(lineSegment(tick.position, plot.bottom, tick.position, plot.bottom + AXIS_TICK, TICK_STROKE));
-    parts.push(text(tick.position, layout.xLabelBaseline, tick.text, "middle"));
+    parts.push(text(tick.position, layout.xLabelBaseline, tick.text, "middle", fontSizePx));
   }
   for (const tick of layout.yTicks) {
     parts.push(lineSegment(plot.left, tick.position, plot.left - AXIS_TICK, tick.position, TICK_STROKE));
     parts.push(
-      text(plot.left - AXIS_TICK - TICK_LABEL_GAP, tick.position + FIGURE_FONT_SIZE * BASELINE_MID, tick.text, "end"),
+      text(
+        plot.left - AXIS_TICK - TICK_LABEL_GAP,
+        tick.position + fontSizePx * BASELINE_MID,
+        tick.text,
+        "end",
+        fontSizePx,
+      ),
     );
   }
 
   // 轴标目：横轴居中写在刻度值下方，纵轴竖排写在刻度值左侧。
   if (layout.xTitle.trim() !== "") {
-    parts.push(text((plot.left + plot.right) / 2, layout.xTitleBaseline, layout.xTitle, "middle"));
+    parts.push(text((plot.left + plot.right) / 2, layout.xTitleBaseline, layout.xTitle, "middle", fontSizePx));
   }
   if (layout.yTitle.trim() !== "") {
-    parts.push(text(layout.yTitleX, plot.top + PLOT_HEIGHT / 2, layout.yTitle, "middle", true));
+    parts.push(text(layout.yTitleX, plot.top + PLOT_HEIGHT / 2, layout.yTitle, "middle", fontSizePx, true));
   }
 
   for (const entry of layout.series) {
@@ -546,11 +571,11 @@ export function renderChartBody(layout: ChartLayout): string {
     let cursor = plot.left;
     for (const entry of row.entries) {
       const name = entry.series.name?.trim() ?? "";
-      const centerY = row.baseline - FIGURE_FONT_SIZE * BASELINE_MID;
+      const centerY = row.baseline - fontSizePx * BASELINE_MID;
       parts.push(lineSegment(cursor, centerY, cursor + LEGEND_SWATCH_W, centerY, SERIES_STROKE, dashArray(entry.line)));
       parts.push(MARKER_SHAPE[entry.marker](cursor + LEGEND_SWATCH_W / 2, centerY));
-      parts.push(text(cursor + LEGEND_SWATCH_W + TICK_LABEL_GAP, row.baseline, name, "start"));
-      cursor += LEGEND_SWATCH_W + TICK_LABEL_GAP + measureTextWidth(name) + LEGEND_GAP_X;
+      parts.push(text(cursor + LEGEND_SWATCH_W + TICK_LABEL_GAP, row.baseline, name, "start", fontSizePx));
+      cursor += LEGEND_SWATCH_W + TICK_LABEL_GAP + measureTextWidth(name, fontSizePx) + LEGEND_GAP_X;
     }
   }
 

@@ -3,8 +3,9 @@
  *
  * LLM 只产结构化节点/边/附图标记，不产图形；黑白线条合规（审查指南 2023 一部
  * 一章 4.3/4.6）是渲染器构造期不变式。生成后自动运行结构校验（V1/V4/V5/V7/V8/V9；
- * V2/V3 需说明书文本，属 patent_figure_check 职责），fail 级发现随结果返回
- * （不落盘阻断，由调用方决定修复重生成）。format=html/both 时另产 A4 打印版式
+ * V2/V3 需说明书文本，属 patent_figure_check 职责）与图面渲染复核（RC1–RC7），
+ * 并以同目录既有 sidecar 核对跨调用的图号/标号占用；发现随结果返回（缺省不阻断，
+ * 档位见 `SATI_FIGURE_RENDER_GATE`）。format=html/both 时另产 A4 打印版式
  * 单文件 HTML（PDF 经既有 Chromium 打印管线从该 HTML 产出）。
  *
  * 默认注册（createBuiltinRegistry `patentFigure: false` 可排除；排除会改变工具集
@@ -35,6 +36,7 @@ import {
   figureCaption,
   measureSvgPaperSize,
   profileForJurisdiction,
+  readFigureSidecars,
   renderFigureSvg,
   renderFigureSvgWithGraphviz,
   renderFiguresHtml,
@@ -55,6 +57,14 @@ import {
 } from "../../patent/figuregen/index.js";
 import { SatiToolRuntimeError } from "../protocol/errors.js";
 import type { SatiToolDefinition, SatiToolRuntimeContext } from "../protocol/types.js";
+import {
+  FIGURE_RENDER_GATE_ENV,
+  crossCallReview,
+  resolveRenderGate,
+  reviewRenderedFigures,
+  type FigureCheck,
+  type FigureRenderGate,
+} from "./patentFigureReview.js";
 import {
   assertFigurePayloads,
   FIGURE_ARTIFACT_SCHEMA,
@@ -249,7 +259,7 @@ async function exportFiguresTextToPath(paths: readonly string[], inkscape: Inksc
   }
 }
 
-/** 报告文本（行式摘要：逐幅路径、图号体例、页码、落版页、sidecar、核验发现与附图说明草稿）。 */
+/** 报告文本（行式摘要：逐幅路径、图号体例、页码、落版页、跨调用一致性、sidecar、核验发现与附图说明草稿）。 */
 function buildGenerateReportLines(args: {
   files: RenderedFigureFile[];
   pagePaths: { path: string; figure_no: number }[];
@@ -262,6 +272,11 @@ function buildGenerateReportLines(args: {
   sidecarPath: string;
   htmlPath: string | undefined;
   check: ReturnType<typeof checkFigures>;
+  /** 跨调用一致性的报告行（见 {@link crossCallReview}）。 */
+  crossCallLines: string[];
+  /** 渲染复核档位与发现数（off 档必须显式写「未量测」，见 AGENTS 第 11 条）。 */
+  renderGate: FigureRenderGate;
+  renderFindingCount: number;
   brief: boolean | undefined;
   figures: FigureSpec[];
   inventionName: string | undefined;
@@ -269,7 +284,8 @@ function buildGenerateReportLines(args: {
   rendererLabel: string | undefined;
 }): string[] {
   const { files, pagePaths, profile, jurisdiction, figureCount, captionRendered } = args;
-  const { sheetText, sheetTotal, sidecarPath, htmlPath, check, brief, figures, rendererLabel } = args;
+  const { sheetText, sheetTotal, sidecarPath, htmlPath, check, crossCallLines, brief, figures, rendererLabel } = args;
+  const { renderGate, renderFindingCount } = args;
   const lines: string[] = [
     `已生成 ${files.length} 幅附图（黑白线条，审查指南一部一章 4.3/4.6 合规` +
       (rendererLabel === undefined ? "）：" : `；渲染器: ${rendererLabel}）：`),
@@ -281,6 +297,11 @@ function buildGenerateReportLines(args: {
       : [`- 附图页页码：本图页写作 ${sheetText}（${files.length} 幅，共 ${sheetTotal} 页）`]),
     ...pagePaths.map(page => `- 提交落版页（A4 整页，图号在图下、页码在版心上沿）: ${page.path}`),
     `- 附图 sidecar（FigureSpec 与生成期核验留痕，供 patent_figure_check / 附图门禁复用）: ${sidecarPath}`,
+    ...crossCallLines,
+    renderGate === "off"
+      ? `- 渲染复核：未运行（${FIGURE_RENDER_GATE_ENV}=off）——RC1–RC7 图面缺陷本次未量测，不能视为已核验无问题`
+      : `- 渲染复核：RC1–RC7 已量测，发现 ${String(renderFindingCount)} 条` +
+        `（档位 ${renderGate}${renderGate === "fail" ? "，fail 级发现已在产物落盘后阻断" : "，不阻断生成"}）`,
   ];
   if (htmlPath !== undefined) {
     lines.push(`A4 打印版式 HTML（PDF 可经 export_html 产出）: ${htmlPath}`);
@@ -289,7 +310,7 @@ function buildGenerateReportLines(args: {
   if (check.findings.length > 0) {
     lines.push(
       "",
-      "附图结构核验（生成期 spec_text 为空，V2/V3 结果以 patent_figure_check 提交说明书后为准）：",
+      "附图核验（生成期 spec_text 为空，结构 V*、渲染复核 RC*、跨调用结论；V2/V3 以 patent_figure_check 提交说明书后为准）：",
       ...check.findings.map(
         finding =>
           `- [${finding.severity.toUpperCase()}] ${finding.rule}: ${finding.message}` +
@@ -333,7 +354,8 @@ export function createPatentFigureGenerateTool(): SatiToolDefinition<PatentFigur
             ok: { type: "boolean", description: "生成期核验无 fail（文本侧规则未参与）" },
             findings: { type: "array", items: FIGURE_FINDING_SCHEMA },
           },
-          description: "生成期结构核验（V2/V3 需说明书文本，以 patent_figure_check 为准）",
+          description:
+            "生成期核验（结构 V* + 渲染复核 RC* + 跨调用图号/标号占用；V2/V3 需说明书文本，以 patent_figure_check 为准）",
         },
       },
     },
@@ -424,6 +446,9 @@ export function createPatentFigureGenerateTool(): SatiToolDefinition<PatentFigur
         });
       }
       assertFigureOutputName(input.output_name, tool);
+      // 渲染复核档位：与 format/renderer 同属「入参期决定的开关」，非法值必须在写出任何
+      // 产物之前报错（否则会留下一个半成品目录）。
+      const renderGate = resolveRenderGate();
 
       const documentKind = toDocumentKind(input.document_kind);
       const jurisdiction = toJurisdiction(input.jurisdiction);
@@ -468,6 +493,27 @@ export function createPatentFigureGenerateTool(): SatiToolDefinition<PatentFigur
           sourceCharHeightMm: sourceCharMm,
         });
 
+        // 渲染复核（RC1–RC7）与跨调用一致性：两者都在**已生成、未落盘**的产物上做，发现
+        // 与结构规则合并后统一随 sidecar/报告返回。跨调用以同目录既有 sidecar 为单一事实
+        // 源——本次自己的 sidecar 尚未写出，但同名文件可能来自上一次调用，须排除（否则
+        // 每次重生成都会把自己的旧图号判成"被占用"）。
+        const renderFindings = reviewRenderedFigures({
+          renderedSvgs,
+          paperSizes: measuredPaperSizes,
+          profile,
+          gate: renderGate,
+        });
+        const priorSidecars = await readFigureSidecars(outputDir);
+        const crossCall = crossCallReview({
+          figures,
+          priorSidecars: priorSidecars.filter(sidecar => sidecar.output_name !== input.output_name),
+        });
+        const checkAll: FigureCheck = {
+          ...check,
+          ok: check.ok && [...renderFindings, ...crossCall.findings].every(finding => finding.severity !== "fail"),
+          findings: [...check.findings, ...renderFindings, ...crossCall.findings],
+        };
+
         // 字体独立导出（可选收尾，最后一步）：把字形换成轮廓路径，使交付物不依赖读者机器
         // 上的字体。放在**全部 SVG 落盘之后、sidecar 落盘之前**——此后不再有模块解析这些
         // 文件的文本，而 sidecar 需要记录"产物已转路径"这一事实（回读语义见 sidecar.ts
@@ -492,7 +538,7 @@ export function createPatentFigureGenerateTool(): SatiToolDefinition<PatentFigur
             documentKind,
             files,
             figures,
-            check,
+            check: checkAll,
             skipTextRules: true,
             ...(inkscape === undefined ? {} : { textToPath: true }),
           }),
@@ -508,6 +554,26 @@ export function createPatentFigureGenerateTool(): SatiToolDefinition<PatentFigur
           );
         }
 
+        // `fail` 档：产物与 sidecar 全部落盘**之后**才抛错——已交付的图可审计（调用方据
+        // 报告与 sidecar 修复后重生成），而"先抛错后落盘"会留下半成品目录。缺省的 `warn`
+        // 档不阻断：生成期发现的历史噪音（如 V8 摘要附图未指定）不应挡住已合规的图。
+        if (renderGate === "fail") {
+          const failures = checkAll.findings.filter(finding => finding.severity === "fail");
+          if (failures.length > 0) {
+            throw new SatiToolRuntimeError(
+              "tool_execution_failed",
+              `附图核验有 ${String(failures.length)} 条 fail 级发现（${failures.map(finding => finding.rule).join(", ")}）：` +
+                `产物与 sidecar 已落盘（${sidecarPath}）可审计，修复后重生成`,
+              {
+                tool,
+                sidecar_path: sidecarPath,
+                rules: failures.map(finding => finding.rule),
+                findings: failures.map(finding => `${finding.rule}: ${finding.message}`),
+              },
+            );
+          }
+        }
+
         const rendererLabel: string | undefined =
           renderer === "graphviz" ? "graphviz dot" : renderer === "graphviz-wasm" ? "graphviz (WASM)" : undefined;
         const lines = buildGenerateReportLines({
@@ -521,7 +587,10 @@ export function createPatentFigureGenerateTool(): SatiToolDefinition<PatentFigur
           sheetTotal: sheet?.total,
           sidecarPath,
           htmlPath,
-          check,
+          check: checkAll,
+          crossCallLines: crossCall.lines,
+          renderGate,
+          renderFindingCount: renderFindings.length,
           brief: input.brief,
           figures,
           inventionName: input.invention_name,
@@ -543,7 +612,7 @@ export function createPatentFigureGenerateTool(): SatiToolDefinition<PatentFigur
           pages: pagePaths.map(page => ({ figure_no: page.figure_no, path: page.path })),
           ...(htmlPath === undefined ? {} : { html_path: htmlPath }),
           sidecar_path: sidecarPath,
-          check: { ok: check.ok, findings: check.findings },
+          check: { ok: checkAll.ok, findings: checkAll.findings },
         };
 
         return {
