@@ -14,10 +14,11 @@ export interface OnboardingPayload {
 
 const ALLOWED_PROVIDER_TYPES = new Set(["anthropic", "openai-chat", "openai-responses", "google", "litellm", "ccr"]);
 
-/** Gateway V2 schema: anthropic | openai | google */
-export function providerTypeToProtocol(providerType: string): "anthropic" | "openai" | "google" {
+/** Gateway V2 schema: anthropic | openai | openai-responses | google */
+export function providerTypeToProtocol(providerType: string): "anthropic" | "openai" | "openai-responses" | "google" {
   if (providerType === "anthropic") return "anthropic";
   if (providerType === "google") return "google";
+  if (providerType === "openai-responses") return "openai-responses";
   return "openai";
 }
 

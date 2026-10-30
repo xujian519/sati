@@ -734,8 +734,9 @@ router.post("/models", async (req, res) => {
   const normalizedType = String(providerType || "").toLowerCase();
   const isAnthropic = normalizedType === "anthropic";
   const isGoogle = normalizedType === "google";
+  const isOpenAIResponses = normalizedType === "openai-responses" || normalizedType === "responses";
   const normalizedBaseUrl = String(baseUrl).trim().replace(/\/+$/, "");
-  const protocol = isGoogle ? "google" : isAnthropic ? "anthropic" : "openai";
+  const protocol = isGoogle ? "google" : isAnthropic ? "anthropic" : isOpenAIResponses ? "openai-responses" : "openai";
   const controller = new AbortController();
   const timer = setTimeout(
     () => controller.abort(new NetworkFetchError("network_timeout", "Model list request timed out after 10s.")),
