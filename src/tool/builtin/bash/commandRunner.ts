@@ -28,6 +28,54 @@ export type SatiCommandRunner = {
 
 type SpawnShell = typeof spawn;
 
+/**
+ * 单条流在内存中保留的最大字符数（头 + 尾），超出部分丢弃并插入显式标记。
+ *
+ * 工具结果最终还会被 `ToolRuntime` 按 `maxResultBytes` 截断，但那是**事后**截断：
+ * 若不在这里设上限，`cat 大日志` / `yes` 这类命令会在超时（默认 30s）前把整段
+ * 输出攒成一个字符串，足以把 agent 主进程撑到 OOM。头尾各留一段是为了超时/报错
+ * 时仍能看到开头的上下文和结尾的诊断信息。
+ */
+const MAX_CAPTURED_STREAM_CHARS = 4_000_000;
+const CAPTURED_HEAD_CHARS = Math.floor(MAX_CAPTURED_STREAM_CHARS * 0.4);
+const CAPTURED_TAIL_CHARS = MAX_CAPTURED_STREAM_CHARS - CAPTURED_HEAD_CHARS;
+
+/** 有界流式文本缓冲：保留开头与结尾，中间丢弃，并在拼回时标注省略量。 */
+export class CappedStreamCapture {
+  private head = "";
+  private tail = "";
+  private droppedChars = 0;
+
+  constructor(
+    private readonly headChars: number = CAPTURED_HEAD_CHARS,
+    private readonly tailChars: number = CAPTURED_TAIL_CHARS,
+  ) {}
+
+  append(text: string): void {
+    if (!text) return;
+    if (this.head.length < this.headChars) {
+      const room = this.headChars - this.head.length;
+      if (text.length <= room) {
+        this.head += text;
+        return;
+      }
+      this.head += text.slice(0, room);
+      text = text.slice(room);
+    }
+    this.tail += text;
+    if (this.tail.length > this.tailChars) {
+      const excess = this.tail.length - this.tailChars;
+      this.droppedChars += excess;
+      this.tail = this.tail.slice(excess);
+    }
+  }
+
+  text(): string {
+    if (this.droppedChars === 0) return this.head + this.tail;
+    return `${this.head}\n[Sati] ... ${this.droppedChars} characters omitted (output capped to bound memory) ...\n${this.tail}`;
+  }
+}
+
 export class NodeShellCommandRunner implements SatiCommandRunner {
   constructor(
     private readonly spawnShell: SpawnShell = spawn,
@@ -48,8 +96,8 @@ export class NodeShellCommandRunner implements SatiCommandRunner {
         stdio: ["ignore", "pipe", "pipe"],
       });
 
-      let stdout = "";
-      let stderr = "";
+      const stdoutCapture = new CappedStreamCapture();
+      const stderrCapture = new CappedStreamCapture();
       let timedOut = false;
       let settled = false;
 
@@ -97,8 +145,8 @@ export class NodeShellCommandRunner implements SatiCommandRunner {
           cleanup();
           resolve({
             exitCode: null,
-            stdout,
-            stderr: stderr + "\n[Sati] Process did not exit within 15s after termination; force-resolved.",
+            stdout: stdoutCapture.text(),
+            stderr: `${stderrCapture.text()}\n[Sati] Process did not exit within 15s after termination; force-resolved.`,
             timedOut: true,
             durationMs: Date.now() - startedAt,
           });
@@ -127,13 +175,13 @@ export class NodeShellCommandRunner implements SatiCommandRunner {
           clearTimeout(closeFallback);
           closeFallback = undefined;
         }
-        stdout += stdoutDecoder.flush();
-        stderr += stderrDecoder.flush();
+        stdoutCapture.append(stdoutDecoder.flush());
+        stderrCapture.append(stderrDecoder.flush());
         cleanup();
         resolve({
           exitCode,
-          stdout,
-          stderr,
+          stdout: stdoutCapture.text(),
+          stderr: stderrCapture.text(),
           timedOut,
           durationMs: Date.now() - startedAt,
         });
@@ -141,7 +189,7 @@ export class NodeShellCommandRunner implements SatiCommandRunner {
 
       child.stdout?.on("data", (chunk: Buffer) => {
         const text = stdoutDecoder.decode(chunk);
-        stdout += text;
+        stdoutCapture.append(text);
         if (options.onStdout) {
           try {
             options.onStdout(text);
@@ -152,7 +200,7 @@ export class NodeShellCommandRunner implements SatiCommandRunner {
       });
       child.stderr?.on("data", (chunk: Buffer) => {
         const text = stderrDecoder.decode(chunk);
-        stderr += text;
+        stderrCapture.append(text);
         if (options.onStderr) {
           try {
             options.onStderr(text);
@@ -162,14 +210,14 @@ export class NodeShellCommandRunner implements SatiCommandRunner {
         }
       });
       child.on("error", error => {
-        stdout += stdoutDecoder.flush();
-        stderr += stderrDecoder.flush();
+        stdoutCapture.append(stdoutDecoder.flush());
+        stderrCapture.append(stderrDecoder.flush());
         cleanup();
         if (options.signal?.aborted) {
           resolve({
             exitCode: null,
-            stdout,
-            stderr,
+            stdout: stdoutCapture.text(),
+            stderr: stderrCapture.text(),
             timedOut: true,
             durationMs: Date.now() - startedAt,
           });
