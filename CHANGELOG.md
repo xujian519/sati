@@ -2,6 +2,38 @@
 
 本文件按版本记录 Sati 的重要变更。桌面端版本号（`release(desktop)`）与根 `package.json` 由 `scripts/bump-version.mjs` 同步维护。
 
+## v0.4.2 - 2026-10-30
+
+> **版本目标（2026-10-30）**：法律域从「有技能」走到「有数据底座且有评分口径」——legal 技能包与规则层入库，`law_search` 离线快照三级兜底并对覆盖规模如实回报，`evaluate_legal_evidence` 按八类法定证据 × 三性打分；附图侧把渲染门禁前移到生成期（RC6/RC7、部署级字号、跨调用占用核对），并按图型排除不适用判据，使「量不到」与「查出问题」在报告里始终可区分。
+
+### Feat
+
+- feat(legal): 引入法律技能包（130 个 `legal-*` 技能、`rules/legal` 与第三方许可档案），`<available-skills>` 按域分组渲染（`legal/*` 与 `patent` 为 compact），新增 `list_skills` 工具按组展开（#793）
+- feat(legal): 新增 `evaluate_legal_evidence` 八类证据三性评分；`law_search` 增加离线快照兜底（`knowledge.db` → `laws-full.db` → 快照，7,908 部 / 339,189 条），来源/时点/降级原因均为可选字段（#793）
+- feat(legal): `law_search` 离线分支回报 `snapshotLawCount` / `snapshotArticleCount`，工具描述与 `legal-agent` 技能明示在线/离线行为（先看 `source` 再下结论、规模以输出字段为准、快照不支持 level/category/asOf）（#801）
+- feat(figure): 生成期渲染门禁——新增 RC6 元素重叠与 RC7 跨调用占用核对，字号按部署级口径取值，生成完即看图面而非交付后才查（#795）
+
+### Fix
+
+- fix(figure): 渲染复核缺陷数不再混入 RC0 未量测说明——`warn`/`fail` 计缺陷，`info` 单列为「未量测说明（覆盖盲区）」（#797）
+- fix(figure): RC6 元素重叠改用轮廓边真相交，包围盒仅作预筛，相邻 45° 辐条不再因包围盒套叠误报（#798）
+- fix(figure): 曲线图按 `data-dsh-kind="chart"` 跳过 RC4/RC6 并显式记 `not-measured`，散点图虚假重叠归零（#800）
+
+### Test
+
+- test(legal): 补齐八类法定证据 × 三性矩阵用例（10 → 20 条），含覆盖完整性守卫与类型驱动的强弱序断言（#794）
+- test(legal): `law-verify` 集成层改用内存 sqlite 夹具库，消除 3 条本机 `knowledge.db` 依赖的 skip（#801）
+- test(model): 放宽 Google 空闲看门狗用例时间尺度（块间隔 8→250ms、空闲超时 10→400ms），消除 CI 调度抖动误触发（#803）
+
+### Docs
+
+- docs(compliance): `THIRD_PARTY_NOTICES.md` 新增 deepseek-harness 法律域 MIT 独立条目与随附 LICENSE（#801）
+- docs(prompt): `LEGAL_COMPACT` 开关的触发条件落档——观察到具体选错案例才改 false（#801）
+
+### Chore
+
+- chore(test-support): 新增 `scripts/record-drafting-fixture.ts` 真实录制脚本；drafting spec 记录「轨迹结构性不可重放」结论并写明解阻塞路径（#801）
+
 ## v0.4.1 - 2026-10-27
 
 > **版本目标（2026-10-27）**：专利附图从「能画出来」走向「交付即读得出」——制图侧的标号字框、引线止点与图号注记同一套几何口径，识图侧的编号词法与标记取值统一，交付门禁同权消费 V/PX/RC/C 四族证据并以交付文件实测画幅为准；同期完成 ink 8 迁移、依赖升级与 better-sqlite3 构建提速。
