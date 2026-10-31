@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
-import { homedir } from "node:os";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, it } from "node:test";
+import { DatabaseSync } from "node:sqlite";
+import { after, before, describe, it } from "node:test";
 import type { MemoryRetrieveInput } from "../../src/context/memory/MemoryResolver.js";
 import type { RerankClient } from "../../src/model/embedding/rerank.js";
 import { LegalMemoryProvider } from "../../src/knowledge/legal/legal-memory-provider.js";
@@ -201,38 +202,106 @@ describe("patent-memory-provider", () => {
   });
 });
 
-describe("legal-memory-provider（集成，依赖本地法律库）", () => {
-  const dbPath = [join(homedir(), ".sati", "knowledge", "laws-full-local.db")].find(p => existsSync(p));
-  const provider = (() => {
-    if (!dbPath) return undefined;
-    try {
-      return new LegalMemoryProvider(new LegalSearchEngine(dbPath));
-    } catch (error) {
-      console.error(
-        `[legal-memory-provider] 本地法律库打开失败（${dbPath}）: ${error instanceof Error ? error.message : String(error)}`,
+/**
+ * 夹具法律库：**内存/临时 sqlite**，schema 与生产 laws-full-local.db 一致
+ * （law + category 两表，application_id="LAWS"、user_version=1），含真实法条文本。
+ * 这层不依赖开发者本机 knowledge.db，CI 上也真正执行（不再按本机库存在性 skip）。
+ */
+function createLawsFixture(dbPath: string): void {
+  const db = new DatabaseSync(dbPath);
+  try {
+    db.exec(`
+      CREATE TABLE category (
+        id INTEGER PRIMARY KEY, name TEXT NOT NULL, folder TEXT NOT NULL,
+        isSubFolder INTEGER NOT NULL DEFAULT 0, "group" TEXT, "order" INTEGER NOT NULL DEFAULT 0
       );
-      return undefined;
+      CREATE TABLE law (
+        id TEXT PRIMARY KEY, level TEXT NOT NULL, name TEXT NOT NULL, filename TEXT,
+        publish TEXT, expired INTEGER NOT NULL DEFAULT 0, category_id INTEGER NOT NULL,
+        subtitle TEXT, valid_from TEXT, content TEXT, "order" INTEGER NOT NULL DEFAULT 0
+      );
+      PRAGMA user_version = 1;
+      PRAGMA application_id = 0x4c415753;
+    `);
+    db.prepare('INSERT INTO category (id, name, folder, isSubFolder, "group", "order") VALUES (?, ?, ?, ?, ?, ?)').run(
+      1,
+      "民法商法",
+      "民法商法",
+      0,
+      "民法商法",
+      0,
+    );
+    // 正文超过 4000 字，用于验证 provider 按 contentMaxChars 截断（真实行为，不 mock）。
+    const longContractText = [
+      "第六十条 用人单位与劳动者协商一致，可以解除劳动合同。",
+      "第八十七条 用人单位违反本法规定解除或者终止劳动合同的，应当依照本法第八十七条规定的二倍支付赔偿金。",
+      "为了完善劳动合同制度，明确劳动合同双方当事人的权利和义务，保护劳动者的合法权益，构建和发展和谐稳定的劳动关系，制定本法。".repeat(
+        80,
+      ),
+    ].join("\n");
+    const laws = [
+      {
+        id: "中华人民共和国专利法_2020-10-17",
+        level: "法律",
+        name: "中华人民共和国专利法",
+        publish: "2020-10-17",
+        validFrom: "2021-06-01",
+        content:
+          "第六十五条 侵犯专利权的赔偿数额按照权利人因被侵权所受到的实际损失确定；实际损失难以确定的，可以按照侵权人因侵权所获得的利益确定。权利人的损失或者侵权人获得的利益难以确定的，参照该专利许可使用费的倍数合理确定。",
+      },
+      {
+        id: "中华人民共和国劳动合同法_2012-12-28",
+        level: "法律",
+        name: "中华人民共和国劳动合同法",
+        publish: "2012-12-28",
+        validFrom: "2013-07-01",
+        content: longContractText,
+      },
+    ];
+    for (const law of laws) {
+      db.prepare(
+        'INSERT INTO law (id, level, name, filename, publish, expired, category_id, subtitle, valid_from, content, "order") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      ).run(law.id, law.level, law.name, null, law.publish, 0, 1, null, law.validFrom, law.content, 0);
     }
-  })();
-  const skipReason = provider ? false : "local law database not found or open failed; skipping integration assertions";
+    // 不建 law_fts：引擎按「表不存在」走 LIKE，检索路径与生产降级一致且确定。
+  } finally {
+    db.close();
+  }
+}
 
-  // 本地法律库缺失/打不开时显式 skip（带原因），不再静默假绿、也不使文件加载崩溃
-  it("法律 query 注入 law-database 上下文", { skip: skipReason }, async () => {
-    assert.ok(provider, "local law database missing");
-    const result = await provider.retrieve(makeInput("专利侵权的赔偿标准是什么"));
-    assert.ok(result.systemContext);
+describe("legal-memory-provider（集成，夹具法律库）", () => {
+  let dir: string;
+  let engine: LegalSearchEngine;
+
+  before(() => {
+    dir = mkdtempSync(join(tmpdir(), "sati-legal-memory-"));
+    createLawsFixture(join(dir, "laws-full-local.db"));
+    engine = new LegalSearchEngine(join(dir, "laws-full-local.db"));
+  });
+
+  after(() => {
+    engine.close();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("法律 query 注入 law-database 上下文", async () => {
+    const provider = new LegalMemoryProvider(engine);
+    const result = await provider.retrieve(makeInput("赔偿"));
+    assert.ok(result.systemContext, "命中法条时应注入上下文");
     assert.ok(result.systemContext.includes("<law-database>"));
+    assert.ok(result.systemContext.includes("中华人民共和国专利法"));
   });
 
-  it("法条正文过长时截断", { skip: skipReason }, async () => {
-    assert.ok(provider, "local law database missing");
-    const result = await provider.retrieve(makeInput("劳动合同解除"));
-    if (!result.systemContext) return;
-    assert.ok(result.systemContext.length < 4000);
+  it("法条正文过长时截断", async () => {
+    const provider = new LegalMemoryProvider(engine);
+    const result = await provider.retrieve(makeInput("解除劳动合同"));
+    assert.ok(result.systemContext);
+    assert.ok(result.systemContext.length < 4000, `上下文应被截断（实际 ${result.systemContext.length}）`);
+    assert.ok(result.systemContext.includes("（截断）"), "截断标记应可见");
   });
 
-  it("captureTurn 为空操作", { skip: skipReason }, async () => {
-    assert.ok(provider, "local law database missing");
+  it("captureTurn 为空操作", async () => {
+    const provider = new LegalMemoryProvider(engine);
     await provider.captureTurn({ sessionId: "s1", projectRoot: "/tmp", messages: [], errored: false });
   });
 });
