@@ -16,6 +16,7 @@
       "!.codegraph/**",
       "!.dsh/**",
       "!.worktrees/**",
+      "!.agents/**",
       "!ui/public/**",
       "!ui/src/index.css",
       "!skills/**",
