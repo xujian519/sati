@@ -97,7 +97,7 @@
     "@vscode/ripgrep": "^1.18.0",
     "ajv": "^8.20.0",
     "ajv-formats": "^3.0.1",
-    "csv-parse": "^7.0.2",
+    "csv-parse": "^7.0.3",
     "edgeclaw-memory-core": "workspace:*",
     "ink": "^8.0.0",
     "ink-text-input": "^6.0.0",
