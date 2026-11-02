@@ -1,7 +1,7 @@
 # Sati 技术债务活账本（backlog）
 
 > 唯一事实源。审计/修复时在此登记与更新条目。清分级、条目 Schema、保持新鲜规则见 `README.md`。
-> 快速状态：`metrics.md`（2026-09-20 复核时的最新基线）作为数字事实源；本账本按模块给带 `file:line` 证据的条目（各节数字为时间点快照，见下方「数字口径」）。
+> 快速状态：`metrics.md`（2026-10-31 复核时的最新基线）作为数字事实源；本账本按模块给带 `file:line` 证据的条目（各节数字为时间点快照，见下方「数字口径」）。
 > 标注「**自动化扫描命中**」的条目来自脚本 `node scripts/measure-techdebt.mjs --json`。
 
 ---
@@ -28,12 +28,15 @@
     - 🔒 **保留为必要收窄（won't-fix，非可消除债）**：`knowledge/**` 40 处 `as X[]`（node:sqlite `all()/get()` 无泛型，驱动边界收窄）；`provenance-store.ts:250` 与 `evidence/receipt.ts:224`（`JSON.parse` 断言 + 字段 typeof 守卫，属防御性收窄）；`parseRouterConfig.ts` 4 处 `as string[]`（前置 `Array.isArray + typeof` 守卫后的必要收窄）；`askModeConstraints.ts`/`userInteractionConstraints.ts`/`createLocalGateway.ts`/`proxy.ts` 的 `as never`（存在性探测或跨库/跨泛型边界收窄）。
     - 结论：本次收敛聚焦**真正可消除且每处有安全收益**的断言；被判定为边界必要收窄的点不强行"消除"（避免把 `as` 挪进 helper 藏起来，或引入新抽象——自身即新的 accidental complexity）。
     - ✅ **2026-10-12 sweep P1.3（issue #646 · `e854be98c`）**：产品代码 `as unknown as` **20 → 2**（全量 38 → 20；余 18 处于同址 `*.spec.*` 测试文件，属测试断言面，不在 M7 口径内）。消除手段：接口扩展（`NormalizedMessage` 补 `toolCallId`/`subagentType`，`useSessionStore` 直读）；最小事件契约（`MinimalSubmitEvent`——composerSubmit / useSessionSubmit / useChatComposerState 三处统一）；单步断言（`Element → SVGSVGElement` 下行、`Record<string,string>` ⊇ 5 键结构、桥帧交叉类型收窄）；lib 自带类型（Docx `HighlightRegistry`/`typeof Highlight`；pdfjs legacy shim `export *` 同源后直透传）；类型化全局（`globalThis.crypto`）；Reflect 读写（`window` 挂载 / SDK private `_instructions` 探测）；运行时守卫（`resolveWebSocketImpl` `typeof === "function"`）。**保留 2 处（有据边界，均带注释）**：`WeixinChannel` ← weixin-ilink d.ts 与真实协议不符（file_name vs filekey）；`network/fetch.ts` ← undici 独立包 Response 与全局 Response 不再结构兼容（@types/node 26），运行时鸭子互用。验证：root + UI typecheck、biome/eslint、`pnpm lint` 全链 fresh、事件矩阵重生成（3 处行号漂移）、metrics 同刷（38→20）、UI 定向测试 57/57。
+    - **2026-10-31 复核**：账本 P1.3 声称的「产品代码 2 处」与 `metrics.md` 当前基线（`as unknown as` **29** 处：ui/src 21 · knowledge 5 · adapters 1 · network 1 · tool 1）**不一致**——P1.3 的「20→2」是按「排除 *.spec.*」口径计算，但 `metrics.md` 的 `asUnknownAs` 口径含同址 `*.spec.*`，且 10-12 之后又有新增。需注意：① `as never` 仍有 **11 处**（`GatewayWsConnection.ts` 8 处为 skill_* 方法分发的 `p as never`，非 2026-08-23 已消除的 43 处 gateway method params；其余 3 处在 test-support / session / extension）；② 2026-08-23 消除的 43 处 `as never`（gateway method params）确实已清零，账本此处描述准确，但遗漏了 skill_* 分发的 8 处。跟踪 issue：**#808**。
+  - 最后复核：2026-10-31
 
 ### 错误&可观测
 - **TD-CONSOLE-001** · 裸 `console.*` 267 处，`cli` 191 处最热
   - 位置：`src/cli/sati.ts`、`createLocalGateway.ts` 等；次热 `patent`(15) `agent`(13) `model`(11)
   - 建议：收束到 `src/telemetry/` wrapper；先 `sati.ts` → `createLocalGateway.ts`。
-  - 工作量：L · 严重级：P2 · 状态：new
+  - 工作量：L · 严重级：P2 · 状态：done（2026-10-12 sweep，C39 + #646 P1.4）
+  - **2026-10-31 复核**：状态字段滞后回填——本条已于 2026-09-11 C39 终审 done、2026-10-12 #646 P1.4 进一步收束至 6 处（`metrics.md` 基线），状态字段未同步。剩余 6 处为 ui/server 注释残留（非 M6 口径），不构成本条复发。
   - **2026-08-27 复核**：总量已降至 **153**（logger 收敛生效，cli 191→137，`createLocalGateway.ts` 已清零）。剩余 cli 命中抽样 ~14/15 属 CLI 合法用户输出（向导 TUI、banner、用法报错），建议改判 mostly won't-fix；焦点转向 **ui/server 桥**：`routes/git.js` 等桥文件新增 `console.log("[sati-bridge] submitTurn runMode=...")`（`sati-bridge.js:713,731`，每条用户消息触发）应走 debugLog 门控或服务端 logger。次热现为 `telemetry`(8)。
   - **2026-09-11 终审**：✅ **done（C39，2026-09-08）**。收束 `ui/server` 408→0、`ui/src` 116→0——建两处纯转发入口 `ui/server/utils/consoleLogger.js` 与 `ui/src/utils/logging.ts`（不改输出文本，逐字节不变）；`src/` 剩余 143 处按设计豁免（CLI 交互 / 登录二维码 / `debug.ts` / telemetry 入口），即 2026-08-27 复核所述的「mostly won't-fix」部分。按 2026-09-11 对齐口径，`src + ui/server` 实测**上界 158**（含注释掉的调用等同名文本），远低于目标 <300。
   - **2026-10-12 sweep P1.4（issue #646 · `47f4ef64d`）**：把 C39 终审「按设计豁免」的 src 剩余部分**机械化收束**：cli 全部裸调用（137）改经 `src/telemetry/logger.ts` 的**无前缀直通单例 `plainLogger`**（stdout/stderr 映射与 `console.*` 逐处 1:1：log→info / error→error / warn→warn；`--version` / `--json` 等机器可读输出与任何前缀完全隔离）；weixin 登录 banner（3）同口径；`context` / `mcp` / `createLocalGateway` 的 4 处为**注释提及**（非调用）已改写；`telemetry/logger.ts` 与 `shared/debug.ts` 作为 src 侧收束入口**申报豁免**（C39 先例扩展：`measure-techdebt.mjs` 的 SANCTIONED 集与口径文案同步，见 metrics.md console 行）。metric：`裸 console.*` **160 → 6**（cli 137→0 · telemetry 8→0 · 散落 9→0；剩 **ui/server(6)** = sessionManager.js 5 处注释残留 + projects.test.js 1 处，非 M6 口径，留档）。验证：`pnpm check` 聚合门禁 EXIT=0、定向测试 90/90（tests/cli 15 + weixin ×2 + patentSearchCli）、sati.ts 以 `plainLogger as out` 别名保持棘轮净增 0。最后复核：2026-10-12。
@@ -49,30 +52,31 @@
   - **2026-10-12 sweep P1.1（issue #646 · `6e3b447db`，修正 `5e69d236f`）**：17 处残留全部补「失败模式 → 回退语义」注释，**只增注释、零代码改动**（16 处体内注释 + 1 处 `ui/server/routes/config.js` **代码行尾**注释）；config.js 在 file-size 棘轮上（基线 1234 行）——**`catch {` 行内注释会被 biome/lint-staged 在提交时重排为独立行（+1 触发棘轮并使基线漂移）**，行尾形态净增 0 行、未触发 `--update-baseline` 追认（踩坑已回填 `sweep-split-verification-checklist.md` §1.6）；`undocumented` **17 → 0**（`metrics.md` 同刷：已注释 675 → 692），`thresholds.json` 同步下调 **17 → 0** 锁定（打印 Δ −17 ✓ 锁定改善）。验证：独立复现 `measure-techdebt.mjs` 判据的扫描 17 → 0；`pnpm lint` 全链 fresh（含棘轮/架构边界/事件矩阵/doc-claims）；root + UI typecheck、biome/eslint green。最后复核：2026-10-12。
 
 ### Arch/分层
-- **TD-BOUND-001** · `ui/server → src` 深层导入 14 处
-  - 位置：`ui/server/sati-bridge.js`、`routes/config.js`、`routes/commands.js` 等
+- **TD-BOUND-001** · `ui/server → src` 深层导入
+  - 位置：`ui/server/sati-bridge.js`（5 处）、`routes/config.js`（3 处）、`routes/commands.js`（2 处）等
   - 建议：改走 `src/<module>/index.ts` barrel（纯防御，不动架构）。
   - 工作量：M · 严重级：P2 · 状态：new
+  - **2026-10-31 复核**：`metrics.md` 当前基线 **15 处**（账本旧记 14 处，+1）。跟踪 issue：**#814**。最后复核：2026-10-31
 - **TD-BOUND-002** · `ui/server/routes/memory.js:14` 直连 `edgeclaw-memory-core/lib/index.js` 编译产物
   - 决策：既有注释说明为受支持路径（`technical-debt-report.md` 2026-08-17 复核维持）。状态：**wontfix**。
   - 证据：脚本命中 1 处。
-- **TD-BOUND-003** · src 运行时值循环依赖 3 组 SCC + ~54 个纯类型环（2026-08-27 类型感知复扫发现；修正 `next-batches-schedule.md` §7「模块级依赖环 0」的旧结论）
-  - 类别：D/R5 · 严重级：P2 · 工作量：M（前三刀均 S）· 状态：**in_progress（2026-08-27 切割①②③已落地：SCC 3→0，见分支 refactor/dep-cycles-wiki-dup）** · 意图：[accidental]
-  - Pain×Spread：2×3=6
-  - 证据（运行时值 SCC，类型纯导入已剔除）：
-    - **SCC-1（16 文件，横跨 tool↔patent↔workflow↔agent，barrel 介导宏环）**。唯一真运行时闭环边 E1：`src/agent/loop/projectToolResults.ts:2` 经 `tool/index.js` barrel 引 `toCanonicalToolResultBlock`（实际定义于 `src/tool/protocol/result.ts:57`）；静态闭环边 E5a：`AgentLoop.ts:19`（type-only）。其余闭环边：E2 `patent/workflow-dag.ts:15`→workflow barrel（值引 `FlowGraph`，即 PATENT-N01 双轨的具体化）；E3 `workflow/index.ts:56-58` re-export 无生产消费方的 `createSubagentWorkflowAgentFactory`（呼应 WORKFLOW-N01）；E4 `SubagentWorkflowAgentFactory.ts:8`→agent/sub/SubAgentSession.ts:18。madge 报 59 链多为 barrel/type-only 幻影，无文件级两两互环、无当日初始化序 bug，但 patent/workflow 任一侧引入副作用初始化即成地雷。
-    - **SCC-2（5 文件，patent/graph/domains 内部注册表-barrel 环）**：`domains/{inventiveness.ts:16,enablement.ts:11,novelty.ts:12}` 从 `../index.js` 反向值引 `GraphBuilder`（定义在 `graph/engine.js`，index 第 26 行才 re-export）。
-    - **SCC-3（2 文件）**：`TuiApp.tsx:6` 从 `../TuiChannel.js` 引常量 `defaultTuiSessionKey` 造成反向值边。
-  - 影响：改一处域函数可能牵动四个模块的编译面；阻塞未来把 TuiApp 复用为桌面宿主、把 workflow-dag 校验路径接线。
-  - 建议（最便宜切割优先）：① 移动 `defaultTuiSessionKey` 至叶子模块 → 消灭 SCC-3（S）；② domains 三文件 `../index.js` 改深引 `../engine.js`/`../types.js` → 消灭 SCC-2（S）；③ `projectToolResults.ts:2`+`AgentLoop.ts:19`+`SubAgentSession.ts:25` 由 barrel 改深引 `tool/protocol/*.js` → 移除 SCC-1 唯一运行时闭环（S）；④ 从 `workflow/index.ts` 删除 SubagentWorkflowAgentFactory re-export（与 WORKFLOW-N01 接线决策同批，M）；⑤ graph↔workflow 双轨归一后余下跨模块值边自然消失（归属 PATENT-N01/WF-N01，L）。
-  - 附注（高扇出复核）：`adapters/index.ts`(66)/`createLocalGateway.ts`(49) 为合法编排层豁免；`createBuiltinRegistry.ts`(58) 中 `:3` 横向构造 gateway 域的 `KanbanBoardManager` 属方向性异味，建议随 tool-pack SPI 化收敛（M/L，与 TD-SIZE/TD-GOD 族联动）。
+- **TD-BOUND-003** · src 运行时值循环依赖（2026-08-27 类型感知复扫发现；修正 `next-batches-schedule.md` §7「模块级依赖环 0」的旧结论）
+  - 类别：D/R5 · 严重级：P1 · 工作量：M（前三刀均 S）· 状态：**in_progress** · 意图：[accidental]
+  - Pain×Spread：3×3=9
+  - **2026-08-27 进展**：切割①②③已落地，原 3 组 SCC（patent/workflow 宏环、graph/domains 注册表环、TuiApp 常量环）已消除。
+  - **2026-10-31 复核（madge 复扫）**：原 3 组 SCC 确已消除，但 `madge --circular` 仍检出 **58 条循环链**，核心是 **permission↔tool 运行时值循环**：`permission/decision/PermissionRuntime.ts:3` 值引 `tool/planModeConstraints.js` 的 `buildPlanModeViolationMessage` → `tool/index.ts` barrel 引入 16 个 builtin → 其中 10 个反向值引 `permission/`。该环经 `tool/builtin/team` → `agent/team` → `gateway` → `session` → `agent` 扩展为 35+ 文件的巨型 SCC。原切割未触及此环（它不依赖 patent/workflow 双轨）。
+  - 影响：改动 permission 或 tool 任一侧触发整个核心模块重编译；副作用初始化顺序变动可能引爆运行时初始化序 bug；阻塞未来拆分 tool 或 permission 模块。
+  - 建议：① 将 `PermissionRuntime` 对 `buildPlanModeViolationMessage` 的值依赖倒置——把 plan-mode 违规消息构造移至 permission 层（或通过接口注入），切断 permission→tool 的值边；② 拆分 `tool/index.ts` barrel，避免单一 barrel 拉入全部 builtin 造成宏环。
+  - 跟踪 issue：**#807**
+  - 最后复核：2026-10-31
 
 ### 体积/复杂度（God function & 大文件）
 - **TD-GOD-001**（P1）· UI 层巨无霸函数（贡献大于后端）
-  - `useChatComposerState` 1433（`chat/hooks/`）· `PdfDocumentPreview` 1138 · `SidebarV2` 1017 · `useChatSessionState` 941 · `MessagesPaneV2` 937 · `FilesV2` 877 · `MessagesPaneV2.render.test.tsx` 842
-  - 建议：按 hook/组件拆分 + 子组件提取；涉及 UI 须浏览器验证。工作量：L（每组件）· 状态：new
-- **TD-GOD-002**（P2）· 后端巨无霸函数：`createRouterRuntime` 877（`router/`）· `main` 635（`cli/sati.ts`）· `createReadFileTool` 509（`tool/readFile.ts`）
-  - 细分见各模块节。工作量：L · 状态：**in_progress**——`main`（实测 642 行）已由 #646 sweep P2.7 消解（2026-10-15，`ea361690a`：`cli/sati.ts` 1034 → 14 行，逻辑迁入 `commandDispatch.ts` 的 `COMMANDS` 分发表 + `commands/` 下 6 个 server 模块；同批 `projectRuntimeFactory` 的 `createProjectRuntimeResolver` 428 → 77、`resolve` 320 → 73；god fn ≥300 54 → 51、≥400 27 → 25）；余 **`createRouterRuntime` 877 与 `createReadFileTool` 509 未处置**
+  - **2026-10-31 复核**：旧清单（`useChatComposerState` 1433 · `PdfDocumentPreview` 1138 · `SidebarV2` 1017 · `useChatSessionState` 941）已由 #646 sweep 消解。当前 `metrics.md` 基线（≥300 行共 35 个，其中 UI 28 个）Top 7：`MessagesPaneV2.render.test.tsx` 943 · `FilesV2` 832 · `useGitPanelController` 704 · `ImportFromFolder` 688 · `LlmConfigurationStep` 633 · `AppShellV2` 632 · `MainContent.SplitBody` 573。
+  - 建议：按 hook/组件拆分 + 子组件提取；涉及 UI 须浏览器验证。优先处置 FilesV2 / useGitPanelController / ImportFromFolder 三个 >650 行组件。工作量：L（每组件）· 状态：new · 跟踪 issue：**#806**
+  - 最后复核：2026-10-31
+- **TD-GOD-002**（P2）· 后端巨无霸函数：`createRouterRuntime` 131（`router/RouterRuntime.ts`）· `main` 17（`cli/commandDispatch.ts`）· `createReadFileTool` 114（`tool/builtin/readFile.ts`）
+  - 细分见各模块节。工作量：L · 状态：**done（2026-10-31 复核回填）**——三函数均已降至 <300 行 god 阈值以下：`main` 由 #646 sweep P2.7 消解（`cli/sati.ts` 1034 → 14 行，逻辑迁入 `commandDispatch.ts`）；`createRouterRuntime` 877 → **131 行**（`RouterRuntime.ts` 全文件仅 212 行）；`createReadFileTool` 509 → **114 行**（`readFile.ts` 全文件仅 131 行）。状态字段滞后未同步。
   - **2026-08-27 复核补充（`createLocalGateway.ts` 结构债，jscpd 盲区——重复为小型接线模式而非文本克隆）**：(a) 模块为三件无关架构钉合：CLI 引导工厂 `:309-820` + 巨类 `ProjectRuntimeRegistry` `:904~2090`（`resolve`≈245 行、`prepareSessionRuntime`≈430 行，失败域横跨插件系统+MCP 生命周期+browser 工具）+ 无关自由工具函数 `:2215-2461`（browser proxy env 解析）；(b) 工厂内 team 成员回收闭包双实现——`runMemberScan :601-612` vs wakeMember 回调 `:682-688`，注释自承「与 scanner 冷恢复路径同款」；(c) browser-use 专属逻辑（mkdirSync 截图目录、逐 spec 参数改写 `:1663-1689`）泄漏进通用会话装配。建议拆出 `TeamReclaimCoordinator`、以 `SessionToolProvisioner` 承接 browser-use/MCP 装配、迁走 proxy env 工具函数。工作量：M×3 子项。
     - **2026-09-12 进展**：两次逐字迁移已落地（决策见 `docs/notes/implemented/2026-09-11-createlocalgateway-helper-extraction.md`、`2026-09-12-projectruntimeregistry-module-extraction.md`）——(a) 模块级 helper 外置为 `src/cli/{browserLaunchArgs,routerDefaults,gatewaySupport}.ts`；(b) `ProjectRuntimeRegistry` 类整体迁出为 `src/cli/ProjectRuntimeRegistry.ts`（1664 行），`createLocalGateway.ts` 2437 → 804 行。**未完成**：(b) 工厂内 team 成员回收闭包双实现、(c) browser-use 逻辑泄漏进会话装配。
     - **2026-09-12（第三刀）**：`new InProcessGateway(router, {...})` 的 22 字段网关选项（17 个闭包回调，其中 team 面板快照/特权直调、配置热重载、回合收尾等）抽到 `src/cli/gatewayRuntimeOptions.ts`，组合根 803 → 634 行；决策见 `docs/notes/implemented/2026-09-12-gateway-runtime-options-builder.md`。剩余 team 子系统 builder（约 226 行）压 ≤600，browser-use 泄漏随会话装配 builder 处置。
@@ -80,8 +84,9 @@
     - **2026-09-12（第五刀，类内拆分）**：(c) **browser-use 泄漏已处置**——`prepareSessionRuntime` 的会话工具面阶段（113 行：每会话 MCP + unattended excludeTools + always_on 剥离 + 可用性过滤 + 成员角色裁剪，含截图目录 mkdir 与逐 spec 参数改写）抽到 `src/cli/sessionToolSurface.ts`（`provisionSessionTools(input)`），registry 1663 → 1563 行；决策见 `docs/notes/implemented/2026-09-12-session-tool-surface-extraction.md`。剩余：(b) 工厂内 team 成员回收闭包双实现 + 类内其余巨方法（`prepareSessionRuntime` 余两段 / `resolve` 249 / `createAgentConfig` 127）。
     - **2026-09-12（第六刀，类内拆分）**：专利输出门禁构造（167 行，每会话 `PatentOutputGate` + HITL 审批闭环 + 决策溯源旁路 + policy-bridge deny 编译 + 决策反馈回流）抽到 `src/cli/patentOutputGateFactory.ts`（`buildPatentOutputGate(deps)`，gateway/teamDb/sessionOverrides 以 accessor 延迟取数），registry 1563 → 1384 行；决策见 `docs/notes/implemented/2026-09-12-patent-output-gate-factory.md`。
   - **2026-08-27 新增上帝函数 2 个**：`GatewayWsConnection.dispatchRequest`（316 行 switch，见 TD-GATEWAY-002）、kanban `ui/src/components/kanban/hooks/useBoardState.ts::useBoardState`（398 行，见 TD-UI-CHAT-N14）。
-- **TD-SIZE-001** · 大文件：`SkillsV2.tsx` 2503 · `AgentLoop.ts` 1133 · `ProjectRuntimeRegistry.ts` 642（2026-09-12 由 `createLocalGateway.ts` 2437 拆出后经八刀类内拆分：会话工具面 / 专利输出门禁 / 会话依赖装配 / Agent 配置构造 / 项目运行时构造 / 会话权限 lifecycle，组合根降至 448） · `sati-bridge.js` 2055 · `routes/taskmaster.js` 1888 · `PdfDocumentPreview.tsx` 1861 · `WeComChannel.ts` 1761
+- **TD-SIZE-001** · 大文件：`SkillsV2.tsx` 1441 · `AgentLoop.ts` 1150 · `ProjectRuntimeRegistry.ts` 728（2026-09-12 由 `createLocalGateway.ts` 2437 拆出后经八刀类内拆分：会话工具面 / 专利输出门禁 / 会话依赖装配 / Agent 配置构造 / 项目运行时构造 / 会话权限 lifecycle，组合根降至 448） · `sati-bridge.js` 2347 · `routes/taskmaster.js` 1152 · `PdfDocumentPreview.tsx`（已拆分退役）· `WeComChannel.ts` 1764
   - 工作量：L · 严重级：P2 · 状态：partial
+  - **2026-10-31 复核**：标题数字按 `metrics.md` Top 30 基线回填——`SkillsV2.tsx` 2503→**1441**、`sati-bridge.js` 2055→**2347**、`taskmaster.js` 1888→**1152**、`AgentLoop.ts` 1133→**1150**、`WeComChannel.ts` 1761→**1764**、`ProjectRuntimeRegistry.ts` 642→**728**；`PdfDocumentPreview.tsx`（1861）已拆分退役、文件不存在。状态维持 partial。
   - **2026-09-14 进展（AgentLoop 第 5 刀）**：turn 出口与中止捕获（`emitStatus`/`createAbortStatus`/`captureTurn`/`terminateTurn`/`captureAbortedPartial`/`abortTurn`）外迁 `src/agent/loop/turnExit.ts`，共享恢复策略（`continueWithTransientPrompt`/`emitEmptyOutputTokenBump`/`recoverFromMaxOutputBump`/`recoverFromEmptyResponse`）外迁 `src/agent/loop/recoveryStrategies.ts`，AgentLoop.ts 2433 → 2130 行；决策见 `docs/notes/implemented/2026-09-14-agentloop-turn-exit-extraction.md`。
   - **2026-09-14 进展（AgentLoop 第 6 刀）**：`handleModelError` 本体（365 行，约 10 条互斥恢复路径）拆为 `src/agent/loop/modelErrorRecovery.ts` 的具名步骤函数 + `recoverFromModelError` 调度入口，AgentLoop.ts 2130 → 1733 行（TD-AGENT-101 同批结清）；决策见 `docs/notes/implemented/2026-09-14-agentloop-model-error-recovery-extraction.md`。
   - **2026-09-14 进展（AgentLoop 第 7 刀）**：`assembleAndRecover` 本体（201 行）与 `repairTextExtractedToolNames` 迁入 `src/agent/loop/responseAssembly.ts`（装配 + 三条具名处置步骤），AgentLoop.ts 1733 → 1485 行（TD-AGENT-103 同批结清）；决策见 `docs/notes/implemented/2026-09-14-agentloop-response-assembly-extraction.md`。
@@ -326,13 +331,14 @@
 
 ## 4. gateway（主链路 · B1 ✅）
 
-**模块概况**：InProcess/Remote 两实现 + 手写 WS 帧协议 + 服务端连接；已从 2341 行拆出 6 个下沉模块，现 `InProcessGateway.ts` 1103 行；`tests/gateway/` 25 文件。分层清晰，但类型强转（`as never`）、安全关键帧解析的测试空白、「方法清单多处同步」为包袱。
+**模块概况**：InProcess/Remote 两实现 + 手写 WS 帧协议 + 服务端连接；已从 2341 行拆出 6 个下沉模块，现 `InProcessGateway.ts` 1511 行；`tests/gateway/` 25 文件。分层清晰，但类型强转（`as never`）、安全关键帧解析的测试空白、「方法清单多处同步」为包袱。
 
-- **TD-GATEWAY-001** · InProcessGateway 1103 行是否还需再拆
+- **TD-GATEWAY-001** · InProcessGateway 1511 行是否还需再拆
   - 类别：A · 严重级：P3 · 工作量：S · 状态：new
-  - 位置：`src/gateway/client/InProcessGateway.ts:1-1103`（复杂块 `:314-621`）
+  - 位置：`src/gateway/client/InProcessGateway.ts:1-1511`（复杂块 `:314-621`）
   - 建议：不再整体拆分；仅把 submitTurn 内 telemetry/timeout/permission 脚手架抽成辅助函数。
   - **2026-08-27 复核**：文件增至 **1350 行**，增量 ~220 行全部为 kanban 可选域薄委托块（`:1149-1349` 共 17 个 `kanban*` 方法，同一「未配置守卫→resolveKanbanProjectRoot→getRuntime→转发」三步脚手架复制；`submitTurn` 核心实测稳定 ≈298 行），**本轮无认知深度恶化、不升级拆分**；但本类已吸收第 4 个可选域（cron/skills/always-on/team/kanban）——预授权在第 5 个域接入前抽取可选域 facade（`KanbanMethods`/`SkillMethods` mixin 对象挂接），工作量 M，维持 P3~P2 边界。
+  - **2026-10-31 复核**：文件 **1350 → 1511 行**（`metrics.md` Top 30 大文件第 5 位）；增量主要为后续可选域接入的薄委托块，`submitTurn` 核心未见显著膨胀。结论同前：不整体拆分，维持 P3。
 - **TD-GATEWAY-002** · 分发器 `frame.params` 缺运行时校验（`as never` 已消除，2026-08-23）
   - 类别：B · 严重级：P2 · 工作量：M · 状态：**partial（2026-08-23）**
   - 位置：`src/gateway/server/GatewayWsConnection.ts:153,233-388`（43 处 `as never` → 已改 `as GatewayMethodParams<"...">`）；`client/RemoteGateway.ts:92-278`（~30 处 `as XResult`，已在 TD-TYPE-002 消除）
@@ -696,7 +702,7 @@
 
 ## 10. always-on（B3 ✅）
 
-**模块概况**：38 文件；常驻后台执行（Discovery 计划/报告/工作周期/workspace 隔离 + 4 个 always_on_* 工具）。核心编排 1252 行 `runtime/DiscoveryFire.ts`；职责边界清晰但复制与未接线配置显著。
+**模块概况**：38 文件；常驻后台执行（Discovery 计划/报告/工作周期/workspace 隔离 + 4 个 always_on_* 工具）。核心编排 1078 行 `runtime/DiscoveryFire.ts`（`metrics.md` 基线）；职责边界清晰但复制与未接线配置显著。
 > 复核更正：本模块无真实 TODO/FIXME 注释（4 处命中均为 prompt/契约里「拒收含 fuzzy 'TODO'」的业务语义，非债）。静默吞错 ~21 处 `.catch(()=>undefined)`，多数为 best-effort cleanup 可接受。
 
 - **TD-ALWAYSON-N01** · `DiscoveryFire` god class，`run`/`rerunPlan` 近乎全量复制
@@ -905,7 +911,7 @@
 
 ## 15. extension（B4 ✅）
 
-**模块概况**：57 文件；插件/技能装载、生命周期 hooks、7 种贡献点、Skill CRUD/校验/迁移；含 SkillManager 904 行、PluginRuntime、hooks 五类执行器；`tests/extension/` 10 文件。类型卫生良好（无 any/`@ts-ignore`/非空断言）。
+**模块概况**：57 文件；插件/技能装载、生命周期 hooks、7 种贡献点、Skill CRUD/校验/迁移；含 SkillManager 623 行、PluginRuntime、hooks 五类执行器；`tests/extension/` 10 文件。类型卫生良好（无 any/`@ts-ignore`/非空断言）。
 
 - **TD-EXTENSION-N01** · `SkillManager.ts` 单文件巨类，职责重叠
   - 类别：A/D · 严重级：P2 · 工作量：M · 状态：new
@@ -973,11 +979,12 @@
   - 修复：在 `loadPilotConfig` 的各段解析外加兜底 `parseConfigSectionsSafely`——把逃逸的异常经 `configFailureDiagnostics` 转写成 fatal 诊断（未携带诊断的 `PilotConfigError` 按 code/message 转写；非 `PilotConfigError` 记 `CONFIG_UNEXPECTED_ERROR` + `logger.warn`）后再由 `throwConfigErrorIfFatal` 抛出，故对外 `code`/`message` 与兜底前逐字一致，只有 `error.diagnostics` 由空变为非空。不变量恢复为「有 fatal 诊断 ⇔ `error.diagnostics` 非空」，`getDiagnostics()` 不再丢失败原因。值校验器保持纯函数（未采纳「全部改 push」的更彻底方向，理由见决策记录）。新增 `tests/pilot/config/config-error-channel.spec.ts`（5 例：5 类裸 throw 的端到端 + reload→`getDiagnostics()` + 三种转写形态的单测），并做负控制（摘掉兜底后两条集成用例转红）。
   - 决策记录：`docs/notes/implemented/2026-09-15-pilot-config-error-channel.md`
   - 位置：`src/pilot/config/loadPilotConfig.ts`；`parseMemoryConfig.ts`
-- **TD-PILOT-N01** · `loadPilotConfig.ts` ~784 行单函数编排 monolith
+- **TD-PILOT-N01** · `loadPilotConfig.ts` ~921 行单函数编排 monolith
   - 类别：A · 严重级：P2 · 工作量：M · 状态：new
-  - 位置：`src/pilot/config/loadPilotConfig.ts:35-165` + 全文件 784 行
+  - 位置：`src/pilot/config/loadPilotConfig.ts:35-165` + 全文件 921 行
   - 建议：按子系统拆parse+assemble，或拆为 `parse`+`assemble` 两纯函数。
   - 进展（2026-09-15，随 TD-PILOT-N02 修复）：逐段解析已抽成 `parseConfigSections`（入参 `rawConfig`/`model`/`pilotHome`/`diagnostics`，返回 `PilotConfigSections`），`loadPilotConfig` 只保留源读取/校验/快照装配。**未收口**：`parseConfigSections` 仍是约 40 行的顺序编排，`RuntimeDeps` 式依赖注入与 parse/assemble 纯函数化尚未做。
+  - **2026-10-31 复核**：文件 **784 → 921 行**（`metrics.md` Top 30 大文件第 26 位），增长来自后续配置项接入。债本体未变，维持 new/P2。
 - **TD-PILOT-N03** · `warmOllamaProviders` fire-and-forget 无错误处理（未捕获拒绝）
   - 类别：C · 严重级：P2 · 工作量：S · 状态：**done（已修复 2026-08-23）**
   - 修复：`warmOllamaModels` 与 `getCachedOllamaModels`（stale-while-revalidate 后台刷新）的 fire-and-forget 调用加 `.catch(() => {})`（预热为 best-effort，ollama 不可达时忽略，不再 unhandledRejection）；`warmOllamaModels` 增可选 `options.fetchImpl` 透传以便注入失败 fetch。新增 `tests/model/ollamaConfig.spec.ts` 的「warmOllamaModels swallows unreachable-ollama rejection」用例（监听 unhandledRejection 断言不触发）。typecheck/lint/biome/测试全绿。
@@ -1326,10 +1333,11 @@
   - 类别：F · 严重级：P2 · 工作量：S · 状态：new
   - 位置：`hooks/useProjectsState.ts:59-90`；调用点 `161,315,670`
   - 建议：删参数，抽 `mapProjectsAndSelected(apply)` helper。
-- **TD-UI-APP-N09** · `SplitBody`（MainContent）~546 行布局 god 组件，双份拖拽 resize 逻辑
+- **TD-UI-APP-N09** · `SplitBody`（MainContent）573 行布局 god 组件，双份拖拽 resize 逻辑
   - 类别：A · 严重级：P2 · 工作量：M · 状态：new
-  - 位置：`main-content/view/MainContent.tsx:527-1073`、`:668-706`、`:724-749`
+  - 位置：`main-content/view/MainContent.tsx:536-1108`、`:668-706`、`:724-749`
   - 建议：抽 `useResizablePanel` 通用 hook。
+  - **2026-10-31 复核**：函数 **546 → 573 行**（`metrics.md` god function 表第 7 位），行号漂移 `:527-1073` → `:536-1108`。债本体未变，维持 new/P2。
 - **TD-UI-APP-N10** · `DashboardV2.tsx` 1352 行单文件 + 项目匹配谓词重复 + 不安全合成对象
   - 类别：A · 严重级：P3 · 工作量：M · 状态：new
   - 位置：`main-content-v2/DashboardV2.tsx:328-333`、`:349-355`、`:112-116`
@@ -1355,15 +1363,16 @@
 
 ## 26. ui/server（B5 ✅）
 
-**模块概况**：约 99 个手写 JS（routes 33 + services 26 + utils 26 + websocket 3；前两组各含测试文件）。Express 桥连 gateway 属**有意设计**（决策保留）。最大 `sati-bridge.js` 2288 / `routes/git.js` 1490 / `routes/taskmaster.js` 1170。深 `src/` 导入 12 处（对应 TD-BOUND-001）、`memory.js:14` 直连 `lib/index.js` 维持 TD-BOUND-002 wontfix。
+**模块概况**：约 99 个手写 JS（routes 33 + services 26 + utils 26 + websocket 3；前两组各含测试文件）。Express 桥连 gateway 属**有意设计**（决策保留）。最大 `sati-bridge.js` 2347 / `routes/git.js` 1523 / `routes/taskmaster.js` 1152。深 `src/` 导入 15 处（对应 TD-BOUND-001）、`memory.js:14` 直连 `lib/index.js` 维持 TD-BOUND-002 wontfix。
 > 复核结论：历史「同能力多套实现」中 getProjects/WebSocketServer/repairToolName 三项均已统一收口。
 > **2026-09-17 变更**：C34 那批「只登记」条目已收编入本账（见本节末「处置追加」），零消费死表面退役后文件数与最大文件榜随之下降。
 
-- **TD-UISERVER-N01** · `sati-bridge.js` 成为 god-module（2055 行，桥接+统计+缓存混合）
+- **TD-UISERVER-N01** · `sati-bridge.js` 成为 god-module（2347 行，桥接+统计+缓存混合）
   - 类别：A · 严重级：P2 · 工作量：M · 状态：new
   - 位置：`ui/server/sati-bridge.js`（`runChatViaGateway :671-888`、`getRouterDashboardData :1706-1821`、`getRouterStatsSummary :1918-1956`）
   - 建议：拆 `gateway-client.js`/`event-mapper.js`/`router-stats.js`。
   - 2026-08-27 复核：函数本体自审计以来原封未动（现 `:671-894`，+6 行漂移），文件 +73 行来自 kanban 溯源代码；债停滞未恶化。新增两条无条件日志 `:713,731`（每条用户消息触发，计入 TD-CONSOLE-001 的 ui/server 清单）。
+  - **2026-10-31 复核**：文件 **2055 → 2347 行**（`metrics.md` Top 30 大文件第 1 位），较 2026-08-27 复核时再增 ~219 行。桥接+统计+缓存混合的结构性债未变，维持 new/P2。
 - **TD-UISERVER-N02** · bridge 内 4 个 per-session 内存缓存无 LRU/容量上限
   - 类别：I · 严重级：P2 · 工作量：S · 状态：**done（缓存容量上限，#529 / PR 交付 2026-09-24）**
   - 位置：`sati-bridge.js:1470`（`_sessionTitleCache`）、`:1556`（`_userQueriesCache`）、`:1672`（`_toolSequenceCache`）、`:1756`（`_subagentPromptCache`）
@@ -2380,7 +2389,7 @@
 **B4 · main-content-v2（D33–D36）**
 
 - [ ] **B4.1** `ui/src/components/main-content-v2/DashboardV2.tsx` — `DashboardV2`（332 行）
-- [ ] **B4.3** `ui/src/components/main-content-v2/FilesV2.tsx` — `FilesV2`（849 行）
+- [ ] **B4.3** `ui/src/components/main-content-v2/FilesV2.tsx` — `FilesV2`（832 行）
 - [ ] **B4.4** `ui/src/components/main-content-v2/CronV2.tsx` — `CronFormView`（476 行）
 - [ ] **B4.4** `ui/src/components/main-content-v2/PlansAndCronJobs.tsx` — `PlansAndCronJobs`（334 行）
 - [ ] **B4.4** `ui/src/components/main-content-v2/skills/import/ImportFromFolder.tsx` — `ImportFromFolder`（688 行）
@@ -2451,7 +2460,7 @@
 - [ ] **BF-08** `ui/src/components/main-content-v2/SkillsV2.tsx` — 1440 行 · 承接：**B4.2**
 - [x] **BF-09** `ui/src/stores/useSessionStore.ts` — 1351 行 · 承接：**B1.1** —— **已交付（2026-10-23，`a17297ef`）：1348 → 133 行**（脱表，见 §38.2 抬头回填；`createSessionActions` 624 → 67 行，逻辑迁入 core + 四组 action factories）
 - [ ] **BF-10** `ui/src/components/main-content-v2/DashboardV2.tsx` — 1344 行 · 承接：**B4.1**
-- [ ] **BF-11** `src/adapters/channel/feishu/FeishuChannel.ts` — 1336 行 · 未承接 → PS-08
+- [ ] **BF-11** `src/adapters/channel/feishu/FeishuChannel.ts` — 1389 行 · 未承接 → PS-08
 - [x] **BF-12** `ui/src/components/app-shell/SidebarV2.tsx` — 1322 行 · 承接：**B3.1** —— **已交付（2026-10-24，`b35851255`）：1322 → 426 行**（脱表，见 §38.2 抬头回填；`SidebarV2` 1014 → 380 行，会话行/项目组/右键菜单/resize/rename 五簇 + 八个渲染块外置）
 - [ ] **BF-13** `ui/src/components/chat-v2/processGrouping.ts` — 1293 行 · 未承接 → PS-09
 - [ ] **BF-14** `ui/src/components/chat-v2/MessagesPaneV2.render.test.tsx` — 1233 行 · 承接：**B5.5**
@@ -2459,7 +2468,7 @@
 - [ ] **BF-16** `ui/server/routes/agent.js` — 1223 行 · 未承接 → PS-11
 - [x] **BF-17** `ui/src/components/chat-v2/ComposerV2.tsx` — 1187 行 · 承接：**B2.2** —— **已交付（2026-10-23，`51fe5c142`）：1188 → 508 行**（metrics 口径 1188 → 508；脱表，见 §38.2 抬头回填；`ComposerV2` 741 → 387 行，派生状态与 7 个渲染区块外置）
 - [x] **BF-18** `ui/src/components/chat-v2/MessagesPaneV2.tsx` — 1182 行 · 承接：**B2.1** —— **已交付（2026-10-23，`285b463f1`）：1183 → 360 行**（脱表，见 §38.2 抬头回填；`MessagesPaneV2` 824 → 338 行，逻辑迁入六个 hook/模块 + 类型/纯函数两文件）
-- [ ] **BF-19** `ui/server/routes/taskmaster.js` — 1178 行 · 未承接 → PS-12
+- [ ] **BF-19** `ui/server/routes/taskmaster.js` — 1152 行 · 未承接 → PS-12
 - [ ] **BF-20** `src/agent/loop/AgentLoop.ts` — 1149 行 · 未承接 → PS-13
 - [ ] **BF-21** `ui/src/components/main-content-v2/CronV2.tsx` — 1129 行 · 承接：**B4.4**
 - [ ] **BF-22** `ui/src/components/main-content/view/MainContent.tsx` — 1110 行 · 承接：**B5.4**
@@ -2469,7 +2478,7 @@
 - [ ] **BF-26** `src/always-on/runtime/DiscoveryFire.ts` — 1078 行 · 未承接 → PS-17
 - [x] **BF-27** `src/cli/sati.ts` — 1034 行 · 承接：**P2.7** —— **已交付（2026-10-15，`ea361690a`）：1034 → 14 行**（脱表，见 §38.2 抬头回填；`main` 642 行随之消失，逻辑迁入 `commandDispatch.ts` 分发表）
 - [x] **BF-28** `ui/src/components/chat/hooks/useChatRealtimeHandlers.ts` — 1024 行 · 承接：**B1.2** —— **已交付（2026-10-23，`46611401`）：1024 → 113 行**（metrics 口径 1025 → 114；脱表，见 §38.2 抬头回填；721 行 hook 与 624 行匿名 handleMessage 随之消失，逻辑迁入 kind 注册表 + retry timers + 纯工具 + legacy/side-effect 模块）
-- [ ] **BF-29** `src/adapters/channel/protocol/ImLiveReplyController.ts` — 1016 行 · 未承接 → PS-18
+- [ ] **BF-29** `src/adapters/channel/protocol/ImLiveReplyController.ts` — 1255 行 · 未承接 → PS-18
 - [ ] **BF-30** `src/gateway/protocol/types.ts` — 994 行 · 未承接 → PS-19
 - [ ] **BF-31** `ui/src/components/main-content-v2/FilesV2.tsx` — 961 行 · 承接：**B4.3**
 - [ ] **BF-32** `src/context/DefaultContextRuntime.ts` — 953 行 · 未承接 → PS-20
@@ -2495,17 +2504,17 @@
 - [ ] **PS-05** `src/gateway/client/InProcessGateway.ts` — 1517 行 · sweep 后处置（本轮容量外，2026-10-12 登记）
 - [ ] **PS-06** `ui/server/routes/git.js` — 1506 行 · sweep 后处置（本轮容量外，2026-10-12 登记）
 - [ ] **PS-07** `src/adapters/channel/weixin/WeixinChannel.ts` — 1496 行 · sweep 后处置（本轮容量外，2026-10-12 登记）
-- [ ] **PS-08** `src/adapters/channel/feishu/FeishuChannel.ts` — 1336 行 · sweep 后处置（本轮容量外，2026-10-12 登记）
+- [ ] **PS-08** `src/adapters/channel/feishu/FeishuChannel.ts` — 1389 行 · sweep 后处置（本轮容量外，2026-10-12 登记）
 - [ ] **PS-09** `ui/src/components/chat-v2/processGrouping.ts` — 1293 行 · sweep 后处置（本轮容量外，2026-10-12 登记）
 - [ ] **PS-10** `ui/server/routes/config.js` — 1233 行 · sweep 后处置（本轮容量外，2026-10-12 登记）
 - [ ] **PS-11** `ui/server/routes/agent.js` — 1223 行 · sweep 后处置（本轮容量外，2026-10-12 登记）
-- [ ] **PS-12** `ui/server/routes/taskmaster.js` — 1178 行 · sweep 后处置（本轮容量外，2026-10-12 登记）
+- [ ] **PS-12** `ui/server/routes/taskmaster.js` — 1152 行 · sweep 后处置（本轮容量外，2026-10-12 登记）
 - [ ] **PS-13** `src/agent/loop/AgentLoop.ts` — 1149 行 · sweep 后处置（本轮容量外，2026-10-12 登记）
 - [ ] **PS-14** `ui/server/routes/config.test.js` — 1089 行 · sweep 后处置（本轮容量外，2026-10-12 登记）
 - [ ] **PS-15** `src/model/streaming/streamModel.ts` — 1084 行 · sweep 后处置（本轮容量外，2026-10-12 登记）
 - [ ] **PS-16** `ui/server/routes/commands.js` — 1081 行 · sweep 后处置（本轮容量外，2026-10-12 登记）
 - [ ] **PS-17** `src/always-on/runtime/DiscoveryFire.ts` — 1078 行 · sweep 后处置（本轮容量外，2026-10-12 登记）
-- [ ] **PS-18** `src/adapters/channel/protocol/ImLiveReplyController.ts` — 1016 行 · sweep 后处置（本轮容量外，2026-10-12 登记）
+- [ ] **PS-18** `src/adapters/channel/protocol/ImLiveReplyController.ts` — 1255 行 · sweep 后处置（本轮容量外，2026-10-12 登记）
 - [ ] **PS-19** `src/gateway/protocol/types.ts` — 994 行 · sweep 后处置（本轮容量外，2026-10-12 登记）
 - [ ] **PS-20** `src/context/DefaultContextRuntime.ts` — 953 行 · sweep 后处置（本轮容量外，2026-10-12 登记）
 - [ ] **PS-21** `src/pilot/config/loadPilotConfig.ts` — 921 行 · sweep 后处置（本轮容量外，2026-10-12 登记）
@@ -2543,3 +2552,72 @@
 | `memory_*`（6 个） | 返回结构随 SQLite/向量索引实现演进 | memory 域立项 |
 
 专利域 10 个工具已补真实 schema（#713 验收），不在此表。
+
+---
+
+## 39. 2026-10-31 Brooks-Lint 技术债务评估登记
+
+> 来源：Brooks-Lint Tech Debt Assessment（全仓六类衰减风险扫描）。本节登记此前账本未覆盖的新发现，并把扫描中发现的账本状态滞后项回填到对应条目（见 §0 TD-GOD-001 / TD-BOUND-001 / TD-BOUND-003 / TD-TYPE-002 的 2026-10-31 复核行）。跟踪 issue：#806–#815。
+
+### 39.1 变更传播（R2）
+
+- **TD-R2-001** · `AgentLoop.ts` 扇出 36 个模块（全仓最高），主回路编排职责过重
+  - 类别：R2 · 严重级：P2 · 工作量：M · 状态：new · 跟踪 issue：**#809**
+  - 位置：`src/agent/loop/AgentLoop.ts`（1150 行，36 imports）；次高 `DefaultContextRuntime.ts`（24）、`createAgentSession.ts`（22）
+  - 影响：任何子系统变更（工具协议、模型流式、权限、压缩）都可能牵动 AgentLoop，成为合并冲突热点和回归风险集中点。
+  - 建议：将模型请求构造、错误恢复、压缩触发等横向关注点提取为独立 turn-phase 处理器，AgentLoop 仅保留编排骨架。
+  - 最后复核：2026-10-31
+
+### 39.2 知识重复（R3）
+
+- **TD-R3-001** · 6 个 IM 通道适配器并行复制「新会话创建」确认流程与文案
+  - 类别：R3 · 严重级：P2 · 工作量：M · 状态：new · 跟踪 issue：**#810**
+  - 位置：`FeishuChannel.ts:555` · `WeComChannel.ts:747` · `WeixinChannel.ts:515` · `QQChannel.ts:175` · `ApiServerChannel.ts:293` · `ChannelCommandRegistry.ts:372`（「已创建新会话。」六处重复）；`if (confirmation) await this.sendReply(...)` 模式在 wecom/weixin/qq 各重复 2 次
+  - 影响：修改新会话确认流程需同步 6 处；文案变更易遗漏；新增通道复制粘贴整套模板。
+  - 建议：将确认逻辑上收至 `ChannelCommandRegistry`（已有部分复用），通道适配器只实现 `sendReply` 原语。
+  - 关联：与 TD-ADAPTERS-N01（dispatch/submitTurn 循环重复，已 done）互补——本条聚焦新会话创建的确认文案与流程。
+  - 最后复核：2026-10-31
+
+- **TD-R3-002** · 配置解析辅助函数（positiveInteger/positiveNumber/nonEmptyString）多处重复实现
+  - 类别：R3 · 严重级：P3 · 工作量：S · 状态：new · 跟踪 issue：**#811**
+  - 位置：`positiveInteger` 在 `src/always-on/config/parseAlwaysOnConfig.ts`、`src/cron/config/parseCronConfig.ts`、`src/tool/builtin/filesystem/syntaxDiagnostics.ts` 三处独立定义；`positiveNumber` 在 `compactBudget.ts`/`sessionTokenUsage.ts`/`parseAlwaysOnConfig.ts` 多处重复；`nonEmptyString` 在 `parseCronConfig.ts` 独有
+  - 影响：配置校验语义可能漂移；新增配置模块时复制粘贴。
+  - 建议：提取共享 `src/shared/config-validators.ts`。
+  - 最后复核：2026-10-31
+
+### 39.3 领域模型失真（R6）
+
+- **TD-R6-001** · 领域模型贫血（248 个 interface 零方法）+ sessionKey/sessionId 命名漂移
+  - 类别：R6 · 严重级：P2 · 工作量：M · 状态：new · 跟踪 issue：**#812**
+  - 位置：`src/` 下 248 个 `export interface` 中 0 个含方法声明；`sessionKey` 出现 924 次、`sessionId` 出现 793 次，同一概念两个名字
+  - 影响：领域不变量只能靠 service 层约定；跨模块传递会话标识时需在两套命名间转换，增加传参错误风险。
+  - 建议：对核心聚合（Session/Turn/ToolResult）识别不变量并将状态转换方法收回归属类型；选定 sessionId/sessionKey 规范名，在 gateway 协议层固定命名并逐步迁移。
+  - 最后复核：2026-10-31
+
+### 39.4 依赖混乱 / 测试（R5）
+
+- **TD-R5-001** · 4 个核心模块零测试覆盖（always-on / extension / literature / pilot）
+  - 类别：R5/E · 严重级：P2 · 工作量：M · 状态：new · 跟踪 issue：**#813**
+  - 位置：`src/always-on`（常驻后台任务，高风险）、`src/extension`（插件系统，高风险）、`src/literature`、`src/pilot`（配置解析，回归风险高）
+  - 影响：always-on 常驻任务无测试，故障只能线上发现；pilot 配置解析无单测，配置回归风险高；extension 插件加载无契约测试。
+  - 建议：优先为 always-on 的 `parseAlwaysOnConfig.ts` 和 pilot 的 `loadPilotConfig.ts` 补充单元测试（纯函数，易测）；extension 插件加载逻辑加契约测试。
+  - 关联：TD-TEST-001（主链路缺单测）、TD-TEST-002（极薄模块）——本条聚焦完全零测试的模块。
+  - 最后复核：2026-10-31
+
+### 39.5 偶然复杂性（R4）
+
+- **TD-R4-001** · 7 处 `@deprecated` 迁移残留 + 11 处 TODO 无追踪机制
+  - 类别：R4 · 严重级：P3 · 工作量：S · 状态：new · 跟踪 issue：**#815**
+  - 位置：`@deprecated` 7 处（`pilot/paths.ts`、`always-on/protocol/types.ts` 多处、`always-on/web/DiscoveryPlanStatus.ts`、`always-on/workspace/GitWorktreeProvider.ts`、`tool/builtin/agent.ts`）；TODO 11 处（always-on 4、tests 4、ui/src 2、ui/server 1）
+  - 影响：废弃代码增加阅读噪音；TODO 无 issue 关联易被遗忘。
+  - 建议：每个 `@deprecated` 设定删除截止版本号并在 CHANGELOG 跟踪；TODO 关联 issue 编号。
+  - 最后复核：2026-10-31
+
+### 39.6 已回填的账本条目（状态滞后更正）
+
+| 账本条目 | 原声明 | 实测（2026-10-31） | 跟踪 issue |
+|---|---|---|---|
+| TD-GOD-001 | useChatComposerState 1433 等 | 已由 #646 消解；当前 Top 为 FilesV2 832 等 | #806 |
+| TD-BOUND-003 | SCC 3→0 | 原 3 组 SCC 已消，但 permission↔tool 运行时循环仍在（58 链） | #807 |
+| TD-TYPE-002 | as never 43→0、as unknown as 20→2 | as never 仍 11（skill_* 分发 8 处）；as unknown as 29 | #808 |
+| TD-BOUND-001 | 14 处 | 15 处 | #814 |
