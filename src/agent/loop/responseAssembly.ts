@@ -63,8 +63,8 @@ export type SyntheticPromptOutcome =
   | { type: "completed"; result: AgentTurnResult; status?: AgentStatusMessage };
 
 /**
- * 合成提示续跑（含 LargeFileRepair 的 `config.maxOutputTokens` 抬升，因此
- * 实现留在 AgentLoop）：本模块只按此窄接口调用。
+ * 合成提示续跑（含 LargeFileRepair 的 `config.maxOutputTokens` 抬升，实现见
+ * `phases/syntheticPrompt.ts`）：本模块只按此窄接口调用。
  */
 export type SyntheticPromptContinuer = (
   state: TurnRuntimeState,

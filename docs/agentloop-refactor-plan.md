@@ -1,7 +1,7 @@
 # AgentLoop 拆解专项实施文档
 
 - 创建日期：2026-08-14
-- 状态：**轮次 1–8 完成**——`AgentLoop.ts` 2433 → 约 1.1 千行（表内各轮次的「→ N 行」是当时的快照；**当前行数以 `docs/technical-debt/metrics.md` 为准**，勿在文档写死），issue #147 已结清（收口判据见 `docs/notes/implemented/2026-09-14-agentloop-decomposition-closure.md`）
+- 状态：**轮次 1–9 完成**（轮次 9：阶段方法迁入 `phases/`，见 §11）——`AgentLoop.ts` 从 2433 行降到「只剩阶段编排」，阶段实现已全部外置（表内各轮次的「→ N 行」是当时的快照；**当前行数以 `docs/technical-debt/metrics.md` 为准**，勿在文档写死）；issue #147 已结清（收口判据见 `docs/notes/implemented/2026-09-14-agentloop-decomposition-closure.md`），issue #809 的阶段面收口见 `docs/notes/implemented/2026-11-07-agentloop-phase-extraction.md`
 - 前置：阶段一/阶段二（`docs/deepseek-harness-phase1-plan.md` / `phase2-plan.md`）
 
 ---
@@ -208,3 +208,36 @@
 ### 10.2 收口（issue #147 结清）
 
 轮次 8 之后 `AgentLoop.ts` 只剩主循环阶段编排与其编排用辅助（无 200+ 行的私有子系统方法），`createLocalGateway.ts` 448 行已达 P4a 的 ≤600 验收线——**停在 1133 行是设计使然**（继续切阶段方法属"改流程"，会把阶段间的顺序契约从"读一个类"变成"跨文件追调用链"）。判据、放弃过的替代方案与代价见 `docs/notes/implemented/2026-09-14-agentloop-decomposition-closure.md`。P4c（渠道类切分）不属本 issue 的债务，方向由 #149 与本文档 §3 机会型清单承担。
+
+> **2026-11-07 修正**：上面「继续切阶段方法属改流程」的判断已被**轮次 9** 修正——`turnExit.ts` 的 `TurnStepContinue | TurnStepReturn` 哨兵契约落地后，阶段方法可以逐字搬迁为自由函数而不改流程（原文保留，作为当时的判断记录）。现状、判据与代价见 §11 与 `docs/notes/implemented/2026-11-07-agentloop-phase-extraction.md`。
+
+---
+
+## 11. 轮次 9：阶段方法迁入 `phases/`（已完成，2026-11-07，issue #809）
+
+轮次 4 把 `run()` 切成了阶段方法，但阶段实现仍留在类体里：6 个 `private async *` generator（`runTurnGuards` / `applySteeredMessages` / `prepareModelCall` / `streamModelResponse` / `handleCircuitBreaker` / `finishTurn`）+ 1 个 `private async continueWithSyntheticPrompt`。它们的入参是 `this`，单测必须拼出整台 loop；issue #809 挂在 `AgentLoop.ts` 上的 34 条 import 也大多由它们带来。
+
+轮次 9 把这 7 个函数整体外迁到 `src/agent/loop/phases/`，形态与 `loop/` 既有 seam 一致（`export type XxxDeps` + `export async function*`）：
+
+| 模块 | 行数 | 对应原类内方法 | 职责 |
+|---|---|---|---|
+| `phases/turnGuards.ts` | 89 | `runTurnGuards` | 取消检查 → doomLoop 致命状态 → PreStep 生命周期 |
+| `phases/steering.ts` | 46 | `applySteeredMessages` | 模型调用边界 drain 插话邮箱、落库、广播 `steer_applied` |
+| `phases/modelCall.ts` | 161 | `prepareModelCall` | pre-routing 压缩 → 请求装配 → 生命周期 → 路由 → post-routing 压缩 → token caps → `context_budget` |
+| `phases/streamResponse.ts` | 131 | `streamModelResponse` | 请求头快照 → 上下文快照 → 逐事件喂 assembler →（可选）派发点对拍 → 异常/取消收尾 |
+| `phases/circuitBreaker.ts` | 123 | `handleCircuitBreaker` | invalid_tool_input 指纹熔断（待修优先 / 宽限 / 终止 / 计数复位） |
+| `phases/finishTurn.ts` | 79 | `finishTurn` | 结构化输出即停 → maxTurns → `turn_continued` |
+| `phases/syntheticPrompt.ts` | 91 | `continueWithSyntheticPrompt` | 合成提示续跑（剥离 / transient 提示 / 抬升 `maxOutputTokens` / `stop`） |
+
+**结果**：`AgentLoop.ts` 783 → **290 行**，import 34 → **27**；类体只剩构造器接线、`run()` 顺序编排、`snapshotFileState`、`applyPermissionOverrides`、`applyRunModeOverride`、`now`。`phases/` 合计 720 行，无新增逻辑（逐 token 对照）。
+
+**判据（与 §8.3 的分工）**：
+
+- **阶段函数进 `phases/`**——回答「一轮 turn 的第 N 步做什么」，入参 `(deps, state, input)`，出参 `TurnStepContinue | TurnStepReturn`；
+- **恢复 / 装配 seam 仍平铺在 `loop/`**——`modelErrorRecovery` / `responseAssembly` / `turnExit` / `recoveryStrategies` / `modelRequest` / `compactionExecutor` 是被多个阶段共用的处置链或执行器，不是「第 N 步」；
+- **`phases/` 内禁止 import `AgentLoop.ts`**——阶段只能经 deps 取能力（允许 `import type { AgentLoopInput }` 这类协议类型）；
+- **导入深度**：`phases/` 内引用 `loop/` 兄弟 seam 是 `../x.js`，跨层是 `../../x.js` / `../../../x.js`；`loop/` 其余文件不动。
+
+**§8.3 的读法**：那张表的「段范围（原行号）」是轮次 4 的快照，现已不代表当前文件布局；`runTurnGuards` / `prepareModelCall` / `streamModelResponse` / `handleCircuitBreaker` / `finishTurn` 五行对应的实现分别在 `phases/` 同名文件，`applySteeredMessages` 在 `phases/steering.ts`，`assembleAndRecover` 在轮次 7 已迁 `responseAssembly.ts`，`handleModelError` 在轮次 6 已迁 `modelErrorRecovery.ts`。
+
+**验证**：`tsc --noEmit` 0 error、480 项 agent 测试（含 274 项 `tests/agent/loop/`）通过、`pnpm check:runtime-cycles` green——均由开发位/审查位执行；事件矩阵需 `pnpm gen:event-matrix` 回填（`AgentLoop.ts` 的若干 emit 点已随迁）。决策背景、放弃过的三条方案与代价见 `docs/notes/implemented/2026-11-07-agentloop-phase-extraction.md`。
