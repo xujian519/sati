@@ -1,6 +1,6 @@
 # Sati × PilotDeck 引入方案（2026-11-07 批次）
 
-Status: Implemented（2026-11-07；M1–M5 代码已完成，分支已按里程碑拆分，PR 待开）
+Status: 已合并（2026-11-07；M1–M5 经 #834–#838 顺序 squash 合并至 `main`，`main` CI 绿）
 
 范围基线：上游 **v2026.10.20**（`96226d8`，2026-10-20）→ **v2026.11.07**（`60dfc6b`，2026-11-07）。
 上一份引入方案是 `docs/pilotdeck-2026-10-22-upstream-port-plan.md`，其评估时点止于 v2026.10.20。
@@ -366,11 +366,11 @@ Status: Implemented（2026-11-07；M1–M5 代码已完成，分支已按里程�
 
 ### 4.6 发布前
 
-- [ ] 所有里程碑 PR 合并到 `main`，CI 全绿。
-- [ ] `pnpm check` + 全量 `pnpm test` 在 `main` 上复跑。
-- [ ] 回滚点明确：每个 PR 可独立 revert；M1 的权限复核不依赖后续里程碑。
-- [ ] 更新 `CHANGELOG.md`（若本批进入版本发布）。
-- [ ] 计划状态改为 `Implemented`，并在 `docs/notes/implemented/` 留结论。
+- [x] 所有里程碑 PR 合并到 `main`，CI 全绿（#834–#838，`main` CI [run 42345810088](https://github.com/xujian519/sati/actions/runs/42345810088)）。
+- [x] `pnpm check` + 全量 `pnpm test` 在 `main` 上复跑（由 CI 的 Typecheck/Lint/Test 任务覆盖后端与 UI 全量套件）。
+- [x] 回滚点明确：每个 PR 可独立 revert；M1 的权限复核不依赖后续里程碑。
+- [ ] 更新 `CHANGELOG.md`（本批未进入版本发布，暂无适用条目）。
+- [x] 计划状态改为 `Implemented`，并在 `docs/notes/implemented/` 留结论（5 条里程碑决策记录）。
 
 ---
 
@@ -415,16 +415,12 @@ Status: Implemented（2026-11-07；M1–M5 代码已完成，分支已按里程�
 ## 8. 一页看板
 
 ```
-Now
-  M1 工具运行时硬化            [ ] 权限改写复核
-                              [ ] 并发安全复核
-                              [ ] 有界调度
-                              [ ] 测试 + 负控制
-  M2 上游 parity 小修          [ ] 8 项逐项
-Next
-  M3 上下文检查器              [ ] 快照/API/UI
-  M4 Python 运行时感知         [ ] 三态 + prompt
-  M5 按技能持久开关            [ ] 持久化 + UI
+Done（2026-11-07）
+  M1 工具运行时硬化            #834  权限改写复核 / 并发安全复核 / 有界调度
+  M2 上游 parity 小修          #835  8 项逐项
+  M3 上下文检查器              #836  快照 sidecar / API / UI
+  M4 Python 运行时感知         #837  三态 + prompt + 解释器配置
+  M5 按技能持久开关            #838  持久化 + prompt 过滤 + UI
 Later（需触发条件）
   全局搜索 / 系统通知 / Web 认证限流 / MCP 热更新 / 每文件租约
 不做
