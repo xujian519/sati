@@ -151,7 +151,11 @@
     "fieldBody": "初始正文（Markdown）",
     "bodyHint": "可选，之后可以在主视图里详细编辑。",
     "create": "创建技能",
-    "creating": "创建中…"
+    "creating": "创建中…",
+    "enable": "启用",
+    "disable": "禁用",
+    "enabledSuccess": "已启用",
+    "disabledSuccess": "已禁用"
   },
   "status": {
     "loading": "加载中...",

@@ -54,7 +54,7 @@
 | `src/cli/` | 46 | ✓ | CLI 入口与命令（sati.ts / satiServer.ts / createLocalGateway.ts） |
 | `src/context/` | 102 | ✓ | 上下文（压缩/预算/记忆/向量/workspace registerLeak） |
 | `src/cron/` | 18 | ✓ | 定时任务（config/protocol/runtime/storage/tool） |
-| `src/extension/` | 51 | ✓ | 插件系统（plugin.json、lifecycle hooks、skills、贡献点） |
+| `src/extension/` | 52 | ✓ | 插件系统（plugin.json、lifecycle hooks、skills、贡献点） |
 | `src/fs/` | 1 | — | 文件系统小工具（JSONL run 写入器） |
 | `src/gateway/` | 39 | ✓ | WebSocket 网关（protocol/server/client/approval） |
 | `src/knowledge/` | 63 | ✓ | 知识库（图谱/判例/法规/embeddings/wiki 卡片） |

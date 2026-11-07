@@ -30,6 +30,8 @@ import { ScopeSelector } from "./skills/shared/ScopeSelector";
 import type { NewModalCreated, Skill, SkillScope } from "./skills/shared/types";
 import { api } from "./skills/shared/api";
 import { ImportFromFolder } from "./skills/import/ImportFromFolder";
+import { SkillEnableSwitch } from "./skills/shared/SkillEnableSwitch";
+import { useSkillEnablement } from "./skills/shared/useSkillEnablement";
 
 type SkillsV2Props = {
   selectedProject: Project | null;
@@ -538,6 +540,13 @@ function SkillsList({
     [effectiveProjectPath, selectedSkill, refresh, flashToast, setActiveScope, t],
   );
 
+  const handleToggleSkill = useSkillEnablement({
+    projectPath: effectiveProjectPath,
+    refresh,
+    flashToast,
+    t,
+  });
+
   const moveTargets = useMemo((): { label: string; target: MoveTarget }[] => {
     const targets: { label: string; target: MoveTarget }[] = [];
     targets.push({ label: "User (global)", target: { scope: "user", projectPath: null } });
@@ -576,6 +585,7 @@ function SkillsList({
                 onSelect={onSelect}
                 onDelete={handleDeleteSkill}
                 onMove={handleMoveSkill}
+                onToggle={handleToggleSkill}
                 moveTargets={moveTargets}
                 currentProjectPath={effectiveProjectPath}
                 t={t}
@@ -589,6 +599,7 @@ function SkillsList({
                 onSelect={onSelect}
                 onDelete={handleDeleteSkill}
                 onMove={handleMoveSkill}
+                onToggle={handleToggleSkill}
                 moveTargets={moveTargets}
                 currentProjectPath={effectiveProjectPath}
                 t={t}
@@ -640,6 +651,7 @@ function ListSection({
   onSelect,
   onDelete,
   onMove,
+  onToggle,
   moveTargets,
   currentProjectPath,
   t,
@@ -650,6 +662,7 @@ function ListSection({
   onSelect: (s: Skill) => void;
   onDelete: (s: Skill) => void;
   onMove: (s: Skill, target: MoveTarget) => void;
+  onToggle: (s: Skill) => void;
   moveTargets: { label: string; target: MoveTarget }[];
   currentProjectPath: string | null;
   t: ReturnType<typeof useTranslation>["t"];
@@ -707,6 +720,7 @@ function ListSection({
       <ul className="space-y-0.5 px-2">
         {items.map(s => {
           const isActive = activeSlug === s.slug;
+          const isEnabled = s.enabled !== false;
           return (
             <li key={`${s.scope}:${s.slug}`} className="group relative">
               <button
@@ -714,7 +728,8 @@ function ListSection({
                 onClick={() => onSelect(s)}
                 onContextMenu={s.readonly ? undefined : e => handleContextMenu(e, s)}
                 className={cn(
-                  "block w-full truncate rounded-md px-2 py-1.5 pr-8 text-left text-[13px] transition-colors",
+                  "block w-full truncate rounded-md px-2 py-1.5 pr-14 text-left text-[13px] transition-colors",
+                  !isEnabled && "opacity-50",
                   isActive
                     ? "bg-neutral-100 text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100"
                     : "text-neutral-700 hover:bg-neutral-50 dark:text-neutral-300 dark:hover:bg-neutral-900/60",
@@ -750,6 +765,15 @@ function ListSection({
                   </div>
                 ) : null}
               </button>
+              <SkillEnableSwitch
+                enabled={isEnabled}
+                label={
+                  (isEnabled
+                    ? t("skillsTab.disable", { defaultValue: "Disable" })
+                    : t("skillsTab.enable", { defaultValue: "Enable" })) as string
+                }
+                onToggle={() => onToggle(s)}
+              />
               {!s.readonly ? (
                 <button
                   type="button"

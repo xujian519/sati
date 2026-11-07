@@ -7,11 +7,11 @@
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1200 / 209327 |
+| src TS 文件 / 行数 | 1201 / 209583 |
 | src JS 文件 | 0 |
-| tests 文件 | 708 |
-| ui/src 文件 / 行数 | 743 / 110082 |
-| ui/server 文件 / 行数 | 149 / 38871 |
+| tests 文件 | 710 |
+| ui/src 文件 / 行数 | 746 / 110286 |
+| ui/server 文件 / 行数 | 149 / 38945 |
 
 ## 指标口径
 
@@ -32,9 +32,9 @@
 | `as unknown as`（双重断言） | 29 | ui/src(21) · knowledge(5) · adapters(1) |
 | 裸 `console.*` | 6 | ui/server(6) |
 | 空 `catch {}` | 0 | — |
-| 无参 `catch {`（总计） | 708 | ui/server(157) · ui/src(126) · adapters(72) |
+| 无参 `catch {`（总计） | 712 | ui/server(158) · ui/src(126) · adapters(72) |
 | ↳ **无注释**（隐患类，目标） | **0** | — |
-| ↳ 已带意图注释 | 708 | — |
+| ↳ 已带意图注释 | 712 | — |
 | `TODO/HACK/FIXME/XXX` | 11 | always-on(4) · tests(4) · ui/src(2) |
 | 分层违规 `ui/server→src` | 15 | — |
 | 分层违规 `src→ui` | 0 | — |
@@ -91,7 +91,7 @@
 | `ui/server/routes/git.js` | 1523 |
 | `src/gateway/client/InProcessGateway.ts` | 1512 |
 | `src/adapters/channel/weixin/WeixinChannel.ts` | 1497 |
-| `ui/src/components/main-content-v2/SkillsV2.tsx` | 1441 |
+| `ui/src/components/main-content-v2/SkillsV2.tsx` | 1465 |
 | `src/adapters/channel/feishu/FeishuChannel.ts` | 1389 |
 | `ui/src/components/main-content-v2/DashboardV2.tsx` | 1345 |
 | `ui/src/components/chat-v2/processGrouping.ts` | 1294 |
@@ -108,7 +108,7 @@
 | `ui/server/routes/commands.js` | 1082 |
 | `src/always-on/runtime/DiscoveryFire.ts` | 1079 |
 | `src/gateway/protocol/types.ts` | 995 |
-| `src/context/DefaultContextRuntime.ts` | 975 |
+| `src/context/DefaultContextRuntime.ts` | 987 |
 | `ui/src/components/main-content-v2/FilesV2.tsx` | 945 |
 | `src/pilot/config/loadPilotConfig.ts` | 941 |
 | `src/patent/figuregen/inkscape-renderer.ts` | 916 |
@@ -142,7 +142,7 @@
 | tool | 78 |
 | agent | 61 |
 | knowledge | 45 |
-| context | 40 |
+| context | 41 |
 | gateway | 34 |
 | model | 33 |
 | session | 29 |
@@ -150,8 +150,8 @@
 | router | 20 |
 | adapters | 18 |
 | always-on | 14 |
+| extension | 14 |
 | pilot | 14 |
-| extension | 13 |
 | mcp | 13 |
 | cron | 12 |
 | web | 11 |
@@ -171,7 +171,7 @@
 | lifecycle | 1 |
 | status | 1 |
 
-| **合计** | **680** |
+| **合计** | **682** |
 
 ## i18n en/zh-CN 对齐
 
@@ -181,7 +181,7 @@
 | auth | 23 | 23 | 0 | 0 |
 | chat | 393 | 393 | 0 | 0 |
 | codeEditor | 196 | 196 | 0 | 0 |
-| common | 446 | 446 | 0 | 0 |
+| common | 450 | 450 | 0 | 0 |
 | hookTrust | 19 | 19 | 0 | 0 |
 | kanban | 44 | 44 | 0 | 0 |
 | knowledgeDrafts | 10 | 10 | 0 | 0 |

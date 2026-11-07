@@ -4,6 +4,7 @@ import { basename, join, resolve } from "node:path";
 import { getPilotExtensionPaths } from "../../shared/paths/index.js";
 import { parseSkillFrontmatter } from "./frontmatter.js";
 import { isRoleFrontmatter, parseRoleConfig } from "./roleConfig.js";
+import { SkillPreferenceStore } from "./skillPreferences.js";
 import { validateFromDisk, validateFromManifest } from "./validation.js";
 import {
   TEMPLATE_MODES,
@@ -21,6 +22,7 @@ import {
   type SkillScanInput,
   type SkillScanResult,
   type SkillScope,
+  type SkillSetEnabledInput,
   type SkillSummary,
   type SkillTemplateMeta,
   type SkillValidateInput,
@@ -60,6 +62,8 @@ export type SkillManagerOptions = {
    * built-in and user-scope skills are visible, but project skills are not.
    */
   generalCwdPaths?: string[];
+  /** 技能开关存储；缺省读取 `~/.sati/skill-preferences.json`。 */
+  preferences?: SkillPreferenceStore;
 };
 
 /**
@@ -74,12 +78,14 @@ export class SkillManager {
   private readonly pilotHome: string;
   private readonly builtinSkillsRootPath: string | null;
   private readonly generalCwdPaths: string[];
+  private readonly preferences: SkillPreferenceStore;
 
   constructor(options: SkillManagerOptions) {
     this.pilotHome = resolve(options.pilotHome);
     this.builtinSkillsRootPath = options.builtinSkillsRoot ? resolve(options.builtinSkillsRoot) : null;
     const defaults = [this.pilotHome];
     this.generalCwdPaths = (options.generalCwdPaths ?? defaults).map(p => resolve(p));
+    this.preferences = options.preferences ?? new SkillPreferenceStore(this.pilotHome);
   }
 
   // -------------------------------------------------------------------
@@ -161,26 +167,57 @@ export class SkillManager {
     const userSlugs = new Set(userSkills.map(skill => skill.slug));
     const projectSlugs = new Set(projectSkills.map(skill => skill.slug));
 
+    this.preferences.refresh();
+    const withEnabled = (skill: SkillSummary): SkillSummary => ({
+      ...skill,
+      enabled: this.preferences.isEnabled(skill.slug, effectiveProject),
+    });
+    const filterEnabled = (items: SkillSummary[]): SkillSummary[] =>
+      input.enabledOnly ? items.filter(skill => skill.enabled) : items;
+
     return {
-      builtin: builtinSkills.map(skill => ({
-        ...skill,
-        ...(projectSlugs.has(skill.slug)
-          ? { overriddenBy: "project" as const }
-          : userSlugs.has(skill.slug)
-            ? { overriddenBy: "user" as const }
-            : {}),
-      })),
-      user: userSkills.map(skill => ({
-        ...skill,
-        ...(builtinSlugs.has(skill.slug) ? { overridesBuiltin: true } : {}),
-        ...(projectSlugs.has(skill.slug) ? { overriddenBy: "project" as const } : {}),
-      })),
-      project: projectSkills.map(skill => ({
-        ...skill,
-        ...(builtinSlugs.has(skill.slug) ? { overridesBuiltin: true } : {}),
-      })),
+      builtin: filterEnabled(
+        builtinSkills.map(skill =>
+          withEnabled({
+            ...skill,
+            ...(projectSlugs.has(skill.slug)
+              ? { overriddenBy: "project" as const }
+              : userSlugs.has(skill.slug)
+                ? { overriddenBy: "user" as const }
+                : {}),
+          }),
+        ),
+      ),
+      user: filterEnabled(
+        userSkills.map(skill =>
+          withEnabled({
+            ...skill,
+            ...(builtinSlugs.has(skill.slug) ? { overridesBuiltin: true } : {}),
+            ...(projectSlugs.has(skill.slug) ? { overriddenBy: "project" as const } : {}),
+          }),
+        ),
+      ),
+      project: filterEnabled(
+        projectSkills.map(skill =>
+          withEnabled({
+            ...skill,
+            ...(builtinSlugs.has(skill.slug) ? { overridesBuiltin: true } : {}),
+          }),
+        ),
+      ),
       projectPath: effectiveProject,
     };
+  }
+
+  /** 持久化启用/禁用；返回更新后的完整偏好快照。 */
+  setEnabled(input: SkillSetEnabledInput): { ok: true; enabled: boolean } {
+    this.preferences.setEnabled({
+      scope: input.scope,
+      slug: input.slug,
+      projectKey: input.scope === "project" ? input.projectKey : null,
+      enabled: input.enabled,
+    });
+    return { ok: true, enabled: input.enabled };
   }
 
   async read(input: SkillAddressInput): Promise<SkillReadResult> {

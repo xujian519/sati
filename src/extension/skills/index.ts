@@ -30,6 +30,7 @@ export type {
   SkillScanInput,
   SkillScanResult,
   SkillScope,
+  SkillSetEnabledInput,
   SkillSummary,
   SkillTemplateMeta,
   SkillValidateInput,
@@ -40,3 +41,11 @@ export type {
   SkillsListInput,
   SkillsListResult,
 } from "./types.js";
+export {
+  SkillPreferenceStore,
+  emptySkillPreferences,
+  skillPreferencesPath,
+  type SetSkillEnabledInput,
+  type SkillPreferenceScope,
+  type SkillPreferencesFile,
+} from "./skillPreferences.js";

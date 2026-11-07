@@ -45,6 +45,7 @@ import { createAgentProjectSessionStorage } from "../session/index.js";
 import { FileHistoryStore } from "../session/filesystem/FileHistoryStore.js";
 import type { ResumeSessionDependencyExtension } from "../session/resume/resumeAgentSession.js";
 import { createPlanFileManager, type ToolRegistry } from "../tool/index.js";
+import { SkillPreferenceStore } from "../extension/skills/index.js";
 import { brandEnv, ENV_KEY } from "../env.js";
 import { getRecallLogDbPath } from "../shared/paths/pilotPaths.js";
 import { createAutoElicitationChannel } from "./gatewaySupport.js";
@@ -207,6 +208,7 @@ export function buildSessionDependencies(deps: SessionDependenciesInput): Sessio
       extension,
       projectRoot,
       pythonRuntime,
+      skillPreferences: new SkillPreferenceStore(deps.pilotHome),
       patentDomainEnabled: runtime.patentDomainEnabled,
       memoryResolver,
       // 召回日志（WS1）：Sati 自有状态库（env SATI_RECALL_LOG_DB 可覆盖），
