@@ -52,10 +52,10 @@ test("ccr-subagent-model tag 大小写不敏感匹配", () => {
   assert.equal(result.modelHint, "claude-sonnet");
 });
 
-test("工具列表不含 agent/task 类工具时判定 missingAgentTool", () => {
+test("工具列表不含 agent/task 类工具时只记诊断，不把主 agent 判成子代理", () => {
   const result = detectSubagent([userMessage("普通请求")], [tool("read_file"), tool("search")], true);
   assert.equal(result.missingAgentTool, true);
-  assert.equal(result.isSubagent, true);
+  assert.equal(result.isSubagent, false);
 });
 
 test("launch_agent 风格工具名也能识别为 agent 工具", () => {
