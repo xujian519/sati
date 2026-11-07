@@ -1,6 +1,7 @@
 import type { CanonicalUsage } from "../../model/index.js";
 import type { AgentTranscriptEntry } from "../../session/transcript/TranscriptEntry.js";
 import { buildCompactTokenBudget } from "../../context/budget/compactBudget.js";
+import { asPositiveNumber } from "../../shared/configValidators.js";
 
 /**
  * Token-usage recovery from a session transcript: given the durable entries,
@@ -45,11 +46,11 @@ export function tokenUsageFromTranscript(
   if (!latestTurn) {
     return undefined;
   }
-  const inputTokens = positiveNumber(latestTurn.inputTokens);
-  const outputTokens = positiveNumber(latestTurn.outputTokens) ?? 0;
-  const cacheReadTokens = positiveNumber(latestTurn.cacheReadTokens) ?? 0;
-  const cacheWriteTokens = positiveNumber(latestTurn.cacheWriteTokens) ?? 0;
-  const totalTokens = positiveNumber(latestTurn.totalTokens);
+  const inputTokens = asPositiveNumber(latestTurn.inputTokens);
+  const outputTokens = asPositiveNumber(latestTurn.outputTokens) ?? 0;
+  const cacheReadTokens = asPositiveNumber(latestTurn.cacheReadTokens) ?? 0;
+  const cacheWriteTokens = asPositiveNumber(latestTurn.cacheWriteTokens) ?? 0;
+  const totalTokens = asPositiveNumber(latestTurn.totalTokens);
   const used =
     inputTokens !== undefined
       ? Math.ceil(inputTokens + cacheReadTokens + cacheWriteTokens)
@@ -59,8 +60,8 @@ export function tokenUsageFromTranscript(
   if (used === undefined || used <= 0) {
     return undefined;
   }
-  const total = positiveNumber(options.maxContextTokens) ?? DEFAULT_HISTORY_CONTEXT_TOKENS;
-  const reservedOutputTokens = positiveNumber(options.maxOutputTokens) ?? 0;
+  const total = asPositiveNumber(options.maxContextTokens) ?? DEFAULT_HISTORY_CONTEXT_TOKENS;
+  const reservedOutputTokens = asPositiveNumber(options.maxOutputTokens) ?? 0;
   const effectiveTotal = Math.max(1, total - reservedOutputTokens);
   return {
     used,
@@ -89,9 +90,9 @@ function latestContextBudget(entries: AgentTranscriptEntry[]): IndexedTokenUsage
     if (!detail) {
       continue;
     }
-    const used = positiveNumber(detail.displayUsed) ?? positiveNumber(detail.used);
-    const total = positiveNumber(detail.total);
-    const effectiveTotal = positiveNumber(detail.effectiveTotal) ?? total;
+    const used = asPositiveNumber(detail.displayUsed) ?? asPositiveNumber(detail.used);
+    const total = asPositiveNumber(detail.total);
+    const effectiveTotal = asPositiveNumber(detail.effectiveTotal) ?? total;
     if (used === undefined || total === undefined || effectiveTotal === undefined) {
       continue;
     }
@@ -99,16 +100,18 @@ function latestContextBudget(entries: AgentTranscriptEntry[]): IndexedTokenUsage
       index,
       usage: {
         used,
-        ...(positiveNumber(detail.displayUsed) !== undefined
-          ? { displayUsed: positiveNumber(detail.displayUsed) }
+        ...(asPositiveNumber(detail.displayUsed) !== undefined
+          ? { displayUsed: asPositiveNumber(detail.displayUsed) }
           : {}),
-        ...(positiveNumber(detail.budgetUsed) !== undefined ? { budgetUsed: positiveNumber(detail.budgetUsed) } : {}),
-        ...(positiveNumber(detail.fixedOverheadTokens) !== undefined
-          ? { fixedOverheadTokens: positiveNumber(detail.fixedOverheadTokens) }
+        ...(asPositiveNumber(detail.budgetUsed) !== undefined
+          ? { budgetUsed: asPositiveNumber(detail.budgetUsed) }
+          : {}),
+        ...(asPositiveNumber(detail.fixedOverheadTokens) !== undefined
+          ? { fixedOverheadTokens: asPositiveNumber(detail.fixedOverheadTokens) }
           : {}),
         total,
         effectiveTotal,
-        reservedOutputTokens: positiveNumber(detail.reservedOutputTokens) ?? 0,
+        reservedOutputTokens: asPositiveNumber(detail.reservedOutputTokens) ?? 0,
         ...(typeof detail.state === "string" ? { state: detail.state } : {}),
         ...(typeof detail.ratio === "number" && Number.isFinite(detail.ratio) ? { ratio: detail.ratio } : {}),
         source: "history",
@@ -131,16 +134,18 @@ function latestCompactBudget(entries: AgentTranscriptEntry[]): IndexedCompactBud
       continue;
     }
     const metadata = entry.boundary.compactMetadata;
-    const postTokens = positiveNumber(metadata.postTokens);
+    const postTokens = asPositiveNumber(metadata.postTokens);
     if (postTokens === undefined) {
       continue;
     }
     return {
       index,
       postTokens,
-      ...(positiveNumber(metadata.preTokens) !== undefined ? { preTokens: positiveNumber(metadata.preTokens) } : {}),
-      ...(positiveNumber(metadata.messagesSummarized) !== undefined
-        ? { messagesSummarized: positiveNumber(metadata.messagesSummarized) }
+      ...(asPositiveNumber(metadata.preTokens) !== undefined
+        ? { preTokens: asPositiveNumber(metadata.preTokens) }
+        : {}),
+      ...(asPositiveNumber(metadata.messagesSummarized) !== undefined
+        ? { messagesSummarized: asPositiveNumber(metadata.messagesSummarized) }
         : {}),
     };
   }
@@ -152,8 +157,8 @@ function tokenUsageFromCompactBoundary(
   previousBudget: Record<string, unknown> | undefined,
   options: HistoryTokenUsageOptions,
 ): Record<string, unknown> {
-  const fallbackTotal = positiveNumber(options.maxContextTokens) ?? DEFAULT_HISTORY_CONTEXT_TOKENS;
-  const fallbackReserved = positiveNumber(options.maxOutputTokens) ?? 0;
+  const fallbackTotal = asPositiveNumber(options.maxContextTokens) ?? DEFAULT_HISTORY_CONTEXT_TOKENS;
+  const fallbackReserved = asPositiveNumber(options.maxOutputTokens) ?? 0;
   const budget = buildCompactTokenBudget(
     {
       postTokens: compact.postTokens,
@@ -186,16 +191,12 @@ function latestTurnUsage(entries: AgentTranscriptEntry[]): CanonicalUsage | unde
 function hasPositiveUsage(usage: CanonicalUsage | undefined): boolean {
   if (!usage) return false;
   return (
-    positiveNumber(usage.inputTokens) !== undefined ||
-    positiveNumber(usage.outputTokens) !== undefined ||
-    positiveNumber(usage.cacheReadTokens) !== undefined ||
-    positiveNumber(usage.cacheWriteTokens) !== undefined ||
-    positiveNumber(usage.totalTokens) !== undefined
+    asPositiveNumber(usage.inputTokens) !== undefined ||
+    asPositiveNumber(usage.outputTokens) !== undefined ||
+    asPositiveNumber(usage.cacheReadTokens) !== undefined ||
+    asPositiveNumber(usage.cacheWriteTokens) !== undefined ||
+    asPositiveNumber(usage.totalTokens) !== undefined
   );
-}
-
-function positiveNumber(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

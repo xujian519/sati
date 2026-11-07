@@ -75,7 +75,7 @@ export type AgentToolInput = {
   description: string;
   prompt: string;
   subagent_type?: string;
-  /** @deprecated camelCase alias retained for backwards compatibility. */
+  /** @deprecated camelCase alias retained for backwards compatibility. 删除跟踪 #815（目标 v0.5.0，需同 PR 重录 llm-replay）。 */
   subagentType?: string;
   /** 子代理内部最大轮数（预算控制）。 */
   max_turns?: number;

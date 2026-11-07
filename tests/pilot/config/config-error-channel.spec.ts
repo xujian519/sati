@@ -18,7 +18,7 @@ import test from "node:test";
 import { configFailureDiagnostics, loadPilotConfig } from "../../../src/pilot/config/loadPilotConfig.js";
 import { createPilotConfigStoreSync } from "../../../src/pilot/config/PilotConfigStore.js";
 import { PilotConfigError, type PilotConfigDiagnostic } from "../../../src/pilot/config/types.js";
-import { PILOT_CONFIG_FILE_NAME } from "../../../src/pilot/paths.js";
+import { PILOT_CONFIG_FILE_NAME } from "../../../src/shared/paths/index.js";
 
 const AGENT_HEAD = ["schemaVersion: 1", "agent:", "  model: deepseek/deepseek-chat"];
 const MODEL_TAIL = [

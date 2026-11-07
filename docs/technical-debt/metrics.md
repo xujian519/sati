@@ -7,10 +7,10 @@
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1201 / 209583 |
+| src TS 文件 / 行数 | 1209 / 211481 |
 | src JS 文件 | 0 |
-| tests 文件 | 710 |
-| ui/src 文件 / 行数 | 746 / 110286 |
+| tests 文件 | 715 |
+| ui/src 文件 / 行数 | 801 / 112332 |
 | ui/server 文件 / 行数 | 149 / 38945 |
 
 ## 指标口径
@@ -32,9 +32,9 @@
 | `as unknown as`（双重断言） | 29 | ui/src(21) · knowledge(5) · adapters(1) |
 | 裸 `console.*` | 6 | ui/server(6) |
 | 空 `catch {}` | 0 | — |
-| 无参 `catch {`（总计） | 712 | ui/server(158) · ui/src(126) · adapters(72) |
+| 无参 `catch {`（总计） | 715 | ui/server(158) · ui/src(126) · adapters(72) |
 | ↳ **无注释**（隐患类，目标） | **0** | — |
-| ↳ 已带意图注释 | 712 | — |
+| ↳ 已带意图注释 | 715 | — |
 | `TODO/HACK/FIXME/XXX` | 11 | always-on(4) · tests(4) · ui/src(2) |
 | 分层违规 `ui/server→src` | 15 | — |
 | 分层违规 `src→ui` | 0 | — |
@@ -46,11 +46,6 @@
 | 文件 | 函数 | 行 | 类型 |
 |---|---|---|---|
 | `ui/src/components/chat-v2/MessagesPaneV2.render.test.tsx` | `(anonymous)` | 943 | arrow |
-| `ui/src/components/main-content-v2/FilesV2.tsx` | `FilesV2` | 832 | function |
-| `ui/src/components/git-panel/hooks/useGitPanelController.ts` | `useGitPanelController` | 704 | function |
-| `ui/src/components/main-content-v2/skills/import/ImportFromFolder.tsx` | `ImportFromFolder` | 688 | function |
-| `ui/src/components/onboarding/view/subcomponents/LlmConfigurationStep.tsx` | `LlmConfigurationStep` | 633 | function |
-| `ui/src/components/app-shell/AppShellV2.tsx` | `AppShellV2` | 632 | function |
 | `ui/src/components/main-content/view/MainContent.tsx` | `SplitBody` | 573 | function |
 | `ui/src/components/main-content-v2/CronV2.tsx` | `CronFormView` | 476 | function |
 | `ui/src/components/settings/view/modelPool/components/ProviderCard.tsx` | `ProviderCard` | 447 | function |
@@ -99,7 +94,6 @@
 | `ui/src/components/chat-v2/MessagesPaneV2.render.test.tsx` | 1235 |
 | `ui/server/routes/config.js` | 1234 |
 | `ui/server/routes/agent.js` | 1228 |
-| `src/agent/loop/AgentLoop.ts` | 1152 |
 | `ui/server/routes/taskmaster.js` | 1152 |
 | `ui/src/components/main-content-v2/CronV2.tsx` | 1130 |
 | `ui/src/components/main-content/view/MainContent.tsx` | 1111 |
@@ -109,12 +103,13 @@
 | `src/always-on/runtime/DiscoveryFire.ts` | 1079 |
 | `src/gateway/protocol/types.ts` | 995 |
 | `src/context/DefaultContextRuntime.ts` | 987 |
-| `ui/src/components/main-content-v2/FilesV2.tsx` | 945 |
 | `src/pilot/config/loadPilotConfig.ts` | 941 |
 | `src/patent/figuregen/inkscape-renderer.ts` | 916 |
-| `ui/src/components/app-shell/AppShellV2.tsx` | 897 |
 | `ui/src/components/chat/tools/configs/toolConfigs.ts` | 864 |
 | `ui/server/services/satiConfig.js` | 858 |
+| `src/tool/builtin/kanban.ts` | 816 |
+| `ui/server/services/spreadsheetPreview.js` | 793 |
+| `ui/src/types/contentReference.ts` | 792 |
 
 ## vendored 子包（单列，不计入上述规模与排名）
 
@@ -138,7 +133,7 @@
 
 | 模块 | 测试文件 |
 |---|---|
-| patent | 178 |
+| patent | 182 |
 | tool | 78 |
 | agent | 61 |
 | knowledge | 45 |
@@ -158,8 +153,8 @@
 | rule | 10 |
 | literature | 8 |
 | permission | 5 |
+| shared | 4 |
 | test-support | 4 |
-| shared | 3 |
 | telemetry | 3 |
 | board | 2 |
 | methodology | 2 |
@@ -171,7 +166,7 @@
 | lifecycle | 1 |
 | status | 1 |
 
-| **合计** | **682** |
+| **合计** | **687** |
 
 ## i18n en/zh-CN 对齐
 

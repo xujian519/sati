@@ -1,7 +1,9 @@
 /**
- * Plan-mode tool constraints enforced by ToolRuntime. Plan mode keeps the
- * model-visible non-plan tool catalog stable for prompt-cache reuse; this
- * runtime boundary is the security check.
+ * Plan-mode 工具约束与违规文案。
+ *
+ * 放在 shared：tool 执行前置检查与 permission 判定都需要它。此前它位于
+ * `src/tool/planModeConstraints.ts`，使 `permission → tool` 产生运行时值边，
+ * 与 tool builtin 反向引 permission 形成循环（#807）。这里不依赖任何一侧。
  */
 
 /**

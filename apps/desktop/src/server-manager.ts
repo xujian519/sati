@@ -162,7 +162,7 @@ function bundledBinary(binDir: string, name: string): string {
 }
 
 /**
- * Sati 数据目录。与 main.ts / onboarding-window.ts / src/pilot/paths.ts 一致：
+ * Sati 数据目录。与 main.ts / onboarding-window.ts / src/shared/paths/pilotPaths.ts 一致：
  * 优先 SATI_HOME，缺省 ~/.sati。此前 desktop.server.log/.pid 硬编码 ~/.sati，
  * 在 SATI_HOME 设置时与主进程路径分歧。
  */

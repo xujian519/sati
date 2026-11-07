@@ -2,6 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { CITATION_CHECK_INPUT_DECLARATIONS } from "../../../src/patent/graph/domains/citation-check.js";
 import {
+  CLAIM_BREADTH_INPUT_DECLARATIONS,
+  anchorClaimFeatures,
+  buildClaimBreadthGraph,
+  extractClaimBreadthResult,
+  extractClaimFeatures,
+  splitClaims,
+} from "../../../src/patent/graph/domains/claim-breadth.js";
+import {
   ENABLEMENT_INPUT_DECLARATIONS,
   buildSpecContext,
   runSpecPrechecks,
@@ -365,6 +373,16 @@ test("buildSpecContext: 优先章节在前、预算内截断、无切片回退�
   assert.ok(ctx.length <= 8000 + 100, "预算内截断");
   const fallback = buildSpecContext({ text: "ABCDEFG" }, ["具体实施方式"], 5);
   assert.equal(fallback, "ABCDE");
+});
+
+test("buildSpecContext: 超预算时按实施例均分预算，后续实施例不被整体丢弃", () => {
+  const section = ["实施例1：", "A".repeat(500), "实施例2：", "B".repeat(500), "实施例3：", "C".repeat(500)].join("\n");
+  const state = { spec_section_texts: { 具体实施方式: section } };
+  const ctx = buildSpecContext(state, ["具体实施方式"], 300);
+  assert.ok(ctx.includes("实施例1"));
+  assert.ok(ctx.includes("实施例2"));
+  assert.ok(ctx.includes("实施例3"));
+  assert.ok(ctx.length <= 400, `ctx length ${ctx.length} 应接近预算`);
 });
 
 test("runSpecPrechecks: 实施例计数/数值范围端点/效果定量", () => {
@@ -952,6 +970,109 @@ test("inventiveness: 无领域命中时 domain_inject 输出空串（P2-2 不改
 });
 
 // ---------------------------------------------------------------------------
+// claim-breadth 子图（A26.4，M2）
+// ---------------------------------------------------------------------------
+
+const CLAIM_TEXT = [
+  "权利要求书",
+  "1. 一种分拣装置，其特征在于，包括传送带，以及识别传感器。",
+  "2. 根据权利要求1所述的装置，其特征在于，所述传送带为皮带。",
+].join("\n");
+
+const SPEC_TEXT = "技术领域：分拣设备。发明内容：一种分拣装置，包括传送带与识别传感器。具体实施方式：实施例1…";
+
+test("claim-breadth: 权项切分跳过前置标题行，特征机械切分", () => {
+  const claims = splitClaims(CLAIM_TEXT);
+  assert.equal(claims.length, 2);
+  assert.equal(claims[0]!.claimNo, 1);
+  assert.ok(claims[0]!.text.includes("分拣装置"));
+  assert.equal(claims[1]!.claimNo, 2);
+  assert.ok(claims[1]!.text.includes("皮带"));
+  const features = extractClaimFeatures(claims[0]!.text);
+  assert.ok(
+    features.some(feature => feature.includes("传送带")),
+    `特征应含传送带: ${features.join("|")}`,
+  );
+  assert.ok(features.every(feature => !feature.startsWith("其特征在于")));
+  // 无编号权项整体作为第 1 项
+  assert.deepEqual(splitClaims("一种装置，包括支架"), [{ claimNo: 1, text: "一种装置，包括支架" }]);
+});
+
+test("claim-breadth: 锚点证据区分命中与未命中（未命中不静默）", () => {
+  const evidence = anchorClaimFeatures(CLAIM_TEXT, SPEC_TEXT);
+  assert.equal(evidence.claims.length, 2);
+  const all = evidence.claims.flatMap(claim => claim.features);
+  assert.ok(
+    all.some(feature => feature.hit !== null),
+    "应至少命中一条原文",
+  );
+  assert.ok(
+    all.some(feature => feature.hit === null),
+    "说明书未记载的特征应标为未命中",
+  );
+  assert.equal(evidence.matched + evidence.unmatched, all.length);
+});
+
+const claimBreadthProvider = (): StageProvider => ({
+  callLLM: async prompt => {
+    if (prompt.includes("综合三步审查")) {
+      return JSON.stringify({
+        support_ok: false,
+        clarity_ok: false,
+        gaps: ["权1 的“识别传感器”缺少说明书实施方式支持"],
+        confidence: "medium",
+        key_rationale: "概括范围超出说明书公开内容",
+        report: "A26.4 审查报告：权利要求 1 未以说明书为依据，且“识别传感器”含义不清楚。",
+      });
+    }
+    if (prompt.includes("第一步：权利要求是否清楚")) {
+      return JSON.stringify({
+        issues: [{ claim_no: 1, problem: "“识别传感器”含义不确定", severity: "major" }],
+        clarity_ok: false,
+      });
+    }
+    if (prompt.includes("第二步：权利要求是否以说明书为依据")) {
+      return JSON.stringify({
+        gaps: [{ claim_no: 1, feature: "识别传感器", rationale: "说明书未记载具体实施方式" }],
+        support_ok: false,
+      });
+    }
+    if (prompt.includes("第三步：功能性限定是否过宽")) {
+      return JSON.stringify({ overbroad: false, issues: [] });
+    }
+    return "默认";
+  },
+});
+
+test("claim-breadth: mock provider → A26.4 全流程 + 结论提取 + 规则门收口", async () => {
+  const graph = buildClaimBreadthGraph({ handlers: passthroughHandlers() }).compile("load");
+  const result = await graph.run({ text: SPEC_TEXT, claim: CLAIM_TEXT }, { provider: claimBreadthProvider() });
+  assert.equal(result.completed, true);
+  assert.equal(result.state.claim_count, 2);
+  const evidence = result.state.claim_anchor_evidence as { matched: number; unmatched: number };
+  assert.ok(evidence.matched > 0, "确定性锚点应命中部分特征");
+  const extracted = extractClaimBreadthResult(result.state);
+  assert.equal(extracted.supportOk, false);
+  assert.equal(extracted.clarityOk, false);
+  assert.ok(extracted.gaps?.some(gap => gap.includes("识别传感器")));
+  assert.ok(extracted.report?.includes("A26.4"));
+  assert.ok(["pass", "blocked", "needs_revision"].includes(result.state.rule_gate_verdict as string));
+});
+
+test("claim-breadth: 无 provider → LLM 节点降级，确定性证据仍在（includeApproval=false 可跑完）", async () => {
+  const graph = buildClaimBreadthGraph({
+    ruleGate: false,
+    includeApproval: false,
+    handlers: globalStageHandlerRegistry,
+  }).compile("load");
+  const result = await graph.run({ text: SPEC_TEXT, claim: CLAIM_TEXT });
+  assert.equal(result.completed, true);
+  assert.equal(isDegraded(result.state, "claim_breadth_conclusion"), true);
+  const evidence = result.state.claim_anchor_evidence as { claims: unknown[] };
+  assert.equal(evidence.claims.length, 2, "无 LLM 时锚点证据仍应产出");
+});
+
+// ---------------------------------------------------------------------------
 // 输入声明表：显式懒取（W-10 / #728）
 // ---------------------------------------------------------------------------
 
@@ -960,9 +1081,10 @@ const DECLARATION_SOURCES = {
   inventiveness: INVENTIVENESS_INPUT_DECLARATIONS,
   enablement: ENABLEMENT_INPUT_DECLARATIONS,
   citation_check: CITATION_CHECK_INPUT_DECLARATIONS,
+  claim_breadth: CLAIM_BREADTH_INPUT_DECLARATIONS,
 } as const satisfies Record<DomainGraphName, Readonly<Record<string, readonly string[]>>>;
 
-test("getInputDeclarations: 四图均可取，且与各子图声明表同源", () => {
+test("getInputDeclarations: 五图均可取，且与各子图声明表同源", () => {
   const names = Object.keys(DOMAIN_GRAPHS) as DomainGraphName[];
   assert.deepEqual([...names].sort(), Object.keys(DECLARATION_SOURCES).sort());
   for (const name of names) {

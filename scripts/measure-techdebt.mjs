@@ -194,15 +194,20 @@ export function listFiles(dir, exts) {
       maxBuffer: 32 * 1024 * 1024,
     },
   );
-  return listing
-    .split("\0")
-    .filter(Boolean)
-    .filter(p => p.startsWith(prefix))
-    .filter(p => exts.some(x => p.endsWith(x)) && !p.endsWith(".d.ts"))
-    .filter(p => !p.split("/").some(seg => seg.startsWith(".") || EXCLUDE_DIRS.has(seg)))
-    .filter(p => !isPathExcluded(p))
-    .map(p => join(ROOT, p))
-    .sort();
+  return (
+    listing
+      .split("\0")
+      .filter(Boolean)
+      .filter(p => p.startsWith(prefix))
+      .filter(p => exts.some(x => p.endsWith(x)) && !p.endsWith(".d.ts"))
+      .filter(p => !p.split("/").some(seg => seg.startsWith(".") || EXCLUDE_DIRS.has(seg)))
+      .filter(p => !isPathExcluded(p))
+      .map(p => join(ROOT, p))
+      // 工作区已删除但尚未暂存时，git ls-files --cached 仍会列出该路径；
+      // 直接跳过，避免度量脚本因一次本地删除而整体失败。
+      .filter(p => existsSync(p))
+      .sort()
+  );
 }
 
 function readLines(file) {

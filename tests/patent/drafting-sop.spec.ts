@@ -350,6 +350,7 @@ test("patent_drafting_v1 manifest 结构合法且原子全部可解析", () => {
     "extract_features",
     "search",
     "search_quality",
+    "claim_strategy",
     "draft_claims",
     "draft_spec",
     "slop_clean",

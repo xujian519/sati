@@ -81,6 +81,14 @@ function fullRunProvider(): StageProvider {
       if (prompt.includes("充分公开审查专家")) {
         return "充分公开审查报告：交底书清楚完整；撰写建议：补充实施方式参数。";
       }
+      if (prompt.includes("权利要求布局策略专家")) {
+        return JSON.stringify({
+          subject: "一种双层真空保温容器",
+          independent_features: ["双层真空结构"],
+          dependent_claims: [{ depends_on: [1], features: ["所述双层真空结构包括保温层与内胆"] }],
+          rationale: "独权含区别特征，从权细化结构",
+        });
+      }
       if (prompt.includes("权利要求撰写专家")) {
         return JSON.stringify({
           claims: ["1. 一种双层真空保温容器，其特征在于，包括双层真空结构。"],

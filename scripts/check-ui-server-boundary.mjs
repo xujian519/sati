@@ -15,7 +15,7 @@
 // 注释/字符串里的假 import 天然不在语法树里；负控制见 scripts/check-ui-server-boundary.test.mjs。
 //
 // 规则：ui/server（排除测试文件——测试可直接 import 非 barrel 内部路径，
-// 如 pilotPaths.test.js 深引 src/pilot/paths.js，属测试豁免的有意边界）对
+// 如 pilotPaths.test.js 深引 src/shared/paths/index.js，属测试豁免的有意边界）对
 // src/ 的相对 import 必须命中白名单（barrel 入口 + 有意保留的 edgeclaw lib
 // 编译产物入口）。
 //

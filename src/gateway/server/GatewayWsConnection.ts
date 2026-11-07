@@ -511,14 +511,34 @@ export class GatewayWsConnection {
     },
 
     // —— skill：可选方法经 requireSkillMethod 绑定（未接线抛结构化 SkillManagerError） ——
-    skill_list: p => requireSkillMethod(this.options.gateway.skillsList, this.options.gateway)(p as never),
-    skill_read: p => requireSkillMethod(this.options.gateway.skillRead, this.options.gateway)(p as never),
-    skill_write: p => requireSkillMethod(this.options.gateway.skillWrite, this.options.gateway)(p as never),
-    skill_create: p => requireSkillMethod(this.options.gateway.skillCreate, this.options.gateway)(p as never),
-    skill_delete: p => requireSkillMethod(this.options.gateway.skillDelete, this.options.gateway)(p as never),
-    skill_import: p => requireSkillMethod(this.options.gateway.skillImport, this.options.gateway)(p as never),
-    skill_validate: p => requireSkillMethod(this.options.gateway.skillValidate, this.options.gateway)(p as never),
-    skill_scan: p => requireSkillMethod(this.options.gateway.skillScan, this.options.gateway)(p as never),
+    skill_list: p =>
+      requireSkillMethod(this.options.gateway.skillsList, this.options.gateway)(p as GatewayMethodParams<"skillsList">),
+    skill_read: p =>
+      requireSkillMethod(this.options.gateway.skillRead, this.options.gateway)(p as GatewayMethodParams<"skillRead">),
+    skill_write: p =>
+      requireSkillMethod(this.options.gateway.skillWrite, this.options.gateway)(p as GatewayMethodParams<"skillWrite">),
+    skill_create: p =>
+      requireSkillMethod(
+        this.options.gateway.skillCreate,
+        this.options.gateway,
+      )(p as GatewayMethodParams<"skillCreate">),
+    skill_delete: p =>
+      requireSkillMethod(
+        this.options.gateway.skillDelete,
+        this.options.gateway,
+      )(p as GatewayMethodParams<"skillDelete">),
+    skill_import: p =>
+      requireSkillMethod(
+        this.options.gateway.skillImport,
+        this.options.gateway,
+      )(p as GatewayMethodParams<"skillImport">),
+    skill_validate: p =>
+      requireSkillMethod(
+        this.options.gateway.skillValidate,
+        this.options.gateway,
+      )(p as GatewayMethodParams<"skillValidate">),
+    skill_scan: p =>
+      requireSkillMethod(this.options.gateway.skillScan, this.options.gateway)(p as GatewayMethodParams<"skillScan">),
 
     // —— kanban 订阅：走连接级 subscriber 与连接持有订阅的 manager ——
     kanban_subscribe: p => {

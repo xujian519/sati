@@ -166,6 +166,12 @@ export const patentDisclosureManifest: WorkflowManifest = {
       params: { review_context: "披露分析报告需人工复核后方可继续" },
     },
     {
+      id: "claim_strategy",
+      strategy: "chain",
+      description: "权利要求布局策略：独权必要特征+区别特征、从权层级",
+      atom: "claim-strategy",
+    },
+    {
       id: "draft_claims",
       strategy: "chain",
       description: "基于 PFE 与新颖性结果直出权利要求草稿（独立+从属）",
@@ -596,6 +602,12 @@ export const patentDraftingManifest: WorkflowManifest = {
       description: "HITL：审核充分公开与撰写建议（编号选择：1=确认/2=修改/3=退回/4=其他意见）",
       atom: "approval-gate",
       params: { review_context: "审核充分公开与撰写建议（1=确认/2=修改/3=退回/4=其他意见）" },
+    },
+    {
+      id: "claim_strategy",
+      strategy: "chain",
+      description: "权利要求布局策略：独权必要特征+区别特征、从权层级",
+      atom: "claim-strategy",
     },
     {
       id: "draft_claims",

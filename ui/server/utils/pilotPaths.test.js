@@ -6,7 +6,7 @@ import {
   createCollisionResistantProjectId as createCoreCollisionId,
   createProjectId as createCoreProjectId,
   resolveProjectStorageId as resolveCoreProjectStorageId,
-} from "../../../src/pilot/paths.js";
+} from "../../../src/shared/paths/index.js";
 import { createCollisionResistantProjectId, createProjectId, resolveProjectStorageId } from "./pilotPaths.js";
 
 describe("UI project storage ID resolution", () => {

@@ -64,7 +64,7 @@ export function createPatentWorkflowRunTool(
     aliases: ["PatentWorkflowRun", "run_patent_atoms"],
     description:
       "Execute a patent workflow (atom stages) or a domain graph (LLM + search + rule gate): manifest path runs " +
-      "the manifest, graph path (novelty|inventiveness|enablement|citation_check) runs a subgraph. Approval " +
+      "the manifest, graph path runs a subgraph. Approval " +
       "gates pause the run; resumeCheckpointId continues and approveCheckpointId/approveStageIds grant the gate. " +
       "With caseId, runs and checkpoints persist under <caseDir>/workflow-runs/. Requires a model client. " +
       "Orchestration entries: patent_workflow_assemble (assemble/validate only), patent_workflow_run (execute), " +
@@ -84,10 +84,11 @@ export function createPatentWorkflowRunTool(
         },
         graph: {
           type: "string",
-          enum: ["novelty", "inventiveness", "enablement", "citation_check"],
+          enum: ["novelty", "inventiveness", "enablement", "claim_breadth", "citation_check"],
           description:
-            "Domain graph: novelty (A22.2), inventiveness (A22.3), enablement (A26.3), citation_check (no LLM). " +
-            "Mutually exclusive with manifestId.",
+            "Domain graph: novelty (A22.2), inventiveness (A22.3), enablement (A26.3), " +
+            "claim_breadth (A26.4), citation_check. claim_breadth: claimText=claims, input=spec. " +
+            "Not with manifestId.",
         },
         resumeCheckpointId: {
           type: "string",

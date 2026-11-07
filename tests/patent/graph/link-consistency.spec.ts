@@ -77,6 +77,14 @@ const provider: StageProvider = {
         conclusion: "具备新颖性（置信度 0.8）",
       });
     }
+    if (prompt.includes("权利要求布局策略专家")) {
+      return JSON.stringify({
+        subject: "一种自动化分拣装置",
+        independent_features: ["传送带", "识别传感器", "分拣机械臂"],
+        dependent_claims: [{ depends_on: [1], features: ["识别传感器为视觉传感器"] }],
+        rationale: "独权覆盖解决技术问题的全部必要技术特征",
+      });
+    }
     if (prompt.includes("权利要求撰写专家")) {
       return JSON.stringify({
         claims: ["1. 一种自动化分拣装置，其特征在于，包括传送带与识别传感器。"],

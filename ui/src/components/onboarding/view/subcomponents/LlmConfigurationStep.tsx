@@ -1,324 +1,61 @@
-import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Check, ChevronDown, Loader2, Plus } from "lucide-react";
-import { authenticatedFetch } from "../../../../utils/api";
-import {
-  CATALOG_PROVIDERS,
-  findCatalogProviderByUrl,
-  type CatalogProvider,
-  type CatalogProviderProtocol,
-} from "../../../../shared/catalogProviders";
-import { fetchProviderModels, fetchRemoteDefaultModels, type ApiModelListItem } from "../../../../shared/modelListApi";
-import { buildLlmConfig } from "./llmConfigBuilder";
-import {
-  hasUsableApiKey,
-  modelUsesRemoteDefault,
-  requiresApiKey,
-  resolveLoadErrorKind,
-  resolveNextModels,
-  type ModelLoadContext,
-  type ModelLoadMode,
-} from "./llmModelLoading";
+import AdvancedSettings from "./llm-configuration/AdvancedSettings";
+import ApiKeyField from "./llm-configuration/ApiKeyField";
+import CustomProviderFields from "./llm-configuration/CustomProviderFields";
+import ModelPicker from "./llm-configuration/ModelPicker";
+import ProviderGrid from "./llm-configuration/ProviderGrid";
+import StepActions from "./llm-configuration/StepActions";
+import TestResultBanner from "./llm-configuration/TestResultBanner";
+import { useLlmConfigurationState } from "./llm-configuration/useLlmConfigurationState";
+import { useLlmConnectionTest } from "./llm-configuration/useLlmConnectionTest";
+import { useLlmModelCatalog } from "./llm-configuration/useLlmModelCatalog";
+import { useLlmSave } from "./llm-configuration/useLlmSave";
 
 type LlmConfigurationStepProps = {
   onSaved: () => void | Promise<void>;
 };
 
-type TestStatus = "idle" | "testing" | "success" | "error";
-
-// Sentinel id for the "+" tile. When selected, the form swaps in extra inputs
-// (provider id, protocol, base URL) so the user can describe a provider that
-// isn't in the catalog.
-const CUSTOM_PROVIDER_ID = "__custom__";
-
-const CUSTOM_PROVIDER: CatalogProvider = {
-  id: CUSTOM_PROVIDER_ID,
-  displayName: "Custom",
-  protocol: "openai",
-  defaultUrl: "",
-  models: [],
-};
-
-// 默认选中 DeepSeek（常用国产模型，API 便宜、注册简单），方便国内用户
-// 开箱即用；也可在下方网格切换到 Kimi / GLM / Qwen 等其它内置 Provider。
-const DEFAULT_PROVIDER = CATALOG_PROVIDERS.find(provider => provider.id === "deepseek") ?? CATALOG_PROVIDERS[0];
-
-function defaultModelForProvider(provider: CatalogProvider | null) {
-  if (!provider) return "";
-  // DeepSeek provider 的模型 id 无 "deepseek/" 前缀（带前缀的是 OpenRouter 入口）。
-  return provider.models.find(model => model.id === "deepseek-v4-flash")?.id ?? provider.models[0]?.id ?? "";
-}
-
 export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepProps) {
   const { t } = useTranslation("settings");
-  const [selectedProvider, setSelectedProvider] = useState<CatalogProvider | null>(DEFAULT_PROVIDER);
-  const [selectedModelId, setSelectedModelId] = useState(() => defaultModelForProvider(DEFAULT_PROVIDER));
-  const [customModelId, setCustomModelId] = useState("");
-  const [apiKey, setApiKey] = useState("");
-  const [customUrl, setCustomUrl] = useState("");
-  const [showAdvanced, setShowAdvanced] = useState(false);
-
-  const [testStatus, setTestStatus] = useState<TestStatus>("idle");
-  const [testMessage, setTestMessage] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [apiModels, setApiModels] = useState<ApiModelListItem[] | null>(null);
-  const [modelListStatus, setModelListStatus] = useState<"idle" | "loading" | "error">("idle");
-  const [modelListMessage, setModelListMessage] = useState("");
-
-  // Inputs that are only relevant when the user picks the "+" (custom) tile.
-  const [customProviderId, setCustomProviderId] = useState("");
-  const [customProtocol, setCustomProtocol] = useState<CatalogProviderProtocol>("openai");
-
-  const isCustomMode = selectedProvider?.id === CUSTOM_PROVIDER_ID;
-  const selectedModels = apiModels ?? selectedProvider?.models ?? [];
-  const selectedDefaultUrl = selectedProvider?.defaultUrl ?? "";
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await authenticatedFetch("/api/config/provider");
-        if (!res.ok) return;
-        const data = await res.json();
-        if (!data.exists || !data.provider) return;
-
-        const p = data.provider;
-        const existingKeyIsUsable = hasUsableApiKey(p.apiKey);
-        if (!existingKeyIsUsable) return;
-        setApiKey(p.apiKey);
-        if (p.baseUrl) {
-          const match = findCatalogProviderByUrl(p.baseUrl);
-          if (match) {
-            setSelectedProvider(match);
-            setSelectedModelId(p.model || defaultModelForProvider(match));
-          }
-        }
-      } catch {
-        /* no existing config */
-      }
-    })();
-  }, []);
-
-  const effectiveUrl = customUrl.trim() || selectedProvider?.defaultUrl || "";
-  const effectiveModelId = customModelId.trim() || selectedModelId;
-  const effectiveProtocol: CatalogProviderProtocol = isCustomMode
-    ? customProtocol
-    : (selectedProvider?.protocol ?? "openai");
-  const effectiveProviderId = isCustomMode ? customProviderId.trim() : (selectedProvider?.id ?? "");
-  const selectedProviderRequiresApiKey = requiresApiKey(selectedProvider);
-  const canFetchModels = Boolean(selectedProvider && effectiveProviderId && effectiveUrl);
-  const canTest = Boolean(
-    selectedProvider &&
-      (!selectedProviderRequiresApiKey || apiKey.trim()) &&
-      effectiveModelId &&
-      effectiveProviderId &&
-      (!isCustomMode || effectiveUrl.trim()),
-  );
-  // 连接测试是诊断手段，不是准入门槛：provider / 端点 / 凭证 / 模型齐备即可保存。
-  // 输入变化会把 testStatus 复位为 idle，所以"是否测试过"不影响可保存性。
-  const canSave = canTest && !saving;
-
-  useEffect(() => {
-    setApiModels(null);
-    setModelListStatus("idle");
-    setModelListMessage("");
-  }, [effectiveProviderId, effectiveUrl, effectiveProtocol]);
-
-  const loadModels = useCallback(
-    async (mode: ModelLoadMode, signal?: AbortSignal) => {
-      if (!selectedProvider || !effectiveProviderId) return;
-      const key = apiKey.trim();
-      const ctx: ModelLoadContext = {
-        providerId: effectiveProviderId,
-        protocol: effectiveProtocol,
-        url: effectiveUrl,
-        apiKey: key,
-        isCustomMode,
-        requiresApiKey: selectedProviderRequiresApiKey,
-      };
-      const remoteDefault = modelUsesRemoteDefault(mode, ctx);
-      if (!remoteDefault && !effectiveUrl) return;
-
-      setModelListStatus("loading");
-      setModelListMessage("");
-      try {
-        const models = remoteDefault
-          ? await fetchRemoteDefaultModels(effectiveProviderId)
-          : await fetchProviderModels({
-              protocol: effectiveProtocol,
-              baseUrl: effectiveUrl,
-              apiKey: hasUsableApiKey(key) ? key : "",
-              providerId: effectiveProviderId,
-            });
-        if (signal?.aborted) return;
-        const nextModels = resolveNextModels(mode, ctx, selectedProvider, models);
-        setApiModels(nextModels);
-        setModelListStatus("idle");
-        setSelectedModelId(current =>
-          nextModels.length > 0 && !nextModels.some(model => model.id === current) ? nextModels[0].id : current,
-        );
-      } catch (error) {
-        if (signal?.aborted) return;
-        const message = error instanceof Error ? error.message : String(error);
-        const kind = resolveLoadErrorKind(mode, ctx, selectedProvider);
-        if (kind === "remote-default") {
-          setApiModels(selectedProvider?.models ?? []);
-          setModelListStatus("idle");
-          setModelListMessage(t("llmSetup.remoteModelLoadFailed", { message }));
-        } else if (kind === "local-fallback") {
-          setApiModels(selectedProvider?.models ?? []);
-          setModelListStatus("idle");
-          setModelListMessage(t("llmSetup.localModelLoadFailed", { message }));
-        } else {
-          setModelListStatus("error");
-          setModelListMessage(message);
-        }
-      }
-    },
-    [
-      apiKey,
-      effectiveProviderId,
-      effectiveProtocol,
-      effectiveUrl,
-      isCustomMode,
-      selectedProvider,
-      selectedProviderRequiresApiKey,
-      t,
-    ],
-  );
-
-  useEffect(() => {
-    if (!selectedProvider) return;
-    const key = apiKey.trim();
-    const catalogNoKey = !isCustomMode && !key && selectedProviderRequiresApiKey;
-    const blockedNoKey = !hasUsableApiKey(key) && !isCustomMode && selectedProviderRequiresApiKey;
-    if (!catalogNoKey && !(effectiveProviderId && effectiveUrl && !blockedNoKey)) return;
-    const controller = new AbortController();
-    void loadModels("auto", controller.signal);
-    return () => controller.abort();
-  }, [
-    apiKey,
-    effectiveProviderId,
-    effectiveUrl,
-    isCustomMode,
-    loadModels,
-    selectedProvider,
-    selectedProviderRequiresApiKey,
-  ]);
-
-  const handleFetchModels = useCallback(async () => {
-    if (!canFetchModels) return;
-    await loadModels("manual");
-  }, [canFetchModels, loadModels]);
-
-  const handleProviderSelect = useCallback((provider: CatalogProvider) => {
-    setSelectedProvider(prev => {
-      // Switching to a different provider should not carry over the API key
-      // from the previously selected one (otherwise users adding a 2nd
-      // provider re-save their Anthropic key under OpenAI).
-      if (prev?.id !== provider.id) {
-        setApiKey("");
-      }
-      return provider;
-    });
-    setSelectedModelId(defaultModelForProvider(provider));
-    setApiModels(null);
-    setModelListStatus("idle");
-    setModelListMessage("");
-    setCustomModelId("");
-    setCustomUrl("");
-    setCustomProviderId("");
-    setCustomProtocol("openai");
-    setTestStatus("idle");
-    setTestMessage("");
-  }, []);
-
-  const handleTest = useCallback(async () => {
-    if (!canTest || !selectedProvider) return;
-    setTestStatus("testing");
-    setTestMessage("");
-    try {
-      const res = await authenticatedFetch("/api/config/test-connection", {
-        method: "POST",
-        body: JSON.stringify({
-          providerType: effectiveProtocol,
-          providerId: effectiveProviderId,
-          baseUrl: effectiveUrl,
-          apiKey: apiKey.trim(),
-          model: effectiveModelId,
-        }),
-      });
-      const data = await res.json();
-      if (data.ok) {
-        setTestStatus("success");
-        setTestMessage(data.message || t("llmSetup.connectedSuccessfully"));
-      } else {
-        setTestStatus("error");
-        setTestMessage(data.error || t("llmSetup.connectionFailed"));
-      }
-    } catch (err) {
-      setTestStatus("error");
-      setTestMessage(err instanceof Error ? err.message : t("llmSetup.connectionFailed"));
-    }
-  }, [canTest, selectedProvider, effectiveUrl, apiKey, effectiveModelId, effectiveProtocol, effectiveProviderId, t]);
-
-  const handleSave = useCallback(async () => {
-    if (!selectedProvider) return;
-    setSaving(true);
-    try {
-      const { stringify: stringifyYaml, parse: parseYaml } = await import("yaml");
-
-      let existingConfig: unknown = {};
-      try {
-        const res = await authenticatedFetch("/api/config");
-        if (res.ok) {
-          const data = await res.json();
-          if (data.raw) existingConfig = parseYaml(data.raw) || {};
-        }
-      } catch {
-        /* start fresh */
-      }
-
-      const providerId = effectiveProviderId;
-      const modelId = effectiveModelId;
-      if (!providerId) throw new Error(t("llmSetup.missingProviderId"));
-
-      const config = buildLlmConfig(existingConfig, {
-        providerId,
-        modelId,
-        protocol: effectiveProtocol,
-        url: effectiveUrl,
-        apiKey: apiKey.trim(),
-        apiModels,
-      });
-
-      const saveRes = await authenticatedFetch("/api/config", {
-        method: "PUT",
-        body: JSON.stringify({ raw: stringifyYaml(config, { indent: 2, lineWidth: 0 }) }),
-      });
-
-      if (!saveRes.ok) {
-        const err = await saveRes.json();
-        throw new Error(err.error || t("llmSetup.saveFailed"));
-      }
-
-      await onSaved();
-    } catch (err) {
-      setTestStatus("error");
-      setTestMessage(err instanceof Error ? err.message : t("llmSetup.failedToSave"));
-    } finally {
-      setSaving(false);
-    }
-  }, [
-    selectedProvider,
-    effectiveUrl,
-    effectiveModelId,
-    apiKey,
-    effectiveProtocol,
-    effectiveProviderId,
-    apiModels,
+  const state = useLlmConfigurationState();
+  const { handleFetchModels } = useLlmModelCatalog({
+    selectedProvider: state.selectedProvider,
+    effectiveProviderId: state.effectiveProviderId,
+    effectiveProtocol: state.effectiveProtocol,
+    effectiveUrl: state.effectiveUrl,
+    apiKey: state.apiKey,
+    isCustomMode: state.isCustomMode,
+    selectedProviderRequiresApiKey: state.selectedProviderRequiresApiKey,
+    canFetchModels: state.canFetchModels,
+    t,
+    setApiModels: state.setApiModels,
+    setModelListStatus: state.setModelListStatus,
+    setModelListMessage: state.setModelListMessage,
+    setSelectedModelId: state.setSelectedModelId,
+  });
+  const handleTest = useLlmConnectionTest({
+    canTest: state.canTest,
+    selectedProvider: state.selectedProvider,
+    effectiveProtocol: state.effectiveProtocol,
+    effectiveProviderId: state.effectiveProviderId,
+    effectiveUrl: state.effectiveUrl,
+    apiKey: state.apiKey,
+    effectiveModelId: state.effectiveModelId,
+    t,
+    setTestResult: state.setTestResult,
+  });
+  const { saving, handleSave } = useLlmSave({
+    selectedProvider: state.selectedProvider,
+    effectiveUrl: state.effectiveUrl,
+    effectiveModelId: state.effectiveModelId,
+    apiKey: state.apiKey,
+    effectiveProtocol: state.effectiveProtocol,
+    effectiveProviderId: state.effectiveProviderId,
+    apiModels: state.apiModels,
     onSaved,
     t,
-  ]);
+    setTestResult: state.setTestResult,
+  });
 
   return (
     <div className="mx-auto w-full max-w-xl space-y-8">
@@ -330,355 +67,73 @@ export default function LlmConfigurationStep({ onSaved }: LlmConfigurationStepPr
       <div className="border-t border-border" />
 
       {/* Provider grid */}
-      <div>
-        <div className="mb-3 text-xs font-medium tracking-wide text-muted-foreground uppercase">
-          {t("llmSetup.providerLabel")}
-        </div>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-          {CATALOG_PROVIDERS.map(provider => (
-            <button
-              key={provider.id}
-              type="button"
-              onClick={() => handleProviderSelect(provider)}
-              className={`relative rounded-lg border px-4 py-3 text-left text-sm transition-colors ${
-                selectedProvider?.id === provider.id
-                  ? "border-foreground bg-muted text-foreground"
-                  : "border-border bg-background text-muted-foreground hover:border-foreground/30 hover:text-foreground"
-              }`}
-            >
-              <div className="font-medium">{provider.displayName}</div>
-              {selectedProvider?.id === provider.id && (
-                <Check className="absolute top-2 right-2 h-4 w-4 text-foreground" strokeWidth={2.5} />
-              )}
-            </button>
-          ))}
-          <button
-            type="button"
-            onClick={() => handleProviderSelect(CUSTOM_PROVIDER)}
-            className={`relative flex items-center gap-2 rounded-lg border border-dashed px-4 py-3 text-left text-sm transition-colors ${
-              isCustomMode
-                ? "border-foreground bg-muted text-foreground"
-                : "border-border bg-background text-muted-foreground hover:border-foreground/30 hover:text-foreground"
-            }`}
-          >
-            <Plus className="h-4 w-4" />
-            <div>
-              <div className="font-medium">{t("llmSetup.custom")}</div>
-              <div className="mt-0.5 text-[11px] opacity-60">{t("llmSetup.customHint")}</div>
-            </div>
-            {isCustomMode && <Check className="absolute top-2 right-2 h-4 w-4 text-foreground" strokeWidth={2.5} />}
-          </button>
-        </div>
-      </div>
+      <ProviderGrid
+        selectedProvider={state.selectedProvider}
+        isCustomMode={state.isCustomMode}
+        onSelect={state.handleProviderSelect}
+        t={t}
+      />
 
-      {isCustomMode && (
-        <div className="space-y-3 rounded-lg border border-dashed border-border/60 bg-muted/20 p-4">
-          <div>
-            <label htmlFor="custom-provider-id" className="mb-1 block text-sm font-medium text-foreground">
-              {t("llmSetup.customProviderId")}
-            </label>
-            <input
-              id="custom-provider-id"
-              type="text"
-              value={customProviderId}
-              onChange={e => {
-                setCustomProviderId(e.target.value);
-                setTestStatus("idle");
-                setTestMessage("");
-              }}
-              placeholder={t("llmSetup.customProviderIdPlaceholder")}
-              className="w-full rounded-lg border border-border bg-background px-3 py-2.5 font-mono text-sm text-foreground placeholder:text-muted-foreground/50 focus:border-foreground/40 focus:outline-hidden"
-              autoComplete="off"
-              spellCheck={false}
-            />
-            <p className="mt-1 text-[11px] text-muted-foreground">{t("llmSetup.customProviderIdHint")}</p>
-          </div>
-          <div className="grid grid-cols-3 gap-3">
-            <div className="col-span-1">
-              <label htmlFor="custom-protocol" className="mb-1 block text-sm font-medium text-foreground">
-                {t("llmSetup.protocol")}
-              </label>
-              <div className="relative">
-                <select
-                  id="custom-protocol"
-                  value={customProtocol}
-                  onChange={e => {
-                    setCustomProtocol(e.target.value as CatalogProviderProtocol);
-                    setTestStatus("idle");
-                    setTestMessage("");
-                  }}
-                  className="w-full appearance-none rounded-lg border border-border bg-background px-3 py-2.5 pr-8 text-sm text-foreground focus:border-foreground/40 focus:outline-hidden"
-                >
-                  <option value="openai">openai</option>
-                  <option value="openai-responses">openai-responses</option>
-                  <option value="anthropic">anthropic</option>
-                  <option value="google">google</option>
-                </select>
-                <ChevronDown className="pointer-events-none absolute top-1/2 right-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              </div>
-            </div>
-            <div className="col-span-2">
-              <label htmlFor="custom-base-url" className="mb-1 block text-sm font-medium text-foreground">
-                {t("llmSetup.baseUrl")}
-              </label>
-              <input
-                id="custom-base-url"
-                type="text"
-                value={customUrl}
-                onChange={e => {
-                  setCustomUrl(e.target.value);
-                  setTestStatus("idle");
-                  setTestMessage("");
-                }}
-                placeholder={t("llmSetup.baseUrlPlaceholder")}
-                className="w-full rounded-lg border border-border bg-background px-3 py-2.5 font-mono text-sm text-foreground placeholder:text-muted-foreground/50 focus:border-foreground/40 focus:outline-hidden"
-                autoComplete="off"
-                spellCheck={false}
-              />
-              {customProtocol === "openai" && (
-                <p className="mt-1 text-[11px] text-muted-foreground">
-                  {t("llmSetup.baseUrlOpenaiHintBefore")}
-                  <span className="font-mono">{t("llmSetup.baseUrlOpenaiHintSuffix")}</span>
-                  {t("llmSetup.baseUrlOpenaiHintAfter")}
-                </p>
-              )}
-              {customProtocol === "openai-responses" && (
-                <p className="mt-1 text-[11px] text-muted-foreground">
-                  {t("llmSetup.baseUrlOpenaiResponsesHintBefore")}
-                  <span className="font-mono">{t("llmSetup.baseUrlOpenaiResponsesHintSuffix")}</span>
-                  {t("llmSetup.baseUrlOpenaiResponsesHintAfter")}
-                </p>
-              )}
-              {customProtocol === "google" && (
-                <p className="mt-1 text-[11px] text-muted-foreground">
-                  {t("llmSetup.baseUrlGoogleHintBefore")}
-                  <span className="font-mono">{t("llmSetup.baseUrlGoogleHintSuffix")}</span>
-                  {t("llmSetup.baseUrlGoogleHintAfter")}
-                </p>
-              )}
-            </div>
-          </div>
-        </div>
+      {state.isCustomMode && (
+        <CustomProviderFields
+          customProviderId={state.customProviderId}
+          customProtocol={state.customProtocol}
+          customUrl={state.customUrl}
+          onProviderIdChange={state.handleCustomProviderIdChange}
+          onProtocolChange={state.handleCustomProtocolChange}
+          onUrlChange={state.handleCustomUrlChange}
+          t={t}
+        />
       )}
 
       {/* API Key */}
-      <div>
-        <label htmlFor="llm-api-key" className="mb-1 block text-sm font-medium text-foreground">
-          {t("llmSetup.apiKeyLabel")}
-          {selectedProviderRequiresApiKey ? "" : t("llmSetup.apiKeyOptional")}
-        </label>
-        <input
-          id="llm-api-key"
-          type="password"
-          value={apiKey}
-          onChange={e => {
-            setApiKey(e.target.value);
-            setTestStatus("idle");
-            setTestMessage("");
-          }}
-          placeholder={
-            selectedProviderRequiresApiKey ? t("llmSetup.apiKeyPlaceholder") : t("llmSetup.apiKeyNotRequired")
-          }
-          className="w-full rounded-lg border border-border bg-background px-3 py-2.5 font-mono text-sm text-foreground placeholder:text-muted-foreground/50 focus:border-foreground/40 focus:outline-hidden"
-          autoComplete="off"
-          spellCheck={false}
-        />
-      </div>
+      <ApiKeyField
+        apiKey={state.apiKey}
+        requiresApiKey={state.selectedProviderRequiresApiKey}
+        onChange={state.handleApiKeyChange}
+        t={t}
+      />
 
       {/* Model picker */}
-      <div>
-        <label htmlFor="llm-model" className="mb-1 block text-sm font-medium text-foreground">
-          {t("llmSetup.modelLabel")}
-        </label>
-        {selectedModels.length > 0 ? (
-          <div className="relative">
-            <select
-              id="llm-model"
-              value={selectedModelId}
-              onChange={e => {
-                setSelectedModelId(e.target.value);
-                setCustomModelId("");
-                setTestStatus("idle");
-                setTestMessage("");
-              }}
-              className="w-full appearance-none rounded-lg border border-border bg-background px-3 py-2.5 pr-8 text-sm text-foreground focus:border-foreground/40 focus:outline-hidden"
-            >
-              {selectedModels.map(m => (
-                <option key={m.id} value={m.id}>
-                  {m.displayName} ({m.id})
-                </option>
-              ))}
-            </select>
-            <ChevronDown className="pointer-events-none absolute top-1/2 right-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          </div>
-        ) : (
-          <input
-            id="llm-model"
-            type="text"
-            value={customModelId}
-            onChange={e => {
-              setCustomModelId(e.target.value);
-              setTestStatus("idle");
-              setTestMessage("");
-            }}
-            placeholder={t("llmSetup.modelPlaceholder")}
-            className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50 focus:border-foreground/40 focus:outline-hidden"
-            autoComplete="off"
-            spellCheck={false}
-          />
-        )}
-        {modelListStatus === "loading" && (
-          <p className="mt-1 inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-            <Loader2 className="h-3 w-3 animate-spin" /> {t("llmSetup.fetchingModels")}
-          </p>
-        )}
-        {selectedProvider && (
-          <button
-            type="button"
-            onClick={handleFetchModels}
-            disabled={!canFetchModels || modelListStatus === "loading"}
-            className="mt-2 text-xs text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {t("llmSetup.fetchModels")}
-          </button>
-        )}
-        {modelListStatus === "error" && modelListMessage && (
-          <p className="mt-1 text-[11px] text-destructive">{modelListMessage}</p>
-        )}
-        {modelListStatus === "idle" && modelListMessage && (
-          <p className="mt-1 text-[11px] text-muted-foreground">{modelListMessage}</p>
-        )}
-        {selectedModels.length > 0 && (
-          <div className="mt-2">
-            <input
-              type="text"
-              value={customModelId}
-              onChange={e => {
-                setCustomModelId(e.target.value);
-                setTestStatus("idle");
-                setTestMessage("");
-              }}
-              placeholder={t("llmSetup.customModelPlaceholder")}
-              className="w-full rounded-lg border border-border/60 bg-background px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground/40 focus:border-foreground/40 focus:outline-hidden"
-              autoComplete="off"
-              spellCheck={false}
-            />
-          </div>
-        )}
-      </div>
+      <ModelPicker
+        selectedModels={state.selectedModels}
+        selectedModelId={state.selectedModelId}
+        customModelId={state.customModelId}
+        hasSelectedProvider={Boolean(state.selectedProvider)}
+        modelListStatus={state.modelListStatus}
+        modelListMessage={state.modelListMessage}
+        canFetchModels={state.canFetchModels}
+        onModelChange={state.handleSelectedModelChange}
+        onCustomModelChange={state.handleCustomModelIdChange}
+        onFetchModels={handleFetchModels}
+        t={t}
+      />
 
       {/* Advanced (catalog providers only — custom already shows URL above) */}
-      {!isCustomMode && (
-        <div>
-          <button
-            type="button"
-            onClick={() => setShowAdvanced(!showAdvanced)}
-            className="text-xs text-muted-foreground hover:text-foreground"
-          >
-            {showAdvanced ? t("llmSetup.hideAdvancedToggle") : t("llmSetup.showAdvancedToggle")}
-          </button>
-          {showAdvanced && (
-            <div className="mt-3 space-y-3 rounded-lg border border-border/60 bg-muted/30 p-3">
-              <div>
-                <label htmlFor="llm-url" className="mb-1 block text-xs font-medium text-muted-foreground">
-                  {t("llmSetup.apiBaseUrl")}
-                </label>
-                <input
-                  id="llm-url"
-                  type="text"
-                  value={customUrl}
-                  onChange={e => {
-                    setCustomUrl(e.target.value);
-                    setTestStatus("idle");
-                    setTestMessage("");
-                  }}
-                  placeholder={selectedDefaultUrl}
-                  className="w-full rounded-lg border border-border/60 bg-background px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground/40 focus:border-foreground/40 focus:outline-hidden"
-                  autoComplete="off"
-                  spellCheck={false}
-                />
-                {(selectedProvider?.protocol ?? customProtocol) === "openai" && (
-                  <p className="mt-1 text-[11px] text-muted-foreground">
-                    {t("llmSetup.baseUrlOpenaiHintBefore")}
-                    <span className="font-mono">{t("llmSetup.baseUrlOpenaiHintSuffix")}</span>
-                    {t("llmSetup.baseUrlOpenaiHintAfter")}
-                  </p>
-                )}
-                {(selectedProvider?.protocol ?? customProtocol) === "openai-responses" && (
-                  <p className="mt-1 text-[11px] text-muted-foreground">
-                    {t("llmSetup.baseUrlOpenaiResponsesHintBefore")}
-                    <span className="font-mono">{t("llmSetup.baseUrlOpenaiResponsesHintSuffix")}</span>
-                    {t("llmSetup.baseUrlOpenaiResponsesHintAfter")}
-                  </p>
-                )}
-                {(selectedProvider?.protocol ?? customProtocol) === "google" && (
-                  <p className="mt-1 text-[11px] text-muted-foreground">
-                    {t("llmSetup.advancedGoogleHintBefore")}
-                    <span className="font-mono">{t("llmSetup.advancedGoogleHintSuffix")}</span>
-                    {t("llmSetup.advancedGoogleHintAfter")}
-                  </p>
-                )}
-              </div>
-              <div className="text-[11px] text-muted-foreground">
-                {t("llmSetup.protocolLabel")}
-                <span className="font-mono">{selectedProvider?.protocol ?? customProtocol}</span> &middot;{" "}
-                {t("llmSetup.defaultUrlLabel")}
-                <span className="font-mono">{selectedDefaultUrl}</span>
-              </div>
-            </div>
-          )}
-        </div>
+      {!state.isCustomMode && (
+        <AdvancedSettings
+          showAdvanced={state.showAdvanced}
+          protocol={state.selectedProvider?.protocol ?? state.customProtocol}
+          customUrl={state.customUrl}
+          selectedDefaultUrl={state.selectedDefaultUrl}
+          onToggle={state.toggleAdvanced}
+          onUrlChange={state.handleCustomUrlChange}
+          t={t}
+        />
       )}
 
       {/* Actions */}
-      <div className="flex flex-wrap items-center justify-end gap-3 border-t border-border pt-6">
-        {testStatus === "idle" && canTest && (
-          <span className="mr-auto text-xs text-muted-foreground">{t("llmSetup.testOptional")}</span>
-        )}
-        <button
-          type="button"
-          onClick={handleTest}
-          disabled={!canTest || testStatus === "testing"}
-          className="rounded-lg border border-border px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          {testStatus === "testing" ? (
-            <span className="flex items-center gap-2">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              {t("llmSetup.testing")}
-            </span>
-          ) : (
-            t("llmSetup.testConnection")
-          )}
-        </button>
-        <button
-          type="button"
-          onClick={handleSave}
-          disabled={!canSave}
-          className="rounded-lg bg-foreground px-5 py-2.5 text-sm font-medium text-background transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-30"
-        >
-          {saving ? (
-            <span className="flex items-center gap-2">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              {t("llmSetup.saving")}
-            </span>
-          ) : (
-            t("llmSetup.save")
-          )}
-        </button>
-      </div>
+      <StepActions
+        testStatus={state.testStatus}
+        canTest={state.canTest}
+        canSave={state.canTest && !saving}
+        saving={saving}
+        onTest={handleTest}
+        onSave={handleSave}
+        t={t}
+      />
 
-      {testMessage && (
-        <div
-          className={`rounded-lg border px-4 py-3 text-sm ${
-            testStatus === "success"
-              ? "border-green-200 bg-green-50 text-green-800 dark:border-green-800/40 dark:bg-green-900/10 dark:text-green-300"
-              : "border-red-200 bg-red-50 text-red-800 dark:border-red-800/40 dark:bg-red-900/10 dark:text-red-300"
-          }`}
-        >
-          {testStatus === "success" ? "✓ " : "✗ "}
-          {testMessage}
-        </div>
-      )}
+      <TestResultBanner testStatus={state.testStatus} testMessage={state.testMessage} />
     </div>
   );
 }

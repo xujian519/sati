@@ -285,7 +285,7 @@ test("validate：retry.rewindTo 指向后续阶段被拦截", () => {
 test("patentDisclosureManifest：结构与 retry 声明合法", () => {
   assert.doesNotThrow(() => validateWorkflowManifest(patentDisclosureManifest));
   assert.equal(patentDisclosureManifest.id, "patent_disclosure_v1");
-  assert.equal(patentDisclosureManifest.stages.length, 13);
+  assert.equal(patentDisclosureManifest.stages.length, 14);
   const consistency = patentDisclosureManifest.stages.find(s => s.id === "consistency")!;
   assert.equal(consistency.retry?.rewindTo, "extract_problem");
   assert.match(String(consistency.retry?.whenOutputMatches ?? ""), /不一致|矛盾|缺少|孤立/);
@@ -302,6 +302,7 @@ test("patentDisclosureManifest：结构与 retry 声明合法", () => {
   const atoms = patentDisclosureManifest.stages.filter(s => s.atom !== undefined).map(s => s.atom);
   assert.deepEqual([...new Set(atoms)].sort(), [
     "approval-gate",
+    "claim-strategy",
     "draft-claims",
     "extract",
     "groundedness",

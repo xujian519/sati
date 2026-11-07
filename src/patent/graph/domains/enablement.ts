@@ -11,7 +11,12 @@
 import { GraphBuilder } from "../engine.js";
 import type { GraphNode, GraphState } from "../types.js";
 import { getStateObject, getStateString } from "../state.js";
-import { checkEffectQuantification, checkNumericRangeCoverage, formatRange } from "../../spec/index.js";
+import {
+  checkEffectQuantification,
+  checkNumericRangeCoverage,
+  formatRange,
+  splitEmbodiments,
+} from "../../spec/index.js";
 import { globalStageHandlerRegistry, type StageHandlerRegistry } from "../../atoms/index.js";
 import { dataBlock } from "../../prompt-hygiene.js";
 import { handlerNode, llmNode, resolveInput, ruleGateNode } from "./shared.js";
@@ -30,7 +35,7 @@ export type BuildEnablementGraphOptions = {
 // 说明书五部分（审查指南第二部分第二章）
 // ---------------------------------------------------------------------------
 
-const SPEC_SECTIONS = ["技术领域", "背景技术", "发明内容", "附图说明", "具体实施方式"] as const;
+export const SPEC_SECTIONS = ["技术领域", "背景技术", "发明内容", "附图说明", "具体实施方式"] as const;
 
 /** 章节行首标题正则：兼容 `# 技术领域`、`【技术领域】`、`1. 技术领域`、`技术领域：` 与裸标题行。 */
 const SPEC_SECTION_HEADING_RE =
@@ -86,11 +91,26 @@ export function buildSpecContext(
     if (value.trim().length === 0) continue;
     const remaining = budget - used;
     if (remaining <= 0) break;
-    const part = value.length <= remaining ? value : value.slice(0, remaining);
+    const part = value.length <= remaining ? value : sliceSection(value, remaining);
     parts.push(`## ${key}\n${part}`);
     used += part.length;
   }
   return parts.join("\n\n");
+}
+
+/**
+ * 超预算章节的截断策略：若该节能按实施例切分，则给每个实施例分配均等预算，
+ * 避免长说明书只保留前两个实施例、后面的实施例完全进不了上下文（#830 M6）。
+ * 无实施例标题时保持旧的整节前缀截断。
+ */
+function sliceSection(value: string, budget: number): string {
+  const chunks = splitEmbodiments(value);
+  if (chunks.length < 2) return value.slice(0, budget);
+  const perChunk = Math.max(1, Math.floor(budget / chunks.length));
+  return chunks
+    .map(chunk => `${chunk.title}\n${chunk.content.slice(0, perChunk)}`)
+    .join("\n\n")
+    .slice(0, budget);
 }
 
 /** 说明书上下文拼接预算（字符）。 */
@@ -312,6 +332,7 @@ export function buildEnablementGraph(options: BuildEnablementGraphOptions = {}):
       spec_sections_present: sections.present,
       spec_sections_missing: sections.missing,
       spec_section_texts: splitSpecSections(text),
+      embodiment_chunks: splitEmbodiments(text),
     };
   });
   builder.addNode("spec_prechecks", async ({ state }) => {

@@ -24,11 +24,6 @@
     },
     {
       "rule": "file-size",
-      "file": "src/agent/loop/AgentLoop.ts",
-      "lines": 1152
-    },
-    {
-      "rule": "file-size",
       "file": "src/always-on/runtime/DiscoveryFire.ts",
       "lines": 1079
     },
@@ -114,11 +109,6 @@
     },
     {
       "rule": "file-size",
-      "file": "ui/src/components/app-shell/AppShellV2.tsx",
-      "lines": 897
-    },
-    {
-      "rule": "file-size",
       "file": "ui/src/components/chat-v2/MessagesPaneV2.render.test.tsx",
       "lines": 1235
     },
@@ -141,16 +131,6 @@
       "rule": "file-size",
       "file": "ui/src/components/main-content-v2/DashboardV2.tsx",
       "lines": 1345
-    },
-    {
-      "rule": "file-size",
-      "file": "ui/src/components/main-content-v2/FilesV2.tsx",
-      "lines": 945
-    },
-    {
-      "rule": "file-size",
-      "file": "ui/src/components/main-content-v2/skills/import/ImportFromFolder.tsx",
-      "lines": 825
     },
     {
       "rule": "file-size",

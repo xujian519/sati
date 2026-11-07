@@ -29,6 +29,12 @@ import {
   CITATION_CHECK_INPUT_DECLARATIONS,
   type BuildCitationCheckGraphOptions,
 } from "./citation-check.js";
+import {
+  buildClaimBreadthGraph,
+  CLAIM_BREADTH_INPUT_DECLARATIONS,
+  extractClaimBreadthResult,
+  type BuildClaimBreadthGraphOptions,
+} from "./claim-breadth.js";
 
 export {
   handlerNode,
@@ -53,6 +59,12 @@ export {
   type BuildEnablementGraphOptions,
 };
 export { buildCitationCheckGraph, CITATION_CHECK_INPUT_DECLARATIONS, type BuildCitationCheckGraphOptions };
+export {
+  buildClaimBreadthGraph,
+  CLAIM_BREADTH_INPUT_DECLARATIONS,
+  extractClaimBreadthResult,
+  type BuildClaimBreadthGraphOptions,
+};
 
 /** 三性领域子图注册表（单一数据源：工具层/评测按名取构建函数与入口节点）。 */
 export const DOMAIN_GRAPHS = {
@@ -60,6 +72,7 @@ export const DOMAIN_GRAPHS = {
   inventiveness: { build: buildInventivenessGraph, entry: "parse" },
   enablement: { build: buildEnablementGraph, entry: "load" },
   citation_check: { build: buildCitationCheckGraph, entry: "check" },
+  claim_breadth: { build: buildClaimBreadthGraph, entry: "load" },
 } as const;
 
 /**
@@ -82,6 +95,8 @@ export function getInputDeclarations(
       return ENABLEMENT_INPUT_DECLARATIONS;
     case "citation_check":
       return CITATION_CHECK_INPUT_DECLARATIONS;
+    case "claim_breadth":
+      return CLAIM_BREADTH_INPUT_DECLARATIONS;
     default:
       // 类型层不可达；JS 调用方传未知图名时保持 fail-soft（调用方自行决定 `?? []`）。
       return undefined;

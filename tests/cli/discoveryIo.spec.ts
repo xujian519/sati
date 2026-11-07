@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, it } from "node:test";
 import { createCoreDiscoveryPlanIo } from "../../src/cli/discoveryIo.js";
-import { resolveProjectStorageId } from "../../src/pilot/paths.js";
+import { resolveProjectStorageId } from "../../src/shared/paths/index.js";
 
 function makeTempDir(): string {
   return mkdtempSync(join(tmpdir(), "sati-dio-"));

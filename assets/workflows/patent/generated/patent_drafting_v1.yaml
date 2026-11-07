@@ -90,6 +90,10 @@ stages:
     strategy: chain
     atom: approval-gate
     description: HITL：审核充分公开与撰写建议（编号选择：1=确认/2=修改/3=退回/4=其他意见）
+  - id: claim_strategy
+    strategy: chain
+    atom: claim-strategy
+    description: 权利要求布局策略：独权必要特征+区别特征、从权层级
   - id: draft_claims
     strategy: chain
     atom: draft-claims

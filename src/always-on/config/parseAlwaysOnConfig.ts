@@ -1,6 +1,12 @@
 import { resolve } from "node:path";
 import { isRecord } from "../../model/config/schema.js";
 import type { PilotConfigDiagnostic } from "../../pilot/config/types.js";
+import {
+  isNonNegativeInteger,
+  isNonNegativeNumber,
+  isPositiveInteger,
+  isPositiveNumber,
+} from "../../shared/configValidators.js";
 
 export type AlwaysOnTriggerConfig = {
   enabled: boolean;
@@ -476,7 +482,7 @@ function optionalString(value: unknown, fallback: string | undefined): string | 
 
 function positiveNumber(value: unknown, fallback: number, path: string, diagnostics: PilotConfigDiagnostic[]): number {
   if (value === undefined) return fallback;
-  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+  if (!isPositiveNumber(value)) {
     diagnostics.push({
       code: "ALWAYS_ON_NUMBER_INVALID",
       severity: "warning",
@@ -496,7 +502,7 @@ function nonNegativeNumber(
   diagnostics: PilotConfigDiagnostic[],
 ): number {
   if (value === undefined) return fallback;
-  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+  if (!isNonNegativeNumber(value)) {
     diagnostics.push({
       code: "ALWAYS_ON_NUMBER_INVALID",
       severity: "warning",
@@ -511,7 +517,7 @@ function nonNegativeNumber(
 
 function positiveInteger(value: unknown, fallback: number, path: string, diagnostics: PilotConfigDiagnostic[]): number {
   if (value === undefined) return fallback;
-  if (typeof value !== "number" || !Number.isFinite(value) || !Number.isInteger(value) || value <= 0) {
+  if (!isPositiveInteger(value)) {
     diagnostics.push({
       code: "ALWAYS_ON_NUMBER_INVALID",
       severity: "warning",
@@ -531,7 +537,7 @@ function nonNegativeInteger(
   diagnostics: PilotConfigDiagnostic[],
 ): number {
   if (value === undefined) return fallback;
-  if (typeof value !== "number" || !Number.isFinite(value) || !Number.isInteger(value) || value < 0) {
+  if (!isNonNegativeInteger(value)) {
     diagnostics.push({
       code: "ALWAYS_ON_NUMBER_INVALID",
       severity: "warning",

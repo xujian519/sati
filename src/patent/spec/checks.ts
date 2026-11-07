@@ -7,6 +7,8 @@
  * （src/patent/ 不得依赖 src/tool/）。
  */
 
+import { matchFeature } from "../anchor/match.js";
+
 // =============================================================================
 // 数值范围与单位（端点 + 中间值实施例检测）
 // =============================================================================
@@ -156,4 +158,68 @@ export function checkSectionCompleteness(text: string): string[] {
     if (section !== undefined) present.add(section);
   }
   return SPEC_SECTION_NAMES.filter(name => !present.has(name));
+}
+
+// =============================================================================
+// 实施例分块（#830 M6）
+// =============================================================================
+
+export interface EmbodimentChunk {
+  /** "实施例1" 中的编号；无编号时按出现顺序编号。 */
+  embodimentId: string;
+  /** 标题原文（含 Markdown/方括号标记）。 */
+  title: string;
+  /** 标题之后的正文（不含标题行）。 */
+  content: string;
+  charCount: number;
+  /** 在该块正文中确定性命中的特征（原样回显，未命中不计入）。 */
+  featureIds: string[];
+}
+
+/**
+ * 实施例标题：兼容 `实施例一` / `实施例1` / `【实施例1】` / `## 具体实施例1：`。
+ * 只匹配整行标题形态，正文里的「实施例1中…」不会被切开。
+ */
+const EMBODIMENT_HEADING_RE =
+  /^(?:#{1,6}\s*)?(?:【\s*)?(?:具体)?实施例\s*([一二三四五六七八九十百0-9０-９]+)?\s*(?:】)?\s*(?:[:：](.*))?$/;
+
+/**
+ * 按实施例标题切分说明书正文。
+ *
+ * 纯函数、无 I/O；未发现标题时返回空数组，调用方回退旧的整节截断
+ * （旧 checkpoint 无分块信息也走同一回退，见 #830 M6 T6.4）。
+ * `features` 非空时，每块用 anchor 的连续子串匹配绑定特征，不做语义推断。
+ */
+export function splitEmbodiments(text: string, features: readonly string[] = []): EmbodimentChunk[] {
+  const lines = text.split(/\r?\n/);
+  const chunks: Array<{ id: string; title: string; body: string[] }> = [];
+  let current: { id: string; title: string; body: string[] } | undefined;
+  for (const line of lines) {
+    const match = EMBODIMENT_HEADING_RE.exec(line.trim());
+    if (match !== null) {
+      if (current !== undefined) chunks.push(current);
+      const rawId = match[1]?.trim();
+      current = {
+        id: rawId !== undefined && rawId.length > 0 ? rawId : String(chunks.length + 1),
+        title: line.trim(),
+        body: [],
+      };
+      continue;
+    }
+    current?.body.push(line);
+  }
+  if (current !== undefined) chunks.push(current);
+
+  return chunks
+    .map(chunk => {
+      const content = chunk.body.join("\n").trim();
+      return {
+        embodimentId: chunk.id,
+        title: chunk.title,
+        content,
+        charCount: content.length,
+        featureIds: features.filter(feature => matchFeature(content, feature).hit !== null),
+      };
+    })
+    .filter(chunk => chunk.content.length > 0);
 }

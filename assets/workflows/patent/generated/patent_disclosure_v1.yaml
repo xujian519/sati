@@ -62,6 +62,10 @@ stages:
     strategy: chain
     atom: approval-gate
     description: 人工复核披露分析报告（中断等待确认）
+  - id: claim_strategy
+    strategy: chain
+    atom: claim-strategy
+    description: 权利要求布局策略：独权必要特征+区别特征、从权层级
   - id: draft_claims
     strategy: chain
     atom: draft-claims

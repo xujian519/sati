@@ -9,7 +9,7 @@ import type { ChannelAttachment, Gateway, GatewayChannelKey, GatewayEvent } from
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
 import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
 import { ImPermissionHelper } from "../protocol/ImPermissionHelper.js";
-import { executeChannelCommand } from "../protocol/ChannelCommandRegistry.js";
+import { NEW_SESSION_ACK_TEXT, executeChannelCommand } from "../protocol/ChannelCommandRegistry.js";
 import type { MinimalWebSocketLike, WebSocketCtor } from "../protocol/resolveWebSocketImpl.js";
 import { renderWeComEvent } from "./wecom-render.js";
 import {
@@ -744,7 +744,7 @@ export class WeComChannel implements ChannelAdapter {
       this.onStateChange?.(this.mapper.snapshot());
     }
     if (mapped.command === "new" && !mapped.message) {
-      await this.sendReply(input.chatId, "已创建新会话。", {
+      await this.sendReply(input.chatId, NEW_SESSION_ACK_TEXT, {
         chatType: input.chatType,
         replyToMessageId: input.replyToMessageId,
       });

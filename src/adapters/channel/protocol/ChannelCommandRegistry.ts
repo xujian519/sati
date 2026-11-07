@@ -354,6 +354,15 @@ export async function executeChannelCommand(text: string, ctx: CommandExecContex
 }
 
 /**
+ * 新会话创建后的统一确认文案。
+ *
+ * 各通道适配器的 mapper 入参形状不同（QQ 用 groupId/userId、WeCom 带
+ * groupSessionsPerUser），无法统一走 {@link resolveIncomingMessage}；文案本身
+ * 必须单点定义，避免 6 处字面量各自漂移（#810）。
+ */
+export const NEW_SESSION_ACK_TEXT = "已创建新会话。";
+
+/**
  * Resolve an incoming chat message through the channel's session mapper and
  * handle the shared "new session" acknowledgment that every channel repeats.
  *
@@ -369,7 +378,7 @@ export async function resolveIncomingMessage<T extends { command?: "new"; messag
 ): Promise<{ mapped: T; handled: boolean }> {
   const mapped = mapper.resolve({ chatId, text });
   if (mapped.command === "new" && !mapped.message) {
-    await sendReply(chatId, "已创建新会话。");
+    await sendReply(chatId, NEW_SESSION_ACK_TEXT);
     return { mapped, handled: true };
   }
   if (!mapped.message) return { mapped, handled: true };

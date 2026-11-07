@@ -3,6 +3,7 @@ import path from "node:path";
 import { parse as parseCsv } from "csv-parse/sync";
 import { parseFragment as parseHtmlFragment, type ParserError } from "parse5";
 import { LineCounter, parseDocument } from "yaml";
+import { asFlooredPositiveInteger } from "../../../shared/configValidators.js";
 
 export type SyntaxDiagnostic = {
   line: number;
@@ -163,8 +164,8 @@ export async function collectPythonSyntaxDiagnostics(filePath: string, content: 
   }
   return [
     {
-      line: positiveInteger(parsed.line) ?? 1,
-      column: positiveInteger(parsed.column) ?? 1,
+      line: asFlooredPositiveInteger(parsed.line) ?? 1,
+      column: asFlooredPositiveInteger(parsed.column) ?? 1,
       message: trimDiagnosticMessage(stringValue(parsed.message) ?? "Invalid Python syntax."),
     },
   ];
@@ -210,8 +211,8 @@ function collectHtmlDiagnostics(content: string): SyntaxDiagnostic[] {
     onParseError: error => errors.push(error),
   });
   return errors.map(error => ({
-    line: positiveInteger(error.startLine) ?? 1,
-    column: positiveInteger(error.startCol) ?? 1,
+    line: asFlooredPositiveInteger(error.startLine) ?? 1,
+    column: asFlooredPositiveInteger(error.startCol) ?? 1,
     message: trimDiagnosticMessage(`HTML parse error: ${error.code}`),
   }));
 }
@@ -228,8 +229,8 @@ function collectCsvDiagnostics(content: string, extension: string): SyntaxDiagno
     const record = isRecord(error) ? error : {};
     return [
       {
-        line: positiveInteger(record.lines) ?? 1,
-        column: positiveInteger(record.column) ?? 1,
+        line: asFlooredPositiveInteger(record.lines) ?? 1,
+        column: asFlooredPositiveInteger(record.column) ?? 1,
         message: trimDiagnosticMessage(stringValue(record.message) ?? "Invalid CSV syntax."),
       },
     ];
@@ -464,14 +465,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function stringValue(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
-}
-
-function positiveInteger(value: unknown): number | undefined {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    return undefined;
-  }
-  const integer = Math.floor(value);
-  return integer > 0 ? integer : undefined;
 }
 
 function trimDiagnosticMessage(message: string): string {

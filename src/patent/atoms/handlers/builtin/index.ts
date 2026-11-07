@@ -46,6 +46,13 @@ export {
 export {
   draftClaimsAtom,
   DraftClaimsHandler,
+  claimStrategyAtom,
+  ClaimStrategyHandler,
+  buildClaimTree,
+  normalizeClaimStrategy,
+  renderClaimsFromStrategy,
+  type ClaimStrategy,
+  type ClaimTreeNode,
   draftSpecAtom,
   DraftSpecHandler,
   validateDraftSpec,
