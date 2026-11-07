@@ -21,9 +21,18 @@ stages:
     strategy: chain
     atom: claim-chart
     description: 权利要求要素级映射到审查员引用对比文件（mode=oa-response）
+  - id: classify_grounds
+    strategy: chain
+    atom: oa-grounds
+    description: 按法条与常用表述识别审查意见理由（新颖性/创造性/清楚/公开/超范围/单一性）
+  - id: amendment_diff
+    strategy: chain
+    atom: amendment-diff
+    description: 逐条核对拟修改限定能否在原申请文本中连续命中（输入须含 original_application 与 proposed_limitations 两段；缺段记未核对）
   - id: draft
     strategy: chain
-    description: 撰写意见陈述书（新颖性陈述 + 三步法，消费 claim-chart）
+    atom: draft-oa
+    description: 汇编意见陈述草稿（消费对照表、缺口、理由分型与修改差分，不重新检索）
   - id: approval
     strategy: chain
     description: 人工确认答复书

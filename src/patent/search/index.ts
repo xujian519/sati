@@ -3,6 +3,16 @@
  */
 
 export {
+  buildRecallPrompt,
+  buildRefinedQuery,
+  isSearchRecallStatus,
+  parseRecallDecision,
+  RECALL_SCHEMA,
+  type RecallDecision,
+  type SearchRecallResult,
+  type SearchRecallStatus,
+} from "./recall.js";
+export {
   DEFAULT_RERANK_MODEL,
   DEFAULT_RERANK_PROVIDER,
   MAX_RERANK_CANDIDATES,

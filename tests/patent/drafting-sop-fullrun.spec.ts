@@ -210,10 +210,12 @@ async function assertFullRun(result: Awaited<ReturnType<typeof runWorkflow>>, fi
   assert.match(output("figure_generate"), /附图门: ✅ 通过/, "附图门报告");
   assert.ok(existsSync(join(figureDir, "figure-check.json")), "附图核验结论应留痕");
 
-  // worker 契约校验：search 阶段命中 patent-search-commander（提示性，不降级）
+  // search 阶段改为有界补检原子：不再声明 patent-search-commander worker
+  // （补检输出与 worker 的检索式字段契约不同，保留会变成永真失败）。
   const search = result.stages.find(s => s.stageId === "search")!;
-  assert.equal(search.workerValidation?.workerName, "patent-search-commander");
-  assert.equal(search.degraded, false, "worker 契约缺失不改变 degraded");
+  assert.equal(search.atom, "search-recall");
+  assert.equal(search.workerValidation, undefined);
+  assert.equal(search.degraded, false, "补检原子应产出主输出");
 }
 
 test("T12: 全链路含确定性质量门产出（slop 评分可解析）", async () => {

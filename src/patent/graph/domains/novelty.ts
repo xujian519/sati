@@ -19,6 +19,12 @@ import { handlerNode, llmNode, resolveInput, ruleGateNode } from "./shared.js";
 
 export type BuildNoveltyGraphOptions = {
   handlers?: StageHandlerRegistry;
+  /**
+   * 证据模式。缺省 `"search"`：注册表里有 search handler 才插入检索节点（现状）。
+   * `"supplied"`：不检索、不生成检索关键词，直接对比调用方提供的 `prior_art`
+   * （无效/复审场景的证据由请求人指定，不能被新的检索结果替换）。
+   */
+  evidence?: "search" | "supplied";
   /** 规则门收口（缺省 true）。 */
   ruleGate?: boolean;
   /** 注入 approval-gate 审批门（缺省 true：HITL 暂停；自动执行/评测场景置 false 直达规则门）。 */
@@ -133,8 +139,10 @@ export function buildNoveltyGraph(options: BuildNoveltyGraphOptions = {}): Graph
 
   const extract = handlers.lookup("extract");
   if (extract === undefined) throw new Error("buildNoveltyGraph: 缺少内置原子 extract（请先 registerBuiltinAtoms）");
-  const keywords = handlers.lookup("keywords");
-  const search = handlers.lookup("search");
+  const supplied = options.evidence === "supplied";
+  // 证据模式：即使注册表里有 handler，也不插检索与关键词节点——检索会换掉请求人的证据集。
+  const keywords = supplied ? undefined : handlers.lookup("keywords");
+  const search = supplied ? undefined : handlers.lookup("search");
   const novelty = handlers.lookup("novelty");
   const approval = handlers.lookup("approval-gate");
 

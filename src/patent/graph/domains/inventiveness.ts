@@ -57,6 +57,12 @@ export type BuildInventivenessGraphOptions = {
   ruleGate?: boolean;
   /** 注入 approval-gate 审批门（缺省 true：HITL 暂停；自动执行/评测场景置 false 直达规则门）。 */
   includeApproval?: boolean;
+  /**
+   * 证据模式。缺省 `"search"`：注册表里有 search handler 才插入检索链（现状）。
+   * `"supplied"`：不插检索链，`build_query` 直接连 `closest`，只消费调用方提供的
+   * `prior_art`（无效/复审场景不得用新检索替换请求人指定的证据）。
+   */
+  evidence?: "search" | "supplied";
   /** 溯源包装钩子（ProvenanceCollector.wrapNode）：addNode 统一入口，透传 GraphBuilder。 */
   onAddNode?: (name: string, node: GraphNode) => GraphNode;
   /**
@@ -111,7 +117,8 @@ const STAGE_NODES: readonly StageSpec[] = [
     include: () => true,
   },
   { name: "domain_inject", create: () => domainInjectNode, include: () => true },
-  { name: "build_query", create: () => buildQueryNode, include: () => true },
+  // 证据模式（supplied）没有检索消费者，build_query 的 LLM 产出会被丢弃，故不插入。
+  { name: "build_query", create: () => buildQueryNode, include: ctx => ctx.search },
   { name: "search", create: ctx => handlerNode(ctx.searchHandler!), include: ctx => ctx.search },
   { name: "prepare_query", create: () => prepareQueryNode, include: ctx => ctx.search },
   { name: "recall_check", create: () => recallCheckNode, include: ctx => ctx.recallLoop },
@@ -148,11 +155,12 @@ const STAGE_EDGES: readonly EdgeSpec[] = [
   { from: "refine_query", to: "prepare_query", when: f => f.recallLoop },
   { from: "converge_prior_art", to: "closest", when: f => f.recallLoop },
   { from: "search", to: "closest", when: f => f.search && !f.recallLoop },
-  { from: "build_query", to: "closest", when: f => !f.search },
   // 三步法主线：parse → time_baseline（截止日显式事实）→ domain_inject → build_query
   { from: "parse", to: "time_baseline", when: () => true },
   { from: "time_baseline", to: "domain_inject", when: () => true },
-  { from: "domain_inject", to: "build_query", when: () => true },
+  { from: "domain_inject", to: "build_query", when: f => f.search },
+  // 证据模式没有检索式可生成，domain_inject 直连 closest。
+  { from: "domain_inject", to: "closest", when: f => !f.search },
   { from: "closest", to: "diff", when: () => true },
   { from: "diff", to: "combination", when: f => f.combination },
   { from: "diff", to: "hint", when: f => !f.combination },
@@ -201,7 +209,8 @@ function resolveGraphFlags(
 export function buildInventivenessGraph(options: BuildInventivenessGraphOptions = {}): GraphBuilder {
   const handlers = options.handlers ?? globalStageHandlerRegistry;
   const builder = new GraphBuilder({ onAddNode: options.onAddNode });
-  const searchHandler = handlers.lookup("search");
+  // 证据模式：handler 存在也不插检索链（否则会换掉请求人指定的证据集）。
+  const searchHandler = options.evidence === "supplied" ? undefined : handlers.lookup("search");
   const approvalHandler = handlers.lookup("approval-gate");
   const maxRounds = normalizeMaxRounds(options);
   const flags = resolveGraphFlags(options, searchHandler !== undefined, approvalHandler !== undefined, maxRounds);

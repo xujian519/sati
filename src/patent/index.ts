@@ -31,9 +31,11 @@ export {
   CASE_ROOT_REL,
   CASE_OUTPUTS_REL,
   CASE_WORKFLOW_RUNS_REL,
+  CASE_OA_ROUNDS_REL,
   CASE_INVENTIVENESS_FEEDBACK_FILE,
   caseOutputsDir,
   caseWorkflowRunsDir,
+  caseOaRoundsDir,
   caseInventivenessFeedbackPath,
 } from "./paths.js";
 

@@ -42,6 +42,11 @@ export {
 export {
   searchAtom,
   SearchHandler,
+  searchRecallAtom,
+  SearchRecallHandler,
+  DEFAULT_RETRIEVAL_ROUNDS,
+  type SearchRecallResult,
+  type SearchRecallStatus,
   keywordsAtom,
   KeywordsHandler,
   extractAtom,
@@ -93,6 +98,21 @@ export {
   type RasterGateObservation,
   claimChartAtom,
   ClaimChartHandler,
+  procedureChecklistAtom,
+  ProcedureChecklistHandler,
+  invalidityAnalysisAtom,
+  InvalidityAnalysisHandler,
+  NO_EVIDENCE_REASON,
+  oaGroundsAtom,
+  OaGroundsHandler,
+  amendmentDiffAtom,
+  AmendmentDiffHandler,
+  draftOaAtom,
+  DraftOaHandler,
+  OA_DRAFT_NOTICE,
+  OA_NO_CHART_REASON,
+  type OaDraftStatus,
+  type InvalidityStatus,
   claimEmbodimentMapperAtom,
   ClaimEmbodimentMapperHandler,
   timeBaselineAtom,
@@ -109,6 +129,7 @@ import * as builtin from "./handlers/builtin/index.js";
 /** 将内置原子（契约 + 运行时）注册进全局注册表。幂等：同名覆盖。 */
 export function registerBuiltinAtoms(): void {
   globalAtomRegistry.register(builtin.searchAtom);
+  globalAtomRegistry.register(builtin.searchRecallAtom);
   globalAtomRegistry.register(builtin.extractAtom);
   // compare 原子不在内置 manifest 中（claim-chart 场景由 chart 原子覆盖），
   // 保留给自定义 manifest 按 atom: "compare" 引用。
@@ -126,11 +147,17 @@ export function registerBuiltinAtoms(): void {
   globalAtomRegistry.register(builtin.clarityGateAtom);
   globalAtomRegistry.register(builtin.figureGateAtom);
   globalAtomRegistry.register(builtin.claimChartAtom);
+  globalAtomRegistry.register(builtin.procedureChecklistAtom);
+  globalAtomRegistry.register(builtin.invalidityAnalysisAtom);
+  globalAtomRegistry.register(builtin.oaGroundsAtom);
+  globalAtomRegistry.register(builtin.amendmentDiffAtom);
+  globalAtomRegistry.register(builtin.draftOaAtom);
   globalAtomRegistry.register(builtin.claimEmbodimentMapperAtom);
   globalAtomRegistry.register(builtin.chemistryAnalyzeAtom);
   globalAtomRegistry.register(builtin.timeBaselineAtom);
 
   globalStageHandlerRegistry.register(new builtin.SearchHandler());
+  globalStageHandlerRegistry.register(new builtin.SearchRecallHandler());
   globalStageHandlerRegistry.register(new builtin.ExtractHandler());
   globalStageHandlerRegistry.register(new builtin.CompareHandler());
   globalStageHandlerRegistry.register(new builtin.ReasoningHandler());
@@ -146,6 +173,11 @@ export function registerBuiltinAtoms(): void {
   globalStageHandlerRegistry.register(new builtin.ClarityGateHandler());
   globalStageHandlerRegistry.register(new builtin.FigureGateHandler());
   globalStageHandlerRegistry.register(new builtin.ClaimChartHandler());
+  globalStageHandlerRegistry.register(new builtin.ProcedureChecklistHandler());
+  globalStageHandlerRegistry.register(new builtin.InvalidityAnalysisHandler());
+  globalStageHandlerRegistry.register(new builtin.OaGroundsHandler());
+  globalStageHandlerRegistry.register(new builtin.AmendmentDiffHandler());
+  globalStageHandlerRegistry.register(new builtin.DraftOaHandler());
   globalStageHandlerRegistry.register(new builtin.ClaimEmbodimentMapperHandler());
   globalStageHandlerRegistry.register(new builtin.ChemistryAnalyzeHandler());
   globalStageHandlerRegistry.register(new builtin.TimeBaselineHandler());

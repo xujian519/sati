@@ -70,15 +70,8 @@ export const CONCLUDE_SCHEMA = {
   required: ["inventive", "confidence", "key_rationale", "report"],
 } as const;
 
-export const RECALL_SCHEMA = {
-  type: "object",
-  properties: {
-    adequate: { type: "boolean", description: "检索结果是否足以支撑创造性判断（至少覆盖核心技术特征）" },
-    covered_features: { type: "array", items: { type: "string" }, description: "已被检索结果覆盖的技术特征" },
-    missing_features: { type: "array", items: { type: "string" }, description: "未被覆盖的关键技术特征（补检依据）" },
-  },
-  required: ["adequate", "covered_features", "missing_features"],
-} as const;
+/** 覆盖度 schema 收在 `search/recall.ts`（撰写检索复用同一份契约）。 */
+export { RECALL_SCHEMA } from "../../search/recall.js";
 
 export const COMBINATION_SCHEMA = {
   type: "object",

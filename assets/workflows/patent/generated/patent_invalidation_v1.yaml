@@ -24,10 +24,16 @@ stages:
     description: 权利要求要素级映射到证据组合（mode=invalidity/reexamination）
   - id: novelty
     strategy: chain
-    description: 新颖性单独对比（单篇全覆盖）（原子路径不支持，收口模式）
+    atom: invalidity-analysis
+    description: 新颖性单独对比（单篇全覆盖），只用对照表里请求人指定的证据，不自行检索
   - id: inventiveness
     strategy: chain
-    description: 三步法创造性分析（原子路径不支持，收口模式）
+    atom: invalidity-analysis
+    description: 三步法创造性分析，只用对照表里请求人指定的证据组合，不自行检索
+  - id: procedure_checklist
+    strategy: chain
+    atom: procedure-checklist
+    description: 核对程序事项与理由-证据对应关系（按材料识别复审/无效；核验表，不是请求书）
   - id: approval
     strategy: chain
     description: 人工确认分析结论
