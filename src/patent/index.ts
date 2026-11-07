@@ -214,6 +214,26 @@ export {
   type VerdictLayer,
   type VerdictEnvelope,
   type GraphRunnerOptions,
+  // 起草质量 rubric（#830 M5）
+  DRAFTING_RUBRIC,
+  DRAFTING_RUBRIC_TOTAL,
+  DEFAULT_DRAFTING_PASS_LINE,
+  scoreDraftingArtifacts,
+  parseDraftingGoldenJsonl,
+  evaluateDraftingGolden,
+  runDraftingPipeline,
+  collectDraftingSignals,
+  type DraftingDimensionId,
+  type DraftingRubricDimension,
+  type DraftingArtifacts,
+  type DraftingSignals,
+  type DraftingDimensionScore,
+  type DraftingRubricResult,
+  type DraftingGoldenCase,
+  type DraftingCaseOutcome,
+  type DraftingBatchReport,
+  type DraftingPipelineOptions,
+  type DraftingPipelineRun,
 } from "./evaluate/index.js";
 
 export {
@@ -399,6 +419,11 @@ export {
   MergeHandler,
   draftClaimsAtom,
   DraftClaimsHandler,
+  claimStrategyAtom,
+  ClaimStrategyHandler,
+  buildClaimTree,
+  normalizeClaimStrategy,
+  renderClaimsFromStrategy,
   draftSpecAtom,
   DraftSpecHandler,
   validateDraftSpec,
@@ -425,6 +450,8 @@ export {
   type RasterGateObservation,
   type SpecViolation,
   type PFETriple,
+  type ClaimStrategy,
+  type ClaimTreeNode,
 } from "./atoms/index.js";
 
 export {

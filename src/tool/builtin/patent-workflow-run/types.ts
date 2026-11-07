@@ -7,7 +7,8 @@ export type PatentWorkflowRunInput = {
   manifestId?: string;
   /**
    * 领域子图模式：命中时走图引擎自动执行对应子图（A22.2 新颖性 / A22.3 创造性 /
-   * A26.3 充分公开），一次调用跑完全部节点（LLM + 检索 + 规则门），无需主代理驱动。
+   * A26.3 充分公开 / A26.4 权利要求清楚与支持），一次调用跑完全部节点
+   * （LLM + 检索 + 规则门），无需主代理驱动。
    * 缺省走 manifest 路径（向后兼容）。
    */
   graph?: DomainGraphName;

@@ -32,12 +32,12 @@
 | `role_skill_count` | 专家角色数（type: role） | `45` | skills/**/SKILL.md frontmatter |
 | `patent_skill_count` | 专利相关技能数（patent-* 与 provision-* 技能目录） | `52` | skills/ 目录命名 |
 | `src_module_count` | src/ 模块数 | `32` | src/ 顶层目录 |
-| `loop_module_count` | agent/loop 模块数（.ts 文件） | `28` | src/agent/loop/ |
-| `patent_atom_count` | 内置原子数 | `25` | src/patent/atoms/index.ts registerBuiltinAtoms |
+| `loop_module_count` | agent/loop 模块数（.ts 文件） | `30` | src/agent/loop/ |
+| `patent_atom_count` | 内置原子数 | `26` | src/patent/atoms/index.ts registerBuiltinAtoms |
 | `patent_manifest_count` | 内置 patent manifest 数 | `8` | assets/workflows/patent/generated/*.yaml（由 check:patent-workflow-docs 保真） |
-| `drafting_stage_count` | patent_drafting_v1 阶段数 | `25` | assets/workflows/patent/generated/patent_drafting_v1.yaml |
+| `drafting_stage_count` | patent_drafting_v1 阶段数 | `26` | assets/workflows/patent/generated/patent_drafting_v1.yaml |
 | `event_total_count` | 事件总数（生产者/消费者矩阵行数） | `80` | docs/event-producer-consumer.md（由 check:event-matrix 保真） |
-| `lint_gate_count` | pnpm lint 链上的领域门禁数 | `13` | package.json scripts.lint |
+| `lint_gate_count` | pnpm lint 链上的领域门禁数 | `15` | package.json scripts.lint |
 | `ci_job_count` | CI job 数 | `4` | .github/workflows/ci.yml |
 
 ## 3. `src/` 模块索引
@@ -47,7 +47,7 @@
 | 模块 | .ts/.tsx 文件数 | barrel | 职责 |
 | --- | --- | --- | --- |
 | `src/adapters/` | 104 | ✓ | IM 渠道适配器（21 个渠道 + Channel/render/SessionMapper） |
-| `src/agent/` | 79 | ✓ | Agent 循环、会话、子代理与团队编排 |
+| `src/agent/` | 81 | ✓ | Agent 循环、会话、子代理与团队编排 |
 | `src/always-on/` | 38 | ✓ | 常驻后台执行（Discovery 计划/报告/工作周期） |
 | `src/board/` | 8 | ✓ | 项目看板（protocol/runtime/storage 三组，kanban_* 工具与网关方法组） |
 | `src/browser/` | 6 | — | 浏览器后端抽象（ego lite / BrowserOS 等后端探测与驱动） |
@@ -56,7 +56,7 @@
 | `src/cron/` | 18 | ✓ | 定时任务（config/protocol/runtime/storage/tool） |
 | `src/extension/` | 52 | ✓ | 插件系统（plugin.json、lifecycle hooks、skills、贡献点） |
 | `src/fs/` | 1 | — | 文件系统小工具（JSONL run 写入器） |
-| `src/gateway/` | 39 | ✓ | WebSocket 网关（protocol/server/client/approval） |
+| `src/gateway/` | 40 | ✓ | WebSocket 网关（protocol/server/client/approval） |
 | `src/knowledge/` | 63 | ✓ | 知识库（图谱/判例/法规/embeddings/wiki 卡片） |
 | `src/lifecycle/` | 6 | ✓ | 生命周期（protocol/runtime） |
 | `src/literature/` | 13 | ✓ | 学术论文检索（arXiv/OpenAlex/Semantic Scholar/Crossref） |
@@ -64,14 +64,14 @@
 | `src/methodology/` | 14 | ✓ | 方法论注册表（five-whys/mece/triz/bridge-reencode 等） |
 | `src/model/` | 75 | ✓ | 模型抽象（providers/embedding/catalog/resolveModelInfo/streaming） |
 | `src/network/` | 3 | ✓ | 网络层（fetch 封装） |
-| `src/patent/` | 259 | ✓ | 专利执行管线（workflow/graph/atoms/evidence/figure/document 等） |
+| `src/patent/` | 264 | ✓ | 专利执行管线（workflow/graph/atoms/evidence/figure/document 等） |
 | `src/permission/` | 7 | ✓ | 权限（decision/PermissionRuntime + guard/ToolGuardRegistry） |
 | `src/pilot/` | 19 | ✓ | 配置（PilotConfigStore / lastGoodFacts / workspace 判定） |
 | `src/router/` | 35 | ✓ | 智能路由（含多模态媒体降级） |
 | `src/rule/` | 11 | ✓ | 宪法规则引擎（协议/加载器/评估器/输出门禁/policy-bridge） |
 | `src/runtime/` | 3 | ✓ | 运行时环境适配（命令 shell 解析） |
 | `src/session/` | 35 | ✓ | 会话管理（transcript/artifacts/resume/search/storage/workspace 账本） |
-| `src/shared/` | 13 | — | 跨模块共享工具（env/paths/retry/sqlite/ttl-cache/timeouts） |
+| `src/shared/` | 15 | — | 跨模块共享工具（env/paths/retry/sqlite/ttl-cache/timeouts） |
 | `src/status/` | 2 | ✓ | 状态（agent 状态详情与可见错误体） |
 | `src/task/` | 4 | ✓ | 后台任务存储与运行时 |
 | `src/telemetry/` | 6 | ✓ | 遥测（analytics.v2 契约） |
@@ -84,7 +84,7 @@
 
 ## 4. 门禁链与 CI
 
-`pnpm lint` 在 eslint + UI lint 之后挂 **13** 个领域门禁（按执行顺序）：
+`pnpm lint` 在 eslint + UI lint 之后挂 **15** 个领域门禁（按执行顺序）：
 
 - `pnpm check:catalog-mirror`
 - `pnpm check:event-matrix`
@@ -95,8 +95,10 @@
 - `pnpm check:i18n-namespaces`
 - `pnpm check:issue-labels`
 - `pnpm check:techdebt-metrics`
+- `pnpm check:debt-ledger`
 - `pnpm check:protocol-version`
 - `pnpm check:architecture-boundaries`
+- `pnpm check:runtime-cycles`
 - `pnpm check:degradation`
 - `pnpm check:doc-claims`
 

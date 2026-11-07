@@ -71,6 +71,8 @@ const { result, checkpointId } = await runGraphWithCheckpoints(graph, { input: "
 | 新颖性 | `buildNoveltyGraph` | `extract` | A22.2 单独对比 + 数值范围 | `patent_novelty` |
 | 创造性 | `buildInventivenessGraph` | `parse` | A22.3 三步法 + 辅助因素 | `patent_inventiveness` |
 | 充分公开 | `buildEnablementGraph` | `load` | A26.3 三步审查 + 领域规则 | `patent_disclosure` |
+| 权要清楚/支持 | `buildClaimBreadthGraph` | `load` | A26.4 清楚 + 以说明书为依据 | `patent_claims` |
+| 引用核验 | `buildCitationCheckGraph` | `check` | 结论引用是否接地（零 LLM） | — |
 
 子图复用现有原子（extract/keywords/search/novelty/approval-gate）+ 新增确定性节点
 （`numeric_range` 数值范围专项判定 / `domain_rules` 化学·计算机·机械领域特殊要求），
@@ -87,6 +89,14 @@ const { result, checkpointId } = await runGraphWithCheckpoints(graph, { input: "
 | `domain_rules` | 确定性 | 技术领域检测扩展为 6 域：化学/医药、生物（保藏两条件）、电学（连接关系/信号流）、计算机、机械、通用 |
 | `claimText` 输入 | 工具参数 | `patent_workflow_run({graph:"enablement", claimText})` 独立传入权利要求——enablement/conclude 节点按"权利要求保护的技术方案"判断（缺省回退 input） |
 | enablement 提示 | LLM prompt | 显式列出审查指南 §2.1.3 五种无法实现情形（(1)-(5)）+ 平衡条件（本领域技术人员视角/常识可省略/至少一个技术问题成立/效果可预期无需实验数据/夸大效果通常不构成） |
+
+### 权利要求清楚/支持子图（claim_breadth，A26.4）
+
+节点链：`load`（权项切分 + 说明书切片，确定性）→ `anchor_evidence`（特征→说明书连续子串命中，
+确定性）→ `clarity` / `support` / `functional_limit`（LLM）→ `conclude`（LLM）→ `approval` → `rule_gate`。
+输入键与 enablement 对称：`claimText` 作为权利要求、`input`（或 `text`/`source_text`）作为说明书；
+工具调用 `patent_workflow_run({ graph: "claim_breadth", claimText, input })`。锚点未命中的特征
+不会静默丢弃，而是作为缺口回显给 LLM 判断。
 
 ### 创造性子图（inventiveness）专项节点（2026-08 优化）
 

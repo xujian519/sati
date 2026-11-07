@@ -24,8 +24,8 @@ export const draftClaimsAtom: Atom = {
   name: "draft-claims",
   description: "基于 PFE 与新颖性结果直出权利要求草稿（独立+从属）",
   category: "extract",
-  inputSchema: ["pfe_triples", "merge_result", "novelty_conclusion", "source_text"],
-  outputSchema: ["claims_draft", "draft_claims_result"],
+  inputSchema: ["pfe_triples", "merge_result", "novelty_conclusion", "source_text", "claims_strategy"],
+  outputSchema: ["claims_draft", "draft_claims_result", "claims_tree"],
 };
 
 const DRAFT_CLAIMS_SCHEMA = {
@@ -42,6 +42,31 @@ export class DraftClaimsHandler implements StageHandler {
   readonly category = "extract" as const;
 
   async execute({ state, provider }: StageExecuteInput): Promise<PipelineState> {
+    // 策略表存在且可解析 → 按从权树确定性渲染（不再调用 LLM）；否则回退单次 LLM 旧路径。
+    const strategyRaw = getStateString(state, "claims_strategy");
+    let strategyIgnored: string | undefined;
+    if (strategyRaw.trim().length > 0) {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(strategyRaw);
+      } catch {
+        // 策略表损坏：保留 strategyIgnored 留痕，随后回退单次 LLM 草稿路径。
+        parsed = undefined;
+      }
+      const strategy = normalizeClaimStrategy(parsed);
+      if (strategy !== null) {
+        const { claims, tree } = renderClaimsFromStrategy(strategy);
+        return {
+          claims_draft: claims.join("\n\n"),
+          claims_tree: JSON.stringify(tree),
+          draft_claims_result: JSON.stringify({
+            claims,
+            notes: strategy.rationale ?? "按权利要求布局策略表确定性渲染",
+          }),
+        };
+      }
+      strategyIgnored = "claims_strategy 无法解析为策略表，已回退单次 LLM 草稿路径";
+    }
     const missing = requireLlm(provider, "draft-claims");
     if (missing) return missing;
     const mergeResult = getStateString(state, "merge_result");
@@ -76,9 +101,206 @@ export class DraftClaimsHandler implements StageHandler {
         return {
           claims_draft: parsed.claims.map(String).join("\n\n"),
           draft_claims_result: raw,
+          ...(strategyIgnored !== undefined ? { claim_strategy_ignored: strategyIgnored } : {}),
         };
       },
-      raw => ({ claims_draft: raw }),
+      raw => ({
+        claims_draft: raw,
+        ...(strategyIgnored !== undefined ? { claim_strategy_ignored: strategyIgnored } : {}),
+      }),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// claim-strategy —— 权利要求布局策略表 + 从权树（M3）
+// ---------------------------------------------------------------------------
+
+/** 从权树节点：独权在前，从权按依赖顺序。 */
+export type ClaimTreeNode = {
+  claimNo: number;
+  type: "independent" | "dependent";
+  dependsOn?: number[];
+  features: string[];
+};
+
+/** 权利要求布局策略：独权特征集 + 从权层级。 */
+export type ClaimStrategy = {
+  subject: string;
+  independentFeatures: string[];
+  dependentClaims: Array<{ dependsOn: number[]; features: string[] }>;
+  rationale?: string;
+};
+
+export const claimStrategyAtom: Atom = {
+  name: "claim-strategy",
+  description: "先定权利要求布局策略（独权必要特征+区别特征、从权层级），供 draft-claims 按树渲染",
+  category: "extract",
+  inputSchema: ["pfe_triples", "merge_result", "novelty_conclusion", "source_text"],
+  outputSchema: ["claims_strategy", "claims_tree"],
+};
+
+const CLAIM_STRATEGY_SCHEMA = {
+  type: "object",
+  properties: {
+    subject: { type: "string", description: "发明主题名称（如“一种分拣装置”）" },
+    independent_features: {
+      type: "array",
+      items: { type: "string" },
+      description: "独立权利要求的必要技术特征（含区别特征）",
+    },
+    dependent_claims: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          depends_on: { type: "array", items: { type: "number" } },
+          features: { type: "array", items: { type: "string" } },
+        },
+        required: ["depends_on", "features"],
+      },
+    },
+    rationale: { type: "string", description: "布局理由（可选）" },
+  },
+  required: ["subject", "independent_features", "dependent_claims"],
+} as const;
+
+function toStringArray(value: unknown): string[] | null {
+  if (!Array.isArray(value)) return null;
+  const items = value.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+  return items.length === value.length ? items.map(item => item.trim()) : null;
+}
+
+/**
+ * 收窄 LLM 输出的策略表（兼容 snake_case 与 camelCase）。
+ * 结构不合法返回 null——调用方据此降级，而不是渲染半成品权要。
+ */
+export function normalizeClaimStrategy(value: unknown): ClaimStrategy | null {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  const subject = typeof record.subject === "string" ? record.subject.trim() : "";
+  const independentFeatures = toStringArray(record.independent_features ?? record.independentFeatures);
+  if (subject.length === 0 || independentFeatures === null || independentFeatures.length === 0) return null;
+
+  const dependentClaims: ClaimStrategy["dependentClaims"] = [];
+  const rawDependent = record.dependent_claims ?? record.dependentClaims;
+  if (Array.isArray(rawDependent)) {
+    for (const item of rawDependent) {
+      if (item === null || typeof item !== "object" || Array.isArray(item)) continue;
+      const entry = item as Record<string, unknown>;
+      const features = toStringArray(entry.features);
+      if (features === null || features.length === 0) continue;
+      const rawDependsOn = entry.depends_on ?? entry.dependsOn;
+      const dependsOn = Array.isArray(rawDependsOn)
+        ? rawDependsOn.filter((n): n is number => typeof n === "number" && Number.isInteger(n) && n > 0)
+        : [];
+      dependentClaims.push({ dependsOn, features });
+    }
+  }
+  return {
+    subject,
+    independentFeatures,
+    dependentClaims,
+    ...(typeof record.rationale === "string" && record.rationale.trim().length > 0
+      ? { rationale: record.rationale.trim() }
+      : {}),
+  };
+}
+
+/** 策略表 → 从权树（编号 1 起，从权引用只允许指向前序权项）。 */
+export function buildClaimTree(strategy: ClaimStrategy): ClaimTreeNode[] {
+  const tree: ClaimTreeNode[] = [{ claimNo: 1, type: "independent", features: [...strategy.independentFeatures] }];
+  strategy.dependentClaims.forEach(dependent => {
+    const features = dependent.features.filter(feature => feature.trim().length > 0);
+    if (features.length === 0) return;
+    const claimNo = tree.length + 1;
+    const dependsOn = dependent.dependsOn.filter(n => n >= 1 && n < claimNo);
+    tree.push({
+      claimNo,
+      type: "dependent",
+      dependsOn: dependsOn.length > 0 ? dependsOn : [1],
+      features,
+    });
+  });
+  return tree;
+}
+
+/** 清洗单个特征文本（去尾部标点，避免渲染出“，。”）。 */
+function cleanFeature(feature: string): string {
+  return feature.trim().replace(/[。；;，,]+$/u, "");
+}
+
+/**
+ * 策略表 → 权要文本（确定性渲染器）。
+ *
+ * 独权：`N. <主题>，其特征在于，<特征…>。`
+ * 从权：`N. 根据权利要求X所述的<主题核心>，其特征在于，<特征…>。`
+ */
+export function renderClaimsFromStrategy(strategy: ClaimStrategy): { claims: string[]; tree: ClaimTreeNode[] } {
+  const tree = buildClaimTree(strategy);
+  const subject = strategy.subject.trim().replace(/[。；;，,\s]+$/u, "") || "一种装置";
+  const core = subject.replace(/^一种/u, "");
+  const claims = tree.map(node => {
+    const features = node.features
+      .map(cleanFeature)
+      .filter(feature => feature.length > 0)
+      .join("，");
+    const body = features.length > 0 ? `，其特征在于，${features}。` : "。";
+    if (node.type === "independent") return `${node.claimNo}. ${subject}${body}`;
+    const dependsOn = (node.dependsOn ?? [1]).join("或");
+    return `${node.claimNo}. 根据权利要求${dependsOn}所述的${core}${body}`;
+  });
+  return { claims, tree };
+}
+
+export class ClaimStrategyHandler implements StageHandler {
+  readonly name = "claim-strategy";
+  readonly category = "extract" as const;
+
+  async execute({ state, provider }: StageExecuteInput): Promise<PipelineState> {
+    const missing = requireLlm(provider, "claim-strategy");
+    if (missing) return missing;
+    const mergeResult = getStateString(state, "merge_result");
+    const pfeTriples = getStateArray(state, "pfe_triples");
+    const novelty = getStateString(state, "novelty_conclusion");
+    const source = getStateString(state, "source_text");
+    const input = mergeResult || (pfeTriples.length > 0 ? JSON.stringify(pfeTriples, null, 2) : "") || source;
+    if (input.trim().length === 0) {
+      return degraded("claim-strategy", "输入为空（state.merge_result / pfe_triples / source_text）");
+    }
+    const prompt = [
+      "你是专利权利要求布局策略专家。先定策略、后成文：决定哪些技术特征必须写入独立权利要求，哪些作为从属权利要求逐层限定。",
+      "要求：",
+      "- 独权必须包含解决技术问题的全部必要技术特征，并将与现有技术的区别特征写入独权",
+      "- 从权按依赖顺序逐层细化（结构→参数→方法步骤/用途），每条从权只增加限定",
+      "- depends_on 只能引用编号更小的权项（独权为 1），从权从 2 起顺序编号",
+      "- 避免过宽的功能性限定；功能性限定以说明书公开的实施方式为限",
+      "- 与新颖性分析结论一致：区别特征必须出现在独权特征集中",
+      "",
+      "【分析结果】",
+      dataBlock(input.slice(0, 8000)),
+      novelty.trim().length > 0 ? `【新颖性结论】\n${dataBlock(novelty.slice(0, 2000))}` : "",
+      "",
+      "请严格输出 JSON：subject 为发明主题名称；independent_features 为独权特征数组；",
+      "dependent_claims 为 [{depends_on: number[], features: string[]}]；rationale 为布局理由。",
+    ].join("\n");
+    const res = await callLlm(provider, "claim-strategy", prompt, {
+      schema: CLAIM_STRATEGY_SCHEMA,
+      temperature: 0.2,
+    });
+    if (!res.ok) return res.error;
+    return parseLlmJson(
+      res.raw,
+      parsed => {
+        const strategy = normalizeClaimStrategy(parsed);
+        if (strategy === null) return null;
+        const { tree } = renderClaimsFromStrategy(strategy);
+        return {
+          claims_strategy: JSON.stringify(strategy),
+          claims_tree: JSON.stringify(tree),
+        };
+      },
+      () => degraded("claim-strategy", "LLM 输出无法解析为权利要求布局策略表"),
     );
   }
 }

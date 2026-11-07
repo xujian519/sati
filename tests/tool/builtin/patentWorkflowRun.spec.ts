@@ -348,6 +348,14 @@ test("注入放行审批门的 handlers：draft_claims 执行 + 确定性规则�
     }
   }
   const model = mockModel(prompt => {
+    if (prompt.includes("权利要求布局策略专家")) {
+      return JSON.stringify({
+        subject: "一种智能保温杯",
+        independent_features: ["杯体采用双层真空结构"],
+        dependent_claims: [{ depends_on: [1], features: ["所述杯体包括内胆与外壳"] }],
+        rationale: "独权含区别特征",
+      });
+    }
     if (prompt.includes("权利要求撰写专家")) {
       return JSON.stringify({
         claims: ["1. 一种智能保温杯，其特征在于杯体采用双层真空结构。"],
@@ -607,6 +615,51 @@ test("graph=inventiveness 图自动执行 → 审批门中断 + 检查点输出"
   assert.match(text, /patent_workflow_run\(graph=inventiveness\)/);
   assert.match(text, /审批门暂停/);
   assert.match(text, /检查点: patent_inventiveness-\d+/);
+  assert.match(text, /规则门 verdict/);
+});
+
+/** claim_breadth（A26.4）四段 LLM prompt 响应器。 */
+function claimBreadthResponder(prompt: string): string {
+  if (prompt.includes("权利要求是否清楚")) {
+    return JSON.stringify({ issues: [], clarity_ok: true });
+  }
+  if (prompt.includes("权利要求是否以说明书为依据")) {
+    return JSON.stringify({ gaps: [], support_ok: true });
+  }
+  if (prompt.includes("功能性限定是否过宽")) {
+    return JSON.stringify({ overbroad: false, issues: [] });
+  }
+  if (prompt.includes("生成专利法 A26.4 权利要求审查报告")) {
+    return JSON.stringify({
+      support_ok: true,
+      clarity_ok: true,
+      gaps: [],
+      confidence: "medium",
+      key_rationale: "权项术语明确且说明书给出对应实施方式",
+      report: "A26.4 审查：权利要求清楚，且以说明书为依据。",
+    });
+  }
+  return "{}";
+}
+
+test("graph=claim_breadth 图自动执行 → 审批门中断 + A26.4 结论落 state", async () => {
+  registerBuiltinAtoms();
+  const tool = createPatentWorkflowRunTool({ model: mockModel(claimBreadthResponder), search: mockSearch });
+  const res = await tool.execute(
+    {
+      graph: "claim_breadth",
+      claimText: "1. 一种分拣装置，其特征在于，包括传送带和识别传感器。",
+      input: "本发明公开一种分拣装置，包括传送带和识别传感器，用于提高分拣准确率。",
+    },
+    makeToolContext({ cwd: "/tmp" }),
+  );
+  const text = textOf(res);
+  assert.match(text, /patent_workflow_run\(graph=claim_breadth\)/);
+  assert.match(text, /审批门暂停/);
+  assert.match(text, /claim_breadth_clarity/);
+  assert.match(text, /claim_breadth_support/);
+  assert.match(text, /claim_breadth_conclusion/);
+  assert.match(text, /检查点: patent_claim_breadth-\d+/);
   assert.match(text, /规则门 verdict/);
 });
 

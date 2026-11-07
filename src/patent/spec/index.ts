@@ -8,6 +8,8 @@ export {
   extractNumericValues,
   formatRange,
   normalizeUnit,
+  splitEmbodiments,
   UNITS,
+  type EmbodimentChunk,
   type NumericRange,
 } from "./checks.js";

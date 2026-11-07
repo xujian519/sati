@@ -30,7 +30,7 @@ import { openProvenanceCollector } from "./provenance.js";
 import type { PatentWorkflowRunDeps, PatentWorkflowRunInput } from "./types.js";
 
 // ---------------------------------------------------------------------------
-// 图模式：领域子图自动执行（graph=novelty|inventiveness|enablement|citation_check）
+// 图模式：领域子图自动执行（graph=novelty|inventiveness|enablement|claim_breadth|citation_check）
 // ---------------------------------------------------------------------------
 
 export type GraphExecuteContext = {
