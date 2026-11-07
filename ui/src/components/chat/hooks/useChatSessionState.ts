@@ -317,6 +317,15 @@ export function useChatSessionState({
     setIsUserScrolledUp: pagination.setIsUserScrolledUp,
     tokenBudget,
     setTokenBudget,
+    modelContextParams:
+      currentSessionId && selectedProject
+        ? {
+            sessionId: currentSessionId,
+            projectName: selectedProject.name,
+            projectPath: selectedProject.fullPath || selectedProject.path || "",
+            ...sessionRequestParams,
+          }
+        : undefined,
     visibleMessageCount: pagination.visibleMessageCount,
     visibleMessages: pagination.visibleMessages,
     loadEarlierMessages: pagination.loadEarlierMessages,

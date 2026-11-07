@@ -18,6 +18,7 @@ import type { SessionMetadataValue } from "../../session/transcript/TranscriptEn
 import type { SessionTitleGenerator } from "../../session/title/SessionTitleGenerator.js";
 import { createVisibleErrorStatusDetail } from "../../status/agentStatus.js";
 import { FileArtifactCollector, type FileArtifact } from "../../session/artifacts/index.js";
+import { writeModelContextSnapshot } from "../../session/context/ModelContextSnapshot.js";
 import { sanitizeAgentInput } from "./sanitizeAgentInput.js";
 import { TurnInputProcessor } from "./TurnInputProcessor.js";
 
@@ -354,6 +355,20 @@ export class TurnRunner {
         },
         onRequestHeader: async header => {
           await this.transcript.recordRequestHeader?.(options.sessionId, options.turnId, header);
+        },
+        onModelContext: async snapshot => {
+          if (!this.runtimeContext.transcriptPath) {
+            return;
+          }
+          try {
+            await writeModelContextSnapshot(this.runtimeContext.transcriptPath, snapshot);
+          } catch (error) {
+            // 诊断旁路失败不得阻断对话；保留告警便于排查磁盘/权限问题。
+            logger.warn("model context snapshot write failed", {
+              transcriptPath: this.runtimeContext.transcriptPath,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
         },
         onFlushCheckpoint: async () => {
           await this.transcript.flushCheckpoint?.();

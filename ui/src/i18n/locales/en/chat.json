@@ -553,5 +553,29 @@
       "message": "{{message}}",
       "hint": "Retry with a shorter prompt, ask the agent to split large tool inputs into smaller steps, or switch to a model with stronger tool-calling support in Settings → Model Provider."
     }
+  },
+  "contextInspector": {
+    "open": "Inspect context",
+    "title": "Model context",
+    "subtitle": "What the model actually received on the last request.",
+    "close": "Close",
+    "loading": "Loading context…",
+    "searchPlaceholder": "Search context…",
+    "chars": "{{count}} chars (prompt + tools)",
+    "meta": "{{provider}} / {{model}} · turn {{turnId}}",
+    "mediaOmitted": "Binary media payloads are omitted from this snapshot.",
+    "sections": {
+      "system": "System prompt",
+      "tools": "Tools",
+      "messages": "Messages"
+    },
+    "status": {
+      "error": "Unable to load the context snapshot.",
+      "missing": "No snapshot yet. It becomes available after the next model request.",
+      "stale": "This snapshot belongs to an earlier turn. Send a message to refresh it.",
+      "toolsEmpty": "No tools were sent.",
+      "messagesEmpty": "No messages were sent."
+    },
+    "emptySearch": "No matches."
   }
 }

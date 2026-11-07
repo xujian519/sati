@@ -11,6 +11,7 @@ import ImageAttachment from "../chat/view/subcomponents/ImageAttachment";
 import CommandMenu from "../chat/view/subcomponents/CommandMenu";
 import { cn } from "../../lib/utils.js";
 import type { ContentReference } from "../../types/contentReference";
+import { ContextInspector, type ModelContextRequest } from "../chat-context/ContextInspector";
 import DocumentReferenceChip from "./DocumentReferenceChip";
 import ComposerBusySendNotice from "./ComposerBusySendNotice";
 import ComposerPermissionSelector from "./ComposerPermissionSelector";
@@ -89,6 +90,8 @@ export type ComposerV2Props = {
   onSteerBusySendQueue?: () => void;
   isSubmitPending?: boolean;
   tokenBudget?: Record<string, unknown> | null;
+  /** 上下文检查器所需的会话定位参数；缺省时不显示入口。 */
+  modelContextParams?: ModelContextRequest;
   thinkingMode: ThinkingModeId;
   thinkingModeAvailability: ThinkingModeAvailability;
   onThinkingModeChange: (mode: ThinkingModeId) => void;
@@ -166,6 +169,7 @@ export default function ComposerV2({
   onSteerBusySendQueue,
   isSubmitPending = false,
   tokenBudget,
+  modelContextParams,
   thinkingMode,
   thinkingModeAvailability,
   onThinkingModeChange,
@@ -184,6 +188,9 @@ export default function ComposerV2({
 }: ComposerV2Props) {
   const { t } = useTranslation("chat");
   const [isContextPopoverOpen, setIsContextPopoverOpen] = useState(false);
+  // 检查器状态放在气泡之外：气泡在点击时可能因失焦立即卸载，若检查器挂在
+  // 气泡内部会随之一并消失。
+  const [isContextInspectorOpen, setIsContextInspectorOpen] = useState(false);
   const [isThinkingModeMenuOpen, setIsThinkingModeMenuOpen] = useState(false);
   const [isRunModeMenuOpen, setIsRunModeMenuOpen] = useState(false);
   const [isPermissionMenuOpen, setIsPermissionMenuOpen] = useState(false);
@@ -448,7 +455,16 @@ export default function ComposerV2({
                     文本被切一半）。挂到工具条右缘后气泡落在面板可印区内。
                   */}
                   {isContextPopoverOpen ? (
-                    <ContextStatusPopover status={contextStatus} title={contextWindowTitle} t={t} />
+                    <ContextStatusPopover
+                      status={contextStatus}
+                      title={contextWindowTitle}
+                      t={t}
+                      modelContext={modelContextParams}
+                      onInspectContext={() => setIsContextInspectorOpen(true)}
+                    />
+                  ) : null}
+                  {isContextInspectorOpen && modelContextParams ? (
+                    <ContextInspector request={modelContextParams} onClose={() => setIsContextInspectorOpen(false)} />
                   ) : null}
 
                   <ComposerThinkingSelector

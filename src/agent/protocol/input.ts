@@ -5,6 +5,7 @@ import type {
   AgentControlBoundaryTranscriptEntry,
   AgentRequestHeaderSnapshot,
 } from "../../session/transcript/TranscriptEntry.js";
+import type { ModelContextSnapshot } from "../../session/context/ModelContextSnapshot.js";
 import type { AgentStatusMessage } from "../loop/modelErrors.js";
 
 export type AgentRunMode = "agent" | "plan" | "ask";
@@ -42,6 +43,11 @@ export type AgentLoopInput = {
    * request_header 条目（log-only，重放投影不进入 messages）。
    */
   onRequestHeader?: (header: AgentRequestHeaderSnapshot) => void | Promise<void>;
+  /**
+   * 模型上下文快照回调：请求装配完成、发送前调用。调用方落 sidecar（只读诊断，
+   * 不进入 transcript / 重放 / 流式广播）；失败不得阻断模型请求。
+   */
+  onModelContext?: (snapshot: ModelContextSnapshot) => void | Promise<void>;
   /**
    * durable 边界检查点回调（阶段四 T4.1）：工具副作用执行前调用，确保此前
    * 全部已接受条目落盘。失败即中止本步（fail-closed）；未接线时 no-op。

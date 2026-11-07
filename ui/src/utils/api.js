@@ -291,6 +291,32 @@ export const api = {
       `/api/sessions/${encodeURIComponent(sessionId)}/messages${queryString ? `?${queryString}` : ""}`,
     );
   },
+  // 模型上下文快照（按需读取 sidecar；mode=true 完整 / summary 只返回元信息）
+  sessionModelContext: (
+    sessionId,
+    /** @type {{ projectName?: string, projectPath?: string, sessionKind?: string, parentSessionId?: string, relativeTranscriptPath?: string, mode?: string, signal?: AbortSignal }} */
+    {
+      projectName = "",
+      projectPath = "",
+      sessionKind,
+      parentSessionId,
+      relativeTranscriptPath,
+      mode = "true",
+      signal,
+    } = {},
+  ) => {
+    const params = new URLSearchParams();
+    params.append("includeModelContext", mode);
+    if (projectName) params.append("projectName", projectName);
+    if (projectPath) params.append("projectPath", projectPath);
+    if (sessionKind) params.append("sessionKind", sessionKind);
+    if (parentSessionId) params.append("parentSessionId", parentSessionId);
+    if (relativeTranscriptPath) params.append("relativeTranscriptPath", relativeTranscriptPath);
+    return authenticatedFetch(`/api/sessions/${encodeURIComponent(sessionId)}/messages?${params.toString()}`, {
+      suppressServerErrorToast: true,
+      ...(signal ? { signal } : {}),
+    });
+  },
   renameProject: (projectName, displayName) =>
     authenticatedFetch(`/api/projects/${projectName}/rename`, {
       method: "PUT",

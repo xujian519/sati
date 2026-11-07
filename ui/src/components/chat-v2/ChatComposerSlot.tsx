@@ -173,6 +173,7 @@ export default function ChatComposerSlot({
           canSteerBusySend={canSteerBusySend}
           onSteerBusySendQueue={steerBusySendQueue}
           tokenBudget={tokenBudget}
+          modelContextParams={session.modelContextParams}
           thinkingMode={thinkingMode}
           thinkingModeAvailability={thinkingModeAvailability}
           onThinkingModeChange={setThinkingMode}

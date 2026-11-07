@@ -21,6 +21,7 @@ import type { AgentRuntimeDependencies } from "../runtime/AgentRuntimeDependenci
 import type { TokenBudgetSnapshot } from "../../context/index.js";
 import type { PermissionMode, PermissionRuleSet } from "../../permission/index.js";
 import type { RouterDecision, RouterDispatchReport } from "../../router/index.js";
+import { createModelContextSnapshot } from "../../session/context/ModelContextSnapshot.js";
 import type { AgentRunMode, AgentLoopInput } from "../protocol/input.js";
 import { buildMetacognitiveRetryPrompt, parseSelfEstimate } from "./metacognitiveControl.js";
 import { evaluateClaimGuard } from "./claimGuard.js";
@@ -483,6 +484,7 @@ export class AgentLoop {
     // 写入失败即中止本步（fail-closed：无法记录请求头就不发送）。
     const requestHeader = buildRequestHeaderSnapshot(request, decision);
     await input.onRequestHeader?.(requestHeader);
+    await input.onModelContext?.(createModelContextSnapshot(request, input.turnId));
     // 对拍不在此处做：旧实现在这里用同一对 (request, decision) 自比，恒真（#360）。
     // 现改为在**派发点**对拍（下方 onDispatchRequest），两侧不同源方能有牙齿。
     const verifyDispatch = process.env.SATI_VERIFY_REQUEST_RECONSTRUCTION === "1";

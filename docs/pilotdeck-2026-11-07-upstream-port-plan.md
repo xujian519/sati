@@ -216,34 +216,36 @@ Status: Approved（2026-11-07 批准执行；M0 已完成）
 
 **任务**
 
-- [ ] **T3.1** 新增 `src/session/context/ModelContextSnapshot.ts`：
+- [x] **T3.1** 新增 `src/session/context/ModelContextSnapshot.ts`：
   - 类型：`version: 1`、`turnId`、`capturedAt`、`provider`、`model`、`systemPrompt`、`tools`、`messages`、`breakdown?`、`mediaOmitted`；
   - `createModelContextSnapshot(request, turnId, breakdown?)`：深拷贝；二进制媒体替换为 `[binary payload omitted]`；剥离 `raw`；
   - `writeModelContextSnapshot(transcriptPath, snapshot)`：写 `<transcript>.context.json`，`mode 0o600`，临时文件 + rename；
   - `readModelContextSnapshot(transcriptPath, snapshotRoot)`：解析根路径、拒绝越界与符号链接逃逸、校验 `version`/`turnId` 形状；缺失/坏 JSON 返回 `null`。
-- [ ] **T3.2** 在 `src/agent/protocol/input.ts` 增加 `onModelContext?: (snapshot) => void | Promise<void>`；在 `src/agent/loop/AgentLoop.ts` 的请求装配完成点调用（与 `onRequestHeader` 并列）。
-- [ ] **T3.3** 在 `src/agent/turn/TurnRunner.ts` 用 `transcriptPath` 写 sidecar；无 `transcriptPath` 时 no-op。
-- [ ] **T3.4** 在 `src/web/server/readSessionMessages.ts` 增加 `includeModelContext?: boolean`；仅在 true 时读取 sidecar，正常历史读取零额外 I/O；快照 `turnId` 必须匹配最近一次 accepted input。
-- [ ] **T3.5** 在 `ui/server/routes/messages.js` 透传 `includeModelContext=true|summary`；`summary` 只返回 `breakdown`，`true` 返回完整快照。
-- [ ] **T3.6** 前端：
+- [x] **T3.2** 在 `src/agent/protocol/input.ts` 增加 `onModelContext?: (snapshot) => void | Promise<void>`；在 `src/agent/loop/AgentLoop.ts` 的请求装配完成点调用（与 `onRequestHeader` 并列）。
+- [x] **T3.3** 在 `src/agent/turn/TurnRunner.ts` 用 `transcriptPath` 写 sidecar；无 `transcriptPath` 时 no-op。
+- [x] **T3.4** 在 `src/web/server/readSessionMessages.ts` 增加 `includeModelContext?: boolean`；仅在 true 时读取 sidecar，正常历史读取零额外 I/O；快照 `turnId` 必须匹配最近一次 accepted input。
+- [x] **T3.5** 在 `ui/server/routes/messages.js` 透传 `includeModelContext=true|summary`；`summary` 只返回 `breakdown`，`true` 返回完整快照。
+- [x] **T3.6** 前端：
   - 在 `ui/src/components/chat-v2/ContextStatusPopover.tsx` 增加“Inspect context”入口；
   - 新增 `ui/src/components/chat-context/ContextInspector.tsx`：可搜索分区（System prompt / Tools / Messages），展示 token breakdown 与媒体占位；
   - 懒加载，只在打开时请求；空状态说明“下一次模型请求后可用”；
   - i18n 文案入 `ui/src/i18n/locales/{en,zh-CN}/chat.json`。
-- [ ] **T3.7** 会话删除时删除 sidecar；`forkSession`/`editLastTurn` 不复制过期快照。
-- [ ] **T3.8** 测试：
+- [x] **T3.7** 会话删除时删除 sidecar；`forkSession`/`editLastTurn` 不复制过期快照。
+- [x] **T3.8** 测试：
   - `tests/session/context/model-context-snapshot.spec.ts`：媒体脱敏、raw 剥离、原子写、路径越界/符号链接拒绝、坏 JSON；
   - `tests/web/read-session-messages-context.spec.ts`：`includeModelContext` 开关、stale turn 拒绝；
   - `ui/src/components/chat-context/ContextInspector.test.tsx`：分区、搜索、空状态、懒加载；
   - `ui/src/components/chat-v2/ContextStatusPopover.test.tsx`：入口与键盘关闭。
-- [ ] **T3.9** 负控制：
+- [x] **T3.9** 负控制：
   - 移除路径收口 → 越界用例转红；
   - 移除媒体脱敏 → 脱敏用例转红；
   - 移除 stale turn 校验 → 历史用例转红。
-- [ ] **T3.10** 浏览器验证：打开已有会话 → 触发一次模型请求 → 打开 context popover → Inspect → 搜索 system/tools/messages → 刷新后重开；检查中英文、明暗主题、窄屏。
-- [ ] **T3.11** 写 `docs/notes/implemented/2026-11-XX-context-inspector.md`，含隐私边界与 `## Alternatives considered`（例如“直接写进 transcript”“默认开启”为何不选）。
+- [x] **T3.10** 浏览器验证：打开已有会话 → 触发一次模型请求 → 打开 context popover → Inspect → 搜索 system/tools/messages → 刷新后重开；检查中英文、明暗主题、窄屏。
+- [x] **T3.11** 写 `docs/notes/implemented/2026-11-XX-context-inspector.md`，含隐私边界与 `## Alternatives considered`（例如“直接写进 transcript”“默认开启”为何不选）。
 
 **验收**：快照只在本地、按需读取、路径收口、媒体脱敏；UI 浏览器验证通过；`pnpm check` + 全量测试绿；无网关协议变更（走 HTTP 查询参数）。
+
+**完成情况（2026-11-07）**：分支 `feat/context-inspector`（堆叠在 M2 之上）；决策记录 `docs/notes/implemented/2026-11-07-context-inspector.md`；负控制：去媒体脱敏 / 放行符号链接 / 跳过 stale 校验 → 3 条转红，恢复后 11 条全绿。浏览器验证发现并修复「气泡失焦卸载导致模态消失」，验证用 sidecar 已清理。
 
 ---
 

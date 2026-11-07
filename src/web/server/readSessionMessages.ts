@@ -25,6 +25,11 @@ import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { cloneMessage, type CanonicalMessage } from "../../model/index.js";
 import { listProjectSessions, readTranscript, type SessionInfo } from "../../session/index.js";
 import type { AgentTranscriptEntry } from "../../session/transcript/TranscriptEntry.js";
+import {
+  readModelContextSnapshot,
+  summarizeModelContext,
+  type ModelContextSnapshot,
+} from "../../session/context/ModelContextSnapshot.js";
 import { collectShadowedEntryIds } from "../../session/transcript/TranscriptReplay.js";
 import { getPilotProjectChatDir } from "../../pilot/index.js";
 import { sanitizeSessionIdForPath } from "../../session/storage/ProjectSessionStorage.js";
@@ -68,6 +73,8 @@ type WebMessagesCacheEntry = {
    * 展示旧缓存的不一致）。依赖 maxContextTokens/maxOutputTokens，命中时须
    * 与构建时一致（下方两条键控字段）。 */
   tokenUsage: Record<string, unknown> | undefined;
+  /** 最近一次 accepted_input 的 turnId；上下文快照的新鲜度判据。 */
+  latestTurnId?: string;
   maxContextTokens?: number;
   maxOutputTokens?: number;
 };
@@ -110,6 +117,7 @@ export async function readWebSessionMessages(
   let allMessages: WebMessage[];
   let incompleteTurnIds: string[];
   let tokenUsage: Record<string, unknown> | undefined;
+  let latestTurnId: string | undefined;
   if (
     cached !== undefined &&
     cached.mtimeMs === fileStat!.mtimeMs &&
@@ -121,6 +129,7 @@ export async function readWebSessionMessages(
     allMessages = cached.allMessages;
     incompleteTurnIds = cached.incompleteTurnIds;
     tokenUsage = cached.tokenUsage; // 命中即 0 文件访问：展示与用量同快照（无 TOCTOU）
+    latestTurnId = cached.latestTurnId;
   } else {
     const read = await readTranscript(transcriptPath);
     const entries = read.entries;
@@ -128,6 +137,7 @@ export async function readWebSessionMessages(
     const entryTimestamps = webReplay.timestamps;
     const entryIds = webReplay.entryIds;
     incompleteTurnIds = extractIncompleteTurnIds(entries);
+    latestTurnId = extractLatestTurnId(entries);
 
     const flattenedPerMessage: WebMessage[][] = webReplay.messages.map((message, index) =>
       flattenCanonicalMessage(message, {
@@ -168,6 +178,7 @@ export async function readWebSessionMessages(
           allMessages,
           incompleteTurnIds,
           tokenUsage,
+          latestTurnId,
           maxContextTokens: options.maxContextTokens,
           maxOutputTokens: options.maxOutputTokens,
         });
@@ -186,11 +197,29 @@ export async function readWebSessionMessages(
   const slice = allMessages.slice(offset, sliceEnd);
   const messages = status !== undefined && sliceEnd >= allMessages.length ? [...slice, status] : slice;
 
+  // 上下文快照按需读取：普通历史读取不触碰 sidecar。turnId 不匹配说明快照
+  // 属于更早的回合（如编辑/重写后），显式报 stale，不把旧上下文当当前上下文。
+  let modelContext: ModelContextSnapshot | ReturnType<typeof summarizeModelContext> | undefined;
+  let modelContextStatus: "available" | "missing" | "stale" | undefined;
+  if (input.includeModelContext) {
+    const snapshot = await readModelContextSnapshot(transcriptPath);
+    if (!snapshot) {
+      modelContextStatus = "missing";
+    } else if (latestTurnId === undefined || snapshot.turnId !== latestTurnId) {
+      modelContextStatus = "stale";
+    } else {
+      modelContextStatus = "available";
+      modelContext = input.includeModelContext === "summary" ? summarizeModelContext(snapshot) : snapshot;
+    }
+  }
+
   return {
     messages,
     nextCursor: input.limit && offset + messages.length < total ? String(offset + messages.length) : undefined,
     total,
     tokenUsage,
+    ...(modelContext ? { modelContext } : {}),
+    ...(modelContextStatus ? { modelContextStatus } : {}),
     session: {
       sessionId: sessionInfo?.sessionId ?? input.sessionKey,
       sessionKey: input.sessionKey,
@@ -340,6 +369,15 @@ function extractIncompleteTurnIds(entries: AgentTranscriptEntry[]): string[] {
     }
   }
   return [...incompleteTurnIds];
+}
+
+function extractLatestTurnId(entries: AgentTranscriptEntry[]): string | undefined {
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    if (entries[index]?.type === "accepted_input") {
+      return entries[index].turnId;
+    }
+  }
+  return undefined;
 }
 
 async function locateSession(
