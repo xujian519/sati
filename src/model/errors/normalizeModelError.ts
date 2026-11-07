@@ -86,7 +86,7 @@ export function normalizeModelError(
   return result;
 }
 
-function classifyNetworkError(error: unknown, message: string): CanonicalModelErrorCode | undefined {
+function classifyNetworkError(error: unknown, message: string, depth = 0): CanonicalModelErrorCode | undefined {
   if (error instanceof NetworkFetchError) {
     switch (error.code) {
       case "network_dns_error":
@@ -105,8 +105,22 @@ function classifyNetworkError(error: unknown, message: string): CanonicalModelEr
         return "server_error";
       case "network_timeout":
         return "timeout";
+      case "network_abort":
+        return "aborted";
+      case "network_fetch_failed":
+        return "transport_error";
       default:
         return undefined;
+    }
+  }
+  // 普通 Error 可能把网络错误放在 cause 里；逐层归一再分类。
+  if (error instanceof Error && depth < 3) {
+    if (error.name === "AbortError") {
+      return "aborted";
+    }
+    const fromCause = classifyNetworkError(error.cause, message, depth + 1);
+    if (fromCause) {
+      return fromCause;
     }
   }
   const text = message.toLowerCase();
@@ -121,6 +135,8 @@ function classifyNetworkError(error: unknown, message: string): CanonicalModelEr
     text.includes("econnrefused proxy")
   )
     return "proxy_error";
+  if (text.includes("fetch failed")) return "transport_error";
+  if (text.includes("abort")) return "aborted";
   return undefined;
 }
 
@@ -200,6 +216,7 @@ function isRetryable(status: number | undefined, code: string): boolean {
     "connection_reset",
     "connection_refused",
     "proxy_error",
+    "transport_error",
   ].includes(code);
 }
 

@@ -22,7 +22,7 @@ import { Ajv } from "ajv";
 import addFormatsImport from "ajv-formats";
 import type { SatiMcpServerSpec, SatiMcpStatus, SatiMcpToolSpec } from "../protocol/types.js";
 import { APP_VERSION } from "../../version.js";
-import { McpClientError, isSessionExpired, withTimeout } from "./errors.js";
+import { McpClientError, describeThrown, isSessionExpired, withTimeout } from "./errors.js";
 import { buildTransport, type TransportBuildOptions } from "./transport.js";
 
 export type ListToolsCache = {
@@ -137,7 +137,7 @@ export class McpConnection {
       void transport.close().catch(() => {});
       throw err instanceof McpClientError
         ? err
-        : new McpClientError(`MCP handshake failed: ${(err as Error).message}`, "mcp_handshake_failed", this.spec.id);
+        : new McpClientError(`MCP handshake failed: ${describeThrown(err)}`, "mcp_handshake_failed", this.spec.id);
     }
     this.client = client;
     this.transport = transport;

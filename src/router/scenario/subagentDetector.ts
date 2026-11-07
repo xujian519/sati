@@ -6,9 +6,11 @@ const SUBAGENT_TAG_PATTERN = /<(?:sati|ccr)-subagent-model>([\s\S]+?)<\/(?:sati|
 export type SubagentDetection = {
   isSubagent: boolean;
   modelHint?: string;
-  /** True when the request was launched without an Agent / Task tool, suggesting subagent context. */
-  missingAgentTool: boolean;
-  /** True when the message body contained a subagent tag we should strip in mutations. */
+  /**
+   * True when the request was launched without an Agent / Task tool.
+   * 诊断字段：窄工具集的主代理也会命中，不参与 isSubagent 判定。
+   */
+  missingAgentTool: boolean /** True when the message body contained a subagent tag we should strip in mutations. */;
   taggedInUserMessage: boolean;
 };
 
@@ -46,7 +48,10 @@ export function detectSubagent(
   const missingAgentTool = !!tools && !tools.some(tool => AGENT_TOOL_NAME_PATTERN.test(tool.name));
 
   return {
-    isSubagent: !isMainAgent || taggedInUserMessage || missingAgentTool,
+    // 缺少 agent/task 工具只是「可能是子代理」的弱信号：主代理在窄工具集
+    // （如只读模式、裁剪后的域）下同样没有它。仅凭这一点改判子代理会错配
+    // 路由与预算，把它保留为诊断字段。
+    isSubagent: !isMainAgent || taggedInUserMessage,
     modelHint,
     missingAgentTool,
     taggedInUserMessage,

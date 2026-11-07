@@ -238,6 +238,9 @@ export class MemoryRepository {
 
   private init(): void {
     this.db.exec(`
+      -- 多个进程/连接可能同时写同一个 workspace 记忆库；没有 busy_timeout 时
+      -- 第二个写者会立即拿到 SQLITE_BUSY，而不是等待短暂写锁释放。
+      PRAGMA busy_timeout = 5000;
       PRAGMA journal_mode = WAL;
       CREATE TABLE IF NOT EXISTS l0_sessions (
         l0_index_id TEXT PRIMARY KEY,

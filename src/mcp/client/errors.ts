@@ -21,6 +21,25 @@ export class McpClientError extends Error {
   }
 }
 
+/** 把任意抛出值转成可读消息；非 Error/字符串值不产生 "undefined"。 */
+export function describeThrown(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === "string") {
+    return error;
+  }
+  if (error === undefined || error === null) {
+    return "unknown error";
+  }
+  try {
+    return JSON.stringify(error) ?? String(error);
+  } catch {
+    // 循环引用等无法序列化的值退化为 String()。
+    return String(error);
+  }
+}
+
 /** 会话过期判定：statusCode 404 或 message 含 /session.*expired/i。 */
 export function isSessionExpired(err: unknown): boolean {
   const e = err as { code?: number; message?: string; statusCode?: number } | null;

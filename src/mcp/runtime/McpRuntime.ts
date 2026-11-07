@@ -9,6 +9,7 @@
  */
 
 import { McpClient, McpClientError, type McpClientOptions } from "../client/McpClient.js";
+import { describeThrown } from "../client/errors.js";
 import type {
   McpResourceListing,
   SatiMcpClientStatusEntry,
@@ -62,7 +63,7 @@ export class McpRuntime {
               results.push({
                 serverId: client.spec.id,
                 status: "error",
-                error: err instanceof McpClientError ? err.message : (err as Error).message,
+                error: err instanceof McpClientError ? err.message : describeThrown(err),
               });
             }
           }

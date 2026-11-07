@@ -139,6 +139,24 @@ test("recoverFromMaxOutputBump：Phase A 不可用时走 Phase B 续跑", async 
   );
   assert.equal(state.maxOutputRecoveryCount, 1);
   assert.equal(state.messages.at(-1)!.metadata?.purpose, "max_output_recovery");
+  assert.equal(state.hasAttemptedOutputRetry, false, "没有可用 bump 时不消耗一次性额度");
+});
+
+test("recoverFromMaxOutputBump：后续出现可用上限时仍能执行 Phase A", async () => {
+  const input = baseInput();
+  const state = new TurnRuntimeState(input, {}, STARTED_AT);
+  const deps = makeDeps();
+
+  const first = await drain(recoverFromMaxOutputBump(deps, state, input, DECISION, undefined));
+  assert.equal(first.value, "continuing");
+
+  // 后续恢复轮拿到了显式上限（例如 transient cap 已建立）。
+  deps.tokenCaps.setTransientTokenCap("p1", "m1", { requestedMaxOutputTokens: 4_096 });
+  const second = await drain(recoverFromMaxOutputBump(deps, state, input, DECISION, undefined));
+
+  assert.equal(second.value, "bumped");
+  assert.equal(state.hasAttemptedOutputRetry, true);
+  assert.equal(deps.tokenCaps.currentMaxOutputTokens("p1", "m1"), 8_192);
 });
 
 test("recoverFromMaxOutputBump：两条路都不可用时返回 exhausted 且不发事件", async () => {

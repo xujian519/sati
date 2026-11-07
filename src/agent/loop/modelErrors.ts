@@ -187,8 +187,8 @@ export function createModelRequestFailedStatus(args: {
 }): AgentStatusMessage {
   const providerMessage =
     args.error.message || args.modelError?.message || "The model request failed, so this turn has stopped.";
-  const text = formatModelRequestFailureMessage(providerMessage, args.modelError);
-  const action = modelFailureAction(args.modelError);
+  const text = formatModelRequestFailureMessage(providerMessage, args.modelError, args.error.code);
+  const action = modelFailureAction(args.modelError, args.error.code);
   return {
     event: "model_request_failed",
     kind: "error",
@@ -219,19 +219,30 @@ export function createModelRequestFailedStatus(args: {
 export function formatModelRequestFailureMessage(
   providerMessage: string,
   error: CanonicalModelError | undefined,
+  errorCode?: string,
 ): string {
   const cleanMessage = providerMessage.trim() || "The model request failed.";
-  const action = modelFailureAction(error);
+  const action = modelFailureAction(error, errorCode);
   return `${cleanMessage}\n\n${action.shortAction}`;
 }
 
-export function modelFailureAction(error: CanonicalModelError | undefined): {
+export function modelFailureAction(
+  error: CanonicalModelError | undefined,
+  errorCode?: string,
+): {
   shortAction: string;
   userHint: string;
   userHintI18n: AgentStatusI18nDescriptor;
   fixTarget: "settings" | "provider" | "network" | "prompt" | "retry";
 } {
   if (!error) {
+    // 上下文压缩/恢复失败没有 CanonicalModelError；此时仍应给上下文指引，
+    // 不能退回「检查 base URL / API key」的 settings 兜底。
+    if (errorCode === "agent_context_recovery_failed" || errorCode === "agent_prompt_too_long") {
+      const hint =
+        "Run /compact, start a new session with /new, remove large attachments, or switch to a larger-context model in Settings.";
+      return modelFailureActionResult(hint, "prompt", "contextOverflow");
+    }
     const hint =
       "Check Settings → Model Provider and verify the selected provider, base URL, API key, model name, and timeoutMs. If the provider is slow or the network is unstable, increase timeoutMs or check provider status.";
     return modelFailureActionResult(hint, "settings", "settingsDefault");

@@ -19,6 +19,8 @@ export type CanonicalModelErrorCode =
   | "connection_refused"
   | "tls_error"
   | "proxy_error"
+  | "transport_error"
+  | "aborted"
   | "unknown";
 
 export type SettingsFix = {

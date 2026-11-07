@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { normalizeModelError } from "../../../src/model/errors/normalizeModelError.js";
+import { NetworkFetchError } from "../../../src/network/fetch.js";
 
 function codeFor(message: string): string {
   return normalizeModelError("test", "openai", new Error(message)).code;
@@ -44,4 +45,35 @@ test("non-network messages are not misclassified as timeout", () => {
 
   assert.equal(error.code, "billing");
   assert.equal(error.retryable, false);
+});
+
+test("NetworkFetchError 的 transport/abort 归入独立错误码", () => {
+  const transport = normalizeModelError(
+    "test",
+    "openai",
+    new NetworkFetchError("network_fetch_failed", "fetch failed"),
+  );
+  assert.equal(transport.code, "transport_error");
+  assert.equal(transport.retryable, true);
+
+  const aborted = normalizeModelError("test", "openai", new NetworkFetchError("network_abort", "request aborted"));
+  assert.equal(aborted.code, "aborted");
+  assert.equal(aborted.retryable, false);
+});
+
+test("cause 中的网络错误被递归归一", () => {
+  const nested = new Error("provider request failed", {
+    cause: new NetworkFetchError("network_dns_error", "getaddrinfo ENOTFOUND api.test"),
+  });
+  assert.equal(normalizeModelError("test", "openai", nested).code, "dns_error");
+});
+
+test("普通 AbortError 与 fetch failed 消息也能分类", () => {
+  const abortError = new Error("The operation was aborted");
+  abortError.name = "AbortError";
+  const aborted = normalizeModelError("test", "openai", abortError);
+  assert.equal(aborted.code, "aborted");
+  assert.equal(aborted.retryable, false);
+
+  assert.equal(codeFor("TypeError: fetch failed"), "transport_error");
 });

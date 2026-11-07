@@ -159,6 +159,7 @@ function flushBlock(
       const toolName = readToolResultToolName(block.raw);
       const planData = readPlanData(block.raw);
       const searchData = readSearchToolData(block.raw);
+      const questionData = readQuestionToolData(block.raw);
       const resultImages: NonNullable<WebMessage["images"]> = [];
       for (const sub of block.content) {
         if (sub.type === "image") {
@@ -178,7 +179,7 @@ function flushBlock(
         ok: !block.isError,
         text: resultText,
         ...(errorCode ? { errorCode } : {}),
-        ...(planData || searchData ? { payload: planData ?? searchData } : {}),
+        ...(planData || searchData || questionData ? { payload: planData ?? searchData ?? questionData } : {}),
         ...(resultImages.length > 0 ? { images: resultImages } : {}),
         source: "history",
       });
@@ -325,4 +326,15 @@ function readSearchToolData(raw: unknown): Record<string, unknown> | undefined {
 function isSearchToolName(name: unknown): boolean {
   const normalized = typeof name === "string" ? name.toLowerCase() : "";
   return normalized === "grep" || normalized === "glob";
+}
+
+/**
+ * 问答工具的 `data`（questions + answers）是内联问答卡片的渲染依据。
+ * live 路径已透传；历史回放若不保留，刷新后只剩纯文本，多选/自定义答案丢失。
+ */
+function readQuestionToolData(raw: unknown): Record<string, unknown> | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const record = raw as { toolName?: unknown; data?: unknown };
+  if (record.toolName !== "ask_user_question" && record.toolName !== "AskUserQuestion") return undefined;
+  return record.data && typeof record.data === "object" ? (record.data as Record<string, unknown>) : undefined;
 }
