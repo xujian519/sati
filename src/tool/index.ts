@@ -3,7 +3,7 @@ export type {
   SatiToolAuditRecord,
   SatiToolAuditRecorder,
 } from "./audit/ToolAuditRecorder.js";
-export { ToolRuntime } from "./execution/ToolRuntime.js";
+export { ToolRuntime, type ToolRuntimeExecuteOptions } from "./execution/ToolRuntime.js";
 export type { SatiToolErrorCode } from "./protocol/errors.js";
 export {
   contentToText,
@@ -46,7 +46,10 @@ export type {
 export { ToolRegistry } from "./registry/ToolRegistry.js";
 export { createBuiltinRegistry } from "./registry/createBuiltinRegistry.js";
 export { filterAvailableTools, type SatiUnavailableToolDiagnostic } from "./registry/filterAvailableTools.js";
-export { ConcurrentToolScheduler } from "./scheduler/ConcurrentToolScheduler.js";
+export {
+  ConcurrentToolScheduler,
+  type ConcurrentToolSchedulerOptions,
+} from "./scheduler/ConcurrentToolScheduler.js";
 export { SequentialToolScheduler } from "./scheduler/SequentialToolScheduler.js";
 export type { SatiToolScheduler } from "./scheduler/ToolScheduler.js";
 export { createAgentTool } from "./builtin/agent.js";
