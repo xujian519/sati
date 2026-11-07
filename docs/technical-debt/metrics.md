@@ -7,9 +7,9 @@
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1198 / 208979 |
+| src TS 文件 / 行数 | 1200 / 209327 |
 | src JS 文件 | 0 |
-| tests 文件 | 705 |
+| tests 文件 | 708 |
 | ui/src 文件 / 行数 | 743 / 110082 |
 | ui/server 文件 / 行数 | 149 / 38871 |
 
@@ -32,9 +32,9 @@
 | `as unknown as`（双重断言） | 29 | ui/src(21) · knowledge(5) · adapters(1) |
 | 裸 `console.*` | 6 | ui/server(6) |
 | 空 `catch {}` | 0 | — |
-| 无参 `catch {`（总计） | 707 | ui/server(157) · ui/src(126) · adapters(72) |
+| 无参 `catch {`（总计） | 708 | ui/server(157) · ui/src(126) · adapters(72) |
 | ↳ **无注释**（隐患类，目标） | **0** | — |
-| ↳ 已带意图注释 | 707 | — |
+| ↳ 已带意图注释 | 708 | — |
 | `TODO/HACK/FIXME/XXX` | 11 | always-on(4) · tests(4) · ui/src(2) |
 | 分层违规 `ui/server→src` | 15 | — |
 | 分层违规 `src→ui` | 0 | — |
@@ -108,9 +108,9 @@
 | `ui/server/routes/commands.js` | 1082 |
 | `src/always-on/runtime/DiscoveryFire.ts` | 1079 |
 | `src/gateway/protocol/types.ts` | 995 |
-| `src/context/DefaultContextRuntime.ts` | 969 |
+| `src/context/DefaultContextRuntime.ts` | 975 |
 | `ui/src/components/main-content-v2/FilesV2.tsx` | 945 |
-| `src/pilot/config/loadPilotConfig.ts` | 922 |
+| `src/pilot/config/loadPilotConfig.ts` | 941 |
 | `src/patent/figuregen/inkscape-renderer.ts` | 916 |
 | `ui/src/components/app-shell/AppShellV2.tsx` | 897 |
 | `ui/src/components/chat/tools/configs/toolConfigs.ts` | 864 |
@@ -142,7 +142,7 @@
 | tool | 78 |
 | agent | 61 |
 | knowledge | 45 |
-| context | 39 |
+| context | 40 |
 | gateway | 34 |
 | model | 33 |
 | session | 29 |
@@ -150,9 +150,9 @@
 | router | 20 |
 | adapters | 18 |
 | always-on | 14 |
+| pilot | 14 |
 | extension | 13 |
 | mcp | 13 |
-| pilot | 13 |
 | cron | 12 |
 | web | 11 |
 | rule | 10 |
@@ -164,14 +164,14 @@
 | board | 2 |
 | methodology | 2 |
 | network | 2 |
+| runtime | 2 |
 | task | 2 |
 | browser | 1 |
 | fs | 1 |
 | lifecycle | 1 |
-| runtime | 1 |
 | status | 1 |
 
-| **合计** | **677** |
+| **合计** | **680** |
 
 ## i18n en/zh-CN 对齐
 

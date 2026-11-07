@@ -35,7 +35,7 @@
     {
       "rule": "file-size",
       "file": "src/context/DefaultContextRuntime.ts",
-      "lines": 969
+      "lines": 975
     },
     {
       "rule": "file-size",
@@ -65,7 +65,7 @@
     {
       "rule": "file-size",
       "file": "src/pilot/config/loadPilotConfig.ts",
-      "lines": 922
+      "lines": 941
     },
     {
       "rule": "file-size",

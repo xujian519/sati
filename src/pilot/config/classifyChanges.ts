@@ -36,6 +36,9 @@ function classifyPath(path: string): PilotConfigChangeClass {
   if (path.startsWith("tools.")) {
     return "next-runtime";
   }
+  if (path.startsWith("runtime.") || path === "runtime") {
+    return "next-runtime";
+  }
   if (path.startsWith("proxy.") || path === "proxy") {
     return "runtime-live";
   }

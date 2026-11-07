@@ -24,6 +24,7 @@ import { resolveModelInfo } from "../model/resolveModelInfo.js";
 import { createDefaultPermissionContext, type PermissionRule } from "../permission/index.js";
 import type { loadPilotConfig } from "../pilot/index.js";
 import { mergePolicyDenyRules } from "../rule/index.js";
+import { resolvePythonRuntime } from "../runtime/pythonRuntime.js";
 import { parsePositiveInt } from "../shared/env/index.js";
 
 /** buildAgentSessionConfig 需要读的 ProjectRuntime 投影（类内 ProjectRuntime 不导出）。 */
@@ -155,11 +156,16 @@ export function buildAgentSessionConfig(deps: AgentSessionConfigInput): CreateAg
       ...(subagentMaxOutputTokens !== undefined ? { maxOutputTokens: subagentMaxOutputTokens } : {}),
     };
   }
+  const pythonRuntime = resolvePythonRuntime({
+    config: runtime.snapshot.config.runtime?.python,
+    env: deps.env,
+  });
   return {
     provider,
     model,
     modelMultimodal,
     cwd,
+    pythonRuntime,
     permissionMode,
     jsonSelfCorrect: true,
     workspaceLedger: brandEnv(deps.env, ENV_KEY.WORKSPACE_LEDGER_ENABLED) === "1",

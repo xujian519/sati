@@ -27,6 +27,8 @@ export type AgentRuntimeConfig = {
   permissionModeBeforePlan?: PermissionMode;
   permissionContext: PermissionContext;
   env?: NodeJS.ProcessEnv;
+  /** 解析后的 Python 运行时状态（配置 → VIRTUAL_ENV → PATH）。 */
+  pythonRuntime?: import("../../runtime/pythonRuntime.js").PythonRuntimeStatus;
   maxResultBytes?: number;
   metadata?: Record<string, unknown>;
   /** Marks the agent as a subagent. RouterRuntime uses this for sticky/scenario decisions. */

@@ -257,22 +257,24 @@ Status: Approved（2026-11-07 批准执行；M0 已完成）
 
 **任务**
 
-- [ ] **T4.1** 新增 `src/runtime/pythonRuntime.ts`：
+- [x] **T4.1** 新增 `src/runtime/pythonRuntime.ts`：
   - `PythonRuntimeStatus`：`enabled`、`state: "disabled" | "ready" | "unavailable" | "external"`、`reason`、`version`、`executable`、`environment`、`packages?`；
   - 解析顺序：显式配置 → 激活的 `VIRTUAL_ENV` → PATH 上的 `python3`/`python` → `unavailable`；
   - 只读探测 `python --version` 与少量预装包（可选，失败不阻断）；
   - 不修改 `process.env`。
-- [ ] **T4.2** 配置：在 `src/pilot/config/types.ts` 增加 `runtime.python`（enabled/path，可选），`loadPilotConfig` 解析；默认 enabled，行为与今天一致。
-- [ ] **T4.3** 提示词：在 `src/context/prompt/PromptAssembler.ts` 注入 `<python-runtime>` 块，按状态给出可执行建议；`unavailable` 时明确“先检查项目/系统解释器，不要声称已安装库”。
-- [ ] **T4.4** `src/tool/builtin/executeCode.ts`：用解析后的解释器与 env；保留 PATH 回退；错误消息说明来源。
-- [ ] **T4.5** 测试：
+- [x] **T4.2** 配置：在 `src/pilot/config/types.ts` 增加 `runtime.python`（enabled/path，可选），`loadPilotConfig` 解析；默认 enabled，行为与今天一致。
+- [x] **T4.3** 提示词：在 `src/context/prompt/PromptAssembler.ts` 注入 `<python-runtime>` 块，按状态给出可执行建议；`unavailable` 时明确“先检查项目/系统解释器，不要声称已安装库”。
+- [x] **T4.4** `src/tool/builtin/executeCode.ts`：用解析后的解释器与 env；保留 PATH 回退；错误消息说明来源。
+- [x] **T4.5** 测试：
   - `tests/runtime/python-runtime.spec.ts`：三态 + 外部 venv 优先 + 探测失败降级；
   - `tests/context/python-awareness.spec.ts`：各状态的 prompt 块；
   - `tests/tool/builtin/execute-code-python.spec.ts`：配置路径生效、PATH 回退。
-- [ ] **T4.6** 负控制：移除 venv 优先 → 用例转红；移除 `<python-runtime>` → prompt 用例转红。
-- [ ] **T4.7** 写 `docs/notes/implemented/2026-11-XX-python-runtime-awareness.md`，含 `## Alternatives considered`（全量打包 vs 系统解释器）。
+- [x] **T4.6** 负控制：移除 venv 优先 → 用例转红；移除 `<python-runtime>` → prompt 用例转红。
+- [x] **T4.7** 写 `docs/notes/implemented/2026-11-XX-python-runtime-awareness.md`，含 `## Alternatives considered`（全量打包 vs 系统解释器）。
 
 **验收**：三态可观测；模型不再臆造库；不改变桌面打包；`pnpm check` + 全量测试绿。
+
+**完成情况（2026-11-07）**：分支 `feat/python-runtime-awareness`（堆叠在 M3 之上）；决策记录 `docs/notes/implemented/2026-11-07-python-runtime-awareness.md`；负控制三组均转红后恢复，24 条定向测试全绿。
 
 **后续（不在本批）**：若确认需要固定 Python 3.12 + 精选库，单独立项评估安装器体积、签名、跨平台构建。
 

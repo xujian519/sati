@@ -17,6 +17,7 @@ import { mergeConfigSources } from "./merge.js";
 import { parseMemoryConfig } from "./parseMemoryConfig.js";
 import { parseAdaptersConfig, parseGatewayConfig } from "./parseGatewayConfig.js";
 import { parsePatentsConfig } from "./parsePatentsConfig.js";
+import { parseRuntimeConfig } from "./parseRuntimeConfig.js";
 import { parseToolsConfig } from "./parseToolsConfig.js";
 import { redactConfig } from "./redact.js";
 import {
@@ -52,6 +53,7 @@ type PilotConfigSections = {
   patents: ReturnType<typeof parsePatentsConfig>;
   telemetry: PilotTelemetryConfig;
   proxy: PilotProxyConfig | undefined;
+  runtime: ReturnType<typeof parseRuntimeConfig>;
 };
 
 /**
@@ -125,9 +127,24 @@ function parseConfigSections(
   const patents = parsePatentsConfig(rawConfig.patents, diagnostics);
   const telemetry = parseTelemetryConfig(rawConfig.telemetry);
   const proxy = parseProxyConfig(rawConfig, diagnostics);
+  const runtime = parseRuntimeConfig(rawConfig.runtime, diagnostics);
   throwConfigErrorIfFatal(diagnostics);
 
-  return { agent, extension, memory, gateway, adapters, router, alwaysOn, cron, tools, patents, telemetry, proxy };
+  return {
+    agent,
+    extension,
+    memory,
+    gateway,
+    adapters,
+    router,
+    alwaysOn,
+    cron,
+    tools,
+    patents,
+    telemetry,
+    proxy,
+    runtime,
+  };
 }
 
 /**
@@ -241,7 +258,7 @@ export function loadPilotConfig(options: PilotConfigLoadOptions = {}): PilotConf
 
   const sections = parseConfigSectionsSafely(rawConfig, model, pilotHome, diagnostics);
   const { agent, extension, memory, gateway, adapters, router } = sections;
-  const { alwaysOn, cron, tools, patents, telemetry, proxy } = sections;
+  const { alwaysOn, cron, tools, patents, telemetry, proxy, runtime } = sections;
 
   const redactedSnapshotConfig = redactConfig({
     agent,
@@ -257,6 +274,7 @@ export function loadPilotConfig(options: PilotConfigLoadOptions = {}): PilotConf
     patents,
     telemetry,
     proxy,
+    runtime,
   });
   return deepFreeze({
     version: options.version ?? 1,
@@ -279,6 +297,7 @@ export function loadPilotConfig(options: PilotConfigLoadOptions = {}): PilotConf
       ...(patents ? { patents } : {}),
       telemetry,
       ...(proxy ? { proxy } : {}),
+      ...(runtime ? { runtime } : {}),
     },
   });
 }

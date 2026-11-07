@@ -3,6 +3,7 @@ import { buildEdgeClawMemoryPromptSection } from "edgeclaw-memory-core";
 import type { CanonicalMessage, CanonicalUsage } from "../model/index.js";
 import { createLogger } from "../telemetry/index.js";
 import { debugLog } from "../shared/debug.js";
+import type { PythonRuntimeStatus } from "../runtime/pythonRuntime.js";
 import { stableSerialize } from "./cache/CachePlan.js";
 import { ToolResultBudget } from "./budget/ToolResultBudget.js";
 import type { TokenBudgetManager, TokenBudgetSnapshot } from "./budget/TokenBudgetManager.js";
@@ -80,6 +81,8 @@ export type DefaultContextRuntimeOptions = {
   instructionDiscovery?: InstructionDiscovery;
   /** Project root forwarded to MemoryResolver.retrieve. */
   projectRoot?: string;
+  /** 本地 Python 运行时状态；缺省首次 assemble 时按 process.env 探测。 */
+  pythonRuntime?: import("../runtime/pythonRuntime.js").PythonRuntimeStatus;
   /**
    * Maximum context window size (tokens) for the active model. Used by
    * `tryAutoCompact` to evaluate whether proactive compaction is needed.
@@ -159,6 +162,7 @@ export class DefaultContextRuntime implements ContextRuntime {
   private readonly overflowRecovery?: ContextOverflowRecovery;
   private readonly instructionDiscovery?: InstructionDiscovery;
   private readonly projectRoot?: string;
+  private readonly pythonRuntime?: PythonRuntimeStatus;
   private readonly maxContextTokens: number;
   private readonly truncateFirstKeepRatio: number;
   private readonly memoryRetrievalTimeoutMs: number;
@@ -201,6 +205,7 @@ export class DefaultContextRuntime implements ContextRuntime {
     this.overflowRecovery = options.overflowRecovery;
     this.instructionDiscovery = options.instructionDiscovery;
     this.projectRoot = options.projectRoot;
+    this.pythonRuntime = options.pythonRuntime;
     this.maxContextTokens = options.maxContextTokens ?? DEFAULT_MAX_CONTEXT_TOKENS;
     this.truncateFirstKeepRatio = options.truncateFirstKeepRatio ?? DEFAULT_TRUNCATE_FIRST_RATIO;
     this.memoryRetrievalTimeoutMs = options.memoryRetrievalTimeoutMs ?? DEFAULT_MEMORY_RETRIEVAL_TIMEOUT_MS;
@@ -255,6 +260,7 @@ export class DefaultContextRuntime implements ContextRuntime {
       customSystemPrompt: input.customSystemPrompt,
       appendSystemPrompt: input.appendSystemPrompt,
       now: () => new Date(promptTime.timestamp),
+      pythonRuntime: this.pythonRuntime,
     });
 
     const parts = [...prompt.parts];

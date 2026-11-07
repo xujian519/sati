@@ -310,12 +310,22 @@ async function runExecuteCode(
     );
   }
 
-  const python = await findPython3(context.env);
+  if (context.pythonRuntime?.state === "disabled") {
+    return buildOutput(
+      "unsupported",
+      "",
+      "execute_code is disabled by runtime.python.enabled=false in sati.yaml.",
+      startedAt,
+      toolCallsMade,
+      toolCallLog,
+    );
+  }
+  const python = await findPython(context.env, context.pythonRuntime?.executable);
   if (!python) {
     return buildOutput(
       "unsupported",
       "",
-      "execute_code requires python3 on PATH.",
+      "execute_code requires Python (python3/python) on PATH, or a runnable runtime.python.path in sati.yaml.",
       startedAt,
       toolCallsMade,
       toolCallLog,
@@ -569,8 +579,8 @@ def _call(tool_name, args):
     return response
 `;
 
-async function findPython3(env: NodeJS.ProcessEnv | undefined): Promise<string | undefined> {
-  const candidates = ["python3", "python"];
+async function findPython(env: NodeJS.ProcessEnv | undefined, preferred?: string): Promise<string | undefined> {
+  const candidates = preferred ? [preferred] : ["python3", "python"];
   for (const candidate of candidates) {
     const result = await new Promise<boolean>(resolve => {
       const child = spawn(candidate, ["--version"], { env, stdio: "ignore" });

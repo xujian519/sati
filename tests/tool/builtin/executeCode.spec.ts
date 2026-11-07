@@ -234,3 +234,23 @@ test("RPC 一次到达多个请求时按序响应（串行化不丢请求）", a
     },
   );
 });
+
+test("runtime.python.enabled=false 时 execute_code 明确拒绝", async () => {
+  const tool = createExecuteCodeTool();
+  const result = await tool.execute(
+    { code: "print(1)" },
+    makeToolContext({
+      pythonRuntime: {
+        enabled: false,
+        state: "disabled",
+        reason: "disabled by config",
+        environment: "none",
+      },
+      executeTool: async () => successResult("unused"),
+    }),
+  );
+
+  const data = result.data as { status?: string; error?: string } | undefined;
+  assert.equal(data?.status, "unsupported");
+  assert.match(data?.error ?? "", /runtime\.python\.enabled=false/);
+});
