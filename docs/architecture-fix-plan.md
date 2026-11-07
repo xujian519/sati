@@ -216,7 +216,7 @@
 | P2f | pilot 环收尾（type-only 环处置） | ⬜ |
 | P3 | WeCom/Weixin/Feishu 契约测试 + 纯函数层抽取 | 🔶 2026-09-13 第一卡（企微回调 4 个契约测试落地，`tests/adapters/` 5→6 spec）；余 Weixin / Feishu 各 ≥2 与 `sendVideo`/`deliverCronResult` 纯函数层 |
 | P4a | createLocalGateway 拆 4 builder | ✅ 2026-09-13（十刀收尾：组合根 `createLocalGateway.ts` 2730→448；`ProjectRuntimeRegistry.ts` 1663→642——工具面 / 输出门禁 / 依赖装配 / Agent 配置 / 运行时构造 / 权限 lifecycle 六段 + 四个 builder 均已成独立模块，详见 §二 P4 状态块） |
-| P4b | AgentLoop.run() 阶段骨架 + recovery/ 下沉 | ⬜ |
+| P4b | AgentLoop.run() 阶段骨架 + recovery/ 下沉 | ✅ 2026-11-07（#809；阶段方法已迁入 `src/agent/loop/phases/`——实际目录为 `phases/`，非计划里的 `recovery/`；现状见 `docs/agentloop-refactor-plan.md` §11 与 `docs/notes/implemented/2026-11-07-agentloop-phase-extraction.md`） |
 | P4c | 三大渠道类按 protocol/state/handlers/render 切分 | ⬜ |
 | P5 | pilot 职责文档 + wiki 资产迁 assets/ | ⬜ |
 | P6a | 工作流收敛评估（docs/workflow-convergence-eval.md） | ✅ 2026-09-11（结论：选项 a） |

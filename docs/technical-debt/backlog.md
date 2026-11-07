@@ -2477,7 +2477,7 @@
 - [x] **BF-17** `ui/src/components/chat-v2/ComposerV2.tsx` — 1187 行 · 承接：**B2.2** —— **已交付（2026-10-23，`51fe5c142`）：1188 → 508 行**（metrics 口径 1188 → 508；脱表，见 §38.2 抬头回填；`ComposerV2` 741 → 387 行，派生状态与 7 个渲染区块外置）
 - [x] **BF-18** `ui/src/components/chat-v2/MessagesPaneV2.tsx` — 1182 行 · 承接：**B2.1** —— **已交付（2026-10-23，`285b463f1`）：1183 → 360 行**（脱表，见 §38.2 抬头回填；`MessagesPaneV2` 824 → 338 行，逻辑迁入六个 hook/模块 + 类型/纯函数两文件）
 - [ ] **BF-19** `ui/server/routes/taskmaster.js` — 1152 行 · 未承接 → PS-12
-- [ ] **BF-20** `src/agent/loop/AgentLoop.ts` — 1149 行 · 未承接 → PS-13
+- [x] **BF-20** `src/agent/loop/AgentLoop.ts` — 1149 行 · 未承接 → PS-13 —— **已交付（#809，2026-11-07）：1149 → 290 行**（阶段方法迁入 `src/agent/loop/phases/`，见 `docs/notes/implemented/2026-11-07-agentloop-phase-extraction.md`）
 - [ ] **BF-21** `ui/src/components/main-content-v2/CronV2.tsx` — 1130 行 · 承接：**B4.4**
 - [ ] **BF-22** `ui/src/components/main-content/view/MainContent.tsx` — 1111 行 · 承接：**B5.4**
 - [ ] **BF-23** `ui/server/routes/config.test.js` — 1089 行 · 未承接 → PS-14
@@ -2517,7 +2517,7 @@
 - [ ] **PS-10** `ui/server/routes/config.js` — 1233 行 · sweep 后处置（本轮容量外，2026-10-12 登记）
 - [ ] **PS-11** `ui/server/routes/agent.js` — 1223 行 · sweep 后处置（本轮容量外，2026-10-12 登记）
 - [ ] **PS-12** `ui/server/routes/taskmaster.js` — 1152 行 · sweep 后处置（本轮容量外，2026-10-12 登记）
-- [x] **PS-13** `src/agent/loop/AgentLoop.ts` — 1152 行 · sweep 后处置（本轮容量外，2026-10-12 登记）—— **已交付（#809，2026-11-07）：1152 → 783 行**
+- [x] **PS-13** `src/agent/loop/AgentLoop.ts` — 1152 行 · sweep 后处置（本轮容量外，2026-10-12 登记）—— **已交付（#809，2026-11-07）：1152 → 783 行**；**轮次 9 再降至 290 行**（7 个类内函数迁入 `phases/`，见 `docs/notes/implemented/2026-11-07-agentloop-phase-extraction.md`）
 - [ ] **PS-14** `ui/server/routes/config.test.js` — 1089 行 · sweep 后处置（本轮容量外，2026-10-12 登记）
 - [ ] **PS-15** `src/model/streaming/streamModel.ts` — 1085 行 · sweep 后处置（本轮容量外，2026-10-12 登记）
 - [ ] **PS-16** `ui/server/routes/commands.js` — 1081 行 · sweep 后处置（本轮容量外，2026-10-12 登记）
@@ -2571,9 +2571,10 @@
 
 - **TD-R2-001** · `AgentLoop.ts` 扇出 36 个模块（全仓最高），主回路编排职责过重
   - 类别：R2 · 严重级：P2 · 工作量：M · 状态：**done（#809，2026-11-07）** · 跟踪 issue：**#809**
-  - 位置：`src/agent/loop/AgentLoop.ts`（783 行；拆分前 1152 行 / 36 imports）；次高 `DefaultContextRuntime.ts`（24）、`createAgentSession.ts`（22）
+  - 位置：`src/agent/loop/AgentLoop.ts`（290 行 / 27 imports；本轮拆分前 783 行 / 34 imports；更早一次为 1152 行 / 36 imports）；次高 `DefaultContextRuntime.ts`（24）、`createAgentSession.ts`（22）
   - 影响：任何子系统变更（工具协议、模型流式、权限、压缩）都可能牵动 AgentLoop，成为合并冲突热点和回归风险集中点。
   - 建议：将模型请求构造、错误恢复、压缩触发等横向关注点提取为独立 turn-phase 处理器，AgentLoop 仅保留编排骨架（已按 `noToolCalls` / `toolCallExecution` 等模块落地）。
+  - **2026-11-07 处置（轮次 9）**：7 个类内函数（`runTurnGuards` / `applySteeredMessages` / `prepareModelCall` / `streamModelResponse` / `handleCircuitBreaker` / `finishTurn` + `continueWithSyntheticPrompt`）迁入 `src/agent/loop/phases/`（7 文件 / 720 行）；`AgentLoop` 只剩构造器接线与 `run()` 顺序编排。判据（阶段进 `phases/`、恢复/装配 seam 仍平铺 `loop/`、`phases/` 禁 import `AgentLoop.ts`）与放弃过的方案见 `docs/notes/implemented/2026-11-07-agentloop-phase-extraction.md`。
   - 最后复核：2026-11-07
 
 ### 39.2 知识重复（R3）
