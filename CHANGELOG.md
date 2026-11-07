@@ -2,6 +2,33 @@
 
 本文件按版本记录 Sati 的重要变更。桌面端版本号（`release(desktop)`）与根 `package.json` 由 `scripts/bump-version.mjs` 同步维护。
 
+## v0.4.3 - 2026-11-07
+
+> **版本目标（2026-11-07）**：专利起草从「能出稿」走到「有规则、有布局、有评测」——补齐 A26.4 权要清楚/支持子图、权要布局策略与 `claim_lint` 规则引擎，并以五维 rubric + 20 件金标语料建立可复现基线与 live 口径；同期完成一轮技术债务清扫（初始化期循环归零、质量门禁、UI 巨型组件拆分）与运行时、技能开关等能力。
+
+### Feat
+
+- feat(patent): #830 M2/M3/M4——新增 A26.4 `claim_breadth` 子图、`claim-strategy` 权要布局原子与 `claim_lint` 六条纯函数规则；`patent_workflow_run` 开放 `graph=claim_breadth`（`claimText` = 权利要求、`input` = 说明书）
+- feat(patent): #830 M5——起草质量五维 rubric（100 分）与 20 件金标语料，`pnpm eval:patent-drafting` 输出 BatchReport 与非零退出码；新增 `--live` 真实模型基线与 usage 可见性（token 未返回时不按 0 计）
+- feat(patent): #831 补齐答复、检索补检、证据模式与程序清单执行链
+- feat(context): #836 模型上下文只读快照检查器
+- feat(runtime): #837 Python 运行时感知与解释器配置
+- feat(skills): #838 按技能持久开关
+
+### Fix
+
+- fix(tool): #834 权限改写后复核输入，并限制并发调度上限
+- fix: #835 PilotDeck 2026-11 parity 八项修复
+
+### Refactor
+
+- refactor(ui): #806 拆分 Top 5 巨型组件函数，拆分后各文件 ≤236 行
+- refactor(agent): #809 `AgentLoop` 阶段外置为生成器，主类只保留编排与恢复决策
+
+### Chore
+
+- chore(tech-debt): #807/#808/#810–#817 解除 `permission ↔ tool` 初始化期循环依赖，新增 `check:runtime-cycles` / `check:debt-ledger` 门禁、配置校验原语与 IM 会话文案单点化、会话标识命名规范
+
 ## v0.4.2 - 2026-10-30
 
 > **版本目标（2026-10-30）**：法律域从「有技能」走到「有数据底座且有评分口径」——legal 技能包与规则层入库，`law_search` 离线快照三级兜底并对覆盖规模如实回报，`evaluate_legal_evidence` 按八类法定证据 × 三性打分；附图侧把渲染门禁前移到生成期（RC6/RC7、部署级字号、跨调用占用核对），并按图型排除不适用判据，使「量不到」与「查出问题」在报告里始终可区分。
