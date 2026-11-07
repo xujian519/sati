@@ -57,6 +57,12 @@ export type BuildInventivenessGraphOptions = {
   ruleGate?: boolean;
   /** 注入 approval-gate 审批门（缺省 true：HITL 暂停；自动执行/评测场景置 false 直达规则门）。 */
   includeApproval?: boolean;
+  /**
+   * 证据模式。缺省 `"search"`：注册表里有 search handler 才插入检索链（现状）。
+   * `"supplied"`：不插检索链，`build_query` 直接连 `closest`，只消费调用方提供的
+   * `prior_art`（无效/复审场景不得用新检索替换请求人指定的证据）。
+   */
+  evidence?: "search" | "supplied";
   /** 溯源包装钩子（ProvenanceCollector.wrapNode）：addNode 统一入口，透传 GraphBuilder。 */
   onAddNode?: (name: string, node: GraphNode) => GraphNode;
   /**
@@ -201,7 +207,8 @@ function resolveGraphFlags(
 export function buildInventivenessGraph(options: BuildInventivenessGraphOptions = {}): GraphBuilder {
   const handlers = options.handlers ?? globalStageHandlerRegistry;
   const builder = new GraphBuilder({ onAddNode: options.onAddNode });
-  const searchHandler = handlers.lookup("search");
+  // 证据模式：handler 存在也不插检索链（否则会换掉请求人指定的证据集）。
+  const searchHandler = options.evidence === "supplied" ? undefined : handlers.lookup("search");
   const approvalHandler = handlers.lookup("approval-gate");
   const maxRounds = normalizeMaxRounds(options);
   const flags = resolveGraphFlags(options, searchHandler !== undefined, approvalHandler !== undefined, maxRounds);

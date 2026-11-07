@@ -323,11 +323,9 @@ test("chartTargets 注入：claim-chart 原子收到目标对象（manifest 路�
   assert.match(promptWith, /【目标对象】/);
   assert.match(promptWith, /D1（对比文件：对比文件1）/);
   assert.match(text, /claim-chart \[atom:claim-chart\]/);
-  // T9 I-1 回归：novelty/inventiveness 无 atom 声明（收口透传），不出现降级标注
-  assert.match(text, /✅ novelty:/);
-  assert.doesNotMatch(text, /novelty \[atom:/);
-  assert.match(text, /✅ inventiveness:/);
-  assert.doesNotMatch(text, /inventiveness \[atom:/);
+  // 证据模式：novelty/inventiveness 由 invalidity-analysis 原子执行，消费 chartTargets 的证据
+  assert.match(text, /✅ novelty \[atom:invalidity-analysis\]:/);
+  assert.match(text, /✅ inventiveness \[atom:invalidity-analysis\]:/);
 });
 
 // ---------------------------------------------------------------------------

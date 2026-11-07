@@ -64,9 +64,8 @@ stages:
     description: 生成检索关键词（上位/下位/同义词）
   - id: search
     strategy: react
-    atom: search
-    worker: patent-search-commander
-    description: 检索现有技术文献（证据注入下游对比）
+    atom: search-recall
+    description: 检索现有技术文献（覆盖不足时有界补检，证据注入下游对比）
   - id: search_quality
     strategy: chain
     atom: quality-gate

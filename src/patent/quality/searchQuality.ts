@@ -42,6 +42,12 @@ export const SINGLE_SOURCE_THRESHOLDS: SearchQualityThresholds = {
   minFulltextMarks: SINGLE_SOURCE_MIN_FULLTEXT_MARKS,
 };
 
+/** 召回判断结果（由 `search-recall` 原子写入 `search_recall`）。 */
+export type SearchRecallGateInput = {
+  status: string;
+  missingFeatures?: string[];
+};
+
 export type SearchQualityOptions = {
   /**
    * 装配时启用的检索源数量（如 nuo 专利 + paper 论文 = 2），**不是**本次运行成功源数。
@@ -49,6 +55,11 @@ export type SearchQualityOptions = {
    * 运行期某个源失败不应触发放宽（保守，避免失败越多门槛越低）。
    */
   sourceCount?: number;
+  /**
+   * 可选：覆盖度判断结果。未传时行为与引入该参数前完全一致（只看报告文本）。
+   * `uncovered`（轮次用尽仍缺特征）与 `not_evaluated`（没有判断）都判失败。
+   */
+  recall?: SearchRecallGateInput;
 };
 
 /** 按源数选门槛：恰好 1 源放宽；未知/0/多源严格。 */
@@ -120,6 +131,15 @@ export function checkSearchQuality(text: string, options?: SearchQualityOptions)
   }
   if (!hasIpcLimit) {
     failures.push("检索式未包含 IPC 限定");
+  }
+
+  const recall = options?.recall;
+  if (recall?.status === "uncovered") {
+    const missing = (recall.missingFeatures ?? []).filter(Boolean);
+    failures.push(missing.length > 0 ? `补检后仍有特征未被覆盖：${missing.join("、")}` : "补检后仍有特征未被覆盖");
+  }
+  if (recall?.status === "not_evaluated") {
+    failures.push("检索覆盖度未评估（召回判断未完成）");
   }
 
   return {

@@ -24,7 +24,7 @@ import {
   getStateArray,
   getStateString,
 } from "../../handler.js";
-import { checkSearchQuality } from "../../../quality/index.js";
+import { checkSearchQuality, type SearchRecallGateInput } from "../../../quality/index.js";
 import { buildSlopRevisionHint } from "../../../retry-hints.js";
 import { analyzeSlop } from "../../../slop-engine.js";
 import { degraded } from "./llm.js";
@@ -103,6 +103,24 @@ export class ApprovalGateHandler implements StageHandler {
 // quality-gate —— 检索质量确定性门槛（对齐 prosecution-draft.yaml 检索质量检查）
 // ---------------------------------------------------------------------------
 
+/** 容错读取 `search-recall` 写入的覆盖度结果；缺失或不可解析时返回 undefined（不改变旧行为）。 */
+function readRecallGateInput(raw: string): SearchRecallGateInput | undefined {
+  if (raw.trim().length === 0) return undefined;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return undefined;
+    const record = parsed as Record<string, unknown>;
+    if (typeof record.status !== "string") return undefined;
+    const missingFeatures = Array.isArray(record.missingFeatures)
+      ? record.missingFeatures.filter((item): item is string => typeof item === "string")
+      : undefined;
+    return { status: record.status, ...(missingFeatures !== undefined ? { missingFeatures } : {}) };
+  } catch {
+    // 召回结果是可选输入：不可解析时退回旧判定（只看报告文本）。
+    return undefined;
+  }
+}
+
 export const qualityGateAtom: Atom = {
   name: "quality-gate",
   // 描述语义契约：只描述"审什么"，不出现数字断言（如"≥3 篇/≥2 篇"）。
@@ -140,9 +158,14 @@ export class QualityGateHandler implements StageHandler {
     if (text.trim().length === 0) {
       return degraded("quality-gate", "输入为空（state.search_summary / prior_art）");
     }
-    const result = checkSearchQuality(text, { sourceCount: provider?.sourceCount });
+    const recall = readRecallGateInput(getStateString(state, "search_recall"));
+    const result = checkSearchQuality(text, {
+      sourceCount: provider?.sourceCount,
+      ...(recall !== undefined ? { recall } : {}),
+    });
     const report = [
       `检索质量门: ${result.passed ? "✅ 通过" : "⚠️ 未通过（挂 HITL 决策：退回重做或人工确认放行）"}`,
+      ...(recall !== undefined ? [`- 覆盖度判断: ${recall.status}`] : []),
       ...(result.thresholdsAdjusted
         ? [
             `- 检索源: 装配时 1 个（单源检索，阈值已调整：对比文件 ≥${result.thresholds.minDocs} 篇、全文 ≥${result.thresholds.minFulltextMarks} 篇；运行期源失败不恢复严格阈值）`,

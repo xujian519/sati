@@ -324,7 +324,25 @@ export const patentOaResponseManifest: WorkflowManifest = {
       atom: "claim-chart",
       params: { chart_mode: "oa-response" },
     },
-    { id: "draft", strategy: "chain", description: "撰写意见陈述书（新颖性陈述 + 三步法，消费 claim-chart）" },
+    {
+      id: "classify_grounds",
+      strategy: "chain",
+      description: "按法条与常用表述识别审查意见理由（新颖性/创造性/清楚/公开/超范围/单一性）",
+      atom: "oa-grounds",
+    },
+    {
+      id: "amendment_diff",
+      strategy: "chain",
+      description:
+        "逐条核对拟修改限定能否在原申请文本中连续命中（输入须含 original_application 与 proposed_limitations 两段；缺段记未核对）",
+      atom: "amendment-diff",
+    },
+    {
+      id: "draft",
+      strategy: "chain",
+      description: "汇编意见陈述草稿（消费对照表、缺口、理由分型与修改差分，不重新检索）",
+      atom: "draft-oa",
+    },
     { id: "approval", strategy: "chain", description: "人工确认答复书" },
   ],
   validation: { requireAllSteps: true, maxRetries: 2 },
@@ -360,8 +378,27 @@ export const patentInvalidationManifest: WorkflowManifest = {
       atom: "claim-chart",
       params: { chart_mode: "invalidity" },
     },
-    { id: "novelty", strategy: "chain", description: "新颖性单独对比（单篇全覆盖）（原子路径不支持，收口模式）" },
-    { id: "inventiveness", strategy: "chain", description: "三步法创造性分析（原子路径不支持，收口模式）" },
+    {
+      id: "novelty",
+      strategy: "chain",
+      description: "新颖性单独对比（单篇全覆盖），只用对照表里请求人指定的证据，不自行检索",
+      atom: "invalidity-analysis",
+      params: { analysis: "novelty" },
+    },
+    {
+      id: "inventiveness",
+      strategy: "chain",
+      description: "三步法创造性分析，只用对照表里请求人指定的证据组合，不自行检索",
+      atom: "invalidity-analysis",
+      params: { analysis: "inventiveness" },
+    },
+    {
+      id: "procedure_checklist",
+      strategy: "chain",
+      description: "核对程序事项与理由-证据对应关系（核验表，不是请求书）",
+      atom: "procedure-checklist",
+      params: { procedure_kind: "invalidation" },
+    },
     { id: "approval", strategy: "chain", description: "人工确认分析结论" },
   ],
   validation: { requireAllSteps: true, maxRetries: 2 },
@@ -503,9 +540,11 @@ export const patentDraftingManifest: WorkflowManifest = {
     {
       id: "search",
       strategy: "react",
-      description: "检索现有技术文献（证据注入下游对比）",
-      atom: "search",
-      worker: "patent-search-commander",
+      // 覆盖不足时有界补检（retrieval_rounds 默认 2，0 = 只检索一次）；
+      // 轮次用尽仍缺特征时由质量门判失败，不静默当作已覆盖。
+      description: "检索现有技术文献（覆盖不足时有界补检，证据注入下游对比）",
+      atom: "search-recall",
+      params: { retrieval_rounds: 2 },
     },
     {
       id: "search_quality",

@@ -46,13 +46,14 @@ test("无效/复审 manifest 复用同一 id（双场景）且 checkDomains 含 
   assert.ok(entry!.checkDomains.includes("patent_invalidation"));
 });
 
-test("输入键不匹配的阶段不声明 atom（原子路径不支持，回退收口）", () => {
-  // T9 遗留修复：novelty 原子输入键为 features/prior_art、reasoning 原子输入键为
-  // reasoning_prompt/reasoning_input、draft-claims 原子输入键为 pfe_triples/
-  // merge_result——本 manifest 均无对应产出，声明 atom 必然降级；回退收口语义。
+test("无效清单：新颖性/创造性声明证据模式原子（消费 claim-chart，不再收口）", () => {
+  // 旧版因通用 novelty/reasoning 原子输入键不匹配而不声明 atom；现在改为
+  // invalidity-analysis：从 claim_chart_doc 取请求人指定的证据，图以 supplied 构建。
   for (const stage of patentInvalidationManifest.stages) {
     if (stage.id === "novelty" || stage.id === "inventiveness") {
-      assert.equal(stage.atom, undefined, `${stage.id} 不应声明 atom（输入键不匹配）`);
+      assert.equal(stage.atom, "invalidity-analysis", `${stage.id} 应声明证据模式原子`);
+      const params = stage.params as { analysis?: string } | undefined;
+      assert.equal(params?.analysis, stage.id);
     }
   }
   const draft = patentPatentabilityManifest.stages.find(s => s.id === "draft");

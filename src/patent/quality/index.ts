@@ -14,4 +14,5 @@ export {
   type SearchQualityOptions,
   type SearchQualityResult,
   type SearchQualityThresholds,
+  type SearchRecallGateInput,
 } from "./searchQuality.js";

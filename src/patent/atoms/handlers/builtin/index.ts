@@ -14,6 +14,11 @@
 export {
   searchAtom,
   SearchHandler,
+  searchRecallAtom,
+  SearchRecallHandler,
+  DEFAULT_RETRIEVAL_ROUNDS,
+  type SearchRecallResult,
+  type SearchRecallStatus,
   keywordsAtom,
   KeywordsHandler,
 } from "./search.js";
@@ -77,6 +82,23 @@ export {
   type RasterGateObservation,
 } from "./figure.js";
 export { claimChartAtom, ClaimChartHandler } from "./chart.js";
+export { procedureChecklistAtom, ProcedureChecklistHandler } from "./procedure.js";
+export {
+  invalidityAnalysisAtom,
+  InvalidityAnalysisHandler,
+  NO_EVIDENCE_REASON,
+  type InvalidityAnalysis,
+} from "./invalidity.js";
+export {
+  amendmentDiffAtom,
+  AmendmentDiffHandler,
+  draftOaAtom,
+  DraftOaHandler,
+  oaGroundsAtom,
+  OaGroundsHandler,
+  OA_DRAFT_NOTICE,
+  OA_NO_CHART_REASON,
+} from "./oa.js";
 export { claimEmbodimentMapperAtom, ClaimEmbodimentMapperHandler } from "./mapper.js";
 export { chemistryAnalyzeAtom, ChemistryAnalyzeHandler } from "./chemistry.js";
 export {

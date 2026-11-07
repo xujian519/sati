@@ -37,21 +37,8 @@ export function buildQueryPrompt(params: { parse: string; cutoffDate: string; cu
   ].join("\n");
 }
 
-export function buildRecallPrompt(params: { parse: string; priorArtText: string }): string {
-  const { parse, priorArtText } = params;
-  return [
-    "你是专利检索质量审查员。检查现有技术检索结果的覆盖度：",
-    "- adequate：检索结果是否足以支撑创造性判断（至少覆盖核心技术特征）",
-    "- covered_features：已被检索结果覆盖的技术特征",
-    "- missing_features：未被覆盖的关键技术特征（补检依据）",
-    "【待评技术特征】",
-    dataBlock(parse.slice(0, 3000)),
-    "【检索结果摘要（含公开日）】",
-    priorArtText.length > 0 ? dataBlock(priorArtText.slice(0, 4000)) : "（无检索结果）",
-    "",
-    "请严格输出 JSON：{ adequate, covered_features, missing_features }。",
-  ].join("\n");
-}
+/** 提示词与 schema 收在 `search/recall.ts`（撰写检索复用同一份文本）。 */
+export { buildRecallPrompt } from "../../search/recall.js";
 
 export function buildClosestPrompt(params: { parse: string; domainFocus: string; priorArtText: string }): string {
   const { parse, domainFocus, priorArtText } = params;
