@@ -147,3 +147,13 @@ export {
   type RestoreBackupOptions,
   type RestoreBackupResult,
 } from "./filesystem/index.js";
+export {
+  createModelContextSnapshot,
+  modelContextSnapshotPath,
+  readModelContextSnapshot,
+  summarizeModelContext,
+  writeModelContextSnapshot,
+  type ModelContextBreakdown,
+  type ModelContextSnapshot,
+  type ModelContextSummary,
+} from "./context/ModelContextSnapshot.js";

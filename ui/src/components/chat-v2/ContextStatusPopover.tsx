@@ -1,5 +1,6 @@
 import type { TFunction } from "i18next";
 import { cn } from "../../lib/utils.js";
+import type { ModelContextRequest } from "../chat-context/ContextInspector";
 import { CONTEXT_TONE_BADGE_STYLES, type ContextStatus } from "./contextStatus";
 
 /**
@@ -8,7 +9,19 @@ import { CONTEXT_TONE_BADGE_STYLES, type ContextStatus } from "./contextStatus";
  * 从 `ComposerV2` 抽出的独立组件——气泡文案自成一体，留在主组件里只会让
  * 已超长的渲染函数继续变长。
  */
-export function ContextStatusPopover({ status, title, t }: { status: ContextStatus; title: string; t: TFunction }) {
+export function ContextStatusPopover({
+  status,
+  title,
+  t,
+  modelContext,
+  onInspectContext,
+}: {
+  status: ContextStatus;
+  title: string;
+  t: TFunction;
+  modelContext?: ModelContextRequest;
+  onInspectContext?: () => void;
+}) {
   const usedText = t("input.contextStatusUsed", {
     used: status.used.toLocaleString(),
     total: status.displayTotal.toLocaleString(),
@@ -75,6 +88,15 @@ export function ContextStatusPopover({ status, title, t }: { status: ContextStat
           })}
         </div>
       )}
+      {modelContext && onInspectContext ? (
+        <button
+          type="button"
+          onClick={onInspectContext}
+          className="mt-2 w-full rounded-md border border-neutral-200 px-2 py-1 text-left text-[12px] font-medium text-neutral-700 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-800"
+        >
+          {t("contextInspector.open", { defaultValue: "Inspect context" })}
+        </button>
+      ) : null}
     </div>
   );
 }

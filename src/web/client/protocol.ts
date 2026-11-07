@@ -315,6 +315,11 @@ export type WebReadSessionMessagesInput = {
   limit?: number;
   cursor?: string;
   direction?: "forward" | "backward";
+  /**
+   * 请求模型上下文快照：`true` 返回完整内容，`"summary"` 只返回元信息与体积。
+   * 仅在该字段存在时读 sidecar，正常历史读取零额外 I/O。
+   */
+  includeModelContext?: boolean | "summary";
 };
 
 export type WebReadSessionMessagesResult = {
@@ -322,6 +327,10 @@ export type WebReadSessionMessagesResult = {
   nextCursor?: string;
   total?: number;
   tokenUsage?: Record<string, unknown>;
+  modelContext?:
+    | import("../../session/context/ModelContextSnapshot.js").ModelContextSnapshot
+    | import("../../session/context/ModelContextSnapshot.js").ModelContextSummary;
+  modelContextStatus?: "available" | "missing" | "stale";
   session: WebSessionInfo;
 };
 

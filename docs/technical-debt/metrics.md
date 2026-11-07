@@ -7,11 +7,11 @@
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1197 / 208713 |
+| src TS 文件 / 行数 | 1198 / 208979 |
 | src JS 文件 | 0 |
-| tests 文件 | 703 |
-| ui/src 文件 / 行数 | 740 / 109531 |
-| ui/server 文件 / 行数 | 149 / 38859 |
+| tests 文件 | 705 |
+| ui/src 文件 / 行数 | 743 / 110081 |
+| ui/server 文件 / 行数 | 149 / 38871 |
 
 ## 指标口径
 
@@ -32,9 +32,9 @@
 | `as unknown as`（双重断言） | 29 | ui/src(21) · knowledge(5) · adapters(1) |
 | 裸 `console.*` | 6 | ui/server(6) |
 | 空 `catch {}` | 0 | — |
-| 无参 `catch {`（总计） | 705 | ui/server(157) · ui/src(125) · adapters(72) |
+| 无参 `catch {`（总计） | 707 | ui/server(157) · ui/src(126) · adapters(72) |
 | ↳ **无注释**（隐患类，目标） | **0** | — |
-| ↳ 已带意图注释 | 705 | — |
+| ↳ 已带意图注释 | 707 | — |
 | `TODO/HACK/FIXME/XXX` | 11 | always-on(4) · tests(4) · ui/src(2) |
 | 分层违规 `ui/server→src` | 15 | — |
 | 分层违规 `src→ui` | 0 | — |
@@ -59,9 +59,9 @@
 | `ui/src/components/chat-v2/processGrouping.test.ts` | `(anonymous)` | 409 | arrow |
 | `ui/src/types/contentReference.spec.ts` | `(anonymous)` | 408 | arrow |
 | `ui/src/components/code-editor/view/subcomponents/SpreadsheetInteractivePreview.tsx` | `SpreadsheetInteractivePreview` | 407 | function |
+| `ui/src/components/chat-v2/ComposerV2.tsx` | `ComposerV2` | 400 | function |
 | `ui/src/components/settings/view/agentSearch/components/ToolsSection.tsx` | `ToolsSection` | 399 | function |
 | `ui/src/components/settings/view/integrations/im/components/WeComChannelSection.tsx` | `WeComChannelSection` | 395 | function |
-| `ui/src/components/chat-v2/ComposerV2.tsx` | `ComposerV2` | 387 | function |
 | `ui/src/components/app-shell/SidebarV2.tsx` | `SidebarV2` | 385 | function |
 | `ui/src/components/main-content-v2/CronV2.test.tsx` | `(anonymous)` | 384 | arrow |
 | `ui/src/components/app-shell/MainAreaV2.tsx` | `MainAreaV2Content` | 381 | function |
@@ -99,8 +99,8 @@
 | `ui/src/components/chat-v2/MessagesPaneV2.render.test.tsx` | 1235 |
 | `ui/server/routes/config.js` | 1234 |
 | `ui/server/routes/agent.js` | 1228 |
+| `src/agent/loop/AgentLoop.ts` | 1152 |
 | `ui/server/routes/taskmaster.js` | 1152 |
-| `src/agent/loop/AgentLoop.ts` | 1150 |
 | `ui/src/components/main-content-v2/CronV2.tsx` | 1130 |
 | `ui/src/components/main-content/view/MainContent.tsx` | 1111 |
 | `ui/server/routes/config.test.js` | 1090 |
@@ -145,7 +145,7 @@
 | context | 39 |
 | gateway | 34 |
 | model | 33 |
-| session | 28 |
+| session | 29 |
 | cli | 20 |
 | router | 20 |
 | adapters | 18 |
@@ -154,8 +154,8 @@
 | mcp | 13 |
 | pilot | 13 |
 | cron | 12 |
+| web | 11 |
 | rule | 10 |
-| web | 10 |
 | literature | 8 |
 | permission | 5 |
 | test-support | 4 |
@@ -171,7 +171,7 @@
 | runtime | 1 |
 | status | 1 |
 
-| **合计** | **675** |
+| **合计** | **677** |
 
 ## i18n en/zh-CN 对齐
 
@@ -179,7 +179,7 @@
 |---|---|---|---|---|
 | alwaysOn | 156 | 156 | 0 | 0 |
 | auth | 23 | 23 | 0 | 0 |
-| chat | 375 | 375 | 0 | 0 |
+| chat | 393 | 393 | 0 | 0 |
 | codeEditor | 196 | 196 | 0 | 0 |
 | common | 446 | 446 | 0 | 0 |
 | hookTrust | 19 | 19 | 0 | 0 |

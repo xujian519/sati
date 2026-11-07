@@ -65,6 +65,7 @@ const RETURN_SURFACE_KEYS = [
   "setIsUserScrolledUp",
   "tokenBudget",
   "setTokenBudget",
+  "modelContextParams",
   "visibleMessageCount",
   "visibleMessages",
   "loadEarlierMessages",
@@ -228,7 +229,7 @@ async function capture(harness: Harness, label: string) {
 }
 
 describe("useChatSessionState 返回面契约与等价快照", () => {
-  it("返回面 39 键、键序逐项一致", async () => {
+  it("返回面 40 键、键序逐项一致", async () => {
     const harness = renderHarness();
     await waitFor(() => expect(harness.result.current.state.chatMessages.length).toBe(45));
 

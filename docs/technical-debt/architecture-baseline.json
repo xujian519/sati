@@ -25,7 +25,7 @@
     {
       "rule": "file-size",
       "file": "src/agent/loop/AgentLoop.ts",
-      "lines": 1150
+      "lines": 1152
     },
     {
       "rule": "file-size",

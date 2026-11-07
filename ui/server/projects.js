@@ -464,6 +464,8 @@ async function deleteSession(projectName, sessionId, _options = {}) {
           throw error;
         }
       }
+      // 上下文快照是会话的派生物：删除会话时一并移除，避免留下可读的 system prompt/消息副本。
+      await fs.rm(`${transcript}.context.json`, { force: true });
     }
     await fs.rm(path.join(pilotHome, "projects", projectId, "pending-inputs", `${safeId}.json`), {
       force: true,

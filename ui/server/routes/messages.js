@@ -50,11 +50,19 @@ router.get("/:sessionId/messages", async (req, res) => {
     const offset = parseInt(req.query.offset || "0", 10);
 
     const gateway = await getSatiGateway();
+    const includeModelContextParam = req.query.includeModelContext;
+    const includeModelContext =
+      includeModelContextParam === "summary"
+        ? "summary"
+        : includeModelContextParam === "true" || includeModelContextParam === "1"
+          ? true
+          : undefined;
     const result = await gateway.readSessionMessages({
       sessionKey: sessionId,
       projectKey: projectPath,
       limit: limit ?? undefined,
       cursor: offset > 0 ? String(offset) : undefined,
+      ...(includeModelContext !== undefined ? { includeModelContext } : {}),
       ...(typeof req.query.sessionKind === "string" && req.query.sessionKind
         ? { sessionKind: req.query.sessionKind }
         : {}),
@@ -77,6 +85,8 @@ router.get("/:sessionId/messages", async (req, res) => {
       offset,
       limit,
       ...(result.tokenUsage ? { tokenUsage: result.tokenUsage } : {}),
+      ...(result.modelContext ? { modelContext: result.modelContext } : {}),
+      ...(result.modelContextStatus ? { modelContextStatus: result.modelContextStatus } : {}),
     });
   } catch (error) {
     logger.error("[messages] read_session_messages failed:", error);

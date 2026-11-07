@@ -553,5 +553,29 @@
       "message": "{{message}}",
       "hint": "请用更短 prompt 重试，让 agent 把大型工具输入拆成更小步骤，或在“设置 → 模型 Provider”中切换到工具调用能力更强的模型。"
     }
+  },
+  "contextInspector": {
+    "open": "查看上下文",
+    "title": "模型上下文",
+    "subtitle": "模型在上一次请求中实际收到的内容。",
+    "close": "关闭",
+    "loading": "正在加载上下文…",
+    "searchPlaceholder": "搜索上下文…",
+    "chars": "{{count}} 字符（提示词 + 工具）",
+    "meta": "{{provider}} / {{model}} · 回合 {{turnId}}",
+    "mediaOmitted": "此快照已省略二进制媒体内容。",
+    "sections": {
+      "system": "系统提示词",
+      "tools": "工具",
+      "messages": "消息"
+    },
+    "status": {
+      "error": "无法加载上下文快照。",
+      "missing": "尚无快照。下一次模型请求后可用。",
+      "stale": "该快照属于更早的回合，发送一条消息后会刷新。",
+      "toolsEmpty": "本次请求未发送工具。",
+      "messagesEmpty": "本次请求未发送消息。"
+    },
+    "emptySearch": "没有匹配项。"
   }
 }
