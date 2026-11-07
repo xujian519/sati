@@ -54,6 +54,14 @@ type PermissionOutcome = { decision: AllowedDecision; input: unknown } | { error
 
 type ResolvedPermission = { decision: AllowedDecision; input: unknown };
 
+export type ToolRuntimeExecuteOptions = {
+  /**
+   * 调度器声明本批按并发执行时置位：权限/钩子改写的输入可能在准备阶段
+   * 从并发安全变为独占，执行前必须复核（见 `runTool`）。
+   */
+  requireConcurrencySafe?: boolean;
+};
+
 export class ToolRuntime {
   constructor(
     private readonly registry: ToolRegistry,
@@ -62,7 +70,11 @@ export class ToolRuntime {
     private readonly eventEmitter?: AgentEventEmitter,
   ) {}
 
-  async execute(call: SatiToolCall, context: SatiToolRuntimeContext): Promise<SatiToolResult> {
+  async execute(
+    call: SatiToolCall,
+    context: SatiToolRuntimeContext,
+    options: ToolRuntimeExecuteOptions = {},
+  ): Promise<SatiToolResult> {
     const startedAtDate = now(context);
     context = this.withNestedToolExecutor(context);
     const startedAt = startedAtDate.toISOString();
@@ -80,7 +92,7 @@ export class ToolRuntime {
     const permission = await this.resolvePermission(preflight.tool, call, prepared.input, context, startedAt);
     if ("error" in permission) return permission.error;
 
-    return this.runTool(preflight.tool, call, permission, context, startedAt, startedAtDate);
+    return this.runTool(preflight.tool, call, permission, context, startedAt, startedAtDate, options);
   }
 
   /** 注入嵌套执行器：子工具调用共享同一份 readFileState / writeSnapshots。 */
@@ -146,52 +158,70 @@ export class ToolRuntime {
       };
     }
 
-    const planModeViolation = getPlanModeViolation(tool.name, call.input, context);
+    const inputError = await this.checkInput(tool, call.input, call.id, startedAt, context);
+    if (inputError) {
+      return { error: inputError };
+    }
+
+    return { tool };
+  }
+
+  /**
+   * 执行前输入门：abort / plan mode / ask mode / schema / prompt 能力。
+   * PreToolUse 与权限 hook 都能改写输入，每一处改写后都必须重跑本门，
+   * 否则「校验过的输入」与「真正执行的输入」会脱钩。
+   */
+  private async checkInput(
+    tool: SatiToolDefinition,
+    input: unknown,
+    toolCallId: string,
+    startedAt: string,
+    context: SatiToolRuntimeContext,
+    invalidPrefix = "",
+  ): Promise<SatiToolErrorResult | undefined> {
+    if (context.abortSignal?.aborted) {
+      return this.errorResult(toolCallId, tool.name, "tool_aborted", "Tool execution was aborted.", startedAt, context);
+    }
+
+    const planModeViolation = getPlanModeViolation(tool.name, input, context);
     if (planModeViolation) {
-      return {
-        error: await this.errorResult(call.id, tool.name, "plan_mode_violation", planModeViolation, startedAt, context),
-      };
+      return this.errorResult(toolCallId, tool.name, "plan_mode_violation", planModeViolation, startedAt, context);
     }
 
-    const askModeViolation = context.runMode === "ask" ? getAskModeViolation(tool, call.input) : undefined;
+    const askModeViolation = context.runMode === "ask" ? getAskModeViolation(tool, input) : undefined;
     if (askModeViolation) {
-      return {
-        error: await this.errorResult(call.id, tool.name, "ask_mode_violation", askModeViolation, startedAt, context),
-      };
+      return this.errorResult(toolCallId, tool.name, "ask_mode_violation", askModeViolation, startedAt, context);
     }
 
-    const validation = validateToolInput(call.input, tool.inputSchema);
+    const validation = validateToolInput(input, tool.inputSchema);
     if (!validation.ok) {
-      return {
-        error: await this.errorResult(
-          call.id,
-          tool.name,
-          "invalid_tool_input",
+      return this.errorResult(
+        toolCallId,
+        tool.name,
+        "invalid_tool_input",
+        invalidPrefix +
           formatValidationError(tool.name, validation.issues, {
             maxOutputTokens: context.maxOutputTokens,
             outputTruncated: context.outputTruncated,
           }),
-          startedAt,
-          context,
-          { issues: validation.issues },
-        ),
-      };
+        startedAt,
+        context,
+        { issues: validation.issues },
+      );
     }
 
-    if (context.permissionContext.canPrompt === false && requiresPromptCapability(tool, call.input)) {
-      return {
-        error: await this.errorResult(
-          call.id,
-          tool.name,
-          "unsupported_tool",
-          `${tool.name} requires user interaction, but this session is running with prompts disabled.`,
-          startedAt,
-          context,
-        ),
-      };
+    if (context.permissionContext.canPrompt === false && requiresPromptCapability(tool, input)) {
+      return this.errorResult(
+        toolCallId,
+        tool.name,
+        "unsupported_tool",
+        `${tool.name} requires user interaction, but this session is running with prompts disabled.`,
+        startedAt,
+        context,
+      );
     }
 
-    return { tool };
+    return undefined;
   }
 
   /** PreToolUse hook + 工具自校验 + todo 门：可改写输入，也可直接拒绝。 */
@@ -228,24 +258,17 @@ export class ToolRuntime {
     const updatedInput = findEffect(preToolResult.effects, "updated_tool_input");
     if (updatedInput) {
       executeInput = updatedInput.input;
-      const updatedValidation = validateToolInput(executeInput, tool.inputSchema);
-      if (!updatedValidation.ok) {
-        return {
-          error: await this.errorResult(
-            call.id,
-            tool.name,
-            "invalid_tool_input",
-            `PreToolUse hook produced invalid input for ${tool.name}.
-
-${formatValidationError(tool.name, updatedValidation.issues, {
-  maxOutputTokens: context.maxOutputTokens,
-  outputTruncated: context.outputTruncated,
-})}`,
-            startedAt,
-            context,
-            { issues: updatedValidation.issues },
-          ),
-        };
+      // hop 后的输入同样要过模式与 schema 门：hook 可能把只读调用改成写调用。
+      const updatedError = await this.checkInput(
+        tool,
+        executeInput,
+        call.id,
+        startedAt,
+        context,
+        `PreToolUse hook produced invalid input for ${tool.name}.\n\n`,
+      );
+      if (updatedError) {
+        return { error: updatedError };
       }
     }
 
@@ -382,7 +405,40 @@ ${formatValidationError(tool.name, updatedValidation.issues, {
       };
     }
 
-    return { decision, input: decision.updatedInput ?? executeInput };
+    const finalInput = decision.updatedInput ?? executeInput;
+    const finalInputError = await this.checkInput(tool, finalInput, call.id, startedAt, context);
+    if (finalInputError) {
+      return { error: finalInputError };
+    }
+    if (decision.updatedInput !== undefined) {
+      // 权限回调可在 schema 校验之后改路径/命令，工具级语义校验与 todo 门
+      // 必须基于最终输入重跑。
+      const finalValidation = await tool.validateInput?.(finalInput, context);
+      if (finalValidation && !finalValidation.ok) {
+        return {
+          error: await this.errorResult(
+            call.id,
+            tool.name,
+            "invalid_tool_input",
+            formatValidationError(tool.name, finalValidation.issues, {
+              maxOutputTokens: context.maxOutputTokens,
+              outputTruncated: context.outputTruncated,
+            }),
+            startedAt,
+            context,
+            { issues: finalValidation.issues },
+          ),
+        };
+      }
+      const finalTodoGate = context.planTodo?.blockingMessageFor(tool.name, tool.isReadOnly(finalInput));
+      if (finalTodoGate) {
+        return {
+          error: await this.errorResult(call.id, tool.name, "tool_execution_failed", finalTodoGate, startedAt, context),
+        };
+      }
+    }
+
+    return { decision, input: finalInput };
   }
 
   /** 执行工具（超时熔合 / outputSchema 校验 / 后置 hook / 证据与审计），成功失败同一收口。 */
@@ -393,8 +449,34 @@ ${formatValidationError(tool.name, updatedValidation.issues, {
     context: SatiToolRuntimeContext,
     startedAt: string,
     startedAtDate: Date,
+    options: ToolRuntimeExecuteOptions,
   ): Promise<SatiToolResult> {
     const executeInput = permission.input;
+    if (options.requireConcurrencySafe) {
+      // 调度器按准备阶段的输入把本调用放进并发批；权限/钩子改写后可能已经
+      // 变成独占（写文件、改共享状态）。此时并入并发批不安全，拒绝并要求单独重试。
+      try {
+        if (!tool.isConcurrencySafe(executeInput)) {
+          return await this.errorResult(
+            call.id,
+            tool.name,
+            "tool_execution_failed",
+            "Tool input changed from concurrency-safe to exclusive during preparation. Retry this tool call alone.",
+            startedAt,
+            context,
+          );
+        }
+      } catch (error) {
+        return await this.errorResult(
+          call.id,
+          tool.name,
+          "tool_execution_failed",
+          `Could not verify tool concurrency safety: ${normalizeToolError(error).message}`,
+          startedAt,
+          context,
+        );
+      }
+    }
     const baseContext: SatiToolRuntimeContext = {
       ...context,
       currentToolCallId: call.id,
