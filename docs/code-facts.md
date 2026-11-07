@@ -66,10 +66,10 @@
 | `src/network/` | 3 | ✓ | 网络层（fetch 封装） |
 | `src/patent/` | 259 | ✓ | 专利执行管线（workflow/graph/atoms/evidence/figure/document 等） |
 | `src/permission/` | 7 | ✓ | 权限（decision/PermissionRuntime + guard/ToolGuardRegistry） |
-| `src/pilot/` | 18 | ✓ | 配置（PilotConfigStore / lastGoodFacts / workspace 判定） |
+| `src/pilot/` | 19 | ✓ | 配置（PilotConfigStore / lastGoodFacts / workspace 判定） |
 | `src/router/` | 35 | ✓ | 智能路由（含多模态媒体降级） |
 | `src/rule/` | 11 | ✓ | 宪法规则引擎（协议/加载器/评估器/输出门禁/policy-bridge） |
-| `src/runtime/` | 2 | ✓ | 运行时环境适配（命令 shell 解析） |
+| `src/runtime/` | 3 | ✓ | 运行时环境适配（命令 shell 解析） |
 | `src/session/` | 35 | ✓ | 会话管理（transcript/artifacts/resume/search/storage/workspace 账本） |
 | `src/shared/` | 13 | — | 跨模块共享工具（env/paths/retry/sqlite/ttl-cache/timeouts） |
 | `src/status/` | 2 | ✓ | 状态（agent 状态详情与可见错误体） |

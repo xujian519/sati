@@ -1,6 +1,7 @@
 import type { AlwaysOnConfig } from "../../always-on/config/parseAlwaysOnConfig.js";
 import type { CronConfig } from "../../cron/config/parseCronConfig.js";
 import type { ModelConfig } from "../../model/protocol/canonical.js";
+import type { PythonRuntimeConfig } from "../../runtime/pythonRuntime.js";
 import type { RouterConfig } from "../../router/config/schema.js";
 
 export type PilotConfigSourceKind = "default" | "project" | "env";
@@ -43,6 +44,7 @@ export type PilotRawConfig = {
   proxy?: unknown;
   webui?: unknown;
   patents?: unknown;
+  runtime?: unknown;
 };
 
 export type PilotExtensionConfig = {
@@ -363,6 +365,11 @@ export type PilotPatentsConfig = {
   modelHints?: Record<string, { provider?: string; model: string }>;
 };
 
+/** 本地执行环境相关配置（当前只有 Python）。 */
+export type PilotRuntimeConfig = {
+  python?: PythonRuntimeConfig;
+};
+
 export type PilotConfig = {
   agent: PilotAgentConfig;
   model: ModelConfig;
@@ -377,6 +384,7 @@ export type PilotConfig = {
   telemetry?: PilotTelemetryConfig;
   proxy?: PilotProxyConfig;
   patents?: PilotPatentsConfig;
+  runtime?: PilotRuntimeConfig;
 };
 
 export type PilotConfigSnapshot = {

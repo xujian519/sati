@@ -68,6 +68,7 @@ export class ToolContextFactory {
       auditRecorder: dependencies.auditRecorder,
       now: this.host.now,
       env: buildTurnEnvironment(config.env, config.cwd, input.sessionId, input.turnId),
+      ...(config.pythonRuntime ? { pythonRuntime: config.pythonRuntime } : {}),
       // Tools that need a secondary model call (e.g. `agent` subagents in
       // fallback mode, `web_fetch` extraction) get a thin adapter that
       // funnels into the router's stream so subagents inherit fallback /

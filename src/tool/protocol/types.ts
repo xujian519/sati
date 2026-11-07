@@ -307,6 +307,8 @@ export type SatiToolRuntimeContext = {
   currentPermissionDecision?: Extract<PermissionDecision, { type: "allow" }>;
   now?: () => Date;
   env?: NodeJS.ProcessEnv;
+  /** 解析后的 Python 运行时状态；缺省由 `execute_code` 回退到 PATH。 */
+  pythonRuntime?: import("../../runtime/pythonRuntime.js").PythonRuntimeStatus;
   /**
    * @internal 测试缝：写盘前（真实落点已解析、目标尚未打开）执行，用于确定性
    * 模拟「解析与落盘之间软链被重指 / 目标被换入硬链接」的 TOCTOU 场景。

@@ -1,6 +1,7 @@
 import { dirname } from "node:path";
 import type { CanonicalToolSchema } from "../../model/index.js";
 import { isPatentSkillName } from "../../pilot/workspace/patentSignals.js";
+import { formatPythonRuntimeSection, type PythonRuntimeStatus } from "../../runtime/pythonRuntime.js";
 import type {
   ContributedCommand,
   ContributedSkill,
@@ -26,6 +27,8 @@ export type PromptAssemblerInput = {
   appendSystemPrompt?: string;
   /** Optional override for the user-context "now" line. */
   now?: () => Date;
+  /** 本地 Python 运行时状态；缺省不注入 `<python-runtime>`。 */
+  pythonRuntime?: PythonRuntimeStatus;
 };
 
 export type PromptAssemblerSections = {
@@ -171,6 +174,9 @@ export class PromptAssembler {
     }
     lines.push(`platform: ${process.platform}`);
     lines.push(`node: ${process.version}`);
+    if (input.pythonRuntime) {
+      lines.push(...formatPythonRuntimeSection(input.pythonRuntime));
+    }
     lines.push("</user-context>");
     return [lines.join("\n")];
   }

@@ -40,6 +40,7 @@ import type { ModelRuntime } from "../model/index.js";
 import { MODEL_WINDOW_STORE_FILENAME, ModelWindowStore } from "../model/window/store.js";
 import type { loadPilotConfig } from "../pilot/index.js";
 import type { RouterRuntime } from "../router/index.js";
+import { resolvePythonRuntime } from "../runtime/pythonRuntime.js";
 import { createAgentProjectSessionStorage } from "../session/index.js";
 import { FileHistoryStore } from "../session/filesystem/FileHistoryStore.js";
 import type { ResumeSessionDependencyExtension } from "../session/resume/resumeAgentSession.js";
@@ -199,9 +200,13 @@ export function buildSessionDependencies(deps: SessionDependenciesInput): Sessio
       runtime.snapshot.config.agent.model.model,
     );
     const instructionDiscovery = new InstructionDiscovery(projectRoot, projectRoot, deps.pilotHome);
+    const pythonRuntime = resolvePythonRuntime({
+      config: runtime.snapshot.config.runtime?.python,
+    });
     const contextRuntime = new DefaultContextRuntime({
       extension,
       projectRoot,
+      pythonRuntime,
       patentDomainEnabled: runtime.patentDomainEnabled,
       memoryResolver,
       // 召回日志（WS1）：Sati 自有状态库（env SATI_RECALL_LOG_DB 可覆盖），
