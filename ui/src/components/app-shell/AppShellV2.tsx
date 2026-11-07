@@ -1,896 +1,156 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from "react";
-import { useMatch, useNavigate } from "react-router-dom";
-import { useTranslation } from "react-i18next";
-import ReactDOM from "react-dom";
-import { Loader2, Trash2 } from "lucide-react";
-import { useWebSocket } from "../../contexts/WebSocketContext";
-import { useDeviceSettings } from "../../hooks/useDeviceSettings";
-import { useSessionProtection } from "../../hooks/useSessionProtection";
-import { useProjectsState } from "../../hooks/useProjectsState";
-import { useDesktopSidebarForFiles } from "../../hooks/useDesktopSidebarForFiles";
-import Settings from "../settings/Settings";
-import ProjectCreationWizard from "../project-creation-wizard";
-import { normalizeProjectForSettings, type SettingsProject } from "../../lib/projectSettings";
-import { sessionDisplayTitle, setSessionCustomTitle } from "../../lib/customNames";
-import {
-  getSessionRequestParams,
-  isBackgroundTaskSession,
-  type AppTab,
-  type Project,
-  type ProjectSession,
-} from "../../types/app";
-import { api } from "../../utils/api";
-import { resolveMarkdownFileHref } from "../chat/utils/resolveMarkdownFileHref";
-import type { SessionNavigationOptions } from "../main-content/types/types";
-import { ConnectionBanner } from "../ui/ConnectionBanner";
-import { HookTrustBanner } from "../hook-trust/view/HookTrustBanner";
-import { KnowledgeDraftsBanner } from "../knowledge-drafts/view/KnowledgeDraftsBanner";
 import ErrorBoundary from "../main-content/view/ErrorBoundary";
-import { StylePanelHost } from "../patent/StylePanel";
-import SidebarV2 from "./SidebarV2";
-import MainAreaV2 from "./MainAreaV2";
-import { chooseDefaultProject } from "./appShellSelection";
-
-type TypedSettingsProps = {
-  isOpen: boolean;
-  onClose: () => void;
-  projects: SettingsProject[];
-  initialTab: string;
-};
-
-type DeleteSessionTarget = {
-  project: Project;
-  session: ProjectSession;
-};
-
-const SettingsComponent: (props: TypedSettingsProps) => JSX.Element = Settings;
-
-const UNREAD_IGNORED_MESSAGE_TYPES = new Set([
-  "websocket-reconnected",
-  "pending-permissions-response",
-  "session-status",
-]);
-
-const UNREAD_IGNORED_MESSAGE_KINDS = new Set(["session_created", "status", "stream_end"]);
-
-const getSessionIdFromMessage = (message: unknown): string | null => {
-  if (!message || typeof message !== "object") return null;
-  const candidate = message as {
-    sessionId?: unknown;
-    session_id?: unknown;
-    newSessionId?: unknown;
-    actualSessionId?: unknown;
-  };
-  const value = candidate.sessionId ?? candidate.session_id ?? candidate.actualSessionId ?? candidate.newSessionId;
-  return typeof value === "string" && value.trim() ? value : null;
-};
-
-const isUnreadWorthyMessage = (message: unknown): boolean => {
-  if (!message || typeof message !== "object") return false;
-  const candidate = message as { kind?: unknown; type?: unknown };
-
-  if (typeof candidate.kind === "string") {
-    return !UNREAD_IGNORED_MESSAGE_KINDS.has(candidate.kind);
-  }
-
-  if (typeof candidate.type === "string") {
-    return !UNREAD_IGNORED_MESSAGE_TYPES.has(candidate.type);
-  }
-
-  return false;
-};
-
-// Register a window global used by the chat surface (slash commands, debug
-// console). Clears it on unmount only when nobody else has overwritten it.
-// 经 Reflect 读写：`window` 无可索引签名，下标访问需双重断言；语义等价。
-function useWindowGlobal<T>(name: string, value: T) {
-  useEffect(() => {
-    Reflect.set(window, name, value);
-    return () => {
-      if (Reflect.get(window, name) === value) {
-        Reflect.deleteProperty(window, name);
-      }
-    };
-  }, [name, value]);
-}
-
-// Immutable add/remove updaters for the unread-session set: return the
-// previous reference when nothing changes so React can skip the re-render.
-const addUnreadSession =
-  (sessionId: string) =>
-  (previous: Set<string>): Set<string> => {
-    if (previous.has(sessionId)) return previous;
-    const next = new Set(previous);
-    next.add(sessionId);
-    return next;
-  };
-
-const removeUnreadSession =
-  (sessionId: string) =>
-  (previous: Set<string>): Set<string> => {
-    if (!previous.has(sessionId)) return previous;
-    const next = new Set(previous);
-    next.delete(sessionId);
-    return next;
-  };
+import { ConnectionBanner } from "../ui/ConnectionBanner";
+import AppShellMainArea from "./app-shell-v2/AppShellMainArea";
+import AppShellOverlays from "./app-shell-v2/AppShellOverlays";
+import AppShellSidebar from "./app-shell-v2/AppShellSidebar";
+import { useAppShellChrome } from "./app-shell-v2/useAppShellChrome";
+import { useAppShellGlobals } from "./app-shell-v2/useAppShellGlobals";
+import { useAppShellRoute } from "./app-shell-v2/useAppShellRoute";
+import { useAppShellSelection } from "./app-shell-v2/useAppShellSelection";
+import { useAppShellState } from "./app-shell-v2/useAppShellState";
+import { useDeleteProject, useDeleteSession } from "./app-shell-v2/useDeleteDialogs";
+import { useNewProjectWizard } from "./app-shell-v2/useNewProjectWizard";
+import { usePendingPermissionsSync } from "./app-shell-v2/usePendingPermissionsSync";
+import { useServiceWorkerNavigation } from "./app-shell-v2/useServiceWorkerNavigation";
+import { useSessionActions } from "./app-shell-v2/useSessionActions";
+import { useUnreadSessions } from "./app-shell-v2/useUnreadSessions";
 
 // V2 shell. Reuses the same data hooks as legacy AppContent so chat, discovery,
 // auth, and project plumbing keep working unchanged — V2 just reorganizes the
 // outer chrome (sidebar + breadcrumb header per prototype/shadcn.html).
 export default function AppShellV2() {
-  const navigate = useNavigate();
-  // Match the four V2 URL shapes and hoist params up. A single wildcard route
-  // owns this shell so state survives every URL transition.
-  const matchProjectChat = useMatch("/p/:projectName/c/:sessionId");
-  const matchProject = useMatch("/p/:projectName");
-  const matchLegacySession = useMatch("/session/:sessionId");
-  const projectNameParam = matchProjectChat?.params.projectName ?? matchProject?.params.projectName ?? undefined;
-  const sessionId = matchProjectChat?.params.sessionId ?? matchLegacySession?.params.sessionId ?? undefined;
-  const { t } = useTranslation("common");
-
-  const { isMobile } = useDeviceSettings({ trackPWA: false });
-  // 团队活动浮层开关（侧边栏 Team 按钮切换；非 AppTab，无 URL 路由）
-  const [teamPanelOpen, setTeamPanelOpen] = useState(false);
-  const { ws, sendMessage, latestMessage, isConnected, subscribe } = useWebSocket();
-  const wasConnectedRef = useRef(false);
-  // Guards the URL→selectedProject sync effect against clobbering a project
-  // the user just clicked (see the effect's comment for the full race).
-  const userSelectedProjectRef = useRef<string | null>(null);
-  const [unreadSessionIds, setUnreadSessionIds] = useState<Set<string>>(() => new Set());
-
+  const { navigate, projectNameParam, sessionId } = useAppShellRoute();
   const {
-    activeSessions,
-    processingSessions,
-    markSessionAsActive,
-    markSessionAsInactive,
-    markSessionAsProcessing,
-    markSessionAsNotProcessing,
-    replaceTemporarySession,
-  } = useSessionProtection();
-
-  const {
-    selectedProject,
-    selectedSession,
-    activeTab,
-    sidebarOpen,
-    isLoadingProjects,
-    externalMessageUpdate,
-    setActiveTab,
-    setSelectedSession,
-    setSidebarOpen,
-    setIsInputFocused,
-    setShowSettings,
-    openSettings,
-    refreshProjectsSilently,
-    sidebarSharedProps,
-    handleProjectSelect,
-    handleSessionSelect,
-    handleNewSession,
-    handleDeselectProject,
-    handleResetProjectSessionPreview,
-    setSelectedProject,
-    loadMoreSessions,
-    loadingMoreProjectIds,
-    bumpSessionActivity,
-    replaceOptimisticInProjects,
-    dropOptimisticInProjects,
-  } = useProjectsState({
-    sessionId,
-    navigate,
-    latestMessage,
     isMobile,
-    activeSessions,
-  });
+    websocket,
+    sessionProtection,
+    projectState,
+    desktopSidebar,
+    misroutedFileFromUrl,
+    handleMisroutedFileUrlHandled,
+  } = useAppShellState({ sessionId, navigate });
 
-  const { desktopSidebarOpen, collapseDesktopSidebar, openDesktopSidebar } = useDesktopSidebarForFiles({
-    activeTab,
-    isMobile,
-  });
-
-  const misroutedFileFromUrl = useMemo(() => {
-    if (!sessionId) return null;
-    const filePath = resolveMarkdownFileHref(`/session/${sessionId}`);
-    if (!filePath) return null;
-    if (isLoadingProjects) return filePath;
-    const hasMatchingSession = sidebarSharedProps.projects.some(project =>
-      (project.sessions ?? []).some(session => session.id === sessionId),
-    );
-    return hasMatchingSession ? null : filePath;
-  }, [sessionId, isLoadingProjects, sidebarSharedProps.projects]);
-
-  const handleMisroutedFileUrlHandled = useCallback(() => {
-    const target = selectedProject ? `/p/${encodeURIComponent(selectedProject.name)}` : "/";
-    navigate(target, { replace: true });
-  }, [navigate, selectedProject]);
-
-  // Sync URL projectName -> selectedProject for deep links like /p/:projectName.
-  // When the URL also carries a session id (/p/.../c/:sessionId or
-  // /session/:sessionId) we let useProjectsState own the resolution because
-  // it sets BOTH the project and the session in one effect, avoiding a race
-  // where this hook would clear the session via handleProjectSelect.
-  //
-  // The `userSelectedProjectRef` guard below exists because sidebar clicks
-  // update selectedProject synchronously while React Router's navigate()
-  // lands later (startTransition), and handleProjectSelect also bumps the
-  // `projects` array (setProjects(map(...))), which re-runs this effect
-  // before the URL has caught up. Without the guard the effect sees the
-  // stale URL (previous project) paired with the freshly selected project,
-  // mistakes it for an unsynced deep link, and calls handleProjectSelect
-  // back to the previous project — so clicking a project folder appears to
-  // do nothing.
-  useEffect(() => {
-    if (!projectNameParam) return;
-    if (sessionId) return;
-    // URL caught up with the user's click — release the guard.
-    if (userSelectedProjectRef.current !== null && userSelectedProjectRef.current === projectNameParam) {
-      userSelectedProjectRef.current = null;
-    }
-    if (selectedProject?.name === projectNameParam) return;
-    // The selected project came from an explicit user click whose URL
-    // navigation is still in flight — don't yank the selection back.
-    if (userSelectedProjectRef.current !== null && userSelectedProjectRef.current === selectedProject?.name) return;
-    const target = sidebarSharedProps.projects.find(p => p.name === projectNameParam);
-    if (target) {
-      handleProjectSelect(target);
-      // handleProjectSelect unconditionally navigates to '/' — put the URL back.
-      navigate(`/p/${encodeURIComponent(projectNameParam)}`, { replace: true });
-    }
-  }, [projectNameParam, sessionId, selectedProject?.name, sidebarSharedProps.projects, handleProjectSelect, navigate]);
-
-  // Default selection: prefer a regular project. General is only the fallback
-  // when no regular project exists. Explicit project/session URLs still own
-  // selection and are never overridden here.
-  const didDefaultProjectRef = useRef(false);
-  useEffect(() => {
-    if (didDefaultProjectRef.current) return;
-    if (isLoadingProjects) return;
-    if (selectedProject) {
-      didDefaultProjectRef.current = true;
-      return;
-    }
-    if (projectNameParam || sessionId) {
-      didDefaultProjectRef.current = true;
-      return;
-    }
-    const target = chooseDefaultProject(sidebarSharedProps.projects);
-    if (!target) return;
-    handleProjectSelect(target);
-    navigate(`/p/${encodeURIComponent(target.name)}`, { replace: true });
-    didDefaultProjectRef.current = true;
-  }, [
-    isLoadingProjects,
-    selectedProject,
+  const { userSelectedProjectRef, switchProject } = useAppShellSelection({
     projectNameParam,
     sessionId,
-    sidebarSharedProps.projects,
-    handleProjectSelect,
+    isLoadingProjects: projectState.isLoadingProjects,
+    projects: projectState.sidebarSharedProps.projects,
+    selectedProject: projectState.selectedProject,
+    handleProjectSelect: projectState.handleProjectSelect,
     navigate,
-  ]);
+  });
 
-  useWindowGlobal("refreshProjects", refreshProjectsSilently);
-  useWindowGlobal("openSettings", openSettings);
+  const { unreadSessionIds, markSessionRead } = useUnreadSessions({
+    selectedSessionId: projectState.selectedSession?.id,
+    subscribe: websocket.subscribe,
+  });
 
-  // Resolve a project by name (exact match first, then case-insensitive on
-  // both the directory name and the user-facing displayName, then a relaxed
-  // case-insensitive substring) and select it via the same handler the
-  // sidebar uses, so the chat slash command `/switch-project xxx` can hop
-  // between projects without a manual click.
-  const switchProject = useCallback(
-    (projectName: string): boolean => {
-      const trimmed = (projectName ?? "").trim();
-      if (!trimmed) return false;
+  useAppShellGlobals({
+    refreshProjectsSilently: projectState.refreshProjectsSilently,
+    openSettings: projectState.openSettings,
+    switchProject,
+  });
 
-      const list = sidebarSharedProps.projects;
-      const exact = list.find(p => p.name === trimmed);
-      const ciExact =
-        exact ??
-        list.find(
-          p =>
-            p.name.toLowerCase() === trimmed.toLowerCase() ||
-            (p.displayName ?? "").toLowerCase() === trimmed.toLowerCase(),
-        );
-      const target =
-        ciExact ??
-        list.find(
-          p =>
-            p.name.toLowerCase().includes(trimmed.toLowerCase()) ||
-            (p.displayName ?? "").toLowerCase().includes(trimmed.toLowerCase()),
-        );
-      if (!target) return false;
+  useServiceWorkerNavigation({
+    navigate,
+    refreshProjectsSilently: projectState.refreshProjectsSilently,
+    setActiveTab: projectState.setActiveTab,
+    setSidebarOpen: projectState.setSidebarOpen,
+  });
 
-      handleProjectSelect(target);
-      navigate(`/p/${encodeURIComponent(target.name)}`);
-      return true;
-    },
-    [handleProjectSelect, navigate, sidebarSharedProps.projects],
-  );
+  usePendingPermissionsSync({
+    isConnected: websocket.isConnected,
+    selectedSessionId: projectState.selectedSession?.id,
+    sendMessage: websocket.sendMessage,
+  });
 
-  useWindowGlobal("switchProject", switchProject);
+  const chrome = useAppShellChrome({
+    isMobile,
+    setSidebarOpen: projectState.setSidebarOpen,
+    setShowSettings: projectState.setShowSettings,
+    collapseDesktopSidebar: desktopSidebar.collapseDesktopSidebar,
+  });
 
-  useEffect(() => {
-    const selectedSessionId = selectedSession?.id;
-    if (!selectedSessionId) return;
+  const wizard = useNewProjectWizard({
+    navigate,
+    refreshProjectsSilently: projectState.refreshProjectsSilently,
+    handleNewSession: projectState.handleNewSession,
+    setActiveTab: projectState.setActiveTab,
+    userSelectedProjectRef,
+  });
 
-    setUnreadSessionIds(removeUnreadSession(selectedSessionId));
-  }, [selectedSession?.id]);
+  const actions = useSessionActions({
+    navigate,
+    projects: projectState.sidebarSharedProps.projects,
+    selectedProject: projectState.selectedProject,
+    userSelectedProjectRef,
+    handleProjectSelect: projectState.handleProjectSelect,
+    handleSessionSelect: projectState.handleSessionSelect,
+    handleNewSession: projectState.handleNewSession,
+    replaceTemporarySession: sessionProtection.replaceTemporarySession,
+    markSessionAsInactive: sessionProtection.markSessionAsInactive,
+    replaceOptimisticInProjects: projectState.replaceOptimisticInProjects,
+    dropOptimisticInProjects: projectState.dropOptimisticInProjects,
+    setActiveTab: projectState.setActiveTab,
+    setSelectedProject: projectState.setSelectedProject,
+    setSelectedSession: projectState.setSelectedSession,
+    markSessionRead,
+  });
 
-  useEffect(() => {
-    return subscribe(message => {
-      if (!isUnreadWorthyMessage(message)) return;
+  const deleteProject = useDeleteProject({
+    refreshProjectsSilently: projectState.refreshProjectsSilently,
+    onProjectDelete: projectState.sidebarSharedProps.onProjectDelete,
+  });
 
-      const messageSessionId = getSessionIdFromMessage(message);
-      if (!messageSessionId || messageSessionId === selectedSession?.id) return;
-
-      setUnreadSessionIds(addUnreadSession(messageSessionId));
-    });
-  }, [selectedSession?.id, subscribe]);
-
-  useEffect(() => {
-    if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) {
-      return undefined;
-    }
-
-    const handleServiceWorkerMessage = (event: MessageEvent) => {
-      const message = event.data;
-      if (!message || message.type !== "notification:navigate") return;
-
-      // Provider hint from notifications is no longer stored; all sessions
-      // go through the unified sati gateway.
-
-      setActiveTab("chat");
-      setSidebarOpen(false);
-      void refreshProjectsSilently();
-
-      if (typeof message.sessionId === "string" && message.sessionId) {
-        navigate(`/session/${message.sessionId}`);
-        return;
-      }
-      navigate("/");
-    };
-
-    navigator.serviceWorker.addEventListener("message", handleServiceWorkerMessage);
-    return () => {
-      navigator.serviceWorker.removeEventListener("message", handleServiceWorkerMessage);
-    };
-  }, [navigate, refreshProjectsSilently, setActiveTab, setSidebarOpen]);
-
-  useEffect(() => {
-    const isReconnect = isConnected && !wasConnectedRef.current;
-    if (isReconnect) {
-      wasConnectedRef.current = true;
-    } else if (!isConnected) {
-      wasConnectedRef.current = false;
-    }
-
-    if (isConnected && selectedSession?.id) {
-      sendMessage({
-        type: "get-pending-permissions",
-        sessionId: selectedSession.id,
-      });
-    }
-  }, [isConnected, selectedSession?.id, sendMessage]);
-
-  const onShowSettings = useCallback(() => setShowSettings(true), [setShowSettings]);
-  const onCloseSettings = useCallback(() => setShowSettings(false), [setShowSettings]);
-  const onMenuClick = useCallback(() => setSidebarOpen(true), [setSidebarOpen]);
-  const onCollapseSidebar = useCallback(() => {
-    if (isMobile) {
-      setSidebarOpen(false);
-    } else {
-      collapseDesktopSidebar();
-    }
-  }, [collapseDesktopSidebar, isMobile, setSidebarOpen]);
-
-  // Project creation wizard (local existing / new local / github clone). The
-  // sidebar's Projects-section "+" opens this; row-level "+" is for new sessions.
-  const [showNewProject, setShowNewProject] = useState(false);
-  const handleOpenNewProject = useCallback(() => setShowNewProject(true), []);
-  const handleCloseNewProject = useCallback(() => setShowNewProject(false), []);
-  const handleProjectCreated = useCallback(
-    (project?: Record<string, unknown>) => {
-      setShowNewProject(false);
-      void refreshProjectsSilently();
-
-      // Auto-jump into the new project's empty new-conversation screen so the
-      // user doesn't accidentally keep chatting under the previously selected
-      // project (typically "general") after closing the wizard. The wizard
-      // hands back the freshly created project from POST /create-workspace
-      // (and the clone SSE complete event), which is the same `{ name,
-      // displayName, fullPath, path }` shape as the sidebar list entries.
-      const projectName = typeof project?.name === "string" ? project.name : "";
-      if (!projectName) return;
-      const newProject = project as Project;
-      userSelectedProjectRef.current = projectName;
-      handleNewSession(newProject);
-      navigate(`/p/${encodeURIComponent(projectName)}`);
-      setActiveTab("chat");
-    },
-    [handleNewSession, navigate, refreshProjectsSilently, setActiveTab],
-  );
-
-  // Project deletion (V2): hover-revealed trash button on each row -> confirm dialog
-  // -> DELETE /api/projects/:name (force=true). Reuses the shared cleanup callback
-  // from useProjectsState to clear selection + redirect when the deleted project
-  // was active.
-  const [deleteTarget, setDeleteTarget] = useState<Project | null>(null);
-  const [isDeletingProject, setIsDeletingProject] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
-  const handleRequestDeleteProject = useCallback((project: Project) => {
-    setDeleteError(null);
-    setDeleteTarget(project);
-  }, []);
-  const handleCancelDelete = useCallback(() => {
-    if (isDeletingProject) return;
-    setDeleteTarget(null);
-    setDeleteError(null);
-  }, [isDeletingProject]);
-  const handleConfirmDelete = useCallback(async () => {
-    if (!deleteTarget) return;
-    const target = deleteTarget;
-    setIsDeletingProject(true);
-    setDeleteError(null);
-    try {
-      const response = await api.deleteProject(target.name, true);
-      if (!response.ok) {
-        const body = (await response.json().catch(() => ({}))) as { error?: string };
-        throw new Error(body.error || `Failed (HTTP ${response.status})`);
-      }
-      sidebarSharedProps.onProjectDelete?.(target.name);
-      await refreshProjectsSilently();
-      setDeleteTarget(null);
-    } catch (err) {
-      setDeleteError(err instanceof Error ? err.message : t("deleteDialogs.errorDeleteProject"));
-    } finally {
-      setIsDeletingProject(false);
-    }
-  }, [deleteTarget, refreshProjectsSilently, sidebarSharedProps, t]);
-
-  const [deleteSessionTarget, setDeleteSessionTarget] = useState<DeleteSessionTarget | null>(null);
-  const [isDeletingSession, setIsDeletingSession] = useState(false);
-  const [deleteSessionError, setDeleteSessionError] = useState<string | null>(null);
-  const handleRequestDeleteSession = useCallback((project: Project, session: ProjectSession) => {
-    setDeleteSessionError(null);
-    setDeleteSessionTarget({ project, session });
-  }, []);
-  const handleCancelDeleteSession = useCallback(() => {
-    if (isDeletingSession) return;
-    setDeleteSessionTarget(null);
-    setDeleteSessionError(null);
-  }, [isDeletingSession]);
-  const handleConfirmDeleteSession = useCallback(async () => {
-    if (!deleteSessionTarget) return;
-
-    const { project, session } = deleteSessionTarget;
-    setIsDeletingSession(true);
-    setDeleteSessionError(null);
-
-    try {
-      const response = isBackgroundTaskSession(session)
-        ? await api.deleteSession(project.name, session.id, getSessionRequestParams(session))
-        : await api.deleteSession(project.name, session.id);
-
-      if (!response.ok) {
-        const body = (await response.json().catch(() => ({}))) as { error?: string };
-        throw new Error(body.error || `Failed (HTTP ${response.status})`);
-      }
-
-      sidebarSharedProps.onSessionDelete?.(session.id);
-      setUnreadSessionIds(removeUnreadSession(session.id));
-      setSessionCustomTitle(session.id, null);
-      await refreshProjectsSilently();
-      setDeleteSessionTarget(null);
-    } catch (err) {
-      setDeleteSessionError(err instanceof Error ? err.message : t("deleteDialogs.errorDeleteSession"));
-    } finally {
-      setIsDeletingSession(false);
-    }
-  }, [deleteSessionTarget, refreshProjectsSilently, sidebarSharedProps, t]);
-
-  const handleSelectProject = useCallback(
-    (project: Project) => {
-      // Record the user-initiated selection so the URL sync effect knows
-      // this project is being navigated to and must not be yanked back
-      // while React Router's navigate() is still in flight.
-      userSelectedProjectRef.current = project.name;
-      handleProjectSelect(project);
-      navigate(`/p/${encodeURIComponent(project.name)}`);
-    },
-    [handleProjectSelect, navigate],
-  );
-
-  const handleSelectSession = useCallback(
-    (project: Project, sessId: string, fallbackSession?: ProjectSession, options?: SessionNavigationOptions) => {
-      setUnreadSessionIds(removeUnreadSession(sessId));
-      if (project.name !== selectedProject?.name) {
-        userSelectedProjectRef.current = project.name;
-        handleProjectSelect(project);
-      }
-      const target = (project.sessions ?? []).find(s => s.id === sessId);
-      if (target) {
-        handleSessionSelect(fallbackSession ? { ...target, ...fallbackSession } : target);
-      } else if (fallbackSession) {
-        handleSessionSelect(fallbackSession);
-      } else {
-        navigate(`/session/${sessId}`);
-      }
-      if (!options?.preserveActiveTab) {
-        setActiveTab("chat");
-      }
-    },
-    [handleProjectSelect, handleSessionSelect, navigate, selectedProject?.name, setActiveTab],
-  );
-
-  const handleSelectTab = useCallback(
-    (tab: AppTab) => {
-      // `home` is retained only for old persisted state / links. The Agent
-      // surface now owns both the welcome/new-session state and transcripts.
-      if (tab === "home") {
-        setSelectedSession(null);
-        const target = selectedProject ? `/p/${encodeURIComponent(selectedProject.name)}` : "/";
-        if (window.location.pathname !== target) {
-          navigate(target);
-        }
-        setActiveTab("chat");
-        return;
-      }
-      setActiveTab(tab);
-    },
-    [navigate, selectedProject, setActiveTab, setSelectedSession],
-  );
-
-  const handleStartNewSession = useCallback(
-    (project: Project | null, options?: SessionNavigationOptions) => {
-      if (project) {
-        // Same guard as handleSelectProject: handleNewSession switches the
-        // selected project while React Router's navigate is still in flight.
-        userSelectedProjectRef.current = project.name;
-        handleNewSession(project);
-        navigate(`/p/${encodeURIComponent(project.name)}`);
-        setActiveTab(options?.preserveActiveTab ? "files" : "chat");
-      } else if (selectedProject) {
-        handleNewSession(selectedProject);
-        setActiveTab(options?.preserveActiveTab ? "files" : "chat");
-      } else {
-        // No project context yet — land on /, MainContent's empty state
-        // will prompt the user to create or pick a project.
-        navigate("/");
-      }
-    },
-    [handleNewSession, navigate, selectedProject, setActiveTab],
-  );
-
-  // Wrap the two session-lifecycle callbacks coming out of useSessionProtection
-  // so they also reconcile the optimistic placeholder rows in the sidebar:
-  //  · `session_created` → swap `new-session-*` in projects.sessions for the
-  //    real id in-place (no flicker).
-  //  · `complete` / `error` → drop any leftover `new-session-*` placeholder
-  //    that was never replaced (agent never emitted session_created).
-  const handleReplaceTemporarySession = useCallback(
-    (realSessionId?: string | null) => {
-      replaceTemporarySession(realSessionId);
-      if (realSessionId) replaceOptimisticInProjects(realSessionId);
-    },
-    [replaceTemporarySession, replaceOptimisticInProjects],
-  );
-
-  const handleSessionInactive = useCallback(
-    (sessionId?: string | null) => {
-      markSessionAsInactive(sessionId);
-      if (sessionId) dropOptimisticInProjects(sessionId);
-    },
-    [markSessionAsInactive, dropOptimisticInProjects],
-  );
-
-  const sidebar = (
-    <SidebarV2
-      projects={sidebarSharedProps.projects}
-      selectedProject={selectedProject}
-      selectedSession={selectedSession}
-      activeTab={activeTab}
-      isLoading={isLoadingProjects}
-      processingSessions={processingSessions}
-      unreadSessionIds={unreadSessionIds}
-      onSelectProject={handleSelectProject}
-      onSelectSession={handleSelectSession}
-      onStartNewSession={handleStartNewSession}
-      onCreateProject={handleOpenNewProject}
-      onRequestDeleteProject={handleRequestDeleteProject}
-      onRequestDeleteSession={handleRequestDeleteSession}
-      onShowSettings={onShowSettings}
-      onOpenTeamPanel={() => setTeamPanelOpen(prev => !prev)}
-      isTeamPanelOpen={teamPanelOpen}
-      onDeselectProject={handleDeselectProject}
-      onResetProjectSessionPreview={handleResetProjectSessionPreview}
-      onCollapse={onCollapseSidebar}
-      onLoadMoreSessions={loadMoreSessions}
-      loadingMoreProjectIds={loadingMoreProjectIds}
-    />
-  );
+  const deleteSession = useDeleteSession({
+    refreshProjectsSilently: projectState.refreshProjectsSilently,
+    onSessionDelete: projectState.sidebarSharedProps.onSessionDelete,
+    markSessionRead,
+  });
 
   return (
     <ErrorBoundary>
       <div className="ui-v2 fixed inset-0 flex flex-col bg-white font-sans text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
         <ConnectionBanner />
         <div className="flex min-h-0 flex-1">
-          {!isMobile ? (
-            desktopSidebarOpen ? (
-              sidebar
-            ) : null
-          ) : (
-            <div
-              className={`fixed inset-0 z-50 flex transition-opacity duration-150 ease-out ${
-                sidebarOpen ? "visible opacity-100" : "invisible opacity-0"
-              }`}
-            >
-              <button
-                type="button"
-                className="fixed inset-0 bg-black/40 backdrop-blur-xs"
-                onClick={() => setSidebarOpen(false)}
-                aria-label="Close sidebar"
-              />
-              <div
-                className={`relative h-full w-[85vw] max-w-sm transform transition-transform duration-150 ${
-                  sidebarOpen ? "translate-x-0" : "-translate-x-full"
-                }`}
-                onClick={e => e.stopPropagation()}
-              >
-                {sidebar}
-              </div>
-            </div>
-          )}
+          <AppShellSidebar
+            isMobile={isMobile}
+            sidebarOpen={projectState.sidebarOpen}
+            desktopSidebarOpen={desktopSidebar.desktopSidebarOpen}
+            onCloseSidebar={chrome.onCloseSidebar}
+            projectState={projectState}
+            sessionProtection={sessionProtection}
+            unreadSessionIds={unreadSessionIds}
+            actions={actions}
+            chrome={chrome}
+            wizard={wizard}
+            deleteProject={deleteProject}
+            deleteSession={deleteSession}
+          />
 
-          <main className="flex min-h-0 min-w-0 flex-1 flex-col">
-            <HookTrustBanner projectPath={selectedProject?.fullPath || selectedProject?.path || null} />
-            <KnowledgeDraftsBanner />
-            <MainAreaV2
-              projects={sidebarSharedProps.projects}
-              selectedProject={selectedProject}
-              selectedSession={selectedSession}
-              activeTab={activeTab}
-              setActiveTab={handleSelectTab}
-              ws={ws}
-              sendMessage={sendMessage}
-              latestMessage={latestMessage}
-              isMobile={isMobile}
-              onMenuClick={onMenuClick}
-              isLoading={isLoadingProjects}
-              onInputFocusChange={setIsInputFocused}
-              onSessionActive={markSessionAsActive}
-              onSessionInactive={handleSessionInactive}
-              onSessionProcessing={markSessionAsProcessing}
-              onSessionNotProcessing={markSessionAsNotProcessing}
-              onSessionActivityBump={bumpSessionActivity}
-              processingSessions={processingSessions}
-              unreadSessionIds={unreadSessionIds}
-              onReplaceTemporarySession={handleReplaceTemporarySession}
-              onNavigateToSession={(sid: string) => {
-                setSelectedSession(prev => (prev?.id === sid ? prev : ({ id: sid } as ProjectSession)));
-                navigate(`/session/${sid}`);
-              }}
-              onStartNewSession={handleStartNewSession}
-              onSelectSession={handleSelectSession}
-              onShowSettings={onShowSettings}
-              onSelectProjectByName={(name: string) => {
-                const target = sidebarSharedProps.projects.find(p => p.name === name);
-                if (target) {
-                  userSelectedProjectRef.current = target.name;
-                  setSelectedProject(target);
-                  setSelectedSession(null);
-                  setActiveTab("dashboard");
-                  navigate(`/p/${encodeURIComponent(target.name)}`);
-                }
-              }}
-              isSidebarCollapsed={!isMobile && !desktopSidebarOpen}
-              onOpenSidebar={openDesktopSidebar}
-              externalMessageUpdate={externalMessageUpdate}
-              misroutedFileFromUrl={misroutedFileFromUrl}
-              onMisroutedFileUrlHandled={handleMisroutedFileUrlHandled}
-              teamPanelOpen={teamPanelOpen}
-              onTeamPanelClose={() => setTeamPanelOpen(false)}
-            />
-          </main>
+          <AppShellMainArea
+            isMobile={isMobile}
+            websocket={websocket}
+            sessionProtection={sessionProtection}
+            projectState={projectState}
+            desktopSidebar={desktopSidebar}
+            unreadSessionIds={unreadSessionIds}
+            actions={actions}
+            chrome={chrome}
+            misroutedFileFromUrl={misroutedFileFromUrl}
+            onMisroutedFileUrlHandled={handleMisroutedFileUrlHandled}
+          />
 
-          {sidebarSharedProps.showSettings
-            ? ReactDOM.createPortal(
-                <SettingsComponent
-                  isOpen={sidebarSharedProps.showSettings}
-                  onClose={onCloseSettings}
-                  projects={sidebarSharedProps.projects.map(normalizeProjectForSettings)}
-                  initialTab={sidebarSharedProps.settingsInitialTab || "appearance"}
-                />,
-                document.body,
-              )
-            : null}
-
-          {showNewProject
-            ? ReactDOM.createPortal(
-                <ProjectCreationWizard onClose={handleCloseNewProject} onProjectCreated={handleProjectCreated} />,
-                document.body,
-              )
-            : null}
-
-          {deleteTarget
-            ? ReactDOM.createPortal(
-                <DeleteProjectDialog
-                  project={deleteTarget}
-                  isDeleting={isDeletingProject}
-                  error={deleteError}
-                  onCancel={handleCancelDelete}
-                  onConfirm={handleConfirmDelete}
-                />,
-                document.body,
-              )
-            : null}
-
-          {deleteSessionTarget
-            ? ReactDOM.createPortal(
-                <DeleteSessionDialog
-                  target={deleteSessionTarget}
-                  isDeleting={isDeletingSession}
-                  error={deleteSessionError}
-                  onCancel={handleCancelDeleteSession}
-                  onConfirm={handleConfirmDeleteSession}
-                />,
-                document.body,
-              )
-            : null}
-
-          {/* 文书排版调参面板（document_style_panel 工具 → tool_call_finished payload 打开） */}
-          <StylePanelHost
-            sendMessage={sendMessage}
-            subscribe={subscribe}
-            projectName={selectedProject?.name ?? ""}
-            projectPath={selectedProject?.fullPath || selectedProject?.path || ""}
-            sessionId={selectedSession?.id ?? null}
-            provider="sati"
+          <AppShellOverlays
+            projectState={projectState}
+            websocket={websocket}
+            chrome={chrome}
+            wizard={wizard}
+            deleteProject={deleteProject}
+            deleteSession={deleteSession}
           />
         </div>
       </div>
     </ErrorBoundary>
-  );
-}
-
-type DeleteProjectDialogProps = {
-  project: Project;
-  isDeleting: boolean;
-  error: string | null;
-  onCancel: () => void;
-  onConfirm: () => void;
-};
-
-function DeleteProjectDialog({ project, isDeleting, error, onCancel, onConfirm }: DeleteProjectDialogProps) {
-  const { t } = useTranslation("common");
-  const sessionCount = project.sessions?.length ?? 0;
-  const displayName = project.displayName || project.name;
-
-  return (
-    <div className="fixed inset-0 z-[65] flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
-      <div className="w-full max-w-md rounded-xl border border-border bg-card text-card-foreground shadow-xl">
-        <div className="flex items-start gap-3 border-b border-border p-5">
-          <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-destructive/15 text-destructive">
-            <Trash2 className="h-5 w-5" strokeWidth={1.75} />
-          </div>
-          <div className="min-w-0 flex-1">
-            <h3 className="text-base font-semibold text-foreground">{t("deleteDialogs.projectTitle")}</h3>
-            <p className="mt-1 text-sm break-all text-muted-foreground">
-              <span className="font-mono text-xs">{displayName}</span>
-            </p>
-          </div>
-        </div>
-
-        <div className="space-y-3 p-5">
-          <p className="text-sm text-foreground">
-            {t("deleteDialogs.projectDescription")}
-            {sessionCount > 0 ? (
-              <>
-                {" "}
-                <span className="font-medium">
-                  {t("deleteDialogs.projectSessionsRemovedCount", { count: sessionCount })}
-                </span>{" "}
-                {t("deleteDialogs.projectSessionsRemovedTail")}
-              </>
-            ) : null}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            {t("deleteDialogs.projectFilesOnDiskBefore")}{" "}
-            <span className="font-medium text-foreground">{t("deleteDialogs.projectFilesOnDiskNegation")}</span>{" "}
-            {t("deleteDialogs.projectFilesOnDiskAfter")}
-          </p>
-          {error ? (
-            <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              {error}
-            </div>
-          ) : null}
-        </div>
-
-        <div className="flex items-center justify-end gap-2 border-t border-border bg-muted/30 px-5 py-3">
-          <button
-            type="button"
-            onClick={onCancel}
-            disabled={isDeleting}
-            className="inline-flex h-9 items-center justify-center rounded-md border border-border bg-background px-3 text-sm font-medium text-foreground hover:bg-accent disabled:opacity-50"
-          >
-            {t("buttons.cancel")}
-          </button>
-          <button
-            type="button"
-            onClick={onConfirm}
-            disabled={isDeleting}
-            className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-destructive px-3 text-sm font-medium text-destructive-foreground hover:bg-destructive/90 disabled:opacity-60"
-          >
-            {isDeleting ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Trash2 className="h-4 w-4" strokeWidth={1.75} />
-            )}
-            {isDeleting ? t("deleteDialogs.deleting") : t("deleteProject")}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-type DeleteSessionDialogProps = {
-  target: DeleteSessionTarget;
-  isDeleting: boolean;
-  error: string | null;
-  onCancel: () => void;
-  onConfirm: () => void;
-};
-
-function DeleteSessionDialog({ target, isDeleting, error, onCancel, onConfirm }: DeleteSessionDialogProps) {
-  const { t } = useTranslation("common");
-  const projectName = target.project.displayName || target.project.name;
-  const sessionTitle = sessionDisplayTitle(target.session);
-
-  return (
-    <div className="fixed inset-0 z-[65] flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
-      <div className="w-full max-w-md rounded-xl border border-border bg-card text-card-foreground shadow-xl">
-        <div className="flex items-start gap-3 border-b border-border p-5">
-          <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-destructive/15 text-destructive">
-            <Trash2 className="h-5 w-5" strokeWidth={1.75} />
-          </div>
-          <div className="min-w-0 flex-1">
-            <h3 className="text-base font-semibold text-foreground">{t("deleteDialogs.sessionTitle")}</h3>
-            <p className="mt-1 truncate text-sm text-muted-foreground">{sessionTitle}</p>
-          </div>
-        </div>
-
-        <div className="space-y-3 p-5">
-          <p className="text-sm text-foreground">{t("deleteDialogs.sessionDescription", { projectName })}</p>
-
-          {error ? (
-            <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              {error}
-            </div>
-          ) : null}
-        </div>
-
-        <div className="flex items-center justify-end gap-2 border-t border-border bg-muted/30 px-5 py-3">
-          <button
-            type="button"
-            onClick={onCancel}
-            disabled={isDeleting}
-            className="inline-flex h-9 items-center justify-center rounded-md border border-border bg-background px-3 text-sm font-medium text-foreground hover:bg-accent disabled:opacity-50"
-          >
-            {t("buttons.cancel")}
-          </button>
-          <button
-            type="button"
-            onClick={onConfirm}
-            disabled={isDeleting}
-            className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-destructive px-3 text-sm font-medium text-destructive-foreground hover:bg-destructive/90 disabled:opacity-60"
-          >
-            {isDeleting ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Trash2 className="h-4 w-4" strokeWidth={1.75} />
-            )}
-            {isDeleting ? t("deleteDialogs.deleting") : t("deleteDialogs.deleteSession")}
-          </button>
-        </div>
-      </div>
-    </div>
   );
 }
