@@ -15,6 +15,8 @@ function createFakeTransport(options: {
   tools?: unknown[];
   startDelayMs?: number;
   failStart?: boolean;
+  /** 抛任意值（含非 Error）用于验证错误消息归一。 */
+  failWith?: { value: unknown };
   resources?: unknown[];
 }): Transport {
   let onmessage: Transport["onmessage"];
@@ -23,6 +25,7 @@ function createFakeTransport(options: {
 
   const transport: Transport = {
     async start() {
+      if (options.failWith) throw options.failWith.value;
       if (options.failStart) throw new Error(`fake start failure for ${options.name}`);
       if (options.startDelayMs) await new Promise(r => setTimeout(r, options.startDelayMs));
     },
@@ -284,4 +287,26 @@ test("McpRuntime.readResource rejects unknown or non-ready servers", async () =>
   await assert.rejects(() => runtime.readResource("missing", "file:///x"), /not registered/);
   await assert.rejects(() => runtime.readResource("broken", "file:///x"), /not ready/);
   await runtime.stop();
+});
+
+test("McpRuntime.start 对非 Error 抛出给出可读消息", async () => {
+  const cases: Array<{ label: string; value: unknown; expected: RegExp }> = [
+    { label: "string", value: "boom", expected: /boom/ },
+    { label: "null", value: null, expected: /unknown error/ },
+    { label: "undefined", value: undefined, expected: /unknown error/ },
+    { label: "object", value: { code: "E_X" }, expected: /E_X/ },
+  ];
+
+  for (const item of cases) {
+    const runtime = new McpRuntime([stdioSpec(item.label)], {
+      clientOptions: {
+        transportFactory: spec => createFakeTransport({ name: spec.id, failWith: { value: item.value } }),
+      },
+    });
+    const statuses = await runtime.start();
+    const status = statuses[0];
+    assert.equal(status?.status, "error", item.label);
+    assert.match(status?.error ?? "", item.expected, item.label);
+    await runtime.stop();
+  }
 });
