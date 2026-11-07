@@ -302,7 +302,8 @@ export const patentPatentabilityManifest: WorkflowManifest = {
 /**
  * 内置：审查意见答复 manifest（OA 答复场景）。
  * dispute_framing → parse → claim-chart（mode=oa-response，targets=审查员引用对比文件）→
- * draft（意见陈述书撰写，消费 claim-chart 产出）。
+ * classify_grounds（理由分型）→ amendment_diff（修改差分）→ draft（意见陈述草稿，
+ * 消费对照表、缺口、理由与差分）。
  */
 export const patentOaResponseManifest: WorkflowManifest = {
   id: "patent_oa_response_v1",
@@ -352,12 +353,12 @@ export const patentOaResponseManifest: WorkflowManifest = {
  * 内置：无效宣告/复审答复 manifest（无效/复审双场景）。
  * dispute_framing → parse → claim-chart（mode=invalidity；复审场景可经 flexible-plan 调整）→
  * novelty（单篇全覆盖由 mapping-machine 校验）→ inventiveness（区别特征 = D1
- * not-found 行）。
+ * not-found 行）→ procedure_checklist（程序类型自动识别）→ approval。
  *
- * 注意：novelty / inventiveness 两阶段**不声明 atom**（原子路径不支持——novelty
- * 原子输入键为 features/prior_art、reasoning 原子输入键为 reasoning_prompt/
- * reasoning_input，本 manifest 无对应产出），回退为收口语义：主代理按阶段描述
- * 产出阶段文本，消费方 patent_workflow 工具按 caseType 映射规则门校验。
+ * novelty / inventiveness 用 `invalidity-analysis` 原子以 `evidence: "supplied"`
+ * 执行证据模式：只消费 claim-chart 的 targets/rows，不插检索节点。
+ * procedure_checklist 用 `procedure_kind: "auto"` 从材料识别复审/无效；
+ * 识别不出时清单标「未识别」，不猜期限。
  */
 export const patentInvalidationManifest: WorkflowManifest = {
   id: "patent_invalidation_v1",
@@ -395,9 +396,9 @@ export const patentInvalidationManifest: WorkflowManifest = {
     {
       id: "procedure_checklist",
       strategy: "chain",
-      description: "核对程序事项与理由-证据对应关系（核验表，不是请求书）",
+      description: "核对程序事项与理由-证据对应关系（按材料识别复审/无效；核验表，不是请求书）",
       atom: "procedure-checklist",
-      params: { procedure_kind: "invalidation" },
+      params: { procedure_kind: "auto" },
     },
     { id: "approval", strategy: "chain", description: "人工确认分析结论" },
   ],

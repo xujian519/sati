@@ -111,3 +111,79 @@ test("DraftOaHandler: 未配置模型时降级但仍保留上游结构", async (
   assert.deepEqual(statement.grounds.codes, ["novelty"]);
   assert.equal(statement.draftNotice, OA_DRAFT_NOTICE);
 });
+
+test("DraftOaHandler: 围栏 JSON 能正常解析，不误判为失败", async () => {
+  const provider: StageProvider = {
+    callLLM: async () => '```json\n{"notes":[{"text":"1a 已在 D1 中公开。","refs":["1a"]}]}\n```',
+  };
+  const state = await new DraftOaHandler().execute({
+    state: { claim_chart_doc: CHART, amendment_diff: JSON.stringify({ status: "checked", items: [] }) },
+    provider,
+  });
+  const statement = JSON.parse(state.oa_statement as string) as {
+    status: string;
+    argumentNotes: Array<{ text: string }>;
+  };
+  assert.equal(statement.status, "draft");
+  assert.equal(statement.argumentNotes.length, 1);
+});
+
+test("DraftOaHandler: 非 JSON 输出记 degraded_unparsable，不假装草稿", async () => {
+  const provider: StageProvider = { callLLM: async () => "我认为应该答复。" };
+  const state = await new DraftOaHandler().execute({
+    state: { claim_chart_doc: CHART, amendment_diff: JSON.stringify({ status: "checked", items: [] }) },
+    provider,
+  });
+  const statement = JSON.parse(state.oa_statement as string) as { status: string; reason: string };
+  assert.equal(statement.status, "degraded_unparsable");
+  assert.ok(statement.reason.includes("不是 JSON"));
+});
+
+test("DraftOaHandler: 全部争辩段落被丢弃时状态可区分", async () => {
+  const provider: StageProvider = {
+    callLLM: async () => JSON.stringify({ notes: [{ text: "凭空引用。", refs: ["9z"] }] }),
+  };
+  const state = await new DraftOaHandler().execute({
+    state: { claim_chart_doc: CHART, amendment_diff: JSON.stringify({ status: "checked", items: [] }) },
+    provider,
+  });
+  const statement = JSON.parse(state.oa_statement as string) as {
+    status: string;
+    argumentNotes: unknown[];
+    droppedNotes: number;
+    reason: string;
+  };
+  assert.equal(statement.status, "degraded_all_dropped");
+  assert.equal(statement.argumentNotes.length, 0);
+  assert.equal(statement.droppedNotes, 1);
+});
+
+test("DraftOaHandler: 合法 JSON 但没有段落时记 degraded_empty_notes", async () => {
+  const provider: StageProvider = { callLLM: async () => JSON.stringify({ notes: [] }) };
+  const state = await new DraftOaHandler().execute({
+    state: { claim_chart_doc: CHART, amendment_diff: JSON.stringify({ status: "checked", items: [] }) },
+    provider,
+  });
+  const statement = JSON.parse(state.oa_statement as string) as { status: string; reason: string };
+  assert.equal(statement.status, "degraded_empty_notes");
+  assert.ok(statement.reason.includes("未产出"));
+});
+
+test("DraftOaHandler: 未锚定的修改限定不能作为 ref", async () => {
+  const provider: StageProvider = {
+    callLLM: async () => JSON.stringify({ notes: [{ text: "基于未锚定限定。", refs: ["未锚定限定"] }] }),
+  };
+  const state = await new DraftOaHandler().execute({
+    state: {
+      claim_chart_doc: CHART,
+      amendment_diff: JSON.stringify({
+        status: "checked",
+        items: [{ limitation: "未锚定限定", status: "unsupported", hits: [], reason: "未找到" }],
+      }),
+    },
+    provider,
+  });
+  const statement = JSON.parse(state.oa_statement as string) as { status: string; droppedNotes: number };
+  assert.equal(statement.status, "degraded_all_dropped");
+  assert.equal(statement.droppedNotes, 1);
+});

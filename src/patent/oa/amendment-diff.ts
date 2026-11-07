@@ -31,7 +31,7 @@ export type AmendmentDiffItem = {
   /** 拟新增的限定原文（已去掉项目符号）。缺段占位记录为空串。 */
   limitation: string;
   status: AmendmentDiffStatus;
-  /** 命中的原申请文本区间；未命中为空数组。 */
+  /** 命中的原申请文本区间；基准是 `original_application` 段去掉首尾空白后的文本。 */
   hits: { start: number; end: number }[];
   reason?: string;
 };

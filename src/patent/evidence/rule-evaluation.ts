@@ -6,6 +6,7 @@
  */
 
 import { parseDocument } from "yaml";
+import { asRecord as asRecordValue } from "../json.js";
 import { DEFAULT_WEIGHTS } from "./judgment.js";
 import type { EvidenceSpan } from "./span.js";
 import type {
@@ -86,11 +87,8 @@ export function evaluateCondition(name: string, ctx: ConditionContext): boolean 
   }
 }
 
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
-}
+// 本模块的历史语义用 null 表示「不是记录」；共享守卫用 undefined，这里做单行适配。
+const asRecord = (value: unknown): Record<string, unknown> | null => asRecordValue(value) ?? null;
 
 function asStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];

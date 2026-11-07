@@ -6,6 +6,7 @@
  * 的快照测试锁住。
  */
 
+import { tryParseJson } from "../llm-json.js";
 import { dataBlock } from "../prompt-hygiene.js";
 
 /** 覆盖度判断的结构化输出契约。 */
@@ -42,18 +43,38 @@ export type RecallDecision = {
   missing_features: string[];
 };
 
-/** 解析模型输出；不可用时返回 undefined（调用方据此记 `not_evaluated`，不得当成通过）。 */
+/** `search-recall` 原子与质量门共用的覆盖度状态。 */
+export type SearchRecallStatus = "adequate" | "uncovered" | "not_evaluated" | "single_pass";
+
+const SEARCH_RECALL_STATUSES: ReadonlySet<string> = new Set<SearchRecallStatus>([
+  "adequate",
+  "uncovered",
+  "not_evaluated",
+  "single_pass",
+]);
+
+/** 状态守卫：gate 读取落盘 JSON 时用它收窄，未知状态退回旧判定。 */
+export function isSearchRecallStatus(value: unknown): value is SearchRecallStatus {
+  return typeof value === "string" && SEARCH_RECALL_STATUSES.has(value);
+}
+
+/** `search-recall` 写入 `search_recall` 的主输出形状。 */
+export type SearchRecallResult = {
+  status: SearchRecallStatus;
+  /** 实际执行的补检次数（不含首轮）。 */
+  rounds: number;
+  missingFeatures: string[];
+  reason?: string;
+};
+
+/**
+ * 解析模型输出；不可用时返回 undefined（调用方据此记 `not_evaluated`，不得当成通过）。
+ *
+ * 复用 `tryParseJson`：与创造性图 `recallRouter` 同一容错口径（含代码围栏）。
+ */
 export function parseRecallDecision(raw: string): RecallDecision | undefined {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw) as unknown;
-  } catch {
-    // 模型输出不是 JSON 时返回 undefined；调用方据此记 not_evaluated，不当作通过。
-    return undefined;
-  }
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return undefined;
-  const record = parsed as Record<string, unknown>;
-  if (typeof record.adequate !== "boolean") return undefined;
+  const record = tryParseJson(raw);
+  if (record === undefined || typeof record.adequate !== "boolean") return undefined;
   const toStrings = (value: unknown): string[] =>
     Array.isArray(value) ? value.filter((item): item is string => typeof item === "string").filter(Boolean) : [];
   return {

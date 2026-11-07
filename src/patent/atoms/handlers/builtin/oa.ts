@@ -9,6 +9,8 @@
 
 import { type Atom } from "../../atom.js";
 import { type PipelineState, type StageExecuteInput, type StageHandler, getStateString } from "../../handler.js";
+import { asRecord, parseJsonValue } from "../../../json.js";
+import { tryParseJson } from "../../../llm-json.js";
 import { classifyGrounds } from "../../../oa/grounds.js";
 import { diffAmendments, NOT_CHECKED_REASON } from "../../../oa/amendment-diff.js";
 import { writeOaRoundSnapshot } from "../../../oa/round-snapshot.js";
@@ -27,23 +29,6 @@ function readMaterial(state: PipelineState): string {
     if (value.trim().length > 0) return value;
   }
   return "";
-}
-
-/** 容错解析上游 JSON：失败时原样保留字符串，避免静默丢数据。 */
-function parseJsonOrRaw(value: string): unknown {
-  if (value.trim().length === 0) return null;
-  try {
-    return JSON.parse(value) as unknown;
-  } catch {
-    // 上游可能传纯文本：原样保留，不用异常打断答复阶段。
-    return value;
-  }
-}
-
-function asRecord(value: unknown): Record<string, unknown> | undefined {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -139,59 +124,82 @@ export const draftOaAtom: Atom = {
   name: "draft-oa",
   description: "汇编意见陈述草稿：消费对照表、缺口、理由分型与修改差分，不重新检索",
   category: "reason",
-  inputSchema: ["claim_chart_doc", "gap_list", "amendment_diff", "oa_grounds"],
+  inputSchema: ["claim", "claim_chart_doc", "gap_list", "amendment_diff", "oa_grounds"],
   outputSchema: ["oa_statement"],
 };
 
-/** 从对照表取可用于引用的要素编号与文献行摘要。 */
-function readChartRefs(chartRaw: string): {
-  elementIds: Set<string>;
-  targets: unknown;
-  rows: Array<{ elementId?: string; targetId?: string; mapping?: string }>;
-} {
-  const chart = asRecord(parseJsonOrRaw(chartRaw));
+export type ChartRowRef = {
+  elementId: string;
+  targetId: string;
+  mapping: string;
+  quote: string;
+  pinCite: string;
+};
+
+/** 从对照表取可用于引用的要素编号与证据行（证据行进入起草提示词）。 */
+function readChartRefs(chartRaw: string): { elementIds: Set<string>; rows: ChartRowRef[] } {
+  const chart = asRecord(parseJsonValue(chartRaw));
   const elements = Array.isArray(chart?.elements) ? chart.elements : [];
-  const rows = Array.isArray(chart?.rows) ? (chart.rows as Array<Record<string, unknown>>) : [];
+  const rawRows = Array.isArray(chart?.rows) ? chart.rows : [];
   const elementIds = new Set<string>();
   for (const element of elements) {
     const record = asRecord(element);
     const id = record?.id;
     if (typeof id === "string" && id.length > 0) elementIds.add(id);
   }
-  return {
-    elementIds,
-    targets: chart?.targets ?? [],
-    rows: rows.map(row => ({
-      ...(typeof row.elementId === "string" ? { elementId: row.elementId } : {}),
-      ...(typeof row.targetId === "string" ? { targetId: row.targetId } : {}),
-      ...(typeof row.mapping === "string" ? { mapping: row.mapping } : {}),
-    })),
-  };
+  const rows = rawRows
+    .map(row => asRecord(row))
+    .filter((row): row is Record<string, unknown> => row !== undefined)
+    .map(row => ({
+      elementId: typeof row.elementId === "string" ? row.elementId : "",
+      targetId: typeof row.targetId === "string" ? row.targetId : "",
+      mapping: typeof row.mapping === "string" ? row.mapping : "",
+      quote: typeof row.quote === "string" ? row.quote : "",
+      pinCite: typeof row.pinCite === "string" ? row.pinCite : "",
+    }))
+    .filter(row => row.elementId.length > 0 && row.targetId.length > 0);
+  return { elementIds, rows };
 }
 
+/** 只有已锚定（原申请文本可定位）的限定额允许被争辩段落引用。 */
 function readLimitations(amendmentRaw: string): string[] {
-  const parsed = asRecord(parseJsonOrRaw(amendmentRaw));
+  const parsed = asRecord(parseJsonValue(amendmentRaw));
   const items = Array.isArray(parsed?.items) ? parsed.items : [];
   return items
     .map(item => asRecord(item))
-    .map(item => (typeof item?.limitation === "string" ? item.limitation.trim() : ""))
+    .filter((item): item is Record<string, unknown> => item !== undefined && item.status === "anchored")
+    .map(item => (typeof item.limitation === "string" ? item.limitation.trim() : ""))
     .filter(text => text.length > 0);
 }
 
-/** 引用过滤：每个 ref 都必须命中已存在的要素编号或限定原文，否则整段丢弃。 */
+function formatChartRows(rows: readonly ChartRowRef[]): string {
+  if (rows.length === 0) return "（对照表没有证据行）";
+  return rows
+    .map(
+      (row, index) =>
+        `${index + 1}. ${row.elementId} → ${row.targetId}（${row.mapping || "未标注"}）：${row.quote || "（无引文）"}${
+          row.pinCite.length > 0 ? `（${row.pinCite}）` : ""
+        }`,
+    )
+    .join("\n")
+    .slice(0, 4000);
+}
+
+/** 引用过滤：每个 ref 都必须命中已存在的要素编号或已锚定限定原文，否则整段丢弃。 */
 function filterNotes(
-  raw: string,
+  parsed: Record<string, unknown> | undefined,
   elementIds: ReadonlySet<string>,
   limitations: readonly string[],
-): { notes: Array<{ text: string; refs: string[] }>; dropped: number } {
-  const parsed = asRecord(parseJsonOrRaw(raw));
+): { notes: Array<{ text: string; refs: string[] }>; dropped: number; total: number } {
   const rawNotes = Array.isArray(parsed?.notes) ? parsed.notes : [];
   const notes: Array<{ text: string; refs: string[] }> = [];
   let dropped = 0;
   for (const entry of rawNotes) {
     const record = asRecord(entry);
     const text = typeof record?.text === "string" ? record.text.trim() : "";
-    const refs = Array.isArray(record?.refs) ? record.refs.filter((ref): ref is string => typeof ref === "string") : [];
+    const refs = Array.isArray(record?.refs)
+      ? record.refs.map(ref => (typeof ref === "string" ? ref.trim() : "")).filter(Boolean)
+      : [];
     const valid =
       text.length > 0 && refs.length > 0 && refs.every(ref => elementIds.has(ref) || limitations.includes(ref));
     if (!valid) {
@@ -200,7 +208,7 @@ function filterNotes(
     }
     notes.push({ text, refs });
   }
-  return { notes, dropped };
+  return { notes, dropped, total: rawNotes.length };
 }
 
 /**
@@ -217,8 +225,9 @@ async function maybeSnapshot(
   const caseId = provider?.caseId;
   if (caseId === undefined || caseId.trim().length === 0) return "skipped-no-case";
 
-  const chart = asRecord(parseJsonOrRaw(getStateString(state, "claim_chart_doc")));
-  const claim = typeof chart?.claim === "string" ? chart.claim : "";
+  // 权利要求原文在 state.claim（工具输入 claimText 或 input 回退）；
+  // claim_chart_doc 是 ClaimChart，契约里没有 claim 字段。
+  const claim = getStateString(state, "claim");
   try {
     const snapshot = await writeOaRoundSnapshot({
       caseId,
@@ -234,23 +243,68 @@ async function maybeSnapshot(
   }
 }
 
+/** 意见陈述的产出状态：成功与三类降级可区分，审批面不会把空稿当草稿。 */
+export type OaDraftStatus =
+  | "draft"
+  | "degraded_no_chart"
+  | "degraded_no_llm"
+  | "degraded_unparsable"
+  | "degraded_empty_notes"
+  | "degraded_all_dropped";
+
+type OaStatementParts = {
+  status: OaDraftStatus;
+  reason?: string;
+  grounds: unknown;
+  chartGaps: unknown;
+  amendments: unknown;
+  notes: Array<{ text: string; refs: string[] }>;
+  dropped: number;
+};
+
+function buildOaStatement(parts: OaStatementParts): Record<string, unknown> {
+  return {
+    status: parts.status,
+    ...(parts.reason !== undefined ? { reason: parts.reason } : {}),
+    grounds: parts.grounds,
+    chartGaps: parts.chartGaps,
+    amendments: parts.amendments,
+    argumentNotes: parts.notes,
+    droppedNotes: parts.dropped,
+    draftNotice: OA_DRAFT_NOTICE,
+  };
+}
+
+async function withSnapshot(
+  state: PipelineState,
+  provider: StageExecuteInput["provider"],
+  statement: Record<string, unknown>,
+): Promise<PipelineState> {
+  return { oa_statement: JSON.stringify({ ...statement, snapshot: await maybeSnapshot(state, provider, statement) }) };
+}
+
 export class DraftOaHandler implements StageHandler {
   readonly name = "draft-oa";
   readonly category = "reason" as const;
 
   async execute({ state, provider }: StageExecuteInput): Promise<PipelineState> {
     const chartRaw = getStateString(state, "claim_chart_doc");
+    const grounds = parseJsonValue(getStateString(state, "oa_grounds"));
+    const chartGaps = parseJsonValue(getStateString(state, "gap_list"));
+    const amendments = parseJsonValue(getStateString(state, "amendment_diff"));
+
     if (chartRaw.trim().length === 0) {
       return {
         oa_statement: JSON.stringify({
-          status: "degraded_no_chart",
-          reason: OA_NO_CHART_REASON,
-          grounds: parseJsonOrRaw(getStateString(state, "oa_grounds")),
-          chartGaps: parseJsonOrRaw(getStateString(state, "gap_list")),
-          amendments: parseJsonOrRaw(getStateString(state, "amendment_diff")),
-          argumentNotes: [],
-          droppedNotes: 0,
-          draftNotice: OA_DRAFT_NOTICE,
+          ...buildOaStatement({
+            status: "degraded_no_chart",
+            reason: OA_NO_CHART_REASON,
+            grounds,
+            chartGaps,
+            amendments,
+            notes: [],
+            dropped: 0,
+          }),
           snapshot: "skipped-no-chart",
         }),
       };
@@ -258,56 +312,75 @@ export class DraftOaHandler implements StageHandler {
 
     const chart = readChartRefs(chartRaw);
     const limitations = readLimitations(getStateString(state, "amendment_diff"));
-    const grounds = parseJsonOrRaw(getStateString(state, "oa_grounds"));
-    const amendments = parseJsonOrRaw(getStateString(state, "amendment_diff"));
-    const chartGaps = parseJsonOrRaw(getStateString(state, "gap_list"));
+    const claim = getStateString(state, "claim");
 
     const prompt = [
       "你是专利代理师，正在起草审查意见答复的争辩意见部分。",
       "只写争辩段落；不要编造对比文件内容，不要引用未在下面列出的要素编号或限定。",
       "",
+      "【权利要求原文】",
+      claim.trim().length > 0 ? dataBlock(claim.slice(0, 3000)) : "（未提供权利要求原文）",
       "【理由分型】",
       dataBlock(JSON.stringify(grounds, null, 2).slice(0, 3000)),
       "【权利要求要素编号】",
       dataBlock([...chart.elementIds].join(", ").slice(0, 1500)),
+      "【对照表证据行】",
+      dataBlock(formatChartRows(chart.rows)),
       "【对照表缺口】",
       dataBlock(JSON.stringify(chartGaps, null, 2).slice(0, 3000)),
       "【修改差分】",
       dataBlock(JSON.stringify(amendments, null, 2).slice(0, 3000)),
       "",
-      "每段 refs 只能使用上面出现过的要素编号，或修改差分里的限定原文。",
+      "每段 refs 只能使用上面出现过的要素编号，或修改差分里 status=anchored 的限定原文。",
       "严格输出 JSON：{ notes: [{ text, refs }] }。",
     ].join("\n");
 
     const result = await callLlm(provider, "draft-oa", prompt, { schema: DRAFT_NOTES_SCHEMA, temperature: 0.2 });
     if (!result.ok) {
-      const statement: Record<string, unknown> = {
+      const statement = buildOaStatement({
         status: "degraded_no_llm",
         reason: result.message,
         grounds,
         chartGaps,
         amendments,
-        argumentNotes: [],
-        droppedNotes: 0,
-        draftNotice: OA_DRAFT_NOTICE,
-      };
-      return {
-        oa_statement: JSON.stringify({ ...statement, snapshot: await maybeSnapshot(state, provider, statement) }),
-      };
+        notes: [],
+        dropped: 0,
+      });
+      return withSnapshot(state, provider, statement);
     }
 
-    const { notes, dropped } = filterNotes(result.raw, chart.elementIds, limitations);
-    const statement: Record<string, unknown> = {
-      status: "draft",
+    const parsed = tryParseJson(result.raw);
+    if (parsed === undefined) {
+      const statement = buildOaStatement({
+        status: "degraded_unparsable",
+        reason: "模型输出不是 JSON，未生成争辩段落",
+        grounds,
+        chartGaps,
+        amendments,
+        notes: [],
+        dropped: 0,
+      });
+      return withSnapshot(state, provider, statement);
+    }
+
+    const { notes, dropped, total } = filterNotes(parsed, chart.elementIds, limitations);
+    const reason =
+      total === 0
+        ? "模型未产出争辩段落"
+        : notes.length === 0
+          ? `全部争辩段落引用不存在的要素或限定（丢弃 ${dropped} 段）`
+          : undefined;
+    const status: OaDraftStatus =
+      total === 0 ? "degraded_empty_notes" : notes.length === 0 ? "degraded_all_dropped" : "draft";
+    const statement = buildOaStatement({
+      status,
+      ...(reason !== undefined ? { reason } : {}),
       grounds,
       chartGaps,
       amendments,
-      argumentNotes: notes,
-      droppedNotes: dropped,
-      draftNotice: OA_DRAFT_NOTICE,
-    };
-    return {
-      oa_statement: JSON.stringify({ ...statement, snapshot: await maybeSnapshot(state, provider, statement) }),
-    };
+      notes,
+      dropped,
+    });
+    return withSnapshot(state, provider, statement);
   }
 }

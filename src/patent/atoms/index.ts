@@ -111,6 +111,8 @@ export {
   DraftOaHandler,
   OA_DRAFT_NOTICE,
   OA_NO_CHART_REASON,
+  type OaDraftStatus,
+  type InvalidityStatus,
   claimEmbodimentMapperAtom,
   ClaimEmbodimentMapperHandler,
   timeBaselineAtom,

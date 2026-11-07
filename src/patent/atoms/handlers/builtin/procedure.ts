@@ -7,6 +7,7 @@
 
 import { type Atom } from "../../atom.js";
 import { type PipelineState, type StageExecuteInput, type StageHandler, getStateString } from "../../handler.js";
+import { parseJsonValue } from "../../../json.js";
 import {
   buildProcedureChecklist,
   type ProcedureDeadlineEntry,
@@ -22,24 +23,19 @@ export const procedureChecklistAtom: Atom = {
 };
 
 function readDeadlines(raw: string): ProcedureDeadlineEntry[] | undefined {
-  if (raw.trim().length === 0) return undefined;
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return undefined;
-    return parsed
-      .map(item => (typeof item === "object" && item !== null ? (item as Record<string, unknown>) : undefined))
-      .filter((item): item is Record<string, unknown> => item !== undefined)
-      .map(item => ({
-        id: typeof item.id === "string" ? item.id : "",
-        ...(typeof item.status === "string" ? { status: item.status } : {}),
-        ...(typeof item.reason === "string" ? { reason: item.reason } : {}),
-        ...(typeof item.date === "string" ? { date: item.date } : {}),
-      }))
-      .filter(item => item.id.length > 0);
-  } catch {
-    // 期限条目是可选输入：不可解析时按未求值处理，不编日期。
-    return undefined;
-  }
+  // 期限条目是可选输入：不可解析时按未求值处理，不编日期。
+  const parsed = parseJsonValue(raw);
+  if (!Array.isArray(parsed)) return undefined;
+  return parsed
+    .map(item => (typeof item === "object" && item !== null ? (item as Record<string, unknown>) : undefined))
+    .filter((item): item is Record<string, unknown> => item !== undefined)
+    .map(item => ({
+      id: typeof item.id === "string" ? item.id : "",
+      ...(typeof item.status === "string" ? { status: item.status } : {}),
+      ...(typeof item.reason === "string" ? { reason: item.reason } : {}),
+      ...(typeof item.date === "string" ? { date: item.date } : {}),
+    }))
+    .filter(item => item.id.length > 0);
 }
 
 export class ProcedureChecklistHandler implements StageHandler {
@@ -47,8 +43,9 @@ export class ProcedureChecklistHandler implements StageHandler {
   readonly category = "gate" as const;
 
   async execute({ state }: StageExecuteInput): Promise<PipelineState> {
-    const kind: ProcedureKind =
-      getStateString(state, "procedure_kind") === "reexamination" ? "reexamination" : "invalidation";
+    const rawKind = getStateString(state, "procedure_kind");
+    // 双场景 manifest 传 "auto"：从材料识别；显式 kind 仍优先（单场景调用）。
+    const kind: ProcedureKind | "auto" = rawKind === "reexamination" || rawKind === "invalidation" ? rawKind : "auto";
     const checklist = buildProcedureChecklist({
       kind,
       text: getStateString(state, "text"),

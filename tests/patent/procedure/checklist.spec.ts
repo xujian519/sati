@@ -4,8 +4,15 @@ import {
   buildProcedureChecklist,
   PROCEDURE_DRAFT_NOTICE,
   REEXAMINATION_REQUEST_DEADLINE_ID,
+  resolveProcedureKind,
 } from "../../../src/patent/procedure/checklist.js";
 import { ProcedureChecklistHandler } from "../../../src/patent/atoms/handlers/builtin/procedure.js";
+import {
+  globalStageHandlerRegistry,
+  registerBuiltinAtoms,
+  runWorkflow,
+  type WorkflowManifest,
+} from "../../../src/patent/index.js";
 
 const CHART = JSON.stringify({
   claim: "一种装置，包括壳体。",
@@ -99,4 +106,72 @@ test("ProcedureChecklistHandler: 从状态读取材料与对照表", async () =>
   });
   assert.equal(String(state.procedure_checklist).split("\n")[0], PROCEDURE_DRAFT_NOTICE);
   assert.ok(String(state.procedure_checklist).includes("inventiveness"));
+});
+
+test("resolveProcedureKind: 复审与无效信号互斥识别，同时命中视为未识别", () => {
+  assert.equal(resolveProcedureKind("请求人因驳回决定提出复审请求。"), "reexamination");
+  assert.equal(resolveProcedureKind("请求宣告专利权无效。"), "invalidation");
+  assert.equal(resolveProcedureKind("复审决定与无效宣告请求同时出现。"), undefined);
+  assert.equal(resolveProcedureKind("一份普通技术交底书。"), undefined);
+});
+
+test("auto: 复审材料识别程序类型，期限保持未求值", async () => {
+  const checklist = buildProcedureChecklist({
+    kind: "auto",
+    text: "请求人因驳回决定提出复审请求。",
+    chart: CHART,
+  });
+  assert.equal(checklist.kind, "reexamination");
+  assert.ok(checklist.markdown.includes("## 程序核验（复审）"));
+  const deadline = checklist.items.find(item => item.id === "deadline");
+  assert.equal(deadline?.status, "not_evaluated");
+  assert.ok(deadline?.detail.includes("期限未求值"));
+});
+
+test("auto: 无效材料识别程序类型", async () => {
+  const checklist = buildProcedureChecklist({
+    kind: "auto",
+    text: "请求宣告专利权无效，理由是权利要求1不具备新颖性。",
+    chart: CHART,
+  });
+  assert.equal(checklist.kind, "invalidation");
+  const deadline = checklist.items.find(item => item.id === "deadline");
+  assert.equal(deadline?.detail, "无对应期限条目");
+});
+
+test("auto: 无法识别程序类型时明确标记，不硬猜", async () => {
+  const checklist = buildProcedureChecklist({
+    kind: "auto",
+    text: "权利要求1不具备创造性。",
+    chart: CHART,
+  });
+  assert.equal(checklist.kind, "unidentified");
+  assert.ok(checklist.markdown.includes("程序类型未识别"));
+  const deadline = checklist.items.find(item => item.id === "deadline");
+  assert.ok(deadline?.detail.includes("未识别程序类型"));
+});
+
+test("manifest 路径：procedure_kind=auto 让复审材料得到复审清单", async () => {
+  registerBuiltinAtoms();
+  const manifest: WorkflowManifest = {
+    id: "reexamination-checklist-test",
+    name: "复审核验",
+    caseType: "invalidation_analysis",
+    stages: [
+      {
+        id: "procedure_checklist",
+        strategy: "chain",
+        description: "核对程序事项",
+        atom: "procedure-checklist",
+        params: { procedure_kind: "auto" },
+      },
+    ],
+    validation: { requireAllSteps: true, maxRetries: 0 },
+  };
+  const result = await runWorkflow(manifest, { text: "请求人因驳回决定提出复审请求。" }, async () => "unused", {
+    handlers: globalStageHandlerRegistry,
+  });
+  const output = result.stages.find(stage => stage.stageId === "procedure_checklist")?.output ?? "";
+  assert.ok(output.includes("## 程序核验（复审）"));
+  assert.ok(output.includes("期限未求值"));
 });

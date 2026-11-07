@@ -7,7 +7,7 @@
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1196 / 208343 |
+| src TS 文件 / 行数 | 1197 / 208512 |
 | src JS 文件 | 0 |
 | tests 文件 | 700 |
 | ui/src 文件 / 行数 | 740 / 109531 |
@@ -32,9 +32,9 @@
 | `as unknown as`（双重断言） | 29 | ui/src(21) · knowledge(5) · adapters(1) |
 | 裸 `console.*` | 6 | ui/server(6) |
 | 空 `catch {}` | 0 | — |
-| 无参 `catch {`（总计） | 708 | ui/server(157) · ui/src(125) · adapters(72) |
+| 无参 `catch {`（总计） | 703 | ui/server(157) · ui/src(125) · adapters(72) |
 | ↳ **无注释**（隐患类，目标） | **0** | — |
-| ↳ 已带意图注释 | 708 | — |
+| ↳ 已带意图注释 | 703 | — |
 | `TODO/HACK/FIXME/XXX` | 11 | always-on(4) · tests(4) · ui/src(2) |
 | 分层违规 `ui/server→src` | 15 | — |
 | 分层违规 `src→ui` | 0 | — |

@@ -8,9 +8,14 @@
  * 缺任一项会抛错。调用方把已求值的条目传进来，本模块只做筛选与措辞。
  */
 
+import { asRecord } from "../json.js";
+import { tryParseJson } from "../llm-json.js";
 import { classifyGrounds } from "../oa/grounds.js";
 
 export type ProcedureKind = "reexamination" | "invalidation";
+
+/** 清单最终呈现的程序类型；无法从材料识别时为 unidentified。 */
+export type ProcedureTargetKind = ProcedureKind | "unidentified";
 
 /** 期限求值条目（与 `evaluateDeadlines` 返回项的形状对齐，字段按需读取）。 */
 export type ProcedureDeadlineEntry = {
@@ -30,7 +35,7 @@ export type ProcedureChecklistItem = {
 };
 
 export type ProcedureChecklist = {
-  kind: ProcedureKind;
+  kind: ProcedureTargetKind;
   notice: string;
   items: ProcedureChecklistItem[];
   markdown: string;
@@ -47,10 +52,22 @@ type ChartShape = {
   elements?: unknown;
 };
 
-function asRecord(value: unknown): Record<string, unknown> | undefined {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
+/** 复审材料信号（驳回决定/复审请求）；与无效信号同时命中视为未识别。 */
+const REEXAMINATION_SIGNALS = /复审请求|复审决定|复审通知书|复审委员会|驳回决定/;
+/** 无效宣告材料信号。 */
+const INVALIDATION_SIGNALS = /无效宣告请求|宣告无效|专利权无效|无效宣告|无效请求/;
+
+/**
+ * 从材料原文识别程序类型。
+ *
+ * 双场景 manifest 没有程序类型入参：两类信号都命中或都不命中时返回
+ * undefined，由清单标「未识别」，不凭单次出现硬猜。
+ */
+export function resolveProcedureKind(text: string): ProcedureKind | undefined {
+  const reexamination = REEXAMINATION_SIGNALS.test(text);
+  const invalidation = INVALIDATION_SIGNALS.test(text);
+  if (reexamination === invalidation) return undefined;
+  return reexamination ? "reexamination" : "invalidation";
 }
 
 function countTargets(chart: ChartShape | undefined): number {
@@ -58,9 +75,17 @@ function countTargets(chart: ChartShape | undefined): number {
 }
 
 function deadlineItem(
-  kind: ProcedureKind,
+  kind: ProcedureTargetKind,
   deadlines: readonly ProcedureDeadlineEntry[] | undefined,
 ): ProcedureChecklistItem {
+  if (kind === "unidentified") {
+    return {
+      id: "deadline",
+      label: "期限",
+      status: "not_evaluated",
+      detail: "未识别程序类型（复审/无效），期限未求值",
+    };
+  }
   if (kind === "invalidation") {
     return {
       id: "deadline",
@@ -110,8 +135,14 @@ function deadlineItem(
   };
 }
 
+function procedureLabel(kind: ProcedureTargetKind): string {
+  if (kind === "reexamination") return "复审";
+  if (kind === "invalidation") return "无效";
+  return "程序类型未识别";
+}
+
 function renderMarkdown(checklist: Omit<ProcedureChecklist, "markdown">): string {
-  const lines = [checklist.notice, "", `## 程序核验（${checklist.kind === "reexamination" ? "复审" : "无效"}）`, ""];
+  const lines = [checklist.notice, "", `## 程序核验（${procedureLabel(checklist.kind)}）`, ""];
   for (const item of checklist.items) {
     const mark =
       item.status === "met" ? "✅" : item.status === "pending" ? "⏳" : item.status === "blocked" ? "❌" : "⚠️";
@@ -121,8 +152,9 @@ function renderMarkdown(checklist: Omit<ProcedureChecklist, "markdown">): string
 }
 
 export type BuildProcedureChecklistInput = {
-  kind: ProcedureKind;
-  /** 材料原文（用于理由分型）。 */
+  /** `"auto"` 从材料原文识别（双场景 manifest 用）；显式值优先。 */
+  kind: ProcedureKind | "auto";
+  /** 材料原文（用于程序类型与理由分型）。 */
   text: string;
   /** claim-chart 的 JSON（字符串或已解析对象）。 */
   chart?: unknown;
@@ -132,11 +164,13 @@ export type BuildProcedureChecklistInput = {
 
 /** 构建程序核验清单。 */
 export function buildProcedureChecklist(input: BuildProcedureChecklistInput): ProcedureChecklist {
-  const chart = typeof input.chart === "string" ? asRecord(safeParse(input.chart)) : asRecord(input.chart);
-  const targetCount = countTargets(chart as ChartShape | undefined);
+  const kind: ProcedureTargetKind =
+    input.kind === "auto" ? (resolveProcedureKind(input.text) ?? "unidentified") : input.kind;
+  const chart = typeof input.chart === "string" ? tryParseJson(input.chart) : asRecord(input.chart);
+  const targetCount = countTargets(chart);
   const grounds = classifyGrounds(input.text);
 
-  const items: ProcedureChecklistItem[] = [deadlineItem(input.kind, input.deadlines)];
+  const items: ProcedureChecklistItem[] = [deadlineItem(kind, input.deadlines)];
 
   items.push({
     id: "grounds",
@@ -163,15 +197,6 @@ export function buildProcedureChecklist(input: BuildProcedureChecklistInput): Pr
     });
   }
 
-  const withoutMarkdown = { kind: input.kind, notice: PROCEDURE_DRAFT_NOTICE, items };
+  const withoutMarkdown = { kind, notice: PROCEDURE_DRAFT_NOTICE, items };
   return { ...withoutMarkdown, markdown: renderMarkdown(withoutMarkdown) };
-}
-
-function safeParse(text: string): unknown {
-  try {
-    return JSON.parse(text) as unknown;
-  } catch {
-    // chart 可能是纯文本：缺结构时按「没有目标」处理，由调用方标 blocked。
-    return undefined;
-  }
 }

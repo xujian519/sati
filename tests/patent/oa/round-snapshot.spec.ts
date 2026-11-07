@@ -73,12 +73,13 @@ test("DraftOaHandler: 有 caseId 时落盘并回填 round-N", async () => {
     process.chdir(cwd);
     const provider: StageProvider = {
       caseId: "case-1",
-      callLLM: async () => JSON.stringify({ notes: [] }),
+      callLLM: async () => JSON.stringify({ notes: [{ text: "1a 已在 D1 中公开。", refs: ["1a"] }] }),
     };
+    const claimText = "1. 一种装置，包括壳体和设置在壳体内的电机。";
     const state = await new DraftOaHandler().execute({
       state: {
+        claim: claimText,
         claim_chart_doc: JSON.stringify({
-          claim: "一种装置，包括壳体。",
           elements: [{ id: "1a", claimNo: 1, text: "包括壳体", kind: "limitation" }],
           targets: [{ id: "D1", kind: "prior-art" }],
           rows: [],
@@ -94,6 +95,7 @@ test("DraftOaHandler: 有 caseId 时落盘并回填 round-N", async () => {
       readFileSync(join(cwd, "data/cases/case-1/oa-rounds/round-1/oa_statement.json"), "utf8").includes("draft"),
       true,
     );
+    assert.equal(readFileSync(join(cwd, "data/cases/case-1/oa-rounds/round-1/claims_before.md"), "utf8"), claimText);
   } finally {
     process.chdir(originalCwd);
     rmSync(cwd, { recursive: true, force: true });

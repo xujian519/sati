@@ -1,7 +1,7 @@
 # 专利执行链补齐实施计划
 
 > 日期：2026-11-07
-> 状态：部分实施（2026-11-07）。M0–M7 已落地并有测试；M8 跨表用词、M9 CAD C13/C14、M10 夹具未做。决策记录见 `docs/notes/implemented/2026-11-07-patent-execution-chain.md`。
+> 状态：部分实施（2026-11-07）。M0–M7 已落地并有测试，并按独立代码审阅补齐了 claim 来源、答复状态、补检失败、程序类型识别与证据模式图节点；M8 跨表用词、M9 CAD C13/C14、M10 夹具未做。决策记录见 `docs/notes/implemented/2026-11-07-patent-execution-chain.md`。
 > 来源：开源专利技术对照后的四项建议
 > 关联：`docs/plans/2026-11-02-patent-drafting-enhancement-import.md`（撰写增强计划）
 > 范围：`src/patent/`（anchor、oa、procedure、search/recall、graph 开关、atoms、workflow manifests、figuregen/cad）、`tests/patent/`、`assets/workflows/patent/generated/`、`docs/code-facts.md`（经生成器）、`docs/notes/`

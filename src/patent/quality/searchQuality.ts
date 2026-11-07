@@ -9,7 +9,10 @@
  *
  * 纯字符串判定：不依赖 provider、不抛错；由 quality-gate 原子消费，
  * 不通过时挂 HITL 审批门由用户决策（退回重做 / 人工确认放行）。
+ * 仅对召回状态做类型引用（type-only），运行期仍无依赖。
  */
+
+import type { SearchRecallStatus } from "../search/recall.js";
 
 /** 最低对比文件数（多源检索）。 */
 export const MIN_DOCS = 3;
@@ -44,7 +47,7 @@ export const SINGLE_SOURCE_THRESHOLDS: SearchQualityThresholds = {
 
 /** 召回判断结果（由 `search-recall` 原子写入 `search_recall`）。 */
 export type SearchRecallGateInput = {
-  status: string;
+  status: SearchRecallStatus;
   missingFeatures?: string[];
 };
 

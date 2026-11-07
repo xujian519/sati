@@ -11,35 +11,23 @@
 
 import { type Atom } from "../../atom.js";
 import { type PipelineState, type StageExecuteInput, type StageHandler, getStateString } from "../../handler.js";
-import type { StageProvider } from "../../handler.js";
+import { asRecord } from "../../../json.js";
+import { tryParseJson } from "../../../llm-json.js";
 
 /** 无证据目标时的固定说明。 */
 export const NO_EVIDENCE_REASON = "未提供证据目标，已拒绝改为自行检索";
 
 export type InvalidityAnalysis = "novelty" | "inventiveness";
 
+export type InvalidityStatus = "completed" | "degraded_no_evidence" | "degraded_no_report";
+
 export const invalidityAnalysisAtom: Atom = {
   name: "invalidity-analysis",
   description: "用对照表里请求人指定的证据执行新颖性/创造性分析（证据模式，不自行检索）",
   category: "compare",
-  inputSchema: ["claim_chart_doc", "analysis", "text"],
+  inputSchema: ["claim_chart_doc", "analysis", "claim", "text"],
   outputSchema: ["invalidity_report"],
 };
-
-function asRecord(value: unknown): Record<string, unknown> | undefined {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
-}
-
-function parseJson(value: string): unknown {
-  try {
-    return JSON.parse(value) as unknown;
-  } catch {
-    // claim-chart 缺失或损坏时按空证据处理，由调用方返回「拒绝自行检索」。
-    return undefined;
-  }
-}
 
 function readAnalysis(state: PipelineState): InvalidityAnalysis {
   return getStateString(state, "analysis") === "novelty" ? "novelty" : "inventiveness";
@@ -54,7 +42,7 @@ type EvidenceTarget = {
 };
 
 function readEvidence(state: PipelineState): { targets: EvidenceTarget[]; claim: string } {
-  const chart = asRecord(parseJson(getStateString(state, "claim_chart_doc")));
+  const chart = asRecord(tryParseJson(getStateString(state, "claim_chart_doc")));
   const rawTargets = Array.isArray(chart?.targets) ? chart.targets : [];
   const rawRows = Array.isArray(chart?.rows) ? chart.rows : [];
 
@@ -82,7 +70,9 @@ function readEvidence(state: PipelineState): { targets: EvidenceTarget[]; claim:
     })
     .filter(target => target.id.length > 0);
 
-  const claim = typeof chart?.claim === "string" ? chart.claim : getStateString(state, "text");
+  // 权利要求原文在 state.claim（工具输入 claimText，缺省回退 input）；
+  // ClaimChart 契约没有 claim 字段，state.text 可能是整份无效请求。
+  const claim = getStateString(state, "claim") || getStateString(state, "text");
   return { targets, claim };
 }
 
@@ -107,7 +97,7 @@ export class InvalidityAnalysisHandler implements StageHandler {
       return {
         invalidity_report: JSON.stringify({
           analysis,
-          status: "degraded_no_evidence",
+          status: "degraded_no_evidence" satisfies InvalidityStatus,
           reason: NO_EVIDENCE_REASON,
           targetIds: [],
           nodes: [],
@@ -127,7 +117,7 @@ export class InvalidityAnalysisHandler implements StageHandler {
       claim,
       prior_art: toPriorArt(targets),
     };
-    const result = await compiled.run(seed, { provider: provider as StageProvider | undefined });
+    const result = await compiled.run(seed, { ...(provider !== undefined ? { provider } : {}) });
 
     const reportKey = analysis === "novelty" ? "novelty_report" : "inventiveness_conclusion";
     const report = getStateString(result.state, reportKey);
@@ -136,7 +126,7 @@ export class InvalidityAnalysisHandler implements StageHandler {
     return {
       invalidity_report: JSON.stringify({
         analysis,
-        status: report.trim().length > 0 ? "completed" : "degraded_no_report",
+        status: (report.trim().length > 0 ? "completed" : "degraded_no_report") satisfies InvalidityStatus,
         report,
         targetIds: targets.map(target => target.id),
         evidenceWithoutQuote,

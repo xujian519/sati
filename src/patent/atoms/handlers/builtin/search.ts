@@ -10,6 +10,7 @@ import {
   getStateArray,
   getStateString,
 } from "../../handler.js";
+import { asRecord } from "../../../json.js";
 import { dataBlock } from "../../../prompt-hygiene.js";
 import {
   buildRecallPrompt,
@@ -17,12 +18,55 @@ import {
   parseRecallDecision,
   RECALL_SCHEMA,
   type RecallDecision,
+  type SearchRecallResult,
+  type SearchRecallStatus,
 } from "../../../search/recall.js";
-import { callLlm, degraded, parseLlmJson, requireLlm, resolveInputText } from "./llm.js";
+import { callLlm, degraded, parseLlmJson, requireLlm } from "./llm.js";
+
+export type { SearchRecallResult, SearchRecallStatus };
 
 /** 查询串预览：超 80 字符截断并加省略号（用于检索结果摘要）。 */
 function previewQuery(query: string): string {
   return query.length > 80 ? `${query.slice(0, 80)}…` : query;
+}
+
+const DEFAULT_MAX_RESULTS = 5;
+
+function readMaxResults(state: PipelineState): number {
+  const parsed = Number(getStateString(state, "max_results"));
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : DEFAULT_MAX_RESULTS;
+}
+
+/** 查询词：显式 query/search_query 优先；其次 keywords 数组 join；最后 keywords 字符串。 */
+function resolveSearchQuery(state: PipelineState): string {
+  const explicit = getStateString(state, "query") || getStateString(state, "search_query");
+  if (explicit.trim().length > 0) return explicit.trim();
+  const arrayQuery = getStateArray(state, "keywords").map(String).filter(Boolean).join(" ");
+  if (arrayQuery.trim().length > 0) return arrayQuery.trim();
+  return getStateString(state, "keywords").trim();
+}
+
+type SearchRunResult = { ok: true; docs: unknown[] } | { ok: false; message: string };
+
+/** 单次检索：统一空 provider、异常与非数组返回；调用方决定降级语义。 */
+async function runSearch(
+  provider: StageExecuteInput["provider"],
+  query: string,
+  maxResults: number,
+): Promise<SearchRunResult> {
+  if (!provider?.search) return { ok: false, message: "未配置检索器（provider.search 缺失）" };
+  try {
+    const docs = await provider.search(query, { maxResults });
+    return { ok: true, docs: Array.isArray(docs) ? docs : [] };
+  } catch (err) {
+    return { ok: false, message: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+function summarizeSearch(query: string, docs: readonly unknown[]): string {
+  return docs.length > 0
+    ? `检索到 ${docs.length} 篇相关文献（查询: ${previewQuery(query)}）`
+    : `未检索到相关文献（查询: ${previewQuery(query)}）`;
 }
 
 // ---------------------------------------------------------------------------
@@ -43,31 +87,18 @@ export class SearchHandler implements StageHandler {
   readonly category = "search" as const;
 
   async execute({ state, provider }: StageExecuteInput): Promise<PipelineState> {
-    // 查询词：显式 query/search_query 优先；其次 keywords 键——KeywordsHandler
-    // 产出的是字符串数组，需 join 为查询串（此前 getStateString 对数组返回空，
-    // 导致 disclosure 管线的 search 阶段在原子执行下恒降级）。
-    const explicit = resolveInputText(state, ["query", "search_query"], "");
-    const query =
-      explicit ||
-      getStateArray(state, "keywords").map(String).filter(Boolean).join(" ") ||
-      getStateString(state, "keywords");
+    const query = resolveSearchQuery(state);
     if (!provider?.search) {
       return degraded("search", "未配置检索器（provider.search 缺失）");
     }
-    if (query.trim().length === 0) {
+    if (query.length === 0) {
       return degraded("search", "查询条件为空");
     }
-    try {
-      const maxResults = Number(getStateString(state, "max_results")) || 5;
-      const docs = await provider.search(query, { maxResults });
-      const summary =
-        docs.length > 0
-          ? `检索到 ${docs.length} 篇相关文献（查询: ${previewQuery(query)}）`
-          : `未检索到相关文献（查询: ${previewQuery(query)}）`;
-      return { prior_art: docs, search_summary: summary };
-    } catch (err) {
-      return degraded("search", `检索失败: ${err instanceof Error ? err.message : String(err)}`);
+    const result = await runSearch(provider, query, readMaxResults(state));
+    if (!result.ok) {
+      return degraded("search", `检索失败: ${result.message}`);
     }
+    return { prior_art: result.docs, search_summary: summarizeSearch(query, result.docs) };
   }
 }
 
@@ -77,16 +108,6 @@ export class SearchHandler implements StageHandler {
 
 /** 补检轮次缺省值（与创造性图的 retrieval.maxRounds 缺省一致）。 */
 export const DEFAULT_RETRIEVAL_ROUNDS = 2;
-
-export type SearchRecallStatus = "adequate" | "uncovered" | "not_evaluated" | "single_pass";
-
-export type SearchRecallResult = {
-  status: SearchRecallStatus;
-  /** 实际执行的补检次数（不含首轮）。 */
-  rounds: number;
-  missingFeatures: string[];
-  reason?: string;
-};
 
 export const searchRecallAtom: Atom = {
   name: "search-recall",
@@ -104,19 +125,9 @@ function readRetrievalRounds(state: PipelineState): number {
   return Number.isInteger(parsed) && parsed >= 0 ? parsed : DEFAULT_RETRIEVAL_ROUNDS;
 }
 
-function resolveQuery(state: PipelineState): string {
-  const explicit = getStateString(state, "query") || getStateString(state, "search_query");
-  if (explicit.trim().length > 0) return explicit.trim();
-  return getStateArray(state, "keywords").map(String).filter(Boolean).join(" ").trim();
-}
-
-function asDocRecord(doc: unknown): Record<string, unknown> | undefined {
-  return typeof doc === "object" && doc !== null && !Array.isArray(doc) ? (doc as Record<string, unknown>) : undefined;
-}
-
 /** 去重键：优先 url；没有 url 时用 title + snippet（provider.search 的文档没有稳定 id）。 */
 function docKey(doc: unknown): string {
-  const record = asDocRecord(doc);
+  const record = asRecord(doc);
   const url = typeof record?.url === "string" ? record.url.trim() : "";
   if (url.length > 0) return `url:${url}`;
   const title = typeof record?.title === "string" ? record.title : "";
@@ -139,7 +150,7 @@ function mergeDocs(existing: readonly unknown[], incoming: readonly unknown[]): 
 function formatDocs(docs: readonly unknown[]): string {
   return docs
     .map((doc, index) => {
-      const record = asDocRecord(doc);
+      const record = asRecord(doc);
       const parts = [record?.title, record?.snippet, record?.publication_date, record?.url]
         .filter((value): value is string => typeof value === "string" && value.length > 0)
         .join(" | ");
@@ -148,96 +159,91 @@ function formatDocs(docs: readonly unknown[]): string {
     .join("\n");
 }
 
+/** 检索未执行（缺 provider/空查询）：主输出写明原因，不产生 prior_art。 */
+function notEvaluated(reason: string): PipelineState {
+  return {
+    prior_art: [],
+    search_summary: `检索未执行：${reason}`,
+    search_recall: JSON.stringify({
+      status: "not_evaluated",
+      rounds: 0,
+      missingFeatures: [],
+      reason,
+    } satisfies SearchRecallResult),
+  };
+}
+
 export class SearchRecallHandler implements StageHandler {
   readonly name = "search-recall";
   readonly category = "search" as const;
 
   async execute({ state, provider }: StageExecuteInput): Promise<PipelineState> {
-    const query = resolveQuery(state);
+    const query = resolveSearchQuery(state);
     const features = getStateArray(state, "features").map(String).filter(Boolean);
-    const maxResults = Number(getStateString(state, "max_results")) || 5;
+    const maxResults = readMaxResults(state);
 
     if (!provider?.search) {
-      const recall: SearchRecallResult = {
-        status: "not_evaluated",
-        rounds: 0,
-        missingFeatures: [],
-        reason: "未配置检索器（provider.search 缺失）",
-      };
-      return {
-        prior_art: [],
-        search_summary: `检索未执行：${recall.reason}`,
-        search_recall: JSON.stringify(recall),
-      };
+      return notEvaluated("未配置检索器（provider.search 缺失）");
     }
     if (query.length === 0) {
-      const recall: SearchRecallResult = {
-        status: "not_evaluated",
-        rounds: 0,
-        missingFeatures: [],
-        reason: "查询条件为空",
-      };
+      return notEvaluated("查询条件为空");
+    }
+
+    const first = await runSearch(provider, query, maxResults);
+    if (!first.ok) {
+      const reason = `检索失败: ${first.message}`;
       return {
         prior_art: [],
-        search_summary: `检索未执行：${recall.reason}`,
-        search_recall: JSON.stringify(recall),
+        search_summary: `检索失败：${first.message}`,
+        search_recall: JSON.stringify({
+          status: "not_evaluated",
+          rounds: 0,
+          missingFeatures: [],
+          reason,
+        } satisfies SearchRecallResult),
       };
     }
 
-    let docs: unknown[] = [];
-    try {
-      docs = await provider.search(query, { maxResults });
-    } catch (err) {
-      const recall: SearchRecallResult = {
-        status: "not_evaluated",
-        rounds: 0,
-        missingFeatures: [],
-        reason: `检索失败: ${err instanceof Error ? err.message : String(err)}`,
-      };
-      return {
-        prior_art: [],
-        search_summary: `检索失败：${recall.reason}`,
-        search_recall: JSON.stringify(recall),
-      };
-    }
-
-    const firstRoundSummary = `检索到 ${docs.length} 篇相关文献（查询: ${previewQuery(query)}）`;
+    let docs = first.docs;
+    const firstRoundSummary = summarizeSearch(query, docs);
 
     if (features.length === 0) {
-      const recall: SearchRecallResult = {
-        status: "not_evaluated",
-        rounds: 0,
-        missingFeatures: [],
-        reason: "无特征清单，补检未执行",
-      };
       return {
         prior_art: docs,
         search_summary: `${firstRoundSummary}；无特征清单，补检未执行`,
-        search_recall: JSON.stringify(recall),
+        search_recall: JSON.stringify({
+          status: "not_evaluated",
+          rounds: 0,
+          missingFeatures: [],
+          reason: "无特征清单，补检未执行",
+        } satisfies SearchRecallResult),
       };
     }
 
     const maxRounds = readRetrievalRounds(state);
     if (maxRounds === 0) {
-      const recall: SearchRecallResult = { status: "single_pass", rounds: 0, missingFeatures: [] };
       return {
         prior_art: docs,
         search_summary: firstRoundSummary,
-        search_recall: JSON.stringify(recall),
+        search_recall: JSON.stringify({
+          status: "single_pass",
+          rounds: 0,
+          missingFeatures: [],
+        } satisfies SearchRecallResult),
       };
     }
 
-    if (!provider.callLLM) {
-      const recall: SearchRecallResult = {
-        status: "not_evaluated",
-        rounds: 0,
-        missingFeatures: [],
-        reason: "未配置 LLM，无法判断检索覆盖度",
-      };
+    const callLLM = provider.callLLM;
+    if (callLLM === undefined) {
       return {
         prior_art: docs,
         search_summary: `${firstRoundSummary}；未配置 LLM，覆盖度未评估`,
-        search_recall: JSON.stringify(recall),
+        search_recall: JSON.stringify({
+          status: "not_evaluated",
+          rounds: 0,
+          missingFeatures: [],
+          reason: "未配置 LLM，无法判断检索覆盖度",
+        } satisfies SearchRecallResult),
       };
     }
 
@@ -247,12 +253,9 @@ export class SearchRecallHandler implements StageHandler {
 
     const judge = async (): Promise<RecallDecision | undefined> => {
       try {
-        const raw = await provider.callLLM!(
-          buildRecallPrompt({ parse: features.join("；"), priorArtText: formatDocs(docs) }),
-          {
-            jsonSchema: RECALL_SCHEMA,
-          },
-        );
+        const raw = await callLLM(buildRecallPrompt({ parse: features.join("；"), priorArtText: formatDocs(docs) }), {
+          jsonSchema: RECALL_SCHEMA,
+        });
         return parseRecallDecision(raw);
       } catch {
         // 召回判断失败按 not_evaluated 处理，不能当作 adequate。
@@ -263,8 +266,22 @@ export class SearchRecallHandler implements StageHandler {
     decision = await judge();
     while (decision !== undefined && !decision.adequate && usedRounds < maxRounds) {
       const nextQuery = buildRefinedQuery(currentQuery, decision.missing_features);
-      const more = await provider.search(nextQuery, { maxResults });
-      docs = mergeDocs(docs, Array.isArray(more) ? more : []);
+      const more = await runSearch(provider, nextQuery, maxResults);
+      if (!more.ok) {
+        // 补检轮失败保留首轮证据；状态与首轮失败同一口径（未评估，不假装覆盖）。
+        const reason = `补检第 ${usedRounds + 1} 轮检索失败: ${more.message}`;
+        return {
+          prior_art: docs,
+          search_summary: `${firstRoundSummary}；${reason}`,
+          search_recall: JSON.stringify({
+            status: "not_evaluated",
+            rounds: usedRounds,
+            missingFeatures: decision.missing_features,
+            reason,
+          } satisfies SearchRecallResult),
+        };
+      }
+      docs = mergeDocs(docs, more.docs);
       currentQuery = nextQuery;
       usedRounds += 1;
       decision = await judge();

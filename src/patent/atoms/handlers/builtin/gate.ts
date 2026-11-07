@@ -24,7 +24,9 @@ import {
   getStateArray,
   getStateString,
 } from "../../handler.js";
+import { tryParseJson } from "../../../llm-json.js";
 import { checkSearchQuality, type SearchRecallGateInput } from "../../../quality/index.js";
+import { isSearchRecallStatus } from "../../../search/recall.js";
 import { buildSlopRevisionHint } from "../../../retry-hints.js";
 import { analyzeSlop } from "../../../slop-engine.js";
 import { degraded } from "./llm.js";
@@ -105,20 +107,13 @@ export class ApprovalGateHandler implements StageHandler {
 
 /** 容错读取 `search-recall` 写入的覆盖度结果；缺失或不可解析时返回 undefined（不改变旧行为）。 */
 function readRecallGateInput(raw: string): SearchRecallGateInput | undefined {
-  if (raw.trim().length === 0) return undefined;
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return undefined;
-    const record = parsed as Record<string, unknown>;
-    if (typeof record.status !== "string") return undefined;
-    const missingFeatures = Array.isArray(record.missingFeatures)
-      ? record.missingFeatures.filter((item): item is string => typeof item === "string")
-      : undefined;
-    return { status: record.status, ...(missingFeatures !== undefined ? { missingFeatures } : {}) };
-  } catch {
-    // 召回结果是可选输入：不可解析时退回旧判定（只看报告文本）。
-    return undefined;
-  }
+  // 召回结果是可选输入：不可解析/未知状态时退回旧判定（只看报告文本）。
+  const record = tryParseJson(raw);
+  if (record === undefined || !isSearchRecallStatus(record.status)) return undefined;
+  const missingFeatures = Array.isArray(record.missingFeatures)
+    ? record.missingFeatures.filter((item): item is string => typeof item === "string")
+    : undefined;
+  return { status: record.status, ...(missingFeatures !== undefined ? { missingFeatures } : {}) };
 }
 
 export const qualityGateAtom: Atom = {

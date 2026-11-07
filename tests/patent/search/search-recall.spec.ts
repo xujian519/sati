@@ -149,3 +149,25 @@ test("searchRecallAtom: 未配置检索器时主输出写明原因", async () =>
   const result = JSON.parse(state.search_recall as string) as SearchRecallResult;
   assert.equal(result.status, "not_evaluated");
 });
+
+test("searchRecallAtom: 补检轮检索失败保留首轮结果并记未评估", async () => {
+  let searches = 0;
+  const provider: StageProvider = {
+    search: async () => {
+      searches += 1;
+      if (searches === 1) return docsFor("壳体");
+      throw new Error("网络中断");
+    },
+    callLLM: async () => recall(false, ["滤芯"]),
+  };
+  const state = await new SearchRecallHandler().execute({
+    state: { query: "壳体", features: ["壳体", "滤芯"], retrieval_rounds: 1 },
+    provider,
+  });
+  assert.equal((state.prior_art as unknown[]).length, 1, "首轮证据不得因补检失败丢失");
+  assert.ok(String(state.search_summary).includes("补检第 1 轮检索失败"));
+  const result = JSON.parse(state.search_recall as string) as SearchRecallResult;
+  assert.equal(result.status, "not_evaluated");
+  assert.equal(result.rounds, 0);
+  assert.ok(result.reason?.includes("补检第 1 轮检索失败"));
+});

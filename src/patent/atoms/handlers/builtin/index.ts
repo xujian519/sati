@@ -88,6 +88,7 @@ export {
   InvalidityAnalysisHandler,
   NO_EVIDENCE_REASON,
   type InvalidityAnalysis,
+  type InvalidityStatus,
 } from "./invalidity.js";
 export {
   amendmentDiffAtom,
@@ -98,6 +99,8 @@ export {
   OaGroundsHandler,
   OA_DRAFT_NOTICE,
   OA_NO_CHART_REASON,
+  type ChartRowRef,
+  type OaDraftStatus,
 } from "./oa.js";
 export { claimEmbodimentMapperAtom, ClaimEmbodimentMapperHandler } from "./mapper.js";
 export { chemistryAnalyzeAtom, ChemistryAnalyzeHandler } from "./chemistry.js";

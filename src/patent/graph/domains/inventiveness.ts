@@ -117,7 +117,8 @@ const STAGE_NODES: readonly StageSpec[] = [
     include: () => true,
   },
   { name: "domain_inject", create: () => domainInjectNode, include: () => true },
-  { name: "build_query", create: () => buildQueryNode, include: () => true },
+  // 证据模式（supplied）没有检索消费者，build_query 的 LLM 产出会被丢弃，故不插入。
+  { name: "build_query", create: () => buildQueryNode, include: ctx => ctx.search },
   { name: "search", create: ctx => handlerNode(ctx.searchHandler!), include: ctx => ctx.search },
   { name: "prepare_query", create: () => prepareQueryNode, include: ctx => ctx.search },
   { name: "recall_check", create: () => recallCheckNode, include: ctx => ctx.recallLoop },
@@ -154,11 +155,12 @@ const STAGE_EDGES: readonly EdgeSpec[] = [
   { from: "refine_query", to: "prepare_query", when: f => f.recallLoop },
   { from: "converge_prior_art", to: "closest", when: f => f.recallLoop },
   { from: "search", to: "closest", when: f => f.search && !f.recallLoop },
-  { from: "build_query", to: "closest", when: f => !f.search },
   // 三步法主线：parse → time_baseline（截止日显式事实）→ domain_inject → build_query
   { from: "parse", to: "time_baseline", when: () => true },
   { from: "time_baseline", to: "domain_inject", when: () => true },
-  { from: "domain_inject", to: "build_query", when: () => true },
+  { from: "domain_inject", to: "build_query", when: f => f.search },
+  // 证据模式没有检索式可生成，domain_inject 直连 closest。
+  { from: "domain_inject", to: "closest", when: f => !f.search },
   { from: "closest", to: "diff", when: () => true },
   { from: "diff", to: "combination", when: f => f.combination },
   { from: "diff", to: "hint", when: f => !f.combination },

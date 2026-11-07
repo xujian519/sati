@@ -33,7 +33,7 @@ stages:
   - id: procedure_checklist
     strategy: chain
     atom: procedure-checklist
-    description: 核对程序事项与理由-证据对应关系（核验表，不是请求书）
+    description: 核对程序事项与理由-证据对应关系（按材料识别复审/无效；核验表，不是请求书）
   - id: approval
     strategy: chain
     description: 人工确认分析结论

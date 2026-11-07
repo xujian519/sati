@@ -47,6 +47,13 @@ test("parseRecallDecision: 非 JSON 或缺 adequate 时返回 undefined", () => 
   assert.equal(parseRecallDecision(JSON.stringify({ covered_features: [] })), undefined);
 });
 
+test("parseRecallDecision: 兼容代码围栏（与图内 recallRouter 同口径）", () => {
+  const decision = parseRecallDecision(
+    '```json\n{"adequate":true,"covered_features":["A"],"missing_features":[]}\n```',
+  );
+  assert.deepEqual(decision, { adequate: true, covered_features: ["A"], missing_features: [] });
+});
+
 test("buildRefinedQuery: 缺失特征拼成 OR 补检式", () => {
   assert.equal(buildRefinedQuery("壳体", ["滤芯", "活性炭"]), "壳体 OR 滤芯 OR 活性炭");
 });
