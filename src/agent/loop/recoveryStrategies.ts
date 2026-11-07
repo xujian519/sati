@@ -95,12 +95,14 @@ export async function* recoverFromMaxOutputBump(
 ): AsyncGenerator<AgentEvent, "bumped" | "continuing" | "exhausted", unknown> {
   // Phase A: token doubling (if not yet attempted)
   if (!state.hasAttemptedOutputRetry) {
-    state.hasAttemptedOutputRetry = true;
     const nextMaxOutputTokens = resolveOutputTokenRetryBump({
       currentMaxOutputTokens: deps.tokenCaps.currentMaxOutputTokens(decision.provider, decision.model),
       modelMaxOutputTokens: routedMaxOutputTokens,
     });
     if (nextMaxOutputTokens !== undefined) {
+      // 只有真正抬升上限才消耗这一次性额度：没有可用 bump（默认走 catalog
+      // 上限 / 已到模型上限）时留到后续恢复轮，否则 Phase A 会被静默跳过。
+      state.hasAttemptedOutputRetry = true;
       if (opts.stripTrailingErrorPairMessages) {
         state.messages = stripTrailingErrorPair(state.messages);
       }
