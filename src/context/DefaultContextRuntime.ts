@@ -83,6 +83,8 @@ export type DefaultContextRuntimeOptions = {
   projectRoot?: string;
   /** 本地 Python 运行时状态；缺省首次 assemble 时按 process.env 探测。 */
   pythonRuntime?: import("../runtime/pythonRuntime.js").PythonRuntimeStatus;
+  /** 技能持久开关；提供时 prompt 过滤禁用技能。 */
+  skillPreferences?: import("../extension/skills/skillPreferences.js").SkillPreferenceStore;
   /**
    * Maximum context window size (tokens) for the active model. Used by
    * `tryAutoCompact` to evaluate whether proactive compaction is needed.
@@ -163,6 +165,7 @@ export class DefaultContextRuntime implements ContextRuntime {
   private readonly instructionDiscovery?: InstructionDiscovery;
   private readonly projectRoot?: string;
   private readonly pythonRuntime?: PythonRuntimeStatus;
+  private readonly skillPreferences?: import("../extension/skills/skillPreferences.js").SkillPreferenceStore;
   private readonly maxContextTokens: number;
   private readonly truncateFirstKeepRatio: number;
   private readonly memoryRetrievalTimeoutMs: number;
@@ -186,9 +189,17 @@ export class DefaultContextRuntime implements ContextRuntime {
 
   constructor(options: DefaultContextRuntimeOptions = {}) {
     this.extension = options.extension ?? new NullExtensionResolver();
+    this.skillPreferences = options.skillPreferences;
+    const skillPreferences = options.skillPreferences;
+    const projectRoot = options.projectRoot;
     this.promptAssembler =
       options.promptAssembler ??
-      new PromptAssembler(this.extension, { patentDomainEnabled: options.patentDomainEnabled });
+      new PromptAssembler(this.extension, {
+        patentDomainEnabled: options.patentDomainEnabled,
+        ...(skillPreferences
+          ? { isSkillEnabled: (slug: string) => skillPreferences.isEnabled(slug, projectRoot) }
+          : {}),
+      });
     this.messageProjector = options.messageProjector ?? new MessageProjector();
     this.toolResultBudget = options.toolResultBudget;
     this.memoryResolver = options.memoryResolver;
@@ -249,6 +260,7 @@ export class DefaultContextRuntime implements ContextRuntime {
         })
       : undefined;
 
+    this.skillPreferences?.refresh();
     const prompt = this.promptAssembler.assemble({
       cwd: input.cwd,
       provider: input.provider,

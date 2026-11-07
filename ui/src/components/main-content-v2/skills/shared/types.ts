@@ -27,6 +27,8 @@ export type Skill = {
   readonly: boolean;
   overriddenBy?: "user" | "project";
   overridesBuiltin?: boolean;
+  /** 持久开关；缺省视为启用。 */
+  enabled?: boolean;
   mtime: number | null;
   template?: SkillTemplateMeta | null;
 };

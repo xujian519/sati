@@ -229,6 +229,80 @@ router.post("/list", async (req, res) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// Per-skill enablement
+//
+// Preference file is read by both this route and the agent runtime
+// (`src/extension/skills/skillPreferences.ts`). ui/server cannot import src,
+// so the on-disk shape is duplicated here deliberately:
+//   { version: 1, builtin: {slug: bool}, user: {slug: bool},
+//     project: { [projectKey]: {slug: bool} } }
+// ---------------------------------------------------------------------------
+const SKILL_PREFERENCES_PATH = path.join(SATI_HOME, "skill-preferences.json");
+
+async function readSkillPreferences() {
+  try {
+    const parsed = JSON.parse(await fs.readFile(SKILL_PREFERENCES_PATH, "utf8"));
+    if (!parsed || typeof parsed !== "object" || parsed.version !== 1) {
+      return { version: 1, builtin: {}, user: {}, project: {} };
+    }
+    return {
+      version: 1,
+      builtin: parsed.builtin && typeof parsed.builtin === "object" ? parsed.builtin : {},
+      user: parsed.user && typeof parsed.user === "object" ? parsed.user : {},
+      project: parsed.project && typeof parsed.project === "object" ? parsed.project : {},
+    };
+  } catch {
+    // 缺失/坏 JSON/权限错误：fail-open（全部启用）。
+    return { version: 1, builtin: {}, user: {}, project: {} };
+  }
+}
+
+router.get("/preferences", async (_req, res) => {
+  res.json(await readSkillPreferences());
+});
+
+router.post("/preferences", async (req, res) => {
+  try {
+    const { scope, slug, projectKey, enabled } = req.body || {};
+    if (!["builtin", "user", "project"].includes(scope)) {
+      return res.status(400).json({ error: "scope must be builtin, user or project" });
+    }
+    if (!safeSlug(slug)) {
+      return res.status(400).json({ error: `Invalid slug "${String(slug)}"` });
+    }
+    if (typeof enabled !== "boolean") {
+      return res.status(400).json({ error: "enabled must be a boolean" });
+    }
+    if (scope === "project" && !projectKey) {
+      return res.status(400).json({ error: "project scope requires projectKey" });
+    }
+
+    const next = await readSkillPreferences();
+    if (scope === "project") {
+      next.project[projectKey] = { ...(next.project[projectKey] || {}), [slug]: enabled };
+    } else {
+      next[scope] = { ...next[scope], [slug]: enabled };
+    }
+
+    await fs.mkdir(path.dirname(SKILL_PREFERENCES_PATH), { recursive: true, mode: 0o700 });
+    const temp = `${SKILL_PREFERENCES_PATH}.${process.pid}.${Date.now()}.tmp`;
+    try {
+      await fs.writeFile(temp, `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600 });
+      await fs.rename(temp, SKILL_PREFERENCES_PATH);
+      await fs.chmod(SKILL_PREFERENCES_PATH, 0o600);
+    } catch (error) {
+      await fs.rm(temp, { force: true }).catch(() => {
+        // 清理失败不覆盖原始写入错误。
+      });
+      throw error;
+    }
+    return res.json({ ok: true, enabled, preferences: next });
+  } catch (e) {
+    sendGatewayError(res, e);
+  }
+});
+
 router.post("/read", async (req, res) => {
   try {
     const { skillPath, projectPath } = req.body || {};

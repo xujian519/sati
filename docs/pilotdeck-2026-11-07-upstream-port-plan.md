@@ -288,24 +288,26 @@ Status: Approved（2026-11-07 批准执行；M0 已完成）
 
 **任务**
 
-- [ ] **T5.1** 新增 `src/extension/skills/skillPreferences.ts`：
+- [x] **T5.1** 新增 `src/extension/skills/skillPreferences.ts`：
   - 存储 `skillPreferences.json`（pilotHome），按 scope（builtin/user/project）+ slug + projectKey 记录 enabled；
   - 原子写；坏文件 fail-open（默认启用）。
-- [ ] **T5.2** `src/extension/skills/SkillManager.ts`：
+- [x] **T5.2** `src/extension/skills/SkillManager.ts`：
   - `SkillSummary` 增加 `enabled`；
   - `list`/`search` 过滤 disabled；
   - 新增 `setEnabled({ scope, slug, projectKey?, enabled })`；
   - 默认 enabled，避免升级后技能消失。
-- [ ] **T5.3** `src/context/extension/ExtensionResolver.ts` 与 prompt 组装：过滤 disabled 技能；`available-skills` 分组计数同步。
-- [ ] **T5.4** UI：`ui/server/routes/skills.js` 增加开关端点；技能页增加开关；i18n 文案。
-- [ ] **T5.5** 测试：
+- [x] **T5.3** `src/context/extension/ExtensionResolver.ts` 与 prompt 组装：过滤 disabled 技能；`available-skills` 分组计数同步。
+- [x] **T5.4** UI：`ui/server/routes/skills.js` 增加开关端点；技能页增加开关；i18n 文案。
+- [x] **T5.5** 测试：
   - `tests/extension/skills/skill-enablement.spec.ts`：持久化、scope 覆盖、默认启用、坏文件 fail-open；
   - 新增 `ui/server/routes/skills.addressing.test.js`：开关端点；
   - 新增 `ui/src/components/main-content-v2/SkillsV2.test.tsx`：开关交互与刷新。
-- [ ] **T5.6** 负控制：移除过滤 → 技能仍出现在 prompt/搜索；恢复后转绿。
-- [ ] **T5.7** 写 `docs/notes/implemented/2026-11-XX-skill-switches.md`，含 `## Alternatives considered`。
+- [x] **T5.6** 负控制：移除过滤 → 技能仍出现在 prompt/搜索；恢复后转绿。
+- [x] **T5.7** 写 `docs/notes/implemented/2026-11-XX-skill-switches.md`，含 `## Alternatives considered`。
 
 **验收**：禁用后技能不再进入 prompt/搜索/`/` 菜单；重启后保持；默认开启；`pnpm check` + 测试绿。
+
+**完成情况（2026-11-07）**：分支 `feat/skill-switches`（堆叠在 M4 之上）；决策记录 `docs/notes/implemented/2026-11-07-skill-switches.md`；负控制 3 条转红后恢复，7 条定向测试 + UI 开关测试全绿；浏览器验证开关写入与刷新保持。
 
 ---
 

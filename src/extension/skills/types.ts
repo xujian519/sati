@@ -102,6 +102,8 @@ export type SkillSummary = {
   overriddenBy?: "user" | "project";
   /** True when this entry shadows a bundled skill with the same slug. */
   overridesBuiltin?: boolean;
+  /** 是否参与 prompt / 搜索（持久开关，缺省 true）。 */
+  enabled?: boolean;
   /** Last-modified time of SKILL.md in epoch ms, or null if unreadable. */
   mtime: number | null;
   /** `type: "role"` 时的角色配置；普通 skill 为 null。 */
@@ -117,6 +119,16 @@ export type SkillsListInput = {
    * skills are returned.
    */
   projectKey?: string | null;
+  /** 只返回已启用的技能（运行时/搜索用）；缺省返回全部并带 `enabled`。 */
+  enabledOnly?: boolean;
+};
+
+export type SkillSetEnabledInput = {
+  scope: SkillScope;
+  slug: string;
+  /** Required when `scope === "project"`. */
+  projectKey?: string | null;
+  enabled: boolean;
 };
 
 export type SkillsListResult = {

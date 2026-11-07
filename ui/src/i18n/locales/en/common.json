@@ -151,7 +151,11 @@
     "fieldBody": "Initial body (Markdown)",
     "bodyHint": "Optional. Edit in detail later from the main view.",
     "create": "Create skill",
-    "creating": "Creating…"
+    "creating": "Creating…",
+    "enable": "Enable",
+    "disable": "Disable",
+    "enabledSuccess": "Enabled",
+    "disabledSuccess": "Disabled"
   },
   "newSessionInProject": "New session",
   "deleteProject": "Delete project",

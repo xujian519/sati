@@ -35,7 +35,7 @@
     {
       "rule": "file-size",
       "file": "src/context/DefaultContextRuntime.ts",
-      "lines": 975
+      "lines": 987
     },
     {
       "rule": "file-size",
@@ -155,7 +155,7 @@
     {
       "rule": "file-size",
       "file": "ui/src/components/main-content-v2/SkillsV2.tsx",
-      "lines": 1441
+      "lines": 1465
     },
     {
       "rule": "file-size",

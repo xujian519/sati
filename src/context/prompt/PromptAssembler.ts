@@ -66,6 +66,8 @@ export type PromptAssemblerResult = {
  */
 export type PromptAssemblerOptions = {
   patentDomainEnabled?: boolean;
+  /** 按 slug 过滤已禁用的技能；缺省全部启用。 */
+  isSkillEnabled?: (slug: string) => boolean;
 };
 
 export class PromptAssembler {
@@ -195,7 +197,10 @@ export class PromptAssembler {
     }
 
     const patentDomainEnabled = this.options.patentDomainEnabled ?? true;
-    const skills = this.extension.listSkills().filter(skill => patentDomainEnabled || !isPatentSkillName(skill.name));
+    const isEnabled = this.options.isSkillEnabled ?? (() => true);
+    const skills = this.extension
+      .listSkills()
+      .filter(skill => (patentDomainEnabled || !isPatentSkillName(skill.name)) && isEnabled(skill.name));
     if (skills.length > 0) {
       const plainSkills = skills.filter(s => !s.role);
       const roles = skills.filter(
