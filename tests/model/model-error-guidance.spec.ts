@@ -1,6 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { formatModelRequestFailureMessage, modelFailureAction } from "../../src/agent/loop/modelErrors.js";
+import {
+  createModelRequestFailedStatus,
+  formatModelRequestFailureMessage,
+  modelFailureAction,
+} from "../../src/agent/loop/modelErrors.js";
+import { agentError } from "../../src/agent/protocol/errors.js";
 import { NetworkFetchError } from "../../src/network/fetch.js";
 import { normalizeModelError } from "../../src/model/errors/normalizeModelError.js";
 import type { CanonicalModelError } from "../../src/model/protocol/errors.js";
@@ -152,4 +157,21 @@ test("unsupported_thinking 给出可操作的改选指引（不再静默夹取�
   assert.match(action.userHint, /switch to a model/i);
   // 不得落进通用兜底（那条指引讲的是 base URL / apiKey，与强度无关）
   assert.doesNotMatch(action.userHint, /base URL\/API key\/model and timeoutMs/);
+});
+
+test("上下文恢复失败且无 modelError 时给出上下文指引，而不是 settings 兜底", () => {
+  const error = agentError("agent_context_recovery_failed", "Context is still too large after compaction.");
+  const action = modelFailureAction(undefined, error.code);
+
+  assert.equal(action.fixTarget, "prompt");
+  assert.equal(action.userHintI18n.key, "chat:agentStatus.modelRequestFailed.actions.contextOverflow");
+  assert.match(action.userHint, /\/compact/);
+  assert.match(action.userHint, /larger-context model/);
+
+  const formatted = formatModelRequestFailureMessage(error.message, undefined, error.code);
+  assert.match(formatted, /\/compact/);
+  assert.doesNotMatch(formatted, /base URL\/API key/);
+
+  const status = createModelRequestFailedStatus({ error, modelError: undefined });
+  assert.match(String(status.detail?.userHint ?? ""), /\/compact/);
 });
