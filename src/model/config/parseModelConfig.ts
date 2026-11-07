@@ -419,17 +419,25 @@ function parseMultimodal(
     return value;
   });
 
-  return {
-    ...defaults,
-    input,
-    maxImagesPerRequest: readOptionalPositiveNumber(multimodal.maxImagesPerRequest, "maxImagesPerRequest"),
-    maxImageBytes: readOptionalPositiveNumber(multimodal.maxImageBytes, "maxImageBytes"),
-    supportedImageMimeTypes: readStringArray(multimodal.supportedImageMimeTypes, "supportedImageMimeTypes"),
-    maxPdfPages: readOptionalPositiveNumber(multimodal.maxPdfPages, "maxPdfPages"),
-    maxPdfBytes: readOptionalPositiveNumber(multimodal.maxPdfBytes, "maxPdfBytes"),
-    maxAudioSeconds: readOptionalPositiveNumber(multimodal.maxAudioSeconds, "maxAudioSeconds"),
-    imageDetail: parseImageDetail(multimodal.imageDetail),
-  };
+  // 只覆盖用户显式给出的字段：把未提供的字段写成 undefined 会抹掉
+  // catalog 的默认值（如 maxImagesPerRequest / imageDetail）。
+  const overrides: MultimodalConstraints = { input };
+  const maxImagesPerRequest = readOptionalPositiveNumber(multimodal.maxImagesPerRequest, "maxImagesPerRequest");
+  if (maxImagesPerRequest !== undefined) overrides.maxImagesPerRequest = maxImagesPerRequest;
+  const maxImageBytes = readOptionalPositiveNumber(multimodal.maxImageBytes, "maxImageBytes");
+  if (maxImageBytes !== undefined) overrides.maxImageBytes = maxImageBytes;
+  const supportedImageMimeTypes = readStringArray(multimodal.supportedImageMimeTypes, "supportedImageMimeTypes");
+  if (supportedImageMimeTypes !== undefined) overrides.supportedImageMimeTypes = supportedImageMimeTypes;
+  const maxPdfPages = readOptionalPositiveNumber(multimodal.maxPdfPages, "maxPdfPages");
+  if (maxPdfPages !== undefined) overrides.maxPdfPages = maxPdfPages;
+  const maxPdfBytes = readOptionalPositiveNumber(multimodal.maxPdfBytes, "maxPdfBytes");
+  if (maxPdfBytes !== undefined) overrides.maxPdfBytes = maxPdfBytes;
+  const maxAudioSeconds = readOptionalPositiveNumber(multimodal.maxAudioSeconds, "maxAudioSeconds");
+  if (maxAudioSeconds !== undefined) overrides.maxAudioSeconds = maxAudioSeconds;
+  const imageDetail = parseImageDetail(multimodal.imageDetail);
+  if (imageDetail !== undefined) overrides.imageDetail = imageDetail;
+
+  return { ...defaults, ...overrides };
 }
 
 function readPositiveNumber(value: unknown, key: string): number {

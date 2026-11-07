@@ -222,3 +222,40 @@ test("仅声明一维上限时另一维保留原来源", () => {
   assert.equal(model?.tokenLimitSources?.maxContextTokens, "protocol-default");
   assert.equal(model?.tokenLimitSources?.maxOutputTokens, "config");
 });
+
+test("多模态部分覆盖保留 catalog 默认值", () => {
+  const config = parseModelConfig({
+    providers: {
+      openai: {
+        apiKey: "sk-test",
+        models: { "gpt-4o": { multimodal: { input: ["text", "image"] } } },
+      },
+    },
+  });
+  const multimodal = config.providers.openai.models["gpt-4o"]?.multimodal;
+
+  assert.deepEqual(multimodal?.input, ["text", "image"]);
+  assert.equal(multimodal?.maxImagesPerRequest, 20);
+  assert.equal(multimodal?.imageDetail, "auto");
+  assert.deepEqual(multimodal?.supportedImageMimeTypes, ["image/jpeg", "image/png", "image/gif", "image/webp"]);
+});
+
+test("多模态显式字段覆盖 catalog 默认值", () => {
+  const config = parseModelConfig({
+    providers: {
+      openai: {
+        apiKey: "sk-test",
+        models: {
+          "gpt-4o": {
+            multimodal: { input: ["text", "image"], maxImagesPerRequest: 2, imageDetail: "low" },
+          },
+        },
+      },
+    },
+  });
+  const multimodal = config.providers.openai.models["gpt-4o"]?.multimodal;
+
+  assert.equal(multimodal?.maxImagesPerRequest, 2);
+  assert.equal(multimodal?.imageDetail, "low");
+  assert.deepEqual(multimodal?.supportedImageMimeTypes, ["image/jpeg", "image/png", "image/gif", "image/webp"]);
+});
