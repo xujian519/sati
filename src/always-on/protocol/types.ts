@@ -14,7 +14,7 @@ export type AlwaysOnDormantState = {
   lastChangeAt?: string;
 };
 
-/** @deprecated Retained for lazy migration from pre-WorkCycle state files. */
+/** @deprecated Retained for lazy migration from pre-WorkCycle state files. 删除跟踪 #815（目标 v0.5.0）。 */
 export type AlwaysOnCurrentWorkspaceRef = {
   runId: string;
   strategy: WorkspaceStrategyId;
@@ -34,7 +34,7 @@ export type AlwaysOnDiscoveryState = {
   consecutiveFailures: number;
   dormant?: AlwaysOnDormantState;
   activeWorkCycleId?: string;
-  /** @deprecated Retained for lazy migration; replaced by activeWorkCycleId. */
+  /** @deprecated Retained for lazy migration; replaced by activeWorkCycleId. 删除跟踪 #815（目标 v0.5.0）。 */
   currentWorkspace?: AlwaysOnCurrentWorkspaceRef;
 };
 
@@ -63,7 +63,7 @@ export type WorkspaceHandle = {
   metadata: Record<string, string>;
 };
 
-/** @deprecated Retained for lazy migration from pre-WorkCycle plan records. */
+/** @deprecated Retained for lazy migration from pre-WorkCycle plan records. 删除跟踪 #815（目标 v0.5.0）。 */
 export type DiscoveryPlanWorkspaceRef = {
   strategy: WorkspaceStrategyId;
   handle: string;
@@ -82,7 +82,7 @@ export type DiscoveryPlanRecord = {
   planFilePath: string;
   reportFilePath?: string;
   workCycleId?: string;
-  /** @deprecated Retained for lazy migration; replaced by workCycleId. */
+  /** @deprecated Retained for lazy migration; replaced by workCycleId. 删除跟踪 #815（目标 v0.5.0）。 */
   workspace?: DiscoveryPlanWorkspaceRef;
 };
 

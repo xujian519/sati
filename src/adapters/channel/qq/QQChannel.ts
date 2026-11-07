@@ -1,5 +1,6 @@
 import type { Gateway, GatewayChannelKey } from "../../../gateway/index.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
+import { NEW_SESSION_ACK_TEXT } from "../protocol/ChannelCommandRegistry.js";
 import { ImElicitationHelper } from "../protocol/ImElicitationHelper.js";
 import { ImPermissionHelper } from "../protocol/ImPermissionHelper.js";
 import { processChannelTurn } from "../protocol/ImTurnProcessor.js";
@@ -172,7 +173,7 @@ export class QQChannel implements ChannelAdapter {
     }
 
     if (mapped.command === "new" && !mapped.message) {
-      await this.sendReply(groupOpenId, "已创建新会话。", event.id);
+      await this.sendReply(groupOpenId, NEW_SESSION_ACK_TEXT, event.id);
       return;
     }
 

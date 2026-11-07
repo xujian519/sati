@@ -40,7 +40,7 @@ export type WebPlanRecord = {
   structureVersion: number;
   lastExecutionSource?: string;
   workCycleId?: string;
-  /** @deprecated Retained for migration only. */
+  /** @deprecated Retained for migration only. 删除跟踪 #815（目标 v0.5.0）。 */
   workspace?: {
     strategy: string;
     cwd: string;

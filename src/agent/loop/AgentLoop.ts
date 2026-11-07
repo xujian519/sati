@@ -1,14 +1,9 @@
 import {
   applyModelEventToAssembler,
   createModelMessageAssemblerState,
-  type AssembledAssistantMessage,
-  type CanonicalToolCall,
   type CanonicalMessage,
   ModelProviderError,
   type CanonicalModelRequest,
-  getSelfCorrectPrompt,
-  detectFormatByText,
-  textFromMessage,
 } from "../../model/index.js";
 import type { SatiToolResult } from "../../tool/protocol/result.js";
 import type { SatiReadFileStateMap, SatiWriteSnapshotMap } from "../../tool/protocol/types.js";
@@ -23,49 +18,30 @@ import type { PermissionMode, PermissionRuleSet } from "../../permission/index.j
 import type { RouterDecision, RouterDispatchReport } from "../../router/index.js";
 import { createModelContextSnapshot } from "../../session/context/ModelContextSnapshot.js";
 import type { AgentRunMode, AgentLoopInput } from "../protocol/input.js";
-import { buildMetacognitiveRetryPrompt, parseSelfEstimate } from "./metacognitiveControl.js";
-import { evaluateClaimGuard } from "./claimGuard.js";
 import { buildRequestHeaderSnapshot, verifyDispatchedRequest } from "./requestInvariant.js";
-import { projectToolResults } from "./projectToolResults.js";
 import type { LargeFileRepairDecision } from "./LargeFileRepair.js";
-import { MAX_OUTPUT_RECOVERY_LIMIT, MAX_SAME_INVALID_FINGERPRINT, TurnRuntimeState } from "./turnRuntimeState.js";
-import { createMissingToolResult, ensureToolResultPairing } from "./ensureToolResultPairing.js";
-import {
-  buildRepeatReminderMessage,
-  REPEAT_REMINDER_THRESHOLD,
-  RepeatTracker,
-  toolCallKey,
-} from "./repeatToolReminder.js";
+import { MAX_SAME_INVALID_FINGERPRINT, TurnRuntimeState } from "./turnRuntimeState.js";
+import { RepeatTracker } from "./repeatToolReminder.js";
 import { buildSteerMessage, steerPreview } from "./steer.js";
-import { recordToolResults } from "./doomLoopIntegration.js";
 import {
-  bindSupplementalMessagesToToolCalls,
   cloneReadFileStateMap,
   cloneWriteSnapshotMap,
   createLifecycleDispatcher,
   findLifecycleBlock,
-  findToolLifecycleBlock,
   mergeUserRules,
-  readRequestedMode,
   type LifecycleDispatcher,
 } from "./misc.js";
 import { stripTrailingErrorPair } from "./messages.js";
+import { buildInvalidFingerprint } from "./toolFailure.js";
 import {
-  annotateRepeatedToolFailures,
-  buildInvalidFingerprint,
-  collectPermissionDenials,
-  detectRepeatedToolFailure,
-} from "./toolFailure.js";
-import {
-  createEmptyResponseStatus,
-  createFinishReasonStatus,
   createLifecycleBlockedStatus,
-  createMaxOutputRecoveryExhaustedStatus,
   createMaxTurnsStatus,
   createModelRequestFailedStatus,
   createStructuredOutputCompletedStatus,
   createToolErrorLoopStatus,
 } from "./modelErrors.js";
+import { handleNoToolCalls, type NoToolCallsDeps } from "./noToolCalls.js";
+import { executeToolCalls, type ToolCallExecutionDeps } from "./toolCallExecution.js";
 import { TokenCapManager } from "./tokenCapManager.js";
 import { ToolContextFactory } from "./toolContext.js";
 import { SubagentExecutor } from "./subagentExecutor.js";
@@ -81,7 +57,7 @@ import {
   type TurnStepContinue,
   type TurnStepReturn,
 } from "./turnExit.js";
-import { continueWithTransientPrompt, recoverFromEmptyResponse } from "./recoveryStrategies.js";
+import { continueWithTransientPrompt } from "./recoveryStrategies.js";
 import { recoverFromModelError, type ModelErrorRecoveryDeps } from "./modelErrorRecovery.js";
 import { assembleAndRecover, type ResponseAssemblyDeps, type SyntheticPromptOutcome } from "./responseAssembly.js";
 import { runAutoCompact } from "./compactionExecutor.js";
@@ -121,8 +97,6 @@ type PrepareModelCallResult =
 type StreamModelResponseResult =
   | TurnStepReturn
   | { kind: "continue"; assembler: ReturnType<typeof createModelMessageAssemblerState> };
-type NoToolCallsResult = TurnStepContinue | TurnStepReturn;
-type ExecuteToolCallsResult = TurnStepReturn | TurnStepContinue | { kind: "proceed"; pairedResults: SatiToolResult[] };
 type CircuitBreakerResult = TurnStepContinue | TurnStepReturn;
 type FinishTurnResult = TurnStepContinue | TurnStepReturn;
 
@@ -140,6 +114,8 @@ export class AgentLoop {
   private readonly modelErrorRecovery: ModelErrorRecoveryDeps;
   private readonly responseAssembly: ResponseAssemblyDeps;
   private readonly modelRequest: ModelRequestDeps;
+  private readonly noToolCallsDeps: NoToolCallsDeps;
+  private readonly toolCallExecutionDeps: ToolCallExecutionDeps;
 
   constructor(
     private readonly config: AgentRuntimeConfig,
@@ -187,6 +163,26 @@ export class AgentLoop {
       drainEvents: dependencies.drainEvents,
       scheduler: dependencies.tools.scheduler,
     });
+    this.noToolCallsDeps = {
+      ...this.turnExit,
+      config,
+      dispatchLifecycle: this.dispatchLifecycle,
+      continueWithSyntheticPrompt: (state, input, decision, options) =>
+        this.continueWithSyntheticPrompt(state, input, decision, options),
+    };
+    this.toolCallExecutionDeps = {
+      ...this.turnExit,
+      config,
+      toolContextFactory: this.toolContextFactory,
+      subagentExecutor: this.subagentExecutor,
+      repeatTracker: this.repeatTracker,
+      doomLoop: dependencies.doomLoop,
+      eventEmitter: dependencies.eventEmitter,
+      context: dependencies.context,
+      missingToolResultRecoveryContext: () => this.missingToolResultRecoveryContext(),
+      continueWithSyntheticPrompt: (state, input, decision, options) =>
+        this.continueWithSyntheticPrompt(state, input, decision, options),
+    };
   }
 
   snapshotFileState(): AgentLoopSeedState {
@@ -247,7 +243,8 @@ export class AgentLoop {
       }
 
       if (assembled.toolCalls.length === 0) {
-        const finished = yield* this.handleNoToolCalls(
+        const finished = yield* handleNoToolCalls(
+          this.noToolCallsDeps,
           state,
           input,
           prepared.request,
@@ -261,7 +258,13 @@ export class AgentLoop {
         continue;
       }
 
-      const executed = yield* this.executeToolCalls(state, input, assembled.toolCalls, assembled.assembled);
+      const executed = yield* executeToolCalls(
+        this.toolCallExecutionDeps,
+        state,
+        input,
+        assembled.toolCalls,
+        assembled.assembled,
+      );
       if (executed.kind === "return") return { result: executed.result, messages: executed.messages };
       if (executed.kind === "continue") continue;
 
@@ -552,377 +555,6 @@ export class AgentLoop {
     }
 
     return { kind: "continue", assembler };
-  }
-
-  private async *handleNoToolCalls(
-    state: TurnRuntimeState,
-    input: AgentLoopInput,
-    request: CanonicalModelRequest,
-    decision: RouterDecision,
-    assembled: AssembledAssistantMessage,
-    assistantMessage: CanonicalMessage,
-    toolCalls: CanonicalToolCall[],
-    routedMaxOutputTokens: number | undefined,
-  ): AsyncGenerator<AgentEvent, NoToolCallsResult, unknown> {
-    if (toolCalls.length === 0) {
-      const assistantText = textFromMessage(assistantMessage);
-
-      // Global guard: empty assistant response (no text, no tool calls).
-      // The model produced nothing visible — typically because extended
-      // thinking consumed the entire output budget.
-      if (assistantText.length === 0) {
-        state.messages.pop();
-
-        const recovery = yield* recoverFromEmptyResponse(
-          this.turnExit,
-          state,
-          input,
-          decision,
-          request,
-          assembled.finishReason,
-          routedMaxOutputTokens,
-        );
-        if (recovery === "recovered-return") {
-          return { kind: "continue" };
-        }
-        if (recovery !== "unhandled") {
-          return recovery;
-        }
-        // Exhausted without retry budget: surface a UI-only status message
-        // instead of injecting diagnostic assistant text into the transcript.
-        const status = createEmptyResponseStatus({
-          provider: request.provider,
-          model: request.model,
-          attempts: 2,
-        });
-        yield await emitStatus(input, status);
-        // fall through to normal stop
-      }
-
-      // Pure-text output truncated by max_output_tokens: the model was
-      // mid-sentence with no tool calls. Unlike tool-call truncation we
-      // skip the "strip-and-retry-with-doubled-tokens" phase (Phase A)
-      // because (a) the text already generated is valid and discarding it
-      // wastes tokens, and (b) blindly doubling maxOutputTokens may
-      // exceed the provider's model cap and trigger a 400 error.
-      // Instead, keep the truncated assistant message in context and
-      // inject a continuation prompt so the model resumes from the cut.
-      if (assembled.finishReason === "length") {
-        state.consecutiveEmptyCount = 0;
-        if (state.maxOutputRecoveryCount < MAX_OUTPUT_RECOVERY_LIMIT) {
-          state.maxOutputRecoveryCount++;
-          return yield* continueWithTransientPrompt(
-            state,
-            input,
-            "Output token limit hit. Resume directly - no apology, no recap of what you were doing. " +
-              "Pick up mid-sentence if that is where the cut happened.",
-            "max_output_recovery",
-          );
-        }
-        // Exhausted — fall through to normal completion with whatever
-        // text was produced so far.
-        const status = createMaxOutputRecoveryExhaustedStatus({ attempts: state.maxOutputRecoveryCount });
-        yield await emitStatus(input, status);
-      }
-
-      const largeFileDecision = state.largeFileRepair.onNoToolCalls();
-      if (largeFileDecision) {
-        const continued = await this.continueWithSyntheticPrompt(state, input, largeFileDecision);
-        if (continued.type === "completed") {
-          if (continued.status) {
-            yield await emitStatus(input, continued.status);
-          }
-          return yield* terminateTurn(this.turnExit, input, state, continued.result, { emitFailureEvent: true });
-        }
-        yield continued.event;
-        return { kind: "continue" };
-      }
-
-      if (!assembled.hasPartialTextToolCall && assembled.hasUnparsedTextToolCall) {
-        if (!state.hasAttemptedToolCallRetry) {
-          state.hasAttemptedToolCallRetry = true;
-          return yield* continueWithTransientPrompt(
-            state,
-            input,
-            getSelfCorrectPrompt(this.config.toolCallFormat ?? assembled.textToolCallFormat, assistantText),
-            "unparsed_tool_call_retry",
-          );
-        }
-
-        yield {
-          type: "warning",
-          sessionId: input.sessionId,
-          turnId: input.turnId,
-          code: "unparsed_tool_call",
-          message: "Model attempted to call a tool but the output could not be parsed. The response may be incomplete.",
-          metadata: {
-            detectedFormat: assembled.textToolCallFormat ?? detectFormatByText(assistantText)?.id,
-          },
-        };
-      }
-
-      const stopHooks = await this.dispatchLifecycle(input, "Stop", {
-        stopHookActive: false,
-        lastAssistantMessage: textFromMessage(assistantMessage),
-      });
-      yield { type: "stop_requested", sessionId: input.sessionId, turnId: input.turnId };
-      state.messages.push(...stopHooks.messages);
-      const stopBlock = findLifecycleBlock(stopHooks);
-      if (stopBlock) {
-        const result = this.createTurnResult(input, {
-          type: "error",
-          stopReason: "tool_error",
-          usage: state.usage,
-          permissionDenials: state.permissionDenials,
-          turns: state.turnCount,
-          startedAt: state.startedAt,
-          finalMessage: state.finalMessage,
-          structuredOutput: state.structuredOutput,
-          errors: [agentError("agent_unsupported_feature", stopBlock.reason)],
-        });
-        yield await emitStatus(
-          input,
-          createLifecycleBlockedStatus({
-            error: result.errors![0]!,
-            stage: "stop",
-          }),
-        );
-        return yield* terminateTurn(this.turnExit, input, state, result, { emitFailureEvent: true });
-      }
-      // 声称-行动守卫（W3）：收尾文本含验证类声称但本 run 无支撑工具成功执行
-      // 时，强制一轮纠正（模型补做动作或改口）；每 run 至多一次，误报代价仅
-      // 一轮。仅在 agent 模式启用——plan/ask 模式工具受限，模型只能改口，
-      // 纠正提示要求补做动作无意义。默认关闭，SATI_CLAIM_GUARD=1 开启。
-      if (
-        this.config.claimGuard === true &&
-        (input.runMode === undefined || input.runMode === "agent") &&
-        !state.hasAttemptedClaimGuardRetry
-      ) {
-        const verdict = evaluateClaimGuard(assistantText, state.succeededToolNames);
-        if (verdict.kind === "correction") {
-          state.hasAttemptedClaimGuardRetry = true;
-          return yield* continueWithTransientPrompt(state, input, verdict.prompt, "claim_guard_retry");
-        }
-      }
-      // 元认知控制：shaky 自评不静默收尾——带诊断重试一次（非空白重试）。
-      // 仅 shaky 触发控制退出（见 spec）；strong/thin 被识别但不改行为——一个
-      // 不改变下一步的自评只是评论，不是监控动作。
-      if (this.config.metacognitiveControl === true && !state.hasAttemptedMetacognitiveRetry) {
-        const estimate = parseSelfEstimate(assistantText);
-        if (estimate.tag === "shaky") {
-          state.hasAttemptedMetacognitiveRetry = true;
-          return yield* continueWithTransientPrompt(
-            state,
-            input,
-            buildMetacognitiveRetryPrompt(estimate.diagnosis),
-            "metacognitive_retry",
-            "metacognitive_retry",
-          );
-        }
-      }
-
-      const finishStatus = createFinishReasonStatus(assembled.finishReason, assistantText);
-      if (finishStatus) {
-        yield await emitStatus(input, finishStatus);
-      }
-
-      const result = this.createTurnResult(input, {
-        type: "success",
-        stopReason: "completed",
-        usage: state.usage,
-        permissionDenials: state.permissionDenials,
-        turns: state.turnCount,
-        startedAt: state.startedAt,
-        finalMessage: state.finalMessage,
-        structuredOutput: state.structuredOutput,
-      });
-      return yield* terminateTurn(this.turnExit, input, state, result);
-    }
-
-    return { kind: "continue" };
-  }
-
-  private async *executeToolCalls(
-    state: TurnRuntimeState,
-    input: AgentLoopInput,
-    toolCalls: CanonicalToolCall[],
-    assembled: AssembledAssistantMessage,
-  ): AsyncGenerator<AgentEvent, ExecuteToolCallsResult, unknown> {
-    yield { type: "tool_calls_detected", sessionId: input.sessionId, turnId: input.turnId, calls: toolCalls };
-    if (input.abortSignal?.aborted) {
-      return yield* abortTurn(this.turnExit, input, state);
-    }
-
-    // 阶段四 T4.1：durable 边界检查点——工具副作用（写文件/外呼/子代理）执行
-    // 前强制刷新转录落盘。失败即中止本步（fail-closed：无法保证持久边界就不
-    // 发生副作用）。调用方未接 flushCheckpoint 时是 no-op。
-    await input.onFlushCheckpoint?.();
-
-    let results: SatiToolResult[];
-    try {
-      const toolContext = this.toolContextFactory.createToolContext(input);
-      if (assembled.finishReason === "length" || assembled.hasRepairedToolCalls) {
-        toolContext.outputTruncated = true;
-      }
-      results = yield* this.subagentExecutor.executeToolsWithEventPump(toolCalls, toolContext, input);
-    } catch (error) {
-      results = toolCalls.map(call =>
-        createMissingToolResult(
-          call,
-          this.now,
-          error instanceof Error ? error.message : String(error),
-          this.missingToolResultRecoveryContext(),
-        ),
-      );
-    }
-    if (input.abortSignal?.aborted) {
-      return yield* abortTurn(this.turnExit, input, state);
-    }
-    yield* this.subagentExecutor.drainEventBuffer();
-
-    // 压缩空转判据：一批工具调用执行完即算一次真实工具轮——无论成败，它都是
-    // 「模型试图推进」的证据（工具全错时压缩并不因此有理）。
-    this.dependencies.context?.noteToolTurn?.();
-
-    // 阶段四 T6.2：连续重复软提醒——达到阈值（默认 3 次）后向下一轮请求
-    // 注入一次 transient advisory（不拦截；doomLoop 仍是硬断开）。
-    for (const call of toolCalls) {
-      const count = this.repeatTracker.record(toolCallKey(call.name, call.input));
-      if (count === REPEAT_REMINDER_THRESHOLD) {
-        state.messages = [...state.messages, buildRepeatReminderMessage(call.name, count)];
-      }
-    }
-
-    let pairedResults = ensureToolResultPairing(
-      toolCalls,
-      results,
-      this.now,
-      "Tool execution did not produce a result.",
-      this.missingToolResultRecoveryContext(),
-    );
-    const repeatedFailure = detectRepeatedToolFailure(pairedResults, state.lastToolFailureFingerprint);
-    pairedResults = annotateRepeatedToolFailures(pairedResults, repeatedFailure.repeatedKeys);
-    state.lastToolFailureFingerprint = repeatedFailure.currentFingerprint;
-    const toolFatalReason = recordToolResults(
-      this.dependencies.doomLoop,
-      toolCalls,
-      pairedResults,
-      input,
-      this.dependencies.eventEmitter,
-    );
-    if (toolFatalReason) state.doomLoopFatalReason = toolFatalReason;
-    const toolResultRepair = state.largeFileRepair.analyzeToolResults(pairedResults, {
-      outputTruncated: assembled.finishReason === "length" || assembled.hasRepairedToolCalls === true,
-      repairedToolCalls: assembled.hasRepairedToolCalls === true,
-      finishReason: assembled.finishReason,
-    });
-    state.permissionDenials = [...state.permissionDenials, ...collectPermissionDenials(pairedResults)];
-    for (const result of pairedResults) {
-      // 声称-行动守卫：累积本 run 内成功执行的工具名（供 claimGuard 校验支撑）。
-      if (result.type === "success") {
-        state.succeededToolNames.push(result.toolName);
-      }
-      if (result.type === "success" && result.metadata?.structuredOutput) {
-        state.structuredOutput = result.data;
-      }
-      const requestedMode = readRequestedMode(result.type === "success" ? result.data : undefined);
-      if (requestedMode) {
-        let effectiveMode = requestedMode;
-
-        if (requestedMode === "plan" && this.config.permissionMode !== "plan") {
-          this.config.permissionModeBeforePlan = this.config.permissionMode;
-        } else if (this.config.permissionMode === "plan" && requestedMode !== "plan") {
-          if (this.config.permissionModeBeforePlan) {
-            effectiveMode = this.config.permissionModeBeforePlan;
-            this.config.permissionModeBeforePlan = undefined;
-          }
-        }
-
-        this.config.permissionMode = effectiveMode;
-        this.config.permissionContext.mode = effectiveMode;
-        yield {
-          type: "mode_change_requested",
-          sessionId: input.sessionId,
-          turnId: input.turnId,
-          mode: effectiveMode,
-        };
-      }
-      yield { type: "tool_result", sessionId: input.sessionId, turnId: input.turnId, result };
-    }
-
-    const projected = projectToolResults(pairedResults);
-    // Route the freshly projected tool_result message through the context
-    // runtime so large payloads land on disk via `ToolResultBudget`. When
-    // the runtime doesn't implement `applyToolResults` (e.g. NullContext),
-    // we simply append the raw projection (legacy behaviour).
-    const [toolResultMsg, ...supplementalMsgs] = projected;
-    const supplementalInputs = bindSupplementalMessagesToToolCalls(pairedResults, supplementalMsgs);
-    let appendedMessages: CanonicalMessage[] = projected;
-    const ctxApply = this.dependencies.context?.applyToolResults;
-    if (ctxApply) {
-      try {
-        const applied = await ctxApply.call(this.dependencies.context, {
-          sessionId: input.sessionId,
-          turnId: input.turnId,
-          toolResultMessage: toolResultMsg,
-          supplementalMessages: supplementalInputs,
-          messages: state.messages,
-        });
-        state.messages = applied.messages;
-        appendedMessages = applied.appendedMessages ?? projected;
-      } catch {
-        // applyToolResults 失败（如 spill 落盘错误）：回退原始投影，保证工具结果不丢。
-        state.messages.push(...projected);
-      }
-    } else {
-      state.messages.push(...projected);
-    }
-    for (const appended of appendedMessages) {
-      yield { type: "tool_results_projected", sessionId: input.sessionId, turnId: input.turnId, message: appended };
-      await input.onDurableMessage?.(appended);
-    }
-
-    if (toolResultRepair) {
-      const continued = await this.continueWithSyntheticPrompt(state, input, toolResultRepair);
-      if (continued.type === "completed") {
-        if (continued.status) {
-          yield await emitStatus(input, continued.status);
-        }
-        return yield* terminateTurn(this.turnExit, input, state, continued.result, { emitFailureEvent: true });
-      }
-      yield continued.event;
-      return { kind: "continue" };
-    }
-
-    const lifecycleBlock = findToolLifecycleBlock(pairedResults);
-    if (lifecycleBlock) {
-      const result = this.createTurnResult(input, {
-        type: "error",
-        stopReason: "tool_error",
-        usage: state.usage,
-        permissionDenials: state.permissionDenials,
-        turns: state.turnCount,
-        startedAt: state.startedAt,
-        finalMessage: state.finalMessage,
-        structuredOutput: state.structuredOutput,
-        errors: [agentError("agent_unsupported_feature", lifecycleBlock.reason)],
-      });
-      yield await emitStatus(
-        input,
-        createLifecycleBlockedStatus({
-          error: result.errors![0]!,
-          stage: "tool_lifecycle",
-        }),
-      );
-      return yield* terminateTurn(this.turnExit, input, state, result, { emitFailureEvent: true });
-    }
-
-    // Circuit breaker: detect turns where ALL tool calls returned
-    // invalid_tool_input. Uses fingerprint-based detection (toolName +
-    // errorMessage), and injects one grace prompt before final termination.
-    // When LargeFileRepair is actively managing recovery, defer to its own
-    // attempt limits instead of terminating here.
-    return { kind: "proceed", pairedResults };
   }
 
   private async *handleCircuitBreaker(

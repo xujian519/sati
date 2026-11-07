@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { CronResultDelivery } from "../../../cron/index.js";
 import type { ChannelAttachment, Gateway } from "../../../gateway/index.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
-import { executeChannelCommand } from "../protocol/ChannelCommandRegistry.js";
+import { NEW_SESSION_ACK_TEXT, executeChannelCommand } from "../protocol/ChannelCommandRegistry.js";
 import {
   guessMimeTypeFromName,
   ImAttachmentDelivery,
@@ -552,7 +552,7 @@ export class FeishuChannel implements ChannelAdapter {
           this.logger?.warn?.(`feishu: abort previous session on /new failed: ${formatError(error)}`);
         });
       if (!mapped.message) {
-        await this.send({ chatId, text: "已创建新会话。" });
+        await this.send({ chatId, text: NEW_SESSION_ACK_TEXT });
         return;
       }
     }

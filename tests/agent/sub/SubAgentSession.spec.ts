@@ -6,7 +6,7 @@ import test, { afterEach } from "node:test";
 import type { AgentRuntimeConfig } from "../../../src/agent/runtime/AgentRuntimeConfig.js";
 import { loadPilotConfig } from "../../../src/pilot/config/index.js";
 import { PilotConfigError } from "../../../src/pilot/config/types.js";
-import { PILOT_CONFIG_FILE_NAME } from "../../../src/pilot/paths.js";
+import { PILOT_CONFIG_FILE_NAME } from "../../../src/shared/paths/index.js";
 import type {
   AgentRouterRuntime,
   AgentRuntimeDependencies,

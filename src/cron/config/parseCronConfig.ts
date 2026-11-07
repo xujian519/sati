@@ -1,5 +1,6 @@
 import { isRecord } from "../../model/config/schema.js";
 import type { PilotConfigDiagnostic } from "../../pilot/config/types.js";
+import { asNonEmptyString, isPositiveInteger } from "../../shared/configValidators.js";
 import { isValidCronTimezone } from "../CronTimezone.js";
 
 export type CronConfig = {
@@ -90,8 +91,9 @@ function booleanField(record: Record<string, unknown>, key: string, fallback: bo
 
 function nonEmptyString(value: unknown, fallback: string, path: string, diagnostics: PilotConfigDiagnostic[]): string {
   if (value === undefined) return fallback;
-  if (typeof value === "string" && value.trim().length > 0) {
-    return value.trim();
+  const trimmed = asNonEmptyString(value);
+  if (trimmed !== undefined) {
+    return trimmed;
   }
   diagnostics.push({
     code: "CRON_STRING_INVALID",
@@ -145,7 +147,7 @@ function offPeakHoursField(
 
 function positiveInteger(value: unknown, fallback: number, path: string, diagnostics: PilotConfigDiagnostic[]): number {
   if (value === undefined) return fallback;
-  if (typeof value !== "number" || !Number.isFinite(value) || !Number.isInteger(value) || value <= 0) {
+  if (!isPositiveInteger(value)) {
     diagnostics.push({
       code: "CRON_NUMBER_INVALID",
       severity: "warning",

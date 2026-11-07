@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { createPilotConfigStoreSync } from "../../../src/pilot/config/PilotConfigStore.js";
-import { PILOT_CONFIG_FILE_NAME } from "../../../src/pilot/paths.js";
+import { PILOT_CONFIG_FILE_NAME } from "../../../src/shared/paths/index.js";
 
 const MINIMAL_VALID =
   [

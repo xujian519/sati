@@ -7,8 +7,6 @@ import type { WorkspaceProvider, WorkspacePrepareInput, WorkspacePublishOutput }
 
 export type GitWorktreeProviderOptions = {
   baseDir: string;
-  /** @deprecated Dirty worktrees are now checkpointed automatically. */
-  refuseDirty?: boolean;
   /** Override `git` executable path (tests). */
   gitBin?: string;
   onWorktreeCreated?: (runId: string, cwd: string) => void;

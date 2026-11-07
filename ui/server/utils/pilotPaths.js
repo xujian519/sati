@@ -1,5 +1,5 @@
 /**
- * Pure-JS port of the path helpers from `src/pilot/paths.ts`.
+ * Pure-JS port of the path helpers from `src/shared/paths/pilotPaths.ts`.
  *
  * Lets `ui/server/` resolve `~/.sati` and encode project IDs the
  * same way the gateway server does, WITHOUT pulling `dist/src/pilot/`
@@ -7,7 +7,7 @@
  * can run from source without needing the TypeScript output to exist
  * on disk first.
  *
- * Keep this in sync with `src/pilot/paths.ts` — both must round-trip
+ * Keep this in sync with `src/shared/paths/pilotPaths.ts` — both must round-trip
  * identically or `~/.sati/projects/<id>/.cwd` markers written by
  * the bridge will not be found by `gateway.listProjects()` and vice
  * versa.

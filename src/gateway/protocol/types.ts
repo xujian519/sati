@@ -98,6 +98,7 @@ import type {
   SkillsListInput,
   SkillsListResult,
 } from "../../extension/skills/types.js";
+import type { GatewaySessionKey } from "./sessionIdentity.js";
 
 export type GatewayChannelKey =
   | "cli"
@@ -149,9 +150,8 @@ export type GatewayOutboundAttachment = {
 };
 
 export type TurnUsage = CanonicalUsage;
-
 export type GatewaySubmitTurnInput = {
-  sessionKey: string;
+  sessionKey: GatewaySessionKey; // 网关会话标识；agent/session 层同名值叫 sessionId（边界见 sessionIdentity.ts / #812）
   channelKey: GatewayChannelKey;
   message: string;
   projectKey?: string;

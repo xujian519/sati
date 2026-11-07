@@ -80,5 +80,5 @@ export { buildMcpToolWireName, parseMcpToolWireName } from "../mcp/protocol/wire
 export { createPlanFileManager } from "./builtin/planFile.js";
 export { createTaskCreateTool, createTaskListTool } from "./builtin/taskTools.js";
 export { createTodoWriteTool, parseTodoMarkdown } from "./builtin/todoWrite.js";
-export { PLAN_MODE_ALLOWED_TOOLS } from "./planModeConstraints.js";
+export { PLAN_MODE_ALLOWED_TOOLS } from "../shared/planModeConstraints.js";
 export { isAskModeAllowedTool } from "./askModeConstraints.js";

@@ -2,6 +2,7 @@ import { randomUUID, timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { Gateway, GatewayChannelKey, GatewayEvent } from "../../../gateway/index.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
+import { NEW_SESSION_ACK_TEXT } from "../protocol/ChannelCommandRegistry.js";
 import { readRequestBody } from "../protocol/httpBody.js";
 import { CHANNEL_DEFAULT_PORTS } from "../protocol/channel-defaults.js";
 import { createAgentStatusHttpErrorBody, isVisibleFailureStatusDetail } from "../../../status/agentStatus.js";
@@ -290,7 +291,7 @@ export class ApiServerChannel implements ChannelAdapter {
 
     const mapped = this.mapper.resolve({ chatId, text: userText });
     if (mapped.command === "new" && !mapped.message) {
-      const ack = "已创建新会话。";
+      const ack = NEW_SESSION_ACK_TEXT;
       if (streaming) {
         writeChatCompletionStream(res, this.modelName, ack);
       } else {

@@ -10,7 +10,7 @@ import {
   PLAN_MODE_ALLOWED_TOOLS,
   buildPlanModeBashViolationMessage,
   buildPlanModeViolationMessage,
-} from "../planModeConstraints.js";
+} from "../../shared/planModeConstraints.js";
 import { isReadOnlyShellCommand } from "../builtin/bash/permissions.js";
 import type { SatiToolRuntimeContext } from "../protocol/types.js";
 

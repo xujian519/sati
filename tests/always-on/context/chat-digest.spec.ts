@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, it } from "node:test";
 import { buildChatDigest, extractAllUserPrompts } from "../../../src/always-on/context/ChatDigestBuilder.js";
-import { getPilotProjectChatDir } from "../../../src/pilot/paths.js";
+import { getPilotProjectChatDir } from "../../../src/shared/paths/index.js";
 
 const FIXED_NOW = new Date("2026-08-03T10:00:00.000Z");
 

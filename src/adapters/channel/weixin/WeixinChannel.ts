@@ -13,7 +13,7 @@ import type {
 } from "../../../gateway/index.js";
 import type { ChannelAdapter, ChannelHandle, ChannelLogger, ChannelStartDeps } from "../protocol/ChannelAdapter.js";
 import type { ChannelRuntimeStatusReporter } from "../protocol/ChannelRuntimeStatus.js";
-import { executeChannelCommand } from "../protocol/ChannelCommandRegistry.js";
+import { NEW_SESSION_ACK_TEXT, executeChannelCommand } from "../protocol/ChannelCommandRegistry.js";
 import {
   formatImAttachmentFallback,
   guessMimeTypeFromName,
@@ -512,7 +512,7 @@ export class WeixinChannel implements ChannelAdapter {
           this.logger?.warn?.(`weixin: abort previous session on /new failed: ${formatWeixinError(error)}`);
         });
       if (!mapped.message) {
-        await this.sendReply(fromUser, "已创建新会话。");
+        await this.sendReply(fromUser, NEW_SESSION_ACK_TEXT);
         return;
       }
     }

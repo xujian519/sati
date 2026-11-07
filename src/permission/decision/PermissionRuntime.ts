@@ -1,6 +1,6 @@
 import { isAbsolute, relative, resolve } from "node:path";
 import type { SatiToolDefinition, SatiToolRuntimeContext } from "../../tool/index.js";
-import { buildPlanModeViolationMessage, buildPlanModeBashViolationMessage } from "../../tool/planModeConstraints.js";
+import { buildPlanModeViolationMessage, buildPlanModeBashViolationMessage } from "../../shared/planModeConstraints.js";
 import { matchPermissionRule } from "../policy/matchPermissionRule.js";
 import { ToolGuardRegistry } from "../guard/ToolGuardRegistry.js";
 import type {
