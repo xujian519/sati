@@ -155,54 +155,56 @@ Status: Approved（2026-11-07 批准执行；M0 已完成）
 
 #### M2.1 多模态默认值
 
-- [ ] **T2.1.1** 改 `src/model/config/parseModelConfig.ts` 的 `parseMultimodal`：先收集 `overrides`，只覆盖用户显式给出的字段，再 `return { ...defaults, input, ...overrides }`。
-- [ ] **T2.1.2** 扩 `tests/model/config/parseModelConfig.spec.ts`：catalog 提供 `maxImagesPerRequest` / `maxPdfPages` / `imageDetail`，用户只给 `input`，断言默认值保留。
-- [ ] **T2.1.3** 负控制：退回“展开后显式赋 undefined” → 至少 1 条转红。
+- [x] **T2.1.1** 改 `src/model/config/parseModelConfig.ts` 的 `parseMultimodal`：先收集 `overrides`，只覆盖用户显式给出的字段，再 `return { ...defaults, input, ...overrides }`。
+- [x] **T2.1.2** 扩 `tests/model/config/parseModelConfig.spec.ts`：catalog 提供 `maxImagesPerRequest` / `maxPdfPages` / `imageDetail`，用户只给 `input`，断言默认值保留。
+- [x] **T2.1.3** 负控制：退回“展开后显式赋 undefined” → 至少 1 条转红。
 
 #### M2.2 记忆 SQLite busy_timeout
 
-- [ ] **T2.2.1** 在 `src/context/memory/edgeclaw-memory-core/src/core/storage/sqlite.ts` 的 `init()` 首行加 `PRAGMA busy_timeout = 5000;`。
-- [ ] **T2.2.2** 运行 `pnpm --filter edgeclaw-memory-core build` 重新生成 `lib`。
-- [ ] **T2.2.3** 在 `src/context/memory/edgeclaw-memory-core/tests/` 增加或扩展并发写用例：两个连接同时写，第二个等待而非立即 `SQLITE_BUSY`。
-- [ ] **T2.2.4** 负控制：移除 pragma → 并发用例转红。
+- [x] **T2.2.1** 在 `src/context/memory/edgeclaw-memory-core/src/core/storage/sqlite.ts` 的 `init()` 首行加 `PRAGMA busy_timeout = 5000;`。
+- [x] **T2.2.2** 运行 `pnpm --filter edgeclaw-memory-core build` 重新生成 `lib`。
+- [x] **T2.2.3** 在 `src/context/memory/edgeclaw-memory-core/tests/` 增加或扩展并发写用例：两个连接同时写，第二个等待而非立即 `SQLITE_BUSY`。
+- [x] **T2.2.4** 负控制：移除 pragma → 并发用例转红。
 
 #### M2.3 结构化问答历史
 
-- [ ] **T2.3.1** 在 `src/web/server/webMessageFlatten.ts` 增加 `ask_user_question` / `AskUserQuestion` 的 presentation data 读取（`toolName` + `data`），并入 `tool_result` 的 `payload`。
-- [ ] **T2.3.2** 扩 `tests/web/`：构造带 `data.questions` / `data.answers` 的 tool_result，断言历史回放的 `payload` 与 live 路径一致。
-- [ ] **T2.3.3** 负控制：移除问答题分支 → 历史用例转红。
+- [x] **T2.3.1** 在 `src/web/server/webMessageFlatten.ts` 增加 `ask_user_question` / `AskUserQuestion` 的 presentation data 读取（`toolName` + `data`），并入 `tool_result` 的 `payload`。
+- [x] **T2.3.2** 扩 `tests/web/`：构造带 `data.questions` / `data.answers` 的 tool_result，断言历史回放的 `payload` 与 live 路径一致。
+- [x] **T2.3.3** 负控制：移除问答题分支 → 历史用例转红。
 
 #### M2.4 子代理判定
 
-- [ ] **T2.4.1** 改 `src/router/scenario/subagentDetector.ts`：`isSubagent = !isMainAgent || taggedInUserMessage`，`missingAgentTool` 仅作为诊断字段返回。
-- [ ] **T2.4.2** 扩 `tests/router/scenario/subagentDetector.spec.ts`：主代理工具集缺少 `agent/task` 时仍为 `isSubagent: false`；显式 tag 仍为 true。
-- [ ] **T2.4.3** 负控制：恢复 `|| missingAgentTool` → 用例转红。
+- [x] **T2.4.1** 改 `src/router/scenario/subagentDetector.ts`：`isSubagent = !isMainAgent || taggedInUserMessage`，`missingAgentTool` 仅作为诊断字段返回。
+- [x] **T2.4.2** 扩 `tests/router/scenario/subagentDetector.spec.ts`：主代理工具集缺少 `agent/task` 时仍为 `isSubagent: false`；显式 tag 仍为 true。
+- [x] **T2.4.3** 负控制：恢复 `|| missingAgentTool` → 用例转红。
 
 #### M2.5 输出 token 重试额度
 
-- [ ] **T2.5.1** 改 `src/agent/loop/recoveryStrategies.ts`：把 `state.hasAttemptedOutputRetry = true` 移入 `if (nextMaxOutputTokens !== undefined)`。
-- [ ] **T2.5.2** 扩 `tests/agent/loop/recoveryStrategies.spec.ts`：无 bump 空间时不消耗额度，后续有空间时仍可抬升；Phase B 仍执行。
-- [ ] **T2.5.3** 负控制：恢复旧置位 → 用例转红。
+- [x] **T2.5.1** 改 `src/agent/loop/recoveryStrategies.ts`：把 `state.hasAttemptedOutputRetry = true` 移入 `if (nextMaxOutputTokens !== undefined)`。
+- [x] **T2.5.2** 扩 `tests/agent/loop/recoveryStrategies.spec.ts`：无 bump 空间时不消耗额度，后续有空间时仍可抬升；Phase B 仍执行。
+- [x] **T2.5.3** 负控制：恢复旧置位 → 用例转红。
 
 #### M2.6 MCP 错误消息
 
-- [ ] **T2.6.1** 改 `src/mcp/runtime/McpRuntime.ts`：`err instanceof McpClientError ? err.message : err instanceof Error ? err.message : String(err)`。
-- [ ] **T2.6.2** 扩 `tests/mcp/runtime/McpRuntime.spec.ts`：`throw "boom"`、`throw null` 时状态条目有可读消息。
-- [ ] **T2.6.3** 负控制：恢复 `(err as Error).message` → 用例转红。
+- [x] **T2.6.1** 改 `src/mcp/runtime/McpRuntime.ts`：`err instanceof McpClientError ? err.message : err instanceof Error ? err.message : String(err)`。
+- [x] **T2.6.2** 扩 `tests/mcp/runtime/McpRuntime.spec.ts`：`throw "boom"`、`throw null` 时状态条目有可读消息。
+- [x] **T2.6.3** 负控制：恢复 `(err as Error).message` → 用例转红。
 
 #### M2.7 网络错误分类
 
-- [ ] **T2.7.1** 改 `src/model/errors/normalizeModelError.ts`：为 `NetworkFetchError` 增加 `network_fetch_failed → transport_error`、`network_abort → aborted`；对 `Error` 先 `normalizeNetworkError` 再递归分类；`isRetryable` 加入 `transport_error`。
-- [ ] **T2.7.2** 扩 `tests/model/errors/`：ENOTFOUND/代理/超时/取消/普通 fetch 失败分别落到预期 code；取消不重试，传输错误可重试。
-- [ ] **T2.7.3** 负控制：移除新分支 → 至少 2 条转红。
+- [x] **T2.7.1** 改 `src/model/errors/normalizeModelError.ts`：为 `NetworkFetchError` 增加 `network_fetch_failed → transport_error`、`network_abort → aborted`；对 `Error` 先 `normalizeNetworkError` 再递归分类；`isRetryable` 加入 `transport_error`。
+- [x] **T2.7.2** 扩 `tests/model/errors/`：ENOTFOUND/代理/超时/取消/普通 fetch 失败分别落到预期 code；取消不重试，传输错误可重试。
+- [x] **T2.7.3** 负控制：移除新分支 → 至少 2 条转红。
 
 #### M2.8 上下文溢出指引
 
-- [ ] **T2.8.1** 改 `src/agent/loop/modelErrors.ts`：`createModelRequestFailedStatus` 在没有 `modelError` 且 `error.code === "agent_context_recovery_failed"` 时使用上下文溢出 action；`formatModelRequestFailureMessage` 允许传入 action。
-- [ ] **T2.8.2** 扩 `tests/agent/loop/`：紧急压缩仍放不下时，状态文案/`userHint` 指向 `/compact` / 新会话 / 换大窗口，而不是 provider settings。
-- [ ] **T2.8.3** 负控制：恢复旧分支 → 用例转红。
+- [x] **T2.8.1** 改 `src/agent/loop/modelErrors.ts`：`createModelRequestFailedStatus` 在没有 `modelError` 且 `error.code === "agent_context_recovery_failed"` 时使用上下文溢出 action；`formatModelRequestFailureMessage` 允许传入 action。
+- [x] **T2.8.2** 扩 `tests/agent/loop/`：紧急压缩仍放不下时，状态文案/`userHint` 指向 `/compact` / 新会话 / 换大窗口，而不是 provider settings。
+- [x] **T2.8.3** 负控制：恢复旧分支 → 用例转红。
 
 **M2 验收**：8 项测试与负控制齐备；`pnpm check` 绿；全量 `pnpm test` 绿；生成物无意外变化。
+
+**完成情况（2026-11-07）**：分支 `fix/pilotdeck-parity-2026-11`，8 个独立提交（`e939f857`…`85fc611c`）；决策记录 `docs/notes/implemented/2026-11-07-pilotdeck-parity-fixes.md`；每项负控制均转红后恢复全绿。
 
 ---
 

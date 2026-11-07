@@ -7,9 +7,9 @@
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1197 / 208636 |
+| src TS 文件 / 行数 | 1197 / 208713 |
 | src JS 文件 | 0 |
-| tests 文件 | 702 |
+| tests 文件 | 703 |
 | ui/src 文件 / 行数 | 740 / 109531 |
 | ui/server 文件 / 行数 | 149 / 38859 |
 
@@ -32,9 +32,9 @@
 | `as unknown as`（双重断言） | 29 | ui/src(21) · knowledge(5) · adapters(1) |
 | 裸 `console.*` | 6 | ui/server(6) |
 | 空 `catch {}` | 0 | — |
-| 无参 `catch {`（总计） | 704 | ui/server(157) · ui/src(125) · adapters(72) |
+| 无参 `catch {`（总计） | 705 | ui/server(157) · ui/src(125) · adapters(72) |
 | ↳ **无注释**（隐患类，目标） | **0** | — |
-| ↳ 已带意图注释 | 704 | — |
+| ↳ 已带意图注释 | 705 | — |
 | `TODO/HACK/FIXME/XXX` | 11 | always-on(4) · tests(4) · ui/src(2) |
 | 分层违规 `ui/server→src` | 15 | — |
 | 分层违规 `src→ui` | 0 | — |
@@ -122,13 +122,13 @@
 
 | 子包 | 文件 | 行 | ≥ 300 行函数 |
 |---|---|---|---|
-| `src/context/memory/edgeclaw-memory-core` | 49 | 16682 | 3 |
+| `src/context/memory/edgeclaw-memory-core` | 50 | 16764 | 3 |
 
 其自身 Top 5 大文件（**不参与**上方排名）：
 
 | 文件 | 行 |
 |---|---|
-| `src/context/memory/edgeclaw-memory-core/src/core/storage/sqlite.ts` | 1711 |
+| `src/context/memory/edgeclaw-memory-core/src/core/storage/sqlite.ts` | 1714 |
 | `src/context/memory/edgeclaw-memory-core/src/core/skills/llm-extraction.ts` | 1624 |
 | `src/context/memory/edgeclaw-memory-core/src/core/file-memory.ts` | 1139 |
 | `src/context/memory/edgeclaw-memory-core/src/core/review/dream-review.ts` | 1046 |
@@ -155,7 +155,7 @@
 | pilot | 13 |
 | cron | 12 |
 | rule | 10 |
-| web | 9 |
+| web | 10 |
 | literature | 8 |
 | permission | 5 |
 | test-support | 4 |
@@ -171,7 +171,7 @@
 | runtime | 1 |
 | status | 1 |
 
-| **合计** | **674** |
+| **合计** | **675** |
 
 ## i18n en/zh-CN 对齐
 

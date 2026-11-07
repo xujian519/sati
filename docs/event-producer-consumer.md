@@ -74,7 +74,7 @@ emit/dispatch/emitAgentEvent/emitEvent/emitForSession/sendNotification 字符串
 | team_created | src/tool/builtin/team/teamManagement.ts:94 | - |
 | team_event | - | submitTurn 流 ×15 |
 | team_share_updated | src/tool/builtin/team/teamShare.ts:115 | - |
-| token_cap_adjusted | src/agent/loop/modelErrorRecovery.ts:367, src/agent/loop/modelErrorRecovery.ts:407, src/agent/loop/modelErrorRecovery.ts:429, src/agent/loop/recoveryStrategies.ts:111 | src/gateway/client/InProcessGateway.ts:607 |
+| token_cap_adjusted | src/agent/loop/modelErrorRecovery.ts:367, src/agent/loop/modelErrorRecovery.ts:407, src/agent/loop/modelErrorRecovery.ts:429, src/agent/loop/recoveryStrategies.ts:113 | src/gateway/client/InProcessGateway.ts:607 |
 | tool_call_finished | - | submitTurn 流 ×15 |
 | tool_call_started | - | submitTurn 流 ×15 |
 | tool_calls_detected | src/agent/loop/AgentLoop.ts:749 | src/gateway/client/InProcessGateway.ts:607 |
@@ -82,7 +82,7 @@ emit/dispatch/emitAgentEvent/emitEvent/emitForSession/sendNotification 字符串
 | tool_result_detail_available | src/gateway/client/eventMapping.ts:358, src/gateway/client/eventMapping.ts:364, src/gateway/client/eventMapping.ts:384 | submitTurn 流 ×15 |
 | tool_results_projected | src/agent/loop/AgentLoop.ts:879, src/agent/loop/modelErrorRecovery.ts:300 | src/gateway/client/InProcessGateway.ts:607 |
 | turn_completed | src/agent/loop/turnExit.ts:123, src/agent/loop/turnExit.ts:183, src/agent/turn/TurnRunner.ts:201, src/gateway/client/eventMapping.ts:539, src/gateway/client/normalizers.ts:45, src/session/transcript/TranscriptReplay.ts:259, src/session/transcript/TranscriptReplay.ts:335 | src/gateway/client/InProcessGateway.ts:607, submitTurn 流 ×15 |
-| turn_continued | src/agent/loop/AgentLoop.ts:1057, src/agent/loop/compactionExecutor.ts:82, src/agent/loop/modelErrorRecovery.ts:151, src/agent/loop/modelErrorRecovery.ts:269, src/agent/loop/modelErrorRecovery.ts:378, src/agent/loop/modelErrorRecovery.ts:454, src/agent/loop/modelErrorRecovery.ts:470, src/agent/loop/modelErrorRecovery.ts:482, src/agent/loop/recoveryStrategies.ts:38, src/agent/loop/recoveryStrategies.ts:122 | src/gateway/client/InProcessGateway.ts:607 |
+| turn_continued | src/agent/loop/AgentLoop.ts:1057, src/agent/loop/compactionExecutor.ts:82, src/agent/loop/modelErrorRecovery.ts:151, src/agent/loop/modelErrorRecovery.ts:269, src/agent/loop/modelErrorRecovery.ts:378, src/agent/loop/modelErrorRecovery.ts:454, src/agent/loop/modelErrorRecovery.ts:470, src/agent/loop/modelErrorRecovery.ts:482, src/agent/loop/recoveryStrategies.ts:38, src/agent/loop/recoveryStrategies.ts:124 | src/gateway/client/InProcessGateway.ts:607 |
 | turn_failed | src/agent/loop/turnExit.ts:120, src/agent/turn/TurnRunner.ts:200 | src/gateway/client/InProcessGateway.ts:607 |
 | turn_started | src/agent/turn/TurnRunner.ts:206 | src/gateway/client/InProcessGateway.ts:607, submitTurn 流 ×15 |
 | user_prompt_submitted | src/agent/turn/TurnRunner.ts:270 | src/gateway/client/InProcessGateway.ts:607 |
