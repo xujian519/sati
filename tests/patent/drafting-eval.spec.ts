@@ -111,6 +111,75 @@ test("子图信号：覆盖确定性代理并标记 signalSource=graph", () => {
   assert.deepEqual(result.unverifiedDimensions.sort(), ["anti_slop", "claim_layout", "structure"]);
 });
 
+test("金标 signals 带 source=recorded 标记：结论来源可区分（#847）", () => {
+  const cases = loadCases();
+  // 语料层自带来源标注——每件带 signals 的金标都必须声明为「录制」。
+  for (const item of cases) {
+    if (item.signals === undefined) continue;
+    assert.equal(item.signals.source, "recorded", `${item.id} 的 signals 必须标注 source=recorded`);
+  }
+
+  const report = evaluateDraftingGolden(cases);
+  // 录制的结论是**有效**结论：不得被误列为「未核验」。
+  assert.ok(!report.unverifiedDimensions.includes("enablement"));
+  assert.ok(!report.unverifiedDimensions.includes("claim_support_clarity"));
+  // 但必须能与「子图当场输出」区分开——单独列出 recorded 维度。
+  assert.ok(report.recordedDimensions.includes("enablement"), "enablement 应列为录制结论维度");
+  assert.ok(report.recordedDimensions.includes("claim_support_clarity"), "claim_support_clarity 应列为录制结论维度");
+  // 与未核验维度互斥。
+  for (const dimension of report.recordedDimensions) {
+    assert.ok(!report.unverifiedDimensions.includes(dimension), `${dimension} 不应同时出现在两处`);
+  }
+});
+
+test("录制 signals 与 live signals 在评分维度上可区分（#847）", () => {
+  const [cleanCase] = loadCases().filter(item => item.class === "clean");
+  assert.ok(cleanCase !== undefined);
+  const artifacts = {
+    claims: cleanCase.claims,
+    spec: cleanCase.spec,
+    requiredFeatures: cleanCase.requiredFeatures ?? [],
+  };
+
+  const recorded = scoreDraftingArtifacts(artifacts, {
+    source: "recorded",
+    enablement: { sufficientlyDisclosed: true },
+    claimBreadth: { supportOk: true, clarityOk: true },
+  });
+  const live = scoreDraftingArtifacts(artifacts, {
+    source: "live",
+    enablement: { sufficientlyDisclosed: true },
+    claimBreadth: { supportOk: true, clarityOk: true },
+  });
+
+  const recordedEnablement = recorded.dimensions.find(dimension => dimension.id === "enablement");
+  const liveEnablement = live.dimensions.find(dimension => dimension.id === "enablement");
+  assert.equal(recordedEnablement?.signalSource, "recorded");
+  assert.equal(liveEnablement?.signalSource, "graph");
+  // 分数口径不受来源标注影响（两者都是有效结论）。
+  assert.equal(recordedEnablement?.score, liveEnablement?.score);
+  assert.deepEqual(recorded.recordedDimensions.sort(), ["claim_support_clarity", "enablement"]);
+  assert.deepEqual(live.recordedDimensions, []);
+});
+
+test("金标 source 字段非法时报错（语料层标注必须与事实相符）", () => {
+  assert.throws(
+    () =>
+      parseDraftingGoldenJsonl(
+        JSON.stringify({
+          id: "bad-source",
+          class: "clean",
+          disclosure: "x",
+          claims: "y",
+          spec: "z",
+          signals: { source: "unknown", enablement: { sufficientlyDisclosed: true } },
+        }),
+        "<test>",
+      ),
+    /signals\.source 必须是/,
+  );
+});
+
 test("起草管线运行器：mock provider 也能产出 claims/spec", async () => {
   const provider: StageProvider = {
     caseId: "drafting-eval-spec",

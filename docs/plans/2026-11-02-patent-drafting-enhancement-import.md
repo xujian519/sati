@@ -315,10 +315,16 @@ Wave 2（评测 + 增强）      M5(评测案)  M6(分块)  M7(pairwise)
 
 **决策**：
 
-- 新建 `scripts/patent-pairwise-eval.ts`：输入 N 对（模型输出A，模型输出B，代理师偏好），计算 Kendall τ。
+- 新建 `scripts/patent-pairwise-eval.ts`：输入 N 对（模型打分A，模型打分B，代理师偏好），计算 Kendall τ。
 - τ 未达标（<0.4）时**只出报告不自动 fail**（与 DSH 一致），维持人工抽检。
-- 校准数据存 `tests/patent/fixtures/pairwise/`，每对含 `id`、`output_a`、`output_b`、`preference`（a/b/equal）。
+- 校准数据存 `tests/patent/fixtures/pairwise/`，每对含 `id`、`score_a`、`score_b`、`preference`（a/b/equal）。
 - 与 M5 的金标评测并列报告。
+
+> **字段口径更正（2026-11-09 · #847）**：本节原写「每对含 `id`、`output_a`、`output_b`、`preference`（模型**输出文本**）」，但实现取的是 `score_a`/`score_b`（模型 **rubric 分数**）。二者度量的不是一回事——前者度量「**文本序**与人工偏好是否一致」，后者度量「**分数序**与人工偏好是否一致」。
+>
+> 取分数是**有意选择**：代理师抽检本就按 rubric 打分（见 `docs/patent-pairwise-calibration.md`），分数是抽检时真实产出的量；实现与语料（`tests/patent/fixtures/pairwise/sample.jsonl`）、校准文档、决策记录（`docs/notes/implemented/2026-11-08-issue-830-drafting-gates.md`）自始一致，仅本计划文档未同步。
+>
+> 故本节按实现更正为 `score_a`/`score_b`。**口径锚点**：pairwise 语料度量的是「分数序 vs 人工偏好」；若后续要度量「文本序 vs 人工偏好」，那是另一套口径，须另立字段名另立语料，不得复用本语料。
 
 **改动点**：
 

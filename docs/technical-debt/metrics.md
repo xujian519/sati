@@ -7,9 +7,9 @@
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1218 / 212780 |
+| src TS 文件 / 行数 | 1219 / 212952 |
 | src JS 文件 | 0 |
-| tests 文件 | 720 |
+| tests 文件 | 721 |
 | ui/src 文件 / 行数 | 801 / 112332 |
 | ui/server 文件 / 行数 | 149 / 38945 |
 
@@ -32,9 +32,9 @@
 | `as unknown as`（双重断言） | 29 | ui/src(21) · knowledge(5) · adapters(1) |
 | 裸 `console.*` | 6 | ui/server(6) |
 | 空 `catch {}` | 0 | — |
-| 无参 `catch {`（总计） | 716 | ui/server(158) · ui/src(126) · adapters(72) |
+| 无参 `catch {`（总计） | 718 | ui/server(158) · ui/src(126) · adapters(72) |
 | ↳ **无注释**（隐患类，目标） | **0** | — |
-| ↳ 已带意图注释 | 716 | — |
+| ↳ 已带意图注释 | 718 | — |
 | `TODO/HACK/FIXME/XXX` | 11 | always-on(4) · tests(4) · ui/src(2) |
 | 分层违规 `ui/server→src` | 15 | — |
 | 分层违规 `src→ui` | 0 | — |
@@ -97,8 +97,8 @@
 | `ui/server/routes/taskmaster.js` | 1152 |
 | `ui/src/components/main-content-v2/CronV2.tsx` | 1130 |
 | `ui/src/components/main-content/view/MainContent.tsx` | 1111 |
+| `src/model/streaming/streamModel.ts` | 1092 |
 | `ui/server/routes/config.test.js` | 1090 |
-| `src/model/streaming/streamModel.ts` | 1085 |
 | `ui/server/routes/commands.js` | 1082 |
 | `src/always-on/runtime/DiscoveryFire.ts` | 1079 |
 | `src/gateway/protocol/types.ts` | 995 |
@@ -139,7 +139,7 @@
 | knowledge | 45 |
 | context | 41 |
 | gateway | 34 |
-| model | 33 |
+| model | 34 |
 | session | 29 |
 | cli | 20 |
 | router | 20 |
@@ -166,7 +166,7 @@
 | lifecycle | 1 |
 | status | 1 |
 
-| **合计** | **692** |
+| **合计** | **693** |
 
 ## i18n en/zh-CN 对齐
 

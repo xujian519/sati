@@ -13,6 +13,10 @@
  * 判定为**确定性启发式**（读文本关键词/章节/特征命中），不调模型——保持金标
  * 回归零 LLM、可离线复现。写入后需人工复核：这是"录制的子图结论"，不是
  * 子图当场的真实输出（子图 live 输出见 `pnpm eval:patent-drafting --live`）。
+ *
+ * 来源标注（#847）：每件金标的 `signals` 带 `source: "recorded"`——语料层
+ * 自带可辨识标记，报告与下游据此区分「录制的结论」与「子图真实结论」，
+ * 避免后续误用。
  */
 
 import { readFileSync, writeFileSync } from "node:fs";
@@ -105,6 +109,10 @@ const out = lines.map(line => {
   const supportOk = missing.length === 0;
 
   const signals = {
+    // 来源口径（#847）：显式标注为「录制」——这些结论由上方确定性规则生成，
+    // 不是 enablement / claim_breadth 子图的当场输出。语料层自带标记，
+    // 后续人不必翻脚本就能看出两者口径不同（当场输出口径见 --live）。
+    source: "recorded" as const,
     enablement: { sufficientlyDisclosed },
     claimBreadth: { supportOk, clarityOk },
   };
