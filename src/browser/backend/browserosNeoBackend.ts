@@ -18,6 +18,9 @@ export class BrowserOsNeoBackend implements BrowserBackend {
     siteTools: false,
     loginState: true,
     antiBot: true,
+    contentCapable: true,
+    pdf: true,
+    trueScreenshot: true,
   };
 
   constructor(private options: { url?: string } = {}) {}

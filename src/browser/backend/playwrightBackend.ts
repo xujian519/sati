@@ -9,6 +9,7 @@ const PLAYWRIGHT_MCP_PLUGIN_NAME = "browser-use";
  * 能力位：录屏为真（browser_start_trace/video，随版本）；下载拦截（L-D 实测 2026-08-12）：
  * 无独立 download 工具，仅可经 browser_run_code_unsafe（RCE 等价、需启用 unsafe caps）
  * 实现 → 能力位保守标 false；默认无登录态、非真实浏览器指纹 → loginState/antiBot 为 false。
+ * 内容与像素录屏可用；没有独立 PDF 工具，pdf 与下载拦截同样保守为 false。
  */
 export class PlaywrightMcpBackend implements BrowserBackend {
   readonly id = "playwright" as const;
@@ -20,6 +21,9 @@ export class PlaywrightMcpBackend implements BrowserBackend {
     siteTools: false,
     loginState: false,
     antiBot: false,
+    contentCapable: true,
+    pdf: false,
+    trueScreenshot: true,
   };
 
   probe(): BrowserBackendProbe {

@@ -6,13 +6,14 @@
  *   只抽象「能力探测与能力位」，供路由（cold decision）与下游工具做语义决策。
  * - Backend 选择是 cold decision：只在任务/会话开始前解析一次，运行中禁止切换。
  * - 能力位（capabilities）对齐 POC 报告 §5.2 / §3 的映射评估：
- *   downloadInterception / screencast / handoff / siteTools / loginState / antiBot。
+ *   downloadInterception / screencast / handoff / siteTools / loginState / antiBot，
+ *   以及内容面 contentCapable / pdf / trueScreenshot。
  */
 
-/** 后端标识，同时决定级联顺序（见 buildBackendCandidates）。 */
-export type BrowserBackendId = "ego" | "browseros-neo" | "browser-use" | "playwright";
+/** 后端标识。默认级联顺序见 buildBackendCandidates；lightpanda 不在默认级联里。 */
+export type BrowserBackendId = "ego" | "browseros-neo" | "browser-use" | "playwright" | "lightpanda";
 
-/** 能力位：下游工具（如 patent_pdf_download）据此决定「该后端能否安全承接本任务」。 */
+/** 能力位：下游工具据此决定「该后端能否安全承接本任务」。 */
 export type BrowserCapabilities = {
   /** 下载拦截（ego `page.waitForEvent('download')` 等价） */
   downloadInterception: boolean;
@@ -26,7 +27,18 @@ export type BrowserCapabilities = {
   loginState: boolean;
   /** 反爬能力（真实浏览器指纹，而非纯净自动化 Chromium） */
   antiBot: boolean;
+  /** 可读页面内容（HTML / Markdown）。不是 PDF，也不是像素截图。 */
+  contentCapable: boolean;
+  /** 真实 PDF（下载或打印）。文本排版导出不算。 */
+  pdf: boolean;
+  /** 真实像素截图。文本渲染出的 PNG 不算。 */
+  trueScreenshot: boolean;
 };
+
+/** 任务对能力位的需求。只有值为 true 的键参与过滤。 */
+export type BrowserTaskNeed = "content" | "loginState" | "antiBot" | "pdf" | "trueScreenshot" | "handoff";
+
+export type BrowserTaskNeeds = Partial<Record<BrowserTaskNeed, boolean>>;
 
 export type BackendProbeStatus = "ok" | "warn" | "missing";
 
