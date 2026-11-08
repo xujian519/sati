@@ -119,8 +119,10 @@ test("patent_figure_check：svg_paths 回读不按重排画幅判 V7（交付画
       makeContext(cwd),
     );
     const text = result.content[0].type === "text" ? result.content[0].text : "";
+    // 只判 finding 行里的 V7：输出会原样带上交付文件的临时目录路径，
+    // 裸 includes("V7") 会被 mkdtemp 随机后缀（如 `...-NqV7AA/`）误命中。
     assert.ok(
-      !text.includes("V7"),
+      !/\[[A-Z]+\] V7:/u.test(text),
       `回读骨架的画幅由交付文件决定，不得由核验器重排后判定（重排会量出交付物上不存在的尺寸）：\n${text}`,
     );
   } finally {
