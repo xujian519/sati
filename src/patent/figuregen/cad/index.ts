@@ -31,9 +31,11 @@ export {
   CAD_HATCH_LINE_WIDTH_MM,
   CAD_HATCH_SPACING_MM,
   CAD_HIDDEN_DASH_MM,
+  CAD_LEADER_SEGMENT_CAP,
   CAD_LINE_WIDTH_MM,
   CAD_REF_LEADER_MM,
   buildScreenTransform,
+  capCadLeaderSegments,
   hatchPolylines,
   renderCadSvg,
   type CadRefAnnotation,
@@ -42,5 +44,6 @@ export { CAD_REF_FONT_MM, CAD_REF_FONT_STATUTORY_MM, cadRefFontMm } from "./ref-
 export {
   CAD_MIN_FIT_SCALE,
   checkCadProjection,
+  findingForLeaderPlacementError,
   polylineLengthMm,
 } from "./checks.js";

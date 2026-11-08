@@ -45,7 +45,13 @@ export {
 export { layoutFigure } from "./layout.js";
 export {
   DEFAULT_COLLINEAR_ANGLE_DEG,
+  LEADER_DIRECTION_PHASE_DEG,
   LEADER_DIRECTIONS_DEG,
+  LEADER_PLACEMENT_GUIDANCE,
+  LEADER_STUB_MM,
+  LeaderPlacementError,
+  buildLeaderGeometry,
+  isLeaderPlacementError,
   labelBoxOf,
   planLeaderLines,
   type LeaderBox,
@@ -166,6 +172,7 @@ export {
 } from "./svg-viewport.js";
 export {
   checkFigureRendering,
+  leaderPlacementFailureMessage,
   measureInkBounds,
   type RenderCheckFinding,
   type RenderCheckKind,

@@ -48,6 +48,17 @@ export type FigureSidecarGeometry = {
   section?: { offset_mm: number; cut_faces: number; hatch_segments: number };
   /** 图面已标注的附图标记（升序无关，按调用方顺序；未标注时缺省）。 */
   ref_numerals?: number[];
+  /**
+   * 引线择位的最终结果（纸面毫米，相对锚点）。`strict_failure` 在成功落盘的图上恒为 false：
+   * strict 失败在出图前抛出，不会写出 sidecar。字段是可选追加，不升 sidecar 版本——
+   * 旧文件没有这一项，解析器只校验 version / figures / spec.nodes。
+   */
+  label_placements?: readonly {
+    ref: number;
+    offset_mm: readonly [number, number];
+    degraded: boolean;
+    strict_failure: boolean;
+  }[];
   /** 投影期的几何级检查（几何判据不重跑：记录当时结论供审计）。 */
   findings?: CadFinding[];
 };

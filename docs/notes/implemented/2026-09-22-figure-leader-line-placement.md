@@ -2,6 +2,9 @@
 
 Status: implemented
 
+> 本条是 2026-09-22 的贪心首适配。现行择位（12 向 × 4 环、评分、有界回溯、CAD strict）见
+> [2026-11-08-figure-leader-placement-strict.md](./2026-11-08-figure-leader-placement-strict.md)。
+
 ## Problem
 
 专利附图有两类标记画法：写在部件轮廓内（流程/框图的节点文本）与**向图外引**（机械制图常规，

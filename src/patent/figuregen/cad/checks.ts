@@ -21,20 +21,24 @@
  *   （打印后分不清哪条是标记线，指南一部一章 4.3）、或引线穿过别的标号/与别的引线交叉
  *   → warn。**引擎择位的落位不会触发本规则**（择位判据已排除），故本规则实际是"钉死偏移
  *   的体检"：谁把标号钉到了主线条上，谁在这里被报出来。
- * - C11 标号退化：无可用引线落位 ⇒ 标号就地画在锚点上（压在图上）→ warn。退化是引擎的
- *   兜底而不是静默改写，故必须可观测。
+ * - C11 标号退化：无可用引线落位 ⇒ 标号就地画在锚点上（压在图上）→ warn。只出现在
+ *   `mode: "degrade"` 的调用方。CAD 走 strict，放不下时不会产出这张图。
  * - C12 标号压盖图号注记：标号框与图下方的"图N"注记框相交 → warn。两者都读不出；注记已
  *   作为择位障碍（正常落位不会触发），本规则兜住钉死落位与旧产物。
+ * - C13 引线 strict 失败：候选耗尽，{@link LeaderPlacementError}。图还没画出来，本函数
+ *   不在渲染结果上事后扫描，而由 {@link findingForLeaderPlacementError} 把错误收成 fail，
+ *   说明里写明减少标记、拆图或钉死偏移。
  *
  * 明确不做（诚实边界）：**最小线间距**检查需要先重建轮廓（相邻边共享端点，逐点距离必然
  * 为 0），属更大的一块工作；当前先以"边数/退化边/缩放"三项覆盖可判定的部分。
  */
 
 import type { FigureCheckSeverity } from "../check.js";
+import { LEADER_PLACEMENT_GUIDANCE, type LeaderPlacementError } from "../leader-line.js";
 import { boxesOverlap, boxWithin, type Box } from "../render-utils.js";
 import type { CadEdgeTable } from "./types.js";
 
-export type CadRuleId = "C1" | "C2" | "C3" | "C4" | "C5" | "C6" | "C7" | "C8" | "C9" | "C10" | "C11" | "C12";
+export type CadRuleId = "C1" | "C2" | "C3" | "C4" | "C5" | "C6" | "C7" | "C8" | "C9" | "C10" | "C11" | "C12" | "C13";
 
 export type CadFinding = {
   rule: CadRuleId;
@@ -99,6 +103,19 @@ export type CadCheckInput = {
  * 改一边不会让另一边变红。
  */
 export type CadBox = Box;
+
+/**
+ * 把 strict 择位失败收成 C13。渲染结果不存在（fail-closed），所以不能等
+ * {@link checkCadProjection} 去扫一张没画出来的图。
+ */
+export function findingForLeaderPlacementError(error: LeaderPlacementError): CadFinding {
+  return {
+    rule: "C13",
+    severity: "fail",
+    message: error.message,
+    evidence: [...error.unplaceableIds.map(id => `标记 ${id} 无满足硬约束的引线落位`), LEADER_PLACEMENT_GUIDANCE],
+  };
+}
 
 /** 几何级检查（纯函数）。 */
 export function checkCadProjection(input: CadCheckInput): CadFinding[] {

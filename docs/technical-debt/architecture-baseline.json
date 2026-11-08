@@ -59,6 +59,11 @@
     },
     {
       "rule": "file-size",
+      "file": "src/patent/figuregen/leader-line.ts",
+      "lines": 980
+    },
+    {
+      "rule": "file-size",
       "file": "src/pilot/config/loadPilotConfig.ts",
       "lines": 941
     },
