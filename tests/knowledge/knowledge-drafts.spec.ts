@@ -244,13 +244,17 @@ test("产物刷新落在同一毫秒内（大小相同）仍按替换处理，�
   createKnowledgeFixture(dir);
   // 复刻真实刷新的最坏时序：重建与旧签名落在同一毫秒，且 SQLite 页分配给出的文件大小相同。
   const targetMs = Math.floor(before.mtimeMs);
-  let replaced = statSync(knowledgeDb);
-  // utimes 的毫秒值经秒浮点转换可能落回相邻毫秒，逐个候选试到 floor 相同为止。
-  for (const candidate of [targetMs, targetMs + 1, targetMs - 1]) {
-    utimesSync(knowledgeDb, new Date(candidate), new Date(candidate));
-    replaced = statSync(knowledgeDb);
-    if (Math.floor(replaced.mtimeMs) === targetMs) break;
-  }
+  // 落点取目标毫秒内部（亚毫秒偏移 0.25 / 0.5ms），不贴毫秒边界：
+  // utimes 的秒级浮点在 Linux 上经 libuv → utimes(2) 的 timeval 截断到微秒（最多偏低 1µs），
+  // 正好落在毫秒边界时 Math.floor() 会看到相邻毫秒——按整毫秒设值的前置条件在 CI 上随机
+  // 失败（约 30%），且 ±1ms 的候选无法补偿（截断照样把每个候选压低 1µs）。
+  // 偏移同时保证落点与旧 mtime 的亚毫秒部分至少相差 0.1ms，mtimeNs 必然不同，
+  // 即使 inode 被复用也能判定为替换。
+  const oldSubMs = before.mtimeMs - targetMs;
+  const targetSubMs = Math.abs(oldSubMs - 0.5) < 0.1 ? 0.25 : 0.5;
+  const targetSec = Math.floor(before.mtimeMs / 1000) + ((targetMs % 1000) + targetSubMs) / 1000;
+  utimesSync(knowledgeDb, targetSec, targetSec);
+  const replaced = statSync(knowledgeDb);
   assert.equal(Math.floor(replaced.mtimeMs), targetMs, "前置：重建文件 mtime 与刷新前同毫秒（本用例的碰撞条件）");
   assert.equal(replaced.size, before.size, "前置：重建文件与刷新前大小相同（本用例的碰撞条件）");
 
