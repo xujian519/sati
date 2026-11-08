@@ -41,4 +41,19 @@ describe("pairwise Kendall τ-b", () => {
     assert.equal(items.length, 10);
     assert.equal(kendallTauB(items).tau, 1);
   });
+
+  it("报告含近似置信区间（T7.3）", () => {
+    const report = kendallTauB(ALIGNED);
+    assert.ok(report.confidenceInterval !== undefined, "应给出置信区间");
+    assert.ok(report.confidenceInterval.lower <= report.tau);
+    assert.ok(report.confidenceInterval.upper >= report.tau);
+    assert.match(formatReport(report), /置信区间/);
+  });
+
+  it("τ=±1 时区间退化为 [τ, τ]（不是缺区间）", () => {
+    const report = kendallTauB(ALIGNED);
+    assert.equal(report.tau, 1);
+    assert.equal(report.confidenceInterval?.lower, 1);
+    assert.equal(report.confidenceInterval?.upper, 1);
+  });
 });

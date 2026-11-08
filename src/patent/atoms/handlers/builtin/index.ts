@@ -71,6 +71,15 @@ export {
   slopGateAtom,
   SlopGateHandler,
 } from "./gate.js";
+export {
+  claimLintAtom,
+  ClaimLintHandler,
+  buildClaimLintRevisionHint,
+} from "./claimLint.js";
+export {
+  claimBreadthAtom,
+  ClaimBreadthHandler,
+} from "./claimBreadth.js";
 export { clarityGateAtom, ClarityGateHandler, renderClarityReport } from "./clarity.js";
 export {
   FIGURE_CHECK_REPORT_VERSION,

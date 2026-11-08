@@ -95,6 +95,26 @@ function fullRunProvider(): StageProvider {
           notes: "独权含必要特征",
         });
       }
+      // A26.4 claim-breadth 子图的三个 LLM 判断节点 + 收口节点。
+      if (prompt.includes("第一步：权利要求是否清楚")) {
+        return JSON.stringify({ issues: [], clarity_ok: true });
+      }
+      if (prompt.includes("第二步：权利要求是否以说明书为依据")) {
+        return JSON.stringify({ gaps: [], support_ok: true });
+      }
+      if (prompt.includes("第三步：功能性限定是否过宽")) {
+        return JSON.stringify({ overbroad: false, issues: [] });
+      }
+      if (prompt.includes("综合三步审查")) {
+        return JSON.stringify({
+          support_ok: true,
+          clarity_ok: true,
+          gaps: [],
+          confidence: "high",
+          key_rationale: "权要特征在说明书中均有对应公开",
+          report: "A26.4 审查通过：权项清楚且以说明书为依据。",
+        });
+      }
       if (prompt.includes("实施例覆盖矩阵")) {
         return JSON.stringify({
           claims: [{ claimId: "claim_1", features: ["双层真空结构"], embodimentRefs: ["embodiment_1"] }],

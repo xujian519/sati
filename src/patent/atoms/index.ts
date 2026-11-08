@@ -84,6 +84,11 @@ export {
   QualityGateHandler,
   slopGateAtom,
   SlopGateHandler,
+  claimLintAtom,
+  ClaimLintHandler,
+  buildClaimLintRevisionHint,
+  claimBreadthAtom,
+  ClaimBreadthHandler,
   clarityGateAtom,
   ClarityGateHandler,
   renderClarityReport,
@@ -152,6 +157,8 @@ export function registerBuiltinAtoms(): void {
   globalAtomRegistry.register(builtin.approvalGateAtom);
   globalAtomRegistry.register(builtin.qualityGateAtom);
   globalAtomRegistry.register(builtin.slopGateAtom);
+  globalAtomRegistry.register(builtin.claimLintAtom);
+  globalAtomRegistry.register(builtin.claimBreadthAtom);
   globalAtomRegistry.register(builtin.clarityGateAtom);
   globalAtomRegistry.register(builtin.figureGateAtom);
   globalAtomRegistry.register(builtin.claimChartAtom);
@@ -179,6 +186,8 @@ export function registerBuiltinAtoms(): void {
   globalStageHandlerRegistry.register(new builtin.ApprovalGateHandler());
   globalStageHandlerRegistry.register(new builtin.QualityGateHandler());
   globalStageHandlerRegistry.register(new builtin.SlopGateHandler());
+  globalStageHandlerRegistry.register(new builtin.ClaimLintHandler());
+  globalStageHandlerRegistry.register(new builtin.ClaimBreadthHandler());
   globalStageHandlerRegistry.register(new builtin.ClarityGateHandler());
   globalStageHandlerRegistry.register(new builtin.FigureGateHandler());
   globalStageHandlerRegistry.register(new builtin.ClaimChartHandler());

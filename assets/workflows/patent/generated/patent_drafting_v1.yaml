@@ -94,10 +94,26 @@ stages:
     strategy: chain
     atom: claim-strategy
     description: 权利要求布局策略：独权必要特征+区别特征、从权层级
+  - id: claim_breadth_preview
+    strategy: chain
+    atom: claim-breadth
+    description: A26.4 预评估：对建议权要特征做支持/清楚预判（成文前暴露超范围缺陷）
   - id: draft_claims
     strategy: chain
     atom: draft-claims
     description: 基于 PFE 与新颖性结果直出权利要求草稿（独立+从属）
+  - id: claim_breadth_review
+    strategy: chain
+    atom: claim-breadth
+    description: A26.4 复核：对实际权要草稿做支持/清楚正式判定
+  - id: claim_lint
+    strategy: chain
+    atom: claim-lint
+    retry:
+      whenOutputGaps: true
+      rewindTo: draft_claims
+      maxRetries: 1
+    description: 权利要求确定性校验门：术语清楚/引用基础/多项引用/前序一致/功能限定/编号连续（未通过自动带证据提示回退权要修订）
   - id: claim_coverage
     strategy: chain
     atom: claim-embodiment-mapper

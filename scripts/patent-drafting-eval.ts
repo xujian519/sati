@@ -19,7 +19,7 @@
  *   tsx scripts/patent-drafting-eval.ts --live --pipeline-cases 4 --json
  */
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { CanonicalModelEvent, CanonicalUsage, ModelRuntime } from "../src/model/index.js";
 import { createModelRuntime } from "../src/model/index.js";
@@ -37,6 +37,7 @@ import {
   type DraftingSignals,
 } from "../src/patent/index.js";
 import { loadPilotConfig } from "../src/pilot/index.js";
+import { kendallTauB, loadPairwiseJsonl } from "./patent-pairwise-eval.js";
 
 const DEFAULT_CORPUS = "tests/patent/fixtures/drafting-golden/cases.jsonl";
 
@@ -45,6 +46,8 @@ type ScriptOptions = {
   passLine: number;
   json: boolean;
   live: boolean;
+  /** 并列输出 pairwise 校准 τ（#830 M7 T7.4：撰写分与 τ 并列）。 */
+  pairwise: boolean;
   provider?: string;
   model?: string;
   /** live 管线轮用例数（默认 4 = 2 clean + 2 defect；0 关闭管线轮）。 */
@@ -63,6 +66,7 @@ function parseArgs(argv: readonly string[]): ScriptOptions {
     passLine: DEFAULT_DRAFTING_PASS_LINE,
     json: false,
     live: false,
+    pairwise: false,
     pipelineCases: 4,
   };
   for (let index = 0; index < argv.length; index += 1) {
@@ -73,6 +77,10 @@ function parseArgs(argv: readonly string[]): ScriptOptions {
     }
     if (arg === "--live") {
       options.live = true;
+      continue;
+    }
+    if (arg === "--pairwise") {
+      options.pairwise = true;
       continue;
     }
     if (arg === "--corpus") {
@@ -359,6 +367,38 @@ async function runLive(options: ScriptOptions, cases: readonly DraftingGoldenCas
   };
 }
 
+/**
+ * pairwise 校准并列输出（#830 M7 T7.4）。
+ *
+ * 复用独立脚本 `patent-pairwise-eval.ts` 的计算口径（同一份实现，避免两套算法
+ * 漂移）；τ 未达标只报告不 fail。校准数据缺失时显式说明，不静默跳过。
+ */
+function printPairwise(): void {
+  const pairwisePath = resolve("tests/patent/fixtures/pairwise/sample.jsonl");
+  console.log("");
+  console.log("pairwise 校准（#830 M7）");
+  if (!existsSync(pairwisePath)) {
+    console.log("  校准数据缺失：tests/patent/fixtures/pairwise/sample.jsonl（未静默跳过）");
+    return;
+  }
+  const report = kendallTauB(loadPairwiseJsonl(pairwisePath));
+  console.log(
+    `  ${report.pairCount} 对，concordant=${report.concordant} discordant=${report.discordant}，` +
+      `ties: model=${report.tiesModel} human=${report.tiesHuman}`,
+  );
+  const interval =
+    report.confidenceInterval !== undefined
+      ? `，95% 近似置信区间 CI [${report.confidenceInterval.lower.toFixed(4)}, ${report.confidenceInterval.upper.toFixed(4)}]`
+      : "";
+  console.log(`  Kendall τ-b = ${report.tau.toFixed(4)}${interval}（未达标只报告，不 fail CI）`);
+  if (report.disagreements.length > 0) {
+    console.log("  不一致项：");
+    for (const item of report.disagreements) {
+      console.log(`    - ${item.id}: model=${item.model} human=${item.human}`);
+    }
+  }
+}
+
 function printLive(report: LiveReport): void {
   const { signals, pipeline, usage } = report;
   console.log("");
@@ -463,6 +503,9 @@ async function main(): Promise<void> {
       }
     }
     if (live !== undefined) printLive(live);
+    // pairwise 校准并列输出（#830 M7 T7.4）：撰写分与 τ 同屏，便于对照解读。
+    // τ 未达标只报告不 fail（与独立脚本口径一致）。
+    if (options.pairwise) printPairwise();
   }
 
   const cleanOk = report.clean.passRate === 1;

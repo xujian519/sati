@@ -42,6 +42,8 @@ export class DraftClaimsHandler implements StageHandler {
   readonly category = "extract" as const;
 
   async execute({ state, provider }: StageExecuteInput): Promise<PipelineState> {
+    // claim-lint 门回退时注入的证据型修订提示（非 outputSchema 键 → 回退清理不触及）。
+    const lintHint = getStateString(state, "claim_lint_revision_hint");
     // 策略表存在且可解析 → 按从权树确定性渲染（不再调用 LLM）；否则回退单次 LLM 旧路径。
     const strategyRaw = getStateString(state, "claims_strategy");
     let strategyIgnored: string | undefined;
@@ -56,7 +58,7 @@ export class DraftClaimsHandler implements StageHandler {
       const strategy = normalizeClaimStrategy(parsed);
       if (strategy !== null) {
         const { claims, tree } = renderClaimsFromStrategy(strategy);
-        return {
+        const segment: PipelineState = {
           claims_draft: claims.join("\n\n"),
           claims_tree: JSON.stringify(tree),
           draft_claims_result: JSON.stringify({
@@ -64,6 +66,12 @@ export class DraftClaimsHandler implements StageHandler {
             notes: strategy.rationale ?? "按权利要求布局策略表确定性渲染",
           }),
         };
+        // 策略渲染路径为确定性产出：无法消费 LLM 修订提示，但必须把校验意见
+        // 透传给下游与 HITL（否则修订意见在确定性路径上被静默丢弃）。
+        if (lintHint.trim().length > 0) {
+          segment.claim_lint_revision_hint = lintHint;
+        }
+        return segment;
       }
       strategyIgnored = "claims_strategy 无法解析为策略表，已回退单次 LLM 草稿路径";
     }
@@ -89,6 +97,9 @@ export class DraftClaimsHandler implements StageHandler {
       "【分析结果】",
       dataBlock(input.slice(0, 8000)),
       novelty.trim().length > 0 ? `【新颖性结论】\n${dataBlock(novelty.slice(0, 2000))}` : "",
+      // 证据型修订提示（claim-lint 门回退时注入）：只含问题定位与修订建议，
+      // 不含任何通过线/计数断言。非 outputSchema 键 → 回退清理不触及。
+      lintHint.trim().length > 0 ? `【上一轮校验意见】\n${dataBlock(lintHint.slice(0, 2000))}` : "",
       "",
       "请严格输出 JSON：claims 为权利要求逐条文本数组（第 1 条为独立权利要求），notes 为撰写说明。",
     ].join("\n");

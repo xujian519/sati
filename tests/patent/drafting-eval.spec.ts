@@ -76,9 +76,10 @@ test("批量评测：clean 全过线、defect 全在期望维度失分", () => {
   assert.equal(report.defect.detectionRate, 1);
   assert.ok(report.clean.mean >= 85, `clean 均分过低：${report.clean.mean}`);
   assert.ok(report.defect.mean < report.clean.mean);
-  // 未注入子图结论时，A26.3 / A26.4 只能是确定性代理——必须如实列出。
-  assert.ok(report.unverifiedDimensions.includes("enablement"));
-  assert.ok(report.unverifiedDimensions.includes("claim_support_clarity"));
+  // 金标语料携带子图结论（R1）→ A26.3 / A26.4 已被子图核验，
+  // 不得再列为"未核验"；未核验列表只剩确定性代理维度。
+  assert.ok(!report.unverifiedDimensions.includes("enablement"));
+  assert.ok(!report.unverifiedDimensions.includes("claim_support_clarity"));
 });
 
 test("批量评测：同输入重复评分结果一致（确定性）", () => {
