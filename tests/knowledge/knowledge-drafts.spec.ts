@@ -15,7 +15,7 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, statSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -228,6 +228,42 @@ test("产物刷新（文件级替换）后：确认触发签名检测 + 全量�
     ).map(r => r.title);
     assert.ok(titles.includes("笔记A"), "重投影应恢复刷新前的笔记 A");
     assert.ok(titles.includes("笔记B"), "新确认的笔记 B 应入库");
+  } finally {
+    kdb.close();
+  }
+});
+
+test("产物刷新落在同一毫秒内（大小相同）仍按替换处理，旧笔记恢复", t => {
+  const { notesDb, knowledgeDb, dir } = withTwoDbFixture(t);
+
+  const draftA = saveKnowledgeDraft(notesDb, { sessionId: "s1", title: "笔记A", content: "A 的内容", project: "p" });
+  assert.equal(confirmKnowledgeDraft({ notesDb, knowledgeDb }, draftA.draftId).ok, true);
+
+  const before = statSync(knowledgeDb);
+  rmSync(knowledgeDb);
+  createKnowledgeFixture(dir);
+  // 复刻真实刷新的最坏时序：重建与旧签名落在同一毫秒，且 SQLite 页分配给出的文件大小相同。
+  const targetMs = Math.floor(before.mtimeMs);
+  let replaced = statSync(knowledgeDb);
+  // utimes 的毫秒值经秒浮点转换可能落回相邻毫秒，逐个候选试到 floor 相同为止。
+  for (const candidate of [targetMs, targetMs + 1, targetMs - 1]) {
+    utimesSync(knowledgeDb, new Date(candidate), new Date(candidate));
+    replaced = statSync(knowledgeDb);
+    if (Math.floor(replaced.mtimeMs) === targetMs) break;
+  }
+  assert.equal(Math.floor(replaced.mtimeMs), targetMs, "前置：重建文件 mtime 与刷新前同毫秒（本用例的碰撞条件）");
+  assert.equal(replaced.size, before.size, "前置：重建文件与刷新前大小相同（本用例的碰撞条件）");
+
+  const draftB = saveKnowledgeDraft(notesDb, { sessionId: "s2", title: "笔记B", content: "B 的内容", project: "p" });
+  assert.equal(confirmKnowledgeDraft({ notesDb, knowledgeDb }, draftB.draftId).ok, true);
+
+  const kdb = openReadOnly(knowledgeDb);
+  try {
+    const titles = (
+      kdb.prepare("SELECT title FROM documents WHERE doc_type = 'personal_note'").all() as Array<{ title: string }>
+    ).map(r => r.title);
+    assert.ok(titles.includes("笔记A"), "同毫秒替换也必须触发重投影");
+    assert.ok(titles.includes("笔记B"));
   } finally {
     kdb.close();
   }

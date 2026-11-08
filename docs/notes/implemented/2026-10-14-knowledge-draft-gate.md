@@ -38,3 +38,5 @@ Status: implemented
 换来了：AI 沉淀的知识首次有了人工审批层与负反馈回路（拒痕）；confirm 路径复用直写幂等键（`sha1(project|title|content)`），重复确认天然去重；HTTP 路由零协议成本，UI 面板可随时接上。
 
 付出了：`knowledge_note_save` 的 schema 语义与运行行为分离（描述仍写「沉淀到知识库」，实际默认先沉淀为草稿）——这是避开 fixture 重录的既定取舍，未来若重录 fixture 应同步描述文本；draft 模式下 agent 不知道「何时被确认」，会话内续写时可能重复提交（同会话覆盖语义缓解，跨会话重复靠幂等键与人工拒稿兜住）。
+
+2026-11-08 补正：投影签名由 `size + 整毫秒 mtime` 改为 `inode + size + 纳秒 mtime`。SQLite 按页分配，写了几行的库与空库可能同为 40960 B；若刷新重建又落在记录的同一毫秒内，旧签名与替换后的文件相同，重投影被跳过、旧笔记静默消失。碰撞用例在 `tests/knowledge/knowledge-drafts.spec.ts`（负控制：旧签名下必红）。升级后首次确认会因签名格式变化触发一次全量重投影，属预期。

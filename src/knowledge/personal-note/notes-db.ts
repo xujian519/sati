@@ -11,8 +11,9 @@
  *    meta 表 = 版本/签名/导入门控）；
  *  - knowledge.db 只承载**可重建的检索投影**（documents/chunks/docs_fts），
  *    全部现有检索路径（FTS/判例引擎/回源）读法不变；
- *  - 投影 freshness 用文件签名（size+mtime）检测：管道刷新替换 knowledge.db
- *    → 签名失配 → 写路径自动全量重投影（旧笔记恢复，草稿零丢失）。
+ *  - 投影 freshness 用文件签名（inode + size + 纳秒 mtime）检测：管道刷新替换
+ *    knowledge.db → 签名失配 → 写路径自动全量重投影（旧笔记恢复，草稿零丢失）。
+ *    只取整毫秒会让「同毫秒内重建且页数相同」的替换与旧签名撞车（见 statSignature）。
  *
  * 一次性导入：首次打开 sidecar 时从 knowledge.db 导入存量 personal_note
  * 与旧版 knowledge_drafts（meta import_v1 门控，不重复导入）。
@@ -84,10 +85,16 @@ function migrate(db: DatabaseSync): void {
   db.exec(`PRAGMA application_id = ${NOTES_DB_APPLICATION_ID}`);
 }
 
-/** knowledge.db 文件签名（size+mtime）：整体替换后必然失配。 */
+/**
+ * knowledge.db 文件签名（inode + size + 纳秒 mtime）：整体替换后必然失配。
+ *
+ * 不能只用 size + 整毫秒 mtime：SQLite 按页分配，空库与写了几行的库页数可能相同
+ * （同为 40960 B），而重建可以落在同一毫秒内——两者相乘会让「文件已被管道刷新」
+ * 看起来与旧签名一致，重投影被跳过，旧笔记静默消失（tests/knowledge 的刷新用例）。
+ */
 function statSignature(dbPath: string): string {
-  const stat = statSync(dbPath);
-  return `${stat.size}:${Math.floor(stat.mtimeMs)}`;
+  const stat = statSync(dbPath, { bigint: true });
+  return `${stat.ino}:${stat.size}:${stat.mtimeNs}`;
 }
 
 function readMeta(db: DatabaseSync, key: string): string | undefined {
