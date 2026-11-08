@@ -1,13 +1,13 @@
 # Sati 技术债务指标基线与趋势
 
 > 由 `node scripts/measure-techdebt.mjs --update` 自动生成，谨防手工编辑。
-> 最近一次快照：**2026-11-07**
+> 最近一次快照：**2026-11-08**
 
 ## 规模
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1216 / 211715 |
+| src TS 文件 / 行数 | 1216 / 212289 |
 | src JS 文件 | 0 |
 | tests 文件 | 715 |
 | ui/src 文件 / 行数 | 801 / 112332 |
@@ -73,7 +73,7 @@
 | `ui/src/hooks/useSatiConfig.ts` | `useSatiConfigState` | 332 | function |
 | `ui/src/components/code-editor/view/CodeEditor.tsx` | `CodeEditor` | 326 | function |
 | `ui/src/components/annotation/view/Annotator.tsx` | `Annotator` | 322 | function |
-| `src/tool/builtin/patentFigureProject.ts` | `createPatentFigureProjectTool` | 307 | function |
+| `src/tool/builtin/patentFigureProject.ts` | `createPatentFigureProjectTool` | 316 | function |
 | `ui/src/components/settings/view/integrations/im/components/WeixinChannelSection.tsx` | `WeixinChannelSection` | 300 | function |
 
 ## Top 30 大文件
@@ -103,13 +103,13 @@
 | `src/always-on/runtime/DiscoveryFire.ts` | 1079 |
 | `src/gateway/protocol/types.ts` | 995 |
 | `src/context/DefaultContextRuntime.ts` | 987 |
+| `src/patent/figuregen/leader-line.ts` | 980 |
 | `src/pilot/config/loadPilotConfig.ts` | 941 |
 | `src/patent/figuregen/inkscape-renderer.ts` | 916 |
 | `ui/src/components/chat/tools/configs/toolConfigs.ts` | 864 |
 | `ui/server/services/satiConfig.js` | 858 |
 | `src/tool/builtin/kanban.ts` | 816 |
 | `ui/server/services/spreadsheetPreview.js` | 793 |
-| `ui/src/types/contentReference.ts` | 792 |
 
 ## vendored 子包（单列，不计入上述规模与排名）
 
