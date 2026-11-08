@@ -1,11 +1,15 @@
 /**
  * src/patent/graph/domains/enablement — 充分公开分析子图（专利法 A26.3）。
  *
- * 节点链：load（确定性：分段/统计）→ completeness（结构完整性）→ clarity（清楚性）
+ * 节点链：load（确定性：分段/统计）→ anchor_evidence（确定性：权要特征↔说明书
+ * 锚点命中）→ completeness（结构完整性）→ clarity（清楚性）
  * → enablement（能够实现性）→ domain_rules（新增：技术领域检测 + 领域特殊要求）
  * → conclude（结论）→ approval → rule_gate。
  *
  * 对齐 Mady domains/enablement（5 节点 + domain_rules.go 领域特殊规则）。
+ *
+ * anchor_evidence 与 A26.4 claim-breadth 子图对称：确定性连续子串匹配，
+ * 给「权要特征是否有说明书原文支撑」提供可解释证据层（#830 R3）。
  */
 
 import { GraphBuilder } from "../engine.js";
@@ -16,9 +20,11 @@ import {
   checkNumericRangeCoverage,
   formatRange,
   splitEmbodiments,
+  type EmbodimentChunk,
 } from "../../spec/index.js";
 import { globalStageHandlerRegistry, type StageHandlerRegistry } from "../../atoms/index.js";
 import { dataBlock } from "../../prompt-hygiene.js";
+import { matchFeature, type FeatureMatch } from "../../anchor/index.js";
 import { handlerNode, llmNode, resolveInput, ruleGateNode } from "./shared.js";
 
 export type BuildEnablementGraphOptions = {
@@ -67,7 +73,10 @@ export function splitSpecSections(text: string): Record<string, string> {
 
 /**
  * 按章节优先序拼接说明书上下文（预算内截断，长说明书不再"头部 8K 截断"）。
- * 无切片（splitSpecSections fallback / 旧 checkpoint 恢复）时回退全文截断。
+ *
+ * 「具体实施方式」章节优先按实施例分块拼接（#830 M6）：带权要特征锚点的块
+ * 优先保留，避免后续实施例因预算被整体丢弃。无切片（splitSpecSections
+ * fallback / 旧 checkpoint 恢复）时回退全文截断。
  */
 export function buildSpecContext(
   state: GraphState,
@@ -84,6 +93,10 @@ export function buildSpecContext(
     ...preferSections.filter(s => sections[s] !== undefined),
     ...keys.filter(k => !preferSections.includes(k)),
   ];
+  // 实施例分块（load 节点产出）：供超预算章节按块均分预算。
+  // 防御：state 键可能被外部写入非数组值（getStateObject 只保证是对象）→ 过滤。
+  const rawChunks = getStateObject(state, "embodiment_chunks") as unknown;
+  const chunks: EmbodimentChunk[] = Array.isArray(rawChunks) ? (rawChunks as EmbodimentChunk[]) : [];
   const parts: string[] = [];
   let used = 0;
   for (const key of ordered) {
@@ -91,7 +104,7 @@ export function buildSpecContext(
     if (value.trim().length === 0) continue;
     const remaining = budget - used;
     if (remaining <= 0) break;
-    const part = value.length <= remaining ? value : sliceSection(value, remaining);
+    const part = value.length <= remaining ? value : sliceSection(value, remaining, chunks);
     parts.push(`## ${key}\n${part}`);
     used += part.length;
   }
@@ -102,13 +115,24 @@ export function buildSpecContext(
  * 超预算章节的截断策略：若该节能按实施例切分，则给每个实施例分配均等预算，
  * 避免长说明书只保留前两个实施例、后面的实施例完全进不了上下文（#830 M6）。
  * 无实施例标题时保持旧的整节前缀截断。
+ *
+ * 带权要特征锚点的块（featureIds 非空）排在前面——它们是 A26.3/A26.4 证据
+ * 定位的目标，丢了就等于把证据从上下文里裁掉。
  */
-function sliceSection(value: string, budget: number): string {
-  const chunks = splitEmbodiments(value);
-  if (chunks.length < 2) return value.slice(0, budget);
-  const perChunk = Math.max(1, Math.floor(budget / chunks.length));
-  return chunks
-    .map(chunk => `${chunk.title}\n${chunk.content.slice(0, perChunk)}`)
+function sliceSection(value: string, budget: number, chunks: readonly EmbodimentChunk[] = []): string {
+  const local = splitEmbodiments(value);
+  const usable = local.length >= 2 ? local : chunks.filter(chunk => chunk.content.trim().length > 0);
+  if (usable.length < 2) return value.slice(0, budget);
+  const ordered = [
+    ...usable.filter(chunk => chunk.featureIds.length > 0),
+    ...usable.filter(chunk => chunk.featureIds.length === 0),
+  ];
+  const perChunk = Math.max(1, Math.floor(budget / ordered.length));
+  return ordered
+    .map(chunk => {
+      const head = chunk.featureIds.length > 0 ? `（锚点特征：${chunk.featureIds.join("、")}）` : "";
+      return `${chunk.title}${head}\n${chunk.content.slice(0, perChunk)}`;
+    })
     .join("\n\n")
     .slice(0, budget);
 }
@@ -118,6 +142,9 @@ const SPEC_CONTEXT_BUDGET = 8000;
 
 /** 输入文本在 workflowCtx 中的候选键（对齐 buildWorkflowRunContext 的统一映射）。 */
 const SPEC_INPUT_KEYS = ["text", "source_text", "spec", "input"];
+
+/** 权利要求文本在 workflowCtx 中的候选键（用于锚点证据）。 */
+const CLAIM_INPUT_KEYS = ["claim", "claim_text", "claims", "claimText"];
 
 /** 说明书结构完整性检查（确定性：五部分出现情况）。 */
 function checkSections(text: string): { present: string[]; missing: string[] } {
@@ -317,6 +344,69 @@ const CONCLUDE_SCHEMA = {
 // 子图构建
 // ---------------------------------------------------------------------------
 
+/** 权要特征切分标记（分句与并列）——口径与 A26.4 claim-breadth 一致。 */
+const FEATURE_SPLIT_RE = /[，,；;。]/;
+
+/**
+ * 从权要文本确定性提取候选特征片段（机械切分，不做语义概括）。
+ *
+ * 只去前序/引导词与纯连接词；片段能否在说明书中命中由 anchor 判定。
+ */
+export function extractClaimFeatures(claimText: string): string[] {
+  const features: string[] = [];
+  for (const raw of claimText.split(FEATURE_SPLIT_RE)) {
+    const segment = raw
+      .replace(/^\s*(?:其特征在于|其中|并且|且|还|所述)+/u, "")
+      .replace(/^\s*根据权利要求\s*[0-9、,，和或及与\-~～至到\s]+?所述(?:的)?/u, "")
+      .replace(/^\s*[0-9０-９]+\s*[.、．,，:：]?\s*/u, "")
+      .trim();
+    if (segment.length < 4) continue;
+    if (/^(?:其特征在于|包括|包含|所述)$/u.test(segment)) continue;
+    features.push(segment);
+  }
+  return features;
+}
+
+/**
+ * 确定性锚点证据：权要特征在说明书中的连续子串命中。
+ *
+ * 与 A26.4 claim-breadth 的 anchor_evidence 同口径：未命中不抛错，由下游
+ * LLM 节点作为缺口线索处理（A26.3 视角：权要特征在说明书中无原文对应）。
+ */
+export function anchorSpecFeatures(
+  claimText: string,
+  specText: string,
+): { features: FeatureMatch[]; matched: number; unmatched: number } {
+  const features = extractClaimFeatures(claimText).map(feature => matchFeature(specText, feature));
+  let matched = 0;
+  let unmatched = 0;
+  for (const feature of features) {
+    if (feature.hit === null) unmatched += 1;
+    else matched += 1;
+  }
+  return { features, matched, unmatched };
+}
+
+/** 把锚点证据格式化为提示块（未命中显式标注，不静默丢弃）。 */
+export function formatSpecAnchorEvidence(state: GraphState): string {
+  const evidence = getStateObject(state, "spec_anchor_evidence") as {
+    features?: FeatureMatch[];
+    matched?: number;
+    unmatched?: number;
+  };
+  const features = Array.isArray(evidence.features) ? evidence.features : [];
+  if (features.length === 0) return "";
+  const lines: string[] = [
+    "【权要特征↔说明书锚点证据（确定性连续子串匹配；未命中=说明书中无该原文片段）】",
+    `命中 ${evidence.matched ?? 0} 条 / 未命中 ${evidence.unmatched ?? 0} 条`,
+  ];
+  for (const feature of features) {
+    const span = feature.hit === null ? "未命中" : `命中 [${feature.hit.start}, ${feature.hit.end})`;
+    lines.push(`  - 「${feature.feature}」 ${span}`);
+  }
+  return lines.join("\n");
+}
+
 /** 构建充分公开分析子图（A26.3）。 */
 export function buildEnablementGraph(options: BuildEnablementGraphOptions = {}): GraphBuilder {
   const handlers = options.handlers ?? globalStageHandlerRegistry;
@@ -332,12 +422,19 @@ export function buildEnablementGraph(options: BuildEnablementGraphOptions = {}):
       spec_sections_present: sections.present,
       spec_sections_missing: sections.missing,
       spec_section_texts: splitSpecSections(text),
-      embodiment_chunks: splitEmbodiments(text),
+      embodiment_chunks: splitEmbodiments(text, extractClaimFeatures(resolveInput(state, CLAIM_INPUT_KEYS))),
     };
   });
   builder.addNode("spec_prechecks", async ({ state }) => {
     const text = resolveInput(state, SPEC_INPUT_KEYS);
     return { spec_prechecks: runSpecPrechecks(text) };
+  });
+  // anchor_evidence：确定性节点，不调 LLM；权要特征在说明书中的原文命中。
+  // 与 A26.4 claim-breadth 子图对称（#830 R3）。
+  builder.addNode("anchor_evidence", async ({ state }) => {
+    const specText = resolveInput(state, SPEC_INPUT_KEYS);
+    const claimText = resolveInput(state, CLAIM_INPUT_KEYS);
+    return { spec_anchor_evidence: anchorSpecFeatures(claimText, specText) };
   });
   builder.addNode(
     "completeness",
@@ -405,6 +502,11 @@ export function buildEnablementGraph(options: BuildEnablementGraphOptions = {}):
           "- 技术效果可预期时无需实验数据（公知原理可推知、已知类似结构）；",
           "- 效果夸大通常不构成公开不充分（除非以夸大效果作为公开基础）。",
           prechecksBlock(state),
+          // 锚点证据（确定性）：权要特征在说明书中的原文命中情况，作为
+          // "权要保护的技术方案是否有说明书原文支撑"的确定性线索（#830 R3）。
+          // 未命中只说明「无完全相同的原文片段」，不等于不能实现——等同公开
+          // （本领域技术人员的常识/常规手段）同样构成充分公开，勿据此直接判否。
+          formatSpecAnchorEvidence(state),
           dataBlock(context),
           claimBlock,
           "请严格输出 JSON：{ gaps（每项标注对应情形编号，如 §2.1.3(3)）, enablement_ok, skilled_person_assessment }。",
@@ -455,9 +557,11 @@ export function buildEnablementGraph(options: BuildEnablementGraphOptions = {}):
     }),
   );
 
-  // 边：load → spec_prechecks → completeness → clarity → enablement → domain_rules → conclude → 尾链
+  // 边：load → spec_prechecks → anchor_evidence → completeness → clarity → enablement
+  //   → domain_rules → conclude → 尾链
   builder.addEdge("load", "spec_prechecks");
-  builder.addEdge("spec_prechecks", "completeness");
+  builder.addEdge("spec_prechecks", "anchor_evidence");
+  builder.addEdge("anchor_evidence", "completeness");
   builder.addEdge("completeness", "clarity");
   builder.addEdge("clarity", "enablement");
   builder.addEdge("enablement", "domain_rules");
@@ -512,9 +616,10 @@ export function extractEnablementResult(state: GraphState): {
 export const ENABLEMENT_INPUT_DECLARATIONS: Readonly<Record<string, readonly string[]>> = {
   load: [],
   spec_prechecks: [],
+  anchor_evidence: [],
   completeness: [],
   clarity: [],
-  enablement: ["spec_prechecks"],
+  enablement: ["spec_prechecks", "spec_anchor_evidence"],
   domain_rules: [],
   conclude: ["enablement_completeness", "enablement_clarity", "enablement_enablement"],
 };

@@ -55,7 +55,7 @@ test("StageHandlerRegistry 注册/查询/同名覆盖", () => {
   assert.equal(reg.lookup("t"), h2);
 });
 
-test("registerBuiltinAtoms 注册 26 个内置原子与 handler", () => {
+test("registerBuiltinAtoms 注册 28 个内置原子与 handler", () => {
   registerBuiltinAtoms();
   const names = ListAtoms()
     .map(a => a.name)
@@ -64,8 +64,10 @@ test("registerBuiltinAtoms 注册 26 个内置原子与 handler", () => {
     "amendment-diff",
     "approval-gate",
     "chemistry-analyze",
+    "claim-breadth",
     "claim-chart",
     "claim-embodiment-mapper",
+    "claim-lint",
     "claim-strategy",
     "clarity-gate",
     "compare",

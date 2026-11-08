@@ -610,10 +610,41 @@ export const patentDraftingManifest: WorkflowManifest = {
       atom: "claim-strategy",
     },
     {
+      id: "claim_breadth_preview",
+      strategy: "chain",
+      // A26.4 交底阶段预评估：对策略表给出的建议权要特征做支持/清楚预判，
+      // 在成文前暴露"权要范围超出说明书公开"的缺陷。
+      description: "A26.4 预评估：对建议权要特征做支持/清楚预判（成文前暴露超范围缺陷）",
+      atom: "claim-breadth",
+    },
+    {
       id: "draft_claims",
       strategy: "chain",
       description: "基于 PFE 与新颖性结果直出权利要求草稿（独立+从属）",
       atom: "draft-claims",
+    },
+    {
+      id: "claim_breadth_review",
+      strategy: "chain",
+      // A26.4 草稿阶段复核：对实际权要草稿做正式支持/清楚判定。
+      description: "A26.4 复核：对实际权要草稿做支持/清楚正式判定",
+      atom: "claim-breadth",
+    },
+    {
+      id: "claim_lint",
+      strategy: "chain",
+      // 描述语义契约：不含"零 error 才放行"式门限数字断言（判定口径是 lint
+      // 引擎内部实现；HITL 报告面保留错误清单，worker 可见面剥离）。
+      // error 级经结构化判据（gaps[] 非空 / consistent:false）回退 draft_claims
+      // 重跑（有界 1 次，证据型修订提示注入）；warning 级透传不阻断。
+      description:
+        "权利要求确定性校验门：术语清楚/引用基础/多项引用/前序一致/功能限定/编号连续（未通过自动带证据提示回退权要修订）",
+      atom: "claim-lint",
+      retry: {
+        whenOutputGaps: true,
+        rewindTo: "draft_claims",
+        maxRetries: 1,
+      },
     },
     {
       id: "claim_coverage",

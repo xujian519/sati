@@ -385,6 +385,7 @@ function normalizeGoldenCase(value: unknown, where: string): DraftingGoldenCase 
   for (const dimension of expectedFailures) {
     if (!DIMENSION_IDS.has(dimension)) throw new Error(`${where} 未知期望失分维度：${dimension}`);
   }
+  const signals = normalizeGoldenSignals(record.signals, where);
   return {
     id,
     class: klass,
@@ -393,7 +394,58 @@ function normalizeGoldenCase(value: unknown, where: string): DraftingGoldenCase 
     spec: requireString(record, "spec", where),
     ...(requiredFeatures.length > 0 ? { requiredFeatures } : {}),
     ...(expectedFailures.length > 0 ? { expectedFailures: expectedFailures as DraftingDimensionId[] } : {}),
+    // 子图结论透传（R1）：此前丢弃 signals 导致金标路径的 A26.4 维度恒为
+    // "确定性代理"（unverified），子图结论永远进不了金标回归。
+    ...(signals !== undefined ? { signals } : {}),
   };
+}
+
+/**
+ * 解析金标内的子图结论（可选）。
+ *
+ * 只接受布尔字段；非布尔值直接报错而非静默丢弃——避免"写了但没生效"的
+ * 假核验（金标带坏信号却按"未核验"跑，结论会误导）。
+ */
+function normalizeGoldenSignals(value: unknown, where: string): DraftingSignals | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error(`${where} signals 必须是对象`);
+  }
+  const record = value as Record<string, unknown>;
+  const signals: DraftingSignals = {};
+  const enablement = record.enablement;
+  if (enablement !== undefined) {
+    if (typeof enablement !== "object" || enablement === null || Array.isArray(enablement)) {
+      throw new Error(`${where} signals.enablement 必须是对象`);
+    }
+    const sufficientlyDisclosed = (enablement as Record<string, unknown>).sufficientlyDisclosed;
+    if (sufficientlyDisclosed !== undefined) {
+      if (typeof sufficientlyDisclosed !== "boolean") {
+        throw new Error(`${where} signals.enablement.sufficientlyDisclosed 必须是布尔值`);
+      }
+      signals.enablement = { sufficientlyDisclosed };
+    }
+  }
+  const claimBreadth = record.claimBreadth;
+  if (claimBreadth !== undefined) {
+    if (typeof claimBreadth !== "object" || claimBreadth === null || Array.isArray(claimBreadth)) {
+      throw new Error(`${where} signals.claimBreadth 必须是对象`);
+    }
+    const breadthRecord = claimBreadth as Record<string, unknown>;
+    const supportOk = breadthRecord.supportOk;
+    const clarityOk = breadthRecord.clarityOk;
+    if (supportOk !== undefined && typeof supportOk !== "boolean") {
+      throw new Error(`${where} signals.claimBreadth.supportOk 必须是布尔值`);
+    }
+    if (clarityOk !== undefined && typeof clarityOk !== "boolean") {
+      throw new Error(`${where} signals.claimBreadth.clarityOk 必须是布尔值`);
+    }
+    signals.claimBreadth = {
+      ...(supportOk !== undefined ? { supportOk: supportOk as boolean } : {}),
+      ...(clarityOk !== undefined ? { clarityOk: clarityOk as boolean } : {}),
+    };
+  }
+  return signals;
 }
 
 function requireString(record: Record<string, unknown>, key: string, where: string): string {

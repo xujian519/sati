@@ -28,7 +28,23 @@ export interface TauReport {
   tiesModel: number;
   tiesHuman: number;
   pairCount: number;
+  /** τ 的近似 95% 置信区间（正态近似；样本量小时区间很宽，仅作参考）。 */
+  confidenceInterval?: { lower: number; upper: number };
   disagreements: Array<{ id: string; model: string; human: Preference }>;
+}
+
+/**
+ * τ-b 的近似标准误（正态近似）。
+ *
+ * 口径：SE ≈ sqrt((1 - τ²) / (n(n-1) / 2))——近似忽略 tie 修正，
+ * 样本量小时区间会很宽，只作参考，不作达标依据（达标仍看 τ 阈值）。
+ */
+function tauStandardError(tau: number, pairs: number): number | undefined {
+  if (pairs < 1) return undefined;
+  const variance = (1 - tau * tau) / pairs;
+  // τ = ±1 时方差为 0 → SE 为 0，区间退化为 [τ, τ]（仍给出，避免"无区间"歧义）。
+  if (variance < 0) return undefined;
+  return Math.sqrt(variance);
 }
 
 function sign(value: number): -1 | 0 | 1 {
@@ -78,7 +94,19 @@ export function kendallTauB(items: readonly PairwiseItem[]): TauReport {
   const pairs = (n * (n - 1)) / 2;
   const denominator = Math.sqrt((pairs - tiesModel) * (pairs - tiesHuman));
   const tau = denominator === 0 ? 0 : (concordant - discordant) / denominator;
-  return { tau, concordant, discordant, tiesModel, tiesHuman, pairCount: pairs, disagreements };
+  const se = tauStandardError(tau, pairs);
+  const confidenceInterval =
+    se === undefined ? undefined : { lower: Math.max(-1, tau - 1.96 * se), upper: Math.min(1, tau + 1.96 * se) };
+  return {
+    tau,
+    concordant,
+    discordant,
+    tiesModel,
+    tiesHuman,
+    pairCount: pairs,
+    ...(confidenceInterval !== undefined ? { confidenceInterval } : {}),
+    disagreements,
+  };
 }
 
 export function loadPairwiseJsonl(filePath: string): PairwiseItem[] {
@@ -108,6 +136,12 @@ export function formatReport(report: TauReport, threshold = 0.4): string {
     `pairwise: ${report.pairCount} 对，concordant=${report.concordant} discordant=${report.discordant}`,
     `ties: model=${report.tiesModel} human=${report.tiesHuman}`,
     `Kendall τ-b = ${report.tau.toFixed(4)}（阈值 ${threshold}，${status}）`,
+    // 置信区间为正态近似，样本量小时很宽——只作参考，不作达标依据。
+    ...(report.confidenceInterval !== undefined
+      ? [
+          `τ 95% 近似置信区间: [${report.confidenceInterval.lower.toFixed(4)}, ${report.confidenceInterval.upper.toFixed(4)}]（正态近似，样本量小时区间宽，仅供参考）`,
+        ]
+      : []),
   ];
   if (report.disagreements.length > 0) {
     lines.push("不一致项：");
