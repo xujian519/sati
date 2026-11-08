@@ -20,7 +20,7 @@
  */
 
 import { figureCaption, officeProfile, printableArea } from "../office-profile.js";
-import { planLeaderLines, type LeaderSegment } from "../leader-line.js";
+import { leaderOutwardReachMm, planLeaderLines, type LeaderSegment } from "../leader-line.js";
 import { glyphBox, textWidthMm } from "../glyph-box.js";
 import { escapeXml, fmt as fmtShared, SVG_LEADER_ROLE, SVG_ROLE_ATTRIBUTE } from "../render-utils.js";
 import type { Jurisdiction } from "../types.js";
@@ -142,9 +142,59 @@ export const CAD_REF_LABEL_GAP_MM = 1.5;
 export const CAD_REF_RESERVE_PAD_MM = 1;
 /** 预留带上限（占可印区比例）：防止调用方给出离谱偏移后把几何压到不可见。 */
 export const CAD_MAX_RESERVE_RATIO = 0.2;
+/**
+ * 引线障碍线段上限。投影边 + 剖面线可以上千；48 候选 × 标号数 × 边数会把择位拖慢。
+ * 超过上限时保留最长的若干段，并补上全部端点的轴对齐包络（4 条），避免细碎边把外轮廓丢掉。
+ */
+export const CAD_LEADER_SEGMENT_CAP = 96;
 
 function dot(a: readonly [number, number], b: readonly [number, number]): number {
   return a[0] * b[0] + a[1] * b[1];
+}
+
+/** 端点轴对齐包络的四条边。线段为空时返回空数组。 */
+function leaderEnvelope(segments: readonly LeaderSegment[]): LeaderSegment[] {
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  for (const segment of segments) {
+    for (const point of [segment.from, segment.to]) {
+      minX = Math.min(minX, point.x);
+      minY = Math.min(minY, point.y);
+      maxX = Math.max(maxX, point.x);
+      maxY = Math.max(maxY, point.y);
+    }
+  }
+  if (!Number.isFinite(minX)) return [];
+  const topLeft = { x: minX, y: minY };
+  const topRight = { x: maxX, y: minY };
+  const bottomRight = { x: maxX, y: maxY };
+  const bottomLeft = { x: minX, y: maxY };
+  return [
+    { from: topLeft, to: topRight },
+    { from: topRight, to: bottomRight },
+    { from: bottomRight, to: bottomLeft },
+    { from: bottomLeft, to: topLeft },
+  ];
+}
+
+/**
+ * 把引线障碍收进 {@link CAD_LEADER_SEGMENT_CAP}。未超限时原样返回（顺序不变）；
+ * 超限时取最长的若干段，并附上包络，使外轮廓仍参与共线判定。
+ */
+export function capCadLeaderSegments(segments: readonly LeaderSegment[]): LeaderSegment[] {
+  if (segments.length <= CAD_LEADER_SEGMENT_CAP) return [...segments];
+  const envelope = leaderEnvelope(segments);
+  const room = Math.max(0, CAD_LEADER_SEGMENT_CAP - envelope.length);
+  const ranked = segments
+    .map((segment, index) => ({
+      segment,
+      index,
+      length: Math.hypot(segment.to.x - segment.from.x, segment.to.y - segment.from.y),
+    }))
+    .sort((a, b) => b.length - a.length || a.index - b.index);
+  return [...ranked.slice(0, room).map(item => item.segment), ...envelope];
 }
 
 function normalize(vector: readonly [number, number]): [number, number] | undefined {
@@ -286,8 +336,9 @@ export function renderCadSvg(table: CadEdgeTable, options: CadRenderOptions): Ca
 
   // 标注预留带：标号向图外引，故四边各留出"最长引线 + 半个最宽标号 + 余量"。
   // 有预留带 ⇒ 含标注的纸面尺寸**由构造保证**不超可印区（几何另按可用宽度缩放）。
-  // 预留带同时是择位引擎的**画幅约束**：带内放不下候选时引擎不硬画（那会被裁或压图），
-  // 而是把标号退化为就地标注并告警（见 leader-line.ts）。
+  // 预留带同时是择位引擎的**画幅约束**。带的厚度按「最短环 + 水平短划 + 字框」估算
+  // （见 leaderOutwardReachMm）。CAD 走 strict：带内仍放不下就抛 LeaderPlacementError，
+  // 不把标号画在零件上。
   const profile = officeProfile(
     options.jurisdiction === "us" ? "uspto" : options.jurisdiction === "pct" ? "pct" : "cnipa",
   );
@@ -298,9 +349,12 @@ export function renderCadSvg(table: CadEdgeTable, options: CadRenderOptions): Ca
     let needed = 0;
     for (const annotation of annotations) {
       const offset = annotation.labelOffsetMm;
-      const reach = offset === undefined ? CAD_REF_LEADER_MM : Math.hypot(offset[0], offset[1]);
-      const halfWidth = textWidthMm(String(annotation.ref), refFontMm) / 2;
-      needed = Math.max(needed, Math.min(reach, CAD_REF_LEADER_MM * 6) + halfWidth + CAD_REF_RESERVE_PAD_MM);
+      // 自由落位的外伸已含字宽与短划；钉死偏移只知道调用方给的向量，字宽仍要另加。
+      const reach =
+        offset === undefined
+          ? leaderOutwardReachMm(String(annotation.ref), refFontMm, CAD_REF_LEADER_MM, CAD_REF_LABEL_GAP_MM)
+          : Math.hypot(offset[0], offset[1]) + textWidthMm(String(annotation.ref), refFontMm) / 2;
+      needed = Math.max(needed, Math.min(reach, CAD_REF_LEADER_MM * 8) + CAD_REF_RESERVE_PAD_MM);
     }
     const cap = Math.min(area.widthMm, area.heightMm) * CAD_MAX_RESERVE_RATIO;
     return Math.min(needed, cap);
@@ -398,11 +452,15 @@ export function renderCadSvg(table: CadEdgeTable, options: CadRenderOptions): Ca
         ...(annotation.labelOffsetMm === undefined ? {} : { pinnedOffsetMm: annotation.labelOffsetMm }),
       };
     }),
-    { boxes: [geometryBoundsMm, ...(captionBoxMm === undefined ? [] : [captionBoxMm])], segments: obstacleSegments },
+    {
+      boxes: [geometryBoundsMm, ...(captionBoxMm === undefined ? [] : [captionBoxMm])],
+      segments: capCadLeaderSegments(obstacleSegments),
+    },
     {
       fontSizeMm: refFontMm,
       gapMm: CAD_REF_LABEL_GAP_MM,
       minLeaderMm: CAD_REF_LEADER_MM,
+      mode: "strict",
       // 引线上限取几何对角尺度：锚点在零件深处时必须能一路引到图外（缺省 6mm 够不到中心）
       maxLeaderMm:
         Math.max(geometryBoundsMm.right - geometryBoundsMm.left, geometryBoundsMm.bottom - geometryBoundsMm.top) *
@@ -425,15 +483,18 @@ export function renderCadSvg(table: CadEdgeTable, options: CadRenderOptions): Ca
   }));
   const annotationMarkup = plan.placements
     .map(placement => {
-      const leader = placement.leader
-        .map(
-          segment =>
-            `<polyline points="${fmt(segment.from.x)},${fmt(segment.from.y)} ` +
-            `${fmt(segment.to.x)},${fmt(segment.to.y)}" fill="none" stroke="#000000" ` +
-            `${SVG_ROLE_ATTRIBUTE}="${SVG_LEADER_ROLE}" ` +
-            `stroke-width="${CAD_LINE_WIDTH_MM}"/>`,
-        )
-        .join("");
+      // 折线收成一条 polyline：肘点 + 水平短划仍是一根标记线，复核侧按 leader 角色整段跳过。
+      const points: { x: number; y: number }[] = [];
+      for (const segment of placement.leader) {
+        if (points.length === 0) points.push(segment.from);
+        points.push(segment.to);
+      }
+      const leader =
+        points.length < 2
+          ? ""
+          : `<polyline points="${points.map(point => `${fmt(point.x)},${fmt(point.y)}`).join(" ")}" ` +
+            `fill="none" stroke="#000000" ${SVG_ROLE_ATTRIBUTE}="${SVG_LEADER_ROLE}" ` +
+            `stroke-width="${CAD_LINE_WIDTH_MM}"/>`;
       return (
         `<g id="n-ref-${placement.id}" data-ref="${placement.id}">${leader}` +
         `<text x="${fmt(placement.labelPoint.x)}" y="${fmt(placement.labelPoint.y)}" font-size="${refFontMm}" ` +

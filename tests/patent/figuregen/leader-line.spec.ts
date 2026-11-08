@@ -10,7 +10,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   DEFAULT_COLLINEAR_ANGLE_DEG,
+  LEADER_DIRECTION_PHASE_DEG,
   LEADER_DIRECTIONS_DEG,
+  LEADER_PLACEMENT_GUIDANCE,
+  LEADER_STUB_MM,
+  LeaderPlacementError,
+  buildLeaderGeometry,
   labelBoxOf,
   planLeaderLines,
   segmentAngleDeg,
@@ -87,22 +92,41 @@ test("labelBoxOf：与复核侧共用 glyphBox 的字符宽度（数字/小写 0
   }
 });
 
-test("无遮挡：标号落在基向（远离图心）上、取最短引线，引线止于标号外缘再退间隙", () => {
+test("无遮挡：标号落在最接近基向的相位方向、取最短环，折线以水平短划止于字框外", () => {
+  const anchor = { x: 50, y: 0 };
   const plan = planLeaderLines(
-    [{ id: "10", text: "10", anchor: { x: 50, y: 0 } }],
+    [{ id: "10", text: "10", anchor }],
     {},
     { ...BASE_OPTIONS, figureCenter: { x: 0, y: 0 }, canvas: WIDE_CANVAS },
   );
   const placement = plan.placements[0]!;
   assert.equal(placement.degraded, false);
   assert.equal(placement.pinned, false);
-  // 基向 = 锚点 − 图心 = +x ⇒ 标号在右侧、距离取最短档（引线由短到长枚举，取第一个可用者）
-  assert.deepEqual(placement.offsetMm, [BASE_OPTIONS.minLeaderMm, 0]);
-  assert.equal(placement.leader.length, 1);
-  const leader = placement.leader[0]!;
-  assert.deepEqual(leader.from, { x: 50, y: 0 });
-  // 字框左缘 = 56 − 1.8；引线止于左缘再退 1.5mm 间隙
-  assert.deepEqual(leader.to, { x: placement.box.left - BASE_OPTIONS.gapMm, y: 0 });
+  // 基向 = +x。相位把 0° 错开到 15°（与 345° 角距相同，下标更小者胜），环距取最短档。
+  const expected = buildLeaderGeometry({
+    anchor,
+    directionDeg: LEADER_DIRECTION_PHASE_DEG,
+    ringMm: BASE_OPTIONS.minLeaderMm,
+    text: "10",
+    fontSizeMm: BASE_OPTIONS.fontSizeMm,
+    gapMm: BASE_OPTIONS.gapMm,
+  });
+  assert.ok(expected !== undefined);
+  assert.deepEqual(placement.labelPoint, expected.labelPoint);
+  assert.deepEqual(placement.box, expected.box);
+  assert.equal(placement.leader.length, 2, "自由落位应是斜段 + 水平短划");
+  const [inclined, stub] = placement.leader;
+  assert.deepEqual(inclined!.from, anchor);
+  assert.equal(stub!.from.y, stub!.to.y, "末段应水平");
+  assert.ok(Math.abs(stub!.to.x - stub!.from.x - LEADER_STUB_MM) < 1e-9, "短划长度应等于命名常量");
+  assert.ok(
+    Math.abs(
+      segmentAngleDeg(inclined!, { from: anchor, to: { x: anchor.x + 1, y: anchor.y } }) - LEADER_DIRECTION_PHASE_DEG,
+    ) < 1e-6,
+  );
+  const glyph = glyphBox("10", [placement.labelPoint.x, placement.labelPoint.y], BASE_OPTIONS.fontSizeMm, "middle");
+  assert.deepEqual(placement.box, { left: glyph.minX, top: glyph.minY, right: glyph.maxX, bottom: glyph.maxY });
+  assert.ok(Math.abs(placement.box.left - stub!.to.x - BASE_OPTIONS.gapMm) < 1e-9, "短划应停在字框左缘再退间隙");
   assert.deepEqual(plan.warnings, []);
 });
 
@@ -126,42 +150,60 @@ test("图内实心区：锚点在轮廓里时把标号推到轮廓外（而不�
   assert.ok(!overlaps(placement.box, geometry), `标号框不得压盖实心区：${JSON.stringify(placement.box)}`);
 });
 
-test("共线规避：基向与一条主线条共线时改向，不画出与主线条分不清的引线", () => {
-  const line: LeaderSegment = { from: { x: 0, y: 0 }, to: { x: 100, y: 0 } };
-  const target: LeaderTarget = { id: "10", text: "10", anchor: { x: 50, y: 0 } };
+test("共线规避：最佳斜段贴着主线条时改向，不画出与主线条分不清的引线", () => {
+  const anchor = { x: 50, y: 0 };
+  const target: LeaderTarget = { id: "10", text: "10", anchor };
   const base = { ...BASE_OPTIONS, figureCenter: { x: 0, y: 0 }, canvas: WIDE_CANVAS };
+  const radians = (LEADER_DIRECTION_PHASE_DEG * Math.PI) / 180;
+  // 主线条沿着首选相位（15°）伸出：该斜段的远端落在线上，必须换向
+  const line: LeaderSegment = {
+    from: anchor,
+    to: { x: anchor.x + Math.cos(radians) * 40, y: anchor.y + Math.sin(radians) * 40 },
+  };
 
-  // 画布上没有该线条：照基向（+x）走
   const free = planLeaderLines([target], {}, base);
-  assert.deepEqual(free.placements[0]!.offsetMm, [BASE_OPTIONS.minLeaderMm, 0]);
+  const freeInclined = free.placements[0]!.leader[0]!;
+  assert.ok(
+    Math.abs(
+      segmentAngleDeg(freeInclined, { from: anchor, to: { x: anchor.x + 1, y: anchor.y } }) -
+        LEADER_DIRECTION_PHASE_DEG,
+    ) < 1e-6,
+    "无障碍时斜段应取相位方向",
+  );
 
-  // 有该线条：引线远端贴线 ⇒ 该候选判"分不清"，必须换向（首候选为基向旋转 45°）
   const avoided = planLeaderLines([target], { segments: [line] }, base);
   const placement = avoided.placements[0]!;
   assert.equal(placement.degraded, false);
   const leader = placement.leader[0]!;
-  assert.ok(Math.abs(segmentAngleDeg(leader, line) - 45) < 1e-6, `引线应与主线条成 45°：${JSON.stringify(leader)}`);
-  assert.ok(angleBetween(dirOf(placement.anchor, placement.labelPoint), [1, 0]) > 1e-6, "不得沿用与主线条共线的基向");
+  assert.ok(
+    segmentAngleDeg(leader, line) >= DEFAULT_COLLINEAR_ANGLE_DEG,
+    `贴线斜段应被否掉：${JSON.stringify(leader)}`,
+  );
 });
 
-test("共线判据看的是远端垂距：小角度离开不算共线，远端贴线才算", () => {
-  // 线条从 (-50,0) 到 (0,0)；锚点在其右端点上，基向朝右、略高于线条
+test("共线判据看的是远端垂距：小角度离开不算共线，斜段本身贴线才算", () => {
+  // 线条停在锚点左侧。15° 斜段的远端垂距 ≈ 6·sin15° ≈ 1.55mm > 0.7mm，不算共线。
   const line: LeaderSegment = { from: { x: -50, y: 0 }, to: { x: 0, y: 0 } };
   const target: LeaderTarget = { id: "1", text: "1", anchor: { x: 0, y: 0 } };
-  const withCenter = (center: LeaderPoint) => ({ ...BASE_OPTIONS, figureCenter: center, canvas: WIDE_CANVAS });
+  const options = { ...BASE_OPTIONS, figureCenter: { x: -10, y: 0 }, canvas: WIDE_CANVAS };
 
-  // 基向与线条约 14°：远端垂距 ≈ 6·sin14° ≈ 1.4mm > 0.7mm ⇒ 不算共线，基向照用
-  const shallow = planLeaderLines([target], { segments: [line] }, withCenter({ x: -97, y: 24 }));
-  const shallowPlacement = shallow.placements[0]!;
-  assert.equal(shallowPlacement.degraded, false);
-  const shallowRatio = shallowPlacement.offsetMm[1] / shallowPlacement.offsetMm[0];
-  assert.ok(Math.abs(shallowRatio - -24 / 97) < 1e-6, `应保留基向：${JSON.stringify(shallowPlacement.offsetMm)}`);
+  const shallow = planLeaderLines([target], { segments: [line] }, options);
+  const shallowLeader = shallow.placements[0]!.leader[0]!;
+  assert.equal(shallow.placements[0]!.degraded, false);
+  assert.ok(
+    Math.abs(segmentAngleDeg(shallowLeader, line) - LEADER_DIRECTION_PHASE_DEG) < 1e-6,
+    `小角度离开应保留相位方向：${JSON.stringify(shallow.placements[0]!.offsetMm)}`,
+  );
 
-  // 基向与线条约 2°：远端垂距 ≈ 0.2mm < 0.7mm ⇒ 判共线，须换向（≥ 夹角阈值）
-  const glued = planLeaderLines([target], { segments: [line] }, withCenter({ x: -99.939, y: 3.49 }));
+  const radians = (LEADER_DIRECTION_PHASE_DEG * Math.PI) / 180;
+  const gluedLine: LeaderSegment = {
+    from: { x: 0, y: 0 },
+    to: { x: Math.cos(radians) * 30, y: Math.sin(radians) * 30 },
+  };
+  const glued = planLeaderLines([target], { segments: [gluedLine] }, options);
   const gluedLeader = glued.placements[0]!.leader[0]!;
   assert.ok(
-    segmentAngleDeg(gluedLeader, line) >= DEFAULT_COLLINEAR_ANGLE_DEG,
+    segmentAngleDeg(gluedLeader, gluedLine) >= DEFAULT_COLLINEAR_ANGLE_DEG,
     `贴线候选应被否掉：${JSON.stringify(glued.placements[0]!.offsetMm)}`,
   );
 });
@@ -223,36 +265,43 @@ test("越界：画幅里放不下任何候选 ⇒ 退化为就地标号并告警
   assert.ok(plan.warnings[0]!.includes(String(LEADER_DIRECTIONS_DEG.length)), "告警应报出枚举规模");
 });
 
-test("引线止点按字框求解：1/2/3 位标号在水平/垂直/斜向都不进入字框", () => {
-  const directions: readonly [string, readonly [number, number]][] = [
-    ["水平", [1, 0]],
-    ["垂直", [0, 1]],
-    ["斜向", [Math.SQRT1_2, Math.SQRT1_2]],
+test("引线止点按字框求解：水平短划停在字框外，斜段不取正水平或正垂直", () => {
+  const centers: readonly [string, LeaderPoint][] = [
+    ["向右", { x: 0, y: 50 }],
+    ["向下", { x: 50, y: 0 }],
+    ["斜向", { x: 0, y: 0 }],
   ];
   for (const text of ["1", "10", "100"]) {
-    for (const [label, direction] of directions) {
+    for (const [label, center] of centers) {
       const anchor = { x: 50, y: 50 };
       const plan = planLeaderLines(
         [{ id: text, text, anchor }],
         {},
-        {
-          ...BASE_OPTIONS,
-          figureCenter: { x: anchor.x - direction[0], y: anchor.y - direction[1] },
-          canvas: WIDE_CANVAS,
-        },
+        { ...BASE_OPTIONS, figureCenter: center, canvas: WIDE_CANVAS },
       );
       const placement = plan.placements[0]!;
       assert.equal(placement.degraded, false, `${text} ${label} 不应退化`);
-      const leader = placement.leader[0]!;
-      const dx = Math.max(placement.box.left - leader.to.x, 0, leader.to.x - placement.box.right);
-      const dy = Math.max(placement.box.top - leader.to.y, 0, leader.to.y - placement.box.bottom);
-      const distance = Math.hypot(dx, dy);
-      assert.ok(distance > 0, `${text} ${label}：引线止点进入了标号框`);
-      assert.ok(distance <= BASE_OPTIONS.gapMm + 1e-9, `${text} ${label}：引线未退出间隙`);
-      // 轴向引线的垂距应正好等于间隙（沿射线退让在轴向上与垂距同值）
-      if (label !== "斜向") {
-        assert.ok(Math.abs(distance - BASE_OPTIONS.gapMm) < 1e-9, `${text} ${label}：间隙应为 ${BASE_OPTIONS.gapMm}mm`);
-      }
+      const stub = placement.leader[placement.leader.length - 1]!;
+      assert.equal(stub.from.y, stub.to.y, `${text} ${label}：末段应水平`);
+      const sign = stub.to.x >= stub.from.x ? 1 : -1;
+      const edge = sign > 0 ? placement.box.left : placement.box.right;
+      assert.ok(
+        Math.abs(Math.abs(edge - stub.to.x) - BASE_OPTIONS.gapMm) < 1e-9,
+        `${text} ${label}：短划应停在字框外 ${BASE_OPTIONS.gapMm}mm`,
+      );
+      const glyph = glyphBox(text, [placement.labelPoint.x, placement.labelPoint.y], BASE_OPTIONS.fontSizeMm, "middle");
+      assert.deepEqual(
+        placement.box,
+        { left: glyph.minX, top: glyph.minY, right: glyph.maxX, bottom: glyph.maxY },
+        `${text} ${label}：标号框必须与 glyphBox 一致`,
+      );
+      const inclined = placement.leader[0]!;
+      const toHorizontal = segmentAngleDeg(inclined, { from: { x: 0, y: 0 }, to: { x: 1, y: 0 } });
+      const toVertical = segmentAngleDeg(inclined, { from: { x: 0, y: 0 }, to: { x: 0, y: 1 } });
+      assert.ok(
+        Math.min(toHorizontal, toVertical) >= LEADER_DIRECTION_PHASE_DEG - 1e-6,
+        `${text} ${label}：斜段不应是正水平或正垂直`,
+      );
     }
   }
 });
@@ -394,6 +443,148 @@ test("唯一 id 的正常输入不受影响（回归：唯一性检查不得误�
     plan.placements.map(placement => placement.id),
     ["10", "20"],
   );
+});
+
+test("strict：放不下就抛 LeaderPlacementError，并点名放不下的标记", () => {
+  const options = {
+    ...BASE_OPTIONS,
+    mode: "strict" as const,
+    figureCenter: { x: 0, y: 0 },
+    canvas: { left: 0, top: 0, right: 8, bottom: 8 },
+  };
+  assert.throws(
+    () => planLeaderLines([{ id: "10", text: "10", anchor: { x: 4, y: 4 } }], {}, options),
+    (error: unknown) => {
+      assert.ok(error instanceof LeaderPlacementError);
+      assert.deepEqual([...error.unplaceableIds], ["10"]);
+      assert.match(error.message, /减少同时标注/);
+      assert.match(error.message, /拆成多幅/);
+      assert.match(error.message, /label_offset_mm/);
+      assert.ok(error.message.includes(LEADER_PLACEMENT_GUIDANCE));
+      return true;
+    },
+  );
+});
+
+test("strict：同一输入在可放置时与 degrade 得到同一落位；钉死偏移不因 strict 被改写", () => {
+  const placeable = {
+    ...BASE_OPTIONS,
+    figureCenter: { x: 0, y: 0 },
+    canvas: WIDE_CANVAS,
+  };
+  const targets: LeaderTarget[] = [
+    { id: "10", text: "10", anchor: { x: 20, y: 0 } },
+    { id: "20", text: "20", anchor: { x: 0, y: 0 }, pinnedOffsetMm: [-20, -8] },
+  ];
+  const loose = planLeaderLines(targets, {}, { ...placeable, mode: "degrade" });
+  const tight = planLeaderLines(targets, {}, { ...placeable, mode: "strict" });
+  assert.deepEqual(loose, tight);
+  assert.deepEqual(placementOf(tight, "20").offsetMm, [-20, -8]);
+  assert.equal(placementOf(tight, "20").pinned, true);
+});
+
+test("拥挤需要回溯：先放者的最优解堵死后放者的唯一口袋时，改走次优", () => {
+  const ringMm = 12;
+  const optionsBase: LeaderLineOptions = {
+    ...BASE_OPTIONS,
+    minLeaderMm: ringMm,
+    maxLeaderMm: ringMm,
+    figureCenter: { x: -20, y: 0 },
+    clearanceMm: 0.5,
+  };
+  const anchor = { x: 0, y: 0 };
+  const geometryOf = (text: string, directionDeg: number) => {
+    const geometry = buildLeaderGeometry({
+      anchor,
+      directionDeg,
+      ringMm,
+      text,
+      fontSizeMm: optionsBase.fontSizeMm,
+      gapMm: optionsBase.gapMm,
+    });
+    assert.ok(geometry !== undefined, `${text} @ ${directionDeg}°`);
+    return geometry;
+  };
+  const narrow = geometryOf("1", 15);
+  const narrowNext = geometryOf("1", 45);
+  const wide = geometryOf("100", 15);
+  const wideNext = geometryOf("100", 45);
+  // 画布只包住 15° 与 45° 两只口袋，把更陡的方向关在外面。
+  const canvas: LeaderBox = {
+    left: Math.min(narrow.box.left, narrowNext.box.left, wide.box.left) - 1,
+    top: Math.min(narrow.box.top, narrowNext.box.top, wide.box.top) - 1,
+    right: Math.max(narrow.box.right, narrowNext.box.right, wide.box.right) + 1,
+    bottom: narrowNext.box.bottom + 0.05,
+  };
+  const blocked = geometryOf("1", 75);
+  assert.equal(blocked.box.top > canvas.bottom || blocked.box.bottom > canvas.bottom, true, "75° 应被画布排除");
+  // 薄障碍只压住宽标号在 45° 的外伸，窄标号的 45° 框仍可用。
+  const sliver: LeaderBox = {
+    left: narrowNext.box.right + (optionsBase.clearanceMm ?? 0) + 0.3,
+    right: wideNext.box.right + 0.5,
+    top: wideNext.box.top - 0.2,
+    bottom: wideNext.box.bottom + 0.2,
+  };
+  const options = { ...optionsBase, canvas };
+  const alone = planLeaderLines([{ id: "A", text: "1", anchor }], { boxes: [sliver] }, options);
+  assert.deepEqual(alone.placements[0]!.labelPoint, narrow.labelPoint, "A 单独时应占 15° 最优口袋");
+
+  const plan = planLeaderLines(
+    [
+      { id: "A", text: "1", anchor },
+      { id: "B", text: "100", anchor },
+    ],
+    { boxes: [sliver] },
+    { ...options, mode: "strict" },
+  );
+  assert.deepEqual(plan.warnings, []);
+  assert.deepEqual(placementOf(plan, "A").labelPoint, narrowNext.labelPoint, "回溯后 A 应让出 15°");
+  assert.deepEqual(placementOf(plan, "B").labelPoint, wide.labelPoint, "B 应占回唯一可用的 15°");
+  assert.equal(placementOf(plan, "A").degraded, false);
+  assert.equal(placementOf(plan, "B").degraded, false);
+});
+
+test("reverse：把锚点挪出可放置区域后，strict 必须失败（fail-closed）", () => {
+  const canvas: LeaderBox = { left: -40, top: -40, right: 40, bottom: 40 };
+  const options = { ...BASE_OPTIONS, mode: "strict" as const, figureCenter: { x: 0, y: 0 }, canvas };
+  const placed = planLeaderLines([{ id: "10", text: "10", anchor: { x: 0, y: 0 } }], {}, options);
+  assert.equal(placed.placements[0]!.degraded, false, "对照：锚点在画幅内时应能放下");
+
+  assert.throws(
+    () => planLeaderLines([{ id: "10", text: "10", anchor: { x: 10_000, y: 10_000 } }], {}, options),
+    (error: unknown) => {
+      assert.ok(error instanceof LeaderPlacementError);
+      assert.deepEqual([...error.unplaceableIds], ["10"]);
+      assert.match(error.message, /strict/);
+      return true;
+    },
+  );
+
+  // 钉死的不在失败名单里；被挪走的自由标记才是。
+  assert.throws(
+    () =>
+      planLeaderLines(
+        [
+          { id: "pin", text: "1", anchor: { x: 0, y: 0 }, pinnedOffsetMm: [12, -6] },
+          { id: "gone", text: "2", anchor: { x: 10_000, y: -10_000 } },
+        ],
+        {},
+        options,
+      ),
+    (error: unknown) => {
+      assert.ok(error instanceof LeaderPlacementError);
+      assert.deepEqual([...error.unplaceableIds], ["gone"]);
+      return true;
+    },
+  );
+});
+
+test("方向相位：12 个绝对角都不落在正水平或正垂直上", () => {
+  assert.equal(LEADER_DIRECTIONS_DEG.length, 12);
+  for (const degrees of LEADER_DIRECTIONS_DEG) {
+    const remainder = ((degrees % 90) + 90) % 90;
+    assert.ok(Math.min(remainder, 90 - remainder) >= LEADER_DIRECTION_PHASE_DEG - 1e-9, `${degrees}° 贴着轴线`);
+  }
 });
 
 test("几何谓词：相交（含端点接触与共线重叠）与夹角归一到 0–90", () => {

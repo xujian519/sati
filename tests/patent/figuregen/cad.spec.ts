@@ -16,11 +16,14 @@ import {
   CAD_HATCH_SPACING_MM,
   CAD_JSON_BEGIN,
   CAD_JSON_END,
+  CAD_LEADER_SEGMENT_CAP,
   CAD_MIN_FIT_SCALE,
   CAD_REF_LEADER_MM,
   buildProjectionScript,
   buildScreenTransform,
+  capCadLeaderSegments,
   checkCadProjection,
+  findingForLeaderPlacementError,
   describeCadFailure,
   hatchPolylines,
   parseProjectionOutput,
@@ -35,7 +38,8 @@ import {
 } from "../../../src/patent/figuregen/cad/index.js";
 import { PRINTABLE_HEIGHT_MM, PRINTABLE_WIDTH_MM } from "../../../src/patent/figuregen/page-contract.js";
 import { parseFigureSvg } from "../../../src/patent/figuregen/readback.js";
-import { checkFigureRendering } from "../../../src/patent/figuregen/render-check.js";
+import { LeaderPlacementError } from "../../../src/patent/figuregen/leader-line.js";
+import { checkFigureRendering, leaderPlacementFailureMessage } from "../../../src/patent/figuregen/render-check.js";
 
 const FIXTURE_DIR = resolve(process.cwd(), "tests/fixtures/patent/cad");
 
@@ -783,8 +787,9 @@ test("标注：标号重叠 ⇒ C7 warn；锚点落在图外 ⇒ C8 warn；标�
     "择位引擎避开了重叠，C7 不应再报",
   );
 
-  // C8：锚点写在投影几何之外（该处图面上没有几何）
-  const outside = renderCadSvg(table, { figureNo: 1, annotations: [{ ref: 12, atMm: [400, 15, 10] }] });
+  // C8：锚点略超出投影几何、但标号仍能落在图幅内 ⇒ warn，不把整张图判死。
+  // （锚点远到所有候选都越出画幅时走 strict，见下一条：不再画出越界标号。）
+  const outside = renderCadSvg(table, { figureNo: 1, annotations: [{ ref: 12, atMm: [41, 15, 5] }] });
   const c8 = checkCadProjection({ table, render: outside, hiddenLines: false }).find(finding => finding.rule === "C8");
   assert.equal(c8?.severity, "warn");
   assert.match(c8!.message, /锚点落在投影几何范围之外/u);
@@ -806,6 +811,47 @@ test("标注：标号重叠 ⇒ C7 warn；锚点落在图外 ⇒ C8 warn；标�
   const findings = checkCadProjection({ table, render: pushedOut, hiddenLines: false });
   assert.equal(findings.find(finding => finding.rule === "C10")?.severity, "warn");
   assert.match(findings.find(finding => finding.rule === "C10")!.message, /标记线与主线条分不清/u);
+});
+
+test("标注：锚点远到画幅外时 strict 失败，检查层给出减少标记/拆图/钉死偏移", () => {
+  const table = loadTable("plate-front.json");
+  assert.throws(
+    () => renderCadSvg(table, { figureNo: 1, annotations: [{ ref: 12, atMm: [400, 15, 10] }] }),
+    (error: unknown) => {
+      assert.ok(error instanceof LeaderPlacementError);
+      assert.deepEqual([...error.unplaceableIds], ["12"]);
+      const finding = findingForLeaderPlacementError(error);
+      assert.equal(finding.rule, "C13");
+      assert.equal(finding.severity, "fail");
+      assert.match(finding.message, /减少同时标注/);
+      assert.match(finding.message, /拆成多幅/);
+      assert.match(finding.message, /label_offset_mm/);
+      assert.equal(leaderPlacementFailureMessage(error), error.message);
+      assert.equal(leaderPlacementFailureMessage(new Error("其它")), undefined);
+      return true;
+    },
+  );
+});
+
+test("引线障碍线段超过上限时保留最长段并补上包络", () => {
+  const many = Array.from({ length: CAD_LEADER_SEGMENT_CAP + 20 }, (_, index) => ({
+    from: { x: index, y: 0 },
+    to: { x: index + (index === 0 ? 50 : 0.1), y: 0.1 },
+  }));
+  const capped = capCadLeaderSegments(many);
+  assert.equal(capped.length, CAD_LEADER_SEGMENT_CAP);
+  assert.ok(
+    capped.some(segment => Math.hypot(segment.to.x - segment.from.x, segment.to.y - segment.from.y) > 40),
+    "最长段必须留下",
+  );
+  const envelope = capped.slice(-4);
+  const xs = envelope.flatMap(segment => [segment.from.x, segment.to.x]);
+  const ys = envelope.flatMap(segment => [segment.from.y, segment.to.y]);
+  assert.equal(Math.min(...xs), 0);
+  assert.ok(Math.max(...xs) > CAD_LEADER_SEGMENT_CAP);
+  assert.equal(Math.min(...ys), 0);
+  assert.ok(Math.max(...ys) > 0);
+  assert.equal(capCadLeaderSegments(many.slice(0, 3)).length, 3);
 });
 
 test("剖视图：剖切面轮廓是闭合回路（乱序边序必须被拼成走向，否则剖面线会画到面外）", () => {

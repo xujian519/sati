@@ -27,10 +27,12 @@ import {
   buildFigureSidecar,
   cadRefFontMm,
   checkCadProjection,
+  findingForLeaderPlacementError,
   exportSvgTextToPath,
   figureCaption,
   isCadSectionView,
   isCadView,
+  isLeaderPlacementError,
   printableArea,
   profileForJurisdiction,
   projectStep,
@@ -347,6 +349,16 @@ async function writeProjectArtifacts(args: {
               ? {}
               : {
                   ref_numerals: annotations.map(annotation => annotation.ref),
+                  label_placements: render.labels.map(label => ({
+                    ref: label.ref,
+                    offset_mm: [label.labelMm[0] - label.anchorMm[0], label.labelMm[1] - label.anchorMm[1]] as [
+                      number,
+                      number,
+                    ],
+                    degraded: label.degraded,
+                    // 能走到落盘说明 strict 已经放下；失败在 renderCadSvg 抛出，不会写 sidecar。
+                    strict_failure: false,
+                  })),
                 }),
             findings,
           },
@@ -715,6 +727,15 @@ export function createPatentFigureProjectTool(
         };
       } catch (err) {
         if (err instanceof SatiToolRuntimeError) throw err;
+        if (isLeaderPlacementError(err)) {
+          const finding = findingForLeaderPlacementError(err);
+          throw new SatiToolRuntimeError("tool_execution_failed", finding.message, {
+            tool,
+            view,
+            rule: finding.rule,
+            unplaceable_ids: [...err.unplaceableIds],
+          });
+        }
         const message = err instanceof Error ? err.message : String(err);
         throw new SatiToolRuntimeError("tool_execution_failed", `patent_figure_project 执行失败: ${message}`, {
           tool,

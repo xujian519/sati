@@ -240,6 +240,45 @@ test("patent_figure_project：标注端到端（标号落进 sidecar 的 spec.no
       { id: "ref-20", label: "20", ref: 20 },
     ]);
     assert.deepEqual(sidecar.figures[0].geometry!.ref_numerals, [10, 20]);
+    const placements = sidecar.figures[0].geometry!.label_placements;
+    assert.equal(placements?.length, 2);
+    assert.equal(placements?.[0]?.ref, 10);
+    assert.equal(placements?.[0]?.degraded, false);
+    assert.equal(placements?.[0]?.strict_failure, false);
+    assert.equal(placements?.[0]?.offset_mm.length, 2);
+    // 钉死偏移原样写入，不被择位改写
+    assert.ok(Math.abs((placements?.[1]?.offset_mm[0] ?? 0) - -10) < 1e-6);
+    assert.ok(Math.abs((placements?.[1]?.offset_mm[1] ?? 0) - -8) < 1e-6);
+    assert.equal(placements?.[1]?.strict_failure, false);
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("patent_figure_project：锚点无法落位时 strict 失败，并说明减少标记、拆图或钉死偏移", async () => {
+  const cwd = mkdtempSync(join(tmpdir(), "sati-cadtool-strict-"));
+  const tool = createPatentFigureProjectTool({ runner: okRunner, freecadCmd: "/fake/freecadcmd" });
+  try {
+    await assert.rejects(
+      tool.execute(
+        {
+          step_path: "plate.step",
+          output_name: "case-miss",
+          view: "front",
+          annotations: [{ ref: 12, at_mm: [400, 15, 10] }],
+        },
+        context(cwd),
+      ),
+      (error: unknown) => {
+        assert.ok(error instanceof SatiToolRuntimeError);
+        assert.match(error.message, /减少同时标注/);
+        assert.match(error.message, /拆成多幅/);
+        assert.match(error.message, /label_offset_mm/);
+        assert.equal(error.details?.rule, "C13");
+        assert.deepEqual(error.details?.unplaceable_ids, ["12"]);
+        return true;
+      },
+    );
   } finally {
     rmSync(cwd, { recursive: true, force: true });
   }

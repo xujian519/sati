@@ -71,6 +71,7 @@ import {
   outlineOverlaps,
   textClearanceFindings,
 } from "./render-check-findings.js";
+import { isLeaderPlacementError } from "./leader-line.js";
 import { orientation, subpathSegments, textQuad, visiblePieces } from "./render-check-geometry.js";
 import { LEADER_ROLE, scanSvg } from "./render-check-scan.js";
 import type {
@@ -89,6 +90,16 @@ export type {
   RenderCheckKind,
   RenderCheckReport,
 } from "./render-check-types.js";
+
+/**
+ * strict 引线失败发生在出图之前，{@link checkFigureRendering} 没有 SVG 可量。
+ * 调用方把 {@link LeaderPlacementError} 交给本函数，得到应写进失败报告的那句话
+ * （减少标记、拆图或钉死偏移）。不是引线错误时返回 undefined，避免把别的异常说成择位失败。
+ */
+export function leaderPlacementFailureMessage(error: unknown): string | undefined {
+  if (!isLeaderPlacementError(error)) return undefined;
+  return error.message;
+}
 
 export function measureInkBounds(svg: string, options: { maxBytes?: number } = {}): InkBounds | undefined {
   assertSafeSvg(svg, options.maxBytes ?? DEFAULT_SVG_MAX_BYTES);
