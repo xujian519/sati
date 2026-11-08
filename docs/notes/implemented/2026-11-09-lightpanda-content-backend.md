@@ -10,7 +10,7 @@ Status: implemented
 
 `src/browser/backend/lightpandaBackend.ts` 是可选的 `BrowserBackend`。默认候选列表不含它；`includeLightpanda` 或 `prefer: "lightpanda"` 才把它加进来，未指定 prefer 时排在 playwright 之后。
 
-能力位：`contentCapable` 为真；`loginState`、`antiBot`、`pdf`、`trueScreenshot`、`handoff` 以及下载拦截、录屏、站点工具为假。`resolveBrowserBackend` 在 probe 之前按 `needs` 跳过不满足的后端，并打出 warn，然后继续下一个候选。探测只执行 `version`，子进程环境强制 `LIGHTPANDA_DISABLE_TELEMETRY=true`，不传 cookie 文件，不复用 ego profile。`LIGHTPANDA_SESSION_POLICY.versionPin` 为 null，探测不比较、不下载发行版。win32 直接记 missing，不启动进程。
+能力位：`contentCapable` 为真；`loginState`、`antiBot`、`pdf`、`trueScreenshot`、`handoff` 以及下载拦截、录屏、站点工具为假。`resolveBrowserBackend` 在 probe 之前按 `needs` 跳过不满足的后端，并打出 warn，然后继续下一个候选。候选里能选中 Lightpanda 时，`needs` 必须至少有一个为真的键，否则选择函数直接抛错。探测只执行 `version`，子进程环境强制 `LIGHTPANDA_DISABLE_TELEMETRY=true`，不传 cookie 文件，不复用 ego profile。版本钉与页面抓取见 `2026-11-09-lightpanda-content-fetch.md`。win32 直接记 missing，不启动进程。
 
 ## Alternatives considered
 
@@ -24,5 +24,5 @@ Status: implemented
 
 - 未显式启用时，`sati browsers` 和 `resolveBrowserBackend()` 的候选与以前相同。
 - 登录、反爬、PDF、真实截图、人机交接任务即使 prefer Lightpanda，也不会选中它；内容任务在它 probe 失败时仍可落到后面的后端。
-- 没有页面提取实现，也没有 Windows 原生安装路径。二进制缺失只表现为 probe `missing`。
+- 页面 Markdown / structured extract 与版本钉见 `2026-11-09-lightpanda-content-fetch.md`。没有 Windows 原生安装路径。二进制缺失只表现为 probe `missing`。
 - 现有四个后端补上 `contentCapable` / `pdf` / `trueScreenshot`：内容为真；PDF 只在已有下载拦截的 ego 与 browseros-neo 上为真；真实截图沿用已有录屏位（browser-use 为假）。
