@@ -95,6 +95,14 @@ A26.3 / A26.4 两维现在读金标语料内**录制的子图结论**（`signals
 `scripts/patent-golden-signals.ts` 按确定性规则生成并随语料入库），不再是确定性代理。
 未核验维度只剩结构完整性 / 反套话 / 权要布局（这三维无子图，始终确定性）。
 
+> ⚠️ **录制口径的可辨识标记（#847）**：每件金标的 `signals` 带 `source: "recorded"`，
+> 语料层自带来源标注；评分维度相应标为 `signalSource = "recorded"`（与 live 子图当场
+> 输出的 `"graph"` 区分），并在批次报告里单列「结论来自金标语料录制信号的维度」。
+>
+> 录制结论是**有效结论**（可用于回归、可离线复现、CI 可跑），但**不是**子图当场输出。
+> 两套口径并列不互相替换：当场输出口径走 `--live`（`signalSource = "graph"`）。
+> 此前两者在语料与报告里长得一样，没有机制阻止后续误用——这正是本条要还的债。
+
 > ⚠️ 口径变化说明（2026-11-08）：此前 `normalizeGoldenCase` 丢弃了 `signals`，
 > 导致 A26.3 / A26.4 在金标路径上恒为「确定性代理」——子图结论从未真正进入金标回归，
 > 且金标里写了信号也会被静默丢弃。修复后 A26.4 已核验，均分随之变化
@@ -115,7 +123,7 @@ pnpm eval:patent-drafting --live --provider moonshot --model kimi-k2.7-code-high
 | 信号轮覆盖 | 20 件（10 clean / 10 defect），全部完成、0 失败 |
 | 管线轮覆盖 | 4 件（2 clean / 2 defect），全部完成、0 失败 |
 | 模型调用合计 | 255 次 |
-| token | **API 未返回**（流式响应不含 usage 事件），不按 0 计 |
+| token | **API 未返回**（流式响应不含 usage 事件），不按 0 计 —— 根因与修复见下方 §4.3 |
 | 未核验维度 | 结构完整性 / 反套话 / 权要布局（这三维无子图，始终确定性） |
 
 信号轮（`collectDraftingSignals` 跑 enablement + claim_breadth，A26.3 / A26.4 变为
@@ -178,12 +186,34 @@ pnpm eval:patent-drafting --live --provider moonshot --model kimi-k2.7-code-high
   单独重跑 clean-mechanical-001 得到零降级，说明它是单次运行内的非确定性重试结果，
   不是固定缺陷；评测 seam 只暴露阶段 id，原因未结构化（后续可在 `DraftingPipelineRun`
   透出 `degradations`）。
-- **未量测**：token 与费用（provider 流式响应不含 usage）；Temperature=0 之外的采样随机性
-  未做多次重复；检索增强与多轮修订未接入。以上三项都不在本基线结论范围内。
+- **未量测**：Temperature=0 之外的采样随机性未做多次重复；检索增强与多轮修订未接入。
+  以上两项都不在本基线结论范围内。（token 与费用的根因与修复见 §4.3；本表基线是
+  2026-11-07 修复**之前**跑的，重跑后 token 可计量。）
 
 **口径限制**：DeepSeek `deepseek-flash` 对结构化输出的 `response_format` 返回
 `This response_format type is unavailable now`，图形/管线阶段会整段失败；live 基线因此
 选用 Moonshot，`--provider/--model` 可换，但换模型后必须重跑并替换本表，不能沿用数字。
+
+### 4.3 token 未量测的根因与修复（#847）
+
+**根因**：OpenAI 协议下**流式响应默认不返回 usage**，除非请求显式携带
+`stream_options.include_usage`。此前 Sati 的流式请求体从不带该字段，于是 provider 侧
+token 计量恒为空——「撰写评测到底花多少钱」这个问题当时无解（只能靠估算）。
+
+**修复**（2026-11-09）：
+
+- `src/model/providers/openai/request.ts`：流式请求（`stream: true`）下发
+  `stream_options: { include_usage: true }`；非流式不下发（非流式响应本就自带 usage 字段）。
+- `src/model/streaming/streamModel.ts`：端点因不认该字段而回 400 时，**降级重试**
+  一次（去掉 `stream_options` 后重发）——宁可不计量 token，也不让请求整体失败。
+  降级判据收紧为「400 且错误体明确点名 `stream_options`」，避免把真实参数错误
+  当成兼容性问题重试掩盖。
+- 端点返回 usage 后，`normalizeOpenAIUsage` 解析出的 token 经 `usage` 事件进入
+  `patent-drafting-eval.ts` 的 `UsageStats`，输出 `in=` / `out=` token 数字。
+
+**对既有基线的影响**：§4.2 的 255 次调用基线是**修复前**跑的，故 token 行标注
+「API 未返回」。重跑 `--live` 即可得到 token 与费用；届时应替换 §4.2 表格中的
+token 行，并删除本文「未量测」中的 token 括注。
 
 ## 5. 扩充语料
 

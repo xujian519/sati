@@ -89,10 +89,22 @@ export type DraftingArtifacts = {
   requiredFeatures?: readonly string[];
 };
 
-/** 子图结论（可选注入）；缺失时对应维度使用确定性代理信号。 */
+/**
+ * 子图结论（可选注入）；缺失时对应维度使用确定性代理信号。
+ *
+ * `source` 标注信号的**来源口径**（#847）：
+ * - `live`：子图当场真实输出（`collectDraftingSignals` 跑 enablement / claim_breadth 图得出）。
+ * - `recorded`：金标语料里**录制**的结论（`scripts/patent-golden-signals.ts` 按确定性
+ *   规则生成，见 `docs/patent-drafting-eval.md`）——不是子图当场输出。
+ *
+ * 两者都是「确定性、可离线复现」的有效信号，**都可用于金标回归**；但来源不同，
+ * 报告必须能区分，否则「录制的结论」会被误读成「子图真实结论」。
+ */
 export type DraftingSignals = {
   enablement?: { sufficientlyDisclosed?: boolean };
   claimBreadth?: { supportOk?: boolean; clarityOk?: boolean };
+  /** 信号来源口径；缺省按 `live` 处理（调用方直接注入子图结论时无需显式声明）。 */
+  source?: "live" | "recorded";
 };
 
 export type DraftingDimensionScore = {
@@ -100,8 +112,14 @@ export type DraftingDimensionScore = {
   label: string;
   score: number;
   maxScore: number;
-  /** graph = 子图结论；deterministic = 确定性代理（未跑子图，报告中可见）。 */
-  signalSource: "graph" | "deterministic";
+  /**
+   * 维度结论的来源口径：
+   * - `graph`：子图结论（`signals.source` 为 `live` 或未声明）；
+   * - `recorded`：金标语料里**录制**的子图结论（`signals.source === "recorded"`）——
+   *   有效信号、可用于回归，但**不是**子图当场输出；
+   * - `deterministic`：确定性代理（未注入子图结论，报告中可见）。
+   */
+  signalSource: "graph" | "recorded" | "deterministic";
   reasons: string[];
 };
 
@@ -112,6 +130,13 @@ export type DraftingRubricResult = {
   dimensions: DraftingDimensionScore[];
   /** 使用确定性代理而非子图结论的维度（"未核验"与"已核验且无问题"可区分）。 */
   unverifiedDimensions: DraftingDimensionId[];
+  /**
+   * 结论来自**金标语料录制**的维度（#847）。
+   *
+   * 与 `unverifiedDimensions` 互斥：录制结论是有效结论、可用于回归，只是**不是**
+   * 子图当场输出。单独列出，使报告能区分「录制的结论」与「子图真实结论」。
+   */
+  recordedDimensions: DraftingDimensionId[];
 };
 
 export type DraftingRubricOptions = {
@@ -146,8 +171,10 @@ function dimensionScore(
 export function scoreEnablement(artifacts: DraftingArtifacts, signals?: DraftingSignals): DraftingDimensionScore {
   const graphVerdict = signals?.enablement?.sufficientlyDisclosed;
   if (typeof graphVerdict === "boolean") {
-    return dimensionScore("enablement", graphVerdict ? 30 : 0, "graph", [
+    const recorded = signals?.source === "recorded";
+    return dimensionScore("enablement", graphVerdict ? 30 : 0, recorded ? "recorded" : "graph", [
       graphVerdict ? "enablement 子图判定：充分公开" : "enablement 子图判定：公开不充分",
+      ...(recorded ? ["（金标语料录制的子图结论，非子图当场输出）"] : []),
     ]);
   }
 
@@ -197,10 +224,17 @@ export function scoreClaimSupportClarity(
   const supportVerdict = signals?.claimBreadth?.supportOk;
   const clarityVerdict = signals?.claimBreadth?.clarityOk;
   if (typeof supportVerdict === "boolean" && typeof clarityVerdict === "boolean") {
-    return dimensionScore("claim_support_clarity", (supportVerdict ? 13 : 0) + (clarityVerdict ? 12 : 0), "graph", [
-      supportVerdict ? "claim_breadth 子图判定：以说明书为依据" : "claim_breadth 子图判定：缺乏说明书依据",
-      clarityVerdict ? "claim_breadth 子图判定：权项清楚" : "claim_breadth 子图判定：权项不清楚",
-    ]);
+    const recorded = signals?.source === "recorded";
+    return dimensionScore(
+      "claim_support_clarity",
+      (supportVerdict ? 13 : 0) + (clarityVerdict ? 12 : 0),
+      recorded ? "recorded" : "graph",
+      [
+        supportVerdict ? "claim_breadth 子图判定：以说明书为依据" : "claim_breadth 子图判定：缺乏说明书依据",
+        clarityVerdict ? "claim_breadth 子图判定：权项清楚" : "claim_breadth 子图判定：权项不清楚",
+        ...(recorded ? ["（金标语料录制的子图结论，非子图当场输出）"] : []),
+      ],
+    );
   }
 
   const reasons: string[] = ["未注入 claim_breadth 子图结论，使用确定性代理"];
@@ -312,6 +346,9 @@ export function scoreDraftingArtifacts(
     unverifiedDimensions: dimensions
       .filter(dimension => dimension.signalSource === "deterministic")
       .map(dimension => dimension.id),
+    recordedDimensions: dimensions
+      .filter(dimension => dimension.signalSource === "recorded")
+      .map(dimension => dimension.id),
   };
 }
 
@@ -340,6 +377,8 @@ export type DraftingCaseOutcome = {
   /** 期望失分维度中确实未拿满分的集合。 */
   detectedFailures: DraftingDimensionId[];
   unverifiedDimensions: DraftingDimensionId[];
+  /** 结论来自金标语料**录制**信号的维度（#847；与 unverifiedDimensions 互斥）。 */
+  recordedDimensions: DraftingDimensionId[];
   result: DraftingRubricResult;
 };
 
@@ -350,6 +389,13 @@ export type DraftingBatchReport = {
   defect: { count: number; detected: number; detectionRate: number; mean: number };
   /** 全批次使用确定性代理的维度并集（未跑子图，报告中可见）。 */
   unverifiedDimensions: DraftingDimensionId[];
+  /**
+   * 全批次结论来自**录制**信号的维度并集（#847）。
+   *
+   * 金标回归的 signals 是录制的子图结论（确定性规则生成），**不是**子图当场
+   * 输出——当场输出口径走 `--live`。单独列出，使两套口径在报告中不互相冒充。
+   */
+  recordedDimensions: DraftingDimensionId[];
   cases: DraftingCaseOutcome[];
 };
 
@@ -445,6 +491,16 @@ function normalizeGoldenSignals(value: unknown, where: string): DraftingSignals 
       ...(clarityOk !== undefined ? { clarityOk: clarityOk as boolean } : {}),
     };
   }
+  // 来源口径（#847）：金标语料里的 signals 一律是「录制」的子图结论
+  // （由 scripts/patent-golden-signals.ts 按确定性规则生成），不是子图当场输出。
+  // 显式校验——写错就报错，避免语料层的来源标注与事实不符。
+  const source = record.source;
+  if (source !== undefined && source !== "recorded" && source !== "live") {
+    throw new Error(`${where} signals.source 必须是 "recorded" | "live"`);
+  }
+  if (source !== undefined) {
+    signals.source = source;
+  }
   return signals;
 }
 
@@ -488,6 +544,7 @@ export function evaluateDraftingGolden(
       expectedFailures,
       detectedFailures,
       unverifiedDimensions: result.unverifiedDimensions,
+      recordedDimensions: result.recordedDimensions,
       result,
     };
   });
@@ -501,6 +558,10 @@ export function evaluateDraftingGolden(
   const unverified = new Set<DraftingDimensionId>();
   for (const item of outcomes) {
     for (const dimension of item.unverifiedDimensions) unverified.add(dimension);
+  }
+  const recorded = new Set<DraftingDimensionId>();
+  for (const item of outcomes) {
+    for (const dimension of item.recordedDimensions) recorded.add(dimension);
   }
 
   return {
@@ -519,6 +580,7 @@ export function evaluateDraftingGolden(
       mean: defectCases.length === 0 ? 0 : round2(mean(defectCases.map(item => item.total))),
     },
     unverifiedDimensions: [...unverified],
+    recordedDimensions: [...recorded],
     cases: outcomes,
   };
 }

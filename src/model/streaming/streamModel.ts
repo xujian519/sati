@@ -24,6 +24,7 @@ import { computeBackoffDelay } from "../../shared/retry/index.js";
 import { createLogger } from "../../telemetry/index.js";
 import { createRetryId } from "./retryState.js";
 import { StreamingCheckpointManager } from "./StreamingCheckpoint.js";
+import { retryWithoutStreamUsageOption } from "./streamUsageFallback.js";
 // 流式 HTTP 传输常量单一来源（proxy 的 Undici 池共享，避免双源漂移）。
 import {
   LITELLM_COMPLETION_HTTP_FALLBACK_MS,
@@ -794,6 +795,7 @@ async function sendWithEndpointFallback(
   transport: ModelTransport,
   fetchOptions: RequestInit,
   timeoutMs: number | undefined,
+  allowUsageFallback = true,
 ): Promise<Response> {
   const endpoints = buildProviderChatEndpointCandidates({ protocol: provider.protocol, baseUrl: provider.url });
   let lastResponse: Response | undefined;
@@ -805,7 +807,12 @@ async function sendWithEndpointFallback(
       retry: { maxRetries: 0, retryOnPost: true },
     });
     if (await shouldUseEndpointResponse(provider, response, stream, endpoints.length)) {
-      return response;
+      // 端点不认 `stream_options`（usage 计量开关）时降级重试（#847，判据见
+      // streamUsageFallback.ts）——须在此处（而非循环之后）判定：单端点场景下
+      // shouldUseEndpointResponse 会直接采纳该 400 响应，不会走到循环末尾。
+      if (!allowUsageFallback) return response;
+      const resend = (o: RequestInit) => sendWithEndpointFallback(provider, stream, transport, o, timeoutMs, false);
+      return await retryWithoutStreamUsageOption(provider, stream, fetchOptions, response, resend);
     }
     lastResponse = response;
   }

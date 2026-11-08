@@ -76,12 +76,13 @@
 
 ### 体积/复杂度（God function & 大文件）
 - **TD-GOD-001**（P1）· UI 层巨无霸函数（贡献大于后端）
-  - **2026-10-31 复核**：旧清单（`useChatComposerState` 1433 · `PdfDocumentPreview` 1138 · `SidebarV2` 1017 · `useChatSessionState` 941）已由 #646 sweep 消解。当前 `metrics.md` 基线（≥300 行共 35 个，其中 UI 28 个）Top 7：`MessagesPaneV2.render.test.tsx` 943 · `FilesV2` 832 · `useGitPanelController` 704 · `ImportFromFolder` 688 · `LlmConfigurationStep` 633 · `AppShellV2` 632 · `MainContent.SplitBody` 573。
-  - 建议：按 hook/组件拆分 + 子组件提取；涉及 UI 须浏览器验证。工作量：L（每组件）· 状态：**done（2026-11-07）** · 跟踪 issue：**#806**
+  - **2026-10-31 复核**：旧清单（`useChatComposerState` 1433 · `PdfDocumentPreview` 1138 · `SidebarV2` 1017 · `useChatSessionState` 941）已由 #646 sweep 消解。当前 `metrics.md` 基线（≥300 行共 30 个，其中 UI 28 个）Top 7：`MessagesPaneV2.render.test.tsx` 943 · `MainContent.SplitBody` 573 · `CronV2.CronFormView` 476 · `ProviderCard` 447 · `FeishuChannelSection` 423 · `DocxBuiltinPreview` 422 · `SpreadsheetInteractivePreview` 407。
+  - 建议：按 hook/组件拆分 + 子组件提取；涉及 UI 须浏览器验证。工作量：L（每组件）· 状态：**partially_done（2026-11-09 复核）** · 跟踪 issue：**#806**
   - **2026-11-07 处置（#806，FilesV2 第一刀）**：`FilesV2.tsx` 832 → **236 行**，拆为 `files-v2/` 八件——`useFileTreeExpansion`（80）/`useFileInlineEdit`（121）/`useFileContextMenu`（49）/`useFileOperations`（238）四个 hook + `FilesV2Toolbar`（182）/`FilesV2Row`（162）/`FilesV2ContextMenu`（146）三个展示组件 + `FilesV2.shared`（63，类型/常量/flatten）。行为逐字迁移（上传菜单、内联新建/重命名、右键菜单、HTML 预览、下载、加入对话、项目切换重置），UI typecheck + eslint + vitest 1634 全绿。决策见 `docs/notes/implemented/2026-11-07-issue-sweep.md`。
   - **2026-11-07 处置（#806，Top 5 收口）**：`useGitPanelController.ts` 704 → **167 行**（`controller/` 7 个职责 hook）；`ImportFromFolder.tsx` 688 → **156 行**（`import-from-folder/` 11 件）；`LlmConfigurationStep.tsx` 633 → **139 行**（`llm-configuration/` 12 件）；`AppShellV2.tsx` 632 → **156 行**（`app-shell-v2/` 16 件）。新模块全部 ≤200 行，导出/props 不变，UI typecheck + eslint 全绿、vitest 1634 项中 1632 通过（2 个 server 用例在满载下超时，单独重跑 21/21 通过）。
-  - 剩余：22 个 300–600 行非测试函数（最高 `MainContent.SplitBody` 573 行），按 issue 触发条件在各文件下次被改动时同款拆分；非测试函数中已无 ≥600 行者。
-  - 最后复核：2026-11-07
+  - **2026-11-09 复核（状态字段更正）**：原状态写 `done`，但**并非全清**——issue #806 的「一句话债务」是「UI 层 28 个 ≥300 行函数」，交付只覆盖了 issue 自己列出的 Top 5。实测（`node scripts/measure-techdebt.mjs --json`，排除 `*.spec.*` / `*.test.*`）当前 **UI 产品代码仍余 22 个 ≥300 行函数**，最高 `MainContent.SplitBody` 573 行；`src` 侧余 2 个（`patentFigureGenerate.ts` 333 / `patentFigureProject.ts` 316）。故状态由 `done` 更正为 **`partially_done`**：Top 5 已交付（issue 自身的「触发还债条件」第 1 条已达成），其余按第 2 条「各文件下次被改动时同款拆分」渐进偿还。
+  - 剩余清单（2026-11-09 实测，UI 产品代码，按行数降序）：`MainContent.SplitBody` 573 · `CronV2.CronFormView` 476 · `ProviderCard` 447 · `FeishuChannelSection` 423 · `DocxBuiltinPreview` 422 · `SpreadsheetInteractivePreview` 407 · `ComposerV2` 400 · `ToolsSection` 399 · `WeComChannelSection` 395 · `SidebarV2` 385 · `MainAreaV2.MainAreaV2Content` 381 · `useBoardState` 368 · `useProjectsState` 367 · `RouterSection` 357 · `MainContent.MainContent` 346 · `MessagesPaneV2` 338 · `PlansAndCronJobs` 334 · `DashboardV2` 332 · `useSatiConfigState` 332 · `CodeEditor` 326 · `Annotator` 322 · `WeixinChannelSection` 300。
+  - 最后复核：2026-11-09
 - **TD-GOD-002**（P2）· 后端巨无霸函数：`createRouterRuntime` 131（`router/RouterRuntime.ts`）· `main` 17（`cli/commandDispatch.ts`）· `createReadFileTool` 114（`tool/builtin/readFile.ts`）
   - 细分见各模块节。工作量：L · 状态：**done（2026-10-31 复核回填）**——三函数均已降至 <300 行 god 阈值以下：`main` 由 #646 sweep P2.7 消解（`cli/sati.ts` 1034 → 14 行，逻辑迁入 `commandDispatch.ts`）；`createRouterRuntime` 877 → **131 行**（`RouterRuntime.ts` 全文件仅 212 行）；`createReadFileTool` 509 → **114 行**（`readFile.ts` 全文件仅 131 行）。状态字段滞后未同步。
   - **2026-08-27 复核补充（`createLocalGateway.ts` 结构债，jscpd 盲区——重复为小型接线模式而非文本克隆）**：(a) 模块为三件无关架构钉合：CLI 引导工厂 `:309-820` + 巨类 `ProjectRuntimeRegistry` `:904~2090`（`resolve`≈245 行、`prepareSessionRuntime`≈430 行，失败域横跨插件系统+MCP 生命周期+browser 工具）+ 无关自由工具函数 `:2215-2461`（browser proxy env 解析）；(b) 工厂内 team 成员回收闭包双实现——`runMemberScan :601-612` vs wakeMember 回调 `:682-688`，注释自承「与 scanner 冷恢复路径同款」；(c) browser-use 专属逻辑（mkdirSync 截图目录、逐 spec 参数改写 `:1663-1689`）泄漏进通用会话装配。建议拆出 `TeamReclaimCoordinator`、以 `SessionToolProvisioner` 承接 browser-use/MCP 装配、迁走 proxy env 工具函数。工作量：M×3 子项。
@@ -2354,9 +2355,34 @@
 
 | 新 ID | 严重级 | 摘要 | issue | 最后复核 |
 |---|---|---|---|---|
-| `TD-PATENT-N37` | P3 | **三项口径待办**：① **pairwise fixture 字段口径漂移**——计划文档 `docs/plans/2026-11-02-patent-drafting-enhancement-import.md:320`（T7.2）要求每对含 `id`/`output_a`/`output_b`/`preference`（模型**输出文本**，度量「文本序 vs 人工偏好」），实际实现 `scripts/patent-pairwise-eval.ts:17-22`/`:129` 用 `score_a`/`score_b`（模型 **rubric 分数**，度量「分数序 vs 人工偏好」）——**二者度量的不是一回事**，实现取后者是有意的（代理师抽检本就按 rubric 打分，见 `docs/patent-pairwise-calibration.md`），但计划文档未同步，后来人照文档理解会读错 fixture 语义；② **live 基线 token 未能量测**——`docs/patent-drafting-eval.md` §4.2（Moonshot `kimi-k2.7-code-highspeed`，20 件信号 + 4 件管线，255 次模型调用）标注「token：API 未返回（流式响应不含 usage 事件），不按 0 计」，故「撰写评测成本」当前无解；③ **金标 `signals` 是「录制」而非「当场输出」**——`tests/patent/fixtures/drafting-golden/cases.jsonl` 的 `signals` 由 `scripts/patent-golden-signals.ts` 按**确定性规则**生成（A26.3 复用 `checkSectionCompleteness`/`checkEffectQuantification`，A26.4 用锚点连续子串命中 + 不确定用语词表），非 claim-breadth/enablement 子图当场输出（当场输出口径走 `pnpm eval:patent-drafting --live`，两套并列不互相替换）——**这是设计取舍**（金标回归须零 LLM、可离线复现、CI 可跑），但「录制的结论」与「子图真实结论」在语料里长得一样，无机制阻止后续误用（校验入口 `src/patent/evaluate/cases/disclosure-drafting.ts:409` `normalizeGoldenSignals`） | **#847** | 2026-11-08 |
+| `TD-PATENT-N37` | P3 | **三项口径待办**：① **pairwise fixture 字段口径漂移**——计划文档 `docs/plans/2026-11-02-patent-drafting-enhancement-import.md:320`（T7.2）要求每对含 `id`/`output_a`/`output_b`/`preference`（模型**输出文本**，度量「文本序 vs 人工偏好」），实际实现 `scripts/patent-pairwise-eval.ts:17-22`/`:129` 用 `score_a`/`score_b`（模型 **rubric 分数**，度量「分数序 vs 人工偏好」）——**二者度量的不是一回事**，实现取后者是有意的（代理师抽检本就按 rubric 打分，见 `docs/patent-pairwise-calibration.md`），但计划文档未同步，后来人照文档理解会读错 fixture 语义；② **live 基线 token 未能量测**——`docs/patent-drafting-eval.md` §4.2（Moonshot `kimi-k2.7-code-highspeed`，20 件信号 + 4 件管线，255 次模型调用）标注「token：API 未返回（流式响应不含 usage 事件），不按 0 计」，故「撰写评测成本」当前无解；③ **金标 `signals` 是「录制」而非「当场输出」**——`tests/patent/fixtures/drafting-golden/cases.jsonl` 的 `signals` 由 `scripts/patent-golden-signals.ts` 按**确定性规则**生成（A26.3 复用 `checkSectionCompleteness`/`checkEffectQuantification`，A26.4 用锚点连续子串命中 + 不确定用语词表），非 claim-breadth/enablement 子图当场输出（当场输出口径走 `pnpm eval:patent-drafting --live`，两套并列不互相替换）——**这是设计取舍**（金标回归须零 LLM、可离线复现、CI 可跑），但「录制的结论」与「子图真实结论」在语料里长得一样，无机制阻止后续误用（校验入口 `src/patent/evaluate/cases/disclosure-drafting.ts:409` `normalizeGoldenSignals`） | **#847** | 2026-11-09（**已处置**，见 §39.1） |
 
 > **还债触发条件**（详见 #847）：① 下次改动 M7/pairwise 语义时，或有人照计划文档实现 pairwise 时 → 最低成本是修订计划文档口径（不建议改实现，重录人工标注语料成本高）；② 需回答「撰写评测成本」时，或 provider 侧支持 usage 事件时 → 优先查 `src/model/` 流式响应是否已有 usage 解析能力，**不得以 token=0 记账**；③ 有人把金标 `signals` 当子图真实输出引用时 → 最低成本是给每条记录加 `signalsSource: "deterministic-recording"` 字段并在 `normalizeGoldenSignals` 校验，让「录制的」在**数据层可见**而非只写在脚本注释里。
+
+### 39.1 TD-PATENT-N37 处置（2026-11-09 · #847）
+
+三项口径债全部还清，逐项如下：
+
+**① pairwise fixture 字段口径漂移 → 已修（文档同步）**
+计划文档 `docs/plans/2026-11-02-patent-drafting-enhancement-import.md` T7.2 原写「每对含 `id`/`output_a`/`output_b`/`preference`（模型**输出文本**）」，与实现（`scripts/patent-pairwise-eval.ts` 用 `score_a`/`score_b`，模型 **rubric 分数**）度量的不是一回事。取分数是**有意选择**（代理师抽检本就按 rubric 打分），且实现、语料（`tests/patent/fixtures/pairwise/sample.jsonl`）、校准文档 `docs/patent-pairwise-calibration.md`、决策记录 `docs/notes/implemented/2026-11-08-issue-830-drafting-gates.md` 自始一致——**仅计划文档一处未同步**。故按实现更正计划文档，并加口径锚点：pairwise 语料度量「分数序 vs 人工偏好」；若后续要度量「文本序 vs 人工偏好」，须另立字段名另立语料，不得复用本语料。
+
+**② live 基线 token 未能量测 → 已修（请求侧开口 + 降级）**
+根因：OpenAI 协议下**流式响应默认不返回 usage**，除非显式请求 `stream_options.include_usage`；Sati 此前从不带该字段，故 provider 侧 token 计量恒为空。修复三处：
+- `src/model/providers/openai/request.ts`：流式请求下发 `stream_options: { include_usage: true }`（非流式不下发）；
+- `src/model/streaming/streamModel.ts`：端点因不认该字段回 400 时**降级重试**一次（去掉该字段重发）——宁可不计量 token，也不让请求整体失败。降级判据收紧为「400 且错误体明确点名 `stream_options`」，避免真实参数错误被重试掩盖；
+- usage 事件经 `normalizeOpenAIUsage` → `UsageStats` 进入评测报告的 `in=`/`out=` token 数字。
+新增测试 `tests/model/streaming/streamUsageAccounting.spec.ts`（4 例：下发/非下发、usage 可解析、400 降级成功、无关 400 不降级）。
+⚠️ `docs/patent-drafting-eval.md` §4.2 的 255 次调用基线是**修复前**跑的，token 行仍标「API 未返回」——重跑 `--live` 后应替换该行并删除文档「未量测」中的 token 括注。
+
+**③ 金标 `signals` 是「录制」而非「当场输出」→ 已修（语料层可辨识标记）**
+「录制的结论」与「子图真实结论」此前在语料与报告里长得一样，无机制阻止后续误用。现给 `DraftingSignals` 加 `source: "live" | "recorded"`：
+- 语料层：每件金标的 `signals` 带 `source: "recorded"`（`scripts/patent-golden-signals.ts` 生成，已重跑 20 件语料）；`normalizeGoldenSignals` 校验取值，非法即报错；
+- 评分层：`signalSource` 扩为 `"graph" | "recorded" | "deterministic"`——`recorded`（录制）与 `graph`（live 子图当场输出）区分；`recorded` **不**计入 `unverifiedDimensions`（它是有效结论、可用于回归），只增列 `recordedDimensions`；
+- 报告层：批次报告单列「结论来自金标语料录制信号的维度」，live 报告标注「子图结论来源：live 当场输出（非金标语料录制）」。
+新增测试 `tests/patent/drafting-eval.spec.ts` 3 例（语料标记齐备且不误列未核验、recorded 与 live 可区分、非法 source 报错）。
+回归确认：`pnpm eval:patent-drafting` clean 10/10、defect 10/10，均分未变（98.60 / 80.59）——来源标注不改分数口径。
+
+最后复核：2026-11-09
 
 
 ## 38. 2026-10-12 全库 sweep 冻结清单与勾选载体（P0.1）
@@ -2531,7 +2557,7 @@
 - [ ] **PS-12** `ui/server/routes/taskmaster.js` — 1152 行 · sweep 后处置（本轮容量外，2026-10-12 登记）
 - [x] **PS-13** `src/agent/loop/AgentLoop.ts` — 1152 行 · sweep 后处置（本轮容量外，2026-10-12 登记）—— **已交付（#809，2026-11-07）：1152 → 783 行**；**轮次 9 再降至 290 行**（7 个类内函数迁入 `phases/`，见 `docs/notes/implemented/2026-11-07-agentloop-phase-extraction.md`）
 - [ ] **PS-14** `ui/server/routes/config.test.js` — 1089 行 · sweep 后处置（本轮容量外，2026-10-12 登记）
-- [ ] **PS-15** `src/model/streaming/streamModel.ts` — 1085 行 · sweep 后处置（本轮容量外，2026-10-12 登记）
+- [ ] **PS-15** `src/model/streaming/streamModel.ts` — 1092 行 · sweep 后处置（本轮容量外，2026-10-12 登记）—— 2026-11-09 因 #847 流式 usage 计量降级功能 +7 行（1085 → 1092，架构基线已同步追认）：请求侧下发 `stream_options.include_usage`、端点不认该字段时降级重试（判据与实现收敛在 `src/model/streaming/streamUsageFallback.ts`）
 - [ ] **PS-16** `ui/server/routes/commands.js` — 1081 行 · sweep 后处置（本轮容量外，2026-10-12 登记）
 - [ ] **PS-17** `src/always-on/runtime/DiscoveryFire.ts` — 1079 行 · sweep 后处置（本轮容量外，2026-10-12 登记）
 - [ ] **PS-18** `src/adapters/channel/protocol/ImLiveReplyController.ts` — 1255 行 · sweep 后处置（本轮容量外，2026-10-12 登记）

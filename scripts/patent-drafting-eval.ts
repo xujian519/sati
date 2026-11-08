@@ -409,6 +409,8 @@ function printLive(report: LiveReport): void {
     `  defect ${signals.defect.detected}/${signals.defect.count} 检出，均分 ${signals.defect.mean.toFixed(2)}`,
   );
   console.log(`  未核验维度（仍用确定性代理）：${signals.unverifiedDimensions.join("、") || "无"}`);
+  // live 口径：结论来自子图**当场**输出，与金标语料的「录制」口径互不冒充。
+  console.log("  子图结论来源：live 当场输出（非金标语料录制）");
   for (const item of signals.outcomes) {
     const status =
       item.klass === "clean"
@@ -476,6 +478,9 @@ async function main(): Promise<void> {
       `defect 检出率 ${report.defect.detected}/${report.defect.count}（${(report.defect.detectionRate * 100).toFixed(0)}%）均分 ${report.defect.mean.toFixed(2)}`,
     );
     console.log(`未跑子图、使用确定性代理的维度：${report.unverifiedDimensions.join("、") || "无"}`);
+    // 录制口径单列（#847）：金标的 signals 是「录制」的子图结论，不是子图当场输出
+    // （当场输出口径见下方 live 基线）。两者并列，报告不互相冒充。
+    console.log(`结论来自金标语料录制信号的维度：${report.recordedDimensions.join("、") || "无"}`);
     console.log("");
     for (const item of report.cases) {
       // defect 用例的判定是「期望维度是否失分」，不是总分过线——分开显示避免误读。

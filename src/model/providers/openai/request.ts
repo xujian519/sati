@@ -26,6 +26,17 @@ export type OpenAIRequestBody = {
   tool_choice?: unknown;
   temperature?: number;
   stream?: boolean;
+  /**
+   * OpenAI 兼容端点的流式 usage 计量开关（`include_usage`）。
+   *
+   * 背景（#847）：OpenAI 协议下**流式响应默认不返回 usage**，除非显式请求
+   * `stream_options.include_usage`。缺这一项时 provider 侧 token 计量恒为空，
+   * 「调用成本」类结论无据——此前 live 评测基线只能标注「token：API 未返回」。
+   *
+   * 仅在 `stream: true` 时下发；不支持该字段的端点会返回 400，由
+   * `sendProviderRequest` 降级重试（去掉本字段）后继续，不因此阻断请求。
+   */
+  stream_options?: { include_usage: boolean };
   metadata?: Record<string, unknown>;
   reasoning?: { effort?: string };
   thinking?: Record<string, unknown>;
@@ -88,6 +99,8 @@ export function buildOpenAIRequest(
     tool_choice: toOpenAIToolChoice(request.toolChoice),
     temperature: thinkingPlan.omitTemperature ? undefined : request.temperature,
     stream: request.stream,
+    // 流式 usage 计量（#847）：仅流式下发，非流式响应本就自带 usage 字段。
+    stream_options: request.stream === true ? { include_usage: true } : undefined,
     metadata: request.metadata
       ? Object.fromEntries(Object.entries(request.metadata).map(([k, v]) => [k, String(v)]))
       : undefined,

@@ -50,7 +50,7 @@
     {
       "rule": "file-size",
       "file": "src/model/streaming/streamModel.ts",
-      "lines": 1085
+      "lines": 1092
     },
     {
       "rule": "file-size",
