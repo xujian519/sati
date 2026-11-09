@@ -2,6 +2,31 @@
 
 本文件按版本记录 Sati 的重要变更。桌面端版本号（`release(desktop)`）与根 `package.json` 由 `scripts/bump-version.mjs` 同步维护。
 
+## v0.5.0 - 2026-11-09
+
+> **版本目标（2026-11-09）**：专利制图从「能画得出」走向「生产可用」——引线择位改为评分加有界回溯、CAD 走 strict，附图核验的 V7 断言与投影签名口径收紧；撰写侧 A26.4 判定与权要 lint 门真正接入起草管线，锚点证据落到 A26.3 充分公开。**0.5.0 阶段目标：使专利制图达到生产可用。** 同期完成 AgentLoop 回合阶段外置与浏览器侧可选 content 旁路。
+
+### Feat
+
+- feat(patent): 引线择位改为评分加有界回溯，CAD 走 strict——12 个相位方向乘至多 4 档环距，硬拒绝后按长度、方向偏离、擦边和拥挤评分；放不下时最多回溯 3 轮；CAD 抛 `LeaderPlacementError` 并列出放不下的 id，示意图仍可退化（#844）
+- feat(patent): #830 撰写增强接线收口（A26.4 判定 / 权要 lint 门 / 锚点证据）——新增零 LLM 零 I/O 的 `claim-lint` 原子（严格 JSON 含 `gaps[]`/`consistent`，error 回退 `draft_claims` 重跑有界 1 次并注入证据型修订提示）与 `claim-breadth` 子图原子（起草管线两阶段接线：`claim_breadth_preview` → `claim_breadth_review`）；A26.3 enablement 新增 `anchor_evidence` 确定性节点，提示词显式声明「未命中≠不能实现」；金标 20 件 signals 由 `scripts/patent-golden-signals.ts` 按确定性规则生成入库（#830, #846）
+- feat(browser): 新增可选 Lightpanda content 后端与 Markdown / 结构化内容抓取——默认级联仍为 ego、BrowserOS neo、browser-use 与 playwright，Lightpanda 仅 content 旁路且登录、PDF、反爬、真截图与 handoff 任务跳过；内容失败不吞掉，继续交给级联里下一个已探测成功的后端（#853）
+
+### Fix
+
+- fix(patent): 附图核验 V7 断言只匹配 finding 行，避免临时目录名误命中；投影签名纳入 inode 与纳秒 mtime，避免同毫秒替换漏检（#845）
+- fix(patent): #847 三项口径债逐项还清——pairwise fixture 字段口径按实现更正文档并加口径锚点（若要度量「文本序 vs 人工偏好」须另立字段名）；流式请求下发 `stream_options.include_usage` 以能量测 token，端点不认时降级重试一次；金标 signals 标注 `source: "recorded"`，报告单列 `recordedDimensions` 与当场输出并列不互相冒充（#850）
+- fix(knowledge): 修复草稿刷新用例在 Linux 上的毫秒级落点抖动——重建文件 mtime 改为落在目标毫秒内部（亚毫秒偏移 0.25 / 0.5ms），规避 `utimes(2)` 微秒截断导致的整毫秒归属漂移
+
+### Refactor
+
+- refactor(agent): 抽出 AgentLoop 回合阶段到 `phases/` 模块（`modelCall` / `streamResponse` / `finishTurn` / `turnGuards` / `circuitBreaker` / `steering` / `syntheticPrompt`），主类只保留编排与恢复决策（#809, #843）
+
+### Docs
+
+- docs(adr): 落地 ADR-Sati-001《Lightpanda 仅 content 旁路》（Status: Accepted）——Lightpanda 永不默认盖过 ego 级联（#851）
+- docs(techdebt): 登记 TD-PATENT-N37（#830 收口遗留三项口径待办），条目含位置证据与还债触发条件，并与 issue #847 互为索引（#847, #849）
+
 ## v0.4.3 - 2026-11-07
 
 > **版本目标（2026-11-07）**：专利起草从「能出稿」走到「有规则、有布局、有评测」——补齐 A26.4 权要清楚/支持子图、权要布局策略与 `claim_lint` 规则引擎，并以五维 rubric + 20 件金标语料建立可复现基线与 live 口径；同期完成一轮技术债务清扫（初始化期循环归零、质量门禁、UI 巨型组件拆分）与运行时、技能开关等能力。
