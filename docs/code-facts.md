@@ -50,7 +50,7 @@
 | `src/agent/` | 88 | ✓ | Agent 循环、会话、子代理与团队编排 |
 | `src/always-on/` | 38 | ✓ | 常驻后台执行（Discovery 计划/报告/工作周期） |
 | `src/board/` | 8 | ✓ | 项目看板（protocol/runtime/storage 三组，kanban_* 工具与网关方法组） |
-| `src/browser/` | 6 | — | 浏览器后端抽象（ego lite / BrowserOS 等后端探测与驱动） |
+| `src/browser/` | 7 | — | 浏览器后端抽象（ego lite / BrowserOS 等后端探测与驱动） |
 | `src/cli/` | 46 | ✓ | CLI 入口与命令（sati.ts / satiServer.ts / createLocalGateway.ts） |
 | `src/context/` | 102 | ✓ | 上下文（压缩/预算/记忆/向量/workspace registerLeak） |
 | `src/cron/` | 18 | ✓ | 定时任务（config/protocol/runtime/storage/tool） |

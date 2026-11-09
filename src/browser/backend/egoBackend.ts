@@ -3,7 +3,7 @@ import type { BrowserBackend, BrowserBackendProbe, BrowserCapabilities } from ".
 
 /**
  * ego lite backend —— macOS 首选（P0）。能力位全开（对齐 POC §3 评估）：
- * 下载拦截 / 录屏 / 人机交接 / 站点经验包 / 登录态 / 反爬 均原生支持。
+ * 下载拦截 / 录屏 / 人机交接 / 站点经验包 / 登录态 / 反爬 / 内容 / PDF / 真实截图均原生支持。
  */
 export class EgoBackend implements BrowserBackend {
   readonly id = "ego" as const;
@@ -15,6 +15,9 @@ export class EgoBackend implements BrowserBackend {
     siteTools: true,
     loginState: true,
     antiBot: true,
+    contentCapable: true,
+    pdf: true,
+    trueScreenshot: true,
   };
 
   constructor(private options: { platform?: NodeJS.Platform; doctorCheck?: boolean } = {}) {}

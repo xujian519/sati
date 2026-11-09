@@ -7,7 +7,7 @@ import type { BrowserBackend, BrowserBackendProbe, BrowserCapabilities } from ".
 /**
  * browser-use backend（Python · MIT）—— 无 BrowserOS 机器上的备选（Track A 后端）。
  * 能力位（对齐 POC §3.2）：登录态（--profile）与反爬为真；下载拦截需 CDP 封装（false）、
- * 录屏需 [video] extra（false）——这两项是 Track A 降级的已知短板。
+ * 录屏需 [video] extra（false）——PDF 与真实截图沿用这两项短板，内容抓取仍可用。
  */
 export class BrowserUsePyBackend implements BrowserBackend {
   readonly id = "browser-use" as const;
@@ -19,6 +19,9 @@ export class BrowserUsePyBackend implements BrowserBackend {
     siteTools: false,
     loginState: true,
     antiBot: true,
+    contentCapable: true,
+    pdf: false,
+    trueScreenshot: false,
   };
 
   async probe(): Promise<BrowserBackendProbe> {

@@ -86,6 +86,9 @@ entries:
   - path: src/browser/backend/browserosNeoBackend.ts
     disposition: known-unregistered
     reason: "浏览器后端（基线范围外）：netstat/lsof 端口探测；候选后续批次补登记"
+  - path: src/browser/backend/lightpandaBackend.ts
+    disposition: known-unregistered
+    reason: "浏览器后端（基线范围外）：可选 Lightpanda 的 version 探测与 fetch dump；版本不符或内容失败继续级联，不读 ego cookie。候选后续批次补登记"
   - path: src/cli/proxy.ts
     disposition: waived
     reason: "模式误报：仅 JSDoc 提及 networkFetch，无调用点"
