@@ -176,10 +176,8 @@ export function createPatentMetadataTool(
     aliases: ["PatentMetadata", "get_patent_metadata"],
     title: "Patent Metadata Lookup",
     description:
-      "Fetch patent metadata from Google Patents by number (e.g. US11452699B2): title, inventors, assignees, " +
-      "dates, legal status, expiration, abstract, PDF URL, classifications, citations. Validates and normalizes " +
-      "the number. Read-only. Not-found is success:false; missing fields surface via degraded/missingFields/" +
-      "parseWarnings, not silent N/A.",
+      "Patent metadata by number. Not-found → success:false; missing → degraded/missingFields, never silent N/A. " +
+      "Read-only. 详见 skills/patent-illustrator/references/patent-tool-contracts/search-verify.md。",
 
     kind: "network",
     domain: "patent",
@@ -190,7 +188,7 @@ export function createPatentMetadataTool(
       properties: {
         patent: {
           type: "string",
-          description: "Patent number, e.g. 'US11452699B2'. Validated and normalized (uppercase, no spaces).",
+          description: "专利号，如 US11452699B2（校验并归一）",
         },
         timeout: {
           type: "number",

@@ -83,7 +83,7 @@ const GAP_SCHEMA: SatiJsonSchema = {
   properties: {
     id: { type: "string", description: "Gap key, unique within the docket." },
     question: { type: "string", description: "The open question / missing fact." },
-    source: { type: "string", description: "Where the gap came from (search / OA / disclosure)." },
+    source: { type: "string", description: "缺口来源（search/OA/disclosure）" },
   },
 };
 
@@ -168,9 +168,8 @@ export function createPatentDocketTool(deps: PatentDocketToolDeps = {}): SatiToo
     },
     aliases: ["PatentDocket", "docket"],
     description:
-      "Case-file (docket) round control: create with an optional gap list, maintain gaps (set_gaps), triage " +
-      "(draft / revise / finalize_ready / escalate_human), record revisions with version archiving, finalize " +
-      "(refuses while gaps remain), or abandon.",
+      "Docket round control: create, set_gaps, triage, record_revision (round cap), finalize (refuses while gaps " +
+      "remain), abandon. 详见 skills/patent-illustrator/references/patent-tool-contracts/workflow.md。",
     kind: "session",
     domain: "patent",
     inputSchema: {

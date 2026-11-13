@@ -176,15 +176,23 @@ const STAGE_SCHEMA: SatiJsonSchema = {
   required: ["id", "name", "goal", "strategy"],
   additionalProperties: false,
   properties: {
-    id: { type: "string" },
+    id: { type: "string", description: "Stage id (unique in the plan)." },
     name: { type: "string" },
     goal: { type: "string" },
-    strategy: { type: "string", enum: ["chain", "react", "sub_agent"] },
-    atom: { type: "string" },
-    params: { type: "object" },
-    artifacts: { type: "array", items: { type: "string" } },
-    constraintIds: { type: "array", items: { type: "string" } },
-    articleJudgments: { type: "array", items: { type: "string" } },
+    strategy: { type: "string", enum: ["chain", "react", "sub_agent"], description: "chain | react | sub_agent." },
+    atom: { type: "string", description: "Atom id for this stage (e.g. clarity-gate)." },
+    params: { type: "object", description: "Static params passed to the stage handler." },
+    artifacts: { type: "array", items: { type: "string" }, description: "Artifact names this stage produces." },
+    constraintIds: {
+      type: "array",
+      items: { type: "string" },
+      description: "Rule constraint ids attached to the stage.",
+    },
+    articleJudgments: {
+      type: "array",
+      items: { type: "string" },
+      description: "法条判定（ArticleJudgment.articleId）",
+    },
   },
 };
 
@@ -271,11 +279,8 @@ export function createFlexiblePlanTool(deps: FlexiblePlanToolDeps = {}): SatiToo
     // patent_plan_task 已并入本工具：旧名保留为别名，输入/输出保持兼容。
     aliases: ["FlexiblePlan", "flexible_plan_task", "patent_plan_task"],
     description:
-      "Flexible plan (stage-level HITL): create a plan (optional IPC field inference), run pending stages via " +
-      "atoms (LLM + prior-art search), then confirm/rollback stages; add/remove/reorder/complete/abandon at " +
-      "runtime. Plans persist by caseId; run executes only unconfirmed stages, autoConfirm=true freezes " +
-      "successful ones. Legacy patent_plan_task actions transition/sync/replan accepted (stateless). " +
-      "For drafting, declare {id:'clarity_gate',atom:'clarity-gate'} before deconstruction to pause at low clarity.",
+      "Stage-level HITL plan, persists by caseId. Declare {id:'clarity_gate',atom:'clarity-gate'} to pause at low " +
+      "clarity. 详见 skills/patent-illustrator/references/patent-tool-contracts/workflow.md。",
     kind: "session",
     domain: "patent",
     inputSchema: {
@@ -300,11 +305,11 @@ export function createFlexiblePlanTool(deps: FlexiblePlanToolDeps = {}): SatiToo
             "sync",
             "replan",
           ],
-          description: "Plan operation (legacy: transition|sync|replan).",
+          description: "计划操作（旧式：transition|sync|replan）",
         },
         caseId: { type: "string", description: "Plan key (required except legacy actions)." },
         caseType: { type: "string", description: "Orchestration type (create)." },
-        inputText: { type: "string", description: "Case input text; create persists it, run can override." },
+        inputText: { type: "string", description: "案件输入文本；create 时持久化，run 可覆盖" },
         technicalField: { type: "string", description: "Explicit technical field (else inferred)." },
         stages: {
           type: "array",
@@ -315,7 +320,7 @@ export function createFlexiblePlanTool(deps: FlexiblePlanToolDeps = {}): SatiToo
           description: "Single stage definition (add).",
           ...STAGE_SCHEMA,
         },
-        stageId: { type: "string", description: "Target stage id (confirm / rollback / remove)." },
+        stageId: { type: "string", description: "目标 stage id（confirm/rollback/remove）" },
         stageIds: { type: "array", items: { type: "string" }, description: "New stage order (reorder)." },
         reason: { type: "string", description: "Abandon reason (audit)." },
         maxResults: { type: "number", description: "Max search results for run (default 5)." },

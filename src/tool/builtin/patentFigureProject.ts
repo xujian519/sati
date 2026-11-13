@@ -475,10 +475,10 @@ export function createPatentFigureProjectTool(
     aliases: ["PatentFigureProject", "figure_project"],
     title: "Project 3D Model to Patent Figure",
     description:
-      "Project a STEP/3D model into a patent-style figure (black-and-white SVG, hidden-line removal, " +
-      "orthographic projection) with a local headless FreeCAD. Views: front/back/left/right/top/bottom/iso. " +
-      "section_offset_mm produces a full section view; annotations place reference numerals. Returns the SVG " +
-      "plus a sidecar. Requires FreeCAD (SATI_FREECAD_CMD); missing install fails closed.",
+      "把 STEP/3D 模型投影成专利式附图（黑白 SVG、隐藏线消除、正投影；本机 FreeCAD）。写盘。" +
+      "缺 FreeCAD 即 fail closed（不出图）。" +
+      "section_offset_mm 出全剖视图；标号择位 strict，放不下即不出图。" +
+      "详见 skills/patent-illustrator/references/patent-tool-contracts/figure.md。",
     kind: "custom",
     domain: "patent",
     inputSchema: {
@@ -486,73 +486,73 @@ export function createPatentFigureProjectTool(
       additionalProperties: false,
       required: ["step_path", "output_name", "view"],
       properties: {
-        step_path: { type: "string", description: "STEP file path." },
-        output_name: { type: "string", description: "Output base name." },
-        view: { type: "string", enum: [...CAD_VIEWS], description: "Projection view (iso = isometric)." },
-        figure_no: { type: "number", description: "Figure number (default 1)." },
+        step_path: { type: "string", description: "STEP 文件路径。" },
+        output_name: { type: "string", description: "产物文件名主干。" },
+        view: { type: "string", enum: [...CAD_VIEWS], description: "投影视图（iso＝轴测）。" },
+        figure_no: { type: "number", description: "图号（缺省 1）。" },
         hidden_lines: {
           type: "boolean",
-          description: "Draw hidden lines (default false).",
+          description: "画隐藏线（缺省 false）。",
         },
         section_offset_mm: {
           type: "number",
-          description: "Section plane offset in model mm (axis views only).",
+          description: "剖切面偏移（模型 mm；仅正交视图）。",
         },
         annotations: {
           type: "array",
-          description: "Reference-numeral anchors (model mm).",
+          description: "附图标记锚点（模型 mm）。",
           items: {
             type: "object",
             additionalProperties: false,
             required: ["ref", "at_mm"],
             properties: {
-              ref: { type: "integer", description: "Reference numeral." },
+              ref: { type: "integer", description: "标记号。" },
               at_mm: {
                 type: "array",
-                description: "Anchor [x,y,z] in model mm.",
+                description: "锚点 [x,y,z]（模型 mm）。",
                 items: { type: "number" },
               },
               label_offset_mm: {
                 type: "array",
-                description: "Label offset [dx,dy] in mm.",
+                description: "标号偏移 [dx,dy]（mm）。",
                 items: { type: "number" },
               },
             },
           },
         },
-        case_id: { type: "string", description: "Case id." },
-        output_dir: { type: "string", description: "Output dir." },
+        case_id: { type: "string", description: "案卷 id。" },
+        output_dir: { type: "string", description: "产物目录。" },
         jurisdiction: {
           type: "string",
           enum: JURISDICTIONS,
-          description: "cn|us|pct.",
+          description: "cn|us|pct。",
         },
         document_kind: {
           type: "string",
           enum: ["invention", "utility"],
-          description: "invention / utility (sidecar V9).",
+          description: "invention / utility（sidecar V9）。",
         },
-        tolerance_mm: { type: "number", description: "Projection tolerance in mm (default 0.5)." },
+        tolerance_mm: { type: "number", description: "投影容差（mm，缺省 0.5）。" },
         figure_count: {
           type: "integer",
           minimum: 1,
-          description: "Total figures in case.",
+          description: "本案附图总幅数。",
         },
         sheet_index: {
           type: "integer",
           minimum: 1,
-          description: "Sheet index (paired with sheet_total).",
+          description: "附图页序号（与 sheet_total 成对）。",
         },
-        sheet_total: { type: "integer", minimum: 1, description: "Total sheets." },
+        sheet_total: { type: "integer", minimum: 1, description: "附图页总页数。" },
         fit_to_page: {
           type: "boolean",
-          description: "Also produce a print page SVG.",
+          description: "另出打印落版页 SVG。",
         },
         views: {
           type: "array",
           minItems: 1,
           items: { type: "string", enum: [...CAD_VIEWS] },
-          description: "Views to project in one run (env fallback).",
+          description: "一次投影的视图集（覆盖 env）。",
         },
         submission: {
           type: "object",
@@ -563,7 +563,7 @@ export function createPatentFigureProjectTool(
             caption_gap_mm: { type: "number" },
             sheet_font_mm: { type: "number" },
           },
-          description: "Per-call page params (env fallback).",
+          description: "落版参数（覆盖 env）。",
         },
       },
     },

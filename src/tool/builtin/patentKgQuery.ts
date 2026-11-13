@@ -308,10 +308,9 @@ export function createPatentKgQueryTool(
     },
     title: "Patent Knowledge Graph Query",
     description:
-      "查询专利知识图谱节点（判例/审查规则/法条/概念，116K 节点 + 关系边）。三种模式：① query 关键词检索" +
-      "（FTS5，附相似/引用关系标注）；② id 按节点 id 展开详情与相似/引用邻居（沿引用关系追查判例）；" +
-      "③ node_type 按类型浏览（Case/SupremeCourtJudgment/RegionalCourtJudgment/GuidelineRule/Clause/WikiCard/" +
-      "Concept，支持 Judgment/LawArticle 别名）。",
+      "查询专利知识图谱节点（判例/审查规则/法条/概念）。三种模式：关键词检索 / 按 id 展开 / 按类型浏览。" +
+      "缺库即报错；精排缺模型时降级为原序。只读。详见 skills/patent-illustrator/references/patent-tool-contracts/" +
+      "search-verify.md。",
     kind: "custom",
     domain: "patent",
     inputSchema: {
@@ -324,12 +323,11 @@ export function createPatentKgQueryTool(
         },
         id: {
           type: "string",
-          description: "节点 id（如 CASE_005）；返回节点详情 + 相似/引用邻居；与 query 二选一，id 优先",
+          description: "节点 id（如 CASE_005）；详情+相似/引用邻居；与 query 互斥，id 优先",
         },
         node_type: {
           type: "string",
-          description:
-            "按节点类型浏览（Case/…Judgment/GuidelineRule/Clause/WikiCard/Concept；Judgment=最高法院+地方法院判决，LawArticle=法条条款）",
+          description: "按节点类型浏览；别名 Judgment=判决、LawArticle=法条",
         },
         expand: {
           type: "boolean",

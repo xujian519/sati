@@ -181,6 +181,7 @@ Sati 的 `cad/` 是**真实实现**（FreeCAD 无头 HLR + 半空间剖切 + JSO
 | | **B-2** | 新图型渲染器：**时序图**（生命线+消息）/ **电路图**（9 种 IEC 元件符号）/ **多面板** `panels`（网格拼版 + 共享标号系列） | ✅ 已落地（**3/5 项**；2D 剖视与外观设计二维视图转入 `TD-PATENT-N39`；fixture 再次重录） | `2026-11-12-figure-new-kinds-batch-b2.md` |
 | | **B-3** | **二维剖视**（`kind="cross-section"`：断面轮廓 + 剖切线 + GB/T 4457.5 剖面线交替 + 孔）+ 修掉「画布白底被当零件」的既有 RC4 缺陷 + 全域描述瘦身（预算上限未再上调） | ✅ 已落地 | `2026-11-13-figure-cross-section-batch-b3.md` |
 | | **B-4** | **外观设计二维视图**：**明确不做**（范围决策，非能力遗漏）⇒ `TD-PATENT-N39` 关闭 | ✅ 决策已落 | `2026-11-13-figure-appearance-view-dropped.md` |
+| | **N38** | patent 域**描述预算重排**：契约面 47 800 → 42 235；口径下沉到 skill 的 `patent-tool-contracts/` 分片；门禁收紧在粒度（单工具 1 200→300、属性 200→60、总量 48 000→43 000） | ✅ 已落地 | `2026-11-13-figure-description-budget-rearrange.md` |
 
 ### B-1（**已完成**：一次合并的 schema 变更 + fixture 重录，2026-11-12）
 

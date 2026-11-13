@@ -112,9 +112,8 @@ export function createPatentWikiSearchTool(): SatiToolDefinition<PatentWikiSearc
     name: "patent_wiki_search",
     title: "Patent Wiki Search",
     description:
-      "检索专利 wiki 知识卡片（说明书/权利要求/撰写/附图四目录），用于撰写说明书、权利要求书时查询充分公开、" +
-      "实施例、数值范围、以说明书为依据等撰写标准。支持 dir 目录过滤（specification/claims/drafting/figures）与 " +
-      "include_body 正文片段。撰写说明书前先用本工具检索'撰写必查卡片清单'中的卡片。",
+      "检索专利 wiki 知识卡片（说明书/权利要求/撰写/附图四目录）的撰写标准。只读。详见 " +
+      "skills/patent-illustrator/references/patent-tool-contracts/search-verify.md。",
     kind: "custom",
     domain: "patent",
     inputSchema: {
@@ -128,7 +127,7 @@ export function createPatentWikiSearchTool(): SatiToolDefinition<PatentWikiSearc
         dir: {
           type: "string",
           enum: ["specification", "claims", "drafting", "figures"],
-          description: "目录过滤：specification=说明书、claims=权利要求、drafting=撰写、figures=附图（缺省全部）",
+          description: "目录（见枚举）：说明书/权利要求/撰写/附图",
         },
         limit: {
           type: "number",

@@ -100,9 +100,9 @@ export function createAnalyzePatentFigureTool(
     },
     title: "Analyze Patent Figure",
     description:
-      "分析专利说明书附图：识别附图类型（结构图/流程图/电路图/方框图/示意图/分解图/剖视图）、提取组件与连接关系、" +
-      "核对附图标记并生成专利格式的附图说明文字。可传入权利要求或技术方案文本作为上下文提升识别准确率。" +
-      "结果自动写入附图索引（.sati/figures-index.json）供 search_patent_figure 检索；plan 只读模式不写盘。",
+      "只读。分析专利附图：识别附图类型、提取组件与连接关系、核对附图标记并生成专利格式附图说明。" +
+      "结果写入 .sati/figures-index.json 供检索；plan 模式不写盘。" +
+      "详见 skills/patent-illustrator/references/patent-tool-contracts/drafting-evidence.md。",
     kind: "custom",
     domain: "patent",
     inputSchema: {

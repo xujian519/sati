@@ -197,6 +197,14 @@ FigureSpec 契约对两个渲染器完全一致，切换渲染器不需要改 sp
 
 全部条文与溯源锚见 [references/cn-drawing-rules.md](references/cn-drawing-rules.md)。
 
+## 工具契约档案
+
+patent 域各工具的**详细契约**（用途 / 关键入参 / **硬约束与失败模式** / 口径与依据 / 边界）见
+[references/patent-tool-contracts/index.md](references/patent-tool-contracts/index.md)。
+
+工具的 `description` 因提示面预算只留「做什么 + 硬约束 + 失败模式」；当你要判断某个工具
+**能不能用、失败会返回什么、依据是哪条**，按工具名查该目录下的分片。
+
 ## 现状（截至 2026-09-22）
 
 - **模块与工具**：figuregen（`src/patent/figuregen/`）；`patent_figure_generate` /

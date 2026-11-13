@@ -323,12 +323,11 @@ export function createPatentFigureAnnotateTool(): SatiToolDefinition<
     aliases: ["PatentFigureAnnotate", "figure_annotate"],
     title: "Annotate Patent Figure References",
     description:
-      'Append patent reference numerals (visible marks such as "处理模块(20)") to a delivered SVG and verify ' +
-      "the visible marks against the registered set. Provide svg_path plus references [{ref, label}]: ref is the " +
-      "numeral to write (1..999), label is the visible text to locate (substring, case-insensitive; defaults to " +
-      'the "(ref)" form). Writes <stem>-annotated.svg unless output_path is given; dry_run computes without ' +
-      "writing. Returns written / already_present / unmatched marks, the registration check and ok. " +
-      "Reference-mark rules: `patent-illustrator` skill.",
+      "向已交付 SVG 追加附图标记（形如「处理模块(20)」）并与登记集合对账。写盘。" +
+      "规则目录见 `patent-illustrator` skill；" +
+      "目标文本找不到 ⇒ unmatched 且 ok=false；图面有而登记集合外的标记只报出、不阻断 ok。" +
+      "dry_run 只算不写。" +
+      "详见 skills/patent-illustrator/references/patent-tool-contracts/figure.md。",
     kind: "custom",
     domain: "patent",
     inputSchema: {
@@ -338,34 +337,32 @@ export function createPatentFigureAnnotateTool(): SatiToolDefinition<
       properties: {
         svg_path: {
           type: "string",
-          description: "SVG file to annotate (relative paths resolve against the workspace cwd).",
+          description: "待标注 SVG（相对路径按工作区 cwd 解析）。",
         },
         references: {
           type: "array",
           minItems: 1,
-          description:
-            "Marks to write: ref = numeral (1..999), label = visible text to locate " +
-            '(substring, case-insensitive; defaults to the "(ref)" form).',
+          description: '待写标记：ref=标号（1..999），label=可见文本（子串，缺省 "(ref)"）',
           items: {
             type: "object",
             additionalProperties: false,
             required: ["ref"],
             properties: {
-              ref: { type: "integer", minimum: 1, description: "Reference numeral, written as (ref)." },
+              ref: { type: "integer", minimum: 1, description: "标记号，写成 (ref) 形态。" },
               label: {
                 type: "string",
-                description: 'Visible text on the figure to locate (e.g. "处理模块"); defaults to "(ref)".',
+                description: '图面可见文本（大小写不敏感），缺省 "(ref)"。',
               },
             },
           },
         },
         output_path: {
           type: "string",
-          description: "Output path; defaults to <stem>-annotated.svg next to the input SVG.",
+          description: "产物路径；缺省 <stem>-annotated.svg。",
         },
         dry_run: {
           type: "boolean",
-          description: "Compute and validate only, do not write any file (default false).",
+          description: "只算不写（缺省 false）。",
         },
       },
     },

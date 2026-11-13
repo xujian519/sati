@@ -126,10 +126,8 @@ export function createPatentSearchTool(
     aliases: ["PatentSearch", "search_patents"],
     title: "Patent Search",
     description:
-      "Search Google Patents by keyword or boolean query (e.g. '(phase change OR PCM) AND thermal', " +
-      "'assignee:(Samsung) after:20200101'). Returns structured hits: patent number, title, assignee, " +
-      "publication date, abstract, URL, dataSource, and cache flags. Read-only. Zero results return empty " +
-      "hits with warnings; parse failures raise an error.",
+      "Search Google Patents by keyword/boolean query. Zero hits → empty hits+warnings; parse failure → error. " +
+      "Read-only. 详见 skills/patent-illustrator/references/patent-tool-contracts/search-verify.md。",
 
     kind: "network",
     domain: "patent",
@@ -140,8 +138,7 @@ export function createPatentSearchTool(
       properties: {
         query: {
           type: "string",
-          description:
-            "Google Patents query syntax: keywords, boolean (AND/OR/NOT), fielded (assignee:/inventor:), date ranges (after:/before:).",
+          description: "AND/OR/NOT,assignee:,inventor:,after:/before:",
         },
         limit: {
           type: "number",

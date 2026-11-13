@@ -171,11 +171,10 @@ export function createPatentDeadlinesTool(): SatiToolDefinition<PatentDeadlinesI
     name: "patent_deadlines",
     title: "Patent Deadlines",
     description:
-      "计算中国专利的法定期限与指定期限（申请费、实审请求、办登与分案、公告后年费、优先权、PCT 进入国家阶段、" +
-      "答复一通/后续通知、复审请求），输出届满日、细则第5条休假日顺延后的届满日、剩余天数与状态，并附法条依据。" +
-      "三条边界：①送达起算的期限须有送达记录，否则返回 pending 并指名缺哪个输入；②电子送达以进入电子系统之日" +
-      "（未举证时为发文日）为送达日，不加15日；③工作日历未覆盖的年份，办事期限降级为 pending。" +
-      "起草答复、缴费、办登前先用本工具核对期限。",
+      "计算中国专利的法定期限与指定期限。①送达起算的期限缺送达记录即返回 pending 并指名缺哪个输入；" +
+      "②电子送达不加 15 日（以进入电子系统之日为送达日，未举证时为发文日）；③工作日历未覆盖的年份，" +
+      "办事期限降级为 pending。只读。详见 skills/patent-illustrator/references/patent-tool-contracts/" +
+      "search-verify.md。",
     kind: "custom",
     domain: "patent",
     inputSchema: {
@@ -203,10 +202,7 @@ export function createPatentDeadlinesTool(): SatiToolDefinition<PatentDeadlinesI
         },
         notices: {
           type: "array",
-          description:
-            "启动期限的通知（acceptance-notice / office-action-first、" +
-            "后续审查意见 office-action-subsequent、驳回决定 rejection-decision、授权通知 grant-notice、" +
-            "复审通知书 reexamination-notice）。缺哪类通知，该类期限就以 pending 呈现并指名该通知。",
+          description: "启动期限的通知；缺哪类通知，该类期限即 pending 并指名该通知",
           items: {
             type: "object",
             required: ["kind"],

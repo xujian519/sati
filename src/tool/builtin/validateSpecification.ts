@@ -316,17 +316,15 @@ export function createValidateSpecificationTool(): SatiToolDefinition<
     },
     title: "Validate Patent Specification",
     description:
-      "验证专利说明书是否符合撰写要求，包括结构完整性、发明名称长度、摘要长度、模糊表述、附图说明一致性、" +
-      "权利要求特征覆盖（A26.4）、数值范围端点与中间值实施例、效果数据定量性、化学领域表征数据、摘要关键词与摘要附图等检查。" +
-      "文本含 SMILES 时附加合法性抽检（RDKit 校验，warning 级）。" +
-      "章节标题支持 Markdown（#–######）、纯文本、编号（一、/1./（一））与方括号（【技术领域】）格式。" +
-      "在说明书初稿完成后使用；可传入权利要求书全文（claims）与技术领域（tech_domain）以启用实质校验。",
+      "只读。校验说明书是否符合撰写要求（结构、名称/摘要长度、模糊表述、附图一致性、权要特征覆盖、" +
+      "数值范围中间值、效果定量、化学表征）。缺必备分节判不合格；含 SMILES 附 RDKit 抽检（warning）。" +
+      "详见 skills/patent-illustrator/references/patent-tool-contracts/drafting-evidence.md。",
     kind: "custom",
     inputSchema: {
       type: "object",
       additionalProperties: false,
       properties: {
-        text: { type: "string", description: "说明书全文（markdown，含章节标题）" },
+        text: { type: "string", description: "说明书全文（章节标题支持 Markdown/编号/方括号）" },
         title: { type: "string", description: "发明名称（可选，单独校验长度）" },
         abstract: { type: "string", description: "摘要（可选，校验长度/关键词/摘要附图）" },
         claims: { type: "string", description: "权利要求书全文（可选，用于特征覆盖比对）" },
@@ -358,8 +356,7 @@ export function createValidateSpecificationTool(): SatiToolDefinition<
               },
             },
           },
-          description:
-            "附图智能分析结果（analyze_patent_figure 的输出数组，可选）：提供时执行图文一致性校验（附图说明标号 vs 附图分析标号）",
+          description: "analyze_patent_figure 数组；提供时校验附图说明 vs 附图标记一致性",
         },
       },
     },

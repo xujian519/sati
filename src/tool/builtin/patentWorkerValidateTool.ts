@@ -36,8 +36,8 @@ export function createPatentWorkerValidateTool(): SatiToolDefinition<PatentWorke
     },
     aliases: ["PatentWorkerValidate", "worker_contract_check"],
     description:
-      "Validate a patent worker's output against its declared contract (required fields). Missing hard-contract " +
-      "fields mark the output degraded (no interruption). Returns missing field lists and the pass/degraded verdict.",
+      "Read-only: validates a patent worker output against its contract; missing hard fields mark it degraded " +
+      "(no interruption). 详见 skills/patent-illustrator/references/patent-tool-contracts/workflow.md。",
     kind: "session",
     inputSchema: {
       type: "object",

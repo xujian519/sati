@@ -62,10 +62,9 @@ export function createPatentPdfDownloadTool(
       },
     },
     description:
-      "Download patent PDFs from Google Patents: prefers the ego-browser session (login state), falls back to " +
-      "the CDN URL. Input patents is a list of publication numbers; files go to <outputDir>/<patent>.pdf. " +
-      "Per-patent status is ok or failed (pdfUrl kept); failures do not stop the batch. record=true records " +
-      "the browser session.",
+      "下载 Google Patents 专利 PDF（优先 ego-browser 登录态，回退 CDN 直链）。逐篇写入 <outputDir>/<专利号>.pdf；" +
+      "单篇失败保留 pdfUrl 且不中断整批。非只读。" +
+      "详见 skills/patent-illustrator/references/patent-tool-contracts/drafting-evidence.md。",
     kind: "network",
     domain: "patent",
     inputSchema: {
@@ -78,32 +77,31 @@ export function createPatentPdfDownloadTool(
           items: { type: "string" },
           minItems: 1,
           maxItems: MAX_PATENTS,
-          description: "Patent publication numbers to download (1-50).",
+          description: "要下载的专利公开号列表（1-50 篇）",
         },
         outputDir: {
           type: "string",
-          description:
-            "Output directory (absolute or relative to the workspace). Defaults to <workspace>/专利原文/YYYY-MM-DD.",
+          description: "输出目录（绝对或相对工作区）；默认 <workspace>/专利原文/YYYY-MM-DD",
         },
         pageTimeoutSec: {
           type: "integer",
-          description: "Per-page open timeout s (default 20).",
+          description: "单页打开超时秒（默认 20）",
         },
         downloadTimeoutMs: {
           type: "integer",
-          description: "Per-patent timeout ms (default 60000).",
+          description: "单篇下载超时毫秒（默认 60000）",
         },
         timeoutMs: {
           type: "integer",
-          description: "Overall timeout ms (default 180000, max 300000).",
+          description: "整体超时毫秒（默认 180000，最大 300000）",
         },
         record: {
           type: "boolean",
-          description: "Record session to <outputDir>/recording.webm (default false).",
+          description: "录屏保存到 <outputDir>/recording.webm（默认 false）",
         },
         force: {
           type: "boolean",
-          description: "Ignore .MANIFEST.jsonl resume state (default false).",
+          description: "忽略 .MANIFEST.jsonl 续跑状态（默认 false）",
         },
       },
     },

@@ -509,11 +509,10 @@ export function createPatentFigureCheckTool(): SatiToolDefinition<PatentFigureCh
     aliases: ["PatentFigureCheck", "figure_check"],
     title: "Check Patent Figures",
     description:
-      "Check patent figure compliance (CNIPA/PCT/USPTO): rules V1-V22, raster pixel gate (b/w, line width, " +
-      "DPI, paper size), delivered-SVG render checks. Provide figures and/or svg_paths / image_paths plus " +
-      "spec_text. Returns findings, pixel_images, render checks, vector measurements (canvas/text/strokes/" +
-      "orientations) and ok verdict. Rule catalog: `patent-illustrator` skill. Use after patent_figure_generate " +
-      "or third-party figures.",
+      "核验附图合规（CNIPA/PCT/USPTO）：结构规则 V1–V22、栅格像素门禁、已交付 SVG 渲染复核（RC）。" +
+      "规则目录见 `patent-illustrator` skill；" +
+      "只读。ok 为各通路 fail 合并判定；未提供的通路不核验，不得据此宣称全通过。" +
+      "详见 skills/patent-illustrator/references/patent-tool-contracts/figure.md。",
     kind: "custom",
     domain: "patent",
     inputSchema: {
@@ -525,53 +524,53 @@ export function createPatentFigureCheckTool(): SatiToolDefinition<PatentFigureCh
           type: "array",
           minItems: 1,
           items: FIGURE_INPUT_SCHEMA_REF,
-          description: "FigureSpec figures (same contract as patent_figure_generate).",
+          description: "FigureSpec 附图（契约同 patent_figure_generate）。",
         },
         svg_paths: {
           type: "array",
           minItems: 1,
           items: { type: "string" },
-          description: "Delivered SVG paths to read back data-ref.",
+          description: "已交付 SVG 路径（回读 data-ref）。",
         },
         image_paths: {
           type: "array",
           minItems: 1,
           items: { type: "string" },
-          description: "Raster figures for the pixel gate; no OCR.",
+          description: "栅格附图路径（像素门禁；不做 OCR）。",
         },
         spec_text: {
           type: "string",
-          description: "Specification text (claims + description) for V2/V3.",
+          description: "说明书文本（权利要求+说明书），V2/V3 用。",
         },
         claims_text: {
           type: "string",
-          description: "Optional claims text (V10).",
+          description: "权利要求文本（V10）。",
         },
         description_text: {
           type: "string",
-          description: "Optional description text (V11).",
+          description: "说明书文本（V11）。",
         },
         document_kind: {
           type: "string",
           enum: ["invention", "utility"],
-          description: "invention / utility (V9 utility requires drawings).",
+          description: "invention / utility（V9：实用新型须附图）。",
         },
         jurisdiction: {
           type: "string",
           enum: JURISDICTIONS,
-          description: "cn (CNIPA) / us (USPTO) / pct.",
+          description: "cn(CNIPA) / us(USPTO) / pct。",
         },
         figure_count: {
           type: "integer",
           minimum: 1,
-          description: "Total figure count in the case.",
+          description: "本案附图总幅数。",
         },
         sheet_index: {
           type: "integer",
           minimum: 1,
-          description: "Sheet index (paired with sheet_total).",
+          description: "附图页序号（与 sheet_total 成对）。",
         },
-        sheet_total: { type: "integer", minimum: 1, description: "Total sheets." },
+        sheet_total: { type: "integer", minimum: 1, description: "附图页总页数。" },
         hierarchy: {
           type: "array",
           items: {
@@ -579,11 +578,11 @@ export function createPatentFigureCheckTool(): SatiToolDefinition<PatentFigureCh
             additionalProperties: false,
             required: ["parent", "child"],
             properties: {
-              parent: { type: "integer", description: "Parent numeral." },
-              child: { type: "integer", description: "Direct child numeral." },
+              parent: { type: "integer", description: "父标记号。" },
+              child: { type: "integer", description: "直接子标记号。" },
             },
           },
-          description: "Declared parent→child numeral edges (RC8).",
+          description: "声明的父→子标记边（RC8，warn 不阻断）。",
         },
       },
     },

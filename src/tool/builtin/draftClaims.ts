@@ -136,7 +136,9 @@ export function createDraftClaimsTool(): SatiToolDefinition<DraftClaimsInput, Dr
     name: "draft_claims",
     title: "Draft Patent Claims",
     description:
-      "根据技术交底书或技术方案撰写权利要求书草案（机械/电学/化学/软件四领域）。当用户要求撰写权利要求、写权利要求书时使用，避免自行手写权利要求文本。输出独立权利要求 + 从属权利要求 + 形式校验报告。",
+      "只读。根据技术交底书或技术方案撰写权利要求书草案，含独立权要、从属权要与形式校验报告，" +
+      "避免自行手写权要文本。" +
+      "详见 skills/patent-illustrator/references/patent-tool-contracts/drafting-evidence.md。",
     kind: "custom",
     inputSchema: {
       type: "object",
@@ -166,11 +168,11 @@ export function createDraftClaimsTool(): SatiToolDefinition<DraftClaimsInput, Dr
         shared_features: {
           type: "array",
           items: { type: "string" },
-          description: "与最接近现有技术共有的结构化技术特征（置于独立权利要求前序部分）；优先于 prior_art",
+          description: "与最接近现有技术共有的结构化特征（独立权要前序）；优先于 prior_art",
         },
         prior_art: {
           type: "string",
-          description: "最接近现有技术描述（自由文本，仅生成提示，不写入权利要求）；结构化共有特征请用 shared_features",
+          description: "最接近现有技术（自由文本，仅提示，不写入权要）；结构化特征→shared_features",
         },
       },
       required: ["invention_name", "technical_features"],

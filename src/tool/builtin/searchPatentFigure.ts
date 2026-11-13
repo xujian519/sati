@@ -63,7 +63,9 @@ export function createSearchPatentFigureTool(
     name: "search_patent_figure",
     title: "Search Patent Figure",
     description:
-      "检索已分析的专利附图（索引由 analyze_patent_figure 分析时自动写入 .sati/figures-index.json）：按技术特征、部件名称或附图标记关键词（配置 embedding 后支持语义相似度）返回最相关附图及其分析结果——附图编号、类型、组件与标号、附图说明。撰写说明书/具体实施方式时用于确认技术特征对应的附图与标记。索引为空时返回提示，需先调用 analyze_patent_figure 分析附图。",
+      "只读。检索已分析的专利附图（索引 .sati/figures-index.json）：按技术特征/部件名/标记返回相关附图。" +
+      "索引为空须先 analyze_patent_figure 分析附图；配 embedding 支持语义检索。" +
+      "详见 skills/patent-illustrator/references/patent-tool-contracts/drafting-evidence.md。",
     kind: "custom",
     domain: "patent",
     inputSchema: {

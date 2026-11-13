@@ -66,7 +66,9 @@ export function createPatentEvalTool(): SatiToolDefinition<PatentEvalInput, Pate
     },
     title: "Patent Evaluation",
     description:
-      "评估专利相关产出的质量（报告/检索/流程/引用/综合）。返回结构化评分和通过/失败判定。支持 5 种评估模式（report/retrieval/workflow/citations/comprehensive），在提交人工复核前使用可提前发现质量问题。",
+      "只读。评估专利产出质量（报告/检索/流程/引用/综合 5 模式），返回评分与通过/失败判定；" +
+      "提交人工复核前可先自查质量问题。" +
+      "详见 skills/patent-illustrator/references/patent-tool-contracts/drafting-evidence.md。",
     kind: "custom",
     inputSchema: {
       type: "object",
@@ -75,8 +77,7 @@ export function createPatentEvalTool(): SatiToolDefinition<PatentEvalInput, Pate
         mode: {
           type: "string",
           enum: ["report", "retrieval", "workflow", "citations", "comprehensive"],
-          description:
-            "评估模式: report(分析报告质量) / retrieval(检索覆盖度) / workflow(流程完整性) / citations(引用合规性) / comprehensive(全面评估)",
+          description: "评估模式（见枚举）：报告质量/检索覆盖度/流程完整性/引用合规性/全面评估",
         },
         content: {
           type: "string",
