@@ -179,7 +179,8 @@ Sati 的 `cad/` 是**真实实现**（FreeCAD 无头 HLR + 半空间剖切 + JSO
 | | **D** | 渲染不变式护栏（`check:figure-render-baseline`）/ 核验矢量量测输出 / 多视图 A4 拼版 / 落版页 XML 缺陷修复 | ✅ 已落地（零 `inputSchema` 变更） | `2026-11-12-figure-alignment-batch-d.md` |
 | | **B-1** | **一次**合并的 schema 变更 + **一次** fixture 重录：补标号工具 / 自动标号 per-call / `figure_family` 同族续号 / 落版参数 per-call / CAD `views[]` / 比对工具 / RC8 接线 / 清单工具 / 预算重排 | ✅ 已落地（**9/10 项**；fixture 已重录，重放门禁绿） | `2026-11-12-figure-dsh-alignment-batch-b1.md` |
 | | **B-2** | 新图型渲染器：**时序图**（生命线+消息）/ **电路图**（9 种 IEC 元件符号）/ **多面板** `panels`（网格拼版 + 共享标号系列） | ✅ 已落地（**3/5 项**；2D 剖视与外观设计二维视图转入 `TD-PATENT-N39`；fixture 再次重录） | `2026-11-12-figure-new-kinds-batch-b2.md` |
-| | **B-3** | **二维剖视**（`kind="cross-section"`：断面轮廓 + 剖切线 + GB/T 4457.5 剖面线交替 + 孔）+ 修掉「画布白底被当零件」的既有 RC4 缺陷 + 全域描述瘦身（预算上限未再上调） | ✅ 已落地（`TD-PATENT-N39` 只剩外观设计二维视图） | `2026-11-13-figure-cross-section-batch-b3.md` |
+| | **B-3** | **二维剖视**（`kind="cross-section"`：断面轮廓 + 剖切线 + GB/T 4457.5 剖面线交替 + 孔）+ 修掉「画布白底被当零件」的既有 RC4 缺陷 + 全域描述瘦身（预算上限未再上调） | ✅ 已落地 | `2026-11-13-figure-cross-section-batch-b3.md` |
+| | **B-4** | **外观设计二维视图**：**明确不做**（范围决策，非能力遗漏）⇒ `TD-PATENT-N39` 关闭 | ✅ 决策已落 | `2026-11-13-figure-appearance-view-dropped.md` |
 
 ### B-1（**已完成**：一次合并的 schema 变更 + fixture 重录，2026-11-12）
 
@@ -210,8 +211,10 @@ B-1 推迟的两项里落地三项：**时序图**（`kind="sequence"`）、**�
 三者**复用 `nodes`/`edges`**（时序图 = 参与者+消息；电路图 = 元件+连线），并用摊平 helper
 （`figureNodes`/`figureEdges`）让核验/归一/文案/标号表五条既有管线原样覆盖面板。
 
-仍未落地：**2D 剖视**（需新数据结构）与**外观设计二维视图**（本仓只有 3D STEP 投影，
-DSH 的 `appearance-view-sheet` 是二维外观设计图）⇒ 仍记 `TD-PATENT-N39`。
+仍未落地（截至批次 B-2）：**2D 剖视**与**外观设计二维视图**。前者已在批次 B-3 落地；
+后者在批次 B-4 **明确不做**（范围决策：外观案附图主体是照片，DSH 的 `appearance-view-sheet`
+本身只做版面组合不画图，引入不闭合链路）⇒ `TD-PATENT-N39` 已关闭，本仓与 DSH 在这一点
+**保留差距**。
 
 **重录注意**（本轮再次踩到）：录制脚本是**追加**语义，重录前必须先清空 `records.jsonl`，
 否则报 `duplicate record index 0`。
@@ -252,7 +255,7 @@ DSH 的 `appearance-view-sheet` 是二维外观设计图）⇒ 仍记 `TD-PATENT
 | B2 | **跨图续号（`figure_family`）** | 读索引中同 family 条目，同名组件沿用号、新组件续号 | M | 依赖 A4 先落地 |
 | B3 | **多面板 `panels`（FIG.1A/1B，共享标号系列）** | `patentFigureGenerate.ts` 增 `panels` 分支 + `brief.ts` 支持后缀 | M | 与 B1/B2 同批 |
 | B4 | **落版细节可调**（`rotate_deg` 0/90/180/270、`caption_font_mm`/`caption_gap_mm`/`sheet_font_mm`） | `figuregen/submission-page.ts` + schema | M | 旋转须保持图号在图形正下方 |
-| B5 | **新图型**（建议顺序：时序图 → 电路图 → 外观设计视图 → 2D 剖视图） | 新增 `figuregen/sequence-diagram.ts` / `circuit-diagram.ts` / `appearance-view-sheet.ts` / `section-diagram.ts` + 扩 `FigureKind` | M（每型） | `FigureKind` 是穷尽 `Record` ⇒ `brief.ts` 的 `KIND_TEXT`/`KIND_TEXT_EN` 与 `check-rules.ts` 同步；扩枚举即改 `inputSchema` ⇒ 重录 |
+| B5 | **新图型**（时序图 ✅ / 电路图 ✅ / 2D 剖视图 ✅ / 外观设计视图 ❌**明确不做**） | 已落地 `figuregen/sequence-diagram.ts` / `circuit-diagram.ts` / `cross-section.ts` + 扩 `FigureKind`（7 型） | M（每型） | `FigureKind` 是穷尽 `Record` ⇒ `brief.ts` 的 `KIND_TEXT`/`KIND_TEXT_EN` 与 `check-rules.ts` 同步；扩枚举即改 `inputSchema` ⇒ 重录 |
 | B6 | **生成 ↔ 识图比对**（`compare_patent_figure_analysis` 等价物） | 新增 `src/patent/figure/figure-comparison.ts` + 新增工具 | M | 新增工具 ⇒ 重录 + `gen:doc-claims` |
 | B7 | **CAD 多视图 + manifest**（`views[]`） | `tool/builtin/patentFigureProject.ts` + 新增 `cad/structure-manifest.ts` | M | 一次调多视图会拉长 FreeCAD 运行，需超时策略 |
 | B8 | **交付物 manifest / 哈希 / 时序门**（等价 `verify_deliverable`） | 新增 `tool/builtin/patentDeliverableVerify.ts`，或把 `figure-check.json.inputs_hash` 扩到交付件级 | M | 可不做新工具，先扩 hash 覆盖范围 |
