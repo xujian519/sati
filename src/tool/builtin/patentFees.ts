@@ -134,10 +134,8 @@ export type PatentFeesOutput = {
 };
 
 const DESCRIPTION =
-  "Compute CNIPA official fees: items, quantities, reduction, annuity tiers, late surcharges; per-line " +
-  "unit/subtotal/payable/status, total, legal basis, fee schedule. Amounts come only from the rate index; " +
-  "unverified items block the total (unverifiedIds). Reduction 85% sole / 70% two+, requires a filed record. " +
-  "annuityYears and grantPatentYear come from patent_deadlines. Read-only.";
+  "Compute CNIPA fees from the rate index only; unverified items block total. Reduction needs filed record. " +
+  "Read-only. 详见 skills/patent-illustrator/references/patent-tool-contracts/search-verify.md。";
 
 /**
  * 创建 `patent_fees` 工具。
@@ -161,7 +159,7 @@ export function createPatentFeesTool(): SatiToolDefinition<PatentFeesInput, Pate
         },
         triggers: {
           type: "array",
-          description: "Fee triggers; unlisted steps are not priced.",
+          description: "费用触发项；空 = 报错，未列步骤不计价",
           items: { type: "string", enum: [...FEE_TRIGGERS] },
         },
         claims: { type: "number", description: "Total claims (excess-claim fee from item 11)." },

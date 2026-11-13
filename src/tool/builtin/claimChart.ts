@@ -101,7 +101,9 @@ export function createClaimChartTool(): SatiToolDefinition<ClaimChartInput, Clai
     name: "claim_chart_build",
     title: "Build Patent Claim Chart",
     description:
-      "构建权利要求对照表（claim chart）：把权利要求拆分为编号要素，逐要素映射到对比文件或产品证据（每行 pin-cite 引用），并输出 gap list（证据薄弱的要素）。适用于撰写（可专利性布局）、OA 答复、无效/复审、侵权比对等场景。",
+      "构建权利要求对照表：权利要求拆为编号要素并逐要素映射到对比文件/产品证据，输出 gap list。" +
+      "要素须为原文逐字子串且编号连续，校验不通过打回重做。只读。详见 " +
+      "skills/patent-illustrator/references/patent-tool-contracts/search-verify.md。",
     kind: "custom",
     inputSchema: {
       type: "object",
@@ -110,7 +112,7 @@ export function createClaimChartTool(): SatiToolDefinition<ClaimChartInput, Clai
         mode: {
           type: "string",
           enum: ["infringement", "invalidity", "oa-response", "reexamination", "patentability"],
-          description: "场景：infringement（支持 doe）/invalidity/oa-response/reexamination/patentability",
+          description: "场景；doe 映射仅在 infringement 适用",
         },
         claim_text: { type: "string", description: "权利要求原文（需拆分的权利要求，可含多条）" },
         targets: {

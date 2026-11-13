@@ -92,9 +92,8 @@ export function createPatentLegalStatusTool(
     aliases: ["PatentLegalStatus", "patent_status"],
     title: "Patent Legal Status",
     description:
-      "Query patent legal status (Active / Expired / Abandoned) and estimated expiration from Google Patents. " +
-      "Batch 1-20 numbers; per-patent failures do not abort the batch. Returns title, status, dates, applicant, " +
-      "inventor, event history; per-item degraded/missingFields mark page-structure gaps.",
+      "Legal status + expiration, 1-20 patents. Item failure doesn't abort batch; degraded/missingFields mark " +
+      "gaps. Read-only. 详见 skills/patent-illustrator/references/patent-tool-contracts/search-verify.md。",
 
     kind: "network",
     domain: "patent",
@@ -106,7 +105,7 @@ export function createPatentLegalStatusTool(
         patents: {
           type: "array",
           items: { type: "string" },
-          description: "Patent numbers (1-20), e.g. ['US11452699B2', 'US2668287A']",
+          description: "专利号（1-20），如 US11452699B2",
           minItems: 1,
           maxItems: MAX_PATENTS,
         },

@@ -7,7 +7,7 @@
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1247 / 224691 |
+| src TS 文件 / 行数 | 1247 / 224664 |
 | src JS 文件 | 0 |
 | tests 文件 | 743 |
 | ui/src 文件 / 行数 | 801 / 112332 |
@@ -47,7 +47,7 @@
 |---|---|---|---|
 | `ui/src/components/chat-v2/MessagesPaneV2.render.test.tsx` | `(anonymous)` | 943 | arrow |
 | `ui/src/components/main-content/view/MainContent.tsx` | `SplitBody` | 573 | function |
-| `src/tool/builtin/patentFigureGenerate.ts` | `createPatentFigureGenerateTool` | 489 | function |
+| `src/tool/builtin/patentFigureGenerate.ts` | `createPatentFigureGenerateTool` | 488 | function |
 | `ui/src/components/main-content-v2/CronV2.tsx` | `CronFormView` | 476 | function |
 | `ui/src/components/settings/view/modelPool/components/ProviderCard.tsx` | `ProviderCard` | 447 | function |
 | `ui/src/components/settings/view/integrations/im/components/FeishuChannelSection.tsx` | `FeishuChannelSection` | 423 | function |

@@ -327,11 +327,10 @@ export function createPatentFigureGenerateTool(): SatiToolDefinition<PatentFigur
     aliases: ["PatentFigureGenerate", "figure_generate"],
     title: "Generate Patent Figures",
     description:
-      "Render patent-style figures from structured FigureSpec: flowcharts, block diagrams, state diagrams, " +
-      "component hierarchies, and curve charts. Deterministic black-and-white SVG compliant with CNIPA " +
-      "drawing rules, with reference numerals stored as data-ref and bidirectional figure/spec validation. " +
-      "Numbering follows the target office (CN figure N; PCT/US Fig. N, omitted for a single view). Returns " +
-      "SVG paths and a draft Brief Description of Drawings.",
+      "按 FigureSpec 渲染黑白线条附图 SVG（写盘）。标记 data-ref 内嵌可回读。" +
+      "曲线图/时序图/电路图/多面板/剖视图仅 builtin，graphviz 即 fail-loud。" +
+      "生成期核验不含 V2/V3（需说明书文本）。" +
+      "详见 skills/patent-illustrator/references/patent-tool-contracts/figure.md。",
     kind: "custom",
     domain: "patent",
     inputSchema: {
@@ -343,69 +342,69 @@ export function createPatentFigureGenerateTool(): SatiToolDefinition<PatentFigur
           type: "array",
           minItems: 1,
           items: FIGURE_INPUT_SCHEMA_REF,
-          description: "FigureSpec list.",
+          description: "FigureSpec 列表（单幅 nodes+edges ≤200）。",
         },
-        output_name: { type: "string", description: "Output base name." },
-        case_id: { type: "string", description: "Case id." },
-        output_dir: { type: "string", description: "Output dir." },
+        output_name: { type: "string", description: "产物文件名主干。" },
+        case_id: { type: "string", description: "案卷 id。" },
+        output_dir: { type: "string", description: "产物目录。" },
         document_kind: {
           type: "string",
           enum: ["invention", "utility"],
-          description: "invention / utility.",
+          description: "invention / utility（实用新型须附结构图）。",
         },
-        invention_name: { type: "string", description: "Invention name." },
-        brief: { type: "boolean", description: "Also write the brief." },
+        invention_name: { type: "string", description: "发明名称（写入附图说明草稿）。" },
+        brief: { type: "boolean", description: "附图说明草稿开关（缺省输出）。" },
         format: {
           type: "string",
           enum: ["svg", "html", "both"],
-          description: "svg|html|both.",
+          description: "svg|html|both（html 出 A4 打印版式）。",
         },
         jurisdiction: {
           type: "string",
           enum: JURISDICTIONS,
-          description: "cn|us|pct.",
+          description: "cn|us|pct（纸面常数与编号体例）。",
         },
         figure_count: {
           type: "integer",
           minimum: 1,
-          description: "Total figures in case.",
+          description: "本案附图总幅数（图号义务判据）。",
         },
         sheet_index: {
           type: "integer",
           minimum: 1,
-          description: "Sheet index (with sheet_total).",
+          description: "附图页序号（须与 sheet_total 成对）。",
         },
         sheet_total: {
           type: "integer",
           minimum: 1,
-          description: "Total sheets.",
+          description: "附图页总页数。",
         },
         fit_to_page: {
           type: "boolean",
-          description: "Also write the page SVG.",
+          description: "另出 A4 落版页 SVG。",
         },
         auto_numbering: {
           type: "boolean",
-          description: "Auto-assign reference numerals (env default off).",
+          description: "自动发附图标记（env 缺省 off，本调用优先）。",
         },
         numeral_start: {
           type: "integer",
           minimum: 1,
-          description: "Auto-numbering series start (default 100+100*(fig-1)).",
+          description: "自动发号起点（缺省 100+100*(图序-1)）。",
         },
         numeral_step: {
           type: "integer",
           minimum: 1,
-          description: "Auto-numbering step (default 2).",
+          description: "自动发号步长（缺省 2）。",
         },
         reserved: {
           type: "array",
           items: { type: "string" },
-          description: 'Reserved numerals to skip (e.g. "100").',
+          description: '预留跳过的标号（如 "100"）。',
         },
         figure_family: {
           type: "string",
-          description: "Shared numeral series for this call's figures (e.g. FIG.1A/1B).",
+          description: "本次各图共享标号系列（如 FIG.1A/1B）。",
         },
         submission: {
           type: "object",
@@ -416,7 +415,7 @@ export function createPatentFigureGenerateTool(): SatiToolDefinition<PatentFigur
             caption_gap_mm: { type: "number" },
             sheet_font_mm: { type: "number" },
           },
-          description: "Per-call page params (env fallback).",
+          description: "落版参数（覆盖 env）。",
         },
       },
     },

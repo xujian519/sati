@@ -601,13 +601,11 @@ export function createPatentFigureManifestTool(): SatiToolDefinition<PatentFigur
     aliases: ["PatentFigureManifest", "figure_manifest"],
     title: "Patent Figure Deliverable Manifest",
     description:
-      "Register and verify the patent figure deliverable manifest (sha256 / size / mtime of every delivered " +
-      "artifact). Provide exactly one locator: sidecar_path (a <name>-figures.json sidecar whose deliverables " +
-      "field holds the manifest), output_dir + output_name, or files. mode=build assembles the manifest from the " +
-      "files on disk (read-only); mode=check (default) compares the registered manifest against the current files " +
-      "and reports file-missing / hash-mismatch / not-in-manifest / stale-output. checked is the honest " +
-      "three-state: verified (actually compared), not-registered (nothing was verified, ok=false), unavailable " +
-      "(unreadable, ok=false). Rule catalog: `patent-illustrator` skill.",
+      "登记并核验附图交付物清单（sha256/字节数/mtime）。只读。定位三选一互斥。" +
+      "规则目录见 `patent-illustrator` skill；" +
+      "checked 三态：verified / not-registered（未登记）/ unavailable（读不到）；" +
+      "后两态 ok=false，未核验不判通过。" +
+      "详见 skills/patent-illustrator/references/patent-tool-contracts/figure.md。",
     kind: "custom",
     domain: "patent",
     outputSchema: {
@@ -685,7 +683,7 @@ export function createPatentFigureManifestTool(): SatiToolDefinition<PatentFigur
         mode: {
           type: "string",
           enum: ["build", "check"],
-          description: "build=装配清单（登记当前文件）；check=核验清单（缺省）。两种模式都只读盘不写盘。",
+          description: "build=装配清单（登记当前文件）；check=核验清单（缺省）；两者都只读盘不写盘",
         },
         sidecar_path: {
           type: "string",

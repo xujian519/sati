@@ -197,8 +197,9 @@ export function createEvaluateEvidenceTool(deps?: {
     },
     title: "Evaluate Evidence",
     description:
-      "对专利证据做确定性三性判定（相关性/合法性/真实性）与类型特定检查（电子证据/互联网公开/使用公开四要件/域外证据/公知常识），" +
-      "输出综合评分、举证责任分配与实际适用的证据规则。在 OA 答复、无效宣告论证引用证据前调用，可提前发现证据缺陷。",
+      "对专利证据做确定性三性判定（相关性/合法性/真实性）与类型特定检查（电子证据/互联网公开/使用公开/" +
+      "域外证据/公知常识）。条件输入未提供的规则进 rulesPending，不误判为失败。只读。详见 " +
+      "skills/patent-illustrator/references/patent-tool-contracts/search-verify.md。",
     kind: "custom",
     inputSchema: {
       type: "object",
@@ -236,7 +237,7 @@ export function createEvaluateEvidenceTool(deps?: {
           ],
         },
         filingDate: { type: "string", description: "Filing date." },
-        caseType: { type: "string", description: "invalidation / infringement / new_product_method." },
+        caseType: { type: "string", description: "invalidation/infringement/new_product_method" },
         notarized: { type: "boolean", description: "已公证（EVI-011）。" },
         legalized: { type: "boolean", description: "已认证（EVI-011）。" },
         translated: { type: "boolean", description: "已附中文译本（EVI-011）。" },

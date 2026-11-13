@@ -62,13 +62,10 @@ export function createPatentWorkflowRunTool(
       },
     },
     aliases: ["PatentWorkflowRun", "run_patent_atoms"],
-    description:
-      "Execute a patent workflow (atom stages) or a domain graph (LLM + search + rule gate): manifest path runs " +
-      "the manifest, graph path runs a subgraph. Approval gates pause the run; resumeCheckpointId continues and " +
-      "approveCheckpointId/approveStageIds grant the gate. With caseId, runs and checkpoints persist under " +
-      "<caseDir>/workflow-runs/. Requires a model client. Built-in manifests: " +
-      formatManifestCatalog() +
-      ".",
+    // 描述预算 ≤200 字符：8 个 manifest id 本身占 173 字符（紧凑逗号排版），
+    // 剩余额度留给「做什么 + 硬约束」。完整口径见
+    // skills/patent-illustrator/references/patent-tool-contracts/workflow.md。
+    description: `Run patent workflow manifest; approval gates pause. ${formatManifestCatalog().replaceAll(", ", ",")}`,
     kind: "session",
     domain: "patent",
     inputSchema: {
@@ -78,41 +75,41 @@ export function createPatentWorkflowRunTool(
       properties: {
         manifestId: {
           type: "string",
-          description: "Manifest id (default patent_disclosure_v1).",
+          description: "内置 manifest id（默认 patent_disclosure_v1）",
         },
         graph: {
           type: "string",
           enum: ["novelty", "inventiveness", "enablement", "claim_breadth", "citation_check"],
-          description: "Domain graph (not with manifestId). claim_breadth: claimText=claims, input=spec.",
+          description: "图模式，与 manifestId 互斥；claim_breadth 传 claimText",
         },
         resumeCheckpointId: {
           type: "string",
-          description: "Graph checkpoint id from an interrupted run.",
+          description: "中断（审批门暂停）run 的续跑 id",
         },
         approveCheckpointId: {
           type: "string",
-          description: "Grant the approval gate at this checkpoint and resume.",
+          description: "在该 checkpoint 放行审批门并续跑",
         },
         approveStageIds: {
           type: "array",
           items: { type: "string" },
-          description: "Approved gate stage ids (e.g. ['review_gate']).",
+          description: "放行这些审批门 stage id（如 ['review_gate']）",
         },
         caseId: {
           type: "string",
-          description: "Persist run artifacts under <caseDir>/workflow-runs/.",
+          description: "run 产物落盘到 <caseDir>/workflow-runs/",
         },
         input: {
           type: "string",
-          description: "Initial material (e.g. disclosure text).",
+          description: "初始素材（交底书文本）；LLM 阶段需模型",
         },
         claimText: {
           type: "string",
-          description: "Claim text for graph=enablement (defaults to input).",
+          description: "graph=enablement 用的权要文本（默认取 input）",
         },
         chartTargets: {
           type: "string",
-          description: "Claim-chart targets JSON [{id,kind}]; kind prior-art|product.",
+          description: "对照目标 JSON [{id,kind}]；kind=prior-art|product",
         },
         maxResults: {
           type: "number",
@@ -120,16 +117,16 @@ export function createPatentWorkflowRunTool(
         },
         retrievalRounds: {
           type: "number",
-          description: "Graph retrieval reflection rounds (default 2; 0 disables).",
+          description: "图检索反思轮次（默认 2；0 = 关闭）",
         },
         judgeSamples: {
           type: "number",
-          description: "LLM judge samples; >0 adds a 0-1 advisory score.",
+          description: "LLM 评审判本数；>0 时加 0-1 参考分",
         },
         judgeModels: {
           type: "array",
           items: { type: "string" },
-          description: "Multi-judge modelHint ids → consensus verdict + Verdict Envelope.",
+          description: "多评审 modelHint id → 共识 + 裁决信封",
         },
       },
     },

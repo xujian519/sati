@@ -128,11 +128,9 @@ export function createRenderPatentDocumentTool(): SatiToolDefinition<RenderPaten
     aliases: ["RenderPatentDocument", "render_document"],
     title: "Render Patent Document",
     description:
-      "Render a patent-attorney document from a bundled template (patentability-opinion, search-report, " +
-      "oa-response, claims-spec, invalidation-opinion). Injects brand variables, replaces sections by element id, " +
-      "always writes HTML; pdf/both/all prints PDF when headless Chrome is available, docx/all fills the " +
-      "application .docx from the template's Word master (claims-spec only; section keys: abstract / " +
-      "abstract-figure / claims / specification / drawings).",
+      "从内置模板渲染专利文书；总是产出 HTML；PDF 需 headless Chrome，否则只出 HTML；" +
+      "docx 仅 claims-spec，件键：abstract / abstract-figure / claims / specification / drawings。" +
+      "写盘，非只读。详见 skills/patent-illustrator/references/patent-tool-contracts/drafting-evidence.md。",
     kind: "custom",
     domain: "patent",
     inputSchema: {
@@ -143,37 +141,37 @@ export function createRenderPatentDocumentTool(): SatiToolDefinition<RenderPaten
         template: {
           type: "string",
           enum: ["patentability-opinion", "search-report", "oa-response", "claims-spec", "invalidation-opinion"],
-          description: "Template id.",
+          description: "模板 id",
         },
-        output_name: { type: "string" },
-        case_id: { type: "string" },
-        output_dir: { type: "string" },
+        output_name: { type: "string", description: "输出文件名主干（不含扩展名）" },
+        case_id: { type: "string", description: "案卷 id；提供时落盘 data/cases/<caseId>/outputs/" },
+        output_dir: { type: "string", description: "输出目录（覆盖默认目录）" },
         format: {
           type: "string",
           enum: ["html", "pdf", "both", "docx", "all"],
-          description: "pdf / both / docx / all (default both).",
+          description: "html / pdf / both / docx / all（默认 both）",
         },
         sections: {
           type: "object",
           additionalProperties: { type: "string" },
-          description: `"Map id -> HTML. HTML/PDF: template element id. docx: ${DOCX_PART_IDS.join(", ")}."`,
+          description: `id→HTML；HTML/PDF 模板元素 id，docx 申请文件件 id（共 ${DOCX_PART_IDS.length} 件）`,
         },
         brand: {
           type: "object",
           additionalProperties: { type: "string" },
-          description: "Inline brand overrides.",
+          description: "内联品牌覆盖（优先级最高）",
         },
         brand_path: {
           type: "string",
-          description: "theme.json path.",
+          description: "品牌路径（默认 products/_example/brand/theme.json）",
         },
         style: {
           ...DOCUMENT_STYLE_JSON_SCHEMA,
-          description: "Style overrides (higher priority than brand).",
+          description: "排版参数覆盖（优先级高于 brand / theme.json）",
         },
         style_preset: {
           type: "string",
-          description: "Style preset name.",
+          description: "样式预设名（style-presets/<name>.json）",
         },
       },
     },

@@ -232,9 +232,8 @@ export function createPatentWorkflowTool(): SatiToolDefinition<PatentWorkflowInp
     // 旧名 patent_workflow 保留一个版本（alias），提示词/技能可平滑迁移。
     aliases: ["PatentWorkflow", "patent_workflow", "run_patent_workflow"],
     description:
-      "Assemble stage outputs for a declarative patent workflow (no LLM): validates the manifest, marks missing " +
-      "stages degraded, runs the deterministic rule gate, and persists when caseId is given. Use when stage " +
-      "outputs already exist; use patent_workflow_run to execute atoms. Legacy name patent_workflow is an alias.",
+      "Assembles stage outputs (no LLM): missing stages degraded, rule gate, persists with caseId; " +
+      "read-only without caseId. 详见 skills/patent-illustrator/references/patent-tool-contracts/workflow.md。",
     kind: "session",
     inputSchema: {
       type: "object",
@@ -243,23 +242,19 @@ export function createPatentWorkflowTool(): SatiToolDefinition<PatentWorkflowInp
       properties: {
         manifestId: {
           type: "string",
-          description: "Workflow manifest id. Defaults to 'patent_novelty_v1'.",
+          description: "workflow manifest id（默认 patent_novelty_v1）",
         },
         caseId: {
           type: "string",
-          description:
-            "Optional case id for result records. When provided, the run is persisted to " +
-            "<caseDir>/workflow-runs/<caseId>__<manifestId>.json for audit.",
+          description: "run 记录落盘到 <caseDir>/workflow-runs/",
         },
         checkDomain: {
           type: "string",
-          description:
-            "Rule-check domains (comma-separated)；覆盖 manifest 设定：" +
-            "Overrides the manifest default mapping; empty string disables the rule gate.",
+          description: "规则检查域（逗号分隔）；空 = 不启用",
         },
         outputs: {
           type: "array",
-          description: "Per-stage outputs keyed by stage id. Missing stages are marked degraded.",
+          description: "按 stage id 给各阶段产物；缺阶段 → degraded",
           items: {
             type: "object",
             required: ["stageId", "text"],

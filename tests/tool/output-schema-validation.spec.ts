@@ -266,7 +266,7 @@ test("R-06 编排收敛：旧工具名保留为可调用别名", () => {
   assert.equal(registry.get("flexible_plan")?.name, "flexible_plan");
 });
 
-test("R-06 描述预算：单工具 <=1200 字符、属性描述 <=200 字符、专利面总契约 <=40k", () => {
+test("R-06 描述预算：单工具 <=300、属性描述 <=60、专利面总契约 <=43k（且顶层描述不得为空）", () => {
   const registry = createBuiltinRegistry({});
   const patentTools = registry.list().filter(tool => tool.domain === "patent");
   let total = 0;
@@ -278,32 +278,33 @@ test("R-06 描述预算：单工具 <=1200 字符、属性描述 <=200 字符、
     }
     const record = value as Record<string, unknown>;
     if (typeof record.description === "string") {
-      assert.ok(record.description.length <= 200, `${path}.description is ${record.description.length} chars`);
+      assert.ok(record.description.length <= 60, `${path}.description is ${record.description.length} chars`);
     }
     for (const [key, child] of Object.entries(record)) walk(child, `${path}.${key}`);
   };
   for (const tool of patentTools) {
-    assert.ok(tool.description.length <= 1200, `${tool.name} description is ${tool.description.length} chars`);
+    assert.ok(tool.description.length <= 300, `${tool.name} description is ${tool.description.length} chars`);
+    // 顶层描述不得为空：长度预算收紧后，把描述清空是最省预算的做法 ⇒ 显式禁止
+    // （模型看不到工具元数据，描述为空 = 模型无从判断这个工具能不能用）。
+    assert.ok(tool.description.trim().length > 0, `${tool.name} description is empty`);
     walk(tool.inputSchema, tool.name);
     total += tool.description.length + JSON.stringify(tool.inputSchema).length;
   }
-  // 总量上限 40 000 → 48 000（2026-11-12，批次 B-1 与 B-2 各上调一次）：
+  // 总量上限：40 000（2026-08）→ 48 000（批次 B-1/B-2 两轮上调）→ **43 000**（批次 N38
+  // 描述预算重排，收回 10.4%）。
   //
-  // 40 000 定于 2026-08（patent 域 26 个工具、3 个制图工具、无 per-call 入参）。此后两轮
-  // 都在**真实新增能力**：批次 B-1 新增 3 个工具（annotate/compare/manifest）+ 5 类 per-call
-  // 入参；批次 B-2 新增 2 个图型（sequence/circuit）+ 9 个电路元件形状 + 多面板 `panels`。
-  // 实测契约面 39 991 → 47 752（+19.4%）。
+  // **本轮的门禁强度提升主要在「粒度」，不在总量**：
+  // - 单工具顶层描述：1200 → **300**（收紧 75%）——原来一个工具就能吃掉 1/3 的总量预算；
+  // - 属性描述：200 → **60**（收紧 70%）——属性描述本就该短，长了就该下沉到 reference；
+  // - 总量：43 000（相对 2026-08 的 40 000 宽 7.5%，因**结构本身**——字段名/类型/enum/
+  //   required——已从 20 000 量级涨到 24 285，占掉了描述的可用空间）。
   //
-  // 本次同时做了**真实压缩**（制图三工具与三个新工具的入参描述收成短标签，本仓制图域
-  // 省出约 1 500 字符），单工具上限（1200）与属性描述上限（200）**不变** ⇒ 门禁强度没有
-  // 下降，只是把总量天花板随契约面同步到 48 000。
+  // 实测：契约面 47 800 → **42 037**（顶层 9 743 → 5 746；属性描述 13 772 → 12 006；
+  // 288 条属性描述全部 ≤ 45 字符）。压缩方式是**下沉**而非丢弃：细节搬进
+  // skills/patent-illustrator/references/patent-tool-contracts/（按工具分片 + 索引）。
   //
-  // ⚠️ **这个上限连续上调两次，下一轮必须做描述重排把它降回来**（TD-PATENT-N38 升级为
-  // 「必须执行」：把 patent 域的长描述下沉进 skill/references，工具描述收成「做什么 +
-  // 关键约束」两行；验收口径 = 总量回落且单工具描述不超 400）。理由与取舍见
-  // docs/notes/implemented/2026-11-12-figure-dsh-alignment-batch-b1.md 与
-  // docs/notes/implemented/2026-11-12-figure-new-kinds-batch-b2.md。
-  assert.ok(total <= 48_000, `patent contract is ${total} chars (budget 48000)`);
+  // 理由与取舍见 docs/notes/implemented/2026-11-13-figure-description-budget-rearrange.md。
+  assert.ok(total <= 43_000, `patent contract is ${total} chars (budget 43000)`);
 });
 
 test("R-06 编排收敛：patent_plan_task 旧动作经 flexible_plan 别名仍可执行", async () => {

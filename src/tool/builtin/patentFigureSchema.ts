@@ -319,7 +319,7 @@ export const FIGURE_INPUT_SCHEMA_REF: SatiJsonSchema = {
         hatch_spacing: { type: "number" },
         hatch_angle_deg: { type: "number" },
       },
-      description: "Section parts (normalized 0..1 outlines), cut line, hatch params.",
+      description: "剖面 parts/cut/hatch（轮廓 0..1 归一化）。",
     },
     panels: {
       type: "array",
@@ -335,7 +335,7 @@ export const FIGURE_INPUT_SCHEMA_REF: SatiJsonSchema = {
           edges: { type: "array", items: FIGURE_EDGE_SCHEMA },
         },
       },
-      description: "Panels (FIG.1A/1B); shared numeral series.",
+      description: "面板（FIG.1A/1B），共享标号系列。",
     },
     chart: {
       type: "object",
@@ -380,7 +380,7 @@ export const FIGURE_FINDING_SCHEMA: SatiJsonSchema = {
   properties: {
     rule: {
       type: "string",
-      description: "规则号（V1–V22 结构 / PX1–PX4 像素 / RC0–RC9 渲染 / DR1–DR3 交付面复核 / C1–C13 CAD 几何）",
+      description: "规则号（V*/PX*/RC*/DR*/C*）",
     },
     severity: { type: "string", enum: ["fail", "warn", "info"] },
     message: { type: "string" },
@@ -389,7 +389,7 @@ export const FIGURE_FINDING_SCHEMA: SatiJsonSchema = {
     metric: { type: "string", enum: ["page_fit", "font_size"], description: "V7 判定维度" },
     advisory: {
       type: "boolean",
-      description: "提示级发现：报告但不当成缺陷（不计入缺陷数、不阻断交付）",
+      description: "提示级：报告但不计缺陷、不阻断交付",
     },
   },
 };

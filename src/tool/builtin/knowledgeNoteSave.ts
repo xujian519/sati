@@ -126,8 +126,9 @@ export function createKnowledgeNoteSaveTool(
     },
     title: "Knowledge Note Save",
     description:
-      "把项目专利产出（OA 答复要点、无效分析结论、检索心得）沉淀到知识库 personal_note 层，后续检索可召回。" +
-      "用于定稿后建议沉淀：如 'knowledge_note_save({title, content, project})'。只写 personal_note 文档层，不改核心只读数据。",
+      "把专利产出（OA 答复要点、无效结论、检索心得）沉淀到知识库 personal_note 层，后续检索可召回。" +
+      "默认只写待确认草稿，同会话重复提交覆盖；不写核心只读数据。非只读。" +
+      "详见 skills/patent-illustrator/references/patent-tool-contracts/drafting-evidence.md。",
     kind: "custom",
     domain: "patent",
     inputSchema: {

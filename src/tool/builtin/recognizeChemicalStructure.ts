@@ -112,11 +112,9 @@ export function createRecognizeChemicalStructureTool(
     },
     title: "Recognize Chemical Structure",
     description:
-      "识别化学式/化学结构：从化学结构图（图片模式，多模态模型两步分析 + RDKit 校验）或文档文本（文本模式，" +
-      "正则候选 → LLM 复核/化合物名称转 SMILES → RDKit 校验）中提取多候选 SMILES、分子式与化合物名称。" +
-      "当交底书/说明书/权利要求含化学结构式（含 Markush 广义结构）、分子式或化合物名称需要转 SMILES 时使用。" +
-      "注意：本工具不直接解析 PDF——图片模式输入须为已导出的图片（jpeg/png/gif/webp），文本模式可传 PDF 文本层提取结果。" +
-      "识别结果自动写入化学索引（.sati/chemistry-index.json）；结果含 needHumanReview 标记时需人工确认后再采信。",
+      "只读。识别化学结构图/文本的 SMILES、分子式、名称；不解析 PDF（图片须导出）。" +
+      "写入 .sati/chemistry-index.json（plan 不写盘）；needHumanReview 须人工确认，失败按未知处理不臆造。" +
+      "详见 skills/patent-illustrator/references/patent-tool-contracts/drafting-evidence.md。",
     kind: "custom",
     domain: "patent",
     inputSchema: {
@@ -125,7 +123,7 @@ export function createRecognizeChemicalStructureTool(
       properties: {
         image_path: {
           type: "string",
-          description: "化学结构图图片路径（工作区相对或绝对路径，支持 jpg/png/gif/webp；PDF 页请先导出为图片）",
+          description: "化学结构图路径（工作区相对/绝对；jpg/png/gif/webp；PDF 先导出为图片）",
         },
         text: {
           type: "string",
@@ -134,7 +132,7 @@ export function createRecognizeChemicalStructureTool(
         mode: {
           type: "string",
           enum: ["image", "text", "auto"],
-          description: "识别模式：image 走图片两步法；text 走文本三级流水线；auto 按输入分派（默认）",
+          description: "识别模式：image=图片两步法；text=文本三级流水线；auto=按输入分派（默认）",
         },
         claim_context: {
           type: "string",

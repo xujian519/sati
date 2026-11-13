@@ -57,7 +57,9 @@ export function createDraftSpecificationTool(): SatiToolDefinition<DraftSpecific
     name: "draft_specification",
     title: "Draft Patent Specification",
     description:
-      "根据技术交底书或技术方案撰写符合要求的专利说明书草案（技术领域/背景技术/发明内容/附图说明/具体实施方式五部分）。当用户要求撰写说明书、写专利申请文件时使用，避免自行手写说明书文本。",
+      "只读。根据技术交底书或技术方案撰写专利说明书草案" +
+      "（技术领域/背景技术/发明内容/附图说明/具体实施方式五部分），避免自行手写说明书文本。" +
+      "详见 skills/patent-illustrator/references/patent-tool-contracts/drafting-evidence.md。",
     kind: "custom",
     inputSchema: {
       type: "object",

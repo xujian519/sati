@@ -122,7 +122,8 @@ export function createPatentCaseSearchTool(
     name: "patent_case_search",
     title: "Patent Case Law Search",
     description:
-      "检索本地专利判例全文（无效复审决定/专利判决，knowledge.db，FTS5 BM25 优先）。用于无效宣告分析、OA 答复时检索相似在先决定的理由论证与证据认定：如查'创造性 三步法 技术启示'的无效决定全文实例。支持 doc_type（case=无效决定/judgment=判决）与 court（法院）过滤。默认排除 wiki 审查标准卡片（审查标准请用 patent_wiki_search）。",
+      "检索本地专利判例全文（无效复审决定/专利判决）。FTS5 BM25 优先；默认排除 wiki 审查标准卡片。只读。" +
+      "详见 skills/patent-illustrator/references/patent-tool-contracts/search-verify.md。",
     kind: "custom",
     domain: "patent",
     inputSchema: {

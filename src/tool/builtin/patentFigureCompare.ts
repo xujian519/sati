@@ -329,12 +329,10 @@ export function createPatentFigureCompareTool(): SatiToolDefinition<
     aliases: ["PatentFigureCompare", "figure_compare"],
     title: "Compare Patent Figure Analysis",
     description:
-      "Compare declared patent figure callouts against recognized callouts. Provide two per-figure lists: " +
-      "`declared` (declared at generation time) and `analysis` (recognized on the figure, e.g. from " +
-      "analyze_patent_figure). Each entry: figure_no plus numeric refs 1-999, optional per-ref names and " +
-      "component types aligned by index. Reports missing callouts, extra callouts, same-number name mismatches " +
-      "and same-number type mismatches; ok is false whenever any discrepancy is found. Letter-prefixed callouts " +
-      "(S101/U1) are out of scope. Rule catalog: `patent-illustrator` skill.",
+      "比对生成期声明的附图标记与图面识别出的标记（缺/多/同号异名/同号异类型四类不一致，任一出现 ok=false）。" +
+      "只读。两侧都空即报错——零比对不是通过。字母前缀标记（S101/U1）不在范围。" +
+      "规则目录见 `patent-illustrator` skill；" +
+      "详见 skills/patent-illustrator/references/patent-tool-contracts/figure.md。",
     kind: "custom",
     domain: "patent",
     inputSchema: {
