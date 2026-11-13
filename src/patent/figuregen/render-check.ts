@@ -27,6 +27,9 @@
  *   同组轮廓与贴边相接），两个零件/图形压叠时图面上读不出各自边界。
  * - **字高低于下限**（`minFontMm` 由调用方按法域档案给出）：逐**文字元素**量测字高，
  *   能报出「节点字够大、边标签不够」这类 V7 用渲染器常数估不出的情形。
+ * - **版面利用率不足**（`minSheetFillRatio` 由调用方按部署策略给出，缺省不判）：图面墨迹
+ *   只占画布的一小部分时，缩小复制后细节更难辨认。这是**提示级**发现（advisory），
+ *   不是规范缺陷——它没有条文依据，只值得人看一眼。
  *
  * 图型豁免：根元素声明 {@link SVG_FIGURE_KIND_ATTRIBUTE}=`chart` 时，「相邻零件剖面线」
  * 与「图元互相重叠」**不参与**——曲线图的数据标记与图例符号天然互相叠靠，这两条判据在
@@ -55,6 +58,11 @@
  * 实现按职责拆分：{@link ./render-check-scan} 把 SVG 读成根坐标系下的图面事实，
  * {@link ./render-check-geometry} 提供几何判据所需的线段/包围盒/可见性计算，
  * {@link ./render-check-findings} 承载五类判据；本文件保留公共类型再导出与总装入口。
+ *
+ * 另导出两支**纯量测**入口（不产发现）：{@link measureInkBounds}（墨迹包围盒）与
+ * {@link measureMinimumFontHeightMm}（实测最小字高）——供「只想要量到的数、不想要
+ * 判据结论」的调用方使用（附图核验工具的量测输出面对齐 deepseek-harness 的
+ * `verify_patent_figure` 输出）。
  * @module src/patent/figuregen/render-check
  */
 
@@ -69,6 +77,7 @@ import {
   inkBounds,
   inkOutsideCanvas,
   outlineOverlaps,
+  sheetUnderfill,
   textClearanceFindings,
 } from "./render-check-findings.js";
 import { isLeaderPlacementError } from "./leader-line.js";
@@ -107,6 +116,42 @@ export function measureInkBounds(svg: string, options: { maxBytes?: number } = {
 }
 
 /**
+ * 量测一张 SVG 的**最小字高**（毫米，根坐标系）。
+ *
+ * 字高口径：文字占位框的高（`O→O+e2` 的模长）——它已经是字号换算到根坐标系的结果，
+ * 与「文字被贯穿」「标号净距」同一口径（见 {@link checkFigureRendering} 里 RC7 的取法）。
+ * 取全部文字元素中的最小值，保留两位小数。
+ *
+ * 为什么单列一个导出：{@link RenderCheckReport} 的 `minFontMm` 是**下限回显**（调用方
+ * 给了下限才回显，判据未参与时缺省），而 deepseek-harness 的 `verify_patent_figure`
+ * 输出里的 `minFontMm` 是**实测最小字高**（无文字时缺省）——两者语义不同，不可互相顶替。
+ * 需要「这张图最小字高是多少」的调用方（附图核验工具的量测输出面）用本函数。
+ *
+ * 量测范围与 {@link checkFigureRendering} 一致：不在范围内的结构（CSS 类样式、`<use>`/
+ * `<image>` 引用、嵌套 `<svg>` 内层视口等）不参与——本函数只给**量到的**最小值，
+ * 缺口由复核报告里的 `not-measured` 发现明示，不在此处推断。
+ *
+ * 代价：与 {@link checkFigureRendering} 一样各扫一遍 SVG（两次遍历互不干扰，纯函数、
+ * 结果确定）。
+ * @param svg - 完整 SVG 文本。
+ * @param options - 安全校验上限（字节）。
+ * @returns 最小字高（毫米）；图中无文字元素时为 undefined。
+ * @throws SvgSafetyError 输入未通过 {@link assertSafeSvg} 时。
+ */
+export function measureMinimumFontHeightMm(svg: string, options: { maxBytes?: number } = {}): number | undefined {
+  assertSafeSvg(svg, options.maxBytes ?? DEFAULT_SVG_MAX_BYTES);
+  const scan = scanSvg(svg);
+  let minHeightMm: number | undefined;
+  for (const text of scan.texts) {
+    const quad = textQuad(text);
+    const heightMm = Math.round(Math.hypot(quad.edgeHeight[0], quad.edgeHeight[1]) * 100) / 100;
+    if (!Number.isFinite(heightMm)) continue;
+    if (minHeightMm === undefined || heightMm < minHeightMm) minHeightMm = heightMm;
+  }
+  return minHeightMm;
+}
+
+/**
  * 量测一张已生成的附图并报告渲染层面才可见的问题。
  *
  * 元素按嵌套逐层继承变换与样式（见模块文档的量测范围）；凡不在范围内的结构，报告
@@ -123,9 +168,28 @@ export function measureInkBounds(svg: string, options: { maxBytes?: number } = {
  * @returns 量测值与发现的问题。
  * @throws SvgSafetyError 输入未通过 {@link assertSafeSvg} 时。
  */
+/**
+ * 图元按设计相交的图型（RC4/RC6 不适用）。
+ *
+ * - `chart`：数据标记与图例符号天然叠靠；
+ * - `sequence`：消息箭头必须落在生命线上；
+ * - `circuit`：连线必须落在元件引线端点；
+ * - `panels`：格内图形必然与格边框相交。
+ *
+ * 根元素用 `data-dsh-kind` 声明（见 `SVG_FIGURE_KIND_ATTRIBUTE`）——**只对这几类写**，
+ * 既有图型的产物字节保持不变（渲染不变式基线不漂）。
+ */
+const OVERLAP_EXEMPT_KINDS: ReadonlySet<string> = new Set(["chart", "sequence", "circuit", "panels"]);
+
 export function checkFigureRendering(
   svg: string,
-  options: { maxBytes?: number; textClearanceMm?: number; minFontMm?: number } = {},
+  options: {
+    maxBytes?: number;
+    textClearanceMm?: number;
+    minFontMm?: number;
+    /** 版面利用率下限（0–1）：缺省不判（部署级 opt-in，见 {@link sheetUnderfill}）。 */
+    minSheetFillRatio?: number;
+  } = {},
 ): RenderCheckReport {
   assertSafeSvg(svg, options.maxBytes ?? DEFAULT_SVG_MAX_BYTES);
   const scan = scanSvg(svg);
@@ -150,9 +214,16 @@ export function checkFigureRendering(
       // 不透明填充的闭合轮廓遮挡更早绘制的图元；开放子路径的填充按闭合处理，故不列入。
       if (shape.occludes && subpath.closed) occluders.push({ points: subpath.points, order: shape.order });
       if (subpath.closed) {
-        outlines.push(subpath.points);
-        outlineGroups.push(shape.hatchGroup);
-        outlineStroked.push(shape.stroked);
+        // 只把**承载墨迹**的闭合轮廓当作零件轮廓：画布白底（白填充、不描边）也是闭合
+        // 子路径，但它不是零件——把它算进来，剖面线会被归到「画布」这一组，于是
+        // 「画布 vs 零件 1」被判成「相邻零件剖面线方向相同」（2D 剖视实测踩到）。
+        // 判据用「承载墨迹」而非「是否描边」：既有 RC4/RC6 用例里的轮廓是填充不描边的
+        // 多边形，按描边过滤会把它们整体排除（回归实测）。
+        if (drawsInk) {
+          outlines.push(subpath.points);
+          outlineGroups.push(shape.hatchGroup);
+          outlineStroked.push(shape.stroked);
+        }
       } else openSegments.push(...segments);
       for (const segment of segments) {
         if (shape.dashPatternMm === undefined) pieces.push(segment);
@@ -201,12 +272,25 @@ export function checkFigureRendering(
   // 曲线图的数据标记与图例符号天然互相叠靠（实测散点图的相邻标记 0.3×1.2 毫米就互穿、
   // 图例符号的短笔画被当成剖面线）：轮廓类判据在这类图上只会产出噪音，量不出缺陷。
   // 显式记一条 `not-measured`，而不是让"没判"看起来像"判过且无问题"（AGENTS 第 11 条）。
-  if (scan.figureKind === "chart") {
+  //
+  // 时序图 / 电路图 / 多面板附图同理，且理由更硬：**箭头与引线本来就该相交**——
+  // 时序图的消息箭头必须落在生命线上，电路图的连线必须落在元件引线端点，多面板的
+  // 格内图形必然与格边框相交 ⇒ RC6（图元互相重叠）在这些图型上恒为真，是噪音不是缺陷。
+  if (scan.figureKind !== undefined && OVERLAP_EXEMPT_KINDS.has(scan.figureKind)) {
+    const kindLabel =
+      scan.figureKind === "chart"
+        ? "曲线图（kind=chart）"
+        : scan.figureKind === "sequence"
+          ? "时序图（kind=sequence）"
+          : scan.figureKind === "circuit"
+            ? "电路图（kind=circuit）"
+            : "多面板附图（panels）";
     findings.push({
       check: "not-measured",
       message:
-        "曲线图（kind=chart）的数据标记与图例符号天然互相叠靠：RC4（相邻零件剖面线难以区分）与 RC6（图元互相重叠）" +
-        "在该图型上不适用，本次未量测——RC1/RC2/RC3/RC5/RC7 照常量测",
+        `${kindLabel}的图元按设计相交（时序图箭头落在生命线、电路图连线落在引线端点、` +
+        "多面板图形与格边框相交）：RC4（相邻零件剖面线难以区分）与 RC6（图元互相重叠）在该图型上" +
+        "不适用，本次未量测——RC1/RC2/RC3/RC5/RC7 照常量测",
     });
   } else {
     findings.push(...hatchCollisions(outlines, openSegments, outlineGroups));
@@ -221,6 +305,10 @@ export function checkFigureRendering(
     });
     findings.push(...fontBelowMinimum(scan.texts, heightsMm, options.minFontMm));
   }
+  // 版面利用率（提示级，部署级 opt-in）：缺省不判；启用时产出 advisory 发现，
+  // 「不是缺陷、但值得人看一眼」，不计入缺陷数、不阻断交付。
+  const underfill = sheetUnderfill(scan, options.minSheetFillRatio);
+  if (underfill !== undefined) findings.push(underfill);
 
   const strokeCounts = new Map<number, number>();
   for (const shape of scan.shapes) {

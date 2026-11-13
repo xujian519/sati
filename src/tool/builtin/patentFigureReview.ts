@@ -1,6 +1,6 @@
 /**
  * patent_figure_generate 的**复核与跨调用核对**：生成期渲染门禁（`SATI_FIGURE_RENDER_GATE`）、
- * 图面复核（RC1–RC7）与既有 sidecar 的占用核对。
+ * 图面复核（RC1–RC9）与既有 sidecar 的占用核对。
  *
  * 从生成工具拆出的原因：这三件事都是"在已生成的 SVG / 既有留痕上做量测"，与渲染管线和
  * 入参校验无关；留在 `patentFigureGenerate.ts` 会让那个文件越过模块体量上限，也会让
@@ -35,6 +35,28 @@ export type FigureRenderGate = "off" | "warn" | "fail";
 
 export const FIGURE_RENDER_GATE_ENV = "SATI_FIGURE_RENDER_GATE";
 
+/**
+ * 版面利用率下限（部署级 opt-in，0–1）：图面墨迹占画布的下限。
+ *
+ * 缺省不判（0）：该判据是部署策略而非规范缺陷，不同交付体例对「撑不撑满纸面」的
+ * 要求不同；未启用时报告不含该项，也不声称已量测。
+ */
+export const FIGURE_MIN_SHEET_FILL_RATIO_ENV = "SATI_FIGURE_MIN_SHEET_FILL_RATIO";
+
+export function resolveMinSheetFillRatio(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = (env[FIGURE_MIN_SHEET_FILL_RATIO_ENV] ?? "").trim();
+  if (raw === "") return 0;
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value < 0 || value > 1) {
+    throw new SatiToolRuntimeError(
+      "invalid_tool_input",
+      `非法 ${FIGURE_MIN_SHEET_FILL_RATIO_ENV} "${raw}"（可用: 0–1 的小数，0 表示不判）`,
+      { tool: "patent_figure_generate" },
+    );
+  }
+  return value;
+}
+
 export function resolveRenderGate(env: NodeJS.ProcessEnv = process.env): FigureRenderGate {
   const value = (env[FIGURE_RENDER_GATE_ENV] ?? "").trim().toLowerCase();
   if (value === "") return "warn";
@@ -47,7 +69,7 @@ export function resolveRenderGate(env: NodeJS.ProcessEnv = process.env): FigureR
 }
 
 /**
- * 对**已落盘前**的渲染结果跑图面复核（RC1–RC7），返回带图号的发现。
+ * 对**已落盘前**的渲染结果跑图面复核（RC1–RC9），返回带图号的发现。
  *
  * 字数下限按交付口径折算：法域档案的最小字高（毫米，纸面）除以统一缩放系数，得到
  * 「源图坐标下允许的最小字高」。这样 RC7 与 V7 用的是同一法域档案，但 RC7 量的是
@@ -58,6 +80,8 @@ export function reviewRenderedFigures(args: {
   paperSizes: readonly { figure_no: number; widthMm: number; heightMm: number }[];
   profile: OfficeProfile;
   gate: FigureRenderGate;
+  /** 版面利用率下限（0–1）：缺省不判。 */
+  minSheetFillRatio?: number;
 }): FigureCheck["findings"] {
   if (args.gate === "off") {
     return [
@@ -65,7 +89,7 @@ export function reviewRenderedFigures(args: {
         rule: "RC0",
         severity: "info",
         message:
-          `渲染复核未运行（${FIGURE_RENDER_GATE_ENV}=off）：RC1–RC7 的图面缺陷本次未量测，` + "不能视为已核验无问题",
+          `渲染复核未运行（${FIGURE_RENDER_GATE_ENV}=off）：RC1–RC9 的图面缺陷本次未量测，` + "不能视为已核验无问题",
       },
     ];
   }
@@ -79,7 +103,13 @@ export function reviewRenderedFigures(args: {
   const findings: FigureCheck["findings"] = [];
   for (const [figureNo, svg] of [...args.renderedSvgs].sort((a, b) => a[0] - b[0])) {
     try {
-      const review = checkFigureRendering(svg, minFontMm === undefined ? {} : { minFontMm });
+      const reviewOptions = {
+        ...(minFontMm === undefined ? {} : { minFontMm }),
+        ...(args.minSheetFillRatio === undefined || args.minSheetFillRatio <= 0
+          ? {}
+          : { minSheetFillRatio: args.minSheetFillRatio }),
+      };
+      const review = checkFigureRendering(svg, reviewOptions);
       for (const finding of toRenderCheckFindings(review.findings)) {
         findings.push({ ...finding, message: `图${figureNo} ${finding.message}`, figure_nos: [figureNo] });
       }

@@ -72,25 +72,40 @@ test("能力探测：显式环境变量优先；缺失/非法路径 fail-loud；
 
 test("脚本：含视图方向、定界标记、原点探测与剖切；不产 SVG（交付契约归 Sati 渲染）", () => {
   const script = buildProjectionScript({ stepPath: "/tmp/x.step", view: "front" });
-  assert.match(script, /DIRECTION = App\.Vector\(0, -1, 0\)/u, "front = -Y 方向");
+  assert.match(script, /"front", App\.Vector\(0, -1, 0\)/u, "front = -Y 方向");
   assert.match(script, /TechDraw\.project/u);
   assert.match(script, /_probe/u, "必须探测投影坐标系朝向");
-  assert.match(script, /'origin': _probe\(App\.Vector\(0, 0, 0\)\)/u, "必须探测原点像（仿射映射需要）");
+  assert.match(script, /'origin': _probe\(App\.Vector\(0, 0, 0\), direction\)/u, "必须探测原点像（仿射映射需要）");
   assert.ok(script.includes(CAD_JSON_BEGIN) && script.includes(CAD_JSON_END));
   assert.doesNotMatch(script, /svg/iu, "CAD 侧不得自行产 SVG");
-  assert.match(script, /SECTION_OFFSET = None/u, "整视图不剖切");
+  assert.match(script, /"front": None/u, "整视图不剖切");
 
   const iso = buildProjectionScript({ stepPath: "/tmp/x.step", view: "iso" });
   assert.match(iso, /App\.Vector\(1, -1, 1\)/u);
 
   // 剖切：脚本切半空间并输出剖切面轮廓（模型坐标）
   const section = buildProjectionScript({ stepPath: "/tmp/x.step", view: "top", sectionOffsetMm: 5 });
-  assert.match(section, /SECTION_OFFSET = 5/u);
+  assert.match(section, /"top": 5/u);
   assert.match(section, /shape\.common\(half\)/u, "剖切 = 与半空间求交");
-  assert.match(section, /payload\['cutFaces'\] = cut_faces/u);
-  assert.match(section, /axis = 2/u, "top 视图的剖切轴为 Z");
+  assert.match(section, /table\['cutFaces'\] = cut_faces/u);
+  assert.match(section, /axis_index/u, "剖切轴由视图方向定出（top ⇒ Z）");
   // 轴测图无语义上的"剖切面"⇒ 脚本生成即 fail-loud
   assert.throws(() => buildProjectionScript({ stepPath: "/tmp/x.step", view: "iso", sectionOffsetMm: 5 }), /不能剖切/u);
+});
+
+test("脚本：多视图一次产出（同一模型投影多个视图，只跑一次进程）", () => {
+  const script = buildProjectionScript({ stepPath: "/tmp/x.step", views: ["front", "top", "right"] });
+  assert.match(script, /"front", App\.Vector\(0, -1, 0\)/u);
+  assert.match(script, /"top", App\.Vector\(0, 0, 1\)/u);
+  assert.match(script, /"right", App\.Vector\(1, 0, 0\)/u);
+  // 视图在同一个脚本里循环投影 ⇒ 一次进程产出多视图
+  assert.match(script, /for VIEW, DIRECTION in VIEW_LIST:/u);
+  // 零件事实与锚点核对探针随脚本一起交付
+  assert.match(script, /def _part_facts\(shape\):/u);
+  assert.match(script, /def _anchor_checks\(shape\):/u);
+  assert.match(script, /ANCHOR_PROBES = \[/u);
+  // 视图集为空 ⇒ fail-loud（不猜一个方向）
+  assert.throws(() => buildProjectionScript({ stepPath: "/tmp/x.step", views: [] }), /视图集为空/u);
 });
 
 test("脚本：失败出口统一走 _fail（stderr 标记 + sys.exit(1)）——raise SystemExit 的消息会被 freecadcmd 吞掉", () => {

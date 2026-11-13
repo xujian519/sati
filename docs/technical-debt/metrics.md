@@ -1,15 +1,15 @@
 # Sati 技术债务指标基线与趋势
 
 > 由 `node scripts/measure-techdebt.mjs --update` 自动生成，谨防手工编辑。
-> 最近一次快照：**2026-11-08**
+> 最近一次快照：**2026-11-13**
 
 ## 规模
 
 | 维度 | 值 |
 |---|---|
-| src TS 文件 / 行数 | 1220 / 213480 |
+| src TS 文件 / 行数 | 1247 / 224691 |
 | src JS 文件 | 0 |
-| tests 文件 | 721 |
+| tests 文件 | 743 |
 | ui/src 文件 / 行数 | 801 / 112332 |
 | ui/server 文件 / 行数 | 149 / 38945 |
 
@@ -32,9 +32,9 @@
 | `as unknown as`（双重断言） | 29 | ui/src(21) · knowledge(5) · adapters(1) |
 | 裸 `console.*` | 6 | ui/server(6) |
 | 空 `catch {}` | 0 | — |
-| 无参 `catch {`（总计） | 718 | ui/server(158) · ui/src(126) · adapters(72) |
+| 无参 `catch {`（总计） | 721 | ui/server(158) · ui/src(126) · adapters(72) |
 | ↳ **无注释**（隐患类，目标） | **0** | — |
-| ↳ 已带意图注释 | 718 | — |
+| ↳ 已带意图注释 | 721 | — |
 | `TODO/HACK/FIXME/XXX` | 11 | always-on(4) · tests(4) · ui/src(2) |
 | 分层违规 `ui/server→src` | 15 | — |
 | 分层违规 `src→ui` | 0 | — |
@@ -47,6 +47,7 @@
 |---|---|---|---|
 | `ui/src/components/chat-v2/MessagesPaneV2.render.test.tsx` | `(anonymous)` | 943 | arrow |
 | `ui/src/components/main-content/view/MainContent.tsx` | `SplitBody` | 573 | function |
+| `src/tool/builtin/patentFigureGenerate.ts` | `createPatentFigureGenerateTool` | 489 | function |
 | `ui/src/components/main-content-v2/CronV2.tsx` | `CronFormView` | 476 | function |
 | `ui/src/components/settings/view/modelPool/components/ProviderCard.tsx` | `ProviderCard` | 447 | function |
 | `ui/src/components/settings/view/integrations/im/components/FeishuChannelSection.tsx` | `FeishuChannelSection` | 423 | function |
@@ -61,19 +62,20 @@
 | `ui/src/components/main-content-v2/CronV2.test.tsx` | `(anonymous)` | 384 | arrow |
 | `ui/src/components/app-shell/MainAreaV2.tsx` | `MainAreaV2Content` | 381 | function |
 | `ui/src/types/annotationReference.spec.ts` | `(anonymous)` | 381 | arrow |
+| `src/tool/builtin/patentFigureProject.ts` | `createPatentFigureProjectTool` | 380 | function |
+| `src/patent/figuregen/cad/freecad-script.ts` | `buildProjectionScript` | 368 | function |
 | `ui/src/components/kanban/hooks/useBoardState.ts` | `useBoardState` | 368 | function |
 | `ui/src/hooks/useProjectsState.ts` | `useProjectsState` | 367 | function |
 | `ui/src/components/settings/view/agentRoute/components/RouterSection.tsx` | `RouterSection` | 357 | function |
 | `ui/src/stores/useSessionStore.actions.test.tsx` | `(anonymous)` | 354 | arrow |
 | `ui/src/components/main-content/view/MainContent.tsx` | `MainContent` | 346 | function |
+| `src/tool/builtin/patentFigureGenerate.ts` | `execute` | 344 | method |
 | `ui/src/components/chat-v2/MessagesPaneV2.tsx` | `MessagesPaneV2` | 338 | function |
 | `ui/src/components/main-content-v2/PlansAndCronJobs.tsx` | `PlansAndCronJobs` | 334 | function |
-| `src/tool/builtin/patentFigureGenerate.ts` | `createPatentFigureGenerateTool` | 333 | function |
 | `ui/src/components/main-content-v2/DashboardV2.tsx` | `DashboardV2` | 332 | function |
 | `ui/src/hooks/useSatiConfig.ts` | `useSatiConfigState` | 332 | function |
 | `ui/src/components/code-editor/view/CodeEditor.tsx` | `CodeEditor` | 326 | function |
 | `ui/src/components/annotation/view/Annotator.tsx` | `Annotator` | 322 | function |
-| `src/tool/builtin/patentFigureProject.ts` | `createPatentFigureProjectTool` | 316 | function |
 | `ui/src/components/settings/view/integrations/im/components/WeixinChannelSection.tsx` | `WeixinChannelSection` | 300 | function |
 
 ## Top 30 大文件
@@ -109,7 +111,7 @@
 | `ui/src/components/chat/tools/configs/toolConfigs.ts` | 864 |
 | `ui/server/services/satiConfig.js` | 858 |
 | `src/tool/builtin/kanban.ts` | 816 |
-| `ui/server/services/spreadsheetPreview.js` | 793 |
+| `src/tool/builtin/patentFigureProject.ts` | 798 |
 
 ## vendored 子包（单列，不计入上述规模与排名）
 
@@ -133,7 +135,7 @@
 
 | 模块 | 测试文件 |
 |---|---|
-| patent | 187 |
+| patent | 209 |
 | tool | 78 |
 | agent | 61 |
 | knowledge | 45 |
@@ -166,7 +168,7 @@
 | lifecycle | 1 |
 | status | 1 |
 
-| **合计** | **693** |
+| **合计** | **715** |
 
 ## i18n en/zh-CN 对齐
 

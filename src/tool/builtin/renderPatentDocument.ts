@@ -128,11 +128,11 @@ export function createRenderPatentDocumentTool(): SatiToolDefinition<RenderPaten
     aliases: ["RenderPatentDocument", "render_document"],
     title: "Render Patent Document",
     description:
-      "Render a professional patent-attorney document from a bundled template (patentability-opinion, " +
-      "search-report, oa-response, claims-spec, invalidation-opinion). Injects brand variables, replaces sections " +
-      "by element id, and always writes HTML; format pdf/both/all prints PDF when headless Chrome is available, " +
-      "and docx/all fills the application .docx from the template's Word master (claims-spec only). For docx, " +
-      "section keys are the application parts: abstract / abstract-figure / claims / specification / drawings.",
+      "Render a patent-attorney document from a bundled template (patentability-opinion, search-report, " +
+      "oa-response, claims-spec, invalidation-opinion). Injects brand variables, replaces sections by element id, " +
+      "always writes HTML; pdf/both/all prints PDF when headless Chrome is available, docx/all fills the " +
+      "application .docx from the template's Word master (claims-spec only; section keys: abstract / " +
+      "abstract-figure / claims / specification / drawings).",
     kind: "custom",
     domain: "patent",
     inputSchema: {

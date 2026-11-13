@@ -101,9 +101,8 @@ export function createAnalyzePatentFigureTool(
     title: "Analyze Patent Figure",
     description:
       "分析专利说明书附图：识别附图类型（结构图/流程图/电路图/方框图/示意图/分解图/剖视图）、提取组件与连接关系、" +
-      "核对附图标记并生成专利格式的附图说明文字。当用户提供附图图片并要求撰写附图说明、理解附图内容、" +
-      "核对附图标记一致性时使用。可传入权利要求或技术方案文本作为上下文提升识别准确率。" +
-      "分析结果自动写入附图索引（.sati/figures-index.json）供 search_patent_figure 检索；plan 只读模式下不写盘。",
+      "核对附图标记并生成专利格式的附图说明文字。可传入权利要求或技术方案文本作为上下文提升识别准确率。" +
+      "结果自动写入附图索引（.sati/figures-index.json）供 search_patent_figure 检索；plan 只读模式不写盘。",
     kind: "custom",
     domain: "patent",
     inputSchema: {
@@ -158,7 +157,7 @@ export function createAnalyzePatentFigureTool(
               text: "错误：当前模型不支持图片输入（analyze_patent_figure 需要多模态视觉模型）。请在模型配置中切换到支持视觉的模型后重试。",
             },
           ],
-          metadata: { error: "unsupported_tool", hint: "model_not_vision_capable" },
+          metadata: { error: "model_cannot_accept_image", hint: "model_not_vision_capable" },
         };
       }
 

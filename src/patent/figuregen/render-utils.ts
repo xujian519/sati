@@ -1,3 +1,5 @@
+import type { FigureNodeShape } from "./types.js";
+
 /**
  * src/patent/figuregen — 渲染器与几何判据的共享小工具（单一实现点）。
  *
@@ -50,6 +52,71 @@ export function fmt(value: number, digits: number = FMT_DIGITS): string {
  * 产物，发明名称、节点 label、图号里的 `&` 或 `<` 原样插入即破坏文档结构（提前闭合
  * `<title>`、注入标签）。HTML 侧（`html.ts`）与 SVG 侧同用本函数——两者的转义要求一致。
  */
+/**
+ * 节点形状的 SVG 片段（单一事实源）。
+ *
+ * 内置渲染器、多面板拼版、电路图三处画形状，必须用**同一份**实现——形状口径（内边距、
+ * 圆角半径、线宽、填充色）漂一处，三处画出来的同一个形状就会不一样，而产物是逐字节
+ * 比对不出来的。
+ */
+export function renderShape(
+  shape: FigureNodeShape,
+  p: { x: number; y: number; width: number; height: number },
+): string {
+  const { x, y, width: w, height: h } = p;
+  const stroke = 'fill="#FFFFFF" stroke="#000000" stroke-width="1.5"';
+  switch (shape) {
+    case "circle": {
+      return `<circle cx="${fmt(x + w / 2)}" cy="${fmt(y + h / 2)}" r="${fmt(Math.min(w, h) / 2)}" fill="#000000"/>`;
+    }
+    case "doublecircle": {
+      const outer = Math.min(w, h) / 2;
+      const cx = fmt(x + w / 2);
+      const cy = fmt(y + h / 2);
+      return (
+        `<circle cx="${cx}" cy="${cy}" r="${fmt(outer)}" ${stroke}/>` +
+        `<circle cx="${cx}" cy="${cy}" r="${fmt(outer * 0.62)}" ${stroke}/>`
+      );
+    }
+    case "round": {
+      const radius = Math.min(h / 2, 18);
+      return `<rect x="${fmt(x)}" y="${fmt(y)}" width="${fmt(w)}" height="${fmt(h)}" rx="${fmt(radius)}" ${stroke}/>`;
+    }
+    case "ellipse":
+      return `<ellipse cx="${fmt(x + w / 2)}" cy="${fmt(y + h / 2)}" rx="${fmt(w / 2)}" ry="${fmt(h / 2)}" ${stroke}/>`;
+    case "diamond": {
+      const points = [
+        `${fmt(x + w / 2)},${fmt(y)}`,
+        `${fmt(x + w)},${fmt(y + h / 2)}`,
+        `${fmt(x + w / 2)},${fmt(y + h)}`,
+        `${fmt(x)},${fmt(y + h / 2)}`,
+      ].join(" ");
+      return `<polygon points="${points}" ${stroke}/>`;
+    }
+    case "parallelogram": {
+      const skew = Math.min(16, w / 5);
+      const points = [
+        `${fmt(x + skew)},${fmt(y)}`,
+        `${fmt(x + w)},${fmt(y)}`,
+        `${fmt(x + w - skew)},${fmt(y + h)}`,
+        `${fmt(x)},${fmt(y + h)}`,
+      ].join(" ");
+      return `<polygon points="${points}" ${stroke}/>`;
+    }
+    case "cylinder": {
+      const ry = Math.min(10, h / 5);
+      const d =
+        `M ${fmt(x)} ${fmt(y + ry)} ` +
+        `A ${fmt(w / 2)} ${fmt(ry)} 0 0 1 ${fmt(x + w)} ${fmt(y + ry)} ` +
+        `L ${fmt(x + w)} ${fmt(y + h - ry)} ` +
+        `A ${fmt(w / 2)} ${fmt(ry)} 0 0 1 ${fmt(x)} ${fmt(y + h - ry)} Z`;
+      return `<path d="${d}" ${stroke}/>`;
+    }
+    default:
+      return `<rect x="${fmt(x)}" y="${fmt(y)}" width="${fmt(w)}" height="${fmt(h)}" rx="2" ${stroke}/>`;
+  }
+}
+
 export function escapeXml(text: string): string {
   return text
     .replaceAll("&", "&amp;")

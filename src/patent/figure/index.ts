@@ -6,6 +6,12 @@
  */
 
 export {
+  compareFigureAnalysis,
+  type FigureComparisonFinding,
+  type FigureComparisonReport,
+} from "./figure-comparison.js";
+
+export {
   FIGURE_TYPES,
   FIGURE_TYPE_NAMES,
   FIGURE_COMPONENT_KINDS,

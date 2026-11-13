@@ -44,6 +44,14 @@ export type Para<R> = {
   align: "left" | "center";
   /** 列表嵌套层级；0 = 不缩进。 */
   indentLevel: number;
+  /**
+   * 段前分页（本段另起一页）。
+   *
+   * 母版的正文段属性带 `<w:pageBreakBefore w:val="0"/>`（**显式关闭**段前分页），
+   * 故本开关默认不生效；只有明确置 true 的段落（附图节的「每图一页」分页点）
+   * 才会把该属性打开——打开时只改这一项，母版的缩进/字号/段前段后一律不动。
+   */
+  pageBreakBefore?: boolean;
 };
 
 /** 表格：单元格内可再嵌块（含表格）。 */
@@ -68,6 +76,20 @@ export type OoxmlRenderContext = {
   /** 版面可用宽度（EMU），用于表格列宽。 */
   contentWidthEmu: number;
 };
+
+/**
+ * 图号文本（图1 / 图 2 / FIG. 1 / FIG 2）→ 数字；不是图号返回 undefined。
+ *
+ * **唯一事实源**：渲染侧（附图节「每图一页」的分页点归属）与核验侧（图号与图序一致）
+ * 都用这一个识别口径——两处各写一份必然漂移，漂移会让渲染出的分页点与判据错位。
+ */
+export function figureCaptionNumber(text: string): number | undefined {
+  const chinese = /^\s*图\s*(\d+)\s*$/.exec(text);
+  if (chinese !== null) return Number(chinese[1]);
+  const english = /^\s*FIG\.?\s*(\d+)\s*$/i.exec(text);
+  if (english !== null) return Number(english[1]);
+  return undefined;
+}
 
 /**
  * 转义 XML 文本内容，并剔除 XML 1.0 不允许的控制字符
@@ -136,8 +158,74 @@ function placeParagraphProp(pPrXml: string, element: "ind" | "jc", xml: string):
   return withoutExisting.slice(0, insertAt) + xml + withoutExisting.slice(insertAt);
 }
 
+/**
+ * CT_PPr 里排在 `w:pageBreakBefore` **之后**的元素（插入位置的锚点）。
+ *
+ * CT_PPr 是有序序列：`pStyle, keepNext, keepLines, pageBreakBefore, framePr,
+ * widowControl, numPr, …, spacing, ind, …, jc, …, rPr, sectPr`。
+ * 母版没给 `pageBreakBefore` 时必须插到这些元素中最早出现者之前，否则会落成 schema 违规。
+ */
+const PPR_AFTER_PAGE_BREAK_BEFORE = [
+  "w:framePr",
+  "w:widowControl",
+  "w:numPr",
+  "w:suppressLineNumbers",
+  "w:pBdr",
+  "w:shd",
+  "w:tabs",
+  "w:suppressAutoHyphens",
+  "w:kinsoku",
+  "w:wordWrap",
+  "w:overflowPunct",
+  "w:topLinePunct",
+  "w:autoSpaceDE",
+  "w:autoSpaceDN",
+  "w:bidi",
+  "w:adjustRightInd",
+  "w:snapToGrid",
+  "w:spacing",
+  "w:ind",
+  "w:contextualSpacing",
+  "w:mirrorIndents",
+  "w:suppressOverlap",
+  "w:jc",
+  "w:textDirection",
+  "w:textAlignment",
+  "w:textboxTightWrap",
+  "w:outlineLvl",
+  "w:divId",
+  "w:cnfStyle",
+  "w:rPr",
+  "w:sectPr",
+  "w:pPrChange",
+];
+
+/**
+ * 打开「段前分页」（`<w:pageBreakBefore/>`）。
+ *
+ * 母版的正文段属性带 `<w:pageBreakBefore w:val="0"/>`——那是「不要段前分页」的**显式关闭**，
+ * 本函数把它就地换成开启版：只动这一项，段落的缩进/字号/行距/段前段后**一律不改**
+ * （母版体例是唯一事实源）。
+ *
+ * 母版没写该元素时，按 CT_PPr 的元素顺序插到紧随其后的元素之前。
+ */
+function enablePageBreakBefore(pPrXml: string): string {
+  // 先摘掉母版已有的（无论开关），避免同名元素在同一 `w:pPr` 内重复出现。
+  const stripped = pPrXml.replace(
+    /<w:pageBreakBefore\b[^>]*\/>|<w:pageBreakBefore\b[^>]*>[\s\S]*?<\/w:pageBreakBefore>/g,
+    "",
+  );
+  let insertAt = stripped.length;
+  for (const anchor of PPR_AFTER_PAGE_BREAK_BEFORE) {
+    const match = new RegExp(`<${anchor}\\b`).exec(stripped);
+    if (match !== null && match.index < insertAt) insertAt = match.index;
+  }
+  return `${stripped.slice(0, insertAt)}<w:pageBreakBefore/>${stripped.slice(insertAt)}`;
+}
+
 /** 构造段落属性。 */
 function buildParagraphProps(paragraph: Para<ReadyRun>, ctx: OoxmlRenderContext): string {
+  let props: string;
   if (paragraph.role === "title") {
     const parts: string[] = [];
     if (ctx.titleStyleId !== "") {
@@ -145,23 +233,24 @@ function buildParagraphProps(paragraph: Para<ReadyRun>, ctx: OoxmlRenderContext)
     }
     // 标题样式基于模板正文样式，会继承两字符首行缩进；标题必须显式清零。
     // 无标题样式时退化为居中正文——仍不引入自定义字号字体。
-    let props = `${parts.join("")}<w:ind w:firstLine="0" w:firstLineChars="0"/>`;
+    props = `${parts.join("")}<w:ind w:firstLine="0" w:firstLineChars="0"/>`;
     if (ctx.titleStyleId === "") props += `<w:jc w:val="center"/>`;
-    return props;
+  } else {
+    props = ctx.bodyPPrXml;
+    if (paragraph.indentLevel > 0) {
+      props = placeParagraphProp(
+        props,
+        "ind",
+        `<w:ind w:left="${420 * paragraph.indentLevel}" w:firstLine="0" w:firstLineChars="0"/>`,
+      );
+    }
+    if (paragraph.align === "center") {
+      // 两端对齐（模板正文为 jc=both）与居中互斥，必须覆盖继承来的对齐。
+      props = placeParagraphProp(props, "jc", `<w:jc w:val="center"/>`);
+    }
   }
-
-  let props = ctx.bodyPPrXml;
-  if (paragraph.indentLevel > 0) {
-    props = placeParagraphProp(
-      props,
-      "ind",
-      `<w:ind w:left="${420 * paragraph.indentLevel}" w:firstLine="0" w:firstLineChars="0"/>`,
-    );
-  }
-  if (paragraph.align === "center") {
-    // 两端对齐（模板正文为 jc=both）与居中互斥，必须覆盖继承来的对齐。
-    props = placeParagraphProp(props, "jc", `<w:jc w:val="center"/>`);
-  }
+  // 段前分页最后统一处理：它只改 `w:pageBreakBefore` 一项，不动母版段落的其它属性。
+  if (paragraph.pageBreakBefore === true) props = enablePageBreakBefore(props);
   return props;
 }
 

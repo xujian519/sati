@@ -50,8 +50,11 @@ import { createExportHtmlTool } from "../builtin/exportHtml.js";
 import { createRenderPatentDocumentTool } from "../builtin/renderPatentDocument.js";
 import { createDocumentStylePresetTool } from "../builtin/documentStylePreset.js";
 import { createDocumentStylePanelTool } from "../builtin/documentStylePanel.js";
+import { createPatentFigureAnnotateTool } from "../builtin/patentFigureAnnotate.js";
 import { createPatentFigureCheckTool } from "../builtin/patentFigureCheck.js";
+import { createPatentFigureCompareTool } from "../builtin/patentFigureCompare.js";
 import { createPatentFigureGenerateTool } from "../builtin/patentFigureGenerate.js";
+import { createPatentFigureManifestTool } from "../builtin/patentFigureManifest.js";
 import { createPatentFigureProjectTool } from "../builtin/patentFigureProject.js";
 import { createFlexiblePlanTool } from "../builtin/patentFlexiblePlanTool.js";
 import { createPatentDocketTool } from "../builtin/patentDocketTool.js";
@@ -381,6 +384,11 @@ export function createBuiltinRegistry(options?: CreateBuiltinRegistryOptions): T
       registry.register(annotate(createPatentFigureGenerateTool(), "patent"));
       registry.register(annotate(createPatentFigureCheckTool(), "patent"));
       registry.register(annotate(createPatentFigureProjectTool(), "patent"));
+      // 批次 B-1：三个纯能力模块的工具化暴露（补标号 / 生成↔识图比对 / 交付物清单）。
+      // 与上面三个制图工具同组——`patentFigure: false` 一并排除（工具集摘要会变 ⇒ 须重录）。
+      registry.register(annotate(createPatentFigureAnnotateTool(), "patent"));
+      registry.register(annotate(createPatentFigureCompareTool(), "patent"));
+      registry.register(annotate(createPatentFigureManifestTool(), "patent"));
     }
     registry.register(annotate(createDraftSpecificationTool(), "patent"));
     registry.register(annotate(createValidateSpecificationTool(), "patent"));

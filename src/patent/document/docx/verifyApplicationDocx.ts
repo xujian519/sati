@@ -4,14 +4,21 @@
  * 与渲染器的分工：`renderApplicationDocx` 负责「写出」，本模块负责「读回并自证」——
  * 解开**已落盘**的包，按分节逐件核对内容是否真的落地、版面是否仍与母版一致。
  *
- * 三类断言（对齐 dsh `patent-filing/assets/engine/verify.py` 的分类，判据按 Sati 的渲染事实重写）：
+ * 四类断言（对齐 dsh `patent-filing/assets/engine/verify.py` 的分类，判据按 Sati 的渲染事实重写）：
  *
  * - **内容**：期望有内容的件在成品里必须真的有段落或图片（**这是本模块的立身之本**：
  *   渲染器只在「五件全空」时告警，单件为空是静默的——成品会少一整节，
  *   而分节数、页眉、页码全都照样正确）；
  * - **体例**：分节数 / 各节页眉 / 首行缩进是否仍与母版一致（母版换版时的回归防线）；
  * - **痕迹**：内部标记词——**词表由调用方注入**，本模块不自带第二张表
- *   （输出门禁已在拦同一批词，两张表必然漂移）。未注入时报告显式标注「未检查」。
+ *   （输出门禁已在拦同一批词，两张表必然漂移）。未注入时报告显式标注「未检查」；
+ * - **附图**：每图一页（总数上 N 张图须有 N−1 个生效分页符，**且**每一对相邻图之间
+ *   都真的有分页符）/ 图号文字与图序一致 / 摘要附图恰 1 张（读**成品**的
+ *   `word/document.xml`，不读调用方入参）。
+ *
+ * 「未检查」与「已核验且无问题」必须可区分（仓库 AGENTS.md 第 11 条）：图相关断言
+ * 在**没有判据可依**时（如附图节只有一幅图、附图节没有图号文本）不报通过，而是在
+ * `info.figureChecks` 里如实标 false。
  *
  * ⚠️ 三处与 dsh 判据**不同**的 Sati 事实（改动前请先读，这三条都是踩过的）：
  *
@@ -47,7 +54,7 @@ import {
   topLevelElements,
 } from "./applicationTemplate.js";
 import { htmlToBlocks } from "./htmlToOoxml.js";
-import type { ParsedBlock } from "./ooxml.js";
+import { figureCaptionNumber, type ParsedBlock } from "./ooxml.js";
 
 /** 一条核验发现。 */
 export type DocxVerifyFinding = {
@@ -75,6 +82,16 @@ export type DocxVerifySectionInfo = {
   tables: number;
 };
 
+/** 图相关断言的实测状态：false = **本次未检查**（不得当作「通过」）。 */
+export type DocxVerifyFigureChecks = {
+  /** 每图一页（附图节有**两幅及以上**图才可判；一幅图时无需分页符 ⇒ 未检查）。 */
+  readonly pageBreak: boolean;
+  /** 图号文字与图序一致（附图节出现图号文本才可判）。 */
+  readonly captionOrder: boolean;
+  /** 摘要附图恰 1 张（摘要附图节有图才可判）。 */
+  readonly abstractFigureCount: boolean;
+};
+
 /** 核验实测摘要（供报告与测试断言）。 */
 export type DocxVerifyInfo = {
   sections: DocxVerifySectionInfo[];
@@ -83,6 +100,8 @@ export type DocxVerifyInfo = {
   template: DocxVerifyTemplateInfo | null;
   /** 痕迹词表是否真的被检查过（未注入词表时为 false——降级不静默）。 */
   residueMarkersChecked: boolean;
+  /** 图相关断言是否真的被检查过（可选字段：便于旧调用方免改；缺省即视为未检查）。 */
+  figureChecks?: DocxVerifyFigureChecks;
 };
 
 /** 母版对拍结果：分节数与正文段首行缩进。 */
@@ -180,6 +199,90 @@ function statSection(contentXml: string): ElementStat {
 /** 内容是否落地（段 / 图 / 表任一非零）。 */
 function hasContent(stat: ElementStat): boolean {
   return stat.paragraphs + stat.figures + stat.tables > 0;
+}
+
+/**
+ * 附图节里「图」与「生效分页符」按出现顺序的实测结果。
+ *
+ * 计数口径必须与渲染侧（`renderApplicationDocx.ts` 的 `markFigurePageBreaks`）一致：
+ * **图按「幅」计**（一段里塞两幅图就是两幅），且只数**顶层段落**里的图——
+ * 表格单元格里的图不参与「每图一页」（它不是一节里的一幅图）。
+ */
+type FigurePageAnalysis = {
+  /** 附图节的图数（按幅计）。 */
+  figures: number;
+  /** 顶层流程里的生效分页符总数。 */
+  pageBreaks: number;
+  /** 缺分页的图号对。 */
+  missingPairs: { before: number; after: number; sameParagraph: boolean }[];
+};
+
+/**
+ * 分节里的**生效**分页符与图，按出现顺序的实测。
+ *
+ * `w:br@w:type="page"` 是显式分页；`w:pageBreakBefore` 只有在**未被显式关掉**时才算
+ * （母版的正文段属性带 `<w:pageBreakBefore w:val="0"/>`，渲染器会把它继承给每个段落——
+ * 那是「不要段前分页」，不是分页本身；把它算进去会把每张图都误判成「图前有分页」）。
+ */
+function analyzeFigurePages(sectionXml: string): FigurePageAnalysis {
+  let figures = 0;
+  let pageBreaks = 0;
+  const missingPairs: { before: number; after: number; sameParagraph: boolean }[] = [];
+  // 每幅图所在的顶层段落序号（同一段落里的两幅图 → 同一个序号）。
+  const figureElement: number[] = [];
+  const elements = topLevelElements(sectionXml);
+  for (const [elementIndex, element] of elements.entries()) {
+    // 表格里的图不参与「每图一页」（它不是附图节里的一幅图），表格里的分页符同理。
+    if (element.startsWith("<w:tbl")) continue;
+    // 元素内按出现顺序取「分页符 / 内联图」两类标记：段前分页在 `w:pPr` 里，
+    // 必然排在同一段的 run（含图）之前，故顺序即版面顺序。
+    const tokens: { kind: "break" | "figure"; at: number }[] = [];
+    const collect = (pattern: RegExp, kind: "break" | "figure"): void => {
+      pattern.lastIndex = 0;
+      let match: RegExpExecArray | null;
+      while ((match = pattern.exec(element)) !== null) {
+        tokens.push({ kind, at: match.index });
+        if (match[0].length === 0) pattern.lastIndex += 1;
+      }
+    };
+    collect(/<w:pageBreakBefore\b(?![^>]*\bw:val="(?:0|false)")/g, "break");
+    collect(/<w:br\b[^>]*\bw:type="page"/g, "break");
+    collect(/<w:drawing\b/g, "figure");
+    tokens.sort((left, right) => left.at - right.at);
+    for (const token of tokens) {
+      if (token.kind === "break") {
+        pageBreaks += 1;
+        continue;
+      }
+      figures += 1;
+      figureElement.push(elementIndex);
+      // 第 k 幅图之前应当已有 k−1 个分页符；不足即「第 k−1 幅与第 k 幅之间缺分页」。
+      if (pageBreaks < figures - 1) {
+        const previousElement = figureElement[figures - 2];
+        missingPairs.push({
+          before: figures - 1,
+          after: figures,
+          sameParagraph: previousElement === elementIndex,
+        });
+      }
+    }
+  }
+  return { figures, pageBreaks, missingPairs };
+}
+
+/**
+ * 附图节里的图号序列（按出现顺序）。
+ *
+ * 只认**整段**就是图号的段落：正文里「如图1所示」这类引用不是图号，
+ * 混进来会把图序判据搅乱（dsh 的判据同口径）。
+ */
+function collectFigureCaptions(sectionXml: string): number[] {
+  const numbers: number[] = [];
+  for (const element of topLevelElements(sectionXml)) {
+    const number = figureCaptionNumber(extractText(element));
+    if (number !== undefined) numbers.push(number);
+  }
+  return numbers;
 }
 
 /** 件内容（HTML 或纯文本）的机械统计——只关心「是否有文本」与图片张数。 */
@@ -395,6 +498,89 @@ export function verifyApplicationDocxPackage(input: VerifyApplicationDocxPackage
     }
   }
 
+  // ---- 附图：每图一页 / 图号文字与图序一致 / 摘要附图恰 1 张
+  //
+  // 判据读的是**成品 document.xml**（`parseTemplateSections` 从成品包里切出的分节内容），
+  // 不是调用方传来的件内容——调用方说「我给了 3 张图」不算数，成品里到底有几张图才算。
+  //
+  // 「未检查」与「通过」必须可区分：没有判据可依时（没有附图节 / 附图节只有一幅图 /
+  // 附图节没有图号文本）不报通过，只把 `info.figureChecks` 对应项置 false。
+  const figureChecks = { pageBreak: false, captionOrder: false, abstractFigureCount: false };
+  {
+    const drawingsEntry = plan.entries.find(entry => entry.part?.id === "drawings");
+    if (drawingsEntry !== undefined) {
+      const drawingsXml = drawingsEntry.section.contentXml;
+      const pages = analyzeFigurePages(drawingsXml);
+      // **两幅及以上才判**：一幅图时「每图一页」无判据可依（不需要任何分页符），
+      // 按「未检查」报（不是「通过」）——没有附图节的母版同理（`drawingsEntry` 为 undefined）。
+      if (pages.figures >= 2) {
+        figureChecks.pageBreak = true;
+        // 判据有两层：**总数**（N 张图须有 N−1 个生效分页符）与**位置**
+        // （第 k 幅图之前必须真的有分页符）。只看总数会漏掉「分页符断在别处」
+        // 这种总数对得上、却有两幅图挤在同一页的情形。
+        if (pages.pageBreaks !== pages.figures - 1 || pages.missingPairs.length > 0) {
+          // **fail 而非 warn**：渲染链现在能产出分页符（附图节按「每图一页」插段前分页），
+          // 「每图一页」是**交付要求**，不是能力缺口 ⇒ 缺分页就是这份申请文件不合格。
+          const missing = pages.missingPairs.map(pair =>
+            pair.sameParagraph
+              ? `第 ${pair.before} 幅图与第 ${pair.after} 幅图在同一段落里（段前分页隔不开，需拆成两段）`
+              : `第 ${pair.before} 幅图与第 ${pair.after} 幅图之间缺分页符`,
+          );
+          const detail =
+            missing.length > 0
+              ? `（${missing.join("、")}）`
+              : `（分页符多出 ${pages.pageBreaks - (pages.figures - 1)} 个：图与图之外还有生效分页符）`;
+          const fix =
+            missing.length === 0
+              ? "；修法：删去多余的段前分页（<w:pageBreakBefore/>），只保留图与图之间的分页符"
+              : pages.missingPairs.every(pair => pair.sameParagraph)
+                ? "；修法：把同一段落里的多幅图拆到各自独立的段落（一段一幅图），段前分页才能把它们隔开"
+                : "；修法：在缺分页的那幅图所在段落前设置段前分页（<w:pageBreakBefore/>），使其与前一幅图分属两页";
+          findings.push({
+            id: "figure-page-break",
+            severity: "fail",
+            message:
+              `说明书附图未做到每图一页：${pages.figures} 张图之间实测 ${pages.pageBreaks} 个分页符，` +
+              `应为 ${pages.figures - 1} 个${detail}${fix}`,
+            evidence: `figures=${pages.figures}; pageBreaks=${pages.pageBreaks}; missing=${pages.missingPairs
+              .map(pair => `${pair.before}-${pair.after}`)
+              .join(",")}`,
+          });
+        }
+      }
+      const captions = collectFigureCaptions(drawingsXml);
+      if (captions.length > 0) {
+        figureChecks.captionOrder = true;
+        const expected = captions.map((_, index) => index + 1);
+        if (captions.join(",") !== expected.join(",")) {
+          findings.push({
+            id: "figure-caption-order",
+            severity: "fail",
+            message: `图号文字与图序不一致：实测 ${captions.join("、")}，应为 ${expected.join("、")}`,
+            evidence: `captions=${captions.join(",")}`,
+          });
+        }
+      }
+    }
+    const abstractFigureEntry = plan.entries.find(entry => entry.part?.id === "abstract-figure");
+    if (abstractFigureEntry !== undefined) {
+      const figures = statSection(abstractFigureEntry.section.contentXml).figures;
+      // 该节没有图时不判「摘要附图恰 1 张」：图没落地是**输入侧**事实
+      // （调用方没给图或图不可读），另有 `figures-not-landed` 告警，不在这里重复升级。
+      if (figures > 0) {
+        figureChecks.abstractFigureCount = true;
+        if (figures !== 1) {
+          findings.push({
+            id: "abstract-figure-count",
+            severity: "fail",
+            message: `摘要附图节应恰有 1 张图，实测 ${figures} 张`,
+            evidence: `part=abstract-figure; figures=${figures}`,
+          });
+        }
+      }
+    }
+  }
+
   return {
     passed: !findings.some(finding => finding.severity === "fail"),
     findings,
@@ -403,6 +589,7 @@ export function verifyApplicationDocxPackage(input: VerifyApplicationDocxPackage
       headers: sections.map(section => section.headerTitle),
       template: templateInfo,
       residueMarkersChecked: markers.length > 0,
+      figureChecks,
     },
   };
 }

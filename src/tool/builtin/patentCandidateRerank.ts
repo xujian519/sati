@@ -40,7 +40,7 @@ const CANDIDATE_SCHEMA: SatiJsonSchema = {
   properties: {
     id: { type: "string", description: "Candidate key (publication number / URL / local id), unique." },
     title: { type: "string", description: "Title." },
-    snippet: { type: "string", description: "Abstract or relevant snippet (truncated to ~400 chars for ranking)." },
+    snippet: { type: "string", description: "Abstract or snippet (~400 chars)." },
     publicationDate: { type: "string", description: "Publication date (ISO), for time-validity context." },
   },
 };
@@ -54,10 +54,9 @@ export function createPatentCandidateRerankTool(
     title: "Rerank Patent Search Candidates",
     description:
       "对专利/文献检索候选做 LLM 摘要精排：一次批量调用给每条候选打相关性档位" +
-      "（3=高相关>80%，2=中相关50-80%，1=低相关，0=无关）并给出中文判定理由。" +
-      "用于查新检索与无效证据收集的筛选排序步骤，替代人工逐条初筛。最多 20 条参与精排，" +
-      "超出按未评级置尾（truncatedCount 透出）。模型不可用或输出解析失败时降级返回原序" +
-      "（degraded=true），不阻断检索流程。不改变候选集合本身，只输出排序与档位。",
+      "（3=高相关>80%，2=中相关50-80%，1=低相关，0=无关）并给出中文判定理由，替代人工逐条初筛。" +
+      "最多 20 条参与精排，超出按未评级置尾（truncatedCount 透出）。模型不可用或解析失败时降级返回原序" +
+      "（degraded=true），不阻断检索流程。只输出排序与档位，不改变候选集合。",
     kind: "custom",
     domain: "patent",
     aliases: ["PatentCandidateRerank", "candidate_rerank"],

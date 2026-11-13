@@ -31,6 +31,13 @@ export type FigureIndexEntry = {
   analyzedAt: string;
   /** 附图分析结果。 */
   analysis: FigureAnalysisResult;
+  /**
+   * 发明家族标识（可选）：同家族的多幅附图沿用同一套标号。
+   *
+   * 守卫对齐 DSH 的同名字段（可选但必须是字符串）：字段类型漂移会让「按家族续号」
+   * 这类读法拿到非预期值。旧索引没有该字段时按「无家族」处理，不破坏既有索引文件。
+   */
+  figureFamily?: string;
 };
 
 /** 索引文件结构。 */
@@ -52,7 +59,9 @@ function isFigureIndexEntry(value: unknown): value is FigureIndexEntry {
     // 数组字段必须为数组：否则下游检索（components.map 等）会以裸 TypeError 崩溃
     Array.isArray(analysis.components) &&
     Array.isArray(analysis.connections) &&
-    Array.isArray(analysis.warnings)
+    Array.isArray(analysis.warnings) &&
+    // 家族标识是可选字段，但一旦出现必须是字符串（字段类型漂移会让按家族续号读错）。
+    (entry.figureFamily === undefined || typeof entry.figureFamily === "string")
   );
 }
 

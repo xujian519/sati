@@ -16,6 +16,7 @@ export type RenderCheckKind =
   | "ink-outside-canvas"
   | "element-overlap"
   | "font-below-minimum"
+  | "sheet-underfill"
   | "not-measured";
 
 /** 图面墨迹的包围盒（毫米，根坐标系）。 */
@@ -36,6 +37,14 @@ export type RenderCheckFinding = {
   readonly check: RenderCheckKind;
   /** 模型可见的一句话结论。 */
   readonly message: string;
+  /**
+   * 提示级：报告但不当成图面缺陷阻断交付。
+   *
+   * 用于「不是缺陷、但值得人看一眼」的判据（如版面利用率不足）。与 severity 正交：
+   * 提示级发现的 severity 仍是 warn，但**不计入缺陷数**（缺陷数只算 fail/warn 中
+   * 非 advisory 的项），也不参与门禁阻断。
+   */
+  readonly advisory?: boolean;
 };
 
 /** 复核报告：量测值 + 发现的问题。 */

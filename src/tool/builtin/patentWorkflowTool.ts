@@ -234,9 +234,7 @@ export function createPatentWorkflowTool(): SatiToolDefinition<PatentWorkflowInp
     description:
       "Assemble stage outputs for a declarative patent workflow (no LLM): validates the manifest, marks missing " +
       "stages degraded, runs the deterministic rule gate, and persists when caseId is given. Use when stage " +
-      "outputs already exist; use patent_workflow_run to execute atoms. Orchestration entries: " +
-      "patent_workflow_assemble (assemble), patent_workflow_run (execute), patent_docket (case lifecycle). " +
-      "Manifest catalog: see patent_workflow_run. Legacy name patent_workflow is an alias.",
+      "outputs already exist; use patent_workflow_run to execute atoms. Legacy name patent_workflow is an alias.",
     kind: "session",
     inputSchema: {
       type: "object",
@@ -256,7 +254,7 @@ export function createPatentWorkflowTool(): SatiToolDefinition<PatentWorkflowInp
         checkDomain: {
           type: "string",
           description:
-            "Deterministic rule-check domains (comma-separated, e.g. 'patent_novelty,patent_disclosure'). " +
+            "Rule-check domains (comma-separated)；覆盖 manifest 设定：" +
             "Overrides the manifest default mapping; empty string disables the rule gate.",
         },
         outputs: {

@@ -308,7 +308,10 @@ export function createPatentKgQueryTool(
     },
     title: "Patent Knowledge Graph Query",
     description:
-      "查询专利知识图谱节点（判例/审查规则/法条/概念，116K 节点 + 关系边）。三种模式：① query 关键词检索（FTS5，附相似/引用关系标注）；② id 按节点 id 展开详情与相似/引用邻居（沿引用关系追查判例）；③ node_type 按类型浏览（Case/SupremeCourtJudgment/RegionalCourtJudgment/GuidelineRule/Clause/WikiCard/Concept，支持 Judgment/LawArticle 别名）。与 patent_wiki_search（wiki 卡片正文）和 law_search（法条原文）互补。",
+      "查询专利知识图谱节点（判例/审查规则/法条/概念，116K 节点 + 关系边）。三种模式：① query 关键词检索" +
+      "（FTS5，附相似/引用关系标注）；② id 按节点 id 展开详情与相似/引用邻居（沿引用关系追查判例）；" +
+      "③ node_type 按类型浏览（Case/SupremeCourtJudgment/RegionalCourtJudgment/GuidelineRule/Clause/WikiCard/" +
+      "Concept，支持 Judgment/LawArticle 别名）。",
     kind: "custom",
     domain: "patent",
     inputSchema: {
@@ -326,7 +329,7 @@ export function createPatentKgQueryTool(
         node_type: {
           type: "string",
           description:
-            "按节点类型浏览（Case/SupremeCourtJudgment/RegionalCourtJudgment/GuidelineRule/Clause/WikiCard/Concept；Judgment=最高法院+地方法院判决，LawArticle=法条条款）",
+            "按节点类型浏览（Case/…Judgment/GuidelineRule/Clause/WikiCard/Concept；Judgment=最高法院+地方法院判决，LawArticle=法条条款）",
         },
         expand: {
           type: "boolean",

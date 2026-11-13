@@ -134,11 +134,10 @@ export type PatentFeesOutput = {
 };
 
 const DESCRIPTION =
-  "Compute CNIPA official fees: fee items, quantities, reduction, annuity tiers, and late surcharges, with " +
-  "per-line unit/subtotal/payable/status, total, legal basis, and a fee schedule. Money comes only from the " +
-  "rate index; unverified/unrecorded/pending items block the total (unverifiedIds). Reduction is 85% for a " +
-  "sole applicant and 70% for two or more, and requires a filed record. annuityYears and grantPatentYear " +
-  "come from patent_deadlines. Read-only.";
+  "Compute CNIPA official fees: items, quantities, reduction, annuity tiers, late surcharges; per-line " +
+  "unit/subtotal/payable/status, total, legal basis, fee schedule. Amounts come only from the rate index; " +
+  "unverified items block the total (unverifiedIds). Reduction 85% sole / 70% two+, requires a filed record. " +
+  "annuityYears and grantPatentYear come from patent_deadlines. Read-only.";
 
 /**
  * 创建 `patent_fees` 工具。

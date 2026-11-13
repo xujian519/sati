@@ -176,10 +176,10 @@ export function createPatentMetadataTool(
     aliases: ["PatentMetadata", "get_patent_metadata"],
     title: "Patent Metadata Lookup",
     description:
-      "Fetch patent metadata from Google Patents by patent number (e.g. US11452699B2): title, inventors, " +
-      "assignees, dates, legal status, estimated expiration, abstract, PDF URL, classifications, and citations. " +
-      "Validates and normalizes the number. Read-only. Not-found is success:false data. Missing fields surface " +
-      "via degraded/missingFields/parseWarnings instead of silent N/A.",
+      "Fetch patent metadata from Google Patents by number (e.g. US11452699B2): title, inventors, assignees, " +
+      "dates, legal status, expiration, abstract, PDF URL, classifications, citations. Validates and normalizes " +
+      "the number. Read-only. Not-found is success:false; missing fields surface via degraded/missingFields/" +
+      "parseWarnings, not silent N/A.",
 
     kind: "network",
     domain: "patent",

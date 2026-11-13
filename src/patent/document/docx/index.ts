@@ -25,7 +25,19 @@ export {
   topLevelElements,
 } from "./applicationTemplate.js";
 export { htmlToBlocks } from "./htmlToOoxml.js";
-export { decodeDataUri, probeImage, type ImageProbe } from "./imageInfo.js";
+export { decodeDataUri, looksLikeSvg, probeImage, type ImageProbe } from "./imageInfo.js";
+export {
+  DEFAULT_FIGURE_DPI,
+  FigureRasterError,
+  rasterizeFigureSvg,
+  rasterizeFigureSvgText,
+  resolveFigurePixelSize,
+  type FigurePixelSize,
+  type FigureRasterBackend,
+  type FigureRasterOptions,
+  type FigureRasterRenderContext,
+  type RasterizedFigure,
+} from "./figureRaster.js";
 export {
   EMU_PER_PX,
   EMU_PER_TWIP,
@@ -57,6 +69,7 @@ export {
   verifyApplicationDocx,
   verifyApplicationDocxPackage,
   type DocxPackageReference,
+  type DocxVerifyFigureChecks,
   type DocxVerifyFinding,
   type DocxVerifyInfo,
   type DocxVerifyResult,

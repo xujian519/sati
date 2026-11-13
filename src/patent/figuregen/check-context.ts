@@ -20,7 +20,11 @@ import { hasNumeralPrefix, isRefNumeral } from "./numeral.js";
 import { profileForJurisdiction, shouldRenderCaption, type OfficeProfile } from "./office-profile.js";
 import { pxToMm, uniformFigureZoom } from "./page-contract.js";
 import { splitSpecFaces, type SpecFaces } from "./spec-sections.js";
-import type { FigureSpec, Jurisdiction } from "./types.js";
+import { renderFigureSvg } from "./render-svg.js";
+// 词法判定在零依赖模块 `ref-label.ts`（断 init-time 循环依赖，见该模块头注释）；
+// 这里 re-export 保持既有 import 路径可用。
+export { normalizeRefLabel, stripRefMark } from "./ref-label.js";
+import { figureNodes, type FigureSpec, type Jurisdiction } from "./types.js";
 import { scanFigureWording, type WordingHit } from "./wording-rules.js";
 
 /** V5 阈值：单行 label 最大字符数 / 最大行数（超出视为疑似注释性文字）。 */
@@ -68,34 +72,34 @@ function extractBracketRefs(specText: string): number[] {
   return [...found].sort((a, b) => a - b);
 }
 
-/** 剥离 label 中的括号标记后缀，得到组件名称主干。 */
-export function stripRefMark(label: string): string {
-  return label
-    .replace(/[（(]\s*\d{1,3}\s*[)）]/gu, "")
-    .split("\n")[0]
-    .trim();
-}
-
-/**
- * 附图标记名称归一化（**仅用于比较**，不改变呈现形态）。
- *
- * 同一组件在图上可能写作「处理模块(20)」（附图惯例）或「处理模块20」（说明书正文
- * 惯例：名称+数字、不加括号）——两者指同一组成部分，V4 不得判为名称不一致。
- * 归一化 = 剥括号标记 + 剥尾部裸数字 + trim；`stripRefMark` 保持对外呈现形态
- * （brief.ts 依赖其输出格式）。
- */
-export function normalizeRefLabel(label: string): string {
-  return stripRefMark(label)
-    .replace(/\s*\d{1,3}\s*$/u, "")
-    .trim();
-}
-
 /**
  * 单幅附图的画幅（px）。曲线图由坐标图几何决定，其余图型由分层布局决定——
  * **核验与渲染必须同源**，否则 V7 量的是另一张图。
+ *
+ * 时序图 / 电路图 / 多面板附图走各自的渲染器（它们不用分层布局）⇒ 画幅也取自**同一个
+ * 渲染器**（见 {@link renderFigureSvg}），否则 V7 会拿 `layoutFigure` 的近似尺寸去判
+ * 一张根本没那样画的图。
  */
-function figureCanvasPx(figure: FigureSpec, caption: boolean): { width: number; height: number } {
-  return figure.kind === "chart" ? layoutChart(figure.chart, { caption }) : layoutFigure(figure, { caption });
+function figureCanvasPx(
+  figure: FigureSpec,
+  caption: boolean,
+  jurisdiction: Jurisdiction,
+  figureCount: number,
+): { width: number; height: number } {
+  if (figure.kind === "chart") {
+    const chart = layoutChart(figure.chart, { caption });
+    return { width: chart.width, height: chart.height };
+  }
+  if (
+    figure.kind === "sequence" ||
+    figure.kind === "circuit" ||
+    figure.kind === "cross-section" ||
+    (figure.panels !== undefined && figure.panels.length > 0)
+  ) {
+    const rendered = renderFigureSvg(figure, { jurisdiction, figureCount });
+    return { width: rendered.width, height: rendered.height };
+  }
+  return layoutFigure(figure, { caption });
 }
 
 /** V7 的画幅量（惰性求值：只有 V7 用得到，见 FigureRuleContext.layout）。 */
@@ -163,7 +167,9 @@ export function buildRuleContext(
 
   const refsInFigures = [
     ...new Set(
-      figures.flatMap(f => f.nodes.flatMap(n => (n.ref === undefined || !isRefNumeral(n.ref) ? [] : [n.ref]))),
+      // 多面板附图的标记住在各面板里 ⇒ 用摊平口径（figureNodes），否则面板里的标记
+      // 在核验侧"消失"（声明了却查不到 = 假保证）。
+      figures.flatMap(f => figureNodes(f).flatMap(n => (n.ref === undefined || !isRefNumeral(n.ref) ? [] : [n.ref]))),
     ),
   ].sort((a, b) => a - b);
   const refsInText = options.skipTextRules ? [] : extractBracketRefs(specText);
@@ -244,7 +250,7 @@ export function buildRuleContext(
               if (measured !== undefined) {
                 return { figure_no: figure.figure_no, widthMm: measured.widthMm, heightMm: measured.heightMm };
               }
-              const { width, height } = figureCanvasPx(figure, captionRendered);
+              const { width, height } = figureCanvasPx(figure, captionRendered, jurisdiction, figureCount);
               return { figure_no: figure.figure_no, widthMm: pxToMm(width), heightMm: pxToMm(height) };
             });
       layoutCache = { captionRendered, paperSizes, zoom: uniformFigureZoom(paperSizes, profile) };

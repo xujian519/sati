@@ -1,5 +1,5 @@
 /**
- * src/patent/figuregen/cad — FreeCAD 无头投影（能力探测 + 脚本 + 运行 + 解析）。
+ * src/patent/figuregen/cad — FreeCAD 无头投影（能力探测 + 运行 + 解析）。
  *
  * 实测结论（FreeCAD 1.1.3，`freecadcmd`，`App.GuiUp = 0`）：冷启动 0.18–0.19s；
  * `TechDraw.project(shape, dir)` 返回 `[可见 G0, 可见 G1, 隐藏 G0, 隐藏 G1]`；输出数值
@@ -18,6 +18,11 @@
  * 6. 于是失败仍可能以「**退出码 0** + 真因只在 stderr」的形态到达 ⇒ 消费侧解析失败时**不得**
  *    丢弃 stderr（`describeCadFailure`）：退出码不是成功的充分条件。
  *
+ * **与 DSH 的对应关系**：DSH 的 `freecad-renderer.ts` 同样"一次进程跑多个视图"，同样把
+ * 锚点核对放在脚本侧。本模块的差异是**产物契约**：DSH 让脚本直接吐 SVG 片段与 manifest，
+ * 本模块让脚本只吐 JSON 边表 + 零件事实 + 锚点归属，画图与版式仍由 Sati 侧负责
+ * （黑白不变式、`data-ref`、A4 版式、回读全部复用既有交付契约）。
+ *
  * 单测**不真跑 FreeCAD**：走注入的 `runner` + 录制的边表（与 dot 的注入先例一致）。
  */
 
@@ -26,18 +31,26 @@ import { existsSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { CAD_ERROR_MARKER } from "./error-marker.js";
+import { buildProjectionScript } from "./freecad-script.js";
 import {
   CAD_EDGE_TABLE_VERSION,
-  CAD_SECTION_VIEWS,
+  CAD_PROJECTION_VERSION,
+  type CadAnchorCheck,
   type CadAxisImages,
   type CadCutFace,
   type CadEdge,
   type CadEdgeTable,
+  type CadPartFact,
+  type CadProjectionPayload,
   type CadSection,
   type CadView,
   isCadSectionView,
   isCadView,
 } from "./types.js";
+
+export { CAD_ERROR_MARKER } from "./error-marker.js";
+export { buildProjectionScript, type ProjectionScriptOptions } from "./freecad-script.js";
 
 /** 显式指定 freecadcmd 路径的环境变量（优先于探测）。 */
 export const FREECAD_CMD_ENV = "SATI_FREECAD_CMD";
@@ -48,12 +61,6 @@ export const CAD_MAX_EDGES = 20_000;
 /** 投影脚本输出边表的定界标记（stdout 混有横幅与统计，必须按标记截取）。 */
 export const CAD_JSON_BEGIN = "SATI_CAD_JSON_BEGIN";
 export const CAD_JSON_END = "SATI_CAD_JSON_END";
-/**
- * 投影脚本的失败标记（`_fail` 写 stderr 的前缀）。
- *
- * 脚本侧与消费侧共用同一个常量 ⇒ 「脚本报了错」与「Sati 认得出这个错」不可能漂移。
- */
-export const CAD_ERROR_MARKER = "SATI_CAD_ERROR:";
 
 /** 常见安装位置（macOS 官方 app 包内；Windows/Linux 走 PATH 探测）。 */
 const FREECAD_CANDIDATE_PATHS = [
@@ -92,226 +99,6 @@ export function resolveFreecadCmd(
   return undefined;
 }
 
-/** 视图方向向量（FreeCAD 坐标系；front 为 -Y）。 */
-const VIEW_DIRECTIONS: Record<CadView, [number, number, number]> = {
-  front: [0, -1, 0],
-  back: [0, 1, 0],
-  left: [-1, 0, 0],
-  right: [1, 0, 0],
-  top: [0, 0, 1],
-  bottom: [0, 0, -1],
-  iso: [1, -1, 1],
-};
-
-export type ProjectionScriptOptions = {
-  stepPath: string;
-  view: CadView;
-  /** 离散化容差（毫米）：越小越平滑、边表越大；0.5mm 对交付图足够。 */
-  toleranceMm?: number;
-  /**
-   * 剖切（全剖视图）：剖切面垂直于视图方向、位于距模型原点该处（模型坐标沿视线方向的
-   * 值，毫米）。仅轴对齐视图可剖切（`CAD_SECTION_VIEWS`）。
-   */
-  sectionOffsetMm?: number;
-};
-
-/**
- * 生成投影脚本（Python，交给 `freecadcmd` 执行）。
- *
- * 脚本只做三件事：导入 STEP → （可选）按半空间剖切 → `TechDraw.project` 并把可见/隐藏边
- * 离散化为 JSON 边表（打印在定界标记之间）。**不画图、不产 SVG、不投影剖切面**——画与
- * 投影都由 Sati 自己的契约负责（剖切面轮廓以模型坐标交给 Sati 侧投影）。
- *
- * **失败契约**（见文件头注 5/6）：任何失败都写 stderr（`CAD_ERROR_MARKER` 前缀）并以
- * `sys.exit(1)` 结束；主流程收进 `_main()` 且由顶层兜底，使契约外的异常也不返回退出码 0。
- */
-export function buildProjectionScript(options: ProjectionScriptOptions): string {
-  const direction = VIEW_DIRECTIONS[options.view];
-  const tolerance = options.toleranceMm ?? 0.5;
-  const section = options.sectionOffsetMm;
-  if (section !== undefined && !isCadSectionView(options.view)) {
-    throw new TypeError(`视图 ${options.view} 不能剖切（剖切要求轴对齐视图：${CAD_SECTION_VIEWS.join(", ")}）`);
-  }
-  const axisIndex = direction.findIndex(component => component !== 0);
-  const sectionAxis = axisIndex === 0 ? "X" : axisIndex === 1 ? "Y" : "Z";
-  // 生成物分两段：助手函数留在模块级，主流程收进 `_main()`（只有它的行要缩进一级）。
-  const helpers = [
-    "def _fail(message):",
-    "    # 不能用 raise SystemExit('…')：实测 freecadcmd 只传播退出码、吞掉消息；而非",
-    "    # SystemExit 逃逸时退出码反而是 0。写 stderr + sys.exit(1) 是本机实测唯一",
-    "    # 「消息与退出码同时成立」的形态；消费侧按 CAD_ERROR_MARKER 取真因。",
-    "    sys.stderr.write(CAD_ERROR_MARKER + ' ' + str(message) + '\\n')",
-    "    sys.stderr.flush()",
-    "    sys.exit(1)",
-    "",
-    "def _discretize(edge):",
-    "    length = edge.Length",
-    "    count = int(max(2, min(64, length / TOLERANCE + 2)))",
-    "    return [[round(p.x, 4), round(p.y, 4)] for p in edge.discretize(count)]",
-    "",
-    "# 投影坐标系是 TechDraw 自己挑的（实测 front 视图里 u 对应 -Z）：用四个单位参考体",
-    "# （原点 + 三轴）分别投影，得到模型原点与各轴在投影平面上的像。仅有轴像不足以定出",
-    "# 仿射映射（三轴像含同一个未知平移），故原点像必须一并给出。",
-    "def _probe(vec):",
-    "    probe = Part.makeBox(0.001, 0.001, 0.001, vec)",
-    "    p0, p1, _, _ = TechDraw.project(probe, DIRECTION)",
-    "    probe_edges = list(p0.Edges) + list(p1.Edges)",
-    "    if not probe_edges:",
-    "        _fail('参考体投影为空，无法确定投影坐标系朝向')",
-    "    point = probe_edges[0].discretize(2)[0]",
-    "    return [round(point.x, 6), round(point.y, 6)]",
-    "",
-    "# 剖切（全剖视图）：保留远离观者的一侧（p·d ≤ offset），露出剖切面。",
-    "# 剖切面轮廓另行以**模型坐标**输出（Sati 侧投影 + 纸面剖面线填充）。",
-    "def _section(shape):",
-    "    bb = shape.BoundBox",
-    "    span = max(bb.XLength, bb.YLength, bb.ZLength, 1.0)",
-    "    margin = span * 2 + 10",
-    "    low = [bb.XMin - margin, bb.YMin - margin, bb.ZMin - margin]",
-    "    high = [bb.XMax + margin, bb.YMax + margin, bb.ZMax + margin]",
-    `    axis = ${axisIndex}`,
-    "    sign = 1 if DIRECTION.x + DIRECTION.y + DIRECTION.z > 0 else -1",
-    "    # 保留 sign*coord ≤ sign*offset 的一侧（远离观者）",
-    "    if sign > 0:",
-    "        high[axis] = SECTION_OFFSET",
-    "    else:",
-    "        low[axis] = SECTION_OFFSET",
-    "    half = Part.makeBox(high[0]-low[0], high[1]-low[1], high[2]-low[2], App.Vector(low[0], low[1], low[2]))",
-    "    kept = shape.common(half)",
-    "    if kept.isNull() or not kept.Faces:",
-    "        _fail('剖切后几何为空（剖切面在模型范围之外？offset=' + str(SECTION_OFFSET) + '）')",
-    "    unit = App.Vector(0, 0, 0)",
-    "    if axis == 0:",
-    "        unit = App.Vector(sign, 0, 0)",
-    "    elif axis == 1:",
-    "        unit = App.Vector(0, sign, 0)",
-    "    else:",
-    "        unit = App.Vector(0, 0, sign)",
-    "    faces = []",
-    "    for face in kept.Faces:",
-    "        if face.Surface.__class__.__name__ != 'Plane':",
-    "            continue",
-    "        normal = face.normalAt(0, 0)",
-    "        if abs(normal.dot(unit) - 1.0) > 1e-6:",
-    "            continue  # 非剖切面：法向须与视线方向一致（朝观者）",
-    "        if abs(face.CenterOfMass.dot(unit) - SECTION_OFFSET * sign) > 1e-6:",
-    "            continue",
-    "        loops = []",
-    "        wires = [face.OuterWire]",
-    "        for wire in face.Wires:",
-    "            if not wire.isSame(face.OuterWire):",
-    "                loops.append(wire)",
-    "        loops = [face.OuterWire] + loops",
-    "        loops = [[[round(p.x, 4), round(p.y, 4), round(p.z, 4)] for p in _loop_points(w)] for w in loops]",
-    "        faces.append({'loops': loops})",
-    "    return kept, faces",
-    "",
-    "def _loop_points(wire):",
-    "    # 环必须连成**闭合回路**：wire.OrderedEdges 只是「边集合已排序」，并不保证首尾相接地",
-    "    # 串成走向（实测剖切面的边序是乱序）⇒ 按端点做连通性搜索逐边拼接，并在必要时反转",
-    "    # （边的参数方向未必与环走向一致）。拼不成环即 fail-loud：宁可不输出，也不画错剖面线。",
-    "    remaining = [list(e.discretize(int(max(2, min(64, e.Length / 0.2 + 2))))) for e in wire.Edges]",
-    "    if not remaining:",
-    "        _fail('剖切面轮廓环为空')",
-    "    current = remaining.pop(0)",
-    "    points = list(current)",
-    "    end = current[-1]",
-    "    while remaining:",
-    "        found = None",
-    "        for index, segment in enumerate(remaining):",
-    "            if (segment[0] - end).Length <= 1e-6 or (segment[-1] - end).Length <= 1e-6:",
-    "                found = index",
-    "                break",
-    "        if found is None:",
-    "            _fail('剖切面轮廓环不闭合（边的端点接不上），拒绝输出可能错误的剖面线')",
-    "        segment = remaining.pop(found)",
-    "        if (segment[0] - end).Length > (segment[-1] - end).Length:",
-    "            segment.reverse()",
-    "        points.extend(segment)",
-    "        end = points[-1]",
-    "    if (points[0] - points[-1]).Length > 1e-3:",
-    "        _fail('剖切面轮廓环未回到起点（几何异常），拒绝输出可能错误的剖面线')",
-    "    return points",
-  ];
-  const mainFlow = [
-    "shape = Part.Shape()",
-    "try:",
-    "    shape.read(STEP_PATH)",
-    "except Exception as exc:",
-    "    _fail('STEP 文件不可读（不存在或格式不支持）: ' + STEP_PATH + ' [' + type(exc).__name__ + ': ' + str(exc) + ']')",
-    "if shape.isNull():",
-    "    _fail('STEP 已解析但几何为空（无 B-rep）: ' + STEP_PATH + ' —— 若该文件由脚本导出，请改用 shape.exportStep(path)：Part.export([shape], path) 会静默写出无几何的空壳 STEP')",
-    "",
-    "cut_faces = []",
-    "projected = shape",
-    "if SECTION_OFFSET is not None:",
-    "    projected, cut_faces = _section(shape)",
-    "",
-    "visible0, visible1, hidden0, hidden1 = TechDraw.project(projected, DIRECTION)",
-    "edges = []",
-    "kinds = {}",
-    "for kind, group in (('visible', visible0), ('visible', visible1), ('hidden', hidden0), ('hidden', hidden1)):",
-    "    for edge in group.Edges:",
-    "        points = _discretize(edge)",
-    "        if len(points) < 2:",
-    "            continue",
-    "        curve = type(edge.Curve).__name__",
-    "        kinds[curve] = kinds.get(curve, 0) + 1",
-    "        edges.append({'kind': kind, 'curve': curve, 'closed': bool(edge.isClosed()), 'points': points})",
-    "",
-    "if not edges:",
-    "    _fail('投影未产生任何边（几何不可见或方向错误）: ' + VIEW)",
-    "",
-    "payload = {",
-    `    'version': ${CAD_EDGE_TABLE_VERSION},`,
-    "    'view': VIEW,",
-    "    'units': 'mm',",
-    "    'axes': {",
-    "        'origin': _probe(App.Vector(0, 0, 0)),",
-    "        'x': _probe(App.Vector(1, 0, 0)),",
-    "        'y': _probe(App.Vector(0, 1, 0)),",
-    "        'z': _probe(App.Vector(0, 0, 1)),",
-    "    },",
-    "    'edges': edges,",
-    "    'curveKinds': kinds,",
-    "}",
-    "if SECTION_OFFSET is not None:",
-    `    lo = round(min(getattr(shape.BoundBox, '${sectionAxis}Min'), getattr(shape.BoundBox, '${sectionAxis}Max')), 4)`,
-    `    hi = round(max(getattr(shape.BoundBox, '${sectionAxis}Min'), getattr(shape.BoundBox, '${sectionAxis}Max')), 4)`,
-    "    signed = [lo, hi] if DIRECTION.x + DIRECTION.y + DIRECTION.z > 0 else [-hi, -lo]",
-    "    payload['section'] = {'offset_mm': SECTION_OFFSET, 'model_extent_mm': signed}",
-    "    payload['cutFaces'] = cut_faces",
-    `print(${JSON.stringify(CAD_JSON_BEGIN)})`,
-    "print(json.dumps(payload, ensure_ascii=False))",
-    `print(${JSON.stringify(CAD_JSON_END)})`,
-  ];
-  return [
-    "# 由 Sati 生成（src/patent/figuregen/cad/freecad.ts）——只输出 JSON 边表，不产出图形。",
-    "import json",
-    "import sys",
-    "import FreeCAD as App",
-    "import Part, TechDraw",
-    "",
-    `STEP_PATH = ${JSON.stringify(options.stepPath)}`,
-    `VIEW = ${JSON.stringify(options.view)}`,
-    `DIRECTION = App.Vector(${direction[0]}, ${direction[1]}, ${direction[2]})`,
-    `TOLERANCE = ${tolerance}`,
-    `SECTION_OFFSET = ${section === undefined ? "None" : String(section)}`,
-    `CAD_ERROR_MARKER = ${JSON.stringify(CAD_ERROR_MARKER)}`,
-    "",
-    ...helpers,
-    "",
-    "def _main():",
-    ...mainFlow.map(line => (line.length === 0 ? "" : `    ${line}`)),
-    "",
-    "try:",
-    "    _main()",
-    "except Exception as exc:",
-    "    _fail('未捕获异常（' + type(exc).__name__ + '）: ' + str(exc))",
-    "",
-  ].join("\n");
-}
-
 /** 进程运行器契约（注入点：单测不真跑 FreeCAD）。 */
 export type CadRunner = (
   cmd: string,
@@ -347,11 +134,16 @@ export const defaultCadRunner: CadRunner = async (cmd, args, options) => {
 };
 
 /**
- * 从 stdout 截取并解析边表（严格按定界标记；缺失/越界/结构非法一律抛错）。
+ * 从 stdout 截取并解析投影产物（严格按定界标记；缺失/越界/结构非法一律抛错）。
  *
  * `freecadcmd` 会把版本横幅与统计打在 stdout，故**不能**直接 `JSON.parse(stdout)`。
+ *
+ * 兼容两种载荷：
+ * - **v3**（当前）：`{version:3, views:[…], parts:[…], anchors:[…]}`——多视图 + 零件事实；
+ * - **v2**（历史单视图平铺）：`{version:2, view, axes, edges, …}`——仍可解析，
+ *   零件与锚点为空（旧产物没有这些事实，如实留空而不是编造）。
  */
-export function parseProjectionOutput(stdout: string): CadEdgeTable {
+export function parseProjectionPayload(stdout: string): CadProjectionPayload {
   const begin = stdout.indexOf(CAD_JSON_BEGIN);
   const end = stdout.indexOf(CAD_JSON_END);
   if (begin === -1 || end === -1 || end <= begin) {
@@ -368,9 +160,52 @@ export function parseProjectionOutput(stdout: string): CadEdgeTable {
     throw new TypeError("投影边表顶层应为对象");
   }
   const table = parsed as Record<string, unknown>;
-  if (table.version !== CAD_EDGE_TABLE_VERSION) {
-    throw new TypeError(`投影边表版本不支持: ${String(table.version)}（期望 ${CAD_EDGE_TABLE_VERSION}）`);
+  const version = table.version;
+  if (version === CAD_PROJECTION_VERSION) {
+    return {
+      version,
+      views: parseViews(table.views),
+      parts: parseParts(table.parts),
+      anchors: parseAnchors(table.anchors),
+    };
   }
+  if (version === CAD_EDGE_TABLE_VERSION) {
+    // 历史单视图载荷：解析为"只有主视图、没有零件事实"的产物
+    return { version, views: [parseEdgeTable(table)], parts: [], anchors: [] };
+  }
+  throw new TypeError(
+    `投影边表版本不支持: ${String(version)}（期望 ${CAD_PROJECTION_VERSION} 或 ${CAD_EDGE_TABLE_VERSION}）`,
+  );
+}
+
+/**
+ * 解析投影产物并取**主视图**（第一个视图）的边表。
+ *
+ * 保留这个函数是为了让"单视图"路径的既有调用方不必改：它与 `parseProjectionPayload`
+ * 共用同一套逐视图校验（`parseEdgeTable`），不存在两套口径。
+ */
+export function parseProjectionOutput(stdout: string): CadEdgeTable {
+  const payload = parseProjectionPayload(stdout);
+  const primary = payload.views[0];
+  if (primary === undefined) {
+    throw new TypeError("投影产物没有任何视图");
+  }
+  return primary;
+}
+
+/** 解析多视图列表（v3 载荷）。 */
+function parseViews(raw: unknown): CadEdgeTable[] {
+  if (!Array.isArray(raw)) {
+    throw new TypeError("投影产物缺少 views 数组");
+  }
+  if (raw.length === 0) {
+    throw new TypeError("投影产物的 views 为空");
+  }
+  return raw.map(entry => parseEdgeTable(entry as Record<string, unknown>));
+}
+
+/** 解析单个视图的边表（v2 平铺与 v3 嵌套共用）。 */
+function parseEdgeTable(table: Record<string, unknown>): CadEdgeTable {
   if (!isCadView(table.view)) {
     throw new TypeError(`投影边表视图非法: ${String(table.view)}`);
   }
@@ -429,6 +264,134 @@ export function parseProjectionOutput(stdout: string): CadEdgeTable {
     ...(cutFaces === undefined ? {} : { cutFaces }),
     curveKinds,
   };
+}
+
+/** 解析每零件几何事实（v3 载荷）。 */
+function parseParts(raw: unknown): CadPartFact[] {
+  if (raw === undefined || raw === null) return [];
+  if (!Array.isArray(raw)) {
+    throw new TypeError("投影产物 parts 应为数组");
+  }
+  return raw.map((entry, index) => {
+    const record = entry as Record<string, unknown>;
+    const partIndex = record.index;
+    if (typeof partIndex !== "number" || !Number.isInteger(partIndex) || partIndex < 0) {
+      throw new TypeError(`投影产物 parts[${index}].index 应为非负整数`);
+    }
+    const bbox = parsePartBBox(record.bbox, index);
+    const centroid = parseTriple(record.centroid, `parts[${index}].centroid`);
+    const area = record.area;
+    const volume = record.volume;
+    if (typeof area !== "number" || !Number.isFinite(area)) {
+      throw new TypeError(`投影产物 parts[${index}].area 应为数字`);
+    }
+    if (typeof volume !== "number" || !Number.isFinite(volume)) {
+      throw new TypeError(`投影产物 parts[${index}].volume 应为数字`);
+    }
+    const views = parsePartViews(record.views, index);
+    return { index: partIndex, bbox, centroid, area, volume, views };
+  });
+}
+
+/** 解析零件包围盒（模型坐标）。 */
+function parsePartBBox(raw: unknown, index: number): { min: [number, number, number]; max: [number, number, number] } {
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new TypeError(`投影产物 parts[${index}].bbox 应为对象`);
+  }
+  const record = raw as Record<string, unknown>;
+  return {
+    min: parseTriple(record.min, `parts[${index}].bbox.min`),
+    max: parseTriple(record.max, `parts[${index}].bbox.max`),
+  };
+}
+
+/** 解析零件的逐视图投影事实。 */
+function parsePartViews(raw: unknown, index: number): Record<string, CadPartFact["views"][string]> {
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new TypeError(`投影产物 parts[${index}].views 应为对象`);
+  }
+  const views: Record<string, CadPartFact["views"][string]> = {};
+  for (const [viewName, value] of Object.entries(raw as Record<string, unknown>)) {
+    const record = value as Record<string, unknown>;
+    const bboxRaw = record.projectedBBox as Record<string, unknown> | undefined;
+    if (bboxRaw === null || typeof bboxRaw !== "object" || Array.isArray(bboxRaw)) {
+      throw new TypeError(`投影产物 parts[${index}].views.${viewName}.projectedBBox 应为对象`);
+    }
+    const min = parsePair(bboxRaw.min, `parts[${index}].views.${viewName}.projectedBBox.min`);
+    const max = parsePair(bboxRaw.max, `parts[${index}].views.${viewName}.projectedBBox.max`);
+    const suggestedAnchor = parseTriple(record.suggestedAnchor, `parts[${index}].views.${viewName}.suggestedAnchor`);
+    const suggestedAnchorProjected = parsePair(
+      record.suggestedAnchorProjected,
+      `parts[${index}].views.${viewName}.suggestedAnchorProjected`,
+    );
+    views[viewName] = { projectedBBox: { min, max }, suggestedAnchor, suggestedAnchorProjected };
+  }
+  return views;
+}
+
+/** 解析显式锚点的归属核对结果（v3 载荷）。 */
+function parseAnchors(raw: unknown): CadAnchorCheck[] {
+  if (raw === undefined || raw === null) return [];
+  if (!Array.isArray(raw)) {
+    throw new TypeError("投影产物 anchors 应为数组");
+  }
+  return raw.map((entry, index) => {
+    const record = entry as Record<string, unknown>;
+    const point = parseTriple(record.point, `anchors[${index}].point`);
+    const ownerRaw = record.ownerPart;
+    if (ownerRaw !== null && (typeof ownerRaw !== "number" || !Number.isInteger(ownerRaw) || ownerRaw < 0)) {
+      throw new TypeError(`投影产物 anchors[${index}].ownerPart 应为非负整数或 null`);
+    }
+    const onPart = record.onPart;
+    if (typeof onPart !== "boolean") {
+      throw new TypeError(`投影产物 anchors[${index}].onPart 应为布尔`);
+    }
+    const surfaceDistanceMm = record.surfaceDistanceMm;
+    const bboxDistanceMm = record.bboxDistanceMm;
+    const nearestPart = record.nearestPart;
+    const nearestSurfaceDistanceMm = record.nearestSurfaceDistanceMm;
+    return {
+      point,
+      ownerPart: ownerRaw === null ? null : ownerRaw,
+      onPart,
+      ...(typeof surfaceDistanceMm === "number" ? { surfaceDistanceMm } : {}),
+      ...(typeof bboxDistanceMm === "number" ? { bboxDistanceMm } : {}),
+      ...(typeof nearestPart === "number" ? { nearestPart } : {}),
+      ...(typeof nearestSurfaceDistanceMm === "number" ? { nearestSurfaceDistanceMm } : {}),
+    };
+  });
+}
+
+/** 解析三维有限数数组。 */
+function parseTriple(raw: unknown, label: string): [number, number, number] {
+  if (
+    !Array.isArray(raw) ||
+    raw.length !== 3 ||
+    typeof raw[0] !== "number" ||
+    typeof raw[1] !== "number" ||
+    typeof raw[2] !== "number" ||
+    !Number.isFinite(raw[0]) ||
+    !Number.isFinite(raw[1]) ||
+    !Number.isFinite(raw[2])
+  ) {
+    throw new TypeError(`投影产物 ${label} 应为 [number, number, number]`);
+  }
+  return [raw[0], raw[1], raw[2]];
+}
+
+/** 解析二维有限数数组。 */
+function parsePair(raw: unknown, label: string): [number, number] {
+  if (
+    !Array.isArray(raw) ||
+    raw.length !== 2 ||
+    typeof raw[0] !== "number" ||
+    typeof raw[1] !== "number" ||
+    !Number.isFinite(raw[0]) ||
+    !Number.isFinite(raw[1])
+  ) {
+    throw new TypeError(`投影产物 ${label} 应为 [number, number]`);
+  }
+  return [raw[0], raw[1]];
 }
 
 /** 解析剖切参数（缺省 = 整视图；出现但结构非法即抛错）。 */
@@ -527,7 +490,7 @@ function parseAxes(raw: unknown): CadAxisImages {
 }
 
 /**
- * 从子进程输出里取失败真因（`projectStep` 的两条失败路径共用）。
+ * 从子进程输出里取失败真因（`projectViews` 的两条失败路径共用）。
  *
  * 顺序：脚本自写的标记行（`CAD_ERROR_MARKER`）→ stderr 尾部 → stdout 尾部。
  * **不能只看退出码**：实测 freecadcmd 对未捕获的 Python 异常**退出码为 0**，真因只在 stderr
@@ -549,21 +512,24 @@ export function describeCadFailure(stdout: string, stderr: string): string {
   return stdoutTail.length > 0 ? `stderr 为空；stdout 尾部：${stdoutTail}` : "子进程无任何输出";
 }
 
-export type ProjectStepOptions = {
+export type ProjectViewsOptions = {
   /** freecadcmd 路径（由 `resolveFreecadCmd` 得到）。 */
   cmd: string;
   stepPath: string;
-  view: CadView;
-  toleranceMm?: number;
-  /** 剖切（全剖视图）：见 `ProjectionScriptOptions.sectionOffsetMm`。 */
+  /** 请求的视图（顺序即输出顺序；第一个是主视图）。 */
+  views: readonly CadView[];
+  /** 剖切（只作用于主视图）：见 `ProjectionScriptOptions.sectionOffsetMm`。 */
   sectionOffsetMm?: number;
+  toleranceMm?: number;
+  /** 显式锚点探针（模型坐标）：脚本按零件真实几何核对归属。 */
+  anchorProbes?: readonly (readonly [number, number, number])[];
   timeoutMs?: number;
   /** 注入点：单测传假运行器（不真跑 FreeCAD）。 */
   runner?: CadRunner;
 };
 
 /**
- * 跑一次无头投影，返回边表（失败 fail-closed：绝不静默回退到别的渲染器）。
+ * 跑**一次**无头投影，产出全部请求视图 + 每零件几何事实 + 锚点归属。
  *
  * 脚本经**临时文件**交付：`freecadcmd` 的位置参数才是"要执行的脚本"，而 `-c` 是
  * "console 模式"开关（**不是** `python -c`）——把脚本内容当参数传会被当作文件名。
@@ -572,16 +538,21 @@ export type ProjectStepOptions = {
  * 两条失败路径（退出码非 0 / 输出不可解析）都经 `describeCadFailure` 带出真因——
  * **不得**以退出码为 0 判定成功（文件头注 6）。
  */
-export async function projectStep(options: ProjectStepOptions): Promise<CadEdgeTable> {
+export async function projectViews(options: ProjectViewsOptions): Promise<CadProjectionPayload> {
   const runner = options.runner ?? defaultCadRunner;
-  if (options.sectionOffsetMm !== undefined && !isCadSectionView(options.view)) {
-    throw new TypeError(`视图 ${options.view} 不能剖切（剖切要求轴对齐视图：${CAD_SECTION_VIEWS.join(", ")}）`);
+  if (options.views.length === 0) {
+    throw new TypeError("投影视图集为空：至少要一个视图");
+  }
+  const primary = options.views[0]!;
+  if (options.sectionOffsetMm !== undefined && !isCadSectionView(primary)) {
+    throw new TypeError(`视图 ${primary} 不能剖切（剖切要求轴对齐视图）`);
   }
   const script = buildProjectionScript({
     stepPath: options.stepPath,
-    view: options.view,
-    ...(options.toleranceMm === undefined ? {} : { toleranceMm: options.toleranceMm }),
+    views: options.views,
     ...(options.sectionOffsetMm === undefined ? {} : { sectionOffsetMm: options.sectionOffsetMm }),
+    ...(options.toleranceMm === undefined ? {} : { toleranceMm: options.toleranceMm }),
+    ...(options.anchorProbes === undefined ? {} : { anchorProbes: options.anchorProbes }),
   });
   const dir = await mkdtemp(join(tmpdir(), "sati-cad-"));
   const scriptPath = join(dir, "project.py");
@@ -593,9 +564,9 @@ export async function projectStep(options: ProjectStepOptions): Promise<CadEdgeT
     if (code !== 0) {
       throw new Error(`freecadcmd 投影失败（退出码 ${String(code)}）：${describeCadFailure(stdout, stderr)}`);
     }
-    let table: CadEdgeTable;
+    let payload: CadProjectionPayload;
     try {
-      table = parseProjectionOutput(stdout);
+      payload = parseProjectionPayload(stdout);
     } catch (err) {
       // 退出码 0 **不是**成功的充分条件：实测 freecadcmd 对未捕获的 Python 异常退出码为 0，
       // 真因只在 stderr ⇒ 解析失败必须把两侧输出一并带出（见 `describeCadFailure`）。
@@ -604,11 +575,38 @@ export async function projectStep(options: ProjectStepOptions): Promise<CadEdgeT
         `freecadcmd 投影失败（退出码 0，输出不可解析：${reason}）：${describeCadFailure(stdout, stderr)}`,
       );
     }
-    if (table.edges.length > CAD_MAX_EDGES) {
-      throw new Error(`投影边数 ${table.edges.length} 超过上限 ${CAD_MAX_EDGES}——请改用更小的装配或分次投影`);
+    for (const table of payload.views) {
+      if (table.edges.length > CAD_MAX_EDGES) {
+        throw new Error(
+          `视图 ${table.view} 的投影边数 ${table.edges.length} 超过上限 ${CAD_MAX_EDGES}——请改用更小的装配或分次投影`,
+        );
+      }
     }
-    return table;
+    return payload;
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+}
+
+export type ProjectStepOptions = Omit<ProjectViewsOptions, "views" | "anchorProbes"> & {
+  /** 单视图（既有调用方的入口；内部走 `projectViews` 的单视图路径）。 */
+  view: CadView;
+};
+
+/**
+ * 跑一次无头投影，返回**主视图**的边表（失败 fail-closed：绝不静默回退到别的渲染器）。
+ *
+ * 单视图路径的薄封装：真正干活的是 `projectViews`（多视图同一条实现），
+ * 避免"单视图一套、多视图一套"两套投影口径各自漂移。
+ */
+export async function projectStep(options: ProjectStepOptions): Promise<CadEdgeTable> {
+  const payload = await projectViews({
+    ...options,
+    views: [options.view],
+  });
+  const primary = payload.views[0];
+  if (primary === undefined) {
+    throw new Error("投影产物没有任何视图");
+  }
+  return primary;
 }

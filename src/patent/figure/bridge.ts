@@ -15,7 +15,7 @@
  * 保留几何会让调用方误以为那些判定可信。
  */
 
-import { stripRefMark, type FigureNode, type FigureSpec } from "../figuregen/index.js";
+import { figureNodes, stripRefMark, type FigureNode, type FigureSpec } from "../figuregen/index.js";
 import type { FigureAnalysisResult, FigureComponent } from "./types.js";
 
 /** 附图标记号取值合法域（纯数字 1..999；无标号部件如 U1 不参与数字档对齐）。 */
@@ -60,7 +60,7 @@ export function figureSpecsToAnalysis(figures: readonly FigureSpec[]): FigureAna
     figureNumber: figure.figure_no,
     figureType: "unknown" as const,
     overallDescription: "",
-    components: figure.nodes.map(nodeToComponent),
+    components: figureNodes(figure).map(nodeToComponent),
     connections: [],
     figureDescription: "",
     confidence: 1,

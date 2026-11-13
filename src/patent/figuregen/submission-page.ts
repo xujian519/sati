@@ -24,7 +24,7 @@ import { CSS_PX_PER_INCH, MM_PER_INCH, pxToMm } from "./page-contract.js";
 import { SVG_FIGURE_KIND_ATTRIBUTE, escapeXml, fmt as fmtShared } from "./render-utils.js";
 
 /** 图内文字的默认估算字高（毫米）：内置渲染器 FIGURE_FONT_SIZE=14px。 */
-const DEFAULT_SOURCE_CHAR_MM = (14 / CSS_PX_PER_INCH) * MM_PER_INCH;
+export const DEFAULT_SOURCE_CHAR_MM = (14 / CSS_PX_PER_INCH) * MM_PER_INCH;
 
 export type SubmissionPageOptions = {
   /** 图形 SVG 文本（本模块渲染器的产物；png/pdf 不在 Sati 产物内，无需处理）。 */
@@ -49,6 +49,15 @@ export type SubmissionPageOptions = {
   captionGapMm?: number;
   /** 放大上限（小图放大到失真没有意义）；缺省 4 倍，超限截断并出 warning。 */
   maxUpscale?: number;
+  /**
+   * 落版旋转角（度）：只取 0/90/180/270（斜置会让墨迹越出幅面）。缺省 0 = 不旋转。
+   *
+   * 90/270 会**交换落版后的占位宽高**：横向图形借它落进竖向版心时缩得更小、图更大。
+   *
+   * ⚠️ 旋转会把图面里的文字一起转 90°——只适用于「图面无文字」或「文字随图一起转仍可读」
+   * 的场合。默认关闭；启用前请确认图面文字的阅读方向。
+   */
+  rotateDeg?: number;
   /**
    * 图形自身坐标下"图内文字"的字高（毫米）；缺省按内置渲染器的 14px 折算。
    * graphviz 产物以 pt 计，调用方可传 `pt→mm` 的结果，使字高估算与实际一致。
@@ -83,7 +92,7 @@ export type SubmissionPageResult = {
 };
 
 /** 图形画幅（毫米）：先读 width/height 声明，缺失时回落 viewBox（按 CSS px 折算）。 */
-function drawingSizeMm(svg: string): { widthMm: number; heightMm: number } {
+export function drawingSizeMm(svg: string): { widthMm: number; heightMm: number } {
   const declared = svgRootSizeMm(svg);
   if (declared !== undefined) return declared;
   const viewBox = svg.match(/<svg\b[^>]*\bviewBox="[\d.]+ [-\d.]+ ([\d.]+) ([\d.]+)"/u);
@@ -98,7 +107,10 @@ function drawingSizeMm(svg: string): { widthMm: number; heightMm: number } {
 }
 
 /** 把图形 SVG 改写为父坐标系下的嵌套 `<svg>`（去掉自己的 xmlns 与宽高，改由父级定位）。 */
-function nestDrawing(svg: string, placed: { xMm: number; yMm: number; widthMm: number; heightMm: number }): string {
+export function nestDrawing(
+  svg: string,
+  placed: { xMm: number; yMm: number; widthMm: number; heightMm: number },
+): string {
   const rootMatch = svg.match(/<svg\b([^>]*)>/u);
   if (rootMatch === null) {
     throw new TypeError("图形 SVG 缺少 <svg 根元素");
@@ -116,14 +128,23 @@ function nestDrawing(svg: string, placed: { xMm: number; yMm: number; widthMm: n
  * 图形 SVG 的根元素标注原样带到页面上：图号使落版页同样可被 `parseFigureSvg` 回读，
  * 图型使渲染复核在页级仍能识别曲线图（`data-figure-no` 与
  * {@link SVG_FIGURE_KIND_ATTRIBUTE} 都由绘图侧写在同一处根元素上）。
+ *
+ * @param drawingSvg - 图形 SVG 文本。
+ * @param figureNoOverride - **图号覆盖**：拼版页（`submission-sheet.ts`）承载的是同一幅图的
+ * 多个视图，各视图 SVG 上的图号可能缺失（CAD 图不写该属性），由页面统一声明图号更可靠。
+ * 缺省时沿用图形自身的标注（本模块的单图落版页走的就是这条 ⇒ 产物逐字节不变）。
  */
-function rootMarkers(drawingSvg: string): string {
-  const figureNo = drawingSvg.match(/\bdata-figure-no="(\d+)"/u)?.[1];
+export function rootMarkers(drawingSvg: string, figureNoOverride?: number): string {
+  const figureNo =
+    figureNoOverride === undefined ? drawingSvg.match(/\bdata-figure-no="(\d+)"/u)?.[1] : String(figureNoOverride);
   const kind = drawingSvg.match(new RegExp(`\\b${SVG_FIGURE_KIND_ATTRIBUTE}="([a-z]+)"`, "u"))?.[1];
   return `${figureNo === undefined ? "" : `data-figure-no="${figureNo}" `}${
     kind === undefined ? "" : `${SVG_FIGURE_KIND_ATTRIBUTE}="${kind}" `
   }`;
 }
+
+/** 落版支持的旋转角（度）：只取直角，避免斜置后墨迹越出幅面。 */
+const ROTATION_DEGREES = [0, 90, 180, 270] as const;
 
 /** 落版页坐标精度：2 位小数（纸面毫米；版心定位不需要 CAD 那样的微米级）。 */
 const SUBMISSION_COORD_DIGITS = 2;
@@ -132,6 +153,11 @@ const fmt = (value: number): string => fmtShared(value, SUBMISSION_COORD_DIGITS)
 
 /**
  * 生成提交落版页（单页 A4，图形居中 + 图号在图下 + 页码在版心底）。
+ *
+ * ⚠️ 2026-11-12 修复：根 `<svg>` 开始标签此前**缺闭合符 `>`**（属性行直接接换行），
+ * 产出的 `-page.svg` **不是合法 XML**——xmllint / librsvg / rsvg-convert 等严格渲染器
+ * 会拒绝它（浏览器与我们的正则回读器能容忍，所以此前没被发现）。交付物要送审、能被
+ * 第三方工具打开 ⇒ 补上 `>`。**这会改变既有 `-page.svg` 的字节**（属缺陷修复，不是行为变更）。
  *
  * 图号与页码文本由调用方经 `figureCaption` / `sheetNumberText` 取得——本模块**不自行解释**
  * 编号与页码规则（那两处是法域档案的职责，两处各解释一次必然漂移）。
@@ -143,6 +169,10 @@ export function buildSubmissionPage(options: SubmissionPageOptions): SubmissionP
   const sheetFontMm = options.sheetFontMm ?? 3.2;
   const captionGapMm = options.captionGapMm ?? 4;
   const maxUpscale = options.maxUpscale ?? 4;
+  const rotateDeg = options.rotateDeg ?? 0;
+  if (!(ROTATION_DEGREES as readonly number[]).includes(rotateDeg)) {
+    throw new TypeError(`落版旋转角必须是 0/90/180/270 之一，收到 ${String(rotateDeg)}`);
+  }
   const warnings: string[] = [];
 
   const drawing = drawingSizeMm(options.drawingSvg);
@@ -161,7 +191,12 @@ export function buildSubmissionPage(options: SubmissionPageOptions): SubmissionP
     throw new TypeError(`版心不足以容纳图形与图号/页码（${profile.office} 版心高 ${area.heightMm}mm）`);
   }
 
-  const fit = Math.min(area.widthMm / drawing.widthMm, drawingAreaHeightMm / drawing.heightMm);
+  // 90/270 交换占位宽高：缩放比必须按旋转**后**的占位算，否则转过来的图形会越出可绘图区。
+  // 旋转绕摆放框中心（该中心与旋转角无关），未旋转的摆放框仍以同一中心定位。
+  const quarterTurn = rotateDeg === 90 || rotateDeg === 270;
+  const fit = quarterTurn
+    ? Math.min(area.widthMm / drawing.heightMm, drawingAreaHeightMm / drawing.widthMm)
+    : Math.min(area.widthMm / drawing.widthMm, drawingAreaHeightMm / drawing.heightMm);
   const pageScale = Math.min(fit, maxUpscale);
   if (fit > maxUpscale) {
     warnings.push(
@@ -179,6 +214,12 @@ export function buildSubmissionPage(options: SubmissionPageOptions): SubmissionP
   const placed = { widthMm: drawing.widthMm * pageScale, heightMm: drawing.heightMm * pageScale };
   const drawingX = (area.widthMm - placed.widthMm) / 2 + profile.margins.leftMm;
   const drawingY = (drawingAreaHeightMm - placed.heightMm) / 2 + profile.margins.topMm;
+  // 旋转组：绕摆放框中心旋转（0/180 不加组 ⇒ 默认产物逐字节不变）。
+  const rotateGroup =
+    rotateDeg === 0
+      ? ""
+      : `<g transform="rotate(${String(rotateDeg)} ${fmt(drawingX + placed.widthMm / 2)} ${fmt(drawingY + placed.heightMm / 2)})">`;
+  const rotateGroupClose = rotateDeg === 0 ? "" : "</g>\n";
   const captionBaselineMm =
     options.caption === undefined
       ? undefined
@@ -197,9 +238,9 @@ export function buildSubmissionPage(options: SubmissionPageOptions): SubmissionP
     `width="${fmt(profile.paper.widthMm)}mm" ` +
     `height="${fmt(profile.paper.heightMm)}mm" ` +
     `viewBox="0 0 ${fmt(profile.paper.widthMm)} ${fmt(profile.paper.heightMm)}" ` +
-    `font-family="sans-serif"\n` +
+    `font-family="sans-serif">\n` +
     `<rect x="0" y="0" width="${fmt(profile.paper.widthMm)}" height="${fmt(profile.paper.heightMm)}" fill="#FFFFFF"/>\n` +
-    `${nestDrawing(options.drawingSvg, { xMm: drawingX, yMm: drawingY, ...placed })}\n` +
+    `${rotateGroup}${nestDrawing(options.drawingSvg, { xMm: drawingX, yMm: drawingY, ...placed })}\n${rotateGroupClose}` +
     (captionBaselineMm === undefined || options.caption === undefined
       ? ""
       : textMarkup(options.caption, captionBaselineMm, captionFontMm)) +
@@ -214,8 +255,8 @@ export function buildSubmissionPage(options: SubmissionPageOptions): SubmissionP
       pageScale,
       drawingWidthMm: drawing.widthMm,
       drawingHeightMm: drawing.heightMm,
-      placedWidthMm: placed.widthMm,
-      placedHeightMm: placed.heightMm,
+      placedWidthMm: quarterTurn ? placed.heightMm : placed.widthMm,
+      placedHeightMm: quarterTurn ? placed.widthMm : placed.heightMm,
       charHeightMm,
       reducedCharHeightMm: charHeightMm * profile.reductionRatio,
       ...(captionBaselineMm === undefined ? {} : { captionBaselineMm }),

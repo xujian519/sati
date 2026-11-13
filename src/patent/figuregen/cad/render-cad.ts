@@ -59,6 +59,13 @@ export type CadRefAnnotation = {
    * 缺省按"远离图心"方向自动放置（常规制图做法：标号向图外引）。
    */
   labelOffsetMm?: readonly [number, number];
+  /**
+   * 锚点在**投影平面**内的微调（毫米，沿 u/v 方向）。
+   *
+   * 用途：把引线起点推到零件投影包围盒之外（自动件号用）——引线自零件轮廓向外引出，
+   * 不横穿零件面。缺省为零偏移（调用方自己选的点不动）。
+   */
+  anchorOffsetMm?: readonly [number, number];
 };
 
 export type CadRenderOptions = {
@@ -109,6 +116,13 @@ export type CadRenderResult = {
   cutFaces: number;
   /** 剖面线段数（0 而 cutFaces > 0 说明剖切面过小，剖面线无法表达）。 */
   hatchSegments: number;
+  /**
+   * 各剖切面的剖面线方向角（度；按几何邻近排序后的顺序）。
+   *
+   * 相邻零件的剖面线方向交替（GB/T 4457.5：相邻零件的剖面线方向或间距应不同），
+   * 否则图面上相邻材料区域糊成一片、不可分辨。
+   */
+  hatchAnglesDeg: number[];
   /** 标注落位（缺省无标注时为空数组）。 */
   labels: CadLabelPlacement[];
   /** 标注择位告警（无可用引线落位 ⇒ 退化就地标号；缺省无标注时为空数组）。 */
@@ -238,23 +252,48 @@ const CAD_COORD_DIGITS = 3;
 const fmt = (value: number): string => fmtShared(value, CAD_COORD_DIGITS);
 
 /**
- * 多边形剖面线（45°，纸面毫米间距；扫描线 + 奇偶规则，纯函数）。
+ * 剖面线方向（度，纸面坐标系：x 向右、y 向下）。
  *
- * 在旋转到 45° 的坐标系里做横向扫描线：`X=(x+y)/√2, Y=(y−x)/√2` ⇒ 剖面线即 `Y=const`，
+ * GB/T 4457.5：同一张图上**相邻零件**的剖面线方向应相反（或间距不等），否则相邻材料区域
+ * 在图面上不可分辨。本仓取"方向相反"这一支：45° 与 135° 交替（`CAD_HATCH_ANGLE_*`）。
+ */
+export const CAD_HATCH_ANGLE_FORWARD_DEG = 45;
+export const CAD_HATCH_ANGLE_BACKWARD_DEG = 135;
+
+/** 剖面线填充参数（方向与相位）。 */
+export type CadHatchOptions = {
+  /**
+   * 剖面线方向角（度，纸面坐标系；0 = 水平）。缺省 45°（与既有实现一致）。
+   *
+   * 方向角按"纸面里线段与 +x 轴的夹角"定义（y 向下 ⇒ 正角在图面上顺时针）。
+   */
+  angleDeg?: number;
+  /** 相位偏移（毫米，沿剖面线法向）：同一方向的两处剖面线相位一致时用它错开。 */
+  phaseOffsetMm?: number;
+};
+
+/**
+ * 多边形剖面线（方向可参数化；纸面毫米间距；扫描线 + 奇偶规则，纯函数）。
+ *
+ * 在旋转到"剖面线方向"的坐标系里做横向扫描线：把点转过 −angle 后，剖面线即 `Y=const`，
  * 相邻线在纸面上的垂直距离恰为 `spacingMm`。奇偶规则使多环（外环 + 孔/缺口内环）
  * 自动留空，无需单独处理洞。
  *
  * 扫描线相位对齐全局网格（`Y = ceil(Ymin/间距)·间距`）：同一张图的两处剖切面剖面线
- * 相位一致，且结果与调用顺序无关（确定性）。
+ * 相位一致，且结果与调用顺序无关（确定性）。`phaseOffsetMm` 用来在同方向的两组之间错开。
  */
 export function hatchPolylines(
   loops: readonly (readonly (readonly [number, number])[])[],
   spacingMm: number,
+  options: CadHatchOptions = {},
 ): [number, number][][] {
   if (spacingMm <= 0 || loops.length === 0) return [];
-  const k = Math.SQRT1_2;
-  const rotate = ([x, y]: readonly [number, number]): [number, number] => [(x + y) * k, (y - x) * k];
-  const unrotate = ([x, y]: readonly [number, number]): [number, number] => [(x - y) * k, (x + y) * k];
+  const radians = ((options.angleDeg ?? CAD_HATCH_ANGLE_FORWARD_DEG) * Math.PI) / 180;
+  const cos = Math.cos(radians);
+  const sin = Math.sin(radians);
+  const rotate = ([x, y]: readonly [number, number]): [number, number] => [x * cos + y * sin, -x * sin + y * cos];
+  const unrotate = ([x, y]: readonly [number, number]): [number, number] => [x * cos - y * sin, x * sin + y * cos];
+  const phase = options.phaseOffsetMm ?? 0;
   const rotated = loops.map(loop => loop.map(rotate));
   const allY = rotated.flatMap(loop => loop.map(point => point[1]));
   const minY = Math.min(...allY);
@@ -266,7 +305,7 @@ export function hatchPolylines(
     }
   }
   const segments: [number, number][][] = [];
-  const first = Math.ceil(minY / spacingMm - 1e-9) * spacingMm;
+  const first = Math.ceil((minY - phase) / spacingMm - 1e-9) * spacingMm + phase;
   for (let y = first; y <= maxY + 1e-9; y += spacingMm) {
     const crossings: number[] = [];
     for (const [a, b] of edges) {
@@ -285,6 +324,32 @@ export function hatchPolylines(
     }
   }
   return segments;
+}
+
+/**
+ * 剖切面按**几何邻近**排序（纸面坐标；先 x 后 y）。
+ *
+ * 相邻关系用现有几何信息判定：同一剖切面上的各材料区域，其投影质心沿图面横向排开，
+ * 于是"相邻"= 质心相邻 ⇒ 剖面线方向按此顺序交替，两侧材料必然一正一反。
+ */
+export function orderCutFacesByProximity(
+  faces: readonly (readonly (readonly (readonly [number, number])[])[])[],
+  toPaper: (point: readonly [number, number]) => readonly [number, number],
+): (readonly (readonly (readonly [number, number])[])[])[] {
+  return faces
+    .map((loops, index) => {
+      const points = loops.flat();
+      const centroid: [number, number] =
+        points.length === 0
+          ? [0, 0]
+          : [
+              points.reduce((sum, point) => sum + toPaper(point)[0], 0) / points.length,
+              points.reduce((sum, point) => sum + toPaper(point)[1], 0) / points.length,
+            ];
+      return { index, centroid };
+    })
+    .sort((left, right) => left.centroid[0] - right.centroid[0] || left.centroid[1] - right.centroid[1])
+    .map(entry => faces[entry.index]!);
 }
 
 /**
@@ -343,7 +408,17 @@ export function renderCadSvg(table: CadEdgeTable, options: CadRenderOptions): Ca
     options.jurisdiction === "us" ? "uspto" : options.jurisdiction === "pct" ? "pct" : "cnipa",
   );
   const area = printableArea(profile);
-  const anchorsLocal = annotations.map(annotation => localFromModel(annotation.atMm));
+  // 锚点投影：先按模型坐标投影到 (u,v)，再叠加"投影平面内的锚点微调"（自动件号用来把
+  // 引线起点推到零件投影包围盒之外），最后才做朝向对齐 ⇒ 微调量与投影平面同坐标系。
+  // 微调**不得越出已绘制几何的范围**：最外层零件处"零件轮廓之外"与"图面之内"不可兼得，
+  // 此时夹回图面之内（否则引线起点跑到图外，还会误触 C8「锚点落在投影几何之外」）。
+  const anchorsLocal = annotations.map(annotation => {
+    const [u, v] = projectModelPoints(table.axes, [annotation.atMm])[0]!;
+    const offset = annotation.anchorOffsetMm;
+    if (offset === undefined) return localFromUv(u, v);
+    const raw = localFromUv(u + offset[0], v + offset[1]);
+    return [Math.min(Math.max(raw[0], minX), maxX), Math.min(Math.max(raw[1], minY), maxY)] as [number, number];
+  });
   const reserve = (() => {
     if (annotations.length === 0) return 0;
     let needed = 0;
@@ -404,16 +479,21 @@ export function renderCadSvg(table: CadEdgeTable, options: CadRenderOptions): Ca
     })
     .join("\n");
 
-  // 剖面线：剖切面轮廓 → 纸面多边形 → 45° 扫描线填充（细实线，先于轮廓绘制）
+  // 剖面线：剖切面轮廓 → 纸面多边形 → 扫描线填充（细实线，先于轮廓绘制）。
+  // 相邻零件的剖面线**方向相反**（GB/T 4457.5）：按几何邻近排序后 45°/135° 交替。
   const cutFaces = table.cutFaces ?? [];
   const toPaperFromModel = (point: readonly [number, number, number]): [number, number] => {
     const [x, y] = localFromModel(point);
     return toPaper(x, y);
   };
+  const orderedFaces = orderCutFacesByProximity(cutFacePolylines(cutFaces, toPaperFromModel), point => point);
+  const hatchAnglesDeg: number[] = [];
   const hatchSegments: [number, number][][] = [];
-  for (const loops of cutFacePolylines(cutFaces, toPaperFromModel)) {
-    hatchSegments.push(...hatchPolylines(loops, CAD_HATCH_SPACING_MM));
-  }
+  orderedFaces.forEach((loops, index) => {
+    const angleDeg = index % 2 === 0 ? CAD_HATCH_ANGLE_FORWARD_DEG : CAD_HATCH_ANGLE_BACKWARD_DEG;
+    hatchAnglesDeg.push(angleDeg);
+    hatchSegments.push(...hatchPolylines(loops, CAD_HATCH_SPACING_MM, { angleDeg }));
+  });
   const hatchPath =
     hatchSegments.length === 0
       ? ""
@@ -526,6 +606,7 @@ export function renderCadSvg(table: CadEdgeTable, options: CadRenderOptions): Ca
     hiddenEdges: table.edges.filter(edge => edge.kind === "hidden").length,
     cutFaces: cutFaces.length,
     hatchSegments: hatchSegments.length,
+    hatchAnglesDeg,
     labels,
     labelWarnings: plan.warnings,
     geometryBoundsMm,

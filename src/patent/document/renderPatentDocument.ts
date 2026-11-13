@@ -241,6 +241,14 @@ export async function renderPatentDocument(input: DocumentRenderInput, cwd: stri
           const failures = verification.findings.filter(finding => finding.severity === "fail");
           docxError = `DOCX 成品核验未通过（${failures.length} 项）：${failures.map(f => f.message).join("；")}`;
         }
+        // warn 级发现也要出声：它们不阻断交付，但「不阻断」不等于「没发生」——
+        // 只报 fail 会让「件内容缺失」「图片未落地」这类输入侧事实在模型可见面里彻底消失。
+        const advisories = verification.findings.filter(finding => finding.severity === "warn");
+        if (advisories.length > 0) {
+          warnings.push(
+            `DOCX 核验提示（${advisories.length} 项，不阻断交付）: ${advisories.map(f => f.message).join("；")}`,
+          );
+        }
       } catch (err) {
         // 核验器自身失败也必须报告：不得静默当作通过（「未核验」≠「已核验且无问题」）。
         const reason = err instanceof Error ? err.message : String(err);

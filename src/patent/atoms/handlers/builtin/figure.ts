@@ -14,7 +14,7 @@
  * - **fail 级** → `InterruptStageError` 挂 HITL（编号选择：1=确认放行 / 2=重新生成附图 /
  *   3=退回）；已批准时经 `APPROVAL_GRANTED_KEY` 强制放行并在报告标注"人工强制放行"
  *   （语义与 clarity-gate 同构，放行标记只存在于 handler 局部执行态，见 gate.ts）。
- *   fail 面 = V 规则 + PX 像素门禁 + RC 交付图面复核 + C 投影几何，四族同权。
+ *   fail 面 = V 规则 + PX 像素门禁 + RC 交付图面复核 + DR 交付面复核 + C 投影几何，五族同权。
  * - **warn 级** → 报告透传，不阻断撰写。
  * - **sidecar 与 SVG 漂移**（图被手工改写/移动，或 sidecar 被改坏）→ fail-loud 挂 HITL：
  *   漂移下"核验通过"不成立，宁可中断也不给出假保证。
@@ -67,6 +67,9 @@ import {
   type TargetOffice,
 } from "../../../figuregen/index.js";
 import { caseOutputsDir } from "../../../paths.js";
+// 交付面复核（DR 族 + 图面用语终检）：barrel 导出由主代理统一补齐，此处直连子模块，
+// 避免两处改动互相等待。
+import { checkFigureDelivery } from "../../../figuregen/delivery-review.js";
 import { APPROVAL_GRANTED_KEY } from "./gate.js";
 import { degraded } from "./llm.js";
 
@@ -145,6 +148,13 @@ export type FigureGateRenderCheck = {
 };
 
 /**
+ * 已交付 SVG 的交付面复核（DR 族 + 图面用语终检）：与 {@link FigureGateRenderCheck} 同形，
+ * 规则族不同——RC* 是**几何量测**（文字被线贯穿、净距、越界），DR* 是**交付面复核**
+ * （位图/照片、横向摆放、整幅框线、图面用语）。
+ */
+export type FigureGateDeliveryCheck = FigureGateRenderCheck;
+
+/**
  * 回读自检：sidecar 声明的图必须与其 SVG 的图号 / data-ref 集合一致（漂移 fail-loud）。
  *
  * 顺带产出三类观测，避免再读一遍盘：
@@ -158,6 +168,7 @@ export async function detectFigureDrift(inputs: LocatedInputs): Promise<{
   paperSizes: { figure_no: number; widthMm: number; heightMm: number }[];
   unmeasuredPaperSizes: number[];
   renderChecks: FigureGateRenderCheck[];
+  deliveryChecks: FigureGateDeliveryCheck[];
   svgDigests: { name: string; digest: string }[];
 }> {
   const drifts: string[] = [];
@@ -165,6 +176,7 @@ export async function detectFigureDrift(inputs: LocatedInputs): Promise<{
   const paperSizes: { figure_no: number; widthMm: number; heightMm: number }[] = [];
   const unmeasuredPaperSizes: number[] = [];
   const renderChecks: FigureGateRenderCheck[] = [];
+  const deliveryChecks: FigureGateDeliveryCheck[] = [];
   const svgDigests: { name: string; digest: string }[] = [];
   for (const figure of inputs.sidecar.figures) {
     const path = join(inputs.dir, figure.file);
@@ -242,8 +254,27 @@ export async function detectFigureDrift(inputs: LocatedInputs): Promise<{
           "——该图缺少文字贯穿/净距/越界核验",
       );
     }
+    // 交付面复核（DR 族 + 图面用语终检）：判据只吃**这份已交付的 SVG**（位图/照片、
+    // 横向摆放、整幅框线、图面用语），与吃 FigureSpec 的 V* 规则互补。复核跑不完时
+    // 同样记 drift——"没跑"不能被当作"没问题"。
+    try {
+      deliveryChecks.push({
+        figure_no: figure.spec.figure_no,
+        path: figure.file,
+        findings: checkFigureDelivery(svg, { jurisdiction: inputs.sidecar.jurisdiction }).map(finding => ({
+          rule: finding.rule,
+          severity: finding.severity,
+          message: finding.message,
+        })),
+      });
+    } catch (err) {
+      drifts.push(
+        `图${figure.figure_no}: 交付面复核未完成（${err instanceof Error ? err.message : String(err)}）` +
+          "——该图缺少位图/方向/整幅框线/图面用语核验",
+      );
+    }
   }
-  return { drifts, numberedFigureNos, paperSizes, unmeasuredPaperSizes, renderChecks, svgDigests };
+  return { drifts, numberedFigureNos, paperSizes, unmeasuredPaperSizes, renderChecks, deliveryChecks, svgDigests };
 }
 
 /** 栅格附图扩展名（`pixel-gate` 经 sharp 解码的格式）。 */
@@ -407,6 +438,7 @@ function renderReport(input: {
   result: FigureCheckResult;
   raster: RasterGateObservation;
   renderChecks: readonly FigureGateRenderCheck[];
+  deliveryChecks: readonly FigureGateDeliveryCheck[];
   geometryFindings: readonly { rule: string; severity: FigureCheckSeverity; message: string; figure_no: number }[];
   textFaces: string;
   skippedTextRules: boolean;
@@ -431,9 +463,20 @@ function renderReport(input: {
     entry.findings.map(finding => ({ ...finding, figure_no: entry.figure_no })),
   );
   const renderFails = renderFindings.filter(f => f.severity === "fail");
+  // 交付面复核（DR*：位图/照片、横向摆放、整幅框线；图面用语终检沿用 V12/V13/V14）
+  // 与 RC*、C* 同权：都是"交付出去就不符合提交要求"的缺陷。
+  const deliveryFindings = input.deliveryChecks.flatMap(entry =>
+    entry.findings.map(finding => ({ ...finding, figure_no: entry.figure_no })),
+  );
+  const deliveryFails = deliveryFindings.filter(f => f.severity === "fail");
   const geometryFails = input.geometryFindings.filter(f => f.severity === "fail");
   const degradedRaster = rasterEntries.filter(entry => !entry.measured).length;
-  const passed = input.result.ok && rasterFails.length === 0 && renderFails.length === 0 && geometryFails.length === 0;
+  const passed =
+    input.result.ok &&
+    rasterFails.length === 0 &&
+    renderFails.length === 0 &&
+    deliveryFails.length === 0 &&
+    geometryFails.length === 0;
   // 计数取跨层去重后的值（C9↔RC5、C11↔RC1 是同一缺陷的两层证据）；阻断仍看 rawFail。
   const { fail: failCount, warn: warnCount } = input.counts;
   const lines = [
@@ -479,6 +522,12 @@ function renderReport(input: {
   if (renderFindings.length > 0) {
     lines.push("", "已交付图面的渲染复核（RC*，矢量源几何量测）：");
     for (const finding of renderFindings) {
+      lines.push(`- [${finding.severity.toUpperCase()}] ${finding.rule}（图${finding.figure_no}）: ${finding.message}`);
+    }
+  }
+  if (deliveryFindings.length > 0) {
+    lines.push("", "已交付图面的交付面复核（DR*：位图/照片、横向摆放、整幅框线；图面用语终检沿用 V12/V13/V14）：");
+    for (const finding of deliveryFindings) {
       lines.push(`- [${finding.severity.toUpperCase()}] ${finding.rule}（图${finding.figure_no}）: ${finding.message}`);
     }
   }
@@ -530,7 +579,7 @@ export class FigureGateHandler implements StageHandler {
 
     // 先回读交付文件（漂移检测与图号观测同源），再跑确定性规则——图号义务（V15/V16）只有
     // 在交付形态可观测时才能判，缺了观测就退化成"猜渲染器应该怎么写"。
-    const { drifts, numberedFigureNos, paperSizes, unmeasuredPaperSizes, renderChecks, svgDigests } =
+    const { drifts, numberedFigureNos, paperSizes, unmeasuredPaperSizes, renderChecks, deliveryChecks, svgDigests } =
       await detectFigureDrift(located);
     // 投影期几何检查（C*）随 sidecar 落盘；它们与 V*/RC* 同权，任一 fail 都不放行。
     const geometryFindings = sidecar.figures.flatMap(figure =>
@@ -562,12 +611,18 @@ export class FigureGateHandler implements StageHandler {
     const renderFindings = renderChecks.flatMap(entry =>
       entry.findings.map(finding => ({ ...finding, figure_no: entry.figure_no })),
     );
+    // 交付面复核（DR*）并入跨层计数：**走 render 槽位**是因为 reconcileGateCounts 的去重
+    // 映射只认 C9/RC5 与 C11/RC1 四对规则号，DR 族不在其中 ⇒ 原样计数、不参与合并
+    // （DR 族是新规则，与任何既有观测都不构成同源重复）。
+    const deliveryFindings = deliveryChecks.flatMap(entry =>
+      entry.findings.map(finding => ({ ...finding, figure_no: entry.figure_no })),
+    );
     const gateCounts = reconcileGateCounts({
       structuralFails: result.findings.filter(finding => finding.severity === "fail").length,
       structuralWarns: result.findings.filter(finding => finding.severity === "warn").length,
       rasterFails: rasterFindings.filter(finding => finding.severity === "fail").length,
       rasterWarns: rasterFindings.filter(finding => finding.severity === "warn").length,
-      render: renderFindings,
+      render: [...renderFindings, ...deliveryFindings],
       geometry: geometryFindings,
     });
 
@@ -578,6 +633,7 @@ export class FigureGateHandler implements StageHandler {
       result,
       raster,
       renderChecks,
+      deliveryChecks,
       geometryFindings,
       textFaces: textFaces.length > 0 ? textFaces : "（无）",
       skippedTextRules,
@@ -614,6 +670,7 @@ export class FigureGateHandler implements StageHandler {
       result,
       raster,
       renderChecks,
+      deliveryChecks,
       unmeasuredPaperSizes,
       renderer: sidecar.renderer,
       figures: sidecar.figures,
@@ -633,6 +690,7 @@ export class FigureGateHandler implements StageHandler {
 
     const rasterFails = rasterFailCount(raster);
     const renderFails = renderFindings.filter(finding => finding.severity === "fail").length;
+    const deliveryFails = deliveryFindings.filter(finding => finding.severity === "fail").length;
     const geometryFails = geometryFindings.filter(finding => finding.severity === "fail").length;
     if (gateCounts.rawFail > 0 && !state[APPROVAL_GRANTED_KEY]) {
       const mergedNote =
@@ -645,6 +703,7 @@ export class FigureGateHandler implements StageHandler {
           `附图存在 ${gateCounts.fail} 项 fail 级发现${mergedNote}（图号连续性/图文标记一致/画幅可印性` +
           `${rasterFails === 0 ? "" : "/栅格附件黑白性与线宽"}` +
           `${renderFails === 0 ? "" : "/交付图面文字与线条冲突"}` +
+          `${deliveryFails === 0 ? "" : "/交付面位图/方向/整幅框线"}` +
           `${geometryFails === 0 ? "" : "/投影几何不可交付"}）。` +
           "编号选择：1=确认放行（强制） / 2=重新生成附图 / 3=退回",
         figure_report: report,
@@ -671,6 +730,8 @@ export type FigureCheckReport = {
   raster?: RasterGateObservation;
   /** 已交付 SVG 的渲染复核（RC*；本次未做时缺省）。 */
   render_check?: readonly FigureGateRenderCheck[];
+  /** 已交付 SVG 的交付面复核（DR* + 图面用语终检；本次未做时缺省）。 */
+  delivery_check?: readonly FigureGateDeliveryCheck[];
   /** 交付文件未声明宽高、V7 只能按布局重排估算的图（缺省 = 全部实测）。 */
   paper_size_unmeasured?: readonly number[];
   renderer?: string;
@@ -684,6 +745,8 @@ export type FigureCheckReportInput = {
   raster?: RasterGateObservation;
   /** 已交付 SVG 的渲染复核（RC*）。 */
   renderChecks?: readonly FigureGateRenderCheck[];
+  /** 已交付 SVG 的交付面复核（DR* + 图面用语终检）。 */
+  deliveryChecks?: readonly FigureGateDeliveryCheck[];
   /** 未能实测画幅的图号。 */
   unmeasuredPaperSizes?: readonly number[];
   /** sidecar.renderer（builtin / graphviz / cad）。 */
@@ -704,6 +767,7 @@ export function buildFigureCheckReport(input: FigureCheckReportInput): FigureChe
     result: input.result,
     ...(input.raster === undefined ? {} : { raster: input.raster }),
     ...(input.renderChecks === undefined ? {} : { render_check: input.renderChecks }),
+    ...(input.deliveryChecks === undefined ? {} : { delivery_check: input.deliveryChecks }),
     ...(input.unmeasuredPaperSizes === undefined || input.unmeasuredPaperSizes.length === 0
       ? {}
       : { paper_size_unmeasured: input.unmeasuredPaperSizes }),

@@ -94,7 +94,7 @@ export function createPatentLegalStatusTool(
     description:
       "Query patent legal status (Active / Expired / Abandoned) and estimated expiration from Google Patents. " +
       "Batch 1-20 numbers; per-patent failures do not abort the batch. Returns title, status, dates, applicant, " +
-      "inventor, and event history. Per-item degraded/missingFields flags mark page-structure gaps.",
+      "inventor, event history; per-item degraded/missingFields mark page-structure gaps.",
 
     kind: "network",
     domain: "patent",

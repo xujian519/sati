@@ -60,16 +60,26 @@ export type FigurePaperSize = {
  * 逐图独立缩放会让同文档字高不一致（大图字小、小图字大）。统一系数使
  * ① 打印版式各图缩放一致；② 核验器报告的打印字高与实际排版一致（而非按
  * 单图缩放高估字高）。空列表返回 1（无缩放）。
+ *
+ * @param sizes - 各图的画幅（毫米）。
+ * @param profile - 法域档案（决定缺省可用区）。
+ * @param area - **可用区覆盖**（毫米）：缺省取档案版心。
+ *
+ * 覆盖参数存在的理由：多视图拼版（`submission-sheet.ts`）的每格只分到版心的一小块，
+ * 系数必须按**单格可用区**算——按整页版心算会把图按"能放进整页"的大小落进小格子里，
+ * 图形撑出格子，且字高被高估（判据与实际排版漂移）。口径仍在本函数一处，
+ * 调用方只换可用区，不另写一份系数公式。
  */
 export function uniformFigureZoom(
   sizes: readonly FigurePaperSize[],
   profile: OfficeProfile = DEFAULT_OFFICE_PROFILE,
+  area?: { widthMm: number; heightMm: number },
 ): number {
-  const area = printableArea(profile);
+  const limit = area ?? printableArea(profile);
   let zoom = 1;
   for (const size of sizes) {
-    if (size.widthMm > 0) zoom = Math.min(zoom, area.widthMm / size.widthMm);
-    if (size.heightMm > 0) zoom = Math.min(zoom, area.heightMm / size.heightMm);
+    if (size.widthMm > 0) zoom = Math.min(zoom, limit.widthMm / size.widthMm);
+    if (size.heightMm > 0) zoom = Math.min(zoom, limit.heightMm / size.heightMm);
   }
   return zoom;
 }

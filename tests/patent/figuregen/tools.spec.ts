@@ -513,6 +513,9 @@ test("入参枚举与 FigureKind/FigureNodeShape 同步（类型加了而 schema
     state: true,
     hierarchy: true,
     chart: true,
+    sequence: true,
+    circuit: true,
+    "cross-section": true,
   };
   const shapes: Record<FigureNodeShape, true> = {
     rect: true,
@@ -523,6 +526,15 @@ test("入参枚举与 FigureKind/FigureNodeShape 同步（类型加了而 schema
     parallelogram: true,
     circle: true,
     doublecircle: true,
+    resistor: true,
+    capacitor: true,
+    inductor: true,
+    diode: true,
+    source: true,
+    ground: true,
+    switch: true,
+    lamp: true,
+    battery: true,
   };
   const props = FIGURE_INPUT_SCHEMA_REF.properties as Record<string, { enum?: string[] }>;
   const itemProps = (props.nodes as unknown as { items: { properties: Record<string, { enum?: string[] }> } }).items

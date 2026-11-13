@@ -8,7 +8,7 @@
  * 收窄逻辑后漂移（一处漏掉 `pct` 就会让同一份图在两个工具里按不同法域判定）。
  */
 
-import type { FigureSpec, Jurisdiction } from "../../patent/figuregen/index.js";
+import { figureEdges, figureNodes, type FigureSpec, type Jurisdiction } from "../../patent/figuregen/index.js";
 import { isRefNumeral } from "../../patent/figuregen/numeral.js";
 import { SatiToolRuntimeError } from "../protocol/errors.js";
 import type { SatiJsonSchema } from "../protocol/schema.js";
@@ -17,7 +17,16 @@ import type { SatiJsonSchema } from "../protocol/schema.js";
 export const JURISDICTIONS: string[] = ["cn", "us", "pct"];
 
 /** 图型取值（schema enum 与 `FigureKind` 同源；同步守卫见 tests/patent/figuregen/tools.spec.ts）。 */
-export const FIGURE_KINDS: string[] = ["flowchart", "block", "state", "hierarchy", "chart"];
+export const FIGURE_KINDS: string[] = [
+  "flowchart",
+  "block",
+  "state",
+  "hierarchy",
+  "chart",
+  "sequence",
+  "circuit",
+  "cross-section",
+];
 
 /** 节点形状取值（schema enum 与 `FigureNodeShape` 同源）。 */
 export const FIGURE_NODE_SHAPES: string[] = [
@@ -29,6 +38,15 @@ export const FIGURE_NODE_SHAPES: string[] = [
   "parallelogram",
   "circle",
   "doublecircle",
+  "resistor",
+  "capacitor",
+  "inductor",
+  "diode",
+  "source",
+  "ground",
+  "switch",
+  "lamp",
+  "battery",
 ];
 
 /** 曲线标记取值（schema enum 与 `ChartMarker` 同源）。 */
@@ -101,8 +119,10 @@ export function assertFigurePayloads(figures: readonly FigureSpec[], tool: strin
   };
   for (const figure of figures) {
     const no = figure.figure_no;
-    const nodeCount = Array.isArray(figure.nodes) ? figure.nodes.length : 0;
-    const edgeCount = Array.isArray(figure.edges) ? figure.edges.length : 0;
+    // 多面板附图：条数上限按**摊平**口径算（所有面板的节点/边合计），否则每个面板
+    // 各自 200 个、四个面板就 800 个 —— 上限就形同虚设。
+    const nodeCount = figureNodes(figure).length;
+    const edgeCount = figureEdges(figure).length;
     if (nodeCount + edgeCount > STRUCTURAL_MAX_ITEMS) {
       invalid(
         `图${no} 的结构元素共 ${nodeCount + edgeCount} 个（nodes ${nodeCount} + edges ${edgeCount}），` +
@@ -122,9 +142,53 @@ export function assertFigurePayloads(figures: readonly FigureSpec[], tool: strin
         }
       }
     }
+    if (figure.section !== undefined) {
+      // 剖视输入：断面零件非空、轮廓至少 3 点、坐标在归一化域 0..1。
+      if (figure.section.parts.length === 0) {
+        invalid(`图${no} 的 section.parts 不能为空（剖视图至少要一个断面零件）`, no);
+      }
+      for (const part of figure.section.parts) {
+        if (part.outline.length < 3) {
+          invalid(`图${no} 零件「${part.id}」的断面轮廓至少要 3 个顶点（收到 ${String(part.outline.length)}）`, no);
+        }
+        for (const [x, y] of part.outline) {
+          if (!Number.isFinite(x) || !Number.isFinite(y)) {
+            invalid(`图${no} 零件「${part.id}」的轮廓坐标必须是有限数`, no);
+          }
+          if (x < 0 || x > 1 || y < 0 || y > 1) {
+            invalid(`图${no} 零件「${part.id}」的轮廓坐标须落在归一化域 0..1（收到 ${String(x)},${String(y)}）`, no);
+          }
+        }
+        if (part.ref !== undefined && !isRefNumeral(part.ref)) {
+          invalid(`图${no} 零件「${part.id}」的附图标记应为正整数（V22，收到 ${String(part.ref)}）`, no);
+        }
+      }
+    }
     if (figure.kind !== "chart") {
+      // 多面板附图：内容在面板里（顶层 nodes/edges 被忽略）⇒ 逐面板要求非空，
+      // 且面板里的节点同样要过 ref 合法性与条数上限。
+      if (figure.panels !== undefined && figure.panels.length > 0) {
+        figure.panels.forEach((panel, index) => {
+          if (!Array.isArray(panel.nodes) || panel.nodes.length === 0) {
+            invalid(`图${no} 的第 ${index + 1} 个面板没有节点（面板不能为空）`, no);
+          }
+          for (const node of panel.nodes) {
+            if (node.ref !== undefined && !isRefNumeral(node.ref)) {
+              invalid(
+                `图${no} 面板 ${index + 1} 节点「${node.id}」的附图标记应为正整数（V22，收到 ${String(node.ref)}）`,
+                no,
+              );
+            }
+          }
+        });
+        continue;
+      }
       if (!Array.isArray(figure.nodes) || figure.nodes.length === 0) {
-        invalid(`图${no} 的 nodes 不能为空`, no);
+        // 剖视图的节点在 `section.parts` 里（断面零件）⇒ 顶层 nodes 可为空。
+        const hasSectionParts = figure.section !== undefined && figure.section.parts.length > 0;
+        if (!hasSectionParts) {
+          invalid(`图${no} 的 nodes 不能为空`, no);
+        }
       }
       continue;
     }
@@ -180,6 +244,44 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/** 归一化坐标点（二元组；JSON Schema 子集不校验长度 ⇒ 运行时兜底见 `assertFigurePayloads`）。 */
+const NORMALIZED_POINT_SCHEMA: SatiJsonSchema = {
+  type: "array",
+  items: { type: "number" },
+};
+
+/** 归一化闭合多边形（顶点序列；运行时校验点数与坐标域）。 */
+const NORMALIZED_OUTLINE_SCHEMA: SatiJsonSchema = {
+  type: "array",
+  items: NORMALIZED_POINT_SCHEMA,
+};
+
+/** 节点 schema（顶层 nodes 与面板内 nodes 共用同一份定义）。 */
+const FIGURE_NODE_SCHEMA: SatiJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["id", "label"],
+  properties: {
+    id: { type: "string" },
+    label: { type: "string" },
+    ref: { type: "integer" },
+    shape: { type: "string", enum: FIGURE_NODE_SHAPES },
+  },
+};
+
+/** 边 schema（顶层 edges 与面板内 edges 共用同一份定义）。 */
+const FIGURE_EDGE_SCHEMA: SatiJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["from", "to"],
+  properties: {
+    from: { type: "string" },
+    to: { type: "string" },
+    label: { type: "string" },
+    dashed: { type: "boolean" },
+  },
+};
+
 export const FIGURE_INPUT_SCHEMA_REF: SatiJsonSchema = {
   type: "object",
   additionalProperties: false,
@@ -189,33 +291,51 @@ export const FIGURE_INPUT_SCHEMA_REF: SatiJsonSchema = {
     kind: { type: "string", enum: FIGURE_KINDS },
     direction: { type: "string", enum: ["TB", "LR"] },
     abstract: { type: "boolean" },
-    nodes: {
-      type: "array",
-      items: {
-        type: "object",
-        additionalProperties: false,
-        required: ["id", "label"],
-        properties: {
-          id: { type: "string" },
-          label: { type: "string" },
-          ref: { type: "integer" },
-          shape: { type: "string", enum: FIGURE_NODE_SHAPES },
+    nodes: { type: "array", items: FIGURE_NODE_SCHEMA },
+    edges: { type: "array", items: FIGURE_EDGE_SCHEMA },
+    section: {
+      type: "object",
+      additionalProperties: false,
+      required: ["parts"],
+      properties: {
+        parts: {
+          type: "array",
+          minItems: 1,
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["id", "outline"],
+            properties: {
+              id: { type: "string" },
+              label: { type: "string" },
+              ref: { type: "integer" },
+              outline: NORMALIZED_OUTLINE_SCHEMA,
+              holes: { type: "array", items: NORMALIZED_OUTLINE_SCHEMA },
+              no_hatch: { type: "boolean" },
+            },
+          },
         },
+        cut: { type: "array", items: NORMALIZED_POINT_SCHEMA },
+        hatch_spacing: { type: "number" },
+        hatch_angle_deg: { type: "number" },
       },
+      description: "Section parts (normalized 0..1 outlines), cut line, hatch params.",
     },
-    edges: {
+    panels: {
       type: "array",
+      minItems: 1,
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["from", "to"],
+        required: ["nodes", "edges"],
         properties: {
-          from: { type: "string" },
-          to: { type: "string" },
-          label: { type: "string" },
-          dashed: { type: "boolean" },
+          title: { type: "string" },
+          direction: { type: "string", enum: ["TB", "LR"] },
+          nodes: { type: "array", minItems: 1, items: FIGURE_NODE_SCHEMA },
+          edges: { type: "array", items: FIGURE_EDGE_SCHEMA },
         },
       },
+      description: "Panels (FIG.1A/1B); shared numeral series.",
     },
     chart: {
       type: "object",
@@ -260,13 +380,56 @@ export const FIGURE_FINDING_SCHEMA: SatiJsonSchema = {
   properties: {
     rule: {
       type: "string",
-      description: "规则号（V1–V22 结构 / PX1–PX4 像素 / RC0–RC7 渲染 / C1–C12 CAD 几何）",
+      description: "规则号（V1–V22 结构 / PX1–PX4 像素 / RC0–RC9 渲染 / DR1–DR3 交付面复核 / C1–C13 CAD 几何）",
     },
     severity: { type: "string", enum: ["fail", "warn", "info"] },
     message: { type: "string" },
     figure_nos: { type: "array", items: { type: "integer" }, description: "涉及的图号（集合级判定）" },
     evidence: { type: "array", items: { type: "string" } },
     metric: { type: "string", enum: ["page_fit", "font_size"], description: "V7 判定维度" },
+    advisory: {
+      type: "boolean",
+      description: "提示级发现：报告但不当成缺陷（不计入缺陷数、不阻断交付）",
+    },
+  },
+};
+
+/**
+ * 附图标记映射条目（结构化标号表：组件 → 附图标记）。
+ *
+ * 为什么进输出契约：标号表是「图面 ↔ 说明书」两向一致性的唯一权威，此前只落在
+ * sidecar 与附图说明草稿里，模型在工具输出里拿不到 ⇒ 只能改写文本去猜。对齐
+ * deepseek-harness 的 `numeralMap`（其 output 里同样给标号表）。
+ */
+export const FIGURE_NUMERAL_MAP_SCHEMA: SatiJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["ref", "label", "figure_no"],
+  properties: {
+    ref: { type: "integer" },
+    label: { type: "string" },
+    figure_no: { type: "integer" },
+  },
+};
+
+/**
+ * 落版度量（缩放比 + 落版后纸面尺寸与字高）。
+ *
+ * 为什么进输出契约：模型据它判断「缩小到三分之二是否仍可辨」（指南一部一章 4.3 /
+ * PCT Rule 11.13(c) / 37 CFR 1.84(k)）。此前这些值只写在 sidecar 的 `layout` 里，
+ * 模型看不到 ⇒ 落版后字高不足这件事只能靠人从文件里量。
+ */
+export const FIGURE_LAYOUT_SCHEMA: SatiJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["page_scale", "placed_width_mm", "placed_height_mm", "char_height_mm"],
+  properties: {
+    page_scale: { type: "number" },
+    placed_width_mm: { type: "number" },
+    placed_height_mm: { type: "number" },
+    char_height_mm: { type: "number" },
+    /** 落版页文件（相对产物目录的文件名）。 */
+    page_path: { type: "string" },
   },
 };
 
@@ -280,6 +443,67 @@ export const FIGURE_ARTIFACT_SCHEMA: SatiJsonSchema = {
     path: { type: "string" },
     caption: { type: "string" },
     sheet: { type: "string" },
+    /** 结构化标号映射（该图上的附图标记 → 组件标签）。 */
+    numeral_map: { type: "array", items: FIGURE_NUMERAL_MAP_SCHEMA },
+    /** 落版度量（仅产出落版页时存在）。 */
+    layout: FIGURE_LAYOUT_SCHEMA,
+  },
+};
+
+/**
+ * 矢量量测条目（`patent_figure_check` 的 `measurements`）。
+ *
+ * 一条 = 一幅被核验的 SVG 的**量到的数**（不是判据结论）：画布尺寸、文字度量、
+ * 线宽分布、线段取向分布。字段语义对齐 deepseek-harness 的 `verify_patent_figure`
+ * 输出（DSH 用 camelCase：`widthMm`/`heightMm`/`textCount`/`minFontMm`/
+ * `strokeWidthMm`/`orientationDeg`；本仓输出契约统一 snake_case，故改名不改义）。
+ *
+ * 两条易混语义，声明在此以免消费方误读：
+ * - `min_font_mm` 是**实测最小字高**（图上最小的那处文字有多高，毫米），不是判据
+ *   下限——判据下限是部署口径，不是量出来的数；DSH 的 `minFontMm` 同此义。
+ * - `stroke_width_mm` 升序（线宽由小到大），`orientation_deg` 按线段数降序——
+ *   沿用 `render-check` 的既有排序，两处口径一致。
+ *
+ * ⚠️ 本常量只被 `outputSchema` 引用，**不入**任何 `inputSchema` ⇒ 不影响 llm-replay 的
+ * `toolSchemaDigest`，改它不需要重录 fixture。
+ */
+export const FIGURE_MEASUREMENT_SCHEMA: SatiJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["path", "text_count", "stroke_width_mm", "orientation_deg"],
+  properties: {
+    path: { type: "string", description: "被量测的 SVG 产物路径" },
+    figure_no: { type: "integer", description: "图号（回读到时给）" },
+    width_mm: { type: "number", description: "画布宽（毫米）；根元素未声明时缺省" },
+    height_mm: { type: "number", description: "画布高（毫米）；根元素未声明时缺省" },
+    text_count: { type: "integer", description: "文字元素数（量到的）" },
+    min_font_mm: { type: "number", description: "实测最小字高（毫米）；图中无文字时缺省" },
+    stroke_width_mm: {
+      type: "array",
+      description: "线宽分布（毫米 → 元素数），升序",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["width_mm", "count"],
+        properties: {
+          width_mm: { type: "number" },
+          count: { type: "integer" },
+        },
+      },
+    },
+    orientation_deg: {
+      type: "array",
+      description: "线段取向分布（0–180° → 线段数），按线段数降序",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["orientation_deg", "count"],
+        properties: {
+          orientation_deg: { type: "number" },
+          count: { type: "integer" },
+        },
+      },
+    },
   },
 };
 

@@ -87,23 +87,23 @@ export function createPatentPdfDownloadTool(
         },
         pageTimeoutSec: {
           type: "integer",
-          description: "Per-page open timeout in seconds (default 20).",
+          description: "Per-page open timeout s (default 20).",
         },
         downloadTimeoutMs: {
           type: "integer",
-          description: "Per-patent download interception timeout in milliseconds (default 60000).",
+          description: "Per-patent timeout ms (default 60000).",
         },
         timeoutMs: {
           type: "integer",
-          description: "Overall execution timeout in milliseconds (default 180000, max 300000).",
+          description: "Overall timeout ms (default 180000, max 300000).",
         },
         record: {
           type: "boolean",
-          description: "Record the browser session to <outputDir>/recording.webm (default false).",
+          description: "Record session to <outputDir>/recording.webm (default false).",
         },
         force: {
           type: "boolean",
-          description: "Ignore the .MANIFEST.jsonl resume state and re-download all patents (default false).",
+          description: "Ignore .MANIFEST.jsonl resume state (default false).",
         },
       },
     },

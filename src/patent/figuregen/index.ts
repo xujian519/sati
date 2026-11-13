@@ -5,6 +5,7 @@
  * 草稿。LLM 只产结构化数据，图形与合规由本模块确定性保证。
  */
 
+export { figureEdges, figureNodes } from "./types.js";
 export type {
   ChartLineStyle,
   ChartMarker,
@@ -13,6 +14,7 @@ export type {
   FigureKind,
   FigureNode,
   FigureNodeShape,
+  FigurePanel,
   FigureSpec,
   Jurisdiction,
 } from "./types.js";
@@ -38,6 +40,48 @@ export {
   type FigureCheckSeverity,
 } from "./check.js";
 export {
+  checkFigureDelivery,
+  type DeliveryFinding,
+  type DeliveryReviewFinding,
+  type DeliveryReviewKind,
+  type DeliveryWordingFinding,
+} from "./delivery-review.js";
+export {
+  applyVisibleNumerals,
+  assignNumerals,
+  autoAssignNumerals,
+  assignFamilyNumerals,
+  backfillRefsFromLabels,
+  findRefsMissingInLabels,
+  labelContainsNumeral,
+  numeralSeriesStart,
+  NumeralAssignError,
+  parseLabelNumeral,
+  withVisibleNumeral,
+  type NumeralAssignment,
+  type NumeralAssignErrorCode,
+} from "./numeral-assign.js";
+export {
+  checkFigureHierarchy,
+  type FigureHierarchyEdge,
+  type HierarchyCheckFinding,
+  type HierarchyCheckInput,
+} from "./hierarchy-check.js";
+export {
+  drawingComplianceFindings,
+  type ComplianceFinding,
+  type ComplianceInput,
+  type ComplianceSeverity,
+} from "./compliance.js";
+export {
+  annotateSvgWithReferences,
+  validateSvgReferences,
+  type SvgAnnotateResult,
+  type SvgReferenceRequest,
+  type SvgReferenceValidation,
+  type SvgUnmatchedReference,
+} from "./svg-annotate.js";
+export {
   inspectWording,
   scanFigureWording,
   type WordingIssueKind,
@@ -61,6 +105,9 @@ export {
   type LeaderSegment,
   type LeaderTarget,
 } from "./leader-line.js";
+export { renderCircuitDiagram, type CircuitDiagramLayout } from "./circuit-diagram.js";
+export { renderPanelSheet, type PanelSheetLayout } from "./panel-sheet.js";
+export { renderSequenceDiagram, type SequenceDiagramLayout } from "./sequence-diagram.js";
 export { renderFigureSvg } from "./render-svg.js";
 export {
   TARGET_OFFICES,
@@ -76,6 +123,14 @@ export {
   type TargetOffice,
 } from "./office-profile.js";
 export { buildSubmissionPage, type SubmissionPageOptions } from "./submission-page.js";
+export {
+  buildSubmissionSheet,
+  type SubmissionSheetCell,
+  type SubmissionSheetMetrics,
+  type SubmissionSheetOptions,
+  type SubmissionSheetPlacement,
+  type SubmissionSheetResult,
+} from "./submission-sheet.js";
 export {
   EDGE_FONT_RATIO,
   FIGURE_FONT_MM_ENV,
@@ -133,6 +188,7 @@ export {
   type FigureSidecarGeometry,
   type FigureSidecarLayout,
   type FigureSidecarSheet,
+  type FigureSidecarSheetLayout,
 } from "./sidecar.js";
 export * from "./cad/index.js";
 export { renderFiguresHtml } from "./html.js";
@@ -140,6 +196,7 @@ export { buildFigureBriefDraft } from "./brief.js";
 export {
   writeFigureSidecar,
   writeSubmissionPageArtifact,
+  writeSubmissionSheetArtifact,
 } from "./deliverables.js";
 export {
   FIGURE_TEXT_TO_PATH_ENV,

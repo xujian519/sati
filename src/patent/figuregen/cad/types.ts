@@ -24,8 +24,20 @@ export function isCadSectionView(value: unknown): value is CadSectionView {
   return typeof value === "string" && (CAD_SECTION_VIEWS as readonly string[]).includes(value);
 }
 
-/** 投影边表契约版本（结构变更须升版本并同步解析校验）。 */
+/** 单视图边表契约版本（结构变更须升版本并同步解析校验）。 */
 export const CAD_EDGE_TABLE_VERSION = 2;
+
+/**
+ * 投影产物（顶层）契约版本 v3：**多视图 + 每零件几何事实 + 锚点归属**。
+ *
+ * v2 是**单视图平铺**的边表（`view`/`axes`/`edges` 在顶层），只保留为历史产物与录制夹具的
+ * 兼容读法；v3 起顶层是 `{views:[…], parts:[…], anchors:[…]}`——多视图一次投影、零件口径
+ * 与件号归属都可查（见 `CadPartFact` / `CadAnchorCheck`）。
+ */
+export const CAD_PROJECTION_VERSION = 3;
+
+/** 锚点归属容差（毫米）：与 DSH 的 `STRUCTURE_ANCHOR_TOLERANCE_MM` 同值。 */
+export const CAD_ANCHOR_TOLERANCE_MM = 0.5;
 
 /** 单条投影边。 */
 export type CadEdge = {
@@ -73,7 +85,70 @@ export type CadCutFace = {
   loops: [number, number, number][][];
 };
 
-/** 投影边表（FreeCAD → Sati）。 */
+/**
+ * 每个 solid（零件）的几何事实。
+ *
+ * **零件序号 = STEP 中 solid 的出现顺序**——这是"件号 ↔ 零件"的归属口径（与 DSH 的
+ * `modelPaths` 顺序即件号归属同构）：调用方不必自己编号，产物里逐件记录事实，
+ * 下游不必猜哪个件号对应哪个零件。
+ */
+export type CadPartFact = {
+  /** 零件序号（0 起；STEP 中 solid 的出现顺序）。 */
+  index: number;
+  /** 包围盒（模型坐标，毫米）。 */
+  bbox: { min: [number, number, number]; max: [number, number, number] };
+  /** 质心（模型坐标，毫米）。 */
+  centroid: [number, number, number];
+  /** 表面积（平方毫米）。 */
+  area: number;
+  /** 体积（立方毫米）。 */
+  volume: number;
+  /** 逐视图的投影事实（键为视图名）。 */
+  views: Record<string, CadPartViewFact>;
+};
+
+/**
+ * 零件在某视图下的投影事实（投影坐标 u,v，毫米）。
+ *
+ * 投影包围盒由**表面采样点的投影**取极值得到（而非 3D 包围盒的角点投影）：只有这样，
+ * "建议锚点落在投影轮廓外缘"才是可核对的事实（采样点含表面极值点 ⇒ 锚点必在盒边界上）。
+ */
+export type CadPartViewFact = {
+  /** 该零件的投影包围盒。 */
+  projectedBBox: { min: [number, number]; max: [number, number] };
+  /**
+   * 建议锚点（模型坐标）：落在零件**表面**上的采样点，其投影位于零件投影轮廓的外缘
+   * ⇒ 引线自轮廓向外引出，不横穿零件面（GB/T 4457.5 的常规制图形态）。
+   */
+  suggestedAnchor: [number, number, number];
+  /** 建议锚点的投影坐标（u,v）。 */
+  suggestedAnchorProjected: [number, number];
+};
+
+/**
+ * 显式锚点的归属核对结果（由 FreeCAD 侧按零件真实几何算出）。
+ *
+ * 归属口径：**先看表面**（距离 ≤ 容差 ⇒ 落在零件上），再看包围盒（落在盒内或距盒 ≤ 容差）；
+ * 两者都不命中 ⇒ `ownerPart = null` ⇒ 报 `C14 anchor-not-on-part`（不静默画一条指错零件的引线）。
+ */
+export type CadAnchorCheck = {
+  /** 被核对的锚点（模型坐标，毫米）。 */
+  point: [number, number, number];
+  /** 归属零件下标；null = 不落在任何零件上。 */
+  ownerPart: number | null;
+  /** 到归属零件表面的距离（毫米）。 */
+  surfaceDistanceMm?: number;
+  /** 到归属零件包围盒的距离（毫米；落在盒内为 0）。 */
+  bboxDistanceMm?: number;
+  /** 是否落在零件表面/包围盒上（容差内）。 */
+  onPart: boolean;
+  /** 最近的零件下标（无归属时的诊断线索）。 */
+  nearestPart?: number;
+  /** 到最近零件表面的距离（毫米）。 */
+  nearestSurfaceDistanceMm?: number;
+};
+
+/** 投影边表（FreeCAD → Sati）：**单个视图**的投影结果。 */
 export type CadEdgeTable = {
   version: number;
   view: CadView;
@@ -128,3 +203,17 @@ export function projectModelPoints(
     return [u, v] as [number, number];
   });
 }
+
+/**
+ * 投影产物（顶层，v3）：**一次 FreeCAD 运行**的全部结果。
+ *
+ * - `views`：逐视图的边表（顺序即请求顺序，第一个是主视图）；
+ * - `parts`：逐零件的几何事实（顺序即件号归属口径）；
+ * - `anchors`：显式锚点的归属核对结果（顺序与调用方的标注顺序一致）。
+ */
+export type CadProjectionPayload = {
+  version: number;
+  views: CadEdgeTable[];
+  parts: CadPartFact[];
+  anchors: CadAnchorCheck[];
+};

@@ -110,8 +110,7 @@ export function createClaimChartTool(): SatiToolDefinition<ClaimChartInput, Clai
         mode: {
           type: "string",
           enum: ["infringement", "invalidity", "oa-response", "reexamination", "patentability"],
-          description:
-            "场景模式：infringement=侵权（被控产品，支持 doe）/invalidity=无效/oa-response=审查意见答复/reexamination=复审/patentability=撰写前可专利性",
+          description: "场景：infringement（支持 doe）/invalidity/oa-response/reexamination/patentability",
         },
         claim_text: { type: "string", description: "权利要求原文（需拆分的权利要求，可含多条）" },
         targets: {

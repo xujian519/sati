@@ -28,6 +28,11 @@
  * - C13 引线 strict 失败：候选耗尽，{@link LeaderPlacementError}。图还没画出来，本函数
  *   不在渲染结果上事后扫描，而由 {@link findingForLeaderPlacementError} 把错误收成 fail，
  *   说明里写明减少标记、拆图或钉死偏移。
+ * - C14 锚点不落在零件上：附图标记的锚点既不在任何零件的表面、也不在任何零件的包围盒
+ *   内（容差 0.5mm）→ warn（引线可能指向错误位置/错误零件，不静默画出去）
+ * - C15 引线横穿零件面：锚点的**投影位置**落在其归属零件的投影轮廓内部（离轮廓 >0.5mm）
+ *   → warn（引线会从零件面里穿出来；建议把锚点移到零件轮廓外缘）
+ * - C16 剖面线方向交替：报出各剖切面的剖面线方向（相邻零件方向相反，GB/T 4457.5）→ info
  *
  * 明确不做（诚实边界）：**最小线间距**检查需要先重建轮廓（相邻边共享端点，逐点距离必然
  * 为 0），属更大的一块工作；当前先以"边数/退化边/缩放"三项覆盖可判定的部分。
@@ -36,9 +41,32 @@
 import type { FigureCheckSeverity } from "../check.js";
 import { LEADER_PLACEMENT_GUIDANCE, type LeaderPlacementError } from "../leader-line.js";
 import { boxesOverlap, boxWithin, type Box } from "../render-utils.js";
-import type { CadEdgeTable } from "./types.js";
+import type { CadCalloutBinding } from "./anchors.js";
+import {
+  CAD_ANCHOR_TOLERANCE_MM,
+  projectModelPoints,
+  type CadAnchorCheck,
+  type CadEdgeTable,
+  type CadPartFact,
+} from "./types.js";
 
-export type CadRuleId = "C1" | "C2" | "C3" | "C4" | "C5" | "C6" | "C7" | "C8" | "C9" | "C10" | "C11" | "C12" | "C13";
+export type CadRuleId =
+  | "C1"
+  | "C2"
+  | "C3"
+  | "C4"
+  | "C5"
+  | "C6"
+  | "C7"
+  | "C8"
+  | "C9"
+  | "C10"
+  | "C11"
+  | "C12"
+  | "C13"
+  | "C14"
+  | "C15"
+  | "C16";
 
 export type CadFinding = {
   rule: CadRuleId;
@@ -91,8 +119,23 @@ export type CadCheckInput = {
     geometryBoundsMm?: CadBox;
     /** 图号注记的纸面包围盒（C12；无图号时缺省）。 */
     captionBoxMm?: CadBox;
+    /** 各剖切面的剖面线方向角（度；C16 报出）。 */
+    hatchAnglesDeg?: readonly number[];
   };
   hiddenLines: boolean;
+  /**
+   * 显式锚点的归属核对**测量**（与调用方的标注顺序一致）。
+   *
+   * 缺省或长度不足 ⇒ 锚点类判据（C14/C15）**不适用**（不报"通过"；由调用方在报告里
+   * 如实声明判据未适用）。
+   */
+  anchorChecks?: readonly CadAnchorCheck[];
+  /**
+   * 件号 ↔ 零件的归属记录（C15 需要归属零件的投影包围盒）。
+   */
+  bindings?: readonly CadCalloutBinding[];
+  /** 每零件几何事实（C15 需要零件的投影包围盒）。 */
+  parts?: readonly CadPartFact[];
 };
 
 /**
@@ -324,6 +367,81 @@ export function checkCadProjection(input: CadCheckInput): CadFinding[] {
             ),
           "去掉 label_offset_mm 让引擎自行择位（注记已作为择位障碍）",
         ],
+      });
+    }
+  }
+
+  // C16 剖面线方向交替：相邻零件的剖面线方向相反（GB/T 4457.5），
+  // 否则图面上相邻材料区域糊成一片、不可分辨。
+  const hatchAngles = input.render?.hatchAnglesDeg;
+  if (hatchAngles !== undefined && hatchAngles.length > 0) {
+    const distinct = [...new Set(hatchAngles)].sort((left, right) => left - right);
+    findings.push({
+      rule: "C16",
+      severity: "info",
+      message:
+        `剖面线方向：${hatchAngles.map(angle => `${angle}°`).join(" / ")}` +
+        `（${hatchAngles.length} 个剖切面，方向取值 ${distinct.join("° / ")}°，相邻件方向相反以示区分）`,
+      evidence:
+        distinct.length < 2 ? ["只有一种方向：多个相邻零件的剖面线将无法区分（应检查剖切面是否真的相邻）"] : undefined,
+    });
+  }
+
+  // C14 锚点不落在零件上：锚点既不在任何零件表面、也不在任何零件包围盒内（容差 0.5mm）
+  // ⇒ 引线可能指向错误位置/错误零件。必须报出来，而不是静默画一条指错的引线。
+  const anchorChecks = input.anchorChecks ?? [];
+  if (anchorChecks.length > 0) {
+    const offPart = anchorChecks.filter(check => !check.onPart);
+    if (offPart.length > 0) {
+      findings.push({
+        rule: "C14",
+        severity: "warn",
+        message:
+          `有 ${offPart.length} 个附图标记的锚点不落在任何零件上（既不在零件表面，也不在零件包围盒内，` +
+          `容差 ${CAD_ANCHOR_TOLERANCE_MM}mm）：引线可能指向错误位置`,
+        evidence: offPart.slice(0, 5).map(check => {
+          const nearest =
+            check.nearestPart === undefined
+              ? "（模型没有零件可比对）"
+              : `最近的零件 ${check.nearestPart} 距表面 ${
+                  check.nearestSurfaceDistanceMm === undefined ? "未知" : check.nearestSurfaceDistanceMm.toFixed(3)
+                }mm`;
+          return `锚点 (${check.point.map(value => value.toFixed(2)).join(", ")})mm，${nearest}`;
+        }),
+      });
+    }
+  }
+
+  // C15 引线横穿零件面：锚点的投影位置落在归属零件的投影轮廓内部（离轮廓 > 0.5mm）
+  // ⇒ 引线会从零件面里穿出。建议把锚点移到零件轮廓外缘（自动件号已按此口径选取）。
+  const bindings = input.bindings ?? [];
+  const parts = input.parts ?? [];
+  if (bindings.length > 0 && parts.length > 0) {
+    const inside: string[] = [];
+    for (const binding of bindings) {
+      if (binding.partIndex === null) continue;
+      const part = parts.find(entry => entry.index === binding.partIndex);
+      if (part === undefined) continue;
+      const fact = part.views[input.table.view];
+      if (fact === undefined) continue;
+      const [u, v] = projectModelPoints(input.table.axes, [binding.anchorMm])[0]!;
+      const { min, max } = fact.projectedBBox;
+      const depth = Math.min(u - min[0], max[0] - u, v - min[1], max[1] - v);
+      if (depth > CAD_ANCHOR_TOLERANCE_MM) {
+        inside.push(
+          `视图 ${input.table.view}：标记 ${binding.ref}（零件 ${binding.partIndex}）` +
+            `锚点投影落在零件轮廓内 ${depth.toFixed(1)}mm`,
+        );
+      }
+    }
+    if (inside.length > 0) {
+      findings.push({
+        rule: "C15",
+        severity: "warn",
+        message:
+          `有 ${inside.length} 个附图标记的锚点落在其零件的投影轮廓内部（离轮廓 >${CAD_ANCHOR_TOLERANCE_MM}mm）：` +
+          "引线将横穿零件面，建议把锚点移到零件轮廓外缘",
+        evidence: inside.slice(0, 5),
       });
     }
   }

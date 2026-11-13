@@ -141,7 +141,7 @@ export function createPatentSearchTool(
         query: {
           type: "string",
           description:
-            "Search query in Google Patents syntax: keywords, phrases, boolean (AND/OR/NOT), fielded (assignee:/inventor:), date ranges (after:/before:).",
+            "Google Patents query syntax: keywords, boolean (AND/OR/NOT), fielded (assignee:/inventor:), date ranges (after:/before:).",
         },
         limit: {
           type: "number",

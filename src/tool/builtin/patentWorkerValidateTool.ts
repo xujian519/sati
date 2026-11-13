@@ -36,9 +36,8 @@ export function createPatentWorkerValidateTool(): SatiToolDefinition<PatentWorke
     },
     aliases: ["PatentWorkerValidate", "worker_contract_check"],
     description:
-      "Validate a patent worker's output against its declared contract (required fields). " +
-      "Missing hard-contract fields mark the output degraded (no interruption). Returns missing " +
-      "field lists and the pass/degraded verdict. Registry completeness can be checked separately.",
+      "Validate a patent worker's output against its declared contract (required fields). Missing hard-contract " +
+      "fields mark the output degraded (no interruption). Returns missing field lists and the pass/degraded verdict.",
     kind: "session",
     inputSchema: {
       type: "object",
