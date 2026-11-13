@@ -10,7 +10,7 @@
 
 import { stripRefMark } from "./check.js";
 import { figureCaption, profileForJurisdiction } from "./office-profile.js";
-import type { DocumentKind, FigureSpec, Jurisdiction } from "./types.js";
+import { figureNodes, type DocumentKind, type FigureSpec, type Jurisdiction } from "./types.js";
 
 export type FigureBriefOptions = {
   /** 发明（或实用新型）名称，如"一种数据处理装置"。 */
@@ -28,6 +28,9 @@ const KIND_TEXT: Readonly<Record<FigureSpec["kind"], string>> = {
   state: "状态转移示意图",
   hierarchy: "层级结构示意图",
   chart: "曲线图",
+  sequence: "时序示意图",
+  circuit: "电路示意图",
+  "cross-section": "剖视图",
 };
 
 const KIND_TEXT_EN: Readonly<Record<FigureSpec["kind"], string>> = {
@@ -36,6 +39,9 @@ const KIND_TEXT_EN: Readonly<Record<FigureSpec["kind"], string>> = {
   state: "state transition diagram of a process",
   hierarchy: "hierarchical block diagram of a system",
   chart: "graph of measurement data",
+  sequence: "sequence diagram",
+  circuit: "circuit diagram",
+  "cross-section": "cross-sectional view",
 };
 
 export function buildFigureBriefDraft(specs: readonly FigureSpec[], options: FigureBriefOptions = {}): string {
@@ -43,7 +49,8 @@ export function buildFigureBriefDraft(specs: readonly FigureSpec[], options: Fig
   const profile = profileForJurisdiction(options.jurisdiction);
   const markers = new Map<number, string>();
   for (const figure of specs) {
-    for (const node of figure.nodes) {
+    // 多面板附图的标号摊平后收集（面板内的组件也要进附图说明，否则说明书缺组件名）。
+    for (const node of figureNodes(figure)) {
       if (node.ref !== undefined && !markers.has(node.ref)) {
         markers.set(node.ref, stripRefMark(node.label));
       }

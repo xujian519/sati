@@ -3,7 +3,9 @@
  *
  * 审查指南 2023 一部一章 4.3/4.6 的黑白合规是构造期不变式：仅 #000000/#FFFFFF、
  * 无渐变、无彩色函数；文字黑色背景白净。附图标记写入节点分组的 data-ref 属性
- * （供核验器/代理师工具回读），文本层同时渲染"组件名(N)"惯用形。图号按法域档案
+ * （供核验器/代理师工具回读），文本层同时渲染"组件名(N)"惯用形：节点有 ref 而
+ * label 未带可见标号时，图面上补画 `(ref)`（本仓惯例无空格；已带则不重复画——
+ * 判定口径见 numeral-assign.ts，与 check-context 的 stripRefMark 同源）。图号按法域档案
  * 写成"图N"（CN）/ "Fig. N"（PCT）/ "FIG. N"（US），**是否需要图号由图幅数与法域
  * 决定**（单幅在 PCT/US 不得出现 "Fig."——PCT 指南 IP 5.141、37 CFR 1.84(u)(1)），
  * 需要时居中标注于图形正下方（指南一部一章 4.3"标注在相应附图的正下方"）。
@@ -15,9 +17,14 @@ import { figureCaption, profileForJurisdiction } from "./office-profile.js";
 import { layoutChart, renderChartBody } from "./chart.js";
 import { isSymbolShape, layoutFigure, type FigureLayout } from "./layout.js";
 import { figureFontSizePx, edgeFontSizePx } from "./metrics.js";
+import { withVisibleNumeral } from "./numeral-assign.js";
 import { FIGURE_NO_ATTRIBUTE } from "./readback.js";
-import { SVG_FIGURE_KIND_ATTRIBUTE, escapeXml, fmt } from "./render-utils.js";
-import type { FigureNode, FigureNodeShape, FigureSpec, Jurisdiction } from "./types.js";
+import { SVG_FIGURE_KIND_ATTRIBUTE, escapeXml, fmt, renderShape } from "./render-utils.js";
+import { renderCircuitDiagram } from "./circuit-diagram.js";
+import { renderCrossSection } from "./cross-section.js";
+import { renderPanelSheet } from "./panel-sheet.js";
+import { renderSequenceDiagram } from "./sequence-diagram.js";
+import type { FigureNode, FigureSpec, Jurisdiction } from "./types.js";
 
 /** 节点 id → 合法 XML id 片段。 */
 function xmlId(nodeId: string): string {
@@ -25,60 +32,6 @@ function xmlId(nodeId: string): string {
 }
 
 /** 形状绘制：符号形状（circle/doublecircle）无文字，label 由 renderNodeText 跳过。 */
-function renderShape(shape: FigureNodeShape, p: { x: number; y: number; width: number; height: number }): string {
-  const { x, y, width: w, height: h } = p;
-  const stroke = 'fill="#FFFFFF" stroke="#000000" stroke-width="1.5"';
-  switch (shape) {
-    case "circle": {
-      return `<circle cx="${fmt(x + w / 2)}" cy="${fmt(y + h / 2)}" r="${fmt(Math.min(w, h) / 2)}" fill="#000000"/>`;
-    }
-    case "doublecircle": {
-      const outer = Math.min(w, h) / 2;
-      const cx = fmt(x + w / 2);
-      const cy = fmt(y + h / 2);
-      return (
-        `<circle cx="${cx}" cy="${cy}" r="${fmt(outer)}" ${stroke}/>` +
-        `<circle cx="${cx}" cy="${cy}" r="${fmt(outer * 0.62)}" ${stroke}/>`
-      );
-    }
-    case "round": {
-      const radius = Math.min(h / 2, 18);
-      return `<rect x="${fmt(x)}" y="${fmt(y)}" width="${fmt(w)}" height="${fmt(h)}" rx="${fmt(radius)}" ${stroke}/>`;
-    }
-    case "ellipse":
-      return `<ellipse cx="${fmt(x + w / 2)}" cy="${fmt(y + h / 2)}" rx="${fmt(w / 2)}" ry="${fmt(h / 2)}" ${stroke}/>`;
-    case "diamond": {
-      const points = [
-        `${fmt(x + w / 2)},${fmt(y)}`,
-        `${fmt(x + w)},${fmt(y + h / 2)}`,
-        `${fmt(x + w / 2)},${fmt(y + h)}`,
-        `${fmt(x)},${fmt(y + h / 2)}`,
-      ].join(" ");
-      return `<polygon points="${points}" ${stroke}/>`;
-    }
-    case "parallelogram": {
-      const skew = Math.min(16, w / 5);
-      const points = [
-        `${fmt(x + skew)},${fmt(y)}`,
-        `${fmt(x + w)},${fmt(y)}`,
-        `${fmt(x + w - skew)},${fmt(y + h)}`,
-        `${fmt(x)},${fmt(y + h)}`,
-      ].join(" ");
-      return `<polygon points="${points}" ${stroke}/>`;
-    }
-    case "cylinder": {
-      const ry = Math.min(10, h / 5);
-      const d =
-        `M ${fmt(x)} ${fmt(y + ry)} ` +
-        `A ${fmt(w / 2)} ${fmt(ry)} 0 0 1 ${fmt(x + w)} ${fmt(y + ry)} ` +
-        `L ${fmt(x + w)} ${fmt(y + h - ry)} ` +
-        `A ${fmt(w / 2)} ${fmt(ry)} 0 0 1 ${fmt(x)} ${fmt(y + h - ry)} Z`;
-      return `<path d="${d}" ${stroke}/>`;
-    }
-    default:
-      return `<rect x="${fmt(x)}" y="${fmt(y)}" width="${fmt(w)}" height="${fmt(h)}" rx="2" ${stroke}/>`;
-  }
-}
 
 function renderNodeText(
   node: FigureNode,
@@ -86,7 +39,11 @@ function renderNodeText(
   fontSizePx: number,
 ): string {
   if (isSymbolShape(node.shape)) return "";
-  const lines = node.label.split("\n");
+  // 附图标记归一：节点有 ref 而 label 未带可见标号时，在图面上补画 `(ref)`（本仓惯例无空格）。
+  // label 已带该标号则不重复画（否则会出现「处理模块(20)(20)」）；判定口径见 numeral-assign.ts
+  // （与 check-context 的 stripRefMark / svg-annotate 的标记形态同源）。
+  const label = node.ref === undefined ? node.label : withVisibleNumeral(node.label, node.ref);
+  const lines = label.split("\n");
   const lineHeight = fontSizePx + 7;
   const startY = p.y + p.height / 2 - ((lines.length - 1) * lineHeight) / 2 + fontSizePx / 2 - 3;
   return lines
@@ -97,6 +54,9 @@ function renderNodeText(
     )
     .join("");
 }
+
+/** 需要在根元素写 `data-dsh-kind` 的图型（图元按设计相交 ⇒ RC4/RC6 不适用）。 */
+const KIND_MARKED_KINDS: ReadonlySet<string> = new Set(["chart", "sequence", "circuit", "panels"]);
 
 /**
  * 渲染单幅附图为完整 SVG 文档。
@@ -127,6 +87,86 @@ export function renderFigureSvg(
       svg: documentSvg(spec.figure_no, chart.width, chart.height, body, "", caption, fontSizePx, spec.kind),
       width: chart.width,
       height: chart.height,
+    };
+  }
+
+  // 多面板附图：内容在面板里（顶层 nodes/edges 被忽略）⇒ 走面板拼版渲染。
+  if (spec.panels !== undefined && spec.panels.length > 0) {
+    const sheet = renderPanelSheet(spec, { fontSizePx, edgeFontSizePx: edgeFontSize });
+    return {
+      svg: documentSvg(
+        spec.figure_no,
+        sheet.width,
+        sheet.height,
+        `${sheet.body}\n`,
+        sheet.defs ?? "",
+        caption,
+        fontSizePx,
+        "panels",
+      ),
+      width: sheet.width,
+      height: sheet.height,
+    };
+  }
+
+  // 时序图：参与者生命线 + 消息（graphviz 画不出，见 dot.ts 的 fail-loud）。
+  if (spec.kind === "sequence") {
+    const sequence = renderSequenceDiagram(spec, {
+      fontSizePx,
+      edgeFontSizePx: edgeFontSize,
+      caption: caption !== undefined,
+    });
+    return {
+      svg: documentSvg(
+        spec.figure_no,
+        sequence.width,
+        sequence.height,
+        `${sequence.body}\n`,
+        sequence.defs ?? "",
+        caption,
+        fontSizePx,
+        "sequence",
+      ),
+      width: sequence.width,
+      height: sequence.height,
+    };
+  }
+
+  // 电路图：元件符号 + 连线。
+  if (spec.kind === "circuit") {
+    const circuit = renderCircuitDiagram(spec, { fontSizePx, edgeFontSizePx: edgeFontSize });
+    return {
+      svg: documentSvg(
+        spec.figure_no,
+        circuit.width,
+        circuit.height,
+        `${circuit.body}\n`,
+        circuit.defs ?? "",
+        caption,
+        fontSizePx,
+        "circuit",
+      ),
+      width: circuit.width,
+      height: circuit.height,
+    };
+  }
+
+  // 二维剖视：断面轮廓 + 剖面线（graphviz 画不出，见 dot.ts 的 fail-loud）。
+  if (spec.kind === "cross-section") {
+    const section = renderCrossSection(spec, { fontSizePx, edgeFontSizePx: edgeFontSize });
+    return {
+      svg: documentSvg(
+        spec.figure_no,
+        section.width,
+        section.height,
+        `${section.body}\n`,
+        section.defs ?? "",
+        caption,
+        fontSizePx,
+        "cross-section",
+      ),
+      width: section.width,
+      height: section.height,
     };
   }
 
@@ -186,7 +226,7 @@ function documentSvg(
   defs: string,
   caption: string | undefined,
   fontSizePx: number,
-  kind: FigureSpec["kind"],
+  kind: string,
 ): string {
   const captionText =
     caption === undefined
@@ -194,7 +234,10 @@ function documentSvg(
       : `<text x="${fmt(width / 2)}" y="${fmt(height - 16)}" font-size="${fontSizePx}" ` +
         `text-anchor="middle" fill="#000000">${escapeXml(caption)}</text>\n`;
 
-  const kindAttribute = kind === "chart" ? ` ${SVG_FIGURE_KIND_ATTRIBUTE}="chart"` : "";
+  // 图型标记只对**图元按设计相交**的几类写（chart/sequence/circuit/panels）——
+  // 渲染复核据此豁免 RC4/RC6（见 render-check.ts）。既有图型不写 ⇒ 产物字节不变
+  // （渲染不变式基线不漂）。
+  const kindAttribute = KIND_MARKED_KINDS.has(kind) ? ` ${SVG_FIGURE_KIND_ATTRIBUTE}="${kind}"` : "";
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" ${FIGURE_NO_ATTRIBUTE}="${figureNo}"${kindAttribute} ` +
     `width="${fmt(width)}" height="${fmt(height)}" ` +

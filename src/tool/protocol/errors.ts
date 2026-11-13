@@ -16,6 +16,9 @@ export type SatiToolErrorCode =
   | "file_conflict"
   | "unsupported_tool"
   | "setup_required"
+  // 模型能力缺失：模型显式声明不支持图片输入时，附图识别类工具无法工作（对齐
+  // deepseek-harness 的同名错误码：上层按码路由，而不是从人读文案里猜原因）。
+  | "model_cannot_accept_image"
   | "plan_mode_violation"
   | "ask_mode_violation"
   | "team_actor_unknown"

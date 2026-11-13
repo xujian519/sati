@@ -19,8 +19,14 @@ import type { RenderCheckFinding, RenderCheckKind } from "./render-check.js";
  *
  * RC8 预留给将来的 `figure-hierarchy`（声明的图内层级与权利要求归属表述一致性）：
  * 该判据需要 FigureSpec 之外的显式层级输入，属 schema 变更，未随本次落地。
+ *
+ * RC9 是**提示级**判据（`sheet-underfill` 版面利用率不足）：没有条文依据，只是「值得人
+ * 看一眼」；severity 仍是 warn，但带 advisory 标记 ⇒ 不计入缺陷数、不阻断交付。
  */
-export const RENDER_CHECK_RULE: Record<RenderCheckKind, { rule: FigureCheckRuleId; severity: FigureCheckSeverity }> = {
+export const RENDER_CHECK_RULE: Record<
+  RenderCheckKind,
+  { rule: FigureCheckRuleId; severity: FigureCheckSeverity; advisory?: boolean }
+> = {
   "text-crossed-by-line": { rule: "RC1", severity: "fail" },
   "ink-outside-canvas": { rule: "RC5", severity: "fail" },
   "text-clearance": { rule: "RC2", severity: "warn" },
@@ -28,12 +34,21 @@ export const RENDER_CHECK_RULE: Record<RenderCheckKind, { rule: FigureCheckRuleI
   "hatch-orientation-collision": { rule: "RC4", severity: "warn" },
   "element-overlap": { rule: "RC6", severity: "warn" },
   "font-below-minimum": { rule: "RC7", severity: "warn" },
+  "sheet-underfill": { rule: "RC9", severity: "warn", advisory: true },
   "not-measured": { rule: "RC0", severity: "info" },
 };
 
 /** 一条复核发现 → 带规则号与级别的发现（报告面形状）。 */
 export function toRenderCheckFindings(
   findings: readonly RenderCheckFinding[],
-): { rule: FigureCheckRuleId; severity: FigureCheckSeverity; message: string }[] {
-  return findings.map(finding => ({ ...RENDER_CHECK_RULE[finding.check], message: finding.message }));
+): { rule: FigureCheckRuleId; severity: FigureCheckSeverity; message: string; advisory?: boolean }[] {
+  return findings.map(finding => {
+    const mapped = RENDER_CHECK_RULE[finding.check];
+    return {
+      rule: mapped.rule,
+      severity: mapped.severity,
+      message: finding.message,
+      ...(mapped.advisory === true || finding.advisory === true ? { advisory: true } : {}),
+    };
+  });
 }

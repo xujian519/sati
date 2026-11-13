@@ -273,11 +273,9 @@ export function createFlexiblePlanTool(deps: FlexiblePlanToolDeps = {}): SatiToo
     description:
       "Flexible plan (stage-level HITL): create a plan (optional IPC field inference), run pending stages via " +
       "atoms (LLM + prior-art search), then confirm/rollback stages; add/remove/reorder/complete/abandon at " +
-      "runtime. Plans persist by caseId; run executes only unconfirmed stages and autoConfirm=true freezes " +
-      "successful ones. Also accepts legacy patent_plan_task actions transition/sync/replan (stateless, no " +
-      "caseId; old name kept as an alias). Orchestration entries: patent_workflow_assemble (assemble), " +
-      "patent_workflow_run (execute), patent_docket (case lifecycle). For drafting, declare " +
-      "{id:'clarity_gate',atom:'clarity-gate'} before deconstruction to pause at low clarity.",
+      "runtime. Plans persist by caseId; run executes only unconfirmed stages, autoConfirm=true freezes " +
+      "successful ones. Legacy patent_plan_task actions transition/sync/replan accepted (stateless). " +
+      "For drafting, declare {id:'clarity_gate',atom:'clarity-gate'} before deconstruction to pause at low clarity.",
     kind: "session",
     domain: "patent",
     inputSchema: {
@@ -302,7 +300,7 @@ export function createFlexiblePlanTool(deps: FlexiblePlanToolDeps = {}): SatiToo
             "sync",
             "replan",
           ],
-          description: "Plan operation (legacy patent_plan_task: transition | sync | replan).",
+          description: "Plan operation (legacy: transition|sync|replan).",
         },
         caseId: { type: "string", description: "Plan key (required except legacy actions)." },
         caseType: { type: "string", description: "Orchestration type (create)." },

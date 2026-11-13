@@ -170,7 +170,7 @@ export function createPatentDocketTool(deps: PatentDocketToolDeps = {}): SatiToo
     description:
       "Case-file (docket) round control: create with an optional gap list, maintain gaps (set_gaps), triage " +
       "(draft / revise / finalize_ready / escalate_human), record revisions with version archiving, finalize " +
-      "(refuses while gaps remain), or abandon. Stage execution stays in flexible_plan.",
+      "(refuses while gaps remain), or abandon.",
     kind: "session",
     domain: "patent",
     inputSchema: {

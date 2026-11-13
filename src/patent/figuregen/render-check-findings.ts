@@ -455,6 +455,45 @@ export function inkOutsideCanvas(scan: Scan): RenderCheckFinding | undefined {
 }
 
 /**
+ * 版面利用率下限（部署级 opt-in，0–1）：图面墨迹包围盒的面积占画布面积的下限。
+ *
+ * 缺省**不判**：该判据是部署策略（不同交付体例对「撑不撑满纸面」的要求不同），
+ * 不是缺陷。未启用时报告不含该项，也不声称已量测（不制造「未量测」的噪音）。
+ */
+export const DEFAULT_MIN_SHEET_FILL_RATIO = 0;
+
+/**
+ * 版面利用率：图面内容只占画布的一小部分时，缩小复制后细节更难辨认。
+ *
+ * 分母是**这张图自己的画布**，不与金样或标准图对比——两边的画布来源不同
+ * （生成图是图形自身画布、落版页是 A4 纸面），跨图比它没有意义。
+ *
+ * 这是**提示级**发现（advisory）：它不是规范缺陷（无条文依据），只是「值得人看一眼」。
+ * @param scan - 遍历结果。
+ * @param minSheetFillRatio - 利用率下限（0–1）；缺省或 ≤0 时不判。
+ * @returns 提示级发现；不适用时 undefined。
+ */
+export function sheetUnderfill(scan: Scan, minSheetFillRatio: number | undefined): RenderCheckFinding | undefined {
+  if (minSheetFillRatio === undefined || minSheetFillRatio <= 0) return undefined;
+  const { widthMm, heightMm } = scan;
+  if (widthMm === undefined || heightMm === undefined) return undefined;
+  const canvasArea = widthMm * heightMm;
+  if (!(canvasArea > 0)) return undefined;
+  const bounds = inkBounds(scan);
+  if (bounds === undefined) return undefined;
+  const contentArea = (bounds.maxX - bounds.minX) * (bounds.maxY - bounds.minY);
+  const ratio = contentArea / canvasArea;
+  if (ratio >= minSheetFillRatio) return undefined;
+  return {
+    check: "sheet-underfill",
+    advisory: true,
+    message:
+      `图面内容只占画布的 ${(ratio * 100).toFixed(1)}%（下限 ${(minSheetFillRatio * 100).toFixed(0)}%）：` +
+      "图形可能撑不满纸面，缩小复制后细节更难辨认；调整投影比例或改用更紧凑的视图",
+  };
+}
+
+/**
  * 元素重叠判定的包围盒预筛尺寸（毫米）：两盒在这两个轴上的相交都不超过它时，
  * 轮廓不可能真正相交，直接跳过（旋转图形的包围盒会假性重叠，见 {@link outlinesCross}）。
  */

@@ -57,7 +57,8 @@ export function isSymbolShape(shape: FigureNodeShape | undefined): boolean {
 }
 
 export function defaultDirection(kind: FigureKind): FigureDirection {
-  return kind === "block" ? "LR" : "TB";
+  // block 与 circuit 默认横向（电路图按信号流向从左到右读）；其余（含 sequence）纵向。
+  return kind === "block" || kind === "circuit" ? "LR" : "TB";
 }
 
 function nodeSize(node: FigureNode, fontSizePx: number): { width: number; height: number } {

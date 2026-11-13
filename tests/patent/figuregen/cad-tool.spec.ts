@@ -67,9 +67,11 @@ test("patent_figure_project：落盘 SVG 与 sidecar（含几何来源与投影�
       context(cwd),
     );
     const text = result.content[0].type === "text" ? result.content[0].text : "";
-    assert.match(text, /已投影 front 视图/u);
-    assert.match(text, /纸面尺寸 \d/u);
-    assert.match(text, /不产几何；剖面线为 45°/u, "边界须如实声明");
+    assert.match(text, /已投影 1 个视图/u);
+    assert.match(text, /- 视图 front（图2）/u);
+    assert.match(text, /纸面 \d/u);
+    assert.match(text, /不产几何；剖面线为细实线/u, "边界须如实声明");
+    assert.match(text, /相邻零件方向相反/u, "剖面线方向交替须如实声明");
 
     const svgPath = join(cwd, ".sati", "figures", "case-cad-fig2.svg");
     assert.ok(existsSync(svgPath));
@@ -226,7 +228,7 @@ test("patent_figure_project：标注端到端（标号落进 sidecar 的 spec.no
       context(cwd),
     );
     const text = result.content[0].type === "text" ? result.content[0].text : "";
-    assert.match(text, /附图标记 2 个（模型坐标锚点 \+ 引线）：10、20/u);
+    assert.match(text, /附图标记 2 个：10、20/u);
 
     const svg = readFileSync(join(cwd, ".sati", "figures", "case-refs-fig1.svg"), "utf8");
     assert.deepEqual(

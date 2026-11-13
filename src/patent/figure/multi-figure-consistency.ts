@@ -35,6 +35,8 @@ export type FigureConsistencyReport = {
   conflicts: ComponentConflict[];
   /** 图号不连续时报告缺失图号。 */
   missingFigureNumbers: number[];
+  /** 重复出现的图号（同一图号对应多幅附图 ⇒ 说明书里的「图N」指向不唯一）。 */
+  duplicateFigureNumbers: number[];
   /** 权利要求/说明书中引用但在附图中未出现的 ref。 */
   missingRefs: string[];
   /** 单引脚非电源网络（跨图聚合后仍单引脚）。 */
@@ -157,16 +159,30 @@ export function checkFigureConsistency(
     }
   }
 
-  // 图号连续性
+  // 图号连续性与重复
   const missingFigureNumbers: number[] = [];
+  const duplicateFigureNumbers: number[] = [];
   if (figureNumbers.length > 0) {
     const max = Math.max(...figureNumbers);
     for (let n = 1; n <= max; n += 1) {
       if (!figureNumbers.includes(n)) missingFigureNumbers.push(n);
     }
+    // 重复图号：同一图号被登记了多幅附图（分次调用或多条路径提交同一图）⇒ 说明书里的
+    // 「图N」会指向两幅图，审查员按图核对时必然对不上。
+    const seen = new Set<number>();
+    for (const n of figureNumbers) {
+      if (seen.has(n)) {
+        if (!duplicateFigureNumbers.includes(n)) duplicateFigureNumbers.push(n);
+      } else {
+        seen.add(n);
+      }
+    }
   }
   if (missingFigureNumbers.length > 0) {
     warnings.push(`附图编号不连续，缺失图号：${missingFigureNumbers.join(", ")}`);
+  }
+  if (duplicateFigureNumbers.length > 0) {
+    warnings.push(`附图编号重复：${duplicateFigureNumbers.join(", ")}（同一图号对应多幅附图）`);
   }
 
   // 跨图引用的 ref 冲突：同一 ref 在不同图中 symbol/category 不一致
@@ -204,7 +220,11 @@ export function checkFigureConsistency(
     warnings.push(`跨图聚合后仍仅单元件连接的网络：${orphanNets.join(", ")}`);
   }
 
-  const consistent = conflicts.length === 0 && missingFigureNumbers.length === 0 && missingRefs.length === 0;
+  const consistent =
+    conflicts.length === 0 &&
+    missingFigureNumbers.length === 0 &&
+    duplicateFigureNumbers.length === 0 &&
+    missingRefs.length === 0;
 
   const summary = buildSummary({
     figureCount: sorted.length,
@@ -212,6 +232,7 @@ export function checkFigureConsistency(
     netCount: Object.keys(globalNets).length,
     conflictCount: conflicts.length,
     missingFigureCount: missingFigureNumbers.length,
+    duplicateFigureCount: duplicateFigureNumbers.length,
     missingRefCount: missingRefs.length,
     orphanNetCount: orphanNets.length,
   });
@@ -223,6 +244,7 @@ export function checkFigureConsistency(
     numericComponents,
     conflicts,
     missingFigureNumbers,
+    duplicateFigureNumbers,
     missingRefs,
     orphanNets,
     warnings,
@@ -249,6 +271,7 @@ function buildSummary(stats: {
   netCount: number;
   conflictCount: number;
   missingFigureCount: number;
+  duplicateFigureCount: number;
   missingRefCount: number;
   orphanNetCount: number;
 }): string {
@@ -256,9 +279,17 @@ function buildSummary(stats: {
   parts.push(`附图 ${stats.figureCount} 张，合并识别 ${stats.componentCount} 个元件、${stats.netCount} 个网络。`);
   if (stats.conflictCount > 0) parts.push(`跨图标记冲突 ${stats.conflictCount} 处。`);
   if (stats.missingFigureCount > 0) parts.push(`缺失图号 ${stats.missingFigureCount} 个。`);
+  if (stats.duplicateFigureCount > 0) parts.push(`重复图号 ${stats.duplicateFigureCount} 个。`);
   if (stats.missingRefCount > 0) parts.push(`权利要求/说明书中有 ${stats.missingRefCount} 个引用未在附图中识别。`);
   if (stats.orphanNetCount > 0) parts.push(`孤立网络 ${stats.orphanNetCount} 个。`);
-  if (stats.conflictCount + stats.missingFigureCount + stats.missingRefCount + stats.orphanNetCount === 0) {
+  if (
+    stats.conflictCount +
+      stats.missingFigureCount +
+      stats.duplicateFigureCount +
+      stats.missingRefCount +
+      stats.orphanNetCount ===
+    0
+  ) {
     parts.push("跨图一致性检查通过。");
   }
   return parts.join("");

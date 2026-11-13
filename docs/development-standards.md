@@ -67,7 +67,7 @@
 | 提交前 | `scripts/lint-staged.mjs`（pre-commit hook） | staged 文件 biome format + eslint --fix，按 ui/root 分流 |
 | 边界 | `scripts/check-architecture-boundaries.mjs`（挂 `pnpm lint`）与 `scripts/check-ui-server-boundary.mjs`（挂 ui lint） | `src/` 不 import `ui/`、`ui/src` 不 import 后端 `src/`；`ui/server` → `src/` 走 barrel 白名单（两方向都是纯路径静态校验——带扩展名 specifier 下 eslint resolver 不回退，规则会静默跳过；specifier 提取见 `scripts/lib/import-specifiers.mjs`） |
 | 基线新鲜度 | `scripts/check-workspace-freshness.mjs`（`pnpm check:freshness`，挂 `pnpm check` 首位） | 不在过期基线上开工——本仓有两条按 `file:line` 硬编码的产物门禁（事件矩阵、文档事实层 claim），旧基线上的分析结论与生成物都是错的 |
-| 领域门禁 | `check:catalog-mirror` / `check:event-matrix` / `check:patent-sop` / `check:patent-workflow-docs` / `check:html-templates` / `check:skills` / `check:i18n-namespaces` / `check:issue-labels` / `check:techdebt-metrics` / `check:protocol-version` / `check:architecture-boundaries` / `check:degradation` / `check:doc-claims`（均挂 `pnpm lint`，共 <!-- claim:lint_gate_count -->15<!-- /claim --> 个） | 模型目录镜像、事件矩阵新鲜度、专利 SOP 引用、workflow 文档幂等、HTML 模板、skill frontmatter、i18n namespace 注册一致、标签清单与 issue 模板一致、技术债指标基线、协议台账、架构边界与文件规模、降级 registry（fail 方向/可观测/豁免/负向演练）、文档事实层（版本/计数/模块索引） |
+| 领域门禁 | `check:catalog-mirror` / `check:event-matrix` / `check:patent-sop` / `check:patent-workflow-docs` / `check:figure-render-baseline` / `check:html-templates` / `check:skills` / `check:i18n-namespaces` / `check:issue-labels` / `check:techdebt-metrics` / `check:protocol-version` / `check:architecture-boundaries` / `check:degradation` / `check:doc-claims`（均挂 `pnpm lint`，共 <!-- claim:lint_gate_count -->16<!-- /claim --> 个） | 模型目录镜像、事件矩阵新鲜度、专利 SOP 引用、workflow 文档幂等、HTML 模板、skill frontmatter、i18n namespace 注册一致、标签清单与 issue 模板一致、技术债指标基线、协议台账、架构边界与文件规模、降级 registry（fail 方向/可观测/豁免/负向演练）、文档事实层（版本/计数/模块索引） |
 | 测试 | 后端 `node:test` + UI `vitest` + Playwright e2e + `llm-replay` 无 key 重放 seam | 单元/集成/回路级；用例数与测试文件数**不写进文档**（每加一个测试就会变，跑一次 `pnpm test` 才准） |
 | 版本 | `scripts/bump-version.mjs` | 根 / ui / apps-desktop 三处 version lockstep |
 | CI | `.github/workflows/ci.yml`（<!-- claim:ci_job_count -->4<!-- /claim --> job） | typecheck/lint/format/test（root+ui）+ Windows desktop build&lint |
@@ -160,7 +160,7 @@
 
 ### 领域门禁（Sati 特有，✅ 已落地，维持）
 
-`pnpm lint` 末尾已挂接 <!-- claim:lint_gate_count -->15<!-- /claim --> 个领域门禁，任何事件面/专利 SOP/模板/标签/i18n/架构边界/文件规模/降级 registry/文档事实改动漏改即红。**这些是 Sati 相对模板的"超额资产"，保持并继续维护**（清单的生成源见 `docs/code-facts.md` §4）：
+`pnpm lint` 末尾已挂接 <!-- claim:lint_gate_count -->16<!-- /claim --> 个领域门禁，任何事件面/专利 SOP/模板/标签/i18n/架构边界/文件规模/降级 registry/文档事实改动漏改即红。**这些是 Sati 相对模板的"超额资产"，保持并继续维护**（清单的生成源见 `docs/code-facts.md` §4）：
 
 | 门禁 | 生成器 | 保护什么 |
 |---|---|---|
@@ -168,6 +168,7 @@
 | `check:event-matrix` | `gen-event-matrix.ts --check` | `docs/event-producer-consumer.md` 与源码事件声明/emit/订阅一致（改事件漏订即红） |
 | `check:patent-sop` | `check-patent-sop-references.mjs` | 手册/YAML 五类引用存在性 |
 | `check:patent-workflow-docs` | `gen-patent-workflow-docs.ts --check` | `assets/workflows/patent/generated/*.yaml` 幂等 |
+| `check:figure-render-baseline` | `gen-render-baseline.ts` | 附图渲染产物的**不变式**基线：图号/`data-ref`/文字内容集合/图元类别分布/图元数（结构量）+ 纸面尺寸/端点数/线段数（坐标派生量，引擎版本一致时才判定）；内置渲染器另比对产物 sha256（逐字节确定）。渲染布局漂移即红并指出哪一幅哪个量；基线缺失即红（不是静默通过） |
 | `check:html-templates` | `check-html-templates.mjs` | HTML 交付模板约束 |
 | `check:skills` | `validate-skills.mjs` | skill frontmatter 一致性 |
 | `check:i18n-namespaces` | `check-i18n-namespaces.ts` | `ui/src/i18n/config.js` 的资源注册表 ↔ `locales/{en,zh-CN}/*.json` ↔ `ns` 三方一致（漏注册即静默回落英文） |
@@ -291,7 +292,7 @@
 pnpm check            # 聚合门禁：check:freshness + check:config + typecheck + ui typecheck + lint + format:check（不含 test）
 pnpm check:freshness  # 开工前基线新鲜度（默认离线；--fetch 拉最新远端，--max-behind-main N 调阈值）
 pnpm typecheck        # tsc --noEmit（根）+ edgeclaw-memory-core typecheck；先 build 子包
-pnpm lint             # eslint src tests scripts apps/desktop + ui lint + <!-- claim:lint_gate_count -->15<!-- /claim --> 个领域门禁
+pnpm lint             # eslint src tests scripts apps/desktop + ui lint + <!-- claim:lint_gate_count -->16<!-- /claim --> 个领域门禁
 pnpm check:architecture-boundaries   # 架构边界与文件规模（--update-baseline 重写 docs/technical-debt/architecture-baseline.json）
 pnpm check:degradation   # 降级 registry 门禁（fail 方向/可观测/豁免/负向演练；挂 lint）
 pnpm audit:silent-catches   # 静默 catch 分档审计（DoD 对账用；--fail-on-hits 预留 CI 化）

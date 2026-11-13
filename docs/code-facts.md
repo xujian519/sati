@@ -25,8 +25,8 @@
 
 | claim | 事实 | 值 | 来源 |
 | --- | --- | --- | --- |
-| `default_tool_count` | 默认注册工具数（无参 createBuiltinRegistry） | `55` | src/tool/registry/createBuiltinRegistry.ts（运行期实例化） |
-| `patent_tool_count` | 专利域工具数（domain === "patent"） | `29` | src/tool/registry/createBuiltinRegistry.ts（运行期实例化） |
+| `default_tool_count` | 默认注册工具数（无参 createBuiltinRegistry） | `58` | src/tool/registry/createBuiltinRegistry.ts（运行期实例化） |
+| `patent_tool_count` | 专利域工具数（domain === "patent"） | `32` | src/tool/registry/createBuiltinRegistry.ts（运行期实例化） |
 | `channel_adapter_count` | IM 渠道适配器数 | `21` | src/adapters/channel/（目录数，不含 protocol/） |
 | `skill_count` | 内置技能数（SKILL.md 总数） | `237` | skills/**/SKILL.md |
 | `role_skill_count` | 专家角色数（type: role） | `45` | skills/**/SKILL.md frontmatter |
@@ -37,7 +37,7 @@
 | `patent_manifest_count` | 内置 patent manifest 数 | `8` | assets/workflows/patent/generated/*.yaml（由 check:patent-workflow-docs 保真） |
 | `drafting_stage_count` | patent_drafting_v1 阶段数 | `29` | assets/workflows/patent/generated/patent_drafting_v1.yaml |
 | `event_total_count` | 事件总数（生产者/消费者矩阵行数） | `80` | docs/event-producer-consumer.md（由 check:event-matrix 保真） |
-| `lint_gate_count` | pnpm lint 链上的领域门禁数 | `15` | package.json scripts.lint |
+| `lint_gate_count` | pnpm lint 链上的领域门禁数 | `16` | package.json scripts.lint |
 | `ci_job_count` | CI job 数 | `4` | .github/workflows/ci.yml |
 
 ## 3. `src/` 模块索引
@@ -64,7 +64,7 @@
 | `src/methodology/` | 14 | ✓ | 方法论注册表（five-whys/mece/triz/bridge-reencode 等） |
 | `src/model/` | 76 | ✓ | 模型抽象（providers/embedding/catalog/resolveModelInfo/streaming） |
 | `src/network/` | 3 | ✓ | 网络层（fetch 封装） |
-| `src/patent/` | 266 | ✓ | 专利执行管线（workflow/graph/atoms/evidence/figure/document 等） |
+| `src/patent/` | 287 | ✓ | 专利执行管线（workflow/graph/atoms/evidence/figure/document 等） |
 | `src/permission/` | 7 | ✓ | 权限（decision/PermissionRuntime + guard/ToolGuardRegistry） |
 | `src/pilot/` | 18 | ✓ | 配置（PilotConfigStore / lastGoodFacts / workspace 判定） |
 | `src/router/` | 35 | ✓ | 智能路由（含多模态媒体降级） |
@@ -76,7 +76,7 @@
 | `src/task/` | 4 | ✓ | 后台任务存储与运行时 |
 | `src/telemetry/` | 6 | ✓ | 遥测（analytics.v2 契约） |
 | `src/test-support/` | 7 | — | 测试基建（llm-replay 录制/重放 seam） |
-| `src/tool/` | 151 | ✓ | 工具系统（registry/execution/audit/builtin） |
+| `src/tool/` | 157 | ✓ | 工具系统（registry/execution/audit/builtin） |
 | `src/web/` | 13 | — | Web 服务端与浏览器客户端投影 |
 
 > 文件数按 **git 清单**统计（`git ls-files --cached --others --exclude-standard`，排除 `.d.ts`），
@@ -84,12 +84,13 @@
 
 ## 4. 门禁链与 CI
 
-`pnpm lint` 在 eslint + UI lint 之后挂 **15** 个领域门禁（按执行顺序）：
+`pnpm lint` 在 eslint + UI lint 之后挂 **16** 个领域门禁（按执行顺序）：
 
 - `pnpm check:catalog-mirror`
 - `pnpm check:event-matrix`
 - `pnpm check:patent-sop`
 - `pnpm check:patent-workflow-docs`
+- `pnpm check:figure-render-baseline`
 - `pnpm check:html-templates`
 - `pnpm check:skills`
 - `pnpm check:i18n-namespaces`

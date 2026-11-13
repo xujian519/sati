@@ -116,7 +116,19 @@ export type FigureCheckRuleId =
   | "RC4"
   | "RC5"
   | "RC6"
-  | "RC7";
+  | "RC7"
+  // RC8 预留（figure-hierarchy：声明的图内层级与权利要求归属表述一致性，需 schema 变更）；
+  // RC9 = 版面利用率不足（sheet-underfill，提示级 advisory）。
+  | "RC8"
+  | "RC9"
+  // DR 族 = 交付面复核（位图/横向/整幅框线；另含图面用语终检，沿用 V12/V13/V14 规则号）。
+  // 与 RC 族同域：吃的是已交付的 SVG，产出并入同一份 findings/门禁判定。
+  | "DR1"
+  | "DR2"
+  | "DR3"
+  // DR4 = 交付物清单漂移（内容哈希/大小/缺文件/新增未登记/时序倒挂）：
+  // 证据在 sidecar 的 deliverables 清单里，判据见 figuregen/deliverable-manifest.ts。
+  | "DR4";
 
 export type FigureCheckOptions = {
   /** 生成期无说明书文本可核时跳过 V2/V3（V1/V4/V5/V7/V8/V9 照常）。 */
@@ -200,6 +212,13 @@ export type FigureCheckFinding = {
   evidence?: string[];
   /** V7 判定维度：page_fit=可印区/分页切断；font_size=打印字高可辨性。 */
   metric?: "page_fit" | "font_size";
+  /**
+   * 提示级：报告但不当成图面缺陷阻断交付（与 severity 正交）。
+   *
+   * 用于「不是缺陷、但值得人看一眼」的判据（如版面利用率不足）；缺陷计数与门禁阻断
+   * 都跳过 advisory 项。字段在渲染复核族（RC*）与本类型之间共用，故此处一并声明。
+   */
+  advisory?: boolean;
 };
 
 export type FigureCheckResult = {

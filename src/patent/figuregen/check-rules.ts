@@ -32,7 +32,7 @@ import { sourceCharHeightMm } from "./source-char-height.js";
 import { hasNumeralPrefix, isRefNumeral, REF_NUMERAL_PRACTICAL_MAX } from "./numeral.js";
 import { minCharHeight, printableArea, sheetNumberText } from "./office-profile.js";
 import { LEGIBILITY_SHRINK_FACTOR } from "./page-contract.js";
-import type { FigureSpec } from "./types.js";
+import { figureNodes, type FigureSpec } from "./types.js";
 import type { WordingHit, WordingRuleId } from "./wording-rules.js";
 
 /** V12–V14 依据措辞（cn 引 CN 条文；域外引 37 CFR 1.84 与 PCT 明文，逐条溯源见 references/*.md）。 */
@@ -96,7 +96,7 @@ const ruleV2: FigureRule = {
     if (ctx.options.skipTextRules) return [];
     const missingEvidence: string[] = [];
     for (const figure of ctx.figures) {
-      for (const node of figure.nodes) {
+      for (const node of figureNodes(figure)) {
         if (node.ref === undefined || !isRefNumeral(node.ref)) continue;
         if (!textMentionsRef(ctx.specText, node.ref)) {
           missingEvidence.push(
@@ -148,7 +148,7 @@ const ruleV4: FigureRule = {
     const idToRefs = new Map<string, Set<number>>();
     for (const figure of ctx.figures) {
       const refToNodeIds = new Map<number, Set<string>>();
-      for (const node of figure.nodes) {
+      for (const node of figureNodes(figure)) {
         if (node.ref !== undefined && isRefNumeral(node.ref)) {
           const names = refToNames.get(node.ref) ?? new Set<string>();
           names.add(normalizeRefLabel(node.label));
@@ -206,7 +206,7 @@ const ruleV5: FigureRule = {
   run(ctx) {
     const annotationEvidence: string[] = [];
     for (const figure of ctx.figures) {
-      for (const node of figure.nodes) {
+      for (const node of figureNodes(figure)) {
         const lines = node.label.split("\n");
         const longest = Math.max(...lines.map(line => line.length));
         if (lines.length > COMMENT_LABEL_LINES_MAX || longest > COMMENT_LABEL_LINE_MAX) {
@@ -234,7 +234,7 @@ const ruleV18: FigureRule = {
   run(ctx) {
     const symbolTextEvidence: string[] = [];
     for (const figure of ctx.figures) {
-      for (const node of figure.nodes) {
+      for (const node of figureNodes(figure)) {
         if (!isSymbolShape(node.shape) || node.label.trim() === "") continue;
         const refNote = node.ref === undefined ? "" : `，标记 ${node.ref} 亦随之不显示`;
         symbolTextEvidence.push(
@@ -656,7 +656,7 @@ const ruleV22: FigureRule = {
     const invalid: string[] = [];
     const excessive: string[] = [];
     for (const figure of ctx.figures) {
-      for (const node of figure.nodes) {
+      for (const node of figureNodes(figure)) {
         if (node.ref === undefined) continue;
         if (!isRefNumeral(node.ref)) {
           invalid.push(`图${figure.figure_no} 节点「${node.id}」的附图标记 ${String(node.ref)} 不是正整数`);

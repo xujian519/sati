@@ -20,34 +20,28 @@
  * 报告与 data/content 构造）；与 generate 逐字重复的入参管线收进 patentFigureShared.ts。
  */
 
-import { mkdir, writeFile } from "node:fs/promises";
 import { isAbsolute, resolve } from "node:path";
 import {
   CAD_VIEWS,
-  buildFigureSidecar,
-  cadRefFontMm,
-  checkCadProjection,
+  CadArtifactError,
+  CadProjectionError,
   findingForLeaderPlacementError,
-  exportSvgTextToPath,
-  figureCaption,
   isCadSectionView,
   isCadView,
   isLeaderPlacementError,
   printableArea,
   profileForJurisdiction,
-  projectStep,
-  renderCadSvg,
+  projectCadViews,
+  resolveCadViewPlan,
   resolveFreecadCmd,
   sheetNumberText,
-  writeFigureSidecar,
-  writeSubmissionPageArtifact,
+  writeCadArtifacts,
+  type CadProjectionOutcome,
   type CadRefAnnotation,
   type CadRunner,
   type CadView,
   type DocumentKind,
-  type FigureSidecarLayout,
-  type FigureSidecarSheet,
-  type FigureSpec,
+  type FigureSidecarSheetLayout,
   type InkscapeProbe,
   type Jurisdiction,
   type OfficeProfile,
@@ -59,6 +53,7 @@ import {
   assertFigureOutputName,
   resolveFigureOutputDir,
   resolveInkscapeProbe,
+  resolveSubmissionStyle,
   toDocumentKind,
   validateSheetArgs,
 } from "./patentFigureShared.js";
@@ -87,6 +82,15 @@ export type PatentFigureProjectInput = {
   sheet_index?: number;
   sheet_total?: number;
   fit_to_page?: boolean;
+  /** 本次要投影的视图集（per-call；缺省取部署级 env，env 缺省单视图）。 */
+  views?: string[];
+  /** 落版参数（per-call；缺省取部署级 env）。 */
+  submission?: {
+    rotate_deg?: number;
+    caption_font_mm?: number;
+    caption_gap_mm?: number;
+    sheet_font_mm?: number;
+  };
 };
 
 /** 标注数量上限（超出属调用方构造错误：图面容不下，且多为误传）。 */
@@ -101,20 +105,21 @@ export type CreatePatentFigureProjectToolOptions = {
   freecadCmd?: string;
 };
 
-/** 投影产物表（projectStep 的返回；装配与检查共用）。 */
-type CadProjectionTable = Awaited<ReturnType<typeof projectStep>>;
-/** CAD 渲染结果（renderCadSvg 的返回；装配与报告共用）。 */
-type CadRenderResult = ReturnType<typeof renderCadSvg>;
-/** 几何级检查发现（checkCadProjection 的条目）。 */
-type CadFinding = ReturnType<typeof checkCadProjection>[number];
+/** 几何级检查发现（编排层返回的条目）。 */
+type CadFinding = CadProjectionOutcome["views"][number]["findings"][number];
 
 /** 产物装配结果（报告与 data/content 构造的输入）。 */
 type ProjectArtifacts = {
-  svgPath: string;
+  /** 各视图的 SVG 路径（顺序与视图一致）。 */
+  svgPaths: string[];
   pagePath: string | undefined;
-  layoutField: FigureSidecarLayout | undefined;
-  sheetField: FigureSidecarSheet | undefined;
+  /** 拼版页路径（多视图 + 落版时出现；单视图不产）。 */
+  sheetPath: string | undefined;
+  /** 拼版页摘要（网格形状、统一缩放、字高核验）。 */
+  sheetLayout: FigureSidecarSheetLayout | undefined;
   caption: string | undefined;
+  /** manifest 路径（视图 → 文件 → 几何事实 / 件号归属）。 */
+  manifestPath: string;
   sidecarPath: string;
 };
 
@@ -224,7 +229,7 @@ function probeFreecadCommand(
   const probe = resolveFreecadCmd();
   if (probe === undefined) {
     throw new SatiToolRuntimeError(
-      "tool_execution_failed",
+      "setup_required",
       "未找到 FreeCAD 无头命令 freecadcmd：请安装 FreeCAD，或用 SATI_FREECAD_CMD 指定其路径" +
         "（本工具不静默回退其它渲染器——CAD 图只能由几何投影得到）",
       { tool },
@@ -234,9 +239,11 @@ function probeFreecadCommand(
 }
 
 /**
- * 产物装配：主 SVG 落盘 → 可选落版页 → 可选文本转路径 → sidecar 落盘。
- * 顺序是契约的一部分（先探测后落盘的 fail-loud 语义在入参阶段已完成；转路径在全部
- * 图形落盘之后、sidecar 之前——sidecar 记录"已转路径"这一事实）。
+ * 产物装配：逐视图 SVG 落盘 → 可选落版页 → 可选文本转路径 → manifest → sidecar。
+ *
+ * 装配逻辑落在 `cad/artifacts.ts`（本仓 CAD 域的算法不放工具层，工具层只留 env 解析与
+ * 调用）；顺序是契约的一部分：先探测后落盘的 fail-loud 语义在入参阶段已完成；转路径在
+ * 全部图形落盘之后、sidecar 之前——sidecar 记录"已转路径"这一事实。
  */
 async function writeProjectArtifacts(args: {
   outputDir: string;
@@ -244,11 +251,7 @@ async function writeProjectArtifacts(args: {
   figureNo: number;
   figureCount: number;
   fitToPage: boolean | undefined;
-  view: CadView;
-  table: CadProjectionTable;
-  render: CadRenderResult;
-  annotations: CadRefAnnotation[];
-  findings: CadFinding[];
+  outcome: CadProjectionOutcome;
   jurisdiction: Jurisdiction;
   documentKind: DocumentKind | undefined;
   profile: OfficeProfile;
@@ -256,177 +259,160 @@ async function writeProjectArtifacts(args: {
   sheetText: string | undefined;
   inkscape: InkscapeProbe | undefined;
   hiddenLines: boolean;
+  stepPath: string;
   tool: string;
-}): Promise<ProjectArtifacts> {
-  const { outputDir, outputName, figureNo, view, table, render, annotations, findings } = args;
-  const { jurisdiction, documentKind, profile, sheet, sheetText, inkscape, hiddenLines } = args;
-  await mkdir(outputDir, { recursive: true });
-  const svgPath = resolve(outputDir, `${outputName}-fig${figureNo}.svg`);
-  await writeFile(svgPath, render.svg, "utf8");
-
-  const caption = figureCaption(profile, figureNo, args.figureCount);
-  const sheetField: FigureSidecarSheet | undefined =
-    sheet === undefined || sheetText === undefined ? undefined : { ...sheet, text: sheetText };
-  let layoutField: FigureSidecarLayout | undefined;
-  let pagePath: string | undefined;
-  if (args.fitToPage === true) {
-    // 落版页的装配与内置渲染通路共用一份实现（文件名形态 + sidecar 的 layout 字段）。
-    // 字高取图内最小字（标记字号）：CAD 图以 mm 为坐标单位，无需按 px 折算。
-    const page = await writeSubmissionPageArtifact({
-      outputDir,
-      outputName,
-      figureNo,
-      drawingSvg: render.svg,
-      office: profile.office,
-      ...(sheet === undefined ? {} : { sheet: { index: sheet.index, total: sheet.total } }),
-      sourceCharHeightMm: cadRefFontMm(args.jurisdiction),
-    });
-    pagePath = page.path;
-    layoutField = page.layout;
-  }
-
-  // 字体独立导出（可选收尾，最后一步）：同内置渲染通路——放在图形与落版页都落盘之后、
-  // sidecar 之前（此后不再解析这些文件的文本；sidecar 记录已转路径这一事实）。
-  if (inkscape !== undefined) {
-    for (const target of [svgPath, ...(pagePath === undefined ? [] : [pagePath])]) {
-      const outcome = await exportSvgTextToPath({ path: target, cmd: inkscape.cmd });
-      if (!outcome.ok) {
-        throw new SatiToolRuntimeError(
-          "tool_execution_failed",
-          `文本转路径失败（${target}）：${outcome.error}${
-            outcome.installHint === undefined ? "" : `——${outcome.installHint}`
-          }`,
-          { tool: args.tool, path: target, reason: outcome.reason },
-        );
-      }
-    }
-  }
-
-  // 图号 + 标记骨架 spec：CAD 图的画幅由投影几何决定（不由本模块布局决定），但**标记**
-  // 是真实存在的图面内容 ⇒ 落进 nodes（label=标号、ref=标记），使 V2/V4 在定稿期可用
-  const skeleton: FigureSpec = {
-    figure_no: figureNo,
-    kind: "block",
-    nodes: annotations.map(annotation => ({
-      id: `ref-${annotation.ref}`,
-      label: String(annotation.ref),
-      ref: annotation.ref,
-    })),
-    edges: [],
+  /** 落版样式（per-call 优先 / env 兜底）。 */
+  submissionStyle?: {
+    readonly rotateDeg?: number;
+    readonly captionFontMm?: number;
+    readonly captionGapMm?: number;
+    readonly sheetFontMm?: number;
   };
-  const sidecarPath = await writeFigureSidecar({
-    outputDir,
-    outputName,
-    sidecar: buildFigureSidecar({
-      outputName,
-      renderer: "cad",
-      jurisdiction,
-      documentKind,
-      files: [
-        {
-          figure_no: figureNo,
-          path: svgPath,
-          ...(caption === undefined ? {} : { caption }),
-          ...(sheetField === undefined ? {} : { sheet: sheetField }),
-          ...(layoutField === undefined ? {} : { layout: layoutField }),
-          geometry: {
-            source: "cad",
-            view,
-            scale: render.scale,
-            width_mm: render.widthMm,
-            height_mm: render.heightMm,
-            hidden_lines: hiddenLines,
-            ...(table.section === undefined
-              ? {}
-              : {
-                  section: {
-                    offset_mm: table.section.offset_mm,
-                    cut_faces: render.cutFaces,
-                    hatch_segments: render.hatchSegments,
-                  },
-                }),
-            ...(annotations.length === 0
-              ? {}
-              : {
-                  ref_numerals: annotations.map(annotation => annotation.ref),
-                  label_placements: render.labels.map(label => ({
-                    ref: label.ref,
-                    offset_mm: [label.labelMm[0] - label.anchorMm[0], label.labelMm[1] - label.anchorMm[1]] as [
-                      number,
-                      number,
-                    ],
-                    degraded: label.degraded,
-                    // 能走到落盘说明 strict 已经放下；失败在 renderCadSvg 抛出，不会写 sidecar。
-                    strict_failure: false,
-                  })),
-                }),
-            findings,
-          },
-        },
-      ],
-      figures: [skeleton],
-      check: { ok: true, findings: [], refsInFigures: [], refsInText: [] },
-      // 文本侧规则在投影期不适用（无说明书文本），核验由附图门在定稿期跑
-      skipTextRules: true,
-      ...(inkscape === undefined ? {} : { textToPath: true }),
-    }),
+}): Promise<ProjectArtifacts> {
+  const artifacts = await writeCadArtifacts({
+    outputDir: args.outputDir,
+    outputName: args.outputName,
+    figureNo: args.figureNo,
+    figureCount: args.figureCount,
+    fitToPage: args.fitToPage,
+    jurisdiction: args.jurisdiction,
+    documentKind: args.documentKind,
+    profile: args.profile,
+    ...(args.sheet === undefined ? {} : { sheet: args.sheet }),
+    ...(args.sheetText === undefined ? {} : { sheetText: args.sheetText }),
+    ...(args.inkscape === undefined ? {} : { inkscape: args.inkscape }),
+    hiddenLines: args.hiddenLines,
+    outcome: args.outcome,
+    stepPath: args.stepPath,
+    tool: args.tool,
+    ...(args.submissionStyle === undefined ? {} : { submissionStyle: args.submissionStyle }),
   });
-  return { svgPath, pagePath, layoutField, sheetField, caption, sidecarPath };
+  return {
+    svgPaths: artifacts.svgPaths,
+    pagePath: artifacts.pagePath,
+    sheetPath: artifacts.sheetPath,
+    sheetLayout: artifacts.sheetLayout,
+    caption: artifacts.caption,
+    manifestPath: artifacts.manifestPath,
+    sidecarPath: artifacts.sidecarPath,
+  };
 }
 
-/** 报告文本（人能直接照做的行式摘要；检查发现逐条列出，择位降级显式报出）。 */
+/**
+ * 几何级发现去重（按 规则 + 文案）。
+ *
+ * 多视图时同一条判据（如 C14 锚点不落在零件上）在各视图重复出现，而它的成因与视图无关
+ * ⇒ data 里只留一条（报告文本仍逐视图列出，视图名在文案里）。
+ */
+function dedupeFindings(findings: readonly CadFinding[]): CadFinding[] {
+  const seen = new Set<string>();
+  const unique: CadFinding[] = [];
+  for (const finding of findings) {
+    const key = `${finding.rule}|${finding.message}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(finding);
+  }
+  return unique;
+}
+
+/**
+ * 报告文本（人能直接照做的行式摘要；检查发现逐条列出，择位降级显式报出）。
+ *
+ * 多视图时逐视图一段（几何、剖面线方向、附图标记与件号归属），末尾给出 manifest 路径
+ * ——"件号 ↔ 零件 ↔ 锚点"的完整对应在 manifest 里，报告只给摘要。
+ */
 function buildProjectResultLines(args: {
-  view: CadView;
+  outcome: CadProjectionOutcome;
   figureNo: number;
-  svgPath: string;
+  svgPaths: string[];
   pagePath: string | undefined;
-  table: CadProjectionTable;
-  render: CadRenderResult;
+  sheetPath: string | undefined;
+  sheetLayout: FigureSidecarSheetLayout | undefined;
+  manifestPath: string;
   profile: OfficeProfile;
   area: ReturnType<typeof printableArea>;
   caption: string | undefined;
   sheetText: string | undefined;
-  annotations: CadRefAnnotation[];
   sidecarPath: string;
   cmdSource: string;
-  findings: CadFinding[];
+  viewSource: string;
 }): string[] {
-  const { view, figureNo, svgPath, pagePath, table, render, profile, area, caption } = args;
-  const { sheetText, annotations, sidecarPath, cmdSource, findings } = args;
-  return [
-    `已投影 ${view} 视图（FreeCAD 无头，命令来源: ${cmdSource}）：`,
-    `- 图${figureNo}: ${svgPath}`,
-    `- 几何范围 ${table.edges.length} 条投影边（可见 ${render.visibleEdges} / 隐藏 ${render.hiddenEdges}）`,
-    `- 纸面尺寸 ${render.widthMm.toFixed(1)}×${render.heightMm.toFixed(1)}mm（适配缩放 ${(render.scale * 100).toFixed(0)}%，` +
-      `${profile.office} 可印区 ${area.widthMm.toFixed(1)}×${area.heightMm.toFixed(1)}mm 内）`,
-    `- 图号：${caption === undefined ? `本案仅一幅附图，按 ${profile.office} 档案不标注图号` : `${caption}（标注在图下方）`}`,
-    ...(sheetText === undefined ? [] : [`- 附图页页码：本图页写作 ${sheetText}`]),
-    ...(pagePath === undefined ? [] : [`- 提交落版页（A4 整页）: ${pagePath}`]),
-    ...(table.section === undefined
-      ? []
-      : [
-          `- 全剖视图：剖切面位于 ${table.section.offset_mm}mm，剖切面 ${render.cutFaces} 个、剖面线 ${render.hatchSegments} 段`,
-        ]),
-    ...(annotations.length === 0
-      ? []
-      : [
-          `- 附图标记 ${annotations.length} 个（模型坐标锚点 + 引线）：${annotations.map(a => a.ref).join("、")}`,
-          // 择位降级（无可用引线落位 ⇒ 标号压在图上）必须显式报出：C11 是机器可读的
-          // 检查项，这里再给一句人能直接照做的说明
-          ...render.labelWarnings.map(warning => `- 标注择位降级：${warning}`),
-        ]),
-    `- 附图 sidecar: ${sidecarPath}`,
-    "",
-    "几何级检查：",
-    ...findings.map(
-      finding =>
-        `- [${finding.severity.toUpperCase()}] ${finding.rule}: ${finding.message}` +
-        (finding.evidence ? `\n  ${finding.evidence.join("\n  ")}` : ""),
-    ),
-    "",
-    "说明：本工具不产几何；剖面线为 45° 细实线（纸面等间距）；旋转剖/阶梯剖/局部剖未做。" +
-      "附图标记的锚点由调用方按模型坐标给出，图面标号位置可经 label_offset_mm 指定。",
+  const { outcome, figureNo, svgPaths, pagePath, sheetPath, sheetLayout, manifestPath, profile, area, caption } = args;
+  const { sheetText, sidecarPath, cmdSource, viewSource } = args;
+  const lines: string[] = [
+    `已投影 ${outcome.views.length} 个视图（FreeCAD 无头，命令来源: ${cmdSource}；视图集: ${viewSource}）：`,
   ];
+  outcome.views.forEach((view, index) => {
+    const render = view.render;
+    lines.push(`- 视图 ${view.view}（图${figureNo}）: ${svgPaths[index] ?? ""}`);
+    lines.push(
+      `  - 几何 ${view.table.edges.length} 条投影边（可见 ${render.visibleEdges} / 隐藏 ${render.hiddenEdges}），` +
+        `纸面 ${render.widthMm.toFixed(1)}×${render.heightMm.toFixed(1)}mm（适配缩放 ${(render.scale * 100).toFixed(0)}%，` +
+        `${profile.office} 可印区 ${area.widthMm.toFixed(1)}×${area.heightMm.toFixed(1)}mm 内）`,
+    );
+    if (view.table.section !== undefined) {
+      lines.push(
+        `  - 全剖视图：剖切面位于 ${view.table.section.offset_mm}mm，剖切面 ${render.cutFaces} 个、` +
+          `剖面线 ${render.hatchSegments} 段（方向 ${render.hatchAnglesDeg.map(angle => `${angle}°`).join(" / ")}，相邻件方向相反）`,
+      );
+    }
+    if (view.annotations.length > 0) {
+      lines.push(`  - 附图标记 ${view.annotations.length} 个：${view.annotations.map(item => item.ref).join("、")}`);
+      // 择位降级（无可用引线落位 ⇒ 标号压在图上）必须显式报出：C11 是机器可读的
+      // 检查项，这里再给一句人能直接照做的说明
+      for (const warning of render.labelWarnings) lines.push(`  - 标注择位降级：${warning}`);
+    }
+    const owned = view.bindings.filter(binding => binding.partIndex !== null);
+    if (owned.length > 0) {
+      lines.push(
+        `  - 件号归属（件号→零件序号）：${owned
+          .map(binding => `${binding.ref}→零件 ${binding.partIndex}${binding.source === "auto" ? "（自动锚点）" : ""}`)
+          .join("、")}`,
+      );
+    }
+    for (const notice of view.notices) lines.push(`  - 口径说明：${notice}`);
+  });
+  lines.push(
+    `- 图号：${caption === undefined ? `本案仅一幅附图，按 ${profile.office} 档案不标注图号` : `${caption}（标注在图下方）`}`,
+  );
+  if (sheetText !== undefined) lines.push(`- 附图页页码：本图页写作 ${sheetText}`);
+  if (pagePath !== undefined) lines.push(`- 提交落版页（A4 整页）: ${pagePath}`);
+  if (sheetPath !== undefined && sheetLayout !== undefined) {
+    lines.push(
+      `- 提交拼版页（A4 整页，${sheetLayout.columns} 列 × ${sheetLayout.rows} 行共 ${sheetLayout.cells} 格，` +
+        `各格统一缩放 ${(sheetLayout.page_scale * 100).toFixed(0)}%，格 ${sheetLayout.cell_width_mm.toFixed(1)}×` +
+        `${sheetLayout.cell_height_mm.toFixed(1)}mm）: ${sheetPath}`,
+    );
+    // 字高核验：低于法域下限必须**报出来**（不静默、不假装通过）。
+    const limit = sheetLayout.min_char_height_mm;
+    const basis = sheetLayout.min_char_height_basis === "statute" ? "条文下限" : "实践下限";
+    const limitText = limit === undefined ? "（该法域档案未登记字高下限）" : `（下限 ${limit.toFixed(2)}mm，${basis}）`;
+    lines.push(
+      `- 拼版后图内字高 ${sheetLayout.char_height_mm.toFixed(2)}mm${limitText}` +
+        ` → ${sheetLayout.char_height_compliant ? "达标" : "**不达标**"}`,
+    );
+    for (const warning of sheetLayout.warnings ?? []) lines.push(`  - 拼版告警：${warning}`);
+  }
+  lines.push(`- 结构图 manifest（视图 → 文件 → 零件几何事实 / 件号归属）: ${manifestPath}`);
+  lines.push(`- 附图 sidecar: ${sidecarPath}`);
+  lines.push("");
+  lines.push("几何级检查：");
+  for (const view of outcome.views) {
+    for (const finding of view.findings) {
+      lines.push(
+        `- [${finding.severity.toUpperCase()}] ${finding.rule}（${view.view}）: ${finding.message}` +
+          (finding.evidence ? `\n  ${finding.evidence.join("\n  ")}` : ""),
+      );
+    }
+  }
+  lines.push("");
+  lines.push(
+    "说明：本工具不产几何；剖面线为细实线（纸面等间距，相邻零件方向相反以示区分，GB/T 4457.5）；" +
+      "旋转剖/阶梯剖/局部剖未做。附图标记的锚点由调用方按模型坐标给出（锚点落在哪个零件由几何判定，" +
+      "不落则报 C14），图面标号位置可经 label_offset_mm 指定。",
+  );
+  return lines;
 }
 
 export function createPatentFigureProjectTool(
@@ -454,8 +440,15 @@ export function createPatentFigureProjectTool(
         output_name: { type: "string" },
         view: { type: "string", enum: [...CAD_VIEWS] },
         svg_path: { type: "string" },
+        svg_paths: {
+          type: "array",
+          items: { type: "string" },
+          description: "多视图时各视图的 SVG 路径（单视图时缺省）",
+        },
         page_path: { type: "string", description: "提交落版页（开启时出现）" },
+        sheet_path: { type: "string", description: "提交拼版页（多视图共页的 A4 整页；开启落版且多视图时出现）" },
         sidecar_path: { type: "string" },
+        manifest_path: { type: "string", description: "结构图 manifest（视图 / 零件几何事实 / 件号归属）" },
         command_source: { type: "string", description: "FreeCAD 可执行来源（env 覆盖 / 平台候选）" },
         scale: { type: "number", description: "适配 A4 可印区的缩放系数" },
         width_mm: { type: "number" },
@@ -503,12 +496,11 @@ export function createPatentFigureProjectTool(
         },
         section_offset_mm: {
           type: "number",
-          description:
-            "全剖视图：沿视图方向的剖切位置（模型坐标，毫米）——剖切面垂直于视图方向、保留远离观者的一侧，剖切面按 45° 细实线填充；仅 front/back/left/right/top/bottom 可剖切（iso 不可）",
+          description: "Section plane offset in model mm (axis views only).",
         },
         annotations: {
           type: "array",
-          description: "Reference-numeral annotations (model-space anchors).",
+          description: "Reference-numeral anchors (model mm).",
           items: {
             type: "object",
             additionalProperties: false,
@@ -528,14 +520,12 @@ export function createPatentFigureProjectTool(
             },
           },
         },
-        case_id: { type: "string", description: "Case id (writes under data/cases/<caseId>/outputs/)." },
-        output_dir: { type: "string", description: "Override output directory." },
+        case_id: { type: "string", description: "Case id." },
+        output_dir: { type: "string", description: "Output dir." },
         jurisdiction: {
           type: "string",
           enum: JURISDICTIONS,
-          description:
-            "Target office (default cn): cn=CNIPA (图N), us=USPTO (FIG. N, 37 CFR 1.84 profile), " +
-            "pct=PCT (Fig. N, PCT Rule 11 profile); single-figure cases are unnumbered under pct/us",
+          description: "cn|us|pct.",
         },
         document_kind: {
           type: "string",
@@ -546,9 +536,7 @@ export function createPatentFigureProjectTool(
         figure_count: {
           type: "integer",
           minimum: 1,
-          description:
-            "本案附图总幅数（缺省 1）：本工具一次只投影一幅，多视图案卷须声明总数——它决定是否需要图号" +
-            "（单幅在 pct/us 不得出现 Fig./FIG.）",
+          description: "Total figures in case.",
         },
         sheet_index: {
           type: "integer",
@@ -559,6 +547,23 @@ export function createPatentFigureProjectTool(
         fit_to_page: {
           type: "boolean",
           description: "Also produce a print page SVG.",
+        },
+        views: {
+          type: "array",
+          minItems: 1,
+          items: { type: "string", enum: [...CAD_VIEWS] },
+          description: "Views to project in one run (env fallback).",
+        },
+        submission: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            rotate_deg: { type: "integer", enum: [0, 90, 180, 270] },
+            caption_font_mm: { type: "number" },
+            caption_gap_mm: { type: "number" },
+            sheet_font_mm: { type: "number" },
+          },
+          description: "Per-call page params (env fallback).",
         },
       },
     },
@@ -575,6 +580,26 @@ export function createPatentFigureProjectTool(
         );
       }
       const view: CadView = input.view;
+      // per-call 视图集的合法性**先**于视图计划解析报出：入参写错是调用方的问题
+      //（invalid_tool_input），不能与部署配置写错（setup_required）混为一谈。
+      if (input.views !== undefined) {
+        for (const name of input.views) {
+          if (!isCadView(name)) {
+            throw new SatiToolRuntimeError(
+              "invalid_tool_input",
+              `非法 views 项 "${name}"（可用: ${CAD_VIEWS.join(", ")}）`,
+              { tool },
+            );
+          }
+        }
+      }
+      // 落版参数：部署级 env 打底，per-call 入参优先。非法值必须在落盘前报错。
+      const submissionStyle = resolveSubmissionStyle(process.env, tool, {
+        ...(input.submission?.rotate_deg === undefined ? {} : { rotateDeg: input.submission.rotate_deg }),
+        ...(input.submission?.caption_font_mm === undefined ? {} : { captionFontMm: input.submission.caption_font_mm }),
+        ...(input.submission?.caption_gap_mm === undefined ? {} : { captionGapMm: input.submission.caption_gap_mm }),
+        ...(input.submission?.sheet_font_mm === undefined ? {} : { sheetFontMm: input.submission.sheet_font_mm }),
+      });
       assertFigureOutputName(input.output_name, tool);
       const figureNo =
         Number.isInteger(input.figure_no) && (input.figure_no ?? 0) > 0 ? (input.figure_no as number) : 1;
@@ -593,45 +618,33 @@ export function createPatentFigureProjectTool(
       const { cmd, cmdSource } = probeFreecadCommand(options, tool);
 
       try {
-        const table = await projectStep({
+        // 视图计划（部署级 env）：view 入参仍是主视图，env 追加其余视图；env 未设置 ⇒ 单视图。
+        let plan;
+        try {
+          plan = resolveCadViewPlan(process.env, view, input.views);
+        } catch (err) {
+          // 部署配置写错（非法视图名 / 非法布尔取值）⇒ 不是调用方的入参问题，报 setup_required。
+          throw new SatiToolRuntimeError(
+            "setup_required",
+            `部署配置非法：${err instanceof Error ? err.message : String(err)}`,
+            { tool },
+          );
+        }
+        const outcome = await projectCadViews({
           cmd,
           stepPath,
-          view,
-          ...(input.tolerance_mm === undefined ? {} : { toleranceMm: input.tolerance_mm }),
+          views: plan.views,
           ...(sectionOffset === undefined ? {} : { sectionOffsetMm: sectionOffset }),
-          ...(options.runner === undefined ? {} : { runner: options.runner }),
-        });
-        // 几何级检查分两步：C1（边数）与 C5（剖切有效性）先于出图 → fail-closed；
-        // C2/C3/C6–C9 依赖排版（缩放/剖面线/标注落位）→ 渲染后。
-        const edgeFindings = checkCadProjection({ table, hiddenLines });
-        const blocker = edgeFindings.find(finding => finding.severity === "fail");
-        if (blocker !== undefined) {
-          throw new SatiToolRuntimeError("tool_execution_failed", `投影结果不可交付：${blocker.message}`, {
-            tool,
-            view,
-          });
-        }
-        const render = renderCadSvg(table, {
+          ...(input.tolerance_mm === undefined ? {} : { toleranceMm: input.tolerance_mm }),
+          annotations,
+          autoAnchors: plan.autoAnchors,
           figureNo,
           jurisdiction,
           figureCount,
           hiddenLines,
-          ...(annotations.length === 0 ? {} : { annotations }),
+          ...(options.runner === undefined ? {} : { runner: options.runner }),
         });
-        const findings = [
-          ...edgeFindings,
-          ...checkCadProjection({ table, render, hiddenLines }).filter(
-            finding => finding.rule !== "C1" && finding.rule !== "C5",
-          ),
-        ];
-        const layoutBlocker = findings.find(finding => finding.severity === "fail");
-        if (layoutBlocker !== undefined) {
-          throw new SatiToolRuntimeError("tool_execution_failed", `图幅不可交付：${layoutBlocker.message}`, {
-            tool,
-            view,
-          });
-        }
-
+        const primary = outcome.primary;
         const sheetText = sheet === undefined ? undefined : sheetNumberText(profile, sheet.index, sheet.total);
         const artifacts = await writeProjectArtifacts({
           outputDir,
@@ -639,11 +652,7 @@ export function createPatentFigureProjectTool(
           figureNo,
           figureCount,
           fitToPage: input.fit_to_page,
-          view,
-          table,
-          render,
-          annotations,
-          findings,
+          outcome,
           jurisdiction,
           documentKind,
           profile,
@@ -651,62 +660,69 @@ export function createPatentFigureProjectTool(
           sheetText,
           inkscape,
           hiddenLines,
+          stepPath,
           tool,
+          submissionStyle,
         });
         const lines = buildProjectResultLines({
-          view,
+          outcome,
           figureNo,
-          svgPath: artifacts.svgPath,
+          svgPaths: artifacts.svgPaths,
           pagePath: artifacts.pagePath,
-          table,
-          render,
+          sheetPath: artifacts.sheetPath,
+          sheetLayout: artifacts.sheetLayout,
+          manifestPath: artifacts.manifestPath,
           profile,
           area,
           caption: artifacts.caption,
           sheetText,
-          annotations,
           sidecarPath: artifacts.sidecarPath,
           cmdSource,
-          findings,
+          viewSource: plan.source,
         });
         const data = {
           figure_no: figureNo,
           output_name: input.output_name,
           view,
-          svg_path: artifacts.svgPath,
+          svg_path: artifacts.svgPaths[0] ?? "",
+          ...(artifacts.svgPaths.length > 1 ? { svg_paths: artifacts.svgPaths } : {}),
           ...(artifacts.pagePath === undefined ? {} : { page_path: artifacts.pagePath }),
+          ...(artifacts.sheetPath === undefined ? {} : { sheet_path: artifacts.sheetPath }),
           sidecar_path: artifacts.sidecarPath,
+          manifest_path: artifacts.manifestPath,
           command_source: cmdSource,
-          scale: render.scale,
-          width_mm: render.widthMm,
-          height_mm: render.heightMm,
-          visible_edges: render.visibleEdges,
-          hidden_edges: render.hiddenEdges,
+          scale: primary.render.scale,
+          width_mm: primary.render.widthMm,
+          height_mm: primary.render.heightMm,
+          visible_edges: primary.render.visibleEdges,
+          hidden_edges: primary.render.hiddenEdges,
           hidden_lines: hiddenLines,
           ...(artifacts.caption === undefined ? {} : { caption: artifacts.caption }),
-          ...(table.section === undefined
+          ...(primary.table.section === undefined
             ? {}
             : {
                 section: {
-                  offset_mm: table.section.offset_mm,
-                  cut_faces: render.cutFaces,
-                  hatch_segments: render.hatchSegments,
+                  offset_mm: primary.table.section.offset_mm,
+                  cut_faces: primary.render.cutFaces,
+                  hatch_segments: primary.render.hatchSegments,
                 },
               }),
-          ...(annotations.length === 0 ? {} : { ref_numerals: annotations.map(annotation => annotation.ref) }),
-          geometry_findings: findings,
+          ...(primary.annotations.length === 0
+            ? {}
+            : { ref_numerals: primary.annotations.map(annotation => annotation.ref) }),
+          geometry_findings: dedupeFindings(outcome.views.flatMap(view => view.findings)),
         };
 
         return {
           data,
           content: [
             { type: "text", text: lines.join("\n") },
-            {
+            ...artifacts.svgPaths.map((path, index) => ({
               type: "file" as const,
-              path: artifacts.svgPath,
+              path,
               mimeType: "image/svg+xml",
-              description: `CAD 投影图 图${figureNo}`,
-            },
+              description: `CAD 投影图 图${figureNo}（${outcome.views[index]?.view ?? "?"}）`,
+            })),
             ...(artifacts.pagePath === undefined
               ? []
               : [
@@ -717,6 +733,22 @@ export function createPatentFigureProjectTool(
                     description: `CAD 投影落版页 图${figureNo}`,
                   },
                 ]),
+            ...(artifacts.sheetPath === undefined
+              ? []
+              : [
+                  {
+                    type: "file" as const,
+                    path: artifacts.sheetPath,
+                    mimeType: "image/svg+xml",
+                    description: `CAD 投影拼版页 图${figureNo}（多视图共页）`,
+                  },
+                ]),
+            {
+              type: "file" as const,
+              path: artifacts.manifestPath,
+              mimeType: "application/json",
+              description: "CAD 结构图 manifest（视图 / 零件 / 件号归属）",
+            },
             {
               type: "file" as const,
               path: artifacts.sidecarPath,
@@ -727,6 +759,24 @@ export function createPatentFigureProjectTool(
         };
       } catch (err) {
         if (err instanceof SatiToolRuntimeError) throw err;
+        if (err instanceof CadProjectionError) {
+          // 几何不可交付：消息保留"投影结果不可交付 / 图幅不可交付"字样（既有契约），
+          // 并把触发失败的检查规则带进详情，便于调用方定位。
+          throw new SatiToolRuntimeError("tool_execution_failed", err.message, {
+            tool,
+            view,
+            rule: err.findings.find(finding => finding.severity === "fail")?.rule,
+          });
+        }
+        if (err instanceof CadArtifactError) {
+          // 落盘阶段失败：保留路径与原因（既有契约：转路径失败要报出是哪个文件）
+          throw new SatiToolRuntimeError("tool_execution_failed", err.message, {
+            tool,
+            view,
+            path: err.path,
+            ...(err.reason === undefined ? {} : { reason: err.reason }),
+          });
+        }
         if (isLeaderPlacementError(err)) {
           const finding = findingForLeaderPlacementError(err);
           throw new SatiToolRuntimeError("tool_execution_failed", finding.message, {

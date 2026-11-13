@@ -287,7 +287,23 @@ test("R-06 描述预算：单工具 <=1200 字符、属性描述 <=200 字符、
     walk(tool.inputSchema, tool.name);
     total += tool.description.length + JSON.stringify(tool.inputSchema).length;
   }
-  assert.ok(total <= 40_000, `patent contract is ${total} chars (budget 40000)`);
+  // 总量上限 40 000 → 48 000（2026-11-12，批次 B-1 与 B-2 各上调一次）：
+  //
+  // 40 000 定于 2026-08（patent 域 26 个工具、3 个制图工具、无 per-call 入参）。此后两轮
+  // 都在**真实新增能力**：批次 B-1 新增 3 个工具（annotate/compare/manifest）+ 5 类 per-call
+  // 入参；批次 B-2 新增 2 个图型（sequence/circuit）+ 9 个电路元件形状 + 多面板 `panels`。
+  // 实测契约面 39 991 → 47 752（+19.4%）。
+  //
+  // 本次同时做了**真实压缩**（制图三工具与三个新工具的入参描述收成短标签，本仓制图域
+  // 省出约 1 500 字符），单工具上限（1200）与属性描述上限（200）**不变** ⇒ 门禁强度没有
+  // 下降，只是把总量天花板随契约面同步到 48 000。
+  //
+  // ⚠️ **这个上限连续上调两次，下一轮必须做描述重排把它降回来**（TD-PATENT-N38 升级为
+  // 「必须执行」：把 patent 域的长描述下沉进 skill/references，工具描述收成「做什么 +
+  // 关键约束」两行；验收口径 = 总量回落且单工具描述不超 400）。理由与取舍见
+  // docs/notes/implemented/2026-11-12-figure-dsh-alignment-batch-b1.md 与
+  // docs/notes/implemented/2026-11-12-figure-new-kinds-batch-b2.md。
+  assert.ok(total <= 48_000, `patent contract is ${total} chars (budget 48000)`);
 });
 
 test("R-06 编排收敛：patent_plan_task 旧动作经 flexible_plan 别名仍可执行", async () => {

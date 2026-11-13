@@ -1,0 +1,2458 @@
+{
+  "generator": "scripts/figure-benchmark/gen-render-baseline.ts",
+  "input_cases": "scripts/figure-benchmark/gen-cases.ts",
+  "policy": {
+    "paper_size_tolerance_mm": 0.5,
+    "structural_fields": [
+      "figure_no",
+      "visible_figure_no",
+      "refs",
+      "text_count",
+      "text_contents",
+      "shape_kinds",
+      "shape_count"
+    ],
+    "geometry_fields": [
+      "width_mm",
+      "height_mm",
+      "endpoint_count",
+      "segment_count"
+    ],
+    "byte_exact_fields": [
+      "content_sha256"
+    ],
+    "notes": "结构量（图号/data-ref/文字数/文字内容集合/图元类别分布/图元数）与引擎版本无关，任何环境都精确比对；坐标派生量（纸面尺寸/端点数/线段数）只在**引擎版本与本基线记录一致**时判定——dot 版本升级导致的布局漂移不是缺陷，届时这些量标注「本环境未核验」（无信号，不是通过）。纸面尺寸按 ±0.5mm 容差比较；内置渲染器逐字节确定，额外比对产物内容的 sha256。"
+  },
+  "backends": {
+    "builtin": {
+      "backend": "builtin",
+      "engine_version": "builtin",
+      "cases": [
+        {
+          "id": "flow-tb-8",
+          "figures": [
+            {
+              "figure_no": 1,
+              "visible_figure_no": "图1",
+              "refs": [
+                10,
+                11,
+                12,
+                13,
+                14,
+                15,
+                16,
+                17
+              ],
+              "width_mm": 52.917,
+              "height_mm": 239.183,
+              "text_count": 9,
+              "text_contents": [
+                "判断新颖性(15)",
+                "图1",
+                "对比区别特征(14)",
+                "接收交底书(10)",
+                "提取必要技术特征(12)",
+                "检索现有技术(13)",
+                "生成检索报告(17)",
+                "解析技术方案(11)",
+                "评估创造性(16)"
+              ],
+              "shape_kinds": {
+                "polyline": 7,
+                "rect": 9,
+                "text": 9
+              },
+              "shape_count": 16,
+              "endpoint_count": 60,
+              "segment_count": 53,
+              "content_sha256": "0df8594018a518c5710cf07dc03c1027ed3e5d221db2adab44e4887212d35190"
+            }
+          ]
+        },
+        {
+          "id": "flow-tb-12",
+          "figures": [
+            {
+              "figure_no": 1,
+              "visible_figure_no": "图1",
+              "refs": [
+                10,
+                11,
+                12,
+                13,
+                14,
+                15,
+                16,
+                17,
+                18,
+                19,
+                20,
+                21
+              ],
+              "width_mm": 52.917,
+              "height_mm": 354.542,
+              "text_count": 13,
+              "text_contents": [
+                "判断新颖性(15)",
+                "同步客户系统(20)",
+                "图1",
+                "复核结论(18)",
+                "对比区别特征(14)",
+                "归档案件材料(19)",
+                "接收交底书(10)",
+                "提取必要技术特征(12)",
+                "更新案件台账(21)",
+                "检索现有技术(13)",
+                "生成检索报告(17)",
+                "解析技术方案(11)",
+                "评估创造性(16)"
+              ],
+              "shape_kinds": {
+                "polyline": 11,
+                "rect": 13,
+                "text": 13
+              },
+              "shape_count": 24,
+              "endpoint_count": 88,
+              "segment_count": 77,
+              "content_sha256": "25832893d57b7db6c488c881a80ad9b0b3b8a8239d66ea75bebac96500ffed49"
+            }
+          ]
+        },
+        {
+          "id": "flow-tb-16",
+          "figures": [
+            {
+              "figure_no": 1,
+              "visible_figure_no": "图1",
+              "refs": [
+                10,
+                11,
+                12,
+                13,
+                14,
+                15,
+                16,
+                17,
+                18,
+                19,
+                20,
+                21,
+                22,
+                23,
+                24,
+                25
+              ],
+              "width_mm": 52.917,
+              "height_mm": 469.9,
+              "text_count": 17,
+              "text_contents": [
+                "关闭案件流程(25)",
+                "判断新颖性(15)",
+                "发送客户确认(24)",
+                "同步客户系统(20)",
+                "图1",
+                "复核结论(18)",
+                "对比区别特征(14)",
+                "归档案件材料(19)",
+                "接收交底书(10)",
+                "提取必要技术特征(12)",
+                "更新案件台账(21)",
+                "检索现有技术(13)",
+                "生成检索报告(17)",
+                "生成缴费提醒(23)",
+                "解析技术方案(11)",
+                "触发年费监控(22)",
+                "评估创造性(16)"
+              ],
+              "shape_kinds": {
+                "polyline": 15,
+                "rect": 17,
+                "text": 17
+              },
+              "shape_count": 32,
+              "endpoint_count": 112,
+              "segment_count": 97,
+              "content_sha256": "9cba76596d3751e1fd4099387bc62ec19fdc5ce8a6086fa47df823a6560815bf"
+            }
+          ]
+        },
+        {
+          "id": "flow-tb-8-us",
+          "figures": [
+            {
+              "figure_no": 1,
+              "visible_figure_no": null,
+              "refs": [
+                10,
+                11,
+                12,
+                13,
+                14,
+                15,
+                16,
+                17
+              ],
+              "width_mm": 52.917,
+              "height_mm": 228.6,
+              "text_count": 8,
+              "text_contents": [
+                "判断新颖性(15)",
+                "对比区别特征(14)",
+                "接收交底书(10)",
+                "提取必要技术特征(12)",
+                "检索现有技术(13)",
+                "生成检索报告(17)",
+                "解析技术方案(11)",
+                "评估创造性(16)"
+              ],
+              "shape_kinds": {
+                "polyline": 7,
+                "rect": 9,
+                "text": 8
+              },
+              "shape_count": 16,
+              "endpoint_count": 60,
+              "segment_count": 53,
+              "content_sha256": "5d678515078164778599087b44997d78e01681636200f4f1f91020c5425f7488"
+            }
+          ]
+        },
+        {
+          "id": "block-cjk-long",
+          "figures": [
+            {
+              "figure_no": 1,
+              "visible_figure_no": "图1",
+              "refs": [
+                10,
+                20,
+                30,
+                40
+              ],
+              "width_mm": 314.325,
+              "height_mm": 37.306,
+              "text_count": 5,
+              "text_contents": [
+                "云端数据存储与可视化分析平台(40)",
+                "图1",
+                "微控制器单元与实时任务调度中心(20)",
+                "无线通信模块与数据加密单元(30)",
+                "温度传感器信号采集与模数转换模块(10)"
+              ],
+              "shape_kinds": {
+                "polyline": 3,
+                "rect": 5,
+                "text": 5
+              },
+              "shape_count": 8,
+              "endpoint_count": 26,
+              "segment_count": 23,
+              "content_sha256": "6beeb7264e1fbe51080c16eba9aa7381f361a9d982ea377b2d9495c1f9d1fb9e"
+            }
+          ]
+        },
+        {
+          "id": "block-latin-long",
+          "figures": [
+            {
+              "figure_no": 1,
+              "visible_figure_no": null,
+              "refs": [
+                10,
+                20,
+                30,
+                40
+              ],
+              "width_mm": 353.219,
+              "height_mm": 26.723,
+              "text_count": 4,
+              "text_contents": [
+                "Cloud storage and analytics platform(40)",
+                "Microcontroller real-time scheduler(20)",
+                "Temperature sensor acquisition module(10)",
+                "Wireless communication module(30)"
+              ],
+              "shape_kinds": {
+                "polyline": 3,
+                "rect": 5,
+                "text": 4
+              },
+              "shape_count": 8,
+              "endpoint_count": 26,
+              "segment_count": 23,
+              "content_sha256": "5ce12502119339c0c869faa53e2f1ea6c853f4f0f0bc752a875c4cec385b9900"
+            }
+          ]
+        },
+        {
+          "id": "block-lr-3node",
+          "figures": [
+            {
+              "figure_no": 1,
+              "visible_figure_no": "图1",
+              "refs": [
+                10,
+                20,
+                30
+              ],
+              "width_mm": 137.054,
+              "height_mm": 37.306,
+              "text_count": 4,
+              "text_contents": [
+                "信号调理单元(20)",
+                "图1",
+                "处理器单元(30)",
+                "输入接口单元(10)"
+              ],
+              "shape_kinds": {
+                "polyline": 2,
+                "rect": 4,
+                "text": 4
+              },
+              "shape_count": 6,
+              "endpoint_count": 20,
+              "segment_count": 18,
+              "content_sha256": "020e1b556a29acda6df2d86b9de561a50104c37ce2c5ac3eb405bf7aaab7cdf8"
+            }
+          ]
+        },
+        {
+          "id": "block-lr-wide",
+          "figures": [
+            {
+              "figure_no": 1,
+              "visible_figure_no": "图1",
+              "refs": [
+                10,
+                20,
+                30,
+                40,
+                50,
+                60
+              ],
+              "width_mm": 272.521,
+              "height_mm": 37.306,
+              "text_count": 7,
+              "text_contents": [
+                "信号调理单元(20)",
+                "图1",
+                "处理器单元(30)",
+                "存储单元(40)",
+                "电源管理单元(60)",
+                "输入接口单元(10)",
+                "输出驱动单元(50)"
+              ],
+              "shape_kinds": {
+                "polyline": 5,
+                "rect": 7,
+                "text": 7
+              },
+              "shape_count": 12,
+              "endpoint_count": 38,
+              "segment_count": 33,
+              "content_sha256": "2ffc57600b31fbdc71558ccc5ee70d214f83f02dc63c812bd735237091bb1f34"
+            }
+          ]
+        },
+        {
+          "id": "bracket-faces",
+          "figures": [
+            {
+              "figure_no": 1,
+              "visible_figure_no": "图1",
+              "refs": [
+                10,
+                20,
+                30
+              ],
+              "width_mm": 64.029,
+              "height_mm": 94.985,
+              "text_count": 4,
+              "text_contents": [
+                "与检测单元连接的控制器(30)",
+                "图1",
+                "壳体(10)",
+                "设于壳体内部的检测单元(20)"
+              ],
+              "shape_kinds": {
+                "polyline": 2,
+                "rect": 4,
+                "text": 4
+              },
+              "shape_count": 6,
+              "endpoint_count": 22,
+              "segment_count": 20,
+              "content_sha256": "701ccfd99bd8767625aedf7ed96bda6cefedd918f1e3523d5dc319228cccf349"
+            }
+          ]
+        },
+        {
+          "id": "label-normalization",
+          "figures": [
+            {
+              "figure_no": 1,
+              "visible_figure_no": "图1",
+              "refs": [
+                10,
+                20
+              ],
+              "width_mm": 93.133,
+              "height_mm": 37.306,
+              "text_count": 3,
+              "text_contents": [
+                "图1",
+                "处理模块(20)",
+                "输入单元(10)"
+              ],
+              "shape_kinds": {
+                "polyline": 1,
+                "rect": 3,
+                "text": 3
+              },
+              "shape_count": 4,
+              "endpoint_count": 14,
+              "segment_count": 13,
+              "content_sha256": "38489c008dc14b050ccc101bcf1253a7f3fd19aad3c1d225cfaf64ba18378e7d"
+            },
+            {
+              "figure_no": 2,
+              "visible_figure_no": "图2",
+              "refs": [
+                20,
+                30
+              ],
+              "width_mm": 85.725,
+              "height_mm": 37.306,
+              "text_count": 3,
+              "text_contents": [
+                "图2",
+                "处理模块20",
+                "输出单元30"
+              ],
+              "shape_kinds": {
+                "polyline": 1,
+                "rect": 3,
+                "text": 3
+              },
+              "shape_count": 4,
+              "endpoint_count": 14,
+              "segment_count": 13,
+              "content_sha256": "72cbed0e079306e6b5de28081b252beb4385a5cd2e6e0f913389dd6371d8967d"
+            }
+          ]
+        },
+        {
+          "id": "uniform-zoom-mixed",
+          "figures": [
+            {
+              "figure_no": 1,
+              "visible_figure_no": "图1",
+              "refs": [
+                10,
+                11,
+                12,
+                13,
+                14,
+                15,
+                16,
+                17,
+                18,
+                19,
+                20,
+                21
+              ],
+              "width_mm": 52.917,
+              "height_mm": 354.542,
+              "text_count": 13,
+              "text_contents": [
+                "判断新颖性(15)",
+                "同步客户系统(20)",
+                "图1",
+                "复核结论(18)",
+                "对比区别特征(14)",
+                "归档案件材料(19)",
+                "接收交底书(10)",
+                "提取必要技术特征(12)",
+                "更新案件台账(21)",
+                "检索现有技术(13)",
+                "生成检索报告(17)",
+                "解析技术方案(11)",
+                "评估创造性(16)"
+              ],
+              "shape_kinds": {
+                "polyline": 11,
+                "rect": 13,
+                "text": 13
+              },
+              "shape_count": 24,
+              "endpoint_count": 88,
+              "segment_count": 77,
+              "content_sha256": "25832893d57b7db6c488c881a80ad9b0b3b8a8239d66ea75bebac96500ffed49"
+            },
+            {
+              "figure_no": 2,
+              "visible_figure_no": "图2",
+              "refs": [
+                10,
+                11,
+                12,
+                13
+              ],
+              "width_mm": 52.917,
+              "height_mm": 123.825,
+              "text_count": 5,
+              "text_contents": [
+                "图2",
+                "接收交底书(10)",
+                "提取必要技术特征(12)",
+                "检索现有技术(13)",
+                "解析技术方案(11)"
+              ],
+              "shape_kinds": {
+                "polyline": 3,
+                "rect": 5,
+                "text": 5
+              },
+              "shape_count": 8,
+              "endpoint_count": 32,
+              "segment_count": 29,
+              "content_sha256": "20082cbae44505856f0dccbdb8ca22b975df578748aad994386dc9fc7e1937df"
+            }
+          ]
+        },
+        {
+          "id": "office-cn-single",
+          "figures": [
+            {
+              "figure_no": 1,
+              "visible_figure_no": "图1",
+              "refs": [
+                10,
+                11,
+                12,
+                13
+              ],
+              "width_mm": 52.917,
+              "height_mm": 123.825,
+              "text_count": 5,
+              "text_contents": [
+                "图1",
+                "接收交底书(10)",
+                "提取必要技术特征(12)",
+                "检索现有技术(13)",
+                "解析技术方案(11)"
+              ],
+              "shape_kinds": {
+                "polyline": 3,
+                "rect": 5,
+                "text": 5
+              },
+              "shape_count": 8,
+              "endpoint_count": 32,
+              "segment_count": 29,
+              "content_sha256": "8c0a7eec5a8ac124ee5ae6fa08fe703690cac608f491a7e743be4005ee817965"
+            }
+          ]
+        },
+        {
+          "id": "office-us-single",
+          "figures": [
+            {
+              "figure_no": 1,
+              "visible_figure_no": null,
+              "refs": [
+                10,
+                11,
+                12,
+                13
+              ],
+              "width_mm": 52.917,
+              "height_mm": 113.242,
+              "text_count": 4,
+              "text_contents": [
+                "接收交底书(10)",
+                "提取必要技术特征(12)",
+                "检索现有技术(13)",
+                "解析技术方案(11)"
+              ],
+              "shape_kinds": {
+                "polyline": 3,
+                "rect": 5,
+                "text": 4
+              },
+              "shape_count": 8,
+              "endpoint_count": 32,
+              "segment_count": 29,
+              "content_sha256": "ef0a5f3bc2e821a559023882133e45b233a3dcbb5a71501f5bdde8fdf30f4892"
+            }
+          ]
+        },
+        {
+          "id": "office-pct-two",
+          "figures": [
+            {
+              "figure_no": 1,
+              "visible_figure_no": "Fig. 1",
+              "refs": [
+                10,
+                11,
+                12,
+                13,
+                14
+              ],
+              "width_mm": 52.917,
+              "height_mm": 152.665,
+              "text_count": 6,
+              "text_contents": [
+                "Fig. 1",
+                "对比区别特征(14)",
+                "接收交底书(10)",
+                "提取必要技术特征(12)",
+                "检索现有技术(13)",
+                "解析技术方案(11)"
+              ],
+              "shape_kinds": {
+                "polyline": 4,
+                "rect": 6,
+                "text": 6
+              },
+              "shape_count": 10,
+              "endpoint_count": 38,
+              "segment_count": 34,
+              "content_sha256": "9681e9cf7092c8fe0e2369151ea2d2876fd55b676d3a467473abd06158b30674"
+            },
+            {
+              "figure_no": 2,
+              "visible_figure_no": "Fig. 2",
+              "refs": [
+                10,
+                11,
+                12
+              ],
+              "width_mm": 52.917,
+              "height_mm": 94.985,
+              "text_count": 4,
+              "text_contents": [
+                "Fig. 2",
+                "接收交底书(10)",
+                "提取必要技术特征(12)",
+                "解析技术方案(11)"
+              ],
+              "shape_kinds": {
+                "polyline": 2,
+                "rect": 4,
+                "text": 4
+              },
+              "shape_count": 6,
+              "endpoint_count": 24,
+              "segment_count": 22,
+              "content_sha256": "2b6c2ef6bab6cdf1acdda3181986e23ef279c4f2f9b2a309e61e67058e161264"
+            }
+          ]
+        },
+        {
+          "id": "numbering-missing-multi",
+          "figures": [
+            {
+              "figure_no": 1,
+              "visible_figure_no": "FIG. 1",
+              "refs": [
+                10,
+                11,
+                12
+              ],
+              "width_mm": 52.917,
+              "height_mm": 94.985,
+              "text_count": 4,
+              "text_contents": [
+                "FIG. 1",
+                "接收交底书(10)",
+                "提取必要技术特征(12)",
+                "解析技术方案(11)"
+              ],
+              "shape_kinds": {
+                "polyline": 2,
+                "rect": 4,
+                "text": 4
+              },
+              "shape_count": 6,
+              "endpoint_count": 24,
+              "segment_count": 22,
+              "content_sha256": "9753ba27303e2cb185cb3441303eddc0c62b21f2e5c784802857448b08a9f4e5"
+            },
+            {
+              "figure_no": 2,
+              "visible_figure_no": "FIG. 2",
+              "refs": [
+                10,
+                11,
+                12
+              ],
+              "width_mm": 52.917,
+              "height_mm": 94.985,
+              "text_count": 4,
+              "text_contents": [
+                "FIG. 2",
+                "接收交底书(10)",
+                "提取必要技术特征(12)",
+                "解析技术方案(11)"
+              ],
+              "shape_kinds": {
+                "polyline": 2,
+                "rect": 4,
+                "text": 4
+              },
+              "shape_count": 6,
+              "endpoint_count": 24,
+              "segment_count": 22,
+              "content_sha256": "93ac53dbe45af3626608f35c10740d92d94f2d42329f8e9d4e4591c2eb994077"
+            }
+          ]
+        },
+        {
+          "id": "numbering-single-numbered",
+          "figures": [
+            {
+              "figure_no": 1,
+              "visible_figure_no": null,
+              "refs": [
+                10,
+                11,
+                12
+              ],
+              "width_mm": 52.917,
+              "height_mm": 84.402,
+              "text_count": 3,
+              "text_contents": [
+                "接收交底书(10)",
+                "提取必要技术特征(12)",
+                "解析技术方案(11)"
+              ],
+              "shape_kinds": {
+                "polyline": 2,
+                "rect": 4,
+                "text": 3
+              },
+              "shape_count": 6,
+              "endpoint_count": 24,
+              "segment_count": 22,
+              "content_sha256": "9e905fa7142c63bc7e8e8a36666fd692f46769c295f8393178543a12fd8eb23f"
+            }
+          ]
+        },
+        {
+          "id": "wording-surface-cn",
+          "figures": [
+            {
+              "figure_no": 1,
+              "visible_figure_no": "图1",
+              "refs": [
+                20,
+                21
+              ],
+              "width_mm": 64.029,
+              "height_mm": 181.504,
+              "text_count": 7,
+              "text_contents": [
+                "Input Sensor",
+                "图1",
+                "如图1所示，两模块相连",
+                "子件20a(21)",
+                "注：此处为优选实施方式",
+                "管径 20mm 的管路(20)",
+                "该步骤至此完成。"
+              ],
+              "shape_kinds": {
+                "polyline": 5,
+                "rect": 7,
+                "text": 7
+              },
+              "shape_count": 12,
+              "endpoint_count": 48,
+              "segment_count": 43,
+              "content_sha256": "85281e3443cd3e75a5d2124395397862c01ead0a84e90d047ca7ea5313311e9b"
+            }
+          ]
+        },
+        {
+          "id": "wording-surface-pct",
+          "figures": [
+            {
+              "figure_no": 1,
+              "visible_figure_no": "Fig. 1",
+              "refs": [
+                90
+              ],
+              "width_mm": 41.804,
+              "height_mm": 66.146,
+              "text_count": 3,
+              "text_contents": [
+                "Fig. 1",
+                "控制器(90)",
+                "比例 1:2"
+              ],
+              "shape_kinds": {
+                "polyline": 1,
+                "rect": 3,
+                "text": 3
+              },
+              "shape_count": 4,
+              "endpoint_count": 16,
+              "segment_count": 15,
+              "content_sha256": "91afbf938f102909e1a4e99415f2b62ddef2ff73f3082aca7e9970572b2bcfdc"
+            },
+            {
+              "figure_no": 2,
+              "visible_figure_no": "Fig. 2",
+              "refs": [
+                10,
+                11,
+                12
+              ],
+              "width_mm": 52.917,
+              "height_mm": 94.985,
+              "text_count": 4,
+              "text_contents": [
+                "Fig. 2",
+                "接收交底书(10)",
+                "提取必要技术特征(12)",
+                "解析技术方案(11)"
+              ],
+              "shape_kinds": {
+                "polyline": 2,
+                "rect": 4,
+                "text": 4
+              },
+              "shape_count": 6,
+              "endpoint_count": 24,
+              "segment_count": 22,
+              "content_sha256": "2b6c2ef6bab6cdf1acdda3181986e23ef279c4f2f9b2a309e61e67058e161264"
+            }
+          ]
+        }
+      ]
+    },
+    "graphviz": {
+      "backend": "graphviz",
+      "engine_version": "16.1.0",
+      "cases": [
+        {
+          "id": "flow-tb-8",
+          "figures": [
+            {
+              "figure_no": 1,
+              "visible_figure_no": "图1",
+              "refs": [
+                10,
+                11,
+                12,
+                13,
+                14,
+                15,
+                16,
+                17
+              ],
+              "width_mm": 57.15,
+              "height_mm": 203.2,
+              "text_count": 9,
+              "text_contents": [
+                "判断新颖性(15)",
+                "图1",
+                "对比区别特征(14)",
+                "接收交底书(10)",
+                "提取必要技术特征(12)",
+                "检索现有技术(13)",
+                "生成检索报告(17)",
+                "解析技术方案(11)",
+                "评估创造性(16)"
+              ],
+              "shape_kinds": {
+                "path": 9,
+                "polygon": 14,
+                "text": 9
+              },
+              "shape_count": 23,
+              "endpoint_count": 95,
+              "segment_count": 86,
+              "content_sha256": null
+            }
+          ]
+        },
+        {
+          "id": "flow-tb-12",
+          "figures": [
+            {
+              "figure_no": 1,
+              "visible_figure_no": "图1",
+              "refs": [
+                10,
+                11,
+                12,
+                13,
+                14,
+                15,
+                16,
+                17,
+                18,
+                19,
+                20,
+                21
+              ],
+              "width_mm": 57.15,
+              "height_mm": 304.8,
+              "text_count": 13,
+              "text_contents": [
+                "判断新颖性(15)",
+                "同步客户系统(20)",
+                "图1",
+                "复核结论(18)",
+                "对比区别特征(14)",
+                "归档案件材料(19)",
+                "接收交底书(10)",
+                "提取必要技术特征(12)",
+                "更新案件台账(21)",
+                "检索现有技术(13)",
+                "生成检索报告(17)",
+                "解析技术方案(11)",
+                "评估创造性(16)"
+              ],
+              "shape_kinds": {
+                "path": 13,
+                "polygon": 22,
+                "text": 13
+              },
+              "shape_count": 35,
+              "endpoint_count": 139,
+              "segment_count": 126,
+              "content_sha256": null
+            }
+          ]
+        },
+        {
+          "id": "flow-tb-16",
+          "figures": [
+            {
+              "figure_no": 1,
+              "visible_figure_no": "图1",
+              "refs": [
+                10,
+                11,
+                12,
+                13,
+                14,
+                15,
+                16,
+                17,
+                18,
+                19,
+                20,
+                21,
+                22,
+                23,
+                24,
+                25
+              ],
+              "width_mm": 57.15,
+              "height_mm": 406.4,
+              "text_count": 17,
+              "text_contents": [
+                "关闭案件流程(25)",
+                "判断新颖性(15)",
+                "发送客户确认(24)",
+                "同步客户系统(20)",
+                "图1",
+                "复核结论(18)",
+                "对比区别特征(14)",
+                "归档案件材料(19)",
+                "接收交底书(10)",
+                "提取必要技术特征(12)",
+                "更新案件台账(21)",
+                "检索现有技术(13)",
+                "生成检索报告(17)",
+                "生成缴费提醒(23)",
+                "解析技术方案(11)",
+                "触发年费监控(22)",
+                "评估创造性(16)"
+              ],
+              "shape_kinds": {
+                "path": 17,
+                "polygon": 30,
+                "text": 17
+              },
+              "shape_count": 47,
+              "endpoint_count": 183,
+              "segment_count": 166,
+              "content_sha256": null
+            }
+          ]
+        },
+        {
+          "id": "flow-tb-8-us",
+          "figures": [
+            {
+              "figure_no": 1,
+              "visible_figure_no": null,
+              "refs": [
+                10,
+                11,
+                12,
+                13,
+                14,
+                15,
+                16,
+                17
+              ],
+              "width_mm": 57.15,
+              "height_mm": 193.322,
+              "text_count": 8,
+              "text_contents": [
+                "判断新颖性(15)",
+                "对比区别特征(14)",
+                "接收交底书(10)",
+                "提取必要技术特征(12)",
+                "检索现有技术(13)",
+                "生成检索报告(17)",
+                "解析技术方案(11)",
+                "评估创造性(16)"
+              ],
+              "shape_kinds": {
+                "path": 9,
+                "polygon": 14,
+                "text": 8
+              },
+              "shape_count": 23,
+              "endpoint_count": 95,
+              "segment_count": 86,
+              "content_sha256": null
+            }
+          ]
+        },
+        {
+          "id": "block-cjk-long",
+          "figures": [
+            {
+              "figure_no": 1,
+              "visible_figure_no": "图1",
+              "refs": [
+                10,
+                20,
+                30,
+                40
+              ],
+              "width_mm": 389.114,
+              "height_mm": 25.4,
+              "text_count": 5,
+              "text_contents": [
+                "云端数据存储与可视化分析平台(40)",
+                "图1",
+                "微控制器单元与实时任务调度中心(20)",
+                "无线通信模块与数据加密单元(30)",
+                "温度传感器信号采集与模数转换模块(10)"
+              ],
+              "shape_kinds": {
+                "path": 3,
+                "polygon": 8,
+                "text": 5
+              },
+              "shape_count": 11,
+              "endpoint_count": 43,
+              "segment_count": 40,
+              "content_sha256": null
+            }
+          ]
+        },
+        {
+          "id": "block-latin-long",
+          "figures": [
+            {
+              "figure_no": 1,
+              "visible_figure_no": null,
+              "refs": [
+                10,
+                20,
+                30,
+                40
+              ],
+              "width_mm": 401.814,
+              "height_mm": 15.522,
+              "text_count": 4,
+              "text_contents": [
+                "Cloud storage and analytics platform(40)",
+                "Microcontroller real&#45;time scheduler(20)",
+                "Temperature sensor acquisition module(10)",
+                "Wireless communication module(30)"
+              ],
+              "shape_kinds": {
+                "path": 3,
+                "polygon": 8,
+                "text": 4
+              },
+              "shape_count": 11,
+              "endpoint_count": 43,
+              "segment_count": 40,
+              "content_sha256": null
+            }
+          ]
+        },
+        {
+          "id": "block-lr-3node",
+          "figures": [
+            {
+              "figure_no": 1,
+              "visible_figure_no": "图1",
+              "refs": [
+                10,
+                20,
+                30
+              ],
+              "width_mm": 155.928,
+              "height_mm": 25.4,
+              "text_count": 4,
+              "text_contents": [
+                "信号调理单元(20)",
+                "图1",
+                "处理器单元(30)",
+                "输入接口单元(10)"
+              ],
+              "shape_kinds": {
+                "path": 2,
+                "polygon": 6,
+                "text": 4
+              },
+              "shape_count": 8,
+              "endpoint_count": 32,
+              "segment_count": 30,
+              "content_sha256": null
+            }
+          ]
+        },
+        {
+          "id": "block-lr-wide",
+          "figures": [
+            {
+              "figure_no": 1,
+              "visible_figure_no": "图1",
+              "refs": [
+                10,
+                20,
+                30,
+                40,
+                50,
+                60
+              ],
+              "width_mm": 316.794,
+              "height_mm": 25.4,
+              "text_count": 7,
+              "text_contents": [
+                "信号调理单元(20)",
+                "图1",
+                "处理器单元(30)",
+                "存储单元(40)",
+                "电源管理单元(60)",
+                "输入接口单元(10)",
+                "输出驱动单元(50)"
+              ],
+              "shape_kinds": {
+                "path": 5,
+                "polygon": 12,
+                "text": 7
+              },
+              "shape_count": 17,
+              "endpoint_count": 65,
+              "segment_count": 60,
+              "content_sha256": null
+            }
+          ]
+        },
+        {
+          "id": "bracket-faces",
+          "figures": [
+            {
+              "figure_no": 1,
+              "visible_figure_no": "图1",
+              "refs": [
+                10,
+                20,
+                30
+              ],
+              "width_mm": 72.319,
+              "height_mm": 76.2,
+              "text_count": 4,
+              "text_contents": [
+                "与检测单元连接的控制器(30)",
+                "图1",
+                "壳体(10)",
+                "设于壳体内部的检测单元(20)"
+              ],
+              "shape_kinds": {
+                "path": 4,
+                "polygon": 4,
+                "text": 4
+              },
+              "shape_count": 8,
+              "endpoint_count": 40,
+              "segment_count": 36,
+              "content_sha256": null
+            }
+          ]
+        },
+        {
+          "id": "label-normalization",
+          "figures": [
+            {
+              "figure_no": 1,
+              "visible_figure_no": "图1",
+              "refs": [
+                10,
+                20
+              ],
+              "width_mm": 83.961,
+              "height_mm": 25.4,
+              "text_count": 3,
+              "text_contents": [
+                "图1",
+                "处理模块(20)",
+                "输入单元(10)"
+              ],
+              "shape_kinds": {
+                "path": 1,
+                "polygon": 4,
+                "text": 3
+              },
+              "shape_count": 5,
+              "endpoint_count": 21,
+              "segment_count": 20,
+              "content_sha256": null
+            },
+            {
+              "figure_no": 2,
+              "visible_figure_no": "图2",
+              "refs": [
+                20,
+                30
+              ],
+              "width_mm": 77.611,
+              "height_mm": 25.4,
+              "text_count": 3,
+              "text_contents": [
+                "图2",
+                "处理模块20",
+                "输出单元30"
+              ],
+              "shape_kinds": {
+                "path": 1,
+                "polygon": 4,
+                "text": 3
+              },
+              "shape_count": 5,
+              "endpoint_count": 21,
+              "segment_count": 20,
+              "content_sha256": null
+            }
+          ]
+        },
+        {
+          "id": "uniform-zoom-mixed",
+          "figures": [
+            {
+              "figure_no": 1,
+              "visible_figure_no": "图1",
+              "refs": [
+                10,
+                11,
+                12,
+                13,
+                14,
+                15,
+                16,
+                17,
+                18,
+                19,
+                20,
+                21
+              ],
+              "width_mm": 57.15,
+              "height_mm": 304.8,
+              "text_count": 13,
+              "text_contents": [
+                "判断新颖性(15)",
+                "同步客户系统(20)",
+                "图1",
+                "复核结论(18)",
+                "对比区别特征(14)",
+                "归档案件材料(19)",
+                "接收交底书(10)",
+                "提取必要技术特征(12)",
+                "更新案件台账(21)",
+                "检索现有技术(13)",
+                "生成检索报告(17)",
+                "解析技术方案(11)",
+                "评估创造性(16)"
+              ],
+              "shape_kinds": {
+                "path": 13,
+                "polygon": 22,
+                "text": 13
+              },
+              "shape_count": 35,
+              "endpoint_count": 139,
+              "segment_count": 126,
+              "content_sha256": null
+            },
+            {
+              "figure_no": 2,
+              "visible_figure_no": "图2",
+              "refs": [
+                10,
+                11,
+                12,
+                13
+              ],
+              "width_mm": 57.15,
+              "height_mm": 101.6,
+              "text_count": 5,
+              "text_contents": [
+                "图2",
+                "接收交底书(10)",
+                "提取必要技术特征(12)",
+                "检索现有技术(13)",
+                "解析技术方案(11)"
+              ],
+              "shape_kinds": {
+                "path": 5,
+                "polygon": 6,
+                "text": 5
+              },
+              "shape_count": 11,
+              "endpoint_count": 51,
+              "segment_count": 46,
+              "content_sha256": null
+            }
+          ]
+        },
+        {
+          "id": "office-cn-single",
+          "figures": [
+            {
+              "figure_no": 1,
+              "visible_figure_no": "图1",
+              "refs": [
+                10,
+                11,
+                12,
+                13
+              ],
+              "width_mm": 57.15,
+              "height_mm": 101.6,
+              "text_count": 5,
+              "text_contents": [
+                "图1",
+                "接收交底书(10)",
+                "提取必要技术特征(12)",
+                "检索现有技术(13)",
+                "解析技术方案(11)"
+              ],
+              "shape_kinds": {
+                "path": 5,
+                "polygon": 6,
+                "text": 5
+              },
+              "shape_count": 11,
+              "endpoint_count": 51,
+              "segment_count": 46,
+              "content_sha256": null
+            }
+          ]
+        },
+        {
+          "id": "office-us-single",
+          "figures": [
+            {
+              "figure_no": 1,
+              "visible_figure_no": null,
+              "refs": [
+                10,
+                11,
+                12,
+                13
+              ],
+              "width_mm": 57.15,
+              "height_mm": 91.722,
+              "text_count": 4,
+              "text_contents": [
+                "接收交底书(10)",
+                "提取必要技术特征(12)",
+                "检索现有技术(13)",
+                "解析技术方案(11)"
+              ],
+              "shape_kinds": {
+                "path": 5,
+                "polygon": 6,
+                "text": 4
+              },
+              "shape_count": 11,
+              "endpoint_count": 51,
+              "segment_count": 46,
+              "content_sha256": null
+            }
+          ]
+        },
+        {
+          "id": "office-pct-two",
+          "figures": [
+            {
+              "figure_no": 1,
+              "visible_figure_no": "Fig. 1",
+              "refs": [
+                10,
+                11,
+                12,
+                13,
+                14
+              ],
+              "width_mm": 57.15,
+              "height_mm": 125.236,
+              "text_count": 6,
+              "text_contents": [
+                "Fig. 1",
+                "对比区别特征(14)",
+                "接收交底书(10)",
+                "提取必要技术特征(12)",
+                "检索现有技术(13)",
+                "解析技术方案(11)"
+              ],
+              "shape_kinds": {
+                "path": 6,
+                "polygon": 8,
+                "text": 6
+              },
+              "shape_count": 14,
+              "endpoint_count": 62,
+              "segment_count": 56,
+              "content_sha256": null
+            },
+            {
+              "figure_no": 2,
+              "visible_figure_no": "Fig. 2",
+              "refs": [
+                10,
+                11,
+                12
+              ],
+              "width_mm": 57.15,
+              "height_mm": 74.436,
+              "text_count": 4,
+              "text_contents": [
+                "Fig. 2",
+                "接收交底书(10)",
+                "提取必要技术特征(12)",
+                "解析技术方案(11)"
+              ],
+              "shape_kinds": {
+                "path": 4,
+                "polygon": 4,
+                "text": 4
+              },
+              "shape_count": 8,
+              "endpoint_count": 40,
+              "segment_count": 36,
+              "content_sha256": null
+            }
+          ]
+        },
+        {
+          "id": "numbering-missing-multi",
+          "figures": [
+            {
+              "figure_no": 1,
+              "visible_figure_no": "FIG. 1",
+              "refs": [
+                10,
+                11,
+                12
+              ],
+              "width_mm": 57.15,
+              "height_mm": 74.436,
+              "text_count": 4,
+              "text_contents": [
+                "FIG. 1",
+                "接收交底书(10)",
+                "提取必要技术特征(12)",
+                "解析技术方案(11)"
+              ],
+              "shape_kinds": {
+                "path": 4,
+                "polygon": 4,
+                "text": 4
+              },
+              "shape_count": 8,
+              "endpoint_count": 40,
+              "segment_count": 36,
+              "content_sha256": null
+            },
+            {
+              "figure_no": 2,
+              "visible_figure_no": "FIG. 2",
+              "refs": [
+                10,
+                11,
+                12
+              ],
+              "width_mm": 57.15,
+              "height_mm": 74.436,
+              "text_count": 4,
+              "text_contents": [
+                "FIG. 2",
+                "接收交底书(10)",
+                "提取必要技术特征(12)",
+                "解析技术方案(11)"
+              ],
+              "shape_kinds": {
+                "path": 4,
+                "polygon": 4,
+                "text": 4
+              },
+              "shape_count": 8,
+              "endpoint_count": 40,
+              "segment_count": 36,
+              "content_sha256": null
+            }
+          ]
+        },
+        {
+          "id": "numbering-single-numbered",
+          "figures": [
+            {
+              "figure_no": 1,
+              "visible_figure_no": null,
+              "refs": [
+                10,
+                11,
+                12
+              ],
+              "width_mm": 57.15,
+              "height_mm": 66.322,
+              "text_count": 3,
+              "text_contents": [
+                "接收交底书(10)",
+                "提取必要技术特征(12)",
+                "解析技术方案(11)"
+              ],
+              "shape_kinds": {
+                "path": 4,
+                "polygon": 4,
+                "text": 3
+              },
+              "shape_count": 8,
+              "endpoint_count": 40,
+              "segment_count": 36,
+              "content_sha256": null
+            }
+          ]
+        },
+        {
+          "id": "wording-surface-cn",
+          "figures": [
+            {
+              "figure_no": 1,
+              "visible_figure_no": "图1",
+              "refs": [
+                20,
+                21
+              ],
+              "width_mm": 63.853,
+              "height_mm": 152.4,
+              "text_count": 7,
+              "text_contents": [
+                "Input Sensor",
+                "图1",
+                "如图1所示，两模块相连",
+                "子件20a(21)",
+                "注：此处为优选实施方式",
+                "管径 20mm 的管路(20)",
+                "该步骤至此完成。"
+              ],
+              "shape_kinds": {
+                "path": 5,
+                "polygon": 12,
+                "text": 7
+              },
+              "shape_count": 17,
+              "endpoint_count": 65,
+              "segment_count": 60,
+              "content_sha256": null
+            }
+          ]
+        },
+        {
+          "id": "wording-surface-pct",
+          "figures": [
+            {
+              "figure_no": 1,
+              "visible_figure_no": "Fig. 1",
+              "refs": [
+                90
+              ],
+              "width_mm": 32.103,
+              "height_mm": 49.036,
+              "text_count": 3,
+              "text_contents": [
+                "Fig. 1",
+                "控制器(90)",
+                "比例 1:2"
+              ],
+              "shape_kinds": {
+                "path": 1,
+                "polygon": 4,
+                "text": 3
+              },
+              "shape_count": 5,
+              "endpoint_count": 21,
+              "segment_count": 20,
+              "content_sha256": null
+            },
+            {
+              "figure_no": 2,
+              "visible_figure_no": "Fig. 2",
+              "refs": [
+                10,
+                11,
+                12
+              ],
+              "width_mm": 57.15,
+              "height_mm": 74.436,
+              "text_count": 4,
+              "text_contents": [
+                "Fig. 2",
+                "接收交底书(10)",
+                "提取必要技术特征(12)",
+                "解析技术方案(11)"
+              ],
+              "shape_kinds": {
+                "path": 4,
+                "polygon": 4,
+                "text": 4
+              },
+              "shape_count": 8,
+              "endpoint_count": 40,
+              "segment_count": 36,
+              "content_sha256": null
+            }
+          ]
+        }
+      ]
+    },
+    "graphviz-wasm": {
+      "backend": "graphviz-wasm",
+      "engine_version": "3.30.0",
+      "cases": [
+        {
+          "id": "flow-tb-8",
+          "figures": [
+            {
+              "figure_no": 1,
+              "visible_figure_no": "图1",
+              "refs": [
+                10,
+                11,
+                12,
+                13,
+                14,
+                15,
+                16,
+                17
+              ],
+              "width_mm": 46.214,
+              "height_mm": 202.142,
+              "text_count": 9,
+              "text_contents": [
+                "判断新颖性(15)",
+                "图1",
+                "对比区别特征(14)",
+                "接收交底书(10)",
+                "提取必要技术特征(12)",
+                "检索现有技术(13)",
+                "生成检索报告(17)",
+                "解析技术方案(11)",
+                "评估创造性(16)"
+              ],
+              "shape_kinds": {
+                "path": 9,
+                "polygon": 14,
+                "text": 9
+              },
+              "shape_count": 23,
+              "endpoint_count": 95,
+              "segment_count": 86,
+              "content_sha256": null
+            }
+          ]
+        },
+        {
+          "id": "flow-tb-12",
+          "figures": [
+            {
+              "figure_no": 1,
+              "visible_figure_no": "图1",
+              "refs": [
+                10,
+                11,
+                12,
+                13,
+                14,
+                15,
+                16,
+                17,
+                18,
+                19,
+                20,
+                21
+              ],
+              "width_mm": 46.214,
+              "height_mm": 303.742,
+              "text_count": 13,
+              "text_contents": [
+                "判断新颖性(15)",
+                "同步客户系统(20)",
+                "图1",
+                "复核结论(18)",
+                "对比区别特征(14)",
+                "归档案件材料(19)",
+                "接收交底书(10)",
+                "提取必要技术特征(12)",
+                "更新案件台账(21)",
+                "检索现有技术(13)",
+                "生成检索报告(17)",
+                "解析技术方案(11)",
+                "评估创造性(16)"
+              ],
+              "shape_kinds": {
+                "path": 13,
+                "polygon": 22,
+                "text": 13
+              },
+              "shape_count": 35,
+              "endpoint_count": 139,
+              "segment_count": 126,
+              "content_sha256": null
+            }
+          ]
+        },
+        {
+          "id": "flow-tb-16",
+          "figures": [
+            {
+              "figure_no": 1,
+              "visible_figure_no": "图1",
+              "refs": [
+                10,
+                11,
+                12,
+                13,
+                14,
+                15,
+                16,
+                17,
+                18,
+                19,
+                20,
+                21,
+                22,
+                23,
+                24,
+                25
+              ],
+              "width_mm": 46.214,
+              "height_mm": 405.342,
+              "text_count": 17,
+              "text_contents": [
+                "关闭案件流程(25)",
+                "判断新颖性(15)",
+                "发送客户确认(24)",
+                "同步客户系统(20)",
+                "图1",
+                "复核结论(18)",
+                "对比区别特征(14)",
+                "归档案件材料(19)",
+                "接收交底书(10)",
+                "提取必要技术特征(12)",
+                "更新案件台账(21)",
+                "检索现有技术(13)",
+                "生成检索报告(17)",
+                "生成缴费提醒(23)",
+                "解析技术方案(11)",
+                "触发年费监控(22)",
+                "评估创造性(16)"
+              ],
+              "shape_kinds": {
+                "path": 17,
+                "polygon": 30,
+                "text": 17
+              },
+              "shape_count": 47,
+              "endpoint_count": 183,
+              "segment_count": 166,
+              "content_sha256": null
+            }
+          ]
+        },
+        {
+          "id": "flow-tb-8-us",
+          "figures": [
+            {
+              "figure_no": 1,
+              "visible_figure_no": null,
+              "refs": [
+                10,
+                11,
+                12,
+                13,
+                14,
+                15,
+                16,
+                17
+              ],
+              "width_mm": 46.214,
+              "height_mm": 193.322,
+              "text_count": 8,
+              "text_contents": [
+                "判断新颖性(15)",
+                "对比区别特征(14)",
+                "接收交底书(10)",
+                "提取必要技术特征(12)",
+                "检索现有技术(13)",
+                "生成检索报告(17)",
+                "解析技术方案(11)",
+                "评估创造性(16)"
+              ],
+              "shape_kinds": {
+                "path": 9,
+                "polygon": 14,
+                "text": 8
+              },
+              "shape_count": 23,
+              "endpoint_count": 95,
+              "segment_count": 86,
+              "content_sha256": null
+            }
+          ]
+        },
+        {
+          "id": "block-cjk-long",
+          "figures": [
+            {
+              "figure_no": 1,
+              "visible_figure_no": "图1",
+              "refs": [
+                10,
+                20,
+                30,
+                40
+              ],
+              "width_mm": 311.15,
+              "height_mm": 24.342,
+              "text_count": 5,
+              "text_contents": [
+                "云端数据存储与可视化分析平台(40)",
+                "图1",
+                "微控制器单元与实时任务调度中心(20)",
+                "无线通信模块与数据加密单元(30)",
+                "温度传感器信号采集与模数转换模块(10)"
+              ],
+              "shape_kinds": {
+                "path": 3,
+                "polygon": 8,
+                "text": 5
+              },
+              "shape_count": 11,
+              "endpoint_count": 43,
+              "segment_count": 40,
+              "content_sha256": null
+            }
+          ]
+        },
+        {
+          "id": "block-latin-long",
+          "figures": [
+            {
+              "figure_no": 1,
+              "visible_figure_no": null,
+              "refs": [
+                10,
+                20,
+                30,
+                40
+              ],
+              "width_mm": 383.117,
+              "height_mm": 15.522,
+              "text_count": 4,
+              "text_contents": [
+                "Cloud storage and analytics platform(40)",
+                "Microcontroller real&#45;time scheduler(20)",
+                "Temperature sensor acquisition module(10)",
+                "Wireless communication module(30)"
+              ],
+              "shape_kinds": {
+                "path": 3,
+                "polygon": 8,
+                "text": 4
+              },
+              "shape_count": 11,
+              "endpoint_count": 43,
+              "segment_count": 40,
+              "content_sha256": null
+            }
+          ]
+        },
+        {
+          "id": "block-lr-3node",
+          "figures": [
+            {
+              "figure_no": 1,
+              "visible_figure_no": "图1",
+              "refs": [
+                10,
+                20,
+                30
+              ],
+              "width_mm": 132.644,
+              "height_mm": 24.342,
+              "text_count": 4,
+              "text_contents": [
+                "信号调理单元(20)",
+                "图1",
+                "处理器单元(30)",
+                "输入接口单元(10)"
+              ],
+              "shape_kinds": {
+                "path": 2,
+                "polygon": 6,
+                "text": 4
+              },
+              "shape_count": 8,
+              "endpoint_count": 32,
+              "segment_count": 30,
+              "content_sha256": null
+            }
+          ]
+        },
+        {
+          "id": "block-lr-wide",
+          "figures": [
+            {
+              "figure_no": 1,
+              "visible_figure_no": "图1",
+              "refs": [
+                10,
+                20,
+                30,
+                40,
+                50,
+                60
+              ],
+              "width_mm": 271.639,
+              "height_mm": 24.342,
+              "text_count": 7,
+              "text_contents": [
+                "信号调理单元(20)",
+                "图1",
+                "处理器单元(30)",
+                "存储单元(40)",
+                "电源管理单元(60)",
+                "输入接口单元(10)",
+                "输出驱动单元(50)"
+              ],
+              "shape_kinds": {
+                "path": 5,
+                "polygon": 12,
+                "text": 7
+              },
+              "shape_count": 17,
+              "endpoint_count": 65,
+              "segment_count": 60,
+              "content_sha256": null
+            }
+          ]
+        },
+        {
+          "id": "bracket-faces",
+          "figures": [
+            {
+              "figure_no": 1,
+              "visible_figure_no": "图1",
+              "refs": [
+                10,
+                20,
+                30
+              ],
+              "width_mm": 57.503,
+              "height_mm": 75.142,
+              "text_count": 4,
+              "text_contents": [
+                "与检测单元连接的控制器(30)",
+                "图1",
+                "壳体(10)",
+                "设于壳体内部的检测单元(20)"
+              ],
+              "shape_kinds": {
+                "path": 4,
+                "polygon": 4,
+                "text": 4
+              },
+              "shape_count": 8,
+              "endpoint_count": 40,
+              "segment_count": 36,
+              "content_sha256": null
+            }
+          ]
+        },
+        {
+          "id": "label-normalization",
+          "figures": [
+            {
+              "figure_no": 1,
+              "visible_figure_no": "图1",
+              "refs": [
+                10,
+                20
+              ],
+              "width_mm": 73.025,
+              "height_mm": 24.342,
+              "text_count": 3,
+              "text_contents": [
+                "图1",
+                "处理模块(20)",
+                "输入单元(10)"
+              ],
+              "shape_kinds": {
+                "path": 1,
+                "polygon": 4,
+                "text": 3
+              },
+              "shape_count": 5,
+              "endpoint_count": 21,
+              "segment_count": 20,
+              "content_sha256": null
+            },
+            {
+              "figure_no": 2,
+              "visible_figure_no": "图2",
+              "refs": [
+                20,
+                30
+              ],
+              "width_mm": 66.322,
+              "height_mm": 24.342,
+              "text_count": 3,
+              "text_contents": [
+                "图2",
+                "处理模块20",
+                "输出单元30"
+              ],
+              "shape_kinds": {
+                "path": 1,
+                "polygon": 4,
+                "text": 3
+              },
+              "shape_count": 5,
+              "endpoint_count": 21,
+              "segment_count": 20,
+              "content_sha256": null
+            }
+          ]
+        },
+        {
+          "id": "uniform-zoom-mixed",
+          "figures": [
+            {
+              "figure_no": 1,
+              "visible_figure_no": "图1",
+              "refs": [
+                10,
+                11,
+                12,
+                13,
+                14,
+                15,
+                16,
+                17,
+                18,
+                19,
+                20,
+                21
+              ],
+              "width_mm": 46.214,
+              "height_mm": 303.742,
+              "text_count": 13,
+              "text_contents": [
+                "判断新颖性(15)",
+                "同步客户系统(20)",
+                "图1",
+                "复核结论(18)",
+                "对比区别特征(14)",
+                "归档案件材料(19)",
+                "接收交底书(10)",
+                "提取必要技术特征(12)",
+                "更新案件台账(21)",
+                "检索现有技术(13)",
+                "生成检索报告(17)",
+                "解析技术方案(11)",
+                "评估创造性(16)"
+              ],
+              "shape_kinds": {
+                "path": 13,
+                "polygon": 22,
+                "text": 13
+              },
+              "shape_count": 35,
+              "endpoint_count": 139,
+              "segment_count": 126,
+              "content_sha256": null
+            },
+            {
+              "figure_no": 2,
+              "visible_figure_no": "图2",
+              "refs": [
+                10,
+                11,
+                12,
+                13
+              ],
+              "width_mm": 46.214,
+              "height_mm": 100.542,
+              "text_count": 5,
+              "text_contents": [
+                "图2",
+                "接收交底书(10)",
+                "提取必要技术特征(12)",
+                "检索现有技术(13)",
+                "解析技术方案(11)"
+              ],
+              "shape_kinds": {
+                "path": 5,
+                "polygon": 6,
+                "text": 5
+              },
+              "shape_count": 11,
+              "endpoint_count": 51,
+              "segment_count": 46,
+              "content_sha256": null
+            }
+          ]
+        },
+        {
+          "id": "office-cn-single",
+          "figures": [
+            {
+              "figure_no": 1,
+              "visible_figure_no": "图1",
+              "refs": [
+                10,
+                11,
+                12,
+                13
+              ],
+              "width_mm": 46.214,
+              "height_mm": 100.542,
+              "text_count": 5,
+              "text_contents": [
+                "图1",
+                "接收交底书(10)",
+                "提取必要技术特征(12)",
+                "检索现有技术(13)",
+                "解析技术方案(11)"
+              ],
+              "shape_kinds": {
+                "path": 5,
+                "polygon": 6,
+                "text": 5
+              },
+              "shape_count": 11,
+              "endpoint_count": 51,
+              "segment_count": 46,
+              "content_sha256": null
+            }
+          ]
+        },
+        {
+          "id": "office-us-single",
+          "figures": [
+            {
+              "figure_no": 1,
+              "visible_figure_no": null,
+              "refs": [
+                10,
+                11,
+                12,
+                13
+              ],
+              "width_mm": 46.214,
+              "height_mm": 91.722,
+              "text_count": 4,
+              "text_contents": [
+                "接收交底书(10)",
+                "提取必要技术特征(12)",
+                "检索现有技术(13)",
+                "解析技术方案(11)"
+              ],
+              "shape_kinds": {
+                "path": 5,
+                "polygon": 6,
+                "text": 4
+              },
+              "shape_count": 11,
+              "endpoint_count": 51,
+              "segment_count": 46,
+              "content_sha256": null
+            }
+          ]
+        },
+        {
+          "id": "office-pct-two",
+          "figures": [
+            {
+              "figure_no": 1,
+              "visible_figure_no": "Fig. 1",
+              "refs": [
+                10,
+                11,
+                12,
+                13,
+                14
+              ],
+              "width_mm": 46.214,
+              "height_mm": 125.942,
+              "text_count": 6,
+              "text_contents": [
+                "Fig. 1",
+                "对比区别特征(14)",
+                "接收交底书(10)",
+                "提取必要技术特征(12)",
+                "检索现有技术(13)",
+                "解析技术方案(11)"
+              ],
+              "shape_kinds": {
+                "path": 6,
+                "polygon": 8,
+                "text": 6
+              },
+              "shape_count": 14,
+              "endpoint_count": 62,
+              "segment_count": 56,
+              "content_sha256": null
+            },
+            {
+              "figure_no": 2,
+              "visible_figure_no": "Fig. 2",
+              "refs": [
+                10,
+                11,
+                12
+              ],
+              "width_mm": 46.214,
+              "height_mm": 75.142,
+              "text_count": 4,
+              "text_contents": [
+                "Fig. 2",
+                "接收交底书(10)",
+                "提取必要技术特征(12)",
+                "解析技术方案(11)"
+              ],
+              "shape_kinds": {
+                "path": 4,
+                "polygon": 4,
+                "text": 4
+              },
+              "shape_count": 8,
+              "endpoint_count": 40,
+              "segment_count": 36,
+              "content_sha256": null
+            }
+          ]
+        },
+        {
+          "id": "numbering-missing-multi",
+          "figures": [
+            {
+              "figure_no": 1,
+              "visible_figure_no": "FIG. 1",
+              "refs": [
+                10,
+                11,
+                12
+              ],
+              "width_mm": 46.214,
+              "height_mm": 75.142,
+              "text_count": 4,
+              "text_contents": [
+                "FIG. 1",
+                "接收交底书(10)",
+                "提取必要技术特征(12)",
+                "解析技术方案(11)"
+              ],
+              "shape_kinds": {
+                "path": 4,
+                "polygon": 4,
+                "text": 4
+              },
+              "shape_count": 8,
+              "endpoint_count": 40,
+              "segment_count": 36,
+              "content_sha256": null
+            },
+            {
+              "figure_no": 2,
+              "visible_figure_no": "FIG. 2",
+              "refs": [
+                10,
+                11,
+                12
+              ],
+              "width_mm": 46.214,
+              "height_mm": 75.142,
+              "text_count": 4,
+              "text_contents": [
+                "FIG. 2",
+                "接收交底书(10)",
+                "提取必要技术特征(12)",
+                "解析技术方案(11)"
+              ],
+              "shape_kinds": {
+                "path": 4,
+                "polygon": 4,
+                "text": 4
+              },
+              "shape_count": 8,
+              "endpoint_count": 40,
+              "segment_count": 36,
+              "content_sha256": null
+            }
+          ]
+        },
+        {
+          "id": "numbering-single-numbered",
+          "figures": [
+            {
+              "figure_no": 1,
+              "visible_figure_no": null,
+              "refs": [
+                10,
+                11,
+                12
+              ],
+              "width_mm": 46.214,
+              "height_mm": 66.322,
+              "text_count": 3,
+              "text_contents": [
+                "接收交底书(10)",
+                "提取必要技术特征(12)",
+                "解析技术方案(11)"
+              ],
+              "shape_kinds": {
+                "path": 4,
+                "polygon": 4,
+                "text": 3
+              },
+              "shape_count": 8,
+              "endpoint_count": 40,
+              "segment_count": 36,
+              "content_sha256": null
+            }
+          ]
+        },
+        {
+          "id": "wording-surface-cn",
+          "figures": [
+            {
+              "figure_no": 1,
+              "visible_figure_no": "图1",
+              "refs": [
+                20,
+                21
+              ],
+              "width_mm": 50.447,
+              "height_mm": 151.342,
+              "text_count": 7,
+              "text_contents": [
+                "Input Sensor",
+                "图1",
+                "如图1所示，两模块相连",
+                "子件20a(21)",
+                "注：此处为优选实施方式",
+                "管径 20mm 的管路(20)",
+                "该步骤至此完成。"
+              ],
+              "shape_kinds": {
+                "path": 5,
+                "polygon": 12,
+                "text": 7
+              },
+              "shape_count": 17,
+              "endpoint_count": 65,
+              "segment_count": 60,
+              "content_sha256": null
+            }
+          ]
+        },
+        {
+          "id": "wording-surface-pct",
+          "figures": [
+            {
+              "figure_no": 1,
+              "visible_figure_no": "Fig. 1",
+              "refs": [
+                90
+              ],
+              "width_mm": 27.869,
+              "height_mm": 49.742,
+              "text_count": 3,
+              "text_contents": [
+                "Fig. 1",
+                "控制器(90)",
+                "比例 1:2"
+              ],
+              "shape_kinds": {
+                "path": 1,
+                "polygon": 4,
+                "text": 3
+              },
+              "shape_count": 5,
+              "endpoint_count": 21,
+              "segment_count": 20,
+              "content_sha256": null
+            },
+            {
+              "figure_no": 2,
+              "visible_figure_no": "Fig. 2",
+              "refs": [
+                10,
+                11,
+                12
+              ],
+              "width_mm": 46.214,
+              "height_mm": 75.142,
+              "text_count": 4,
+              "text_contents": [
+                "Fig. 2",
+                "接收交底书(10)",
+                "提取必要技术特征(12)",
+                "解析技术方案(11)"
+              ],
+              "shape_kinds": {
+                "path": 4,
+                "polygon": 4,
+                "text": 4
+              },
+              "shape_count": 8,
+              "endpoint_count": 40,
+              "segment_count": 36,
+              "content_sha256": null
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
